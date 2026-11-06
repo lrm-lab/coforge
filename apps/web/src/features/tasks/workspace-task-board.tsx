@@ -28,10 +28,13 @@ type BoardSearch = Parameters<typeof useTaskBoardSearch>[0] & { task?: string };
 export function WorkspaceTaskBoard({
   search,
   project,
+  projectSlug,
   board = true,
 }: {
   search: BoardSearch;
   project?: string;
+  /** The Project's slug, which a new Task on its board is filed under. */
+  projectSlug?: string;
   /** False where only the popup is wanted: a Project page's other tabs and its phone list. */
   board?: boolean;
 }) {
@@ -146,6 +149,7 @@ export function WorkspaceTaskBoard({
           renderTitle={renderTaskTitle}
           onCommand={command}
           project={project !== undefined}
+          newTask={{ projectSlug, onCreated: refreshOverview }}
           tree={
             treeShown
               ? {

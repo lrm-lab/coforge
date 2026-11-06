@@ -1,14 +1,18 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 import type { PointerEvent, ReactNode } from "react";
 
+import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
 import { Folder } from "@untitledui/icons";
 
 import type { FilterableTask } from "./task-filters";
+import { openBlockers, type TaskRelations } from "./task-relation-edits";
 import { TaskParentMark, TaskSubtaskMark, TaskBlockedMark } from "./task-relations";
-import type { TaskRelations } from "./task-relation-edits";
 import { TaskCardLabels } from "./task-labels";
+import { TaskLabelChip } from "./task-label-chip";
+import { TaskPriorityIcon } from "./task-priority-icon";
 import { TaskOwnerAvatar } from "./task-owner";
 import { TaskStatusIcon } from "./task-status-icon";
 import type { TaskControls } from "./task-workflow";
@@ -24,13 +28,11 @@ const HIDDEN_ON_BOARD = {
   source: "[.task-hide-source_[data-task-board]_&]:hidden",
   project: "[.task-hide-project_[data-task-board]_&]:hidden",
   owner: "[.task-hide-owner_[data-task-board]_&]:hidden",
-  sourceDot: "[.task-hide-number_[data-task-board]_&]:hidden",
-  // A card's top line (number, source, owner) goes once all of it is hidden.
-  meta: "[.task-hide-number.task-hide-source.task-hide-owner_[data-task-board]_&]:hidden",
 };
 
-const PROJECT_HIDDEN_KEEPS_TOOLS =
-  "[.task-hide-project_[data-task-board]_&]:any-pointer-coarse:flex";
+// A bottom row held only for an owner the viewer hid goes too, except where it holds the tools
+// (a touch pointer).
+const PROJECT_OWNER_KEEPS_TOOLS = "[.task-hide-owner_[data-task-board]_&]:any-pointer-coarse:flex";
 
 /** Classes for the link or button a caller wraps around the title. */
 export const TASK_TITLE_CLASS =
@@ -160,77 +162,98 @@ export function TaskCard({
       </article>
     );
   }
+  // What still blocks it, named in a line of its own under the title (Tasks v2 only: `relations`).
+  const waitingOn = relations && openBlockers(relations.blockedBy).find((task) => !task.hidden);
+  const steps = relations?.subtasks;
+  const [label, ...moreLabels] = task.labels ?? [];
   return (
     <article
       onPointerEnter={onPointerEnter}
-      className="group relative rounded-lg border border-secondary bg-primary p-3 shadow-xs transition-colors hover:border-primary"
+      className="group relative flex flex-col gap-2.5 rounded-xl border border-secondary bg-primary p-3 shadow-xs transition-shadow hover:shadow-md"
     >
-      <div
-        className={cn(
-          "flex h-6 items-center justify-between gap-2 text-xs text-tertiary tabular-nums",
-          HIDDEN_ON_BOARD.meta,
+      {/* The channel leads: a number counts within its channel, so two cards can share one. */}
+      <div className="flex h-4 items-center gap-1.5 text-xs tabular-nums">
+        {source && (
+          <span
+            className={cn("min-w-0 truncate font-medium text-secondary", HIDDEN_ON_BOARD.source)}
+          >
+            {source}
+          </span>
         )}
-      >
-        <span className="min-w-0 truncate">
-          <span className={HIDDEN_ON_BOARD.number}>#{task.number}</span>
-          {source && (
-            <span className={HIDDEN_ON_BOARD.source}>
-              <span className={HIDDEN_ON_BOARD.sourceDot}> · </span>
-              {source}
-            </span>
-          )}
+        <span className={cn("shrink-0 text-quaternary", HIDDEN_ON_BOARD.number)}>
+          #{task.number}
         </span>
-        <span className={HIDDEN_ON_BOARD.owner}>
-          <TaskOwnerAvatar owner={task.owner} />
-        </span>
+        {task.priority && task.priority !== "none" && (
+          <TaskPriorityIcon
+            priority={task.priority}
+            className="ml-auto size-3.5 text-fg-quaternary"
+          />
+        )}
       </div>
-      <h3 className="mt-1 text-sm font-medium text-primary [overflow-wrap:anywhere]">
-        {renderTitle(<span className="line-clamp-3">{task.title}</span>)}
+      <h3 className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
+        {renderTitle(<span className="line-clamp-2">{task.title}</span>)}
       </h3>
       {task.description && (
-        <p className="mt-1 line-clamp-2 text-sm text-tertiary [overflow-wrap:anywhere]">
+        <p className="-mt-1 line-clamp-2 text-sm text-tertiary [overflow-wrap:anywhere]">
           {task.description}
         </p>
       )}
-      {/* Under the title, in words: what the Task waits on and how far its sub-tasks are. The
-          title keeps its place under the number, as on any card; the card grows a line instead
-          of crowding the top one. Its parent shows once it is opened, and in the list. */}
-      {(blocked || subtasks) && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-          {blocked}
-          {subtasks}
-        </div>
+      {waitingOn ? (
+        <p className="-mt-1 flex items-start gap-1.5 text-xs text-warning-primary">
+          <span
+            aria-hidden="true"
+            className="mt-1.5 size-1.5 shrink-0 rounded-full bg-fg-warning-secondary"
+          />
+          <span className="line-clamp-2">
+            {m.task_board_waiting({ number: waitingOn.number, title: waitingOn.title })}
+          </span>
+        </p>
+      ) : (
+        // Blocked only by Tasks the viewer cannot see: there is nothing to name, only the count.
+        blocked
       )}
-      {/* Its labels, two and then +N, as Linear's card shows them (task #455). */}
-      {task.labels?.length ? (
-        <div className="mt-2">
-          <TaskCardLabels labels={task.labels} />
-        </div>
-      ) : null}
-      {(project || tools) && (
-        <div
-          className={cn(
-            "mt-3 min-h-7 items-center justify-between gap-2",
-            // With a touch pointer the tools sit at this row's end, so it keeps room for them.
-            tools && "any-pointer-coarse:pr-16",
-            project ? "flex" : "hidden any-pointer-coarse:flex",
-            // A row held only for a Project the viewer hid goes too, except where it holds the
-            // tools (a touch pointer).
-            project && HIDDEN_ON_BOARD.project,
-            project && tools && PROJECT_HIDDEN_KEEPS_TOOLS,
+      {(label || project) && (
+        <div className={cn("flex min-w-0 items-center gap-1.5", !label && HIDDEN_ON_BOARD.project)}>
+          {label && <TaskLabelChip label={label} />}
+          {moreLabels.length > 0 && (
+            <span className="text-xs text-tertiary">+{moreLabels.length}</span>
           )}
-        >
-          {project ? (
-            <ProjectPill project={project} className={HIDDEN_ON_BOARD.project} />
-          ) : (
-            <span />
+          {/* The Project gives way to the label: it truncates rather than leave the card. */}
+          {project && (
+            <ProjectPill project={project} className={cn("shrink", HIDDEN_ON_BOARD.project)} />
           )}
         </div>
       )}
+      {steps && steps.total > 0 && (
+        <div className="flex items-center gap-2">
+          <ProgressBarBase
+            value={steps.finished}
+            max={steps.total}
+            className="h-1.5 flex-1"
+            progressClassName="bg-fg-brand-primary"
+          />
+          <span className="text-xs text-tertiary tabular-nums">
+            {m.task_board_steps({ finished: steps.finished, total: steps.total })}
+          </span>
+        </div>
+      )}
+      {/* Its owner, and later how much talk it holds (task #598: the comment count, from the
+          board's read, goes at this row's end once the row carries one). With a touch pointer the
+          tools sit at this row's end, so it keeps room for them and stays even with no owner. */}
+      <div
+        className={cn(
+          "flex min-h-7 items-center gap-2",
+          tools && "any-pointer-coarse:pr-16",
+          HIDDEN_ON_BOARD.owner,
+          tools && PROJECT_OWNER_KEEPS_TOOLS,
+        )}
+      >
+        <TaskOwnerAvatar owner={task.owner} />
+      </div>
       {tools && (
         // After the title in the DOM so assistive tech names the task first. With a mouse, over
-        // the top corner (the owner) while hovered or focused; with a touch pointer, always shown
-        // at the bottom row's end, so the owner is never covered for good.
+        // the top corner (the priority) while hovered or focused; with a touch pointer, always
+        // shown at the bottom row's end, so the priority is never covered for good.
         <div className="absolute top-2 right-1.5 rounded-md bg-primary opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100 any-pointer-coarse:top-auto any-pointer-coarse:bottom-2.5 any-pointer-coarse:opacity-100">
           {tools}
         </div>

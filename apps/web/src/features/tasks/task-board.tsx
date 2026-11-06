@@ -1,6 +1,7 @@
-import { TASK_STATUSES, type TaskView } from "@lrm/coforge-sdk/internal";
+import { TASK_STATUSES, type TaskStatus, type TaskView } from "@lrm/coforge-sdk/internal";
 
 import { useMemo, useState, type FocusEvent, type ReactNode } from "react";
+import { Plus } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -9,6 +10,7 @@ import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useTaskHiddenColumns } from "#src/features/settings/task-hidden-columns";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { BoardNewTaskDialog, canCreateIn, newTaskChoices } from "./board-new-task-dialog";
 import { CreateTaskDialog, type TaskDraft } from "./create-task-dialog";
 import { isFinishedStatus, type FinishedStatus } from "./finished-tasks";
 import { TASK_TITLE_CLASS, TaskCard } from "./task-card";
@@ -67,6 +69,7 @@ export function TaskBoard<T extends BoardTask>({
   conversation,
   project = false,
   tree,
+  newTask,
 }: {
   /** The unfinished Tasks, and any the board itself moved to Done or Closed. */
   tasks: readonly T[];
@@ -86,11 +89,17 @@ export function TaskBoard<T extends BoardTask>({
   /** What shows instead of the board or list, with the Tasks its picks offer: a Project's task
    * tree (task #462), which also offers the channel picks, or its skeleton. */
   tree?: { node: ReactNode; tasks: readonly FilterableTask[] };
+  /** Offers "New task" in the toolbar and on each column (All tasks and a Project's board, not a
+   * conversation, which has its own create flow): `projectSlug` files the Task under that
+   * Project, none files it under none; `onCreated` reads the board again. */
+  newTask?: { projectSlug?: string; onCreated: () => void };
 }) {
   const { statuses, filter, layout, completedWindow, changeWindow: onWindowChange } = view;
   const showTree = tree !== undefined;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
+  // The column the board's "New task" form was opened from.
+  const [creating, setCreating] = useState<TaskStatus | null>(null);
   const filtered =
     statuses.length > 0 ||
     filter.owners.length > 0 ||
@@ -122,6 +131,10 @@ export function TaskBoard<T extends BoardTask>({
     });
     return { done: group(done), closed: group(closed) };
   }, [done, closed, layout]);
+  const newTaskChoice = useMemo(
+    () => (newTask ? newTaskChoices(tasks, newTask.projectSlug) : undefined),
+    [tasks, newTask],
+  );
   const onCreateTask = onCommand ? conversation?.onCreateTask : undefined;
   // A Workspace owner or admin sets any status; the board must offer exactly what the server takes.
   const canSetAnyStatus = useCanSetAnyTaskStatus();
@@ -155,10 +168,23 @@ export function TaskBoard<T extends BoardTask>({
         project={project}
         tree={showTree}
         action={
-          onCreateTask && (
+          onCreateTask ? (
             <Button type="button" size="sm" color="secondary" onPress={() => setCreateOpen(true)}>
               {m.tasks_create()}
             </Button>
+          ) : (
+            newTaskChoice &&
+            onCommand && (
+              <Button
+                type="button"
+                size="sm"
+                iconLeading={Plus}
+                isDisabled={newTaskChoice.places.length === 0}
+                onPress={() => setCreating("todo")}
+              >
+                {m.task_board_create_new_task()}
+              </Button>
+            )
           )
         }
       />
@@ -183,9 +209,6 @@ export function TaskBoard<T extends BoardTask>({
                   ? m.tasks_empty()
                   : m.tasks_overview_empty()}
             </p>
-            {!filtered && !conversation && (
-              <p className="mt-1 text-quaternary">{m.tasks_overview_direct_elsewhere()}</p>
-            )}
           </div>
         )}
         {!showTree && (
@@ -200,6 +223,11 @@ export function TaskBoard<T extends BoardTask>({
             disabled={!onCommand}
             // A conversation's board says above it when any command, a move included, is refused.
             showMoveError={!conversation}
+            adding={
+              newTaskChoice && onCommand && newTaskChoice.places.length > 0
+                ? { statuses: TASK_STATUSES.filter(canCreateIn), onAdd: setCreating }
+                : undefined
+            }
             currentMemberId={(task) => task.currentMemberId ?? null}
             onMove={async (task, command) => {
               await onCommand?.(task, command);
@@ -220,6 +248,17 @@ export function TaskBoard<T extends BoardTask>({
           />
         )}
       </div>
+      {newTask && newTaskChoice && (
+        <BoardNewTaskDialog
+          open={creating !== null}
+          status={creating ?? "todo"}
+          places={newTaskChoice.places}
+          people={newTaskChoice.people}
+          labels={newTaskChoice.labels}
+          onOpenChange={(open) => !open && setCreating(null)}
+          onCreated={newTask.onCreated}
+        />
+      )}
       {onCreateTask && (
         <CreateTaskDialog
           open={createOpen}

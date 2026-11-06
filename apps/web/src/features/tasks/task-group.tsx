@@ -1,6 +1,6 @@
 import { type TaskStatus } from "@lrm/coforge-sdk/internal";
 import { useDroppable } from "@dnd-kit/core";
-import { ChevronDown, DotsHorizontal, EyeOff } from "@untitledui/icons";
+import { Check, ChevronDown, DotsHorizontal, EyeOff, Plus } from "@untitledui/icons";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
 
@@ -40,6 +40,9 @@ export function TaskGroup({
   paged,
   hidable,
   onHide,
+  onAdd,
+  onSortByPriority,
+  sortedByPriority,
   children,
 }: {
   status: TaskStatus;
@@ -48,6 +51,11 @@ export function TaskGroup({
   hidable?: boolean;
   /** Hides this board column; given, the column header has a menu offering it. */
   onHide?: () => void;
+  /** Starts a new Task in this column; given, the board header has a "+" and a menu entry. */
+  onAdd?: () => void;
+  /** Sets or clears the column's by-priority order; given, the column menu offers it. */
+  onSortByPriority?: (on: boolean) => void;
+  sortedByPriority?: boolean;
   /** Every Task in the group; for a paged group, more than those read. */
   count: number;
   /** The cards the group holds now. */
@@ -127,8 +135,18 @@ export function TaskGroup({
               />
             </AriaButton>
           </Heading>
-          {/* "···" sits beside the heading, not in it, so the heading names the column alone. */}
-          {onHide && (
+          {/* "+" and "···" sit beside the heading, not in it, so the heading names the column alone. */}
+          {board && onAdd && (
+            <ButtonUtility
+              size="xs"
+              color="tertiary"
+              icon={Plus}
+              tooltip={m.task_board_add_to({ status: label })}
+              aria-label={m.task_board_add_to({ status: label })}
+              onClick={onAdd}
+            />
+          )}
+          {(onHide || (board && (onAdd || onSortByPriority))) && (
             <Dropdown.Root>
               <ButtonUtility
                 size="xs"
@@ -136,9 +154,21 @@ export function TaskGroup({
                 icon={DotsHorizontal}
                 aria-label={m.tasks_column_menu({ status: label })}
               />
-              <Dropdown.Popover placement="bottom end" className="w-44">
+              <Dropdown.Popover placement="bottom end" className="w-48">
                 <Dropdown.Menu aria-label={m.tasks_column_menu({ status: label })}>
-                  <Dropdown.Item icon={EyeOff} label={m.tasks_hide_column()} onAction={onHide} />
+                  {board && onSortByPriority && (
+                    <Dropdown.Item
+                      icon={sortedByPriority ? Check : undefined}
+                      label={m.task_board_sort_priority()}
+                      onAction={() => onSortByPriority(!sortedByPriority)}
+                    />
+                  )}
+                  {board && onAdd && (
+                    <Dropdown.Item icon={Plus} label={m.task_board_add_here()} onAction={onAdd} />
+                  )}
+                  {onHide && (
+                    <Dropdown.Item icon={EyeOff} label={m.tasks_hide_column()} onAction={onHide} />
+                  )}
                 </Dropdown.Menu>
               </Dropdown.Popover>
             </Dropdown.Root>

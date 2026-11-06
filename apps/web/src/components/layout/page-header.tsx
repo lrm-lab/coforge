@@ -2,6 +2,7 @@ import type { FC } from "react";
 
 import { MobileNavigationButton } from "#src/components/layout/sidebar/mobile-header";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
+import { cn } from "#src/lib/utils";
 
 /**
  * The 48px header band every page owns. On mobile it carries the drawer button.
@@ -17,6 +18,7 @@ export function PageHeader({
   meta,
   actions,
   tabs,
+  headingClassName,
 }: {
   /** A control that belongs before the title, such as a panel's way back. */
   leading?: React.ReactNode;
@@ -30,13 +32,17 @@ export function PageHeader({
   actions?: React.ReactNode;
   /** Underline tabs that switch the page's view. */
   tabs?: React.ReactNode;
+  /** For a heading that gives way on a phone, where `meta` carries the page's name. */
+  headingClassName?: string;
 }) {
   const title = (
     <>
       {leading ?? <MobileNavigationButton />}
       {Icon && <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-secondary" />}
       {breadcrumb}
-      <h1 className="truncate text-lg font-semibold text-primary">{heading}</h1>
+      <h1 className={cn("truncate text-lg font-semibold text-primary", headingClassName)}>
+        {heading}
+      </h1>
       {meta}
     </>
   );

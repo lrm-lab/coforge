@@ -47,9 +47,11 @@ export function ProjectsHeader({
     <>
       <PageHeader
         heading={m.projects_title()}
+        // On a phone the switcher alone names the page: it needs the room.
+        headingClassName="max-sm:hidden"
         meta={
           <>
-            <span aria-hidden="true" className="text-lg text-quaternary">
+            <span aria-hidden="true" className="text-lg text-quaternary max-sm:hidden">
               /
             </span>
             <ProjectSwitcher

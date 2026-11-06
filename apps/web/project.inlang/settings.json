@@ -26,6 +26,7 @@
       "./messages/{locale}/artifacts.json",
       "./messages/{locale}/channel-notifications.json",
       "./messages/{locale}/message-forward.json",
+      "./messages/{locale}/task-board-create.json",
       "./messages/{locale}/drafts.json",
       "./messages/{locale}/channels.json",
       "./messages/{locale}/activity-inbox.json",
