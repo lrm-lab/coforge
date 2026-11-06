@@ -20,9 +20,6 @@ export function effectiveActionCardState(
   expiresAt: Date | null | undefined,
   now = new Date(),
 ): ActionCardState {
-  // Rows written before task #616 may still carry the removed `answered_in_chat` state until the
-  // deferred expand-contract migration lands; they read as expired, the only close left.
-  if (state === "answered_in_chat") return "expired";
   if (state === "pending" && expiresAt && expiresAt.getTime() <= now.getTime()) return "expired";
   return state as ActionCardState;
 }

@@ -134,15 +134,12 @@ model ActionCard {
   payload           Json
   draftHint         String?
   preparedByAgentId String       @db.Uuid
-  /// pending | executed | cancelled | expired | answered_in_chat
+  /// pending | executed | cancelled | expired
   state             String       @default("pending")
   committedByUserId String?      @db.Uuid
   committedAt       DateTime?
   /// When a still-pending card expires; the sweep writes `expired` and wakes the Agent.
   expiresAt         DateTime?
-  /// The asked person's first message that answered this card in chat; the message may be gone.
-  answeredInChatMessageId String? @db.Uuid
-  answeredInChatAt  DateTime?
   result            Json?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt

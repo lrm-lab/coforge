@@ -65,10 +65,7 @@ export function actionCardBodySuffix(card: {
   kind?: string;
   result?: unknown;
 }): string {
-  // Rows written before task #616 may still carry the removed `answered_in_chat` state until the
-  // deferred expand-contract migration lands; they read as expired, as the web view shows them.
-  const state = card.state === "answered_in_chat" ? "expired" : card.state;
-  if (state === "executed" && card.kind === "choice") {
+  if (card.state === "executed" && card.kind === "choice") {
     const optionId =
       card.result &&
       typeof card.result === "object" &&
@@ -82,7 +79,7 @@ export function actionCardBodySuffix(card: {
       return `[action card: executed; choice=${optionId}${recommended ? " (recommended)" : ""}]`;
     }
   }
-  if (state === "executed" && card.kind === "questions") {
+  if (card.state === "executed" && card.kind === "questions") {
     const answers =
       card.result && typeof card.result === "object" && "answers" in card.result
         ? (card.result as { answers?: unknown }).answers
@@ -111,7 +108,7 @@ export function actionCardBodySuffix(card: {
       if (parts.length) return `[action card: executed; ${parts.join("; ")}]`;
     }
   }
-  return `[action card: ${state}]`;
+  return `[action card: ${card.state}]`;
 }
 
 /** The choice result an offline Agent missed: who answered, which card, where, and what they chose. */
