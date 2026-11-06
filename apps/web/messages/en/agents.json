@@ -74,7 +74,7 @@
   "agent_form_username_suggest": "Suggest Another",
   "agent_form_username_required": "Enter a username such as release-fix, or roll the dice for one.",
   "agent_form_username_locked_hint": "The username is set when the Agent is created and can't be changed.",
-  "agent_form_provider": "Runtime provider",
+  "agent_form_provider": "Runtime",
   "agent_form_computer": "Computer",
   "agent_form_model": "Model",
   "agent_form_model_refresh": "Refresh Model Catalog",

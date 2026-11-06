@@ -74,7 +74,7 @@
   "agent_form_username_suggest": "换一个名称",
   "agent_form_username_required": "输入用户名，例如 release-fix，或点骰子换一个。",
   "agent_form_username_locked_hint": "用户名在创建时确定，之后无法修改。",
-  "agent_form_provider": "运行时提供商",
+  "agent_form_provider": "运行时",
   "agent_form_computer": "电脑",
   "agent_form_model": "模型",
   "agent_form_model_refresh": "刷新模型目录",

@@ -71,12 +71,12 @@ test("a new Agent starts on a runtime its Computer can run", async () => {
       await browser(
         "wait",
         "--fn",
-        `document.querySelector('[role="dialog"]')?.textContent.includes("Runtime provider") === true`,
+        `[...document.querySelectorAll('[role="dialog"] button')].some((button) => button.textContent.includes("Claude Code"))`,
       );
       await browser("wait", "500");
       const page = await browser("snapshot");
-      expect(page).toContain("Claude Code Runtime provider");
-      expect(page).not.toContain("CoForge Runtime provider");
+      expect(page).toContain("Claude Code Runtime");
+      expect(page).not.toContain("CoForge Runtime");
       await shots(label);
     }
   } finally {
