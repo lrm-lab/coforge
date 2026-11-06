@@ -22,6 +22,7 @@ import {
   type CollectRunComputerInput,
   type CollectWindowKind,
 } from "./weekly-report-collect-run.server";
+import { loadCollectorRunMetadata } from "./weekly-report-collect-run-metadata.server";
 import { resolveCollectWindow } from "#src/features/records/weekly-report-collect-window";
 import { recordSideChat } from "./record-side-chat.server";
 import { resolveLatestChatSessionId } from "./weekly-report-assistant-chat-session.server";
@@ -406,13 +407,16 @@ export async function reportCollectorRuntimeFailure(
   });
   const label = computer?.displayName || computer?.name || input.computerId;
   const reason = input.failureReason.trim() || "collector runtime failed";
+  const runMetadata = await loadCollectorRunMetadata(db, {
+    workspaceId: input.workspaceId,
+    runIds: failed.accepted
+      .filter((accepted) => accepted.newlyAccepted)
+      .map((accepted) => accepted.run.id),
+  });
 
   for (const accepted of failed.accepted) {
     if (!accepted.newlyAccepted) continue;
-    const runMeta = await db.weeklyReportCollectRun.findFirst({
-      where: { id: accepted.run.id, workspaceId: input.workspaceId },
-      select: { reportId: true, userId: true },
-    });
+    const runMeta = runMetadata.get(accepted.run.id) ?? null;
     if (!runMeta) continue;
     if (accepted.synthesisStarted) {
       await recordSideChat(db).postAssistantCollectComment({
