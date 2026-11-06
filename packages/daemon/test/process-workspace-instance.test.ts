@@ -3,7 +3,10 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { ProcessWorkspaceInstance } from "#src/supervisor/process-workspace-instance";
+import {
+  ProcessWorkspaceInstance,
+  writeWorkspaceInstanceRecord,
+} from "#src/supervisor/process-workspace-instance";
 import type { WorkspaceInstanceConfig } from "#src/supervisor/workspace-instance";
 import {
   WorkspaceHealthJournal,
@@ -54,6 +57,12 @@ test("ensureStarted spawns __workspace-daemon once and reuses a live PID", async
     expect(spawns[0]?.env.COFORGE_DAEMON_CONNECTION_ENDPOINT).toBe(
       "ws://127.0.0.1:8000/connection/websocket",
     );
+    // The child self-registers the instance record so a Coordinator that dies before its own
+    // write still leaves an adoptable live instance.
+    expect(spawns[0]?.env.COFORGE_WORKSPACE_INSTANCE_RECORD).toBe(
+      join(cfg.stateDirectory, "process-instance.json"),
+    );
+    expect(spawns[0]?.env.COFORGE_WORKSPACE_INVOCATION_ID).toMatch(/^[0-9a-f]{32}$/);
     const first = await instance.identity();
     expect(first).toMatchObject({ mainPid: 4242, active: true });
     expect(first?.invocationId).toMatch(/^[0-9a-f]{32}$/);
@@ -329,3 +338,22 @@ for (const record of [
     }
   });
 }
+
+test("writeWorkspaceInstanceRecord writes the record and retires the legacy name", async () => {
+  const cfg = await config();
+  try {
+    await mkdir(cfg.stateDirectory, { recursive: true });
+    const legacyPath = join(cfg.stateDirectory, "windows-instance.json");
+    await Bun.write(legacyPath, "{}");
+    const recordPath = join(cfg.stateDirectory, "process-instance.json");
+    const invocationId = "0123456789abcdef0123456789abcdef";
+    await writeWorkspaceInstanceRecord(recordPath, { mainPid: 5150, invocationId });
+    await expect(Bun.file(recordPath).json()).resolves.toEqual({
+      mainPid: 5150,
+      invocationId,
+    });
+    await expect(Bun.file(legacyPath).exists()).resolves.toBe(false);
+  } finally {
+    await rm(cfg.root, { recursive: true, force: true });
+  }
+});

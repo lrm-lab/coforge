@@ -38,6 +38,8 @@ import {
 } from "#src/supervisor/workspace-health-journal";
 import { WorkspaceParking } from "#src/supervisor/workspace-parking";
 import { guardWorkspaceRunnerStart } from "#src/supervisor/workspace-runner-guard";
+import { writeWorkspaceInstanceRecord } from "#src/supervisor/process-workspace-instance";
+import { holdWorkspaceDaemonLock } from "#src/supervisor/workspace-daemon-lock";
 export { launchdJobs } from "#src/platform/launchd-job";
 export { stopWorkspaceAgentProcesses } from "#src/platform/linux-agent-processes";
 export { FileBindingStore } from "#src/supervisor/binding-store";
@@ -237,6 +239,49 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
         process.exitCode = 0;
         return;
       }
+      // One Workspace daemon per binding: a child outlives its Coordinator, so a restarted
+      // Coordinator can spawn a second child while the first still runs. The second waits on
+      // the binding's lock instead of connecting beside it; the first's exit (a terminal cloud
+      // refusal parks and stops it) releases the lock and the waiter takes over.
+      const bindingStop = new AbortController();
+      void stopRequested.then(() => bindingStop.abort());
+      let bindingLock: { release(): void } | undefined;
+      if (config?.workspaceId) {
+        try {
+          bindingLock = await holdWorkspaceDaemonLock(daemonStateDirectory, {
+            signal: bindingStop.signal,
+            waiting: () =>
+              logger.info("Another daemon already owns this Workspace binding; waiting for it", {
+                event: "daemon:binding_lock_wait",
+                outcome: "waiting",
+              }),
+          });
+        } catch (error) {
+          if (!bindingStop.signal.aborted) throw error;
+          await dispose();
+          process.exitCode = 0;
+          return;
+        }
+        // Self-register the OS instance record while holding the binding lock: if the spawning
+        // Coordinator died before its own write, this record is what lets the next Coordinator
+        // adopt this daemon instead of launching a second child beside it. Best effort — the
+        // Coordinator's write already covers the ordinary path.
+        const instanceRecordPath = Bun.env.COFORGE_WORKSPACE_INSTANCE_RECORD;
+        const instanceInvocationId = Bun.env.COFORGE_WORKSPACE_INVOCATION_ID;
+        if (instanceRecordPath && instanceInvocationId) {
+          try {
+            await writeWorkspaceInstanceRecord(instanceRecordPath, {
+              mainPid: process.pid,
+              invocationId: instanceInvocationId,
+            });
+          } catch (error) {
+            logger.warn("Workspace instance record write failed", {
+              event: "daemon:instance_record_failed",
+              error_message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
       if (process.platform === "linux" && config?.workspaceId)
         await reapLeftoverAgentProcesses(config.workspaceId, logger);
       const requireRuntime = (): DaemonRuntime => {
@@ -358,6 +403,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
         // (`machine-supervisor.ts`'s `#stop`) - never an unexpected death; clearing the live
         // marker here is what keeps the next start from counting it as a crash.
         await healthJournal.recordGracefulStop();
+        bindingLock?.release();
         await daemon.stopAll();
         agentProxy.close();
         await localRpc.close();

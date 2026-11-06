@@ -19,7 +19,7 @@ export type ProcessProbe = (pid: number) => boolean;
 
 export type ProcessSignal = (pid: number, signal?: NodeJS.Signals) => void;
 
-type InstanceRecord = { mainPid: number; invocationId: string };
+export type InstanceRecord = { mainPid: number; invocationId: string };
 
 /** This record's name now that Linux without systemd shares it. */
 const RECORD_FILE = "process-instance.json";
@@ -74,6 +74,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     if (this.config.daemonConnectionEndpoint)
       env.COFORGE_DAEMON_CONNECTION_ENDPOINT = this.config.daemonConnectionEndpoint;
 
+    const invocationId = crypto.randomUUID().replaceAll("-", "");
     const child = await this.spawnChild({
       command: [
         this.config.executablePath,
@@ -84,11 +85,17 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
         this.config.stateDirectory,
       ],
       cwd: this.config.stateDirectory,
-      env,
+      env: {
+        ...env,
+        // The child rewrites this record itself once it holds the binding lock, so a Coordinator
+        // that dies between spawn and the write below still leaves a discoverable live instance
+        // for the next Coordinator to adopt instead of spawning a duplicate beside it.
+        COFORGE_WORKSPACE_INSTANCE_RECORD: this.#recordPath,
+        COFORGE_WORKSPACE_INVOCATION_ID: invocationId,
+      },
     });
     if (!Number.isSafeInteger(child.pid) || child.pid <= 0)
       throw new Error(`Workspace ${this.config.workspaceId} did not start`);
-    const invocationId = crypto.randomUUID().replaceAll("-", "");
     await this.#writeRecord({ mainPid: child.pid, invocationId });
     return child.pid;
   }
@@ -162,13 +169,29 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
   }
 
   async #writeRecord(record: InstanceRecord): Promise<void> {
-    await writeFile(this.#recordPath, `${JSON.stringify(record)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    // A record read from the old name is superseded, not left to be read again.
-    await rm(this.#legacyRecordPath, { force: true });
+    await writeWorkspaceInstanceRecord(this.#recordPath, record, this.#legacyRecordPath);
   }
+}
+
+/**
+ * The Workspace child's half of instance discovery: it writes the same record the spawning
+ * Coordinator would have, but from inside the lock holder, so the record always names the one
+ * daemon allowed to run for the binding. Called only by `__workspace-daemon`; best effort —
+ * the Coordinator's own write already covers the ordinary path.
+ */
+export async function writeWorkspaceInstanceRecord(
+  recordPath: string,
+  record: InstanceRecord,
+  legacyRecordPath?: string,
+): Promise<void> {
+  await writeFile(recordPath, `${JSON.stringify(record)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  // A record read from the old name is superseded, not left to be read again.
+  await rm(legacyRecordPath ?? recordPath.replace(RECORD_FILE, LEGACY_RECORD_FILE), {
+    force: true,
+  });
 }
 
 async function defaultSpawn(input: {

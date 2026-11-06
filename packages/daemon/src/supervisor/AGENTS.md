@@ -43,6 +43,19 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
   drops the adopted child; only `stop` or a failed start does. One failed
   `launchctl`/`ps` read must not turn a running Workspace into one reported
   down.
+- On `ProcessWorkspaceInstance` platforms the Workspace child rewrites
+  `process-instance.json` itself once it holds the per-binding lock
+  (`COFORGE_WORKSPACE_INSTANCE_RECORD`/`COFORGE_WORKSPACE_INVOCATION_ID` env),
+  so a Coordinator that dies between spawn and its own record write still
+  leaves an adoptable instance instead of an untracked orphan a later
+  Coordinator would duplicate.
+- `workspace-daemon-lock.ts` is the per-binding single-instance lock the
+  Workspace child itself holds (`runDaemon`, only when its config names a
+  Workspace): a child outlives its Coordinator, so a restarted Coordinator can
+  spawn a second child for a live binding, and only the child knows it is the
+  second. The contender waits on the lock instead of connecting beside the
+  holder; the holder's exit — a terminal cloud refusal parks and stops it —
+  releases the lock and the waiter takes over.
 - An explicit disabled state always wins over automatic restart or recovery.
 - A Workspace the cloud refused for good (`workspace_deleted`, `computer_unlinked`,
   `credential_revoked`) is parked in its health journal. Recovery, `start`, and `restart` never start
