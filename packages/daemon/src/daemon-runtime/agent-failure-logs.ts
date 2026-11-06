@@ -14,7 +14,7 @@ import { controlCodeField } from "./control-error-code";
  * as `error_code`. The message is what makes `message_delivery_failed` diagnosable. It goes
  * through the same scrubber as Activity (`scrubRuntimeErrorText`: credentials stripped, 512 code
  * points) and the stack stays off the record. */
-function loggedErrorMessage(error: unknown): string {
+export function loggedErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return scrubRuntimeErrorText(message);
 }

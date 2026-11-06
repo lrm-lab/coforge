@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { AgentTransportError } from "#src/connection/agent-transport-error";
 import {
   IDLE_NUDGE_UNSUPPORTED_RETRY_MS,
   TaskIdleNudge,
@@ -6,6 +7,7 @@ import {
   type IdleNudgeRequest,
   type IdleNudgeResponse,
 } from "#src/daemon-runtime/task-idle-nudge";
+import { captureDaemonLogs } from "./log-capture";
 
 /** A test double for the server's idle-nudge route; the real one lands with task #477. */
 function harness(
@@ -155,4 +157,116 @@ test("an unanswered ask neither writes nor disables the route", async () => {
   h.nudge.maybeAsk("agent-a");
   await new Promise((resolve) => setTimeout(resolve, 30));
   expect(h.asks).toHaveLength(2);
+});
+
+const waitForEvent = async (
+  records: readonly { properties: Record<string, unknown> }[],
+  event: string,
+) => {
+  for (let i = 0; i < 100 && !records.some((record) => record.properties.event === event); i++)
+    await new Promise((resolve) => setTimeout(resolve, 2));
+};
+
+test("a failed ask logs its message, not a bare Error name", async () => {
+  const { records } = await captureDaemonLogs(async (records) => {
+    const h = harness({
+      respond: async () => {
+        throw new Error("Agent API key is missing");
+      },
+    });
+    h.nudge.maybeAsk("agent-a");
+    await waitForEvent(records, "task_idle_nudge:failed");
+  });
+  const record = records.find((entry) => entry.properties.event === "task_idle_nudge:failed");
+  expect(record?.properties.error_message).toBe("Agent API key is missing");
+});
+
+test("a transport ask failure logs its failure class and upstream status", async () => {
+  const { records } = await captureDaemonLogs(async (records) => {
+    const h = harness({
+      respond: async () => {
+        throw AgentTransportError.upstreamHttpResponse("task idle nudge", 503);
+      },
+    });
+    h.nudge.maybeAsk("agent-a");
+    await waitForEvent(records, "task_idle_nudge:failed");
+  });
+  const record = records.find((entry) => entry.properties.event === "task_idle_nudge:failed");
+  expect(record?.properties.error_code).toBe("AgentTransportError");
+  expect(record?.properties.failure_class).toBe("upstream_http_response");
+  expect(record?.properties.upstream_status).toBe(503);
+});
+
+test("a failed delivery logs its message", async () => {
+  const { records } = await captureDaemonLogs(async (records) => {
+    const h = harness({
+      deliver: async () => {
+        throw new Error("session stdin closed");
+      },
+    });
+    h.nudge.maybeAsk("agent-a");
+    await waitForEvent(records, "task_idle_nudge:delivery_failed");
+  });
+  const record = records.find(
+    (entry) => entry.properties.event === "task_idle_nudge:delivery_failed",
+  );
+  expect(record?.properties.error_message).toBe("session stdin closed");
+});
+
+test("a reminder with no writable session is logged as undelivered", async () => {
+  const { records } = await captureDaemonLogs(async (records) => {
+    const h = harness({ deliver: async () => false });
+    h.nudge.maybeAsk("agent-a");
+    await waitForEvent(records, "task_idle_nudge:delivery_failed");
+  });
+  const record = records.find(
+    (entry) => entry.properties.event === "task_idle_nudge:delivery_failed",
+  );
+  expect(record?.properties.error_code).toBe("no_session");
+});
+
+test("a declined nudge logs the cloud's reason", async () => {
+  const { records } = await captureDaemonLogs(async (records) => {
+    const h = harness({ respond: async () => ({ send: false, reason: "stale" }) });
+    h.nudge.maybeAsk("agent-a");
+    await waitForEvent(records, "task_idle_nudge:skipped");
+  });
+  const record = records.find((entry) => entry.properties.event === "task_idle_nudge:skipped");
+  expect(record?.properties.reason).toBe("stale");
+});
+
+test("a repeated decline for the same agent and reason is throttled to one line per ten minutes", async () => {
+  const { records } = await captureDaemonLogs(async (records) => {
+    const h = harness({ respond: async () => ({ send: false, reason: "stale" }) });
+    h.nudge.maybeAsk("agent-a");
+    await settle();
+    h.nudge.maybeAsk("agent-a");
+    await settle();
+    h.advance(10 * 60 * 1000 + 1);
+    h.nudge.maybeAsk("agent-a");
+    await settle();
+  });
+  const skipped = records.filter((entry) => entry.properties.event === "task_idle_nudge:skipped");
+  expect(skipped).toHaveLength(2);
+});
+
+test("a delivered reminder is logged so delivery can be verified end to end", async () => {
+  const { records } = await captureDaemonLogs(async (records) => {
+    const h = harness();
+    h.nudge.maybeAsk("agent-a");
+    await waitForEvent(records, "task_idle_nudge:delivered");
+  });
+  expect(records.some((entry) => entry.properties.event === "task_idle_nudge:delivered")).toBe(
+    true,
+  );
+});
+
+test("an unanswered ask logs its timeout", async () => {
+  const { records } = await captureDaemonLogs(async (records) => {
+    const h = harness({ respond: () => new Promise(() => {}), timeoutMs: 10 });
+    h.nudge.maybeAsk("agent-a");
+    await waitForEvent(records, "task_idle_nudge:timeout");
+  });
+  const record = records.find((entry) => entry.properties.event === "task_idle_nudge:timeout");
+  expect(record?.properties.timeout_ms).toBe(10);
 });

@@ -1,4 +1,7 @@
 import { getLogger } from "@logtape/logtape";
+import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
+import { AgentTransportError } from "../connection/agent-transport-error";
+import { loggedErrorMessage } from "./agent-failure-logs";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -40,6 +43,10 @@ export const IDLE_NUDGE_TIMEOUT_MS = 15_000;
  * separately, so the route can appear while this daemon keeps running. */
 export const IDLE_NUDGE_UNSUPPORTED_RETRY_MS = 60 * 60_000;
 
+/** A declined nudge for the same Agent and reason logs at most this often: every idle transition
+ * asks again, and a reason that keeps declining would otherwise write one line per turn end. */
+export const IDLE_NUDGE_SKIPPED_LOG_INTERVAL_MS = 10 * 60_000;
+
 /**
  * The daemon's side of the task idle reminder: when a turn ends and the Agent is genuinely idle,
  * ask the cloud once whether to remind it of its open Tasks, and write the answer as idle input.
@@ -51,6 +58,8 @@ export class TaskIdleNudge {
   readonly #inFlight = new Set<string>();
   /** The session each Agent's fresh-session ask was made for. */
   readonly #askedSessions = new Map<string, string>();
+  /** When each Agent-and-reason decline was last logged, for the skipped throttle. */
+  readonly #skippedLoggedAt = new Map<string, number>();
   /** When a 404 last said this server has no idle nudge; asking resumes after the retry window. */
   #unsupportedUntil = 0;
 
@@ -91,13 +100,20 @@ export class TaskIdleNudge {
         }),
       ]);
       // A server that never answers is not a server without the route: the next idle asks again.
-      if ("timeout" in raced) return;
+      if ("timeout" in raced) {
+        logger.info("Task idle nudge was not answered in time", {
+          event: "task_idle_nudge:timeout",
+          agent_id: agentId,
+          timeout_ms: timeoutMs,
+        });
+        return;
+      }
       answer = raced.response;
     } catch (error) {
       logger.info("Task idle nudge was not answered", {
         event: "task_idle_nudge:failed",
         agent_id: agentId,
-        error_code: error instanceof Error ? error.name : "unknown",
+        ...idleNudgeErrorFields(error),
       });
       return;
     } finally {
@@ -112,18 +128,61 @@ export class TaskIdleNudge {
       });
       return;
     }
-    if (!answer.send || !answer.text) return;
+    if (!answer.send || !answer.text) {
+      const reason = answer.reason ?? "";
+      const key = `${agentId} ${reason}`;
+      const now = this.#now();
+      const lastLogged = this.#skippedLoggedAt.get(key);
+      if (lastLogged === undefined || now - lastLogged >= IDLE_NUDGE_SKIPPED_LOG_INTERVAL_MS) {
+        this.#skippedLoggedAt.set(key, now);
+        logger.info("Task idle nudge was declined", {
+          event: "task_idle_nudge:skipped",
+          agent_id: agentId,
+          ...(answer.reason ? { reason: answer.reason } : {}),
+        });
+      }
+      return;
+    }
     // The Agent may have picked up work while the answer was in flight: a reminder that would
     // interrupt a live turn is dropped rather than queued behind it.
     if (!this.ports.idle(agentId)) return;
     try {
-      await this.ports.deliver(agentId, answer.text);
+      const delivered = await this.ports.deliver(agentId, answer.text);
+      if (!delivered) {
+        logger.info("Task idle reminder had no session to write to", {
+          event: "task_idle_nudge:delivery_failed",
+          agent_id: agentId,
+          error_code: "no_session",
+        });
+      } else {
+        logger.info("Task idle reminder was delivered", {
+          event: "task_idle_nudge:delivered",
+          agent_id: agentId,
+        });
+      }
     } catch (error) {
       logger.info("Task idle reminder could not be written", {
         event: "task_idle_nudge:delivery_failed",
         agent_id: agentId,
-        error_code: error instanceof Error ? error.name : "unknown",
+        ...idleNudgeErrorFields(error),
       });
     }
   }
+}
+
+/** The failure fields every idle-nudge log carries: a stable code, the scrubbed message (a bare
+ * `Error` name told production nothing — task #639), and the transport shape when the cloud call
+ * itself failed. */
+function idleNudgeErrorFields(error: unknown): Record<string, unknown> {
+  const fields: Record<string, unknown> = {
+    error_code: diagnosticErrorCode(error),
+    error_message: loggedErrorMessage(error),
+  };
+  if (error instanceof AgentTransportError) {
+    fields.failure_class = error.failureClass;
+    fields.cause_code = error.causeCode;
+    if (error.upstreamStatus !== undefined) fields.upstream_status = error.upstreamStatus;
+    if (error.upstreamCode !== undefined) fields.upstream_code = error.upstreamCode;
+  }
+  return fields;
 }
