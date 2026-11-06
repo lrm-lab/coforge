@@ -74,8 +74,12 @@ test("a CDN's attachment or avatar is read through this site, and nothing else i
   expect(shareImageAddress(attachment, at)).toBe(`/api/attachments/${id}?download`);
   const avatar = `https://images.coforge.cn/users/${id}/avatars/${id}/original?style=a`;
   expect(shareImageAddress(avatar, at)).toBe(`/api/workspaces/ws/users/${id}/avatar`);
+  // The expired preview's fallback, which redirects to the CDN.
+  expect(shareImageAddress(`https://coforge.cn/api/attachments/${id}`, at)).toBe(
+    `/api/attachments/${id}?download`,
+  );
   for (const url of [
-    `https://coforge.cn/api/attachments/${id}`,
+    `https://coforge.cn/api/attachments/${id}?download`,
     "https://coforge.cn/avatars/person-1-2.webp",
     "https://images.coforge.cn/projects/icon.webp",
   ])

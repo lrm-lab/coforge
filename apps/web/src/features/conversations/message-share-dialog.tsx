@@ -3,9 +3,9 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Copy01, Download01 } from "@untitledui/icons";
 
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Select } from "#src/components/base/select/select";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Spinner } from "#src/components/ui/spinner";
 import { useAppToast } from "#src/components/ui/toast";
@@ -171,25 +171,27 @@ export function MessageShareDialog({
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-2 px-4 py-3 safe-area-padding">
-              <ButtonGroup
-                size="sm"
+            <div className="flex items-center gap-2 px-4 py-3 safe-area-padding">
+              <Select
                 aria-label={m.message_share_ratio()}
-                selectedKeys={[ratio]}
-                disallowEmptySelection
-                onSelectionChange={(keys) => {
-                  const picked = [...keys][0] as ShareRatio;
-                  if (picked === ratio) return;
+                size="sm"
+                className="w-24"
+                selectedKey={ratio}
+                onSelectionChange={(key) => {
+                  const picked = SHARE_RATIOS.find((each) => each === key);
+                  if (!picked || picked === ratio) return;
                   setIndex(0);
                   setStep(start(picked));
                 }}
               >
                 {SHARE_RATIOS.map((each) => (
-                  <ButtonGroupItem key={each} id={each}>
-                    {each === "auto" ? m.message_share_ratio_auto() : each}
-                  </ButtonGroupItem>
+                  <Select.Item
+                    key={each}
+                    id={each}
+                    label={each === "auto" ? m.message_share_ratio_auto() : each}
+                  />
                 ))}
-              </ButtonGroup>
+              </Select>
               {total > 1 && (
                 <div className="flex items-center gap-1 text-sm text-secondary tabular-nums">
                   <ButtonUtility
@@ -212,15 +214,14 @@ export function MessageShareDialog({
                 </div>
               )}
               <div className="ml-auto flex items-center gap-2">
-                <Button
+                <ButtonUtility
                   size="sm"
                   color="secondary"
-                  iconLeading={Copy01}
+                  icon={Copy01}
+                  tooltip={m.message_share_copy()}
                   isDisabled={!page}
                   onClick={() => void copy()}
-                >
-                  {m.message_share_copy()}
-                </Button>
+                />
                 <Button
                   size="sm"
                   iconLeading={Download01}

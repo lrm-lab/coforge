@@ -78,18 +78,23 @@ export function shareFileName(index: number, total: number): string {
 
 const DELIVERED_ATTACHMENT = /\/workspaces\/[^/]+\/attachments\/([0-9a-f-]{36})\//i;
 const DELIVERED_AVATAR = /\/users\/([0-9a-f-]{36})\/avatars\//i;
+const SITE_ATTACHMENT = /^\/api\/attachments\/([0-9a-f-]{36})(?:\?(?!download)|$)/i;
 
 /**
- * This site's own address for an image delivered from a CDN, whose address a capture cannot read:
- * neither the attachment nor the profile image CDN sends CORS headers. An attachment's `?download`
- * is the one form of its route that streams the bytes instead of redirecting back to the CDN.
- * Anything else keeps its address.
+ * This site's own address for an image a capture cannot read: neither the attachment nor the
+ * profile image CDN sends CORS headers. An attachment's route redirects to its CDN, the expired
+ * preview's fallback included, unless asked for `?download`, the one form that streams the bytes.
+ * Anything else keeps its address. The patterns follow the object keys `attachment.server.ts` and
+ * `user-avatar.server.ts` write: a key of another shape falls back to the library's placeholder.
  */
 export function shareImageAddress(
   url: string,
   { siteOrigin, workspaceId }: { siteOrigin: string; workspaceId: string },
 ): string | undefined {
-  if (url.startsWith(siteOrigin)) return undefined;
+  if (url.startsWith(siteOrigin)) {
+    const id = SITE_ATTACHMENT.exec(url.slice(siteOrigin.length))?.[1];
+    return id && `/api/attachments/${id}?download`;
+  }
   const attachment = DELIVERED_ATTACHMENT.exec(url)?.[1];
   if (attachment) return `/api/attachments/${attachment}?download`;
   const user = DELIVERED_AVATAR.exec(url)?.[1];
