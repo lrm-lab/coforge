@@ -293,12 +293,11 @@ export class AgentMessageAttentionIndex {
     );
   }
 
-  /** Whether the Agent already has this delivery: read past it, or shown its preview line. A
-   * replayed delivery whose acknowledgement was lost still must not be announced again. */
-  #alreadyRead(agentId: string, message: AgentMessageDelivery & { target: string }): boolean {
+  /** Whether the Agent already saw this sequence or its preview. */
+  #alreadyRead(agentId: string, message: { target: string; sequence: number }): boolean {
     return (
-      this.#consumed(message) ||
-      this.#previewSeen.has(agentId, message.target ?? "", message.sequence)
+      this.hasSeen(agentId, message.target, message.sequence) ||
+      this.#previewSeen.has(agentId, message.target, message.sequence)
     );
   }
 
@@ -456,6 +455,10 @@ export class AgentMessageAttentionIndex {
       )
         throw new Error("invalid Agent recovery message");
       suppliedTargets.add(message.target);
+      this.bindConversation(agentId, message.target, message.conversationId);
+      if (this.#alreadyRead(agentId, message)) {
+        continue;
+      }
       if (
         generation.seenDeliveryIds.has(message.deliveryId) ||
         generation.seenMessageIds.has(message.messageId)
@@ -832,7 +835,6 @@ export class AgentMessageAttentionIndex {
     return (entry?.seq ?? 0) >= sequence || containsSorted(entry?.exactSeqs, sequence);
   }
 
-  /** A delivery's target is the server's canonical spelling, so it needs no alias lookup. */
   #consumed(message: AgentMessageDelivery & { target: string }): boolean {
     if (message.conversationId)
       this.bindConversation(message.agentId, message.target, message.conversationId);
