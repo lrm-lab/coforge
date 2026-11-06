@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * Browser E2E (task #227): a focused text field draws its border in the design spec's brand violet
- * (#5d36dc, `--color-border-input-focus`), and in the lighter brand step (#a993ff) in dark mode,
- * where #5d36dc is too dim on the dark field. Checked on a shared Input (the Records search) and on
- * the chat composer, which draws its own frame.
+ * Browser E2E (task #227): a focused text field draws its border one step up from the resting
+ * one, `--color-border-input-focus` — the keyboard's focus ring says more. Checked on a shared
+ * Input (the Records search) and on the chat composer, which draws its own frame.
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
  * against the dev database. Screenshots are written under `.amp/e2e/input-focus-border/`.
@@ -24,10 +24,18 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/input-focus-border");
 
-const LIGHT = "rgb(93, 54, 220)";
-const DARK = "rgb(169, 147, 255)";
+/** The colour `--color-border-input-focus` resolves to, read off a probe so the check follows the
+ * token rather than pinning its value (the coforge-ui pass made it neutral, not violet). */
+const focusTokenColor = `(() => {
+  const probe = document.createElement("i");
+  probe.style.color = "var(--color-border-input-focus)";
+  document.body.append(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+})()`;
 
-test("a focused text field's border is the brand violet, lighter in dark mode", async () => {
+test("a focused text field's border is the theme's input-focus colour", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `input-focus-${process.pid}`;
   async function browser(...args: string[]) {
@@ -69,20 +77,21 @@ test("a focused text field's border is the brand violet, lighter in dark mode", 
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
-    for (const [theme, color] of [
-      ["light", LIGHT],
-      ["dark", DARK],
-    ] as const) {
+    for (const theme of ["light", "dark"] as const) {
       await browser("open", `${origin}${workspacePath}/records`);
       await setTheme(theme);
-      await waitFor(`document.querySelector('input[type="search"]') !== null`);
+      await waitFor(`${pageHydrated} && document.querySelector('input[type="search"]') !== null`);
+      // The token is theme-scoped, so it is read on the themed page, not before it loads.
+      const color = await evaluate<string>(focusTokenColor);
       await browser("focus", 'input[type="search"]');
       await waitFor(`${inputRing}.includes(${JSON.stringify(color)})`);
       expect(await evaluate<string>(inputRing)).toContain(color);
       await browser("screenshot", join(artifacts, `input-${theme}.png`));
 
       await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
-      await waitFor(`document.querySelector("main form textarea:not([disabled])") !== null`);
+      await waitFor(
+        `${pageHydrated} && document.querySelector("main form textarea:not([disabled])") !== null`,
+      );
       await browser("focus", "main form textarea");
       await waitFor(`${composerBorder} === ${JSON.stringify(color)}`);
       expect(await evaluate<string>(composerBorder)).toBe(color);
