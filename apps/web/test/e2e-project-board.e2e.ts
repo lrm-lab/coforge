@@ -281,6 +281,7 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       await settle();
       await browser("screenshot", join(artifacts, `${name}.png`));
       await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+      await settle();
       await browser("screenshot", join(artifacts, `${name}-dark.png`));
       await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
     };

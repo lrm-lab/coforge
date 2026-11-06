@@ -130,6 +130,9 @@ export function TaskGroup({
                 aria-hidden="true"
                 className={cn(
                   "ml-auto size-4 shrink-0 text-fg-quaternary transition-transform",
+                  // A board column at desktop width gives the room to its title; clicking the
+                  // heading still folds it, and a folded column is plainly short.
+                  board && "md:hidden",
                   !expanded && "-rotate-90",
                 )}
               />
