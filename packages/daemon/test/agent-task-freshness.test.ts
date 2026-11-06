@@ -338,6 +338,47 @@ describe("Agent Task freshness", () => {
     }
   });
 
+  test("unclaim forwards the seen boundary and consumes its attached window like update", async () => {
+    const taskCalls: TaskRequest[] = [];
+    const harness = await messageHarness(
+      async (request) => ({
+        idempotencyKey: request.idempotencyKey,
+        accepted: true,
+        attentionCount: 0,
+        messages: [],
+      }),
+      async (request) => {
+        taskCalls.push(request);
+        return {
+          idempotencyKey: request.idempotencyKey,
+          tasks: [],
+          ...(taskCalls.length === 1
+            ? { recentUnread: [messageRecord(9, "@alice", "#tasks")], newMessageCount: 1 }
+            : {}),
+        };
+      },
+    );
+    try {
+      await harness.deliver(9, "#tasks");
+      const unclaimed = await harness.runtime.agentTask(
+        harness.context,
+        { operation: "unclaim", idempotencyKey: "unclaim", target: "#tasks", number: 7 },
+        harness.apiKey,
+      );
+      expect(unclaimed).toMatchObject({ newMessageCount: 1 });
+      await harness.runtime.agentTask(
+        harness.context,
+        { operation: "update", idempotencyKey: "update", target: "#tasks", number: 7 },
+        harness.apiKey,
+      );
+      expect(taskCalls).toHaveLength(2);
+      expect(taskCalls[0]).toMatchObject({ operation: "unclaim" });
+      expect(taskCalls[1]).toMatchObject({ operation: "update", seenUpToSeq: 9 });
+    } finally {
+      await harness.runtime.stop();
+    }
+  });
+
   test("a failed attached write does not consume what it never showed", async () => {
     const taskCalls: TaskRequest[] = [];
     const harness = await messageHarness(
