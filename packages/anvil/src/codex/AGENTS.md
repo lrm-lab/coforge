@@ -26,13 +26,16 @@
 - Codex Activity follows the reference Computer; MCP tool names match Claude's `mcp__<server>__<tool>`.
 - Every app-server request is answered -32601 (`server-requests.ts`), from process start.
 - Resume recovery (`thread-open.ts`): archived -> `thread/unarchive` once, then resume, else a fresh
-  thread reported as replaced; active writer -> `session_in_use`; the missing-rollout match stays
-  exact. An unnamed thread is named `CoForge · <agent name>`, best effort.
+  thread reported as replaced; an active writer starts a fresh thread and emits a system entry
+  named `Codex resume recovery`; the missing-rollout match stays exact. An unnamed thread is named
+  `CoForge · <agent name>`, best effort.
 - Reasoning summaries (`reasoning-summary.ts`): a launch asks for `model_reasoning_summary: "auto"`
   unless the user's `$CODEX_HOME/config.toml` assigns the key, top level or in a profile. Several
   models default to `none`, and their thinking then arrives with no readable text.
 - `turn-signals.ts`: a completed turn with no evidence and a `systemError` status are errors
-  (`codex_zero_evidence_turn_completed`); warnings, waiting and blank answers are logged only.
+  (`codex_zero_evidence_turn_completed`); Codex diagnostic warnings become warning Activity system
+  entries with provider-specific titles, waiting statuses become warning system entries, and blank
+  answers are logged only.
 - Idle recycle reads `$CODEX_HOME/sessions/**/rollout-*-<threadId>.jsonl` through the history host.
   An absolute `CODEX_HOME` on the Agent wins; a relative one is ignored. Facts are the last
   record's timestamp and the last `event_msg` `token_count`'s `info.last_token_usage.input_tokens`.

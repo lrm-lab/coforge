@@ -29,6 +29,7 @@ import { CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS, readCodexSessionResumeFacts } from 
 import { readCodexUsage } from "./usage";
 import type { CodexRuntimeHost } from "./host";
 import {
+  AGENT_ACTIVITY_DETAIL_KIND,
   RUNTIME_PROVIDER,
   utf8Encoder,
   type AgentServiceTierObserved,
@@ -99,7 +100,7 @@ export class CodexProvider implements CodeAgentProvider {
       });
       assertSkillsLoaded(skillsResponse, options.agentWorkspaceDirectory);
       const reasoningSummary = await codexReasoningSummary(environment, this.#host);
-      const { threadId, result, replacedSessionId } = await openCodexThread(
+      const { threadId, result, replacedSessionId, replacementWarning } = await openCodexThread(
         process,
         options,
         reasoningSummary,
@@ -120,6 +121,7 @@ export class CodexProvider implements CodeAgentProvider {
         options.runtimeId,
         // Only a launch that asked for the Fast tier has anything to report about it.
         options.runtime?.fastMode ? codexServiceTierState(result?.serviceTier) : undefined,
+        replacementWarning,
       );
     } catch (error) {
       await process.dispose();
@@ -152,6 +154,7 @@ class CodexAgentSession implements AgentSession {
    * `createAgentSession` returns, so an event emitted here would be dropped. */
   readonly #serviceTier: AgentServiceTierObserved | undefined;
   #serviceTierReported = false;
+  #replacementWarning: string | undefined;
 
   constructor(
     process: JsonlProcess,
@@ -160,6 +163,7 @@ class CodexAgentSession implements AgentSession {
     agentId?: string,
     runtimeId?: string,
     serviceTier?: AgentServiceTierObserved,
+    replacementWarning?: string,
   ) {
     this.#process = process;
     this.#threadId = threadId;
@@ -168,6 +172,7 @@ class CodexAgentSession implements AgentSession {
     this.#runtimeId = runtimeId;
     this.#signals = new CodexTurnSignals(threadId, agentId, runtimeId);
     this.#serviceTier = serviceTier;
+    this.#replacementWarning = replacementWarning;
     this.#identity = {
       sessionId: threadId,
       state: resumed ? "resumable" : "empty",
@@ -285,6 +290,25 @@ class CodexAgentSession implements AgentSession {
 
   subscribe(listener: (event: AgentRuntimeEvent) => void): () => void {
     this.#listeners.add(listener);
+    if (this.#replacementWarning) {
+      listener({
+        type: "activity",
+        activity: {
+          detailKind: AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+          level: "info",
+          detail: "",
+          observedAtMs: Date.now(),
+          entries: [
+            {
+              kind: "system",
+              title: "Codex resume recovery",
+              text: this.#replacementWarning,
+            },
+          ],
+        },
+      });
+      this.#replacementWarning = undefined;
+    }
     return () => this.#listeners.delete(listener);
   }
 

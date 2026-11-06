@@ -1,4 +1,4 @@
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { AGENT_ACTIVITY_DETAIL_KIND, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { asRecord, eventTime, nonEmptyString, type JsonRecord } from "@lrm/coforge-anvil";
 import { getLogger } from "@logtape/logtape";
@@ -15,11 +15,12 @@ const DIAGNOSTIC_METHODS = new Set([
   "deprecationNotice",
 ]);
 const WAITING_FLAGS = new Set(["waitingOnApproval", "waitingOnUserInput"]);
-const SUMMARY_BOUND = 300;
+const SUMMARY_BOUND = 1_000;
 
 /**
- * Thread health beyond turn content, after the reference Computer 1.0.51: a completed turn with no
- * evidence of work or a `systemError` status is an error; warnings and waiting are logged only.
+ * Thread health beyond turn content, after the reference Computer: a completed turn with no
+ * evidence of work and a `systemError` status are errors; diagnostic and waiting warnings become
+ * visible Activity entries.
  */
 export class CodexTurnSignals {
   readonly #threadId: string;
@@ -87,7 +88,7 @@ export class CodexTurnSignals {
 
   /**
    * A thread status change or a diagnostic notification. `undefined` when the record is neither,
-   * or is for another thread; otherwise the events it yields (none for a diagnostic).
+   * or is for another thread; otherwise the events it yields.
    */
   notification(
     record: JsonRecord,
@@ -112,24 +113,39 @@ export class CodexTurnSignals {
       kind: method,
       summary: summary === undefined ? undefined : scrubError(summary).slice(0, SUMMARY_BOUND),
     });
-    return [];
+    const message = diagnosticMessage(method, params);
+    const details = diagnosticDetails(method, params);
+    return [
+      warningActivity(
+        diagnosticTitle(method),
+        [message, ...(details && details !== message ? [details] : [])].join("\n"),
+        record,
+      ),
+    ];
   }
 
   #status(record: JsonRecord, params: JsonRecord): AgentRuntimeEvent[] {
     const status = asRecord(params.status);
     if (status?.type === "systemError") {
+      const message =
+        nonEmptyString(status.message) ??
+        nonEmptyString(asRecord(status.error)?.message) ??
+        nonEmptyString(params.message) ??
+        nonEmptyString(asRecord(params.error)?.message);
+      const error: AgentRuntimeEvent = {
+        type: "error",
+        message: message ?? "Codex thread entered system error state",
+        occurredAt: eventTime(record),
+        providerErrorClass: "CodexThreadSystemError",
+      };
+      if (message) return [error];
       return [
-        {
-          type: "error",
-          message:
-            nonEmptyString(status.message) ??
-            nonEmptyString(asRecord(status.error)?.message) ??
-            nonEmptyString(params.message) ??
-            nonEmptyString(asRecord(params.error)?.message) ??
-            "Codex thread entered system error state",
-          occurredAt: eventTime(record),
-          providerErrorClass: "CodexThreadSystemError",
-        },
+        warningActivity(
+          "Codex warning",
+          "Codex thread entered system error state without a reason",
+          record,
+        ),
+        error,
       ];
     }
     const flags = Array.isArray(status?.activeFlags)
@@ -142,6 +158,73 @@ export class CodexTurnSignals {
         runtime_id: this.#runtimeId,
         flags,
       });
-    return [];
+    if (status?.type !== "active" || flags.length === 0) return [];
+    const waitingFor =
+      flags.length > 1
+        ? "approval and user input"
+        : flags[0] === "waitingOnApproval"
+          ? "approval"
+          : "user input";
+    return [
+      warningActivity(
+        "Codex warning",
+        `Codex thread is waiting on ${waitingFor}\nActive flags: ${flags.join(", ")}`,
+        record,
+      ),
+    ];
   }
+}
+
+function warningActivity(title: string, text: string, record: JsonRecord): AgentRuntimeEvent {
+  return {
+    type: "activity",
+    activity: {
+      detailKind: AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+      level: "warning",
+      detail: "",
+      observedAtMs: Date.parse(eventTime(record)) || Date.now(),
+      entries: [{ kind: "system", title, text }],
+    },
+  };
+}
+
+function diagnosticTitle(method: string): string {
+  switch (method) {
+    case "configWarning":
+      return "Codex config warning";
+    case "guardianWarning":
+      return "Codex guardian warning";
+    case "deprecationNotice":
+      return "Codex deprecation notice";
+    default:
+      return "Codex warning";
+  }
+}
+
+function diagnosticMessage(method: string, params: JsonRecord | undefined): string {
+  const value =
+    method === "configWarning"
+      ? (nonEmptyString(params?.summary) ?? nonEmptyString(params?.details))
+      : method === "warning"
+        ? nonEmptyString(params?.message)
+        : method === "guardianWarning"
+          ? nonEmptyString(params?.message)
+          : method === "deprecationNotice"
+            ? (nonEmptyString(params?.summary) ?? nonEmptyString(params?.details))
+            : undefined;
+  const fallback =
+    method === "configWarning"
+      ? "Codex configuration warning"
+      : method === "guardianWarning"
+        ? "Codex guardian warning"
+        : method === "deprecationNotice"
+          ? "Codex deprecation notice"
+          : "Codex warning";
+  return scrubError(value ?? fallback).slice(0, SUMMARY_BOUND);
+}
+
+function diagnosticDetails(method: string, params: JsonRecord | undefined): string | undefined {
+  if (method !== "configWarning" && method !== "deprecationNotice") return undefined;
+  const details = nonEmptyString(params?.details);
+  return details ? scrubError(details).slice(0, SUMMARY_BOUND) : undefined;
 }

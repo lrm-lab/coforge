@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { CodexProvider } from "@lrm/coforge-anvil/codex";
-import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
 import { scenarioProvider } from "./codex-scenarios";
 
 let directory: string;
@@ -98,12 +97,49 @@ for (const scenario of ["unarchive-fails", "still-archived"]) {
   });
 }
 
-test("Codex reports a thread with an active writer as session_in_use", async () => {
-  const { session } = open(provider("active-writer"), {
+test("Codex starts a fresh thread when another process owns the saved thread", async () => {
+  const { reports, session } = open(provider("active-writer"), {
     sessionId: "thread-old",
   });
-  await expect(session).rejects.toEqual(new AgentSessionRecoveryError("session_in_use"));
-  expect(await requests("thread/unarchive")).toHaveLength(0);
+  const opened = await session;
+  try {
+    expect(reports).toEqual([["thread-1", "thread-old"]]);
+    expect(await opened.readSessionIdentity!()).toEqual({
+      sessionId: "thread-1",
+      state: "empty",
+    });
+    expect(await requests("thread/resume")).toHaveLength(1);
+    expect(await requests("thread/start")).toHaveLength(1);
+  } finally {
+    await opened.dispose();
+  }
+});
+
+test("Codex reports the active-writer fallback in Activity", async () => {
+  const { session } = open(provider("active-writer"), { sessionId: "thread-old" });
+  const opened = await session;
+  const events: Array<Record<string, unknown>> = [];
+  opened.subscribe((event) => events.push(event as Record<string, unknown>));
+  try {
+    expect(events).toContainEqual({
+      type: "activity",
+      activity: {
+        detailKind: "system_message",
+        level: "info",
+        detail: "",
+        observedAtMs: expect.any(Number),
+        entries: [
+          {
+            kind: "system",
+            title: "Codex resume recovery",
+            text: "Codex could not resume its previous thread because another writer is active; Raft started a fresh Codex thread.\n\nUse Raft conversation history and local MEMORY.md/notes as the recovery point; do not assume prior Codex thread context is loaded.",
+          },
+        ],
+      },
+    });
+  } finally {
+    await opened.dispose();
+  }
 });
 
 test("Codex names a fresh thread after the Agent", async () => {
@@ -144,8 +180,17 @@ test("Codex launches even when naming the thread fails", async () => {
   }
 });
 
-test("Codex reports an active writer found after unarchiving as session_in_use", async () => {
-  const { session } = open(provider("archived", "active-writer"), { sessionId: "thread-old" });
-  await expect(session).rejects.toEqual(new AgentSessionRecoveryError("session_in_use"));
-  expect(await requests("thread/unarchive")).toHaveLength(1);
+test("Codex starts a fresh thread when an unarchived thread is owned by another process", async () => {
+  const { reports, session } = open(provider("archived", "active-writer"), {
+    sessionId: "thread-old",
+  });
+  const opened = await session;
+  try {
+    expect(reports).toEqual([["thread-1", "thread-old"]]);
+    expect(await requests("thread/unarchive")).toHaveLength(1);
+    expect(await requests("thread/resume")).toHaveLength(2);
+    expect(await requests("thread/start")).toHaveLength(1);
+  } finally {
+    await opened.dispose();
+  }
 });

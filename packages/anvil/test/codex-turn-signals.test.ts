@@ -84,15 +84,111 @@ test("Codex reports a thread system error with its message or a default", async 
   ]);
   expect(await turnEvents("system-error-bare")).toEqual([
     started,
+    {
+      type: "activity",
+      activity: {
+        detailKind: "system_message",
+        level: "warning",
+        detail: "",
+        observedAtMs: expect.any(Number),
+        entries: [
+          {
+            kind: "system",
+            title: "Codex warning",
+            text: "Codex thread entered system error state without a reason",
+          },
+        ],
+      },
+    },
     error("Codex thread entered system error state"),
     { type: "text-delta", text: "Done" },
     completed,
   ]);
 });
 
-test("Codex only logs diagnostics and waiting statuses", async () => {
+test("Codex reports diagnostics as warning Activity", async () => {
   expect(await turnEvents("diagnostics")).toEqual([
     started,
+    {
+      type: "activity",
+      activity: {
+        detailKind: "system_message",
+        level: "warning",
+        detail: "",
+        observedAtMs: expect.any(Number),
+        entries: [
+          {
+            kind: "system",
+            title: "Codex config warning",
+            text: "Bad config",
+          },
+        ],
+      },
+    },
+    {
+      type: "activity",
+      activity: {
+        detailKind: "system_message",
+        level: "warning",
+        detail: "",
+        observedAtMs: expect.any(Number),
+        entries: [
+          {
+            kind: "system",
+            title: "Codex warning",
+            text: "careful",
+          },
+        ],
+      },
+    },
+    {
+      type: "activity",
+      activity: {
+        detailKind: "system_message",
+        level: "warning",
+        detail: "",
+        observedAtMs: expect.any(Number),
+        entries: [
+          {
+            kind: "system",
+            title: "Codex guardian warning",
+            text: "guarded",
+          },
+        ],
+      },
+    },
+    {
+      type: "activity",
+      activity: {
+        detailKind: "system_message",
+        level: "warning",
+        detail: "",
+        observedAtMs: expect.any(Number),
+        entries: [
+          {
+            kind: "system",
+            title: "Codex deprecation notice",
+            text: `Old API\n${"x".repeat(400)}`,
+          },
+        ],
+      },
+    },
+    {
+      type: "activity",
+      activity: {
+        detailKind: "system_message",
+        level: "warning",
+        detail: "",
+        observedAtMs: expect.any(Number),
+        entries: [
+          {
+            kind: "system",
+            title: "Codex warning",
+            text: "Codex thread is waiting on approval\nActive flags: waitingOnApproval",
+          },
+        ],
+      },
+    },
     { type: "text-delta", text: "Done" },
     completed,
   ]);

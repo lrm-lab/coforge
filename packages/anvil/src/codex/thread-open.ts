@@ -1,6 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSessionOptions } from "@coforge/agent";
-import { AgentSessionRecoveryError, asRecord, JsonlRequestError } from "@lrm/coforge-anvil";
+import { asRecord, JsonlRequestError } from "@lrm/coforge-anvil";
 import { type JsonlProcess } from "@lrm/coforge-anvil/execution";
 
 import { getLogger } from "@logtape/logtape";
@@ -15,6 +15,8 @@ export interface OpenedCodexThread {
   result: Record<string, unknown> | undefined;
   /** The requested session that could not be resumed and was replaced by a fresh thread. */
   replacedSessionId: string | undefined;
+  /** A user-visible warning explaining why the requested session was replaced. */
+  replacementWarning: string | undefined;
 }
 
 /**
@@ -39,7 +41,6 @@ export async function openCodexThread(
       (response) => ({ response, failure: undefined }),
       (error: unknown) => {
         const failure = resumeFailure(error, id);
-        if (failure === "active_writer") throw new AgentSessionRecoveryError("session_in_use");
         if (!failure) throw error;
         return { response: undefined, failure };
       },
@@ -50,12 +51,23 @@ export async function openCodexThread(
       ...log,
       reason,
     });
-    return { response: await open(), replacedSessionId: id };
+    return {
+      response: await open(),
+      replacedSessionId: id,
+      replacementWarning:
+        reason === "active_writer"
+          ? "Codex could not resume its previous thread because another writer is active; Raft started a fresh Codex thread.\n\nUse Raft conversation history and local MEMORY.md/notes as the recovery point; do not assume prior Codex thread context is loaded."
+          : undefined,
+    };
   };
   const recover = async (
     id: string,
     failure: "missing" | "archived",
-  ): Promise<{ response: ThreadResponse; replacedSessionId?: string }> => {
+  ): Promise<{
+    response: ThreadResponse;
+    replacedSessionId?: string;
+    replacementWarning?: string;
+  }> => {
     if (failure === "missing") return replace(id, "missing");
     try {
       await process.request({ method: "thread/unarchive", params: { threadId: id } });
@@ -67,19 +79,27 @@ export async function openCodexThread(
       ...log,
     });
     const second = await resume(id);
-    return second.response ? { response: second.response } : replace(id, "still_unavailable");
+    if (second.response) return { response: second.response };
+    return replace(id, second.failure === "active_writer" ? "active_writer" : "still_unavailable");
   };
   const first = sessionId ? await resume(sessionId) : { response: await open() };
-  const { response, replacedSessionId } = first.response
-    ? { response: first.response, replacedSessionId: undefined }
-    : await recover(sessionId!, first.failure!);
+  const replacement = first.response
+    ? {
+        response: first.response,
+        replacedSessionId: undefined,
+        replacementWarning: undefined,
+      }
+    : first.failure === "active_writer"
+      ? await replace(sessionId!, "active_writer")
+      : await recover(sessionId!, first.failure!);
+  const { response, replacedSessionId, replacementWarning } = replacement;
   const result = asRecord(response.result);
   const thread = asRecord(result?.thread);
   if (typeof thread?.id !== "string") throw new Error("Codex did not create a thread");
   if (sessionId && !replacedSessionId && thread.id !== sessionId)
     throw new Error("Codex did not resume the requested thread");
   await nameThread(process, options, thread.id, thread.name);
-  return { threadId: thread.id, result, replacedSessionId };
+  return { threadId: thread.id, result, replacedSessionId, replacementWarning };
 }
 
 /**
