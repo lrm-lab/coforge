@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  hydratedElement,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * A Project's Tasks (tasks #460, #504): the Project page's Overview lists its Tasks in progress, up
@@ -107,7 +112,8 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
       // predicate the waits use finds and presses it instead.
       const clickTab = async (name: string) => {
         const tab = `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.trim() === ${JSON.stringify(name)})`;
-        await browser("wait", "--fn", `${tab} !== undefined`);
+        // SSR draws the tabs before React can hear a click; wait for hydration first.
+        await browser("wait", "--fn", `${tab} !== undefined && ${hydratedElement(tab)}`);
         await evaluate(`${tab}.click() ?? true`);
       };
       await browser("open", projectPage);

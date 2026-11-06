@@ -8,7 +8,7 @@ import { AGENT_ACTIVITY_WINDOW } from "#src/features/agents/agent-activity-windo
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
+import { browserSession, hydratedElement, localBrowserE2e } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -213,6 +213,8 @@ for (const width of [1440, 390])
       "--fn",
       `(() => { const s = ${scroller}; return s !== null && s.scrollHeight - s.clientHeight > 800; })()`,
     );
+    // SSR serves the feed before React can hear a scroll; wait for hydration first.
+    await browser("wait", "--fn", hydratedElement(scroller));
     const opened = await settledDistance();
     await browser("screenshot", join(artifacts, `${width}-opened.png`));
 
@@ -283,6 +285,8 @@ for (const width of [1440, 390])
         "--fn",
         `(() => { const s = ${scroller}; return s !== null && s.scrollHeight - s.clientHeight > 800; })()`,
       );
+      // SSR serves the feed before React can hear a scroll; wait for hydration first.
+      await browser("wait", "--fn", hydratedElement(scroller));
       await settledDistance();
       await browser(
         "eval",
@@ -317,6 +321,8 @@ test("390px: rows leaving the top of a full feed leave the row being read in pla
     "--fn",
     `(() => { const s = ${scroller}; return s !== null && s.scrollHeight - s.clientHeight > 800; })()`,
   );
+  // SSR serves the feed before React can hear a scroll; wait for hydration first.
+  await browser("wait", "--fn", hydratedElement(scroller));
   await settledDistance();
   // Safari has no native scroll anchoring (caniuse: css-overflow-anchor), and Chromium's alone
   // let QA's reader drop to the bottom; switched off here as in Safari, the pane holds the row.

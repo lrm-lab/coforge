@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  hydratedElement,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 import { inPane, rowItems, waitFor } from "./helpers/activity-inbox-e2e";
 import { dividerBetween, postLive, row, seedChannel } from "./helpers/open-unread-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
@@ -67,15 +72,10 @@ test("a channel read in Chat and opened from Activity after messages came shows 
     await send(read.length + 2, "E2E open-cached probe received");
 
     await browser("find", "role", "link", "click", "--name", "Activity", "--exact");
-    await browser(
-      "wait",
-      "--fn",
-      `[...document.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent.startsWith("Unread"))`,
-    );
-    await browser(
-      "eval",
-      `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith("Unread")).click()`,
-    );
+    const unreadTab = `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith("Unread"))`;
+    // SSR draws the tabs before React can hear a click; wait for hydration first.
+    await browser("wait", "--fn", `${unreadTab} !== undefined && ${hydratedElement(unreadTab)}`);
+    await browser("eval", `${unreadTab}.click()`);
     await browser("wait", "--fn", `${row("E2E open-cached probe received")} !== null`);
     await browser("find", "text", "E2E open-cached probe received", "click");
     // More comes in while the channel opens.

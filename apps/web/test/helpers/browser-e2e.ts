@@ -14,6 +14,14 @@ export function seededUuid(key: string): string {
 export const pageHydrated = `(!window.$_TSR || window.$_TSR.hydrated === true)`;
 
 /**
+ * React has hydrated `element` — an expression resolving to one node or undefined. SSR markup
+ * already satisfies DOM waits, and a control's handlers attach only at hydration, so a click or
+ * scroll sent before then lands on inert HTML.
+ */
+export const hydratedElement = (element: string) =>
+  `Object.keys(${element} ?? {}).some((key) => key.startsWith("__reactProps"))`;
+
+/**
  * The local stack a browser E2E runs against: the Web service (`COFORGE_E2E_WEB_URL`),
  * `agent-browser`, and PostgreSQL (`DATABASE_URL`). Anything not local is refused, so a run never
  * seeds or resets a shared database.
