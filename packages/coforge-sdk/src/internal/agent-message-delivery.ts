@@ -40,8 +40,10 @@ export type AgentMessageDelivery = {
   features?: { taskConversations: boolean };
   /** Why this delivery reached the Agent: "mentioned" or "subscribed" on a target it was not
    * subscribed to, and "choice" or "expired" for the Agent's own action card that someone answered
-   * or that expired — an event about a message the Agent wrote, not new text to read. Absent on ordinary deliveries and from
-   * an older server. */
+   * or that expired — an event about a message the Agent wrote, not new text to read. A new
+   * event-shaped reason belongs with those two and must be added to `isCardEvent` in the daemon's
+   * attention index, which is what exempts it from the read-state check. Absent on ordinary
+   * deliveries and from an older server. */
   reason?: string;
   /** The message's attachment count. A delivery with one or more is never read in full from a
    * preview. Absent from a server that predates it: the daemon then treats it as unknown. */
