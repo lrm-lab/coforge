@@ -128,12 +128,20 @@ test("an owner hides #general from its panel and restores it from Settings → M
       await browser("eval", `document.querySelector('input[type="checkbox"]').checked`),
     ).toContain("true");
     await browser("screenshot", join(artifacts, "system-channels.png"));
-    await browser("click", 'label:has(input[type="checkbox"])');
+    // Unticking only counts once the form is dirty: a click that lands before hydration flips
+    // the DOM box but not React's draft — it snaps back on hydrate and Save stays disabled,
+    // which the saved-wait below would read as done while the setting is still hidden.
+    const saveButton = `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Save")`;
+    const dirty = `Boolean(${saveButton} && !${saveButton}.disabled)`;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      if ((await browser("eval", dirty)).includes("true")) break;
+      await browser("click", 'label:has(input[type="checkbox"])');
+      await browser("wait", "300");
+    }
+    await waitFor(dirty);
     await clickText("button", "Save");
     // Saved once the form matches the stored setting again: the box unticked, Save disabled.
-    await waitFor(
-      `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Save")?.disabled`,
-    );
+    await waitFor(`Boolean(${saveButton}?.disabled)`);
     expect(
       (await db.conversation.findUniqueOrThrow({ where: { id: general.id } }))
         .hiddenFromWorkspaceAt,
