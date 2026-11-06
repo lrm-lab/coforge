@@ -83,10 +83,12 @@ test("the add view creates an Agent named by the search, and it joins the channe
   }
   /** The seeded Computer's Claude Code needs no API key, unlike the default runtime. */
   async function chooseClaudeCode() {
-    await browser(
-      "eval",
-      `[...${agentForm}.querySelectorAll("button")].find((button) => button.textContent.trim() === "CoForge").click()`,
-    );
+    // The picker opens on the Computer's preferred runtime (Pi on the seeded Computer), so its
+    // trigger is found by the "Runtime provider" label it is named for, not by the runtime it
+    // happens to show.
+    const providerButton = `[...${agentForm}.querySelectorAll('button[aria-haspopup="listbox"]')].find((button) => (button.getAttribute("aria-labelledby") ?? "").split(" ").some((id) => document.getElementById(id)?.textContent.includes("Runtime provider")))`;
+    await waitFor(`${providerButton} != null`);
+    await browser("eval", `(${providerButton}).click()`);
     await waitFor(
       `[...document.querySelectorAll('[role="option"]')].some((option) => option.textContent.includes("Claude Code"))`,
     );
