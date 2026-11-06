@@ -315,9 +315,6 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     await browser("open", popup);
     const chipRow = `${dialog}?.querySelector('dl[data-layout="chips"]')`;
     await browser("wait", "--fn", `${pageHydrated} && ${chipRow} != null`);
-    // Let the popup's animations finish before measuring its rect (run 42165209626 read
-    // 50px for a one-row chip row).
-    await settled();
     // A phone shows the properties as one row of chips under the title, and two lines of the
     // description, so the discussion keeps the screen.
     expect(await evaluate<number>(`${chipRow}.getBoundingClientRect().height`)).toBeLessThan(40);
