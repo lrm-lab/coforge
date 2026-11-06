@@ -37,6 +37,10 @@ if (process.argv.includes("--help")) {
 if (process.argv.includes("--login")) {
   // `agy acp --login` — the headless terminal auth flow: print the link, take the paste on
   // stdin, and persist the sign-in the way the ACP process's state file already does.
+  if (Bun.env.AGY_ACP_FIXTURE_LOGIN_CRASH) {
+    console.error("fixture crash: no usable display or browser");
+    process.exit(1);
+  }
   const url =
     Bun.env.AGY_ACP_FIXTURE_LOGIN_URL ??
     "https://accounts.google.com/o/oauth2/auth?client_id=fixture&state=s";

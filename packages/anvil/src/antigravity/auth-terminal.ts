@@ -1,4 +1,5 @@
 import { authDetail } from "#src/auth-detail";
+import { scrubStderrHint } from "#src/stderr-hint";
 import {
   type OwnedChildProcess,
   type OwnedProcessTree,
@@ -158,6 +159,7 @@ export async function antigravityTerminalLogin(
   let announcedUrl = false;
   let codePromptSeen = false;
   let missingAuthUrl = false;
+  let stderrHint: string | undefined;
   let authUrlWaitTimer: ReturnType<typeof setTimeout> | undefined;
   let promptsHandled = 0;
   let codeWrites = 0;
@@ -288,6 +290,10 @@ export async function antigravityTerminalLogin(
     }),
     watch(child.stderr, (seen) => {
       loginFailure ??= LOGIN_FAILURE.exec(seen)?.[0];
+      stderrHint ??= seen
+        .split("\n")
+        .map((line) => scrubStderrHint(line))
+        .find(Boolean);
     }),
   ]).catch(() => undefined);
 
@@ -313,7 +319,11 @@ export async function antigravityTerminalLogin(
         status: "failed",
         reason: codeWrites > 0 ? "rejected" : "process_failed",
         detail:
-          authDetail(loginFailure) ?? `agy acp --login exited with code ${exitCode ?? "unknown"}`,
+          authDetail(loginFailure) ??
+          authDetail(
+            `agy acp --login exited with code ${exitCode ?? "unknown"}` +
+              (stderrHint ? ` — ${stderrHint}` : ""),
+          ),
       };
     const authStatus = await readStatus();
     if (authStatus.state === "logged_in") return { status: "logged_in", authStatus };

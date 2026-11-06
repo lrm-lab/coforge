@@ -226,6 +226,23 @@ test("a headless login on an agy without --login asks for an upgrade", async () 
   }
 });
 
+test("a headless login that dies before the link reports agy's own stderr", async () => {
+  const dir = await cwd();
+  try {
+    const adapter = new AntigravityRuntimeAuthAdapter(
+      authHost(dir, { AGY_ACP_FIXTURE_SIGNED_OUT: "1", AGY_ACP_FIXTURE_LOGIN_CRASH: "1" }, false),
+    );
+    const result = await adapter.startLogin(
+      { workingDirectory: dir },
+      { onEvent: () => {}, prompt: async () => "" },
+    );
+    expect(result).toEqual(expect.objectContaining({ status: "failed", reason: "process_failed" }));
+    expect((result as { detail?: string }).detail).toContain("no usable display or browser");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("a headless login that agy rejects reports rejected, not a crash", async () => {
   const dir = await cwd();
   try {
