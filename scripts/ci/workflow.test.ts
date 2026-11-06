@@ -292,7 +292,7 @@ test("Plan checks runs the hard rules after the diff check", () => {
   expect(rules.env).toEqual(steps[select]!.env!);
   expect(rules.env!.BEFORE).toContain("'push' && github.event.before");
   expect(rules.run).toBe(
-    'bun scripts/ci/hard-rules.ts --range "$BASE" "$HEAD" --authors-since "$BEFORE"',
+    'bun scripts/ci/range-checks.ts --range "$BASE" "$HEAD" --authors-since "$BEFORE"',
   );
 });
 

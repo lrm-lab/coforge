@@ -1,0 +1,32 @@
+# High-risk paths for the Reviewed-in warning check (task #593, scripts/ci/reviewed-in.ts).
+# One gitignore-style glob per line; `*` stays inside a path segment, `**` crosses
+# directories. A commit whose diff touches any of them and whose message lacks a
+# `Reviewed-in: #<channel>:#<task>` trailer gets a warning, never a failure. The list
+# mirrors the 200-commit study in #coforge:#593; raft narrows coforge-sdk/** later if
+# the warn-only data is noisy.
+
+apps/web/prisma/**
+packages/coforge-sdk/**
+packages/agent/src/contract.ts
+packages/anvil/src/contract.ts
+apps/web/src/server/auth/**
+apps/web/src/server/authorization-server/**
+apps/web/src/server/centrifugo/**
+packages/daemon/src/credentials/**
+packages/daemon/src/connection/**
+packages/daemon/src/daemon-runtime/*attention*
+packages/daemon/src/daemon-runtime/*deliver*
+packages/daemon/src/daemon-runtime/*mention*
+packages/daemon/src/daemon-runtime/*inbox*
+.github/workflows/**
+scripts/deploy/**
+infra/**/caddy/**
+infra/**/Caddyfile
+infra/**/centrifugo/**
+infra/**/*centrifugo*
+**/*agent-api-key*
+**/*api-key.repositories*
+**/*webhook-secret*
+**/*env-secret*
+**/*proxy-secret*
+**/*sealed-values*
