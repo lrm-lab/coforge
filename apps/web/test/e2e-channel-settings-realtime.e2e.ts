@@ -118,9 +118,25 @@ test("another open tab follows a channel's rename, description and archive live"
       );
     }
 
-    // Rename and describe in the editor tab.
+    // Rename and describe in the editor tab. The watcher subscribes as its page comes up, and a
+    // change published before its subscription completes can be missed, so warm-up renames prove
+    // the live path end to end before the assertions depend on it.
     await editor.run("click", '[aria-label="Channel Details and Settings"]');
     await editor.waitFor(panelOpen);
+    const saveName = async (name: string) => {
+      await editor.run("fill", '[role="dialog"] input[type="text"]', name);
+      await editor.clickText("button", "Save");
+      await editor.waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${name}"`);
+    };
+    for (const warm of ["e2e-live-warm", "e2e-live-warmer"]) {
+      await saveName(warm);
+      try {
+        await watcher.waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${warm}"`);
+        break;
+      } catch {
+        // Its subscription was not up yet; the next save publishes the new name afresh.
+      }
+    }
     await editor.run("fill", '[role="dialog"] input[type="text"]', renamed);
     await editor.run("fill", '[role="dialog"] textarea', "Followed live");
     await editor.clickText("button", "Save");
