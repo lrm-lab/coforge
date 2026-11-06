@@ -7,12 +7,7 @@ import {
 import { dispose, getLogger, withContext } from "@logtape/logtape";
 import { startDaemonLocalRpcServer } from "#src/local-rpc";
 import { startAgentProxy } from "#src/agent-proxy";
-import type { AgentProxyRuntime } from "#src/agent-proxy-runtime";
-import { attachmentRuntime } from "#src/agent-proxy-attachment-runtime";
-import { mentionRuntime } from "#src/agent-proxy-mention-runtime";
-import { conversationRuntime } from "#src/agent-proxy-conversation-runtime";
-import { appRuntime } from "#src/agent-proxy-app-runtime";
-import { workspaceRuntime } from "#src/agent-proxy-workspace-runtime";
+import { daemonAgentProxyRuntime } from "#src/agent-proxy-daemon-runtime";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 import {
   DaemonRuntime,
@@ -248,40 +243,9 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
         if (!runtime) throw new Error("daemon runtime is not running");
         return runtime;
       };
-      const agentApi = () => requireRuntime().agentRequests;
-      // Every caller awaits inside a try, so a missing runtime surfaces as a rejected call.
       const agentProxy = startAgentProxy({
         agentApiKeys: agentApiKeyRegistry(requireRuntime),
-        runtime: {
-          agentMessage: async (...args) => requireRuntime().agentMessage(...args),
-          ...attachmentRuntime(agentApi),
-          ...mentionRuntime(agentApi),
-          ...conversationRuntime(agentApi),
-          inbox: async (...args) => requireRuntime().inbox(...args),
-          reminder: async (...args) => requireRuntime().reminder(...args),
-          agentTask: async (...args) => requireRuntime().agentTask(...args),
-          agentMemoryDisposition: async (...args) => agentApi().agentMemoryDisposition(...args),
-          agentOpenviking: async (...args) => agentApi().agentOpenviking(...args),
-          memoryFence: (agentId) => requireRuntime().memoryFence(agentId),
-          agentChannel: async (...args) => agentApi().agentChannel(...args),
-          agentActionPrepare: async (...args) => agentApi().agentActionPrepare(...args),
-          agentWeeklyReport: async (...args) => agentApi().agentWeeklyReport(...args),
-          agentWeeklyReportCollect: async (...args) => agentApi().agentWeeklyReportCollect(...args),
-          agentWeeklyReportKeyPoints: async (...args) =>
-            agentApi().agentWeeklyReportKeyPoints(...args),
-          agentWeeklyReportMemory: async (...args) => agentApi().agentWeeklyReportMemory(...args),
-          workspaceInfo: async (...args) => agentApi().workspaceInfo(...args),
-          githubCredential: async (...args) => agentApi().githubCredential(...args),
-          githubCommitTrailers: async (...args) => agentApi().githubCommitTrailers(...args),
-          version: async (...args) => requireRuntime().version(...args),
-          computerUpdateNotice: async (...args) => requireRuntime().computerUpdateNotice(...args),
-          ...workspaceRuntime(agentApi),
-          ...appRuntime(agentApi),
-          agentArtifact: async (...args) => agentApi().agentArtifact(...args),
-          issueAgentContext: (agentId) => requireRuntime().issueAgentContext(agentId),
-          // Every proxy route must reach the runtime here: an unwired handler is a 404 for the
-          // Agent's CLI, so a new `AgentProxyRuntime` member fails to compile until it is added.
-        } satisfies Required<AgentProxyRuntime>,
+        runtime: daemonAgentProxyRuntime(requireRuntime),
       });
       process.env.COFORGE_AGENT_PROXY_URL = agentProxy.url;
       // `config` was already loaded above, ahead of the health-journal guard.
