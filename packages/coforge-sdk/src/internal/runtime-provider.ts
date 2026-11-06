@@ -98,6 +98,32 @@ export const RUNTIME_PROVIDER_SUPPORTS_FAST_MODE: Record<RuntimeProvider, boolea
   [RUNTIME_PROVIDER.DROID]: false,
 };
 
+/**
+ * Whether input sent while a turn is in progress reaches the model inside that turn — the
+ * session's steer path — rather than queueing behind it for the next turn. Claude Code drains a
+ * boundary-gated stdin write, Codex sends `turn/steer`, Pi steers the live stream, Kiro its
+ * `_session/steer` extension, Grok `_x.ai/interject`, and Cursor/Antigravity take a second
+ * `session/prompt` as the steer. OpenCode, DSH, Command Code, Devin and Droid have no steer
+ * request: a notice waits for the turn to end. The daemon's stalled recovery reads this to pick
+ * its silence fuse — a queue-only provider's quiet turn is weaker evidence of a hang, because a
+ * waiting message has no path to it anyway.
+ */
+export const RUNTIME_PROVIDER_STEERS_BUSY_TURN: Record<RuntimeProvider, boolean> = {
+  [RUNTIME_PROVIDER.COFORGE]: true,
+  [RUNTIME_PROVIDER.CODEX]: true,
+  [RUNTIME_PROVIDER.CLAUDE_CODE]: true,
+  [RUNTIME_PROVIDER.PI]: true,
+  [RUNTIME_PROVIDER.KIRO]: true,
+  [RUNTIME_PROVIDER.CURSOR]: true,
+  [RUNTIME_PROVIDER.OPENCODE]: false,
+  [RUNTIME_PROVIDER.GROK]: true,
+  [RUNTIME_PROVIDER.ANTIGRAVITY]: true,
+  [RUNTIME_PROVIDER.DSH]: false,
+  [RUNTIME_PROVIDER.COMMAND_CODE]: false,
+  [RUNTIME_PROVIDER.DEVIN]: false,
+  [RUNTIME_PROVIDER.DROID]: false,
+};
+
 /** Whether the shipped adapter implements `readUsage`. Cursor, OpenCode, Pi, and CoForge
  * are not connected yet — this table does not say the official product has no quota endpoint.
  * A connected reader may still return unsupported for a particular account.

@@ -16,6 +16,7 @@ test("a notice the process accepted and never acted on for 15 minutes is recover
     silentForMs: STALLED_RECOVERY_SILENCE_MS,
     hasOpenToolCall: false,
     resumable: true,
+    steersBusyTurn: true,
     noticeAcceptedForMs: STALLED_RECOVERY_SILENCE_MS,
     lastAgentActionForMs: STALLED_RECOVERY_SILENCE_MS + 60_000,
   };
@@ -55,6 +56,7 @@ test("a notice the process accepted and never acted on for 15 minutes is recover
       silentForMs: STALLED_RECOVERY_SILENCE_MS,
       hasOpenToolCall: false,
       resumable: true,
+      steersBusyTurn: true,
       recoveryHold: true,
     }),
   ).toBe(true);

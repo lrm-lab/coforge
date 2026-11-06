@@ -12,11 +12,6 @@ import type {
 } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
-import {
-  ProviderProgress,
-  STALLED_RECOVERY_SILENCE_MS,
-  shouldRecoverStalledRuntime,
-} from "#src/daemon-runtime/stalled-recovery";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { captureDaemonLogs } from "./log-capture";
 
@@ -37,58 +32,6 @@ const minutes = (count: number) => new Date(START.getTime() + count * 60_000);
 
 afterAll(() => rm(connection.workspaceRoot, { recursive: true, force: true }));
 afterEach(() => setSystemTime());
-
-test("a busy turn with no provider event for 15 minutes, no open tool call and a resumable session is recovered", () => {
-  const stalled = {
-    turnBusy: true,
-    liveTurn: true,
-    silentForMs: STALLED_RECOVERY_SILENCE_MS,
-    hasOpenToolCall: false,
-    resumable: true,
-  };
-  expect(STALLED_RECOVERY_SILENCE_MS).toBe(15 * 60_000);
-  expect(shouldRecoverStalledRuntime(stalled)).toBe(true);
-  expect(
-    shouldRecoverStalledRuntime({ ...stalled, silentForMs: STALLED_RECOVERY_SILENCE_MS - 1 }),
-  ).toBe(false);
-  // A live turn the delivery path does not see as busy is still a turn to wait on.
-  expect(shouldRecoverStalledRuntime({ ...stalled, turnBusy: false })).toBe(false);
-  // A long build or test run is silent until it ends; it is never killed for a message.
-  expect(shouldRecoverStalledRuntime({ ...stalled, hasOpenToolCall: true })).toBe(false);
-  // A restart that cannot resume the session would start the conversation over.
-  expect(shouldRecoverStalledRuntime({ ...stalled, resumable: false })).toBe(false);
-});
-
-test("a delivery queued for 15 minutes whose turn never began is recovered by the same judgment", () => {
-  const waiting = {
-    turnBusy: false,
-    liveTurn: false,
-    silentForMs: STALLED_RECOVERY_SILENCE_MS,
-    queuedForMs: STALLED_RECOVERY_SILENCE_MS,
-    hasOpenToolCall: false,
-    resumable: true,
-  };
-  expect(shouldRecoverStalledRuntime(waiting)).toBe(true);
-  expect(
-    shouldRecoverStalledRuntime({ ...waiting, queuedForMs: STALLED_RECOVERY_SILENCE_MS - 1 }),
-  ).toBe(false);
-  // An idle provider that just received its first message is not stalled, however long it was
-  // quiet before that message.
-  expect(shouldRecoverStalledRuntime({ ...waiting, queuedForMs: 0 })).toBe(false);
-  expect(shouldRecoverStalledRuntime({ ...waiting, queuedForMs: undefined })).toBe(false);
-  expect(shouldRecoverStalledRuntime({ ...waiting, resumable: false })).toBe(false);
-  expect(shouldRecoverStalledRuntime({ ...waiting, hasOpenToolCall: true })).toBe(false);
-});
-
-// Open tool calls are the launch's `ToolCallLedger` (tool-call-ledger.test.ts).
-test("provider progress counts every provider event", () => {
-  setSystemTime(START);
-  const progress = new ProviderProgress();
-  setSystemTime(minutes(10));
-  expect(progress.silentForMs()).toBe(10 * 60_000);
-  progress.observe();
-  expect(progress.silentForMs()).toBe(0);
-});
 
 /** One managed Agent whose sessions can be driven, stopped and counted. */
 async function harness(

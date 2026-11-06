@@ -31,11 +31,13 @@ test("DSH is recognized as an external runtime without fast mode or usage scanni
     RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
     RUNTIME_PROVIDER_SUPPORTS_FAST_MODE,
     RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN,
+    RUNTIME_PROVIDER_STEERS_BUSY_TURN,
   } = await import("./runtime-provider");
   const provider = requireRuntimeProvider("dsh", "DSH is missing from the runtime vocabulary");
   expect(RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider]).toBe(true);
   expect(RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[provider]).toBe(false);
   expect(RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[provider]).toBe(false);
+  expect(RUNTIME_PROVIDER_STEERS_BUSY_TURN[provider]).toBe(false);
 });
 
 test("Command Code is recognized as an external runtime without fast mode or usage scanning", async () => {
@@ -43,6 +45,7 @@ test("Command Code is recognized as an external runtime without fast mode or usa
     RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
     RUNTIME_PROVIDER_SUPPORTS_FAST_MODE,
     RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN,
+    RUNTIME_PROVIDER_STEERS_BUSY_TURN,
   } = await import("./runtime-provider");
   const provider = requireRuntimeProvider(
     "command-code",
@@ -51,6 +54,7 @@ test("Command Code is recognized as an external runtime without fast mode or usa
   expect(RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider]).toBe(true);
   expect(RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[provider]).toBe(false);
   expect(RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[provider]).toBe(false);
+  expect(RUNTIME_PROVIDER_STEERS_BUSY_TURN[provider]).toBe(false);
 });
 
 test("Devin is recognized as an external runtime without fast mode or usage scanning", async () => {
@@ -58,9 +62,11 @@ test("Devin is recognized as an external runtime without fast mode or usage scan
     RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
     RUNTIME_PROVIDER_SUPPORTS_FAST_MODE,
     RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN,
+    RUNTIME_PROVIDER_STEERS_BUSY_TURN,
   } = await import("./runtime-provider");
   const provider = requireRuntimeProvider("devin", "Devin is missing from the runtime vocabulary");
   expect(RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider]).toBe(true);
   expect(RUNTIME_PROVIDER_SUPPORTS_FAST_MODE[provider]).toBe(false);
   expect(RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[provider]).toBe(false);
+  expect(RUNTIME_PROVIDER_STEERS_BUSY_TURN[provider]).toBe(false);
 });
