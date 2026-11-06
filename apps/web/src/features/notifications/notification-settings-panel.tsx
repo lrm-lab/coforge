@@ -17,7 +17,8 @@ import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type { TestDelivery } from "#src/server/notifications/web-push-notifications.server";
-import { currentBrowserPushEndpoint } from "./browser-push";
+import { currentBrowserPushEndpoint, isAppleMobile } from "./browser-push";
+import { UNREACHABLE_PUSH_SERVICES } from "./unreachable-push-services";
 import {
   customPauseEnd,
   localInputValue,
@@ -176,6 +177,16 @@ export function NotificationSettingsPanel({
   const paused = settings.pausedUntil && new Date(settings.pausedUntil) > new Date();
   const quiet = settings.quietHours;
   const here = devices.find((device) => device.current);
+  // Said once, under this device's row: also before an iPhone or iPad has a subscription, whose
+  // pushes would come from Apple whatever the browser (its usual hint would lead nowhere).
+  const unreachable = here
+    ? here.unreachablePushService &&
+      (here.unreachablePushService === "apple" && here.deviceKind === "mobile"
+        ? m.notif_push_unreachable_iphone()
+        : m.notif_push_unreachable())
+    : UNREACHABLE_PUSH_SERVICES.has("apple") && isAppleMobile()
+      ? m.notif_push_unreachable_iphone()
+      : undefined;
   const HereIcon =
     here?.deviceKind === "mobile" ? Phone01 : here?.deviceKind === "desktop" ? Monitor01 : Globe01;
   const customEnd = until === null ? null : customPauseEnd(until, new Date());
@@ -195,7 +206,9 @@ export function NotificationSettingsPanel({
           <SettingsField
             inline
             label={here ? deviceName(here) : m.notif_this_device_none()}
-            description={here ? deliveryLine(here) : m.notif_this_device_none_hint()}
+            description={
+              here ? deliveryLine(here) : unreachable ? undefined : m.notif_this_device_none_hint()
+            }
           >
             <Button
               size="sm"
@@ -215,13 +228,7 @@ export function NotificationSettingsPanel({
               {testing ? m.notif_test_sending() : m.notif_test_send()}
             </Button>
           </SettingsField>
-          {here?.unreachablePushService && (
-            <p className="-mt-3 text-sm text-warning-primary">
-              {here.unreachablePushService === "apple" && here.deviceKind === "mobile"
-                ? m.notif_push_unreachable_iphone()
-                : m.notif_push_unreachable()}
-            </p>
-          )}
+          {unreachable && <p className="-mt-3 text-sm text-warning-primary">{unreachable}</p>}
           {tested && (
             <p
               role="status"

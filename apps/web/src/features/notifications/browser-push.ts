@@ -68,18 +68,24 @@ export function browserNotificationPermission(): BrowserNotificationPermission {
   return Notification.permission;
 }
 
+/** An iPhone or iPad, whatever the browser: every one of them gets pushes from Apple. */
+export function isAppleMobile(): boolean {
+  const userAgent = navigator.userAgent;
+  return (
+    /iPad|iPhone|iPod/.test(userAgent) ||
+    (userAgent.includes("Macintosh") && navigator.maxTouchPoints > 1)
+  );
+}
+
 /** Whether to teach an iPhone or iPad Safari tab to add CoForge to the home screen, the only way it
- * gets pushes: not while Apple's push service is out of reach, when the steps would lead nowhere. */
+ * gets pushes: not while Apple's push service is out of reach, when the steps would lead nowhere
+ * (Settings says that instead). */
 export function shouldShowAddToHomeScreenGuide(
   unreachable: ReadonlySet<PushService> = UNREACHABLE_PUSH_SERVICES,
 ) {
   if (unreachable.has("apple")) return false;
-  const userAgent = navigator.userAgent;
-  const appleMobile =
-    /iPad|iPhone|iPod/.test(userAgent) ||
-    (userAgent.includes("Macintosh") && navigator.maxTouchPoints > 1);
-  const safari = /Version\/[^ ]+.*Safari\//.test(userAgent);
-  return appleMobile && safari && !window.matchMedia("(display-mode: standalone)").matches;
+  const safari = /Version\/[^ ]+.*Safari\//.test(navigator.userAgent);
+  return isAppleMobile() && safari && !window.matchMedia("(display-mode: standalone)").matches;
 }
 
 export async function ensureBrowserPushSubscription(

@@ -46,7 +46,7 @@ export function SettingsField({
   children,
 }: {
   label: string;
-  description: string;
+  description?: string;
   /** Put the control at the end of the row (switches) instead of under the text. */
   inline?: boolean;
   children: React.ReactNode;
@@ -54,7 +54,7 @@ export function SettingsField({
   const text = (
     <div className="min-w-0">
       <h3 className="text-sm font-semibold text-primary">{label}</h3>
-      <p className="mt-1 text-sm text-tertiary">{description}</p>
+      {description && <p className="mt-1 text-sm text-tertiary">{description}</p>}
     </div>
   );
 
