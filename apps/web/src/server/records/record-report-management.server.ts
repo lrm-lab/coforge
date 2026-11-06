@@ -188,14 +188,23 @@ export function recordReportManagement(db: Db) {
       });
       if (remaining === 0) await tx.weeklyReportCycle.delete({ where: { id: cycle.id } });
     });
-    for (const settingsId of settingsIds) {
-      await cancelScheduledSendForWeek({
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-        settingsId,
-        year: cycle.year,
-        week: cycle.week,
-      });
+    // Each settings stream owns a distinct live format. Cancel them in bounded
+    // batches so deleting a week does not wait through one database round-trip
+    // after another or create unbounded write pressure.
+    const CANCEL_CONCURRENCY = 8;
+    for (let offset = 0; offset < settingsIds.length; offset += CANCEL_CONCURRENCY) {
+      const batch = settingsIds.slice(offset, offset + CANCEL_CONCURRENCY);
+      await Promise.all(
+        batch.map((settingsId) =>
+          cancelScheduledSendForWeek({
+            workspaceId: input.workspaceId,
+            userId: input.userId,
+            settingsId,
+            year: cycle.year,
+            week: cycle.week,
+          }),
+        ),
+      );
     }
     return { ok: true as const };
   }
