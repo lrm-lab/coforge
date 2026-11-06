@@ -16,9 +16,9 @@ describe("assertPlausibleTables", () => {
   });
 
   test("every table at zero bytes is the broken-read signature, not an empty database", () => {
-    expect(() =>
-      assertPlausibleTables([stat("messages", -1, 0), stat("tasks", -1, 0)]),
-    ).toThrow("every table as zero bytes");
+    expect(() => assertPlausibleTables([stat("messages", -1, 0), stat("tasks", -1, 0)])).toThrow(
+      "every table as zero bytes",
+    );
     expect(() => assertPlausibleTables([])).toThrow("every table as zero bytes");
   });
 
