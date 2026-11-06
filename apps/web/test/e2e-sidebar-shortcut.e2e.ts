@@ -31,13 +31,22 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
   const apple = () => evaluate<boolean>(`/Mac|iPhone|iPad|iPod/i.test(navigator.platform)`);
   const COLLAPSE = 'button[aria-label="Collapse sidebar"]';
   const EXPAND = 'button[aria-label="Expand Sidebar"]';
-  /** Moves a real pointer onto a button, from off it, so its tooltip opens. */
+  /** Moves a real pointer onto a button, from off it, so its tooltip opens. The button can still
+   * be moving (the rail's width transition, a late list row) between measuring and the move, so
+   * each attempt confirms the point lands on the button before the tooltip wait relies on it. */
   async function hover(selector: string) {
-    const [x, y] = await evaluate<[number, number]>(
-      `(() => { const box = document.querySelector('${selector}').getBoundingClientRect(); return [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)]; })()`,
-    );
-    await browser("mouse", "move", "700", "450");
-    await browser("mouse", "move", String(x), String(y));
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const [x, y] = await evaluate<[number, number]>(
+        `(() => { const box = document.querySelector('${selector}').getBoundingClientRect(); return [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)]; })()`,
+      );
+      await browser("mouse", "move", "700", "450");
+      await browser("mouse", "move", String(x), String(y));
+      const landed = await evaluate<boolean>(
+        `(() => { const el = document.querySelector('${selector}'); const hit = document.elementFromPoint(${x}, ${y}); return Boolean(el && hit && (hit === el || el.contains(hit))); })()`,
+      );
+      if (landed) return;
+      await browser("wait", "100");
+    }
   }
   const tooltip = () =>
     evaluate<string | null>(`document.querySelector('[role="tooltip"]')?.textContent ?? null`);

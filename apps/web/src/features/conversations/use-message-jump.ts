@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import { scrollToMessageRow, scrollTwice } from "./conversation-scroll-anchor";
+import type { ConversationBottomPin } from "./conversation-bottom-pin";
 import { positionJumpDecision } from "./conversation-thread-search";
 import { JUMP_HIGHLIGHT_MS } from "./message-jump-highlight";
 
@@ -21,6 +22,7 @@ export function useMessageJump({
   onLoadMessageAround,
   setFollowingLatest,
   scrollToLatest,
+  bottomPin,
 }: {
   messages: readonly { id: string; sequence: number }[];
   openedSystemMessages: ReadonlySet<string>;
@@ -30,6 +32,7 @@ export function useMessageJump({
   onLoadMessageAround: ((messageId: string) => Promise<void>) | undefined;
   setFollowingLatest: (following: boolean) => void;
   scrollToLatest: (behavior: ScrollBehavior) => void;
+  bottomPin: ConversationBottomPin;
 }): {
   showMessage: (messageId: string, options?: { opening?: boolean }) => Promise<void>;
   jumpHighlightId: string | undefined;
@@ -74,6 +77,7 @@ export function useMessageJump({
         }
         setFollowingLatest(false);
         message.scrollIntoView({ block: "center" });
+        bottomPin.markJumped(anchor.slice("message-".length));
       };
       scroll();
       requestAnimationFrame(scroll);
@@ -95,6 +99,7 @@ export function useMessageJump({
     pendingMessageIdRef.current = undefined;
     scrollToMessageRow(messageId);
     flashMessageRow(messageId);
+    bottomPin.markJumped(messageId);
   }, [messages, openedSystemMessages, flashMessageRow]);
 
   /** Scrolls to a message, loading the window around it first. `opening`: the conversation opens on
@@ -124,6 +129,7 @@ export function useMessageJump({
     }
     scrollToMessageRow(messageId);
     flashMessageRow(messageId);
+    bottomPin.markJumped(messageId);
   }
 
   // The Saved view's `?message=<uuid>` jump (#127 follow-up) is position-only: it lands at the

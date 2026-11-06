@@ -110,6 +110,13 @@ test("the thread pane shows its title, actions, replies marker and thread compos
     await browser("set", "viewport", "1440", "900");
     await browser("open", threadUrl);
     await browser("wait", "--fn", `document.querySelector('[aria-label="Close Thread"]') !== null`);
+    // The pane's chrome mounts before its replies read lands; the assertions below read the
+    // marker and the reply's text, so wait for both rather than for the shell alone.
+    await browser(
+      "wait",
+      "--fn",
+      `(() => { const pane = [...document.querySelectorAll('section[aria-label="Thread"]')].find((s) => !s.hidden); const text = pane?.textContent ?? ""; return text.includes("Thread pane layout root") && text.includes("Thread pane layout reply") && text.includes("2 replies") && text.includes("Beginning of replies"); })()`,
+    );
     const wide = await evaluate<{
       title: string;
       closeVisible: boolean;

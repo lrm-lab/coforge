@@ -40,6 +40,7 @@ import { isViewerMessage } from "./own-message";
 import { useConversationOpen } from "./use-conversation-open";
 import { useSystemMessageGroups } from "./use-system-message-groups";
 import { useMessageJump } from "./use-message-jump";
+import { useHistoryResize } from "./use-history-resize";
 import type { ConversationPaneProps } from "./conversation-pane-props";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { ConversationStreamPlaceholder } from "./conversation-stream-placeholder";
@@ -269,6 +270,7 @@ export function ConversationPane({
     onLoadMessageAround,
     setFollowingLatest,
     scrollToLatest,
+    bottomPin,
   });
   useLayoutEffect(() => {
     const firstRender = previousConversationIdRef.current === undefined;
@@ -316,31 +318,17 @@ export function ConversationPane({
     return undefined;
   }, [openKey, lastSequence]);
 
-  useLayoutEffect(() => {
-    const history = historyRef.current;
-    if (!history) return;
-    const observer = new ResizeObserver(() => {
-      // An open position the pane could not apply yet (a hidden branch has no height to scroll
-      // within) gets its chance here.
-      if (pendingOpenMessageIdRef.current) {
-        applyOpenPosition();
-        return;
-      }
-      // Whether to re-pin is decided from where the reader stood BEFORE this resize. A
-      // ResizeObserver callback runs after layout, so `scrollHeight` already includes the growth:
-      // judging "at the bottom" from it would refuse to re-pin in exactly the case the pin exists
-      // for — an attachment at the bottom finishing and pushing the latest message out of view.
-      const wasAtBottom = bottomPin.beforeResize(history);
-      // Only a reader genuinely AT the bottom is carried along, never one within the 48px "near
-      // enough" tolerance the reading position uses: re-pinning from 48px fought a reader who had
-      // scrolled up a little, and every deliberate scroll-up must stand.
-      if (!followingLatestRef.current || !wasAtBottom) return;
-      scrollToLatest("instant");
-    });
-    observer.observe(history);
-    if (messageListRef.current) observer.observe(messageListRef.current);
-    return () => observer.disconnect();
-  }, [conversation.conversationId, conversation.messages.length === 0]);
+  useHistoryResize({
+    historyRef,
+    messageListRef,
+    pendingOpenMessageIdRef,
+    bottomPin,
+    followingLatestRef,
+    applyOpenPosition,
+    scrollToLatest,
+    conversationId: conversation.conversationId,
+    listIsEmpty: conversation.messages.length === 0,
+  });
 
   // A load changes the list's height at one end and, once the window is full, removes a page at
   // the other. Restoring the anchored row keeps the reading position; see conversation-scroll-anchor.
