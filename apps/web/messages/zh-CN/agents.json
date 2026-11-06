@@ -65,6 +65,7 @@
   "agent_deferred_start_notice": "Agent 已创建，将在 Daemon 重新连接后启动。",
   "agent_status_online": "在线",
   "agent_status_offline": "离线",
+  "agent_status_unknown": "状态未知",
   "agent_status_quota_exhausted": "额度已用完",
   "agent_status_quota_exhausted_detail": "服务商额度或余额已用完，且没有恢复时间。请切换模型或等待额度恢复后重启。",
   "agent_form_joins_channel": "创建完成后将自动加入 #{channel}。",

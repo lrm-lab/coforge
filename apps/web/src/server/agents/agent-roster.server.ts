@@ -65,6 +65,16 @@ export async function readAgentRoster(db: PrismaClient, userId: string, workspac
   });
 }
 
+/** Every live roster Agent's id and Computer in the Workspace, whatever the viewer may see —
+ * ids only, so the page knows which Agents may report a status on the shared status channel
+ * without learning anything else about them (task #587). */
+export async function statusAgentScopes(db: Pick<PrismaClient, "agent">, workspaceId: string) {
+  return db.agent.findMany({
+    where: { workspaceId, ...ACTIVE_AGENT_WHERE, ...ROSTER_AGENT_WHERE },
+    select: { id: true, computerId: true },
+  });
+}
+
 /** The private Agents `viewer` can see in the Workspace, whose status each has its own channel
  * (`agentStatusChannelForAgent`): only their ids, so the page can learn where those channels stood
  * before it reads them. */

@@ -9,6 +9,7 @@ import {
 } from "#src/features/agents/agent-activity-presentation";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import type { ActivityEntry } from "#src/features/agents/agent-activity";
+import { m } from "#src/paraglide/messages";
 
 function display(overrides: Partial<AgentDisplaySnapshot> = {}): AgentDisplaySnapshot {
   return {
@@ -86,7 +87,7 @@ test("formats only the cloud display decision even when its raw detail kind conf
   });
   expect(agentDisplay()).toEqual({
     kind: "unknown",
-    label: "Status unknown",
+    label: m.agent_status_unknown(),
     isOnline: undefined,
     tone: "unknown",
     pulse: false,
@@ -508,8 +509,7 @@ test("a hidden send_message tool call between fragments still separates them", (
     textFrame(2, "second"),
     textFrame(1, "first"),
   ];
-  // The tool_start entry produces no visible row (send_message is hidden), but it is
-  // still a real tool call between two statements: it must not merge across it.
+  // tool_start (send_message) shows no row but is a real call: statements must not merge across it.
   expect(presentActivity(activity[1])).toEqual([]);
   const rows = presentActivityRows(activity);
   expect(rows.map((row) => row.label)).toEqual(["Output", "Output"]);
@@ -643,8 +643,7 @@ describe("Agent detail", () => {
 
     await query.get("workspace-1", "agent-1", "viewer-1");
 
-    // Both reads are in flight before the first finishes; one-after-the-other would read
-    // status:start, status:end, display:start — which is why this asserts the whole timeline.
+    // Both reads fly before the first finishes; this asserts the whole timeline, not the order.
     expect(timeline).toEqual(["status:start", "display:start", "status:end"]);
   });
 

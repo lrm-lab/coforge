@@ -327,11 +327,9 @@ describe("CentrifugoRpcHandler", () => {
     ).toEqual({ code: 403, message: "Agent status is not authorized" });
   });
 
-  // `agent:status` reports feed both the raw active/inactive event and the reduced
-  // `agent:display` snapshot onto the browser status channel — the same per-Agent-or-shared split
-  // the publish proxy, the Activity sweep and the context-usage receiver already apply, folded
-  // into the same Agent row this method already fetches for authorization above (no extra query).
-  test("routes both the status event and its display snapshot to a private Agent's per-Agent status channel", async () => {
+  // `agent:status` reports feed the raw active/inactive event and the `agent:display` snapshot:
+  // a private Agent's full display goes to its own channel, the shared one only the status floor.
+  test("routes a private Agent's display to its per-Agent status channel and a status floor to the shared one", async () => {
     const publications: Array<{ channel: string }> = [];
     const method = createAgentStatusMethod(
       {
@@ -382,6 +380,7 @@ describe("CentrifugoRpcHandler", () => {
     expect(publications).toEqual([
       { channel: "agentstatus:workspace-1:agent-1" },
       { channel: "agentstatus:workspace-1:agent-1" },
+      { channel: "agentstatus:workspace-1" },
     ]);
   });
 

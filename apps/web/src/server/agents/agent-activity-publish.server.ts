@@ -13,9 +13,12 @@ import { activityKindForObservation } from "./agent-activity-kind";
 import { getAgentDisplay, type AgentDisplay } from "./agent-display.server";
 import { ensureAgentActivitySweep } from "./agent-activity-sweep.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { agentStatusChannelFor } from "#src/features/agents/agent-status-channel";
+import {
+  agentStatusChannelFor,
+  publishAgentDisplay,
+} from "#src/features/agents/agent-status-channel";
 import { agentActivityChannel, isRunStartMarker } from "#src/features/agents/agent-activity";
-import { normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
+import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import {
   agentInPublicationScope,
   publicationDenied as unauthorized,
@@ -151,10 +154,12 @@ export async function handleAgentActivityPublication(
         fence,
       );
       if (snapshot && dependencies.publishJson)
-        await dependencies.publishJson(statusChannel, {
-          type: "agent:display",
-          ...snapshot,
-        });
+        await publishAgentDisplay(
+          dependencies.publishJson,
+          statusChannel,
+          snapshot,
+          visibility !== AGENT_VISIBILITY.PUBLIC,
+        );
     })().catch(() => {});
     await Promise.all([history, reduce]);
 

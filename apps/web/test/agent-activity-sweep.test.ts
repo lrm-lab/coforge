@@ -324,7 +324,7 @@ function expiredSnapshot(scope: { workspaceId: string; computerId: string; agent
   };
 }
 
-test("sweepOne publishes a private Agent's synthesized display to its per-Agent status channel", async () => {
+test("sweepOne publishes a private Agent's synthesized display to its per-Agent status channel and a status floor to the shared one", async () => {
   const privateScope = { workspaceId: "workspace-p", computerId: "computer-p", agentId: "agent-p" };
   const snapshot = expiredSnapshot(privateScope);
   const display = {
@@ -343,11 +343,22 @@ test("sweepOne publishes a private Agent's synthesized display to its per-Agent 
 
   await sweep.tick();
 
-  expect(publishedJson).toHaveLength(1);
+  expect(publishedJson).toHaveLength(2);
   expect(publishedJson[0]!.channel).toBe(
     agentStatusChannelForAgent(privateScope.workspaceId, privateScope.agentId),
   );
   expect(publishedJson[0]!.data).toMatchObject({ type: "agent:display", ...snapshot });
+  // The shared channel gets only the status floor: marked `statusOnly`, no Activity content.
+  expect(publishedJson[1]!.channel).toBe(agentStatusChannel(privateScope.workspaceId));
+  expect(publishedJson[1]!.data).toMatchObject({
+    type: "agent:display",
+    agentId: privateScope.agentId,
+    activityKind: snapshot.activityKind,
+    detailKind: "",
+    detail: "",
+    entries: [],
+    statusOnly: true,
+  });
 });
 
 test("sweepOne keeps publishing a public Agent's synthesized display to the shared status channel", async () => {

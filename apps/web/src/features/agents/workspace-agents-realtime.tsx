@@ -7,7 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { createStore, useSelector, type Store } from "@tanstack/react-store";
+import { useSelector } from "@tanstack/react-store";
 import { useQuery, useQueryClient, skipToken } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
@@ -15,7 +15,10 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { useSyncedStore } from "#src/hooks/use-synced-store";
 
 import { listAgents } from "./agents.functions";
+import { listStatusAgents } from "./workspace-agents.functions";
 import { useAgentStatuses, type AgentStatusView } from "./agent-status-realtime";
+import { LiveAgentStoreContext, StatusOnlyDisplaysContext } from "./agent-status-floor";
+import { useStatusAgents } from "./use-status-agents";
 import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 import {
   activityInConversation,
@@ -46,6 +49,15 @@ import { createReplyIntentStore } from "./reply-intents";
 import { ReplyIntentStoreProvider } from "./reply-intents-context";
 import { useUserChannelReplyIntents } from "./reply-intents-realtime";
 
+// The display-resolution hooks and the two stores they read live in `agent-status-floor`;
+// re-exported here so callers keep one import site for Agent state.
+export {
+  liveAgentDisplay,
+  useAgentDisplays,
+  useLiveAgentDisplay,
+  useVisibleAgentDisplay,
+} from "./agent-status-floor";
+
 const EMPTY_ACTIVITY: ActivityEntry[] = [];
 
 export type LiveAgent = {
@@ -74,7 +86,6 @@ export type LiveAgent = {
 // hooks below, so a consumer can never reach in and subscribe on its own. The live Agents are a
 // TanStack Store rather than a context value, so a reader of one Agent (a message's avatar) is
 // told when that Agent changes and not when any other does.
-const LiveAgentStoreContext = createContext<Store<LiveAgent[]>>(createStore<LiveAgent[]>([]));
 const WorkspaceIdContext = createContext<string | undefined>(undefined);
 const RefreshAgentDirectoryContext = createContext<(() => Promise<void>) | null>(null);
 
@@ -90,6 +101,7 @@ export function WorkspaceAgentsProvider({
   viewerId,
   agents,
   extraAgents: loadedExtras,
+  statusAgents: loadedStatusAgents,
   agentStreamPositions,
   children,
 }: {
@@ -100,11 +112,15 @@ export function WorkspaceAgentsProvider({
   /** The extras the page loaded with the roster, so the first paint already lists a DM with
    * another member's Agent; absent when that read failed, and the browser reads them then. */
   extraAgents?: ExtraAgent[];
+  /** Every live Agent's id and Computer in the Workspace (`statusAgentScopes`), whatever the
+   * viewer may see: which Agents may report a status floor on the shared status channel. */
+  statusAgents?: { id: string; computerId: string | null }[];
   /** Where the page's Agent reads stood in the status stream (`loadWorkspaceAgents`). */
   agentStreamPositions?: StreamPositions;
   children: ReactNode;
 }) {
   const refreshAgents = useServerFn(listAgents);
+  const refreshStatusAgents = useServerFn(listStatusAgents);
   const loadExtras = useServerFn(loadExtraAgents);
   const queryClient = useQueryClient();
   // The Agents the store holds right now, so a read can name the extras it still shows busy and
@@ -166,8 +182,9 @@ export function WorkspaceAgentsProvider({
     [extraAgentsQuery.data],
   );
   const [latestRoster, keepRoster] = useLatestRoster(agents, workspaceId);
+  const { statusAgentIds, keepStatusAgents } = useStatusAgents(loadedStatusAgents, workspaceId);
   const refreshWithExtras = useCallback(async (): Promise<LiveAgent[]> => {
-    const [roster, extras] = await Promise.all([
+    const [roster, extras, statusAgents] = await Promise.all([
       refreshAgents(),
       workspaceId
         ? queryClient
@@ -179,19 +196,36 @@ export function WorkspaceAgentsProvider({
             // The extras are an addition: without a fresh read the last ones read stay.
             .catch(() => queryClient.getQueryData<ExtraAgent[]>(extraAgentsQueryKey(workspaceId)))
         : undefined,
+      // The status set is an addition too: a failed read keeps the last one.
+      workspaceId ? refreshStatusAgents().catch(() => undefined) : undefined,
     ]);
     keepRoster(workspaceId, roster);
+    if (statusAgents) keepStatusAgents(workspaceId, statusAgents);
     return refreshedAgents(roster, extras);
-  }, [refreshAgents, readExtraAgents, queryClient, workspaceId, keepRoster]);
+  }, [
+    refreshAgents,
+    refreshStatusAgents,
+    readExtraAgents,
+    queryClient,
+    workspaceId,
+    keepRoster,
+    keepStatusAgents,
+  ]);
 
   // `useAgentStatuses` derives its own per-Agent status subscriptions from its own current
   // state (see agent-status-realtime.ts), so a freshly-private Agent is subscribed the moment
   // it learns about it — no lag from an external, previous-render list.
-  const { agents: visibleAgents, refresh: refreshDirectory } = useAgentStatuses<LiveAgent>({
+  const {
+    agents: visibleAgents,
+    refresh: refreshDirectory,
+    statusOnlyDisplays,
+  } = useAgentStatuses<LiveAgent>({
     agents: latestRoster,
     workspaceId,
     refresh: refreshWithExtras,
     extraAgents,
+    // An empty set means the read never answered: accept every floor rather than hide them all.
+    statusOnlyAgentIds: statusAgentIds.size > 0 ? statusAgentIds : undefined,
     readPositions: agentStreamPositions,
     onVisibilityChangedEvent: workspaceId
       ? () => {
@@ -242,16 +276,19 @@ export function WorkspaceAgentsProvider({
   }, [visibleAgents, workspaceId, queryClient]);
 
   const liveAgents = useSyncedStore(visibleAgents);
+  const statusOnlyStore = useSyncedStore(statusOnlyDisplays);
 
   return (
     <LiveAgentStoreContext value={liveAgents}>
-      <WorkspaceIdContext value={workspaceId}>
-        <RefreshAgentDirectoryContext value={refreshDirectory}>
-          <DisplayWatcherContext value={watched.watch}>
-            <ReplyIntentStoreProvider value={replyIntents}>{children}</ReplyIntentStoreProvider>
-          </DisplayWatcherContext>
-        </RefreshAgentDirectoryContext>
-      </WorkspaceIdContext>
+      <StatusOnlyDisplaysContext value={statusOnlyStore}>
+        <WorkspaceIdContext value={workspaceId}>
+          <RefreshAgentDirectoryContext value={refreshDirectory}>
+            <DisplayWatcherContext value={watched.watch}>
+              <ReplyIntentStoreProvider value={replyIntents}>{children}</ReplyIntentStoreProvider>
+            </DisplayWatcherContext>
+          </RefreshAgentDirectoryContext>
+        </WorkspaceIdContext>
+      </StatusOnlyDisplaysContext>
     </LiveAgentStoreContext>
   );
 }
@@ -347,12 +384,6 @@ export function useLiveWorkspaceAgents<T extends LiveAgent>(
   });
 }
 
-/** Each live Agent's latest display by id, for avatars' status dots. */
-export function useAgentDisplays(): Map<string, AgentDisplaySnapshot | undefined> {
-  const agents = useLiveAgents();
-  return useMemo(() => new Map(agents.map((agent) => [agent.id, agent.display])), [agents]);
-}
-
 /** The current Workspace id from the app shell's providers, when one is selected. */
 export function useCurrentWorkspaceId(): string | undefined {
   return useContext(WorkspaceIdContext);
@@ -373,36 +404,6 @@ export function useLiveAgentMascot(agentId: string): AgentMascot | undefined {
   return useSelector(
     useContext(LiveAgentStoreContext),
     (agents) => agents.find((agent) => agent.id === agentId && inRoster(agent))?.mascot,
-  );
-}
-
-/** One live Agent's display for an avatar's status dot, or nothing for an Agent not in the
- * viewer's roster (an `isExtra` Agent, which `useLiveAgents` leaves out too) or not live here. */
-export function liveAgentDisplay(
-  agents: readonly { id: string; display?: AgentDisplaySnapshot; isExtra?: true }[],
-  agentId: string,
-): AgentDisplaySnapshot | undefined {
-  return agents.find((agent) => agent.id === agentId && inRoster(agent))?.display;
-}
-
-/**
- * One visible Agent's display, another member's (`isExtra`) included, for the sidebar's DM face:
- * a DM with another member's public Agent is listed there too. Repaints like `useLiveAgentDisplay`.
- */
-export function useVisibleAgentDisplay(agentId: string): AgentDisplaySnapshot | undefined {
-  return useSelector(
-    useContext(LiveAgentStoreContext),
-    (agents) => agents.find((agent) => agent.id === agentId)?.display,
-  );
-}
-
-/**
- * One Agent's display, for its avatar's status dot: repaints when that Agent's display changes
- * and not on another Agent's change or on a status lease refresh.
- */
-export function useLiveAgentDisplay(agentId: string): AgentDisplaySnapshot | undefined {
-  return useSelector(useContext(LiveAgentStoreContext), (agents) =>
-    liveAgentDisplay(agents, agentId),
   );
 }
 

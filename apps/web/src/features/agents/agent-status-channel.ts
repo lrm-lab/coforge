@@ -1,4 +1,5 @@
 import { utf8Encoder } from "@lrm/coforge-sdk/internal";
+import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 
 import { publicationData } from "#src/features/realtime/publication-data";
@@ -36,6 +37,48 @@ export const agentStatusChannelFor = (workspaceId: string, agentId: string, visi
   visibility === AGENT_VISIBILITY.PUBLIC
     ? agentStatusChannel(workspaceId)
     : agentStatusChannelForAgent(workspaceId, agentId);
+
+/**
+ * The status floor a private Agent also publishes on the shared Workspace status channel: its
+ * kind, stop reason and expiry — never `detail`, `detailKind`, `entries`, `contextUsage` or
+ * `fastMode`, so every member learns whether it is online, working, thinking, errored or
+ * offline while its Activity stays private. `statusOnly` marks it so a client that also
+ * receives the full snapshot on the Agent's own channel never lets this one stand in for it.
+ */
+export function agentStatusOnlySnapshot(snapshot: AgentDisplaySnapshot): AgentDisplaySnapshot {
+  return {
+    protocolMajor: 1,
+    workspaceId: snapshot.workspaceId,
+    computerId: snapshot.computerId,
+    agentId: snapshot.agentId,
+    revision: snapshot.revision,
+    activityKind: snapshot.activityKind,
+    detailKind: "",
+    detail: "",
+    entries: [],
+    expiresAt: snapshot.expiresAt,
+    ...(snapshot.stopReason !== undefined ? { stopReason: snapshot.stopReason } : {}),
+    statusOnly: true,
+  };
+}
+
+/** The one `agent:display` fan-out every publisher shares: the full snapshot on the Agent's own
+ * status channel (`channel`, already chosen by visibility), and — for a private Agent — the
+ * status floor on the shared Workspace channel, so every member sees whether it is online,
+ * working or offline while its Activity stays private. */
+export async function publishAgentDisplay(
+  publishJson: (channel: string, data: unknown) => Promise<void>,
+  channel: string,
+  snapshot: AgentDisplaySnapshot,
+  isPrivate: boolean,
+): Promise<void> {
+  await publishJson(channel, { type: "agent:display", ...snapshot });
+  if (isPrivate)
+    await publishJson(agentStatusChannel(snapshot.workspaceId), {
+      type: "agent:display",
+      ...agentStatusOnlySnapshot(snapshot),
+    });
+}
 
 /**
  * The id-only event a visibility change publishes on the shared status channel. A

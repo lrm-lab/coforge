@@ -127,6 +127,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       notifications,
       agents: workspaceAgents.agents,
       extraAgents: workspaceAgents.extraAgents,
+      statusAgents: workspaceAgents.statusAgents,
       agentStreamPositions: workspaceAgents.streamPositions,
       timeZone: preferences.timeZone,
       assumedPhone: loadAssumedPhone(),
@@ -144,6 +145,7 @@ function AppLayout() {
     currentWorkspace,
     agents,
     extraAgents,
+    statusAgents,
     agentStreamPositions,
     notifications,
     timeZone,
@@ -187,6 +189,7 @@ function AppLayout() {
                 viewerId={user.id}
                 agents={agents}
                 extraAgents={extraAgents}
+                statusAgents={statusAgents}
                 agentStreamPositions={agentStreamPositions}
               >
                 <PanelTabOrderProvider workspaceId={currentWorkspace.id} orders={tabOrders}>

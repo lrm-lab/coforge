@@ -2,7 +2,11 @@ import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { encodeAgentActivityProbe } from "@lrm/coforge-sdk/internal";
 
-import { agentStatusChannelFor } from "#src/features/agents/agent-status-channel";
+import {
+  agentStatusChannelFor,
+  publishAgentDisplay,
+} from "#src/features/agents/agent-status-channel";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVITY_PROBE_TIMEOUT_MS } from "#src/features/agents/activity-probe-timeout";
 import {
   createCentrifugoServerApi,
@@ -147,10 +151,12 @@ export class AgentActivitySweep {
       const visibility = await this.visibility(scope);
       if (visibility === undefined) return;
       const channel = agentStatusChannelFor(scope.workspaceId, scope.agentId, visibility);
-      await this.api.publishJson(channel, {
-        type: "agent:display",
-        ...result.snapshot,
-      });
+      await publishAgentDisplay(
+        this.api.publishJson,
+        channel,
+        result.snapshot,
+        visibility !== AGENT_VISIBILITY.PUBLIC,
+      );
     }
   }
 }

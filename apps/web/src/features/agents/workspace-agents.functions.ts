@@ -3,7 +3,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
-import { readAgentRoster, visiblePrivateAgentIds } from "#src/server/agents/agent-roster.server";
+import {
+  readAgentRoster,
+  statusAgentScopes,
+  visiblePrivateAgentIds,
+} from "#src/server/agents/agent-roster.server";
 import { agentVisibilityViewerForUser } from "#src/server/agents/agent-visibility.server";
 import { listExtraAgents } from "#src/server/agents/extra-agents.server";
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
@@ -29,7 +33,7 @@ export const loadWorkspaceAgents = createServerFn({ method: "GET" })
       : [];
     const {
       streamPositions,
-      data: [agents, extraAgents],
+      data: [agents, extraAgents, statusAgents],
     } = await readAfterStreamPositions(
       [
         agentStatusChannel(workspaceId),
@@ -41,7 +45,17 @@ export const loadWorkspaceAgents = createServerFn({ method: "GET" })
           viewer
             ? listExtraAgents(db, getAgentDisplay(), workspaceId, viewer).catch(() => undefined)
             : undefined,
+          statusAgentScopes(db, workspaceId).catch(() => []),
         ]),
     );
-    return { agents, extraAgents, streamPositions };
+    return { agents, extraAgents, statusAgents, streamPositions };
+  });
+
+/** Every live Agent's id and Computer in the Workspace, whatever the viewer may see — ids only,
+ * so a refresh keeps the set of Agents the shared status channel may report on (task #587). */
+export const listStatusAgents = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context: { db, workspaceId } }) => {
+    declareNoStore();
+    return statusAgentScopes(db, workspaceId);
   });

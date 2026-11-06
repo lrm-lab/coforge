@@ -23,6 +23,11 @@ import {
 import { AGENT_VISIBILITY } from "./agent-visibility";
 import { ACTIVITY_PROBE_TIMEOUT_MS } from "./activity-probe-timeout";
 import { isBusyTone } from "./agent-activity-presentation";
+import {
+  dropStatusOnlyDisplay,
+  mergeStatusOnlyDisplaySnapshot,
+  type StatusOnlyDisplays,
+} from "./agent-status-floor";
 
 type StatusTrackedAgent = {
   id: string;
@@ -96,6 +101,8 @@ export function applyAgentDisplaySnapshot<T extends StatusTrackedAgent>(
   workspaceId?: string,
 ): T[] {
   if (workspaceId && snapshot.workspaceId !== workspaceId) return agents;
+  // A status floor is never a display: it lives in `statusOnlyDisplays`, applied by the caller.
+  if (snapshot.statusOnly === true) return agents;
   let changed = false;
   const next = agents.map((agent) => {
     if (
@@ -252,6 +259,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
   onVisibilityChangedEvent,
   onDirectoryChangedEvent,
   readPositions,
+  statusOnlyAgentIds,
 }: {
   agents: T[];
   workspaceId?: string;
@@ -260,6 +268,10 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
    * (via `mergeExtraAgents`) into each new `agents` value; `refresh()` returns its own extras,
    * so its result is never merged with these. A live publication updates them in place. */
   extraAgents?: T[];
+  /** The ids of every live Agent in the Workspace (`statusAgentScopes`), whatever the viewer may
+   * see: a `statusOnly` floor is kept only for one of them. Absent or empty accepts every floor —
+   * the floor carries no Activity content, so an unread set never hides a status. */
+  statusOnlyAgentIds?: ReadonlySet<string>;
   /** Called whenever this hook observes `agent:visibility_changed`, so the caller can
    * invalidate what else follows an Agent's visibility. */
   onVisibilityChangedEvent?: () => void;
@@ -273,11 +285,14 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
   const [visibleAgents, setVisibleAgents] = useState(() =>
     expireAgentStatuses(mergeExtraAgents(agents, extraAgents), Date.now()),
   );
+  const [statusOnlyDisplays, setStatusOnlyDisplays] = useState<StatusOnlyDisplays>(() => new Map());
   const mounted = useRef(true);
   // The status channels subscribed so far, so each channel's first subscribe is told apart.
   const subscribedChannels = useRef(new Set<string>());
   const currentWorkspaceId = useRef(workspaceId);
   const visibleWorkspaceId = useRef(workspaceId);
+  const statusOnlyIds = useRef(statusOnlyAgentIds);
+  statusOnlyIds.current = statusOnlyAgentIds;
   currentWorkspaceId.current = workspaceId;
 
   useEffect(() => {
@@ -291,6 +306,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
     if (visibleWorkspaceId.current !== workspaceId) {
       visibleWorkspaceId.current = workspaceId;
       setVisibleAgents(expireAgentStatuses(mergeExtraAgents(agents, extraAgents), Date.now()));
+      setStatusOnlyDisplays(new Map());
       return;
     }
     setVisibleAgents((current) =>
@@ -343,6 +359,19 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
     };
   }, [refresh, visibleAgents, workspaceId]);
 
+  // A floor is kept only for an Agent the status set still names: one that left the Workspace's
+  // live Agents (deleted, or a failed read answering empty — treated as "not loaded" above)
+  // drops its floor rather than answering for a name no surface should resolve.
+  useEffect(() => {
+    if (!statusOnlyAgentIds || statusOnlyAgentIds.size === 0) return;
+    setStatusOnlyDisplays((current) => {
+      let next: Map<string, AgentDisplaySnapshot> | undefined;
+      for (const agentId of current.keys())
+        if (!statusOnlyAgentIds.has(agentId)) (next ??= new Map(current)).delete(agentId);
+      return next ?? current;
+    });
+  }, [statusOnlyAgentIds]);
+
   const refreshSnapshot = useCallback(async () => {
     const refreshed = await refresh();
     if (mounted.current && currentWorkspaceId.current === workspaceId)
@@ -375,7 +404,21 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
         onDirectoryChangedEvent?.();
       } else if (Reflect.get(value as object, "type") === "agent:display") {
         const snapshot = parseAgentDisplaySnapshot(value);
-        setVisibleAgents((current) => applyAgentDisplaySnapshot(current, snapshot, workspaceId));
+        if (snapshot.statusOnly === true) {
+          // The status floor a private Agent shares with every member: kept beside the tracked
+          // Agents, never in their `display`, so it cannot stand in for or downgrade a full
+          // snapshot — and only for an Agent the status set names.
+          const ids = statusOnlyIds.current;
+          if (
+            (!workspaceId || snapshot.workspaceId === workspaceId) &&
+            (!ids || ids.size === 0 || ids.has(snapshot.agentId))
+          )
+            setStatusOnlyDisplays((current) => mergeStatusOnlyDisplaySnapshot(current, snapshot));
+        } else {
+          if (!workspaceId || snapshot.workspaceId === workspaceId)
+            setStatusOnlyDisplays((current) => dropStatusOnlyDisplay(current, snapshot.agentId));
+          setVisibleAgents((current) => applyAgentDisplaySnapshot(current, snapshot, workspaceId));
+        }
       } else {
         const event = decodeAgentStatusEvent(value);
         setVisibleAgents((current) => applyAgentStatusEvent(current, event));
@@ -429,5 +472,5 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
     onPublication: (_channel, publication) => handleStatusPublication(publication.data),
   });
 
-  return { agents: visibleAgents, refresh: refreshSnapshot };
+  return { agents: visibleAgents, refresh: refreshSnapshot, statusOnlyDisplays };
 }

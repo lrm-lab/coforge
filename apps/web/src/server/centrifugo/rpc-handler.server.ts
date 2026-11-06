@@ -35,6 +35,7 @@ import {
   agentStatusChannel,
   agentStatusChannelForAgent,
   encodeAgentStatusEvent,
+  publishAgentDisplay,
 } from "#src/features/agents/agent-status-channel";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { CentrifugoServerApi } from "./server-api.server";
@@ -201,10 +202,7 @@ export function createAgentStatusMethod(
         );
       }
       if (snapshot && displayEvents)
-        await displayEvents.publishJson(channel, {
-          type: "agent:display",
-          ...snapshot,
-        });
+        await publishAgentDisplay(displayEvents.publishJson, channel, snapshot, isPrivate);
     } catch {
       // Realtime fan-out is best-effort once the process lease is stored.
     }

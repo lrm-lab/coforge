@@ -556,7 +556,7 @@ describe("Agent activity publication", () => {
       expect(decodeAgentActivity(published[0]!.data).activityKind).toBe("working");
     });
 
-    test("reduces its display snapshot to its per-Agent status channel, not the shared one", async () => {
+    test("publishes a private Agent's display to its own channel and a status floor to the shared one", async () => {
       const publishedJson: Array<{ channel: string; data: unknown }> = [];
       await handleAgentActivityPublication(request(), {
         proxySecret: "test-secret",
@@ -576,8 +576,8 @@ describe("Agent activity publication", () => {
             revision: 1,
             activityKind: "working",
             detailKind: activity.detailKind,
-            detail: "",
-            entries: [],
+            detail: "Running a tool",
+            entries: [{ kind: "text", text: "secret words" }],
             expiresAt: Date.now() + 90_000,
           }),
         },
@@ -586,45 +586,20 @@ describe("Agent activity publication", () => {
         },
       });
 
-      expect(publishedJson).toHaveLength(1);
+      // The shared channel gets only the status floor: the kind and its deadline, marked
+      // `statusOnly`, never the Activity's words.
+      expect(publishedJson).toHaveLength(2);
       expect(publishedJson[0]!.channel).toBe("agentstatus:workspace-1:agent-1");
-    });
-
-    test("does not publish to the shared activity or status channel", async () => {
-      const publishedJson: Array<{ channel: string }> = [];
-      const response = await handleAgentActivityPublication(request(), {
-        proxySecret: "test-secret",
-        agentBelongsToWorkspace: async () => true,
-        agentBelongsToComputer: async () => true,
-        computerBelongsToWorkspace: async () => true,
-        agentVisibility: async () => "private",
-        observe: async () => {},
-        publish: async () => {},
-        currentRuntimeFence: async () => ({ daemonInstanceId: "daemon-1", launchId: "launch-1" }),
-        display: {
-          observeActivity: async () => ({
-            protocolMajor: 1,
-            workspaceId: "workspace-1",
-            computerId: "computer-1",
-            agentId: "agent-1",
-            revision: 1,
-            activityKind: "working",
-            detailKind: activity.detailKind,
-            detail: "",
-            entries: [],
-            expiresAt: Date.now() + 90_000,
-          }),
-        },
-        publishJson: async (channel) => {
-          publishedJson.push({ channel });
-        },
+      expect(publishedJson[1]!.channel).toBe("agentstatus:workspace-1");
+      expect(publishedJson[1]!.data).toMatchObject({
+        type: "agent:display",
+        agentId: "agent-1",
+        activityKind: "working",
+        detail: "",
+        entries: [],
+        statusOnly: true,
       });
-
-      const body = (await response.json()) as { result?: unknown };
-      expect(body.result).toBeUndefined();
-      expect(publishedJson.every((entry) => entry.channel !== "agentstatus:workspace-1")).toBe(
-        true,
-      );
+      expect(JSON.stringify(publishedJson[1]!.data)).not.toContain("secret words");
     });
 
     test("treats an unrecognized visibility value as private (fail closed)", async () => {

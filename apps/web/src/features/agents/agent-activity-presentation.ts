@@ -453,7 +453,7 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
   if (!display)
     return {
       kind: "unknown" as const,
-      label: "Status unknown",
+      label: m.agent_status_unknown(),
       isOnline: undefined,
       tone: "unknown" as const,
       pulse: false,

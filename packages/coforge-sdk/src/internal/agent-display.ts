@@ -40,6 +40,12 @@ export type AgentDisplaySnapshot = {
    * that has never written this field; `null` while no stop reason is known.
    */
   stopReason?: string | null;
+  /**
+   * `true` on the status floor a private Agent also publishes on the shared Workspace status
+   * channel: `activityKind`, `stopReason` and `expiresAt` only, with `detailKind`, `detail`
+   * and `entries` always empty — never what the Agent is doing. Absent on a full snapshot.
+   */
+  statusOnly?: true;
 };
 
 const activityKinds = new Set<AgentActivityKind>([
@@ -80,6 +86,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
   const contextUsage = parseContextUsage(item.contextUsage);
   const fastMode = parseFastMode(item.fastMode);
   const stopReason = parseStopReason(item.stopReason);
+  const statusOnly = parseStatusOnly(item);
   return {
     protocolMajor: 1,
     workspaceId: item.workspaceId,
@@ -94,7 +101,25 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
     ...(contextUsage !== undefined ? { contextUsage } : {}),
     ...(fastMode !== undefined ? { fastMode } : {}),
     ...(stopReason !== undefined ? { stopReason } : {}),
+    ...(statusOnly ? { statusOnly } : {}),
   } as AgentDisplaySnapshot;
+}
+
+/** The status floor may carry the kind and its deadline, never Activity content: a `statusOnly`
+ * snapshot with words in it is a bug, rejected at the boundary like any other invalid value. */
+function parseStatusOnly(item: Record<string, unknown>): true | undefined {
+  if (item.statusOnly === undefined) return undefined;
+  if (
+    item.statusOnly !== true ||
+    item.detailKind !== "" ||
+    item.detail !== "" ||
+    !Array.isArray(item.entries) ||
+    item.entries.length !== 0 ||
+    item.contextUsage !== undefined ||
+    item.fastMode !== undefined
+  )
+    throw new Error("invalid Agent display snapshot");
+  return true;
 }
 
 /** Same tolerance as `parseContextUsage`: absent (older server) returns `undefined`, `null`
