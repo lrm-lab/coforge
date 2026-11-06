@@ -22,6 +22,7 @@ import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
 import { ComputerRemoveAction } from "./computer-remove-action";
 import { ComputerDetailAgentRoster } from "./computer-detail-agent-roster";
 import { ComputerDetailStats } from "./computer-detail-stats";
+import { activeRefusal, ComputerRefusalAlert } from "./computer-refusal";
 import {
   RESTART_MAX_POLLS,
   RESTART_POLL_INTERVAL_MS,
@@ -151,6 +152,7 @@ export function ComputerDetail({
   };
 
   const label = computerLabel(computer);
+  const refusal = activeRefusal(computer);
 
   return (
     <>
@@ -186,6 +188,9 @@ export function ComputerDetail({
       <div className="@container min-h-0 flex-1 overflow-y-auto px-page pt-6 pb-10">
         <div className="flex w-full flex-col gap-10">
           <div className="flex flex-col gap-6">
+            {refusal && (
+              <ComputerRefusalAlert refusal={refusal} computer={computer} timeZone={timeZone} />
+            )}
             {/* The header band has no room for it on a phone. */}
             <ComputerDetailWhere computer={computer} label={label} className="-mb-2 sm:hidden" />
             <ComputerDetailStats

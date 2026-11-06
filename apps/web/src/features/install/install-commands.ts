@@ -10,6 +10,11 @@ export function installCommands(origin: string): {
   };
 }
 
+/** Leave one Workspace: stops its Daemon and drops its key. */
+export function detachCommand(workspaceSlug: string): string {
+  return `coforge-computer detach --workspace ${workspaceSlug}`;
+}
+
 /** Join one Workspace; setup requests device-code authorization when credentials are missing. */
 export function setupCommand(workspaceSlug: string): string {
   return `coforge-computer setup --workspace ${workspaceSlug}`;

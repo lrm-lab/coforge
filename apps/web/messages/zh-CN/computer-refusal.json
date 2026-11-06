@@ -1,0 +1,18 @@
+{
+  "computer_refusal_label_credential_revoked": "凭据已吊销",
+  "computer_refusal_label_computer_unlinked": "已从工作区移除",
+  "computer_refusal_label_workspace_deleted": "工作区已删除",
+  "computer_refusal_title_credential_revoked": "这台电脑的凭据已被吊销",
+  "computer_refusal_title_computer_unlinked": "这台电脑已从此工作区移除",
+  "computer_refusal_title_workspace_deleted": "此工作区已删除",
+  "computer_refusal_stopped": "它在 {date} 停止连接并停止了 Agent。文件都还在。",
+  "computer_refusal_ask_owner": "电脑所有者可以重新连接它。",
+  "computer_refusal_run": "在这台电脑上运行下面的命令重新连接：",
+  "computer_refusal_run_other": "在这台电脑上运行下面的命令，连接到其他工作区：",
+  "computer_refusal_copy": "复制命令",
+  "computer_refusal_reconnect": "重新连接",
+  "computer_refusal_reconnecting": "正在重新连接",
+  "computer_refusal_reconnect_queued": "正在重新连接，可能需要一分钟。",
+  "computer_refusal_reconnect_failed": "无法重新连接这台电脑。",
+  "computer_refusal_stopped_undated": "它已停止连接并停止了 Agent。文件都还在。"
+}

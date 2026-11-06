@@ -1,0 +1,18 @@
+{
+  "computer_refusal_label_credential_revoked": "Credential revoked",
+  "computer_refusal_label_computer_unlinked": "Removed from Workspace",
+  "computer_refusal_label_workspace_deleted": "Workspace deleted",
+  "computer_refusal_title_credential_revoked": "This Computer's credential was revoked",
+  "computer_refusal_title_computer_unlinked": "This Computer was removed from this Workspace",
+  "computer_refusal_title_workspace_deleted": "This Workspace was deleted",
+  "computer_refusal_stopped": "It stopped connecting and stopped its Agents on {date}. Its files are kept.",
+  "computer_refusal_ask_owner": "Its owner can connect it again.",
+  "computer_refusal_run": "Run these on the Computer to connect it again:",
+  "computer_refusal_run_other": "Run this on the Computer to connect it to another Workspace:",
+  "computer_refusal_copy": "Copy command",
+  "computer_refusal_reconnect": "Reconnect",
+  "computer_refusal_reconnecting": "Reconnecting",
+  "computer_refusal_reconnect_queued": "Reconnecting. This can take a minute.",
+  "computer_refusal_reconnect_failed": "Could not reconnect this Computer.",
+  "computer_refusal_stopped_undated": "It stopped connecting and stopped its Agents. Its files are kept."
+}

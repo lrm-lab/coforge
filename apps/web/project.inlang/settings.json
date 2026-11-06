@@ -40,6 +40,7 @@
       "./messages/{locale}/workspace-assistant.json",
       "./messages/{locale}/settings.json",
       "./messages/{locale}/notification-settings.json",
+      "./messages/{locale}/computer-refusal.json",
       "./messages/{locale}/computer.json",
       "./messages/{locale}/computer-file-upload.json",
       "./messages/{locale}/local-session-handoff.json",

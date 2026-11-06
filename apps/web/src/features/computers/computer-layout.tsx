@@ -22,11 +22,13 @@ import { computerListUpdateVersion, computerVersionLabel } from "./computer-iden
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 import { upgradeRunning } from "./computer-upgrade-status";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { activeRefusal, refusalLabel, type ComputerConnectRefusal } from "./computer-refusal";
 
 export type ComputerListItem = ComputerIdentity &
   ComputerPlatformInfo & {
     id: string;
     online: boolean;
+    connectRefusal?: ComputerConnectRefusal | null;
     ownedByCurrentUser: boolean;
     computerVersion?: string | null;
     imageVersion?: string | null;
@@ -91,6 +93,7 @@ export function ComputerLayout({
           {computers.map((computer) => {
             const selected = computer.id === selectedComputerId;
             const creatorName = computer.creator ? humanLabel(computer.creator) : "";
+            const refusal = activeRefusal(computer);
             return (
               <li key={computer.id}>
                 <div className="flex min-w-0 items-center">
@@ -121,7 +124,11 @@ export function ComputerLayout({
                         {computerLabel(computer)}
                       </span>
                       <span className="flex min-w-0 items-baseline gap-1.5">
-                        {computer.name && computer.name !== computerLabel(computer) ? (
+                        {refusal ? (
+                          <span className="truncate text-xs text-error-primary">
+                            {refusalLabel(refusal.reason)}
+                          </span>
+                        ) : computer.name && computer.name !== computerLabel(computer) ? (
                           <span className="truncate font-mono text-xs text-tertiary">
                             {computer.name}
                           </span>
