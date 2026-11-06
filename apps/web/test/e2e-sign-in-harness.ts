@@ -304,18 +304,26 @@ export function openBrowser(session: string) {
   const browserPath = Bun.which("agent-browser");
   if (!browserPath) throw new Error("agent-browser is required");
   async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      env: { ...process.env, AGENT_BROWSER_IGNORE_HTTPS_ERRORS: "1" },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
+    // A `wait` polls through an execution context a navigation destroys (sign-in's redirect
+    // lands mid-poll); asking again polls the new document, which is what the wait wanted.
+    // Anything else — a click eval included — is not retried: its first run may have acted.
+    for (let attempt = 0; ; attempt++) {
+      const child = Bun.spawn([browserPath!, "--session", session, ...args], {
+        env: { ...process.env, AGENT_BROWSER_IGNORE_HTTPS_ERRORS: "1" },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      if (code === 0) return stdout;
+      if (args[0] !== "wait" || !/navigated or closed/.test(stderr) || attempt === 2) {
+        throw new Error(`Browser ${args[0]} failed: ${stderr}`);
+      }
+      await Bun.sleep(250);
+    }
   }
   /** The tab the session is bound to, so a second tab can be left again. `tab` accepts a stable id
    * like `t1`, a label, or a CDP target id (newer `agent-browser`, which lists a `tabId`) or, in
