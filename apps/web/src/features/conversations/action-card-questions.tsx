@@ -216,9 +216,7 @@ function ClosedReason({ view }: { view: QuestionsView }) {
       ? m.action_card_cancelled()
       : view.state === "expired"
         ? m.action_card_expired()
-        : view.state === "answered_in_chat"
-          ? m.action_card_answered_in_chat()
-          : undefined;
+        : undefined;
   if (reason)
     return (
       <p className="flex items-center gap-1.5 px-2.5 pb-1 text-sm text-quaternary">

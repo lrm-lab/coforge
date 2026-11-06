@@ -15,7 +15,6 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import type { Transaction } from "./task-board-ports.server";
 import { memberId } from "./task-board-ports.server";
 import { discussionOf, followTask, joinDiscussion } from "./task-discussion-store.server";
-import { markChoiceCardsAnsweredInChat } from "#src/server/conversations/action-card-answered.server";
 
 /**
  * A message in a task's own conversation, written the way a channel message is: its mentions and
@@ -168,17 +167,6 @@ export async function postTaskMessage(
   // whose board the references were resolved against (task #558: a mismatch broke the foreign key).
   await writeMessageReferences(tx, message, { conversationId, workspaceId }, stored.references);
 
-  // A card posted in this conversation waits for the person; their reply here answers it.
-  const answeredCardIds = member.userId
-    ? await markChoiceCardsAnsweredInChat(tx, {
-        workspaceId,
-        conversationId,
-        userId: member.userId,
-        messageId: message.id,
-        sequence,
-        threadRootId: null,
-      })
-    : [];
   await Promise.all(
     attachmentIds.map((id, position) =>
       tx.attachment.update({ where: { id }, data: { messageId: message.id, position } }),
@@ -190,7 +178,6 @@ export async function postTaskMessage(
     sequence: message.sequence,
     createdAt: message.createdAt,
     body: message.body,
-    answeredCardIds,
   };
 }
 

@@ -19,12 +19,10 @@ export function chosenAnswer(view: ChoiceView): string | undefined {
   return view.options.find((option) => option.id === view.result?.optionId)?.label;
 }
 
-/** What stands in for the answer on a card closed without one, in gray: withdrawn, run out, or
- * answered in the chat instead (task #453). */
+/** What stands in for the answer on a card closed without one, in gray: withdrawn or run out. */
 function closedWithoutAnswer(view: ChoiceView): string | undefined {
   if (view.state === "cancelled") return m.action_card_cancelled();
   if (view.state === "expired") return m.action_card_expired();
-  if (view.state === "answered_in_chat") return m.action_card_answered_in_chat();
   return undefined;
 }
 
