@@ -80,6 +80,9 @@ for config in "${configs[@]}"; do
 	# passes), so the names are pointed at loopback in a temporary copy.
 	check_config="$(mktemp "${TMPDIR:-/tmp}/centrifugo-config.XXXXXX")"
 	sed 's/host\.docker\.internal/127.0.0.1/g' "$config" >"$check_config"
+	# mktemp creates the copy 0600, but the image runs checkconfig as its own
+	# user: an unreadable mount surfaces as Centrifugo's "config file not found".
+	chmod 644 "$check_config"
 	if ! docker run --rm \
 		-v "$check_config:/config.yaml:ro" \
 		-e CENTRIFUGO_VAR_RPC_PROXY_SECRET=ci-placeholder \
