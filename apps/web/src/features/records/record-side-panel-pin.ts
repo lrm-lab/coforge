@@ -23,6 +23,21 @@ export function readSidePanelPinned(
   return defaultSidePanelPinned(surface);
 }
 
+/**
+ * Whether the panel starts open. Below `lg` it hides the document, so there only a pin the reader
+ * made opens it; a `beside` panel follows the pinned state, default included.
+ */
+export function sidePanelOpensOnEntry(
+  subjectType: string,
+  subjectId: string,
+  surface: RecordSideSurface,
+  beside: boolean,
+): boolean {
+  if (beside) return readSidePanelPinned(subjectType, subjectId, surface);
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(sidePanelPinStorageKey(subjectType, subjectId)) === "1";
+}
+
 export function writeSidePanelPinned(subjectType: string, subjectId: string, pinned: boolean) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(sidePanelPinStorageKey(subjectType, subjectId), pinned ? "1" : "0");

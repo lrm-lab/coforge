@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 
-import { readSidePanelPinned, type RecordSideSurface } from "./record-side-panel-pin";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
+
+import { sidePanelOpensOnEntry, type RecordSideSurface } from "./record-side-panel-pin";
 
 /** Whether the report's side chat is open; follows the pinned choice when the report changes. */
 export function useReportSidePanelOpen(reportId: string, surface: RecordSideSurface) {
-  const [open, setOpen] = useState(() => readSidePanelPinned("report", reportId, surface));
+  const beside = useBreakpoint("lg");
+  const [open, setOpen] = useState(() =>
+    sidePanelOpensOnEntry("report", reportId, surface, beside),
+  );
   useEffect(() => {
-    setOpen(readSidePanelPinned("report", reportId, surface));
-  }, [reportId, surface]);
+    setOpen(sidePanelOpensOnEntry("report", reportId, surface, beside));
+  }, [reportId, surface, beside]);
   return [open, setOpen] as const;
 }

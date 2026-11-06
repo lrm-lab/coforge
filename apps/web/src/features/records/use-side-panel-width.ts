@@ -7,16 +7,19 @@ import {
   type PointerEvent,
 } from "react";
 
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
+
 import {
   DEFAULT_SIDE_PANEL_WIDTH,
   MIN_SIDE_PANEL_WIDTH,
+  fitSidePanelWidth,
   readStoredSidePanelWidth,
   writeStoredSidePanelWidth,
 } from "./record-side-panel-width";
 
 /**
- * The Record side panel's width: the stored width, clamped to half its parent, eased open and
- * closed, and changed by dragging or arrowing its left edge (`resizeHandle`).
+ * The Record side panel's width: the stored width fitted to its parent (`fitSidePanelWidth`), eased
+ * open and closed, and changed by dragging or arrowing its left edge (`resizeHandle`).
  */
 export function useSidePanelWidth(open: boolean) {
   const asideRef = useRef<HTMLElement>(null);
@@ -27,15 +30,15 @@ export function useSidePanelWidth(open: boolean) {
   const [displayWidth, setDisplayWidth] = useState(() => (open ? DEFAULT_SIDE_PANEL_WIDTH : 0));
   const [resizing, setResizing] = useState(false);
   const wasOpenRef = useRef(open);
+  const beside = useBreakpoint("lg");
 
   useLayoutEffect(() => {
     const stored = readStoredSidePanelWidth();
     const parent = asideRef.current?.parentElement;
-    const max = parent ? Math.floor(parent.clientWidth / 2) : stored;
-    const next = Math.min(Math.max(stored, MIN_SIDE_PANEL_WIDTH), max);
+    const next = parent ? fitSidePanelWidth(stored, parent.clientWidth, beside) : stored;
     setPanelWidth(next);
     if (open) setDisplayWidth(next);
-  }, []);
+  }, [beside]);
 
   useLayoutEffect(() => {
     if (open) {
@@ -57,12 +60,11 @@ export function useSidePanelWidth(open: boolean) {
     function clampToParent() {
       const parent = asideRef.current?.parentElement;
       if (!parent) return;
-      const max = Math.floor(parent.clientWidth / 2);
-      setPanelWidth((current) => Math.min(Math.max(current, MIN_SIDE_PANEL_WIDTH), max));
+      setPanelWidth((current) => fitSidePanelWidth(current, parent.clientWidth, beside));
     }
     window.addEventListener("resize", clampToParent);
     return () => window.removeEventListener("resize", clampToParent);
-  }, []);
+  }, [beside]);
 
   function commitPanelWidth(width: number) {
     panelWidthRef.current = width;

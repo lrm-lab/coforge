@@ -38,7 +38,10 @@ import { SendCountdownBadge } from "./record-side-panel-cards";
 import { commentThreadStates, sideTimeline } from "./record-side-timeline-model";
 import { RecordSideTimeline, type CommentRow } from "./record-side-timeline";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
-import { SIDE_PANEL_WIDTH_TRANSITION } from "./record-side-panel-width";
+import {
+  SIDE_PANEL_RESIZE_HANDLE_CLASS,
+  SIDE_PANEL_WIDTH_TRANSITION,
+} from "./record-side-panel-width";
 import { useSidePanelWidth } from "./use-side-panel-width";
 import { isWritingSuggestion, useSuggestionWrite } from "./use-suggestion-write";
 import {
@@ -726,7 +729,7 @@ export function RecordSidePanel({
           aria-valuenow={Math.round(panelWidth)}
           tabIndex={open ? 0 : -1}
           {...resizeHandle}
-          className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize touch-none hover:bg-brand-solid/20 active:bg-brand-solid/30"
+          className={SIDE_PANEL_RESIZE_HANDLE_CLASS}
         />
         <RecordSideChatHeader
           busy={busy}
