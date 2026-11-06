@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { taskCommand } from "#src/features/tasks/task-command-schema";
+import { validateTaskCommand } from "#src/server/tasks/task-command-validation.server";
 
 const amend = {
   operation: "amend",
@@ -26,4 +27,19 @@ test("a Project slug must be a non-empty string no longer than a Project slug ma
 
 test("a person's page may restore a Task it just deleted (task #507)", () => {
   expect(taskCommand.parse({ ...amend, operation: "restore" }).operation).toBe("restore");
+});
+
+test("a new Task may be filed under no Project, and only a create or an amend names one", () => {
+  const create = {
+    operation: "create",
+    title: "Book the room",
+    idempotencyKey: "01a1b018-491b-7400-b5dc-abda25729401",
+    conversationId: "01a17cde-2786-7298-b3fe-ca229afcbf3d",
+  } as const;
+  expect(() => validateTaskCommand({ ...create, project: null } as never)).not.toThrow();
+  expect(() => validateTaskCommand({ ...create, project: "launch" } as never)).not.toThrow();
+  expect(() => validateTaskCommand({ ...create, project: "  " } as never)).toThrow();
+  expect(() =>
+    validateTaskCommand({ ...create, operation: "claim", project: null } as never),
+  ).toThrow();
 });

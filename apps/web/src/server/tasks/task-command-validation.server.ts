@@ -133,11 +133,12 @@ export function validateTaskCommand(command: TaskCommand) {
   // filters by them.
   if (command.operation !== "amend" && command.removeLabels !== undefined)
     throw new AppError("INVALID_INPUT");
+  // Null files a new Task under no Project, whatever the viewer last used, and takes an amended
+  // Task out of its own.
   if (command.project !== undefined) {
-    const clearing = command.project === null && command.operation === "amend";
     if (
       (command.operation !== "create" && command.operation !== "amend") ||
-      (!clearing && (typeof command.project !== "string" || !command.project.trim()))
+      (command.project !== null && (typeof command.project !== "string" || !command.project.trim()))
     )
       throw new AppError("INVALID_INPUT");
   }
