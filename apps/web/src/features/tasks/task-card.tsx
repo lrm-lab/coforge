@@ -4,7 +4,10 @@ import type { PointerEvent, ReactNode } from "react";
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
+import { formatMonthDay } from "#src/lib/dates";
+import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import { taskStepsProgressClass } from "./task-steps-progress";
 import { Folder } from "@untitledui/icons";
 
@@ -18,22 +21,15 @@ import { TaskOwnerAvatar } from "./task-owner";
 import { TaskStatusIcon } from "./task-status-icon";
 import type { TaskControls } from "./task-workflow";
 
-/**
- * Parts the viewer hid on a Task board (Display → Show): the stored choice is a class on
- * <html> (`features/settings/task-display-fields.ts`), and only a card inside a board
- * (`data-task-board`) follows it, so other surfaces always show every part. CSS alone, so a
- * change never re-renders the cards. A separator hides with whatever it would separate from.
- */
-const HIDDEN_ON_BOARD = {
-  number: "[.task-hide-number_[data-task-board]_&]:hidden",
-  source: "[.task-hide-source_[data-task-board]_&]:hidden",
-  project: "[.task-hide-project_[data-task-board]_&]:hidden",
-  owner: "[.task-hide-owner_[data-task-board]_&]:hidden",
-};
-
-// A bottom row held only for an owner the viewer hid goes too, except where it holds the tools
-// (a touch pointer).
-const PROJECT_OWNER_KEEPS_TOOLS = "[.task-hide-owner_[data-task-board]_&]:any-pointer-coarse:flex";
+/** When the Task was made, at a card's foot (Frank, 11-06): the day, as narrow columns allow. */
+function TaskCreatedAt({ at }: { at: string | Date }) {
+  const timeZone = useTimeZone();
+  return (
+    <span className="shrink-0 text-xs whitespace-nowrap text-tertiary tabular-nums">
+      {formatMonthDay(at, timeZone, getLocale())}
+    </span>
+  );
+}
 
 /** Classes for the link or button a caller wraps around the title. */
 export const TASK_TITLE_CLASS =
@@ -124,11 +120,7 @@ export function TaskCard({
         onPointerEnter={onPointerEnter}
         className="relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors hover:bg-primary_hover"
       >
-        <span
-          className={cn("w-9 shrink-0 text-xs text-tertiary tabular-nums", HIDDEN_ON_BOARD.number)}
-        >
-          #{task.number}
-        </span>
+        <span className="w-9 shrink-0 text-xs text-tertiary tabular-nums">#{task.number}</span>
         <TaskStatusIcon status={task.status} />
         <h3 className="min-w-0 flex-1 text-sm font-medium text-primary">
           {renderTitle(<span className="line-clamp-1">{task.title}</span>)}
@@ -141,7 +133,7 @@ export function TaskCard({
           </span>
         )}
         {source && (
-          <Pill className={cn("hidden sm:inline-flex", HIDDEN_ON_BOARD.source)}>
+          <Pill className="hidden sm:inline-flex">
             <span className="truncate">{source}</span>
           </Pill>
         )}
@@ -150,15 +142,8 @@ export function TaskCard({
             <TaskCardLabels labels={task.labels} />
           </span>
         ) : null}
-        {project && (
-          <ProjectPill
-            project={project}
-            className={cn("hidden sm:inline-flex", HIDDEN_ON_BOARD.project)}
-          />
-        )}
-        <span className={HIDDEN_ON_BOARD.owner}>
-          <TaskOwnerAvatar owner={task.owner} />
-        </span>
+        {project && <ProjectPill project={project} className="hidden sm:inline-flex" />}
+        <TaskOwnerAvatar owner={task.owner} />
         {tools}
       </article>
     );
@@ -174,16 +159,8 @@ export function TaskCard({
     >
       {/* The channel leads: a number counts within its channel, so two cards can share one. */}
       <div className="flex h-4 items-center gap-1.5 text-xs tabular-nums">
-        {source && (
-          <span
-            className={cn("min-w-0 truncate font-medium text-secondary", HIDDEN_ON_BOARD.source)}
-          >
-            {source}
-          </span>
-        )}
-        <span className={cn("shrink-0 text-quaternary", HIDDEN_ON_BOARD.number)}>
-          #{task.number}
-        </span>
+        {source && <span className="min-w-0 truncate font-medium text-secondary">{source}</span>}
+        <span className="shrink-0 text-quaternary">#{task.number}</span>
         {task.priority && task.priority !== "none" && (
           <TaskPriorityIcon
             priority={task.priority}
@@ -209,15 +186,13 @@ export function TaskCard({
         blocked
       )}
       {(label || project) && (
-        <div className={cn("flex min-w-0 items-center gap-1.5", !label && HIDDEN_ON_BOARD.project)}>
+        <div className="flex min-w-0 items-center gap-1.5">
           {label && <TaskLabelChip label={label} />}
           {moreLabels.length > 0 && (
             <span className="text-xs text-tertiary">+{moreLabels.length}</span>
           )}
           {/* The Project gives way to the label: it truncates rather than leave the card. */}
-          {project && (
-            <ProjectPill project={project} className={cn("shrink", HIDDEN_ON_BOARD.project)} />
-          )}
+          {project && <ProjectPill project={project} className="shrink" />}
         </div>
       )}
       {steps && steps.total > 0 && (
@@ -238,13 +213,12 @@ export function TaskCard({
           tools sit at this row's end, so it keeps room for them and stays even with no owner. */}
       <div
         className={cn(
-          "flex min-h-7 items-center gap-2",
+          "flex min-h-7 items-center justify-between gap-2",
           tools && "any-pointer-coarse:pr-16",
-          HIDDEN_ON_BOARD.owner,
-          tools && PROJECT_OWNER_KEEPS_TOOLS,
         )}
       >
         <TaskOwnerAvatar owner={task.owner} />
+        <TaskCreatedAt at={task.createdAt} />
       </div>
       {tools && (
         // After the title in the DOM so assistive tech names the task first. With a mouse, over

@@ -1,25 +1,14 @@
 import { TASK_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
 import { useMemo, type ReactNode } from "react";
-import { Columns03, FilterLines, List, Sliders04 } from "@untitledui/icons";
-import {
-  Dialog as AriaDialog,
-  DialogTrigger,
-  Radio,
-  RadioGroup,
-  SubmenuTrigger,
-  Tag,
-  TagGroup,
-  TagList,
-} from "react-aria-components";
+import { Columns03, FilterLines, List } from "@untitledui/icons";
+import { SubmenuTrigger, Tag, TagGroup, TagList } from "react-aria-components";
 
+import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { Button } from "#src/components/base/buttons/button";
-import { Toggle } from "#src/components/base/toggle/toggle";
-import { cn } from "#src/lib/utils";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { messageSlots } from "#src/lib/message-slots";
 import { TagCloseX } from "#src/components/base/tags/base-components/tag-close-x";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { Select } from "#src/components/base/select/select";
 import {
   agentHandle,
   PickerMenu,
@@ -27,11 +16,6 @@ import {
   type PickerOption,
 } from "#src/features/pickers/entity-picker";
 import { m } from "#src/paraglide/messages";
-import {
-  TASK_DISPLAY_FIELDS,
-  useTaskDisplayFields,
-  type TaskDisplayField,
-} from "#src/features/settings/task-display-fields";
 import {
   NO_OWNER,
   NO_PROJECT,
@@ -45,7 +29,6 @@ import {
   type TaskFilter,
 } from "./task-filters";
 import { statusLabel, type TaskLayout } from "./task-workflow";
-import type { FinishedWindow } from "./finished-tasks";
 
 /** The status choices in the board's column order; read per render, so the language follows. */
 const STATUS_OPTIONS = (): PickerOption[] =>
@@ -54,7 +37,7 @@ const STATUS_OPTIONS = (): PickerOption[] =>
 /**
  * A Task board's toolbar: "Filter" (owner, Project, labels and status, each a submenu where
  * several may be picked; owners, Projects and labels show how many Tasks each has) followed by
- * one removable chip per filter in use, and "Display" on
+ * one removable chip per filter in use, and the board or list switch on
  * the right (board or list, and which parts of a Task show).
  */
 export function TaskToolbar({
@@ -65,9 +48,6 @@ export function TaskToolbar({
   onFilterChange,
   onStatusesChange,
   onLayoutChange,
-  completedWindow,
-  onWindowChange,
-  conversation = false,
   project = false,
   tree = false,
   action,
@@ -80,18 +60,12 @@ export function TaskToolbar({
   onFilterChange: (filter: TaskFilter) => void;
   onStatusesChange: (statuses: readonly TaskStatus[]) => void;
   onLayoutChange: (layout: TaskLayout) => void;
-  /** How far back Done and Closed reach; Display offers it, as Linear's completed issues do. */
-  completedWindow: FinishedWindow;
-  onWindowChange: (completedWindow: FinishedWindow) => void;
-  /** One conversation's board: every Task shares its source, so none is offered; its Tasks can be
-   * under different Projects (task #484), so those are. */
-  conversation?: boolean;
   /** One Project's board: every Task shares its Project, so none is offered. */
   project?: boolean;
   /** A Project's task tree shows (task #462): its Tasks span conversations, so the channel picks
    * are offered; it lists no finished Task and no card, so Display offers only the layout. */
   tree?: boolean;
-  /** The board's own button (a conversation's "Create task"), before Display. */
+  /** The board's own button (a conversation's "Create task"), after the switch. */
   action?: ReactNode;
 }) {
   // Counted over every Task, so the numbers hold still while picking.
@@ -280,16 +254,7 @@ export function TaskToolbar({
         }
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <DisplayMenu
-          layout={layout}
-          onLayoutChange={onLayoutChange}
-          completedWindow={completedWindow}
-          onWindowChange={onWindowChange}
-          tree={tree}
-          fields={
-            conversation ? CONVERSATION_FIELDS : project ? PROJECT_FIELDS : TASK_DISPLAY_FIELDS
-          }
-        />
+        <LayoutSwitch layout={layout} onLayoutChange={onLayoutChange} />
         {action}
       </div>
     </div>
@@ -370,114 +335,31 @@ function FilterSubmenu({
   );
 }
 
-/** A conversation's board has no source to show. */
-const CONVERSATION_FIELDS: readonly TaskDisplayField[] = ["number", "project", "owner"];
-
-/** A Project's board has no Project to show. */
-const PROJECT_FIELDS: readonly TaskDisplayField[] = ["number", "source", "owner"];
-
-const FIELD_LABEL: Record<TaskDisplayField, () => string> = {
-  number: () => m.tasks_field_number(),
-  source: () => m.tasks_field_source(),
-  project: () => m.tasks_overview_project(),
-  owner: () => m.tasks_overview_owner(),
-};
-
-function DisplayMenu({
+/** Board or list, in the bar itself (Frank, 11-06: not behind a menu). */
+function LayoutSwitch({
   layout,
   onLayoutChange,
-  completedWindow,
-  onWindowChange,
-  fields: shownFields,
-  tree,
 }: {
   layout: TaskLayout;
   onLayoutChange: (layout: TaskLayout) => void;
-  completedWindow: FinishedWindow;
-  onWindowChange: (completedWindow: FinishedWindow) => void;
-  fields: readonly TaskDisplayField[];
-  tree: boolean;
 }) {
-  const [fields, setFields] = useTaskDisplayFields();
   return (
-    <DialogTrigger>
-      <Button size="sm" color="tertiary" iconLeading={Sliders04}>
-        {m.tasks_display()}
-      </Button>
-      <Dropdown.Popover placement="bottom end" className="w-72">
-        <AriaDialog
-          aria-label={m.tasks_display()}
-          className="flex flex-col gap-3 p-3 outline-hidden"
-        >
-          {/* Board or list as two tiles, the chosen one filled, as Linear's Display does. */}
-          <RadioGroup
-            aria-label={m.tasks_layout()}
-            value={layout}
-            onChange={(value) => {
-              if (value === "board" || value === "list") onLayoutChange(value);
-            }}
-            className="grid grid-cols-2 gap-2"
-          >
-            {(
-              [
-                ["board", Columns03, m.tasks_layout_board()],
-                ["list", List, m.tasks_layout_list()],
-              ] as const
-            ).map(([value, Icon, label]) => (
-              <Radio
-                key={value}
-                value={value}
-                className={({ isSelected, isFocusVisible, isHovered }) =>
-                  cn(
-                    "flex h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border text-sm font-medium outline-focus-ring transition-colors",
-                    isSelected
-                      ? "border-brand bg-brand-primary text-brand-secondary"
-                      : cn("border-secondary text-tertiary", isHovered && "bg-primary_hover"),
-                    isFocusVisible && "outline-2 outline-offset-2",
-                  )
-                }
-              >
-                <Icon aria-hidden="true" className="size-5" />
-                {label}
-              </Radio>
-            ))}
-          </RadioGroup>
-          {/* The tree's rows are its own, and it lists no finished Task: nothing below applies. */}
-          {!tree && (
-            <>
-              <div className="flex items-center justify-between gap-3 border-t border-secondary pt-3">
-                <span className="text-sm text-secondary">{m.tasks_finished_window()}</span>
-                <Select
-                  aria-label={m.tasks_finished_window()}
-                  size="sm"
-                  className="w-32"
-                  selectedKey={completedWindow}
-                  onSelectionChange={(key) => {
-                    if (key === "week" || key === "month" || key === "all") onWindowChange(key);
-                  }}
-                >
-                  <Select.Item id="week" label={m.tasks_finished_week()} />
-                  <Select.Item id="month" label={m.tasks_finished_month()} />
-                  <Select.Item id="all" label={m.tasks_finished_all()} />
-                </Select>
-              </div>
-              {/* One switch per field: on or off at a glance. */}
-              <div className="flex flex-col gap-2.5 border-t border-secondary pt-3">
-                <p className="text-xs font-medium text-tertiary">{m.tasks_display_fields()}</p>
-                {shownFields.map((field) => (
-                  <Toggle
-                    key={field}
-                    size="sm"
-                    label={FIELD_LABEL[field]()}
-                    isSelected={fields[field]}
-                    onChange={(shown) => setFields({ ...fields, [field]: shown })}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </AriaDialog>
-      </Dropdown.Popover>
-    </DialogTrigger>
+    <ButtonGroup
+      size="sm"
+      aria-label={m.tasks_layout()}
+      selectedKeys={[layout]}
+      disallowEmptySelection
+      onSelectionChange={(keys) => {
+        const [key] = [...keys];
+        if (key === "board" || key === "list") onLayoutChange(key);
+      }}
+    >
+      <ButtonGroupItem id="board" iconLeading={Columns03}>
+        {m.tasks_layout_board()}
+      </ButtonGroupItem>
+      <ButtonGroupItem id="list" iconLeading={List}>
+        {m.tasks_layout_list()}
+      </ButtonGroupItem>
+    </ButtonGroup>
   );
 }

@@ -9,7 +9,7 @@
  *
  * Two other settings pre-paint in a different shape and are deliberately not built from this:
  * `MESSAGE_FONT_SIZE_BOOT` maps one token onto one of several classes, and
- * `TASK_DISPLAY_FIELDS_BOOT` / `TASK_HIDDEN_COLUMNS_BOOT` add one class per entry of a stored list.
+ * `TASK_HIDDEN_COLUMNS_BOOT` add one class per entry of a stored list.
  *
  * The fragment reads `localStorage` directly, unlike the callers, because it runs as text before
  * any module does.

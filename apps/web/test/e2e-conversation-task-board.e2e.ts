@@ -147,7 +147,7 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
     );
     await waitFor(bodyHas(openTitle), 60_000);
     await waitFor(`${byText("button", "Filter")} !== undefined`);
-    expect(await eval_(`${byText("button", "Display")} !== undefined`)).toBe(true);
+    expect(await eval_(`${byText("button", "List")} !== undefined`)).toBe(true);
     expect(await eval_(`${byText("button", "Create Task")} !== undefined`)).toBe(true);
     expect(await eval_(`${byText("button", "Claim")} === undefined`)).toBe(true);
     expect(

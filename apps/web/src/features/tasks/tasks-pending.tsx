@@ -1,5 +1,5 @@
 import { TASK_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
-import { FilterLines, Sliders04 } from "@untitledui/icons";
+import { FilterLines } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
@@ -58,9 +58,6 @@ export function TasksPending({ layout }: { layout?: TaskLayout }) {
       <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-4 py-1.5 md:px-6">
         <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ml-3" isDisabled>
           {m.tasks_filter()}
-        </Button>
-        <Button size="sm" color="tertiary" iconLeading={Sliders04} isDisabled>
-          {m.tasks_display()}
         </Button>
       </div>
       <p role="status" className="sr-only">

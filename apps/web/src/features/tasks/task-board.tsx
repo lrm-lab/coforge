@@ -94,7 +94,7 @@ export function TaskBoard<T extends BoardTask>({
    * Project, none files it under none; `onCreated` reads the board again. */
   newTask?: { projectSlug?: string; onCreated: () => void };
 }) {
-  const { statuses, filter, layout, completedWindow, changeWindow: onWindowChange } = view;
+  const { statuses, filter, layout } = view;
   const showTree = tree !== undefined;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
@@ -162,9 +162,6 @@ export function TaskBoard<T extends BoardTask>({
         onFilterChange={view.changeFilter}
         onStatusesChange={view.changeStatuses}
         onLayoutChange={view.changeLayout}
-        completedWindow={completedWindow}
-        onWindowChange={onWindowChange}
-        conversation={Boolean(conversation)}
         project={project}
         tree={showTree}
         action={

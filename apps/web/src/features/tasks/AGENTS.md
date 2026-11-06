@@ -110,12 +110,8 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   page does not list yet reads the list again.
 - The board's toolbar (`task-toolbar.tsx`) follows Linear: one "Filter"
   menu (owner, Project, status submenus) with a removable chip per filter in
-  use, and one "Display" popover (board or list, the finished-task window, and
-  which Task fields show).
-  The shown fields are a per-device preference
-  (`features/settings/task-display-fields.ts`, stored as the hidden fields)
-  applied as classes on `<html>` by the boot script, so cards inside
-  `[data-task-board]` follow by CSS alone and never flash or re-render.
+  use, and a board or list switch in the bar (Frank, 11-06: nothing else to
+  set; a card's fields are fixed).
 - Filters are search params, comma-separated: `owners` holds User or Agent
   ids and `projects` holds Project ids, with `none` meaning no owner or no
   Project (`task-filters.ts`).
