@@ -17,7 +17,7 @@ import type { Element } from "hast";
  */
 const CHIP_BASE = "message-markdown-mention rounded-sm px-0.5 font-medium";
 export const MENTION_CHIP_CLASS = `${CHIP_BASE} bg-brand-primary text-brand-secondary`;
-export const MENTION_CHIP_SELF_CLASS = `${CHIP_BASE} bg-brand-solid text-white`;
+export const MENTION_CHIP_SELF_CLASS = `${CHIP_BASE} bg-fg-primary text-(--color-bg-primary)`;
 /** Added by the renderer to a mention chip that opens a profile (a host passed the handler), so the
  * stylesheet gives it the pointer and hover affordance of a control; an inert chip lacks it. */
 export const MENTION_CHIP_OPENABLE_CLASS = "message-markdown-mention-openable";

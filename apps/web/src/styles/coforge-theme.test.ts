@@ -6,7 +6,7 @@ import { expect, test } from "bun:test";
  * The bug this guards against shipped twice: a token added with one value for both themes, used by
  * a component, and only looked at in light mode — the chat list's selected row rendered as a white
  * card under light-grey text, and the sidebar's opaque row fill as hard-edged blocks on the dark
- * gradient. A token is allowed to stay flat, but it has to say why here. */
+ * column. A token is allowed to stay flat, but it has to say why here. */
 const FLAT_ON_PURPOSE = new Map([
   ["--color-terminal", "a terminal block stays dark in both themes"],
   ["--color-terminal-fg", "a terminal block stays dark in both themes"],
@@ -59,10 +59,9 @@ test("every CoForge colour token either has a dark-mode value or says why it is 
   expect(unexplained).toEqual([]);
 });
 
-test("the sidebar's rows do not paint a resting fill over its gradient", () => {
+test("the sidebar's rows do not paint a resting fill", () => {
   const dark = block(/\.dark-mode\s*\{/);
-  // An opaque fill reads darker than the gradient at the top of the column and lighter at the
-  // bottom, which is what turned the nav into eight blocks, in either theme.
+  // An opaque fill is what turned the nav into eight blocks, in either theme.
   expect(css).not.toMatch(/--color-sidebar-item:/);
   // The rail and the expanded rows share one highlight, so the current item cannot look like two
   // different things depending on which sidebar is showing.

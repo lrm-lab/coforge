@@ -276,8 +276,7 @@ export const MessageRow = memo(function MessageRow({
           highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           "gap-3",
           messagePaddingClass(grouped),
-          selection?.selected &&
-            "bg-brand-solid/8 hover:bg-brand-solid/8 focus-within:bg-brand-solid/8 dark:bg-brand-solid/15 dark:hover:bg-brand-solid/15 dark:focus-within:bg-brand-solid/15",
+          selection?.selected && "bg-tertiary hover:bg-tertiary focus-within:bg-tertiary",
         )}
       >
         {selection?.checkbox}

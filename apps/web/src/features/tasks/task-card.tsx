@@ -5,6 +5,7 @@ import { ProgressBarBase } from "#src/components/base/progress-indicators/progre
 import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { taskStepsProgressClass } from "./task-steps-progress";
 import { Folder } from "@untitledui/icons";
 
 import type { FilterableTask } from "./task-filters";
@@ -230,7 +231,7 @@ export function TaskCard({
             value={steps.finished}
             max={steps.total}
             className="h-1.5 flex-1"
-            progressClassName="bg-fg-brand-primary"
+            progressClassName={taskStepsProgressClass(steps.finished, steps.total)}
           />
           <span className="text-xs text-tertiary tabular-nums">
             {m.task_board_steps({ finished: steps.finished, total: steps.total })}
