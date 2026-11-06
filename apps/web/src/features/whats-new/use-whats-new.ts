@@ -4,7 +4,7 @@ import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-rea
 import { dismissWhatsNew, loadWhatsNew } from "./whats-new.functions";
 import { isWhatsNewId, type WhatsNewId } from "./whats-new-entries";
 
-type WhatsNewRead = { ids: string[]; recent: string[] };
+type WhatsNewRead = { ids: string[] };
 
 const whatsNewQuery = (workspaceId: string | undefined) =>
   queryOptions({
@@ -15,8 +15,7 @@ const whatsNewQuery = (workspaceId: string | undefined) =>
   });
 
 /**
- * The entries still to show, oldest first, the latest released ones for when none are, and the
- * dismissal that marks some seen. Ids this build does not know (the server is newer) are left out.
+ * The entries still to show, oldest first, and the dismissal that marks some seen. Ids this build does not know (the server is newer) are left out.
  */
 export function useWhatsNew() {
   const workspaceId = useCurrentWorkspaceId();
@@ -36,6 +35,5 @@ export function useWhatsNew() {
     );
   };
   const pending: WhatsNewId[] = (data?.ids ?? []).filter(isWhatsNewId);
-  const recent: WhatsNewId[] = (data?.recent ?? []).filter(isWhatsNewId);
-  return { pending, recent, dismiss };
+  return { pending, dismiss };
 }

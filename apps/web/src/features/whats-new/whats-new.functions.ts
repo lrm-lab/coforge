@@ -4,8 +4,7 @@ import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { WhatsNew, whatsNewClock } from "#src/server/whats-new/whats-new.server";
 
-/** The "What's new" entries the viewer has still to see in this Workspace, oldest first, and the
- * latest released ones, newest first. */
+/** The "What's new" entries the viewer has still to see in this Workspace, oldest first. */
 export const loadWhatsNew = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { db, user, workspaceId } }) =>

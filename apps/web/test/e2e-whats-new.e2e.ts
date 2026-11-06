@@ -4,17 +4,13 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import {
-  WHATS_NEW_ENTRIES,
-  pendingWhatsNew,
-  recentWhatsNew,
-} from "#src/features/whats-new/whats-new-entries";
+import { WHATS_NEW_ENTRIES, pendingWhatsNew } from "#src/features/whats-new/whats-new-entries";
 import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
 /**
  * "What's new" in the sidebar (tasks #493, #516) in a real browser: a dot while entries wait; the
  * row opens the dialog on them and "Got it" clears the dot, also for a second browser (another
- * device); with nothing waiting the row opens the latest releases. Desktop, the collapsed rail and
+ * device); with nothing waiting there is no row (task #585). Desktop, the collapsed rail and
  * phone. Entries that wait on an experiment are covered by `whats-new.integration.ts`.
  *
  * Opt-in like the other browser E2Es: real local Web and `agent-browser`. Entries show only from
@@ -62,7 +58,6 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     dismissed: [],
     experimentOn: () => true,
   });
-  const recent = recentWhatsNew(WHATS_NEW_ENTRIES, { now, experimentOn: () => true });
   const titles: Record<string, string> = {
     "task-labels": "Labels for Tasks",
   };
@@ -112,10 +107,9 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     await second.browser("set", "viewport", "1280", "860");
 
     await open(first);
-    expect(await first.evaluate(`(${entry}) != null`)).toBe(recent.length > 0);
-    if (recent.length === 0) return;
-    expect(await first.evaluate(dot)).toBe(pending.length > 0);
+    expect(await first.evaluate(`(${entry}) != null`)).toBe(pending.length > 0);
     if (pending.length === 0) return;
+    expect(await first.evaluate(dot)).toBe(true);
     await shoot(first, "desktop-1-row");
 
     // The row opens the waiting entries, oldest first; "Got it" on the last clears the dot.
@@ -129,16 +123,13 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     }
     await pressText(first, "Got it");
     await first.browser("wait", "--fn", `${dialog} === null`);
-    expect(await first.evaluate(dot)).toBe(false);
+    // With nothing left to see, the row goes.
+    expect(await first.evaluate(`(${entry}) == null`)).toBe(true);
+    await shoot(first, "desktop-4-seen");
 
-    // Another device keeps what was seen: no dot, and the row opens the latest releases.
+    // Another device keeps what was seen: no row there either.
     await open(second);
-    expect(await second.evaluate(dot)).toBe(false);
-    await press(second, entry);
-    await second.browser("wait", "--fn", `${dialog} !== null`);
-    expect(await second.evaluate(heading)).toBe(titles[recent[0]!]!);
-    await second.browser("press", "Escape");
-    await second.browser("wait", "--fn", `${dialog} === null`);
+    expect(await second.evaluate(`(${entry}) == null`)).toBe(true);
 
     // Closing on the first page counts only that page as seen.
     await setDismissed([]);

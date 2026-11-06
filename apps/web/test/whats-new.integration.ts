@@ -114,25 +114,17 @@ test("documents wait while the experiment is off, uncounted, and show once it is
   }
 });
 
-test("the dialog's dismissal marks several entries at once, and the latest releases stay listed (task #516)", async () => {
+test("the dialog's dismissal marks several entries at once, and then nothing is left to show (tasks #516, #585)", async () => {
   const { db, whatsNew, workspaceId, veteran, newcomer, cleanup } = await setup();
   try {
     await whatsNew.dismiss(veteran.id, "documents", "task-labels");
-    expect(await whatsNew.read(veteran.id, workspaceId)).toEqual({
-      ids: [],
-      recent: ["task-labels", "documents"],
-    });
+    expect(await whatsNew.read(veteran.id, workspaceId)).toEqual({ ids: [] });
     // Dismissing again adds nothing.
     await whatsNew.dismiss(veteran.id, "task-labels");
     expect(
       (await db.userPreference.findUniqueOrThrow({ where: { userId: veteran.id } }))
         .whatsNewDismissed,
     ).toEqual(["documents", "task-labels"]);
-    // Someone who joined after the releases still finds them under "What's new".
-    expect((await whatsNew.read(newcomer.id, workspaceId)).recent).toEqual([
-      "task-labels",
-      "documents",
-    ]);
     // One unknown id refuses the whole batch.
     await expect(whatsNew.dismiss(newcomer.id, "task-labels", "no-such-entry")).rejects.toThrow();
     expect((await whatsNew.read(newcomer.id, workspaceId)).ids).toEqual([]);

@@ -3,7 +3,6 @@ import { AppError } from "#src/lib/app-error";
 import {
   WHATS_NEW_ENTRIES,
   pendingWhatsNew,
-  recentWhatsNew,
   type WhatsNewEntryData,
 } from "#src/features/whats-new/whats-new-entries";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
@@ -29,10 +28,10 @@ export class WhatsNew {
   }
 
   /**
-   * What the sidebar's "What's new" needs (task #516): the entries still to show this person,
-   * oldest first, and the latest released ones, newest first, for when nothing is waiting.
+   * What the sidebar's "What's new" needs: the entries still to show this person, oldest first.
+   * The row shows only while some wait (task #585).
    */
-  async read(userId: string, workspaceId: string): Promise<{ ids: string[]; recent: string[] }> {
+  async read(userId: string, workspaceId: string): Promise<{ ids: string[] }> {
     const [user, workspace] = await Promise.all([
       this.db.user.findUniqueOrThrow({
         where: { id: userId },
@@ -61,16 +60,13 @@ export class WhatsNew {
         on.add(key);
       }
     }
-    const now = this.now();
-    const experimentOn = (key: ExperimentKey) => on.has(key);
     return {
       ids: pendingWhatsNew(this.entries, {
-        now,
+        now: this.now(),
         joinedAt: user.createdAt,
         dismissed: user.preferences?.whatsNewDismissed ?? [],
-        experimentOn,
+        experimentOn: (key) => on.has(key),
       }),
-      recent: recentWhatsNew(this.entries, { now, experimentOn }),
     };
   }
 
