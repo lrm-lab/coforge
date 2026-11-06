@@ -79,6 +79,13 @@ export class RuntimeAuthController {
       intent.computerId !== owner.computerId
     )
       return;
+    logger.info("Runtime auth intent", {
+      event: "runtime_auth:intent",
+      kind: intent.kind,
+      ...("provider" in intent ? { provider: intent.provider } : {}),
+      ...("loginId" in intent ? { login_id: intent.loginId } : {}),
+      ...("requestId" in intent ? { request_id: intent.requestId } : {}),
+    });
     if (intent.kind === "login_code") {
       const login = this.#logins.get(intent.loginId);
       if (!login?.prompt || login.terminal || login.abort.signal.aborted) return;
@@ -333,6 +340,13 @@ export class RuntimeAuthController {
       login.terminal = true;
       login.prompt?.reject(new Error("Runtime authentication ended"));
       login.prompt = undefined;
+      logger.info("Runtime auth login finished", {
+        event: "runtime_auth:login_finished",
+        provider: login.provider,
+        login_id: login.id,
+        outcome: result.kind,
+        ...("reason" in result ? { reason: result.reason } : {}),
+      });
       try {
         this.#report(login, { result });
       } catch {

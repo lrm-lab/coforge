@@ -5,7 +5,6 @@ import type {
   ReceivedAgentMigrationLease,
 } from "./daemon-connection-client";
 import {
-  decodeRuntimeAuthIntent,
   type RuntimeAuthIntent,
   type RuntimeAuthLoginReport,
   type RuntimeAuthLogoutReport,
@@ -32,6 +31,7 @@ import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
 import { messageEndpoint, serverEndpoint } from "./daemon-endpoints";
 import { DaemonQueries } from "./daemon-queries";
+import { routeRuntimeAuthPublication } from "./runtime-auth-publication";
 import { DaemonConnectionWorkspaceBindings } from "./daemon-connection-workspace-bindings";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import type {
@@ -1406,10 +1406,7 @@ export class DaemonConnection
     const ownsDaemon = (value: { workspaceId: string; computerId?: string }) =>
       value.workspaceId === workspaceId && value.computerId === computerId;
     const handled =
-      this.#route(data, decodeRuntimeAuthIntent, (intent) => {
-        if (ownsDaemon(intent)) this.#runtimeAuthIntent.current?.(intent);
-        return true;
-      }) ||
+      routeRuntimeAuthPublication(data, config, this.#runtimeAuthIntent.current) ||
       this.#queries.receive(data, config) ||
       this.#route(data, decodeReminderSync, (sync) => {
         if (sync.messageType !== REMINDER_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;

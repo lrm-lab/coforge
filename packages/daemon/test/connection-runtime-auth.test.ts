@@ -88,3 +88,46 @@ test("routes all four scoped auth intents and sends login/logout reports only th
     await transport.stop();
   }
 });
+
+test("a runtime auth intent with no controller is logged, not silently dropped", async () => {
+  const { transport, publish } = connection();
+  await transport.start("fixture-token", scope);
+  try {
+    const { records } = await captureDaemonLogs(async () => {
+      publish(
+        encodeRuntimeAuthIntent({
+          ...scope,
+          kind: "login_start",
+          loginId,
+          provider: "kiro",
+          kiroIdentityCenter: {
+            startUrl: "https://example.awsapps.com/start",
+            region: "us-east-1",
+          },
+        }),
+      );
+      publish(
+        encodeRuntimeAuthIntent({
+          ...scope,
+          workspaceId: "workspace-other",
+          kind: "login_start",
+          loginId,
+          provider: "kiro",
+          kiroIdentityCenter: {
+            startUrl: "https://example.awsapps.com/start",
+            region: "us-east-1",
+          },
+        }),
+      );
+    });
+    const dropped = records.filter(
+      (record) => record.properties.event === "runtime_auth:intent_dropped",
+    );
+    expect(dropped.map((record) => record.properties)).toMatchObject([
+      { kind: "login_start", provider: "kiro", login_id: loginId },
+    ]);
+    expect(dropped).toHaveLength(1);
+  } finally {
+    await transport.stop();
+  }
+});

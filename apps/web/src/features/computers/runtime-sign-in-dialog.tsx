@@ -60,6 +60,14 @@ type Target = {
 
 /** At most this many views wait for the login id the start returns; a login sends far fewer. */
 const EARLY_VIEW_LIMIT = 16;
+/** The start call's own bound: past it the server is not answering, whatever it may still do. */
+const SIGN_IN_START_TIMEOUT_MS = 120_000;
+/** A started login with no report by now never reached its runtime (the server's own window). */
+const SIGN_IN_SILENT_TIMEOUT_MS = 10 * 60_000;
+/** Past every adapter's deadline and the record's lifetime: the last resort, never reached healthy. */
+const SIGN_IN_HARD_TIMEOUT_MS = 20 * 60_000;
+/** A running login re-reads its record this often; signals are best effort, reads are not. */
+const SIGN_IN_CATCHUP_INTERVAL_MS = 30_000;
 
 /**
  * Signs a Computer's runtime in from the web, as on Raft: the dialog shows what the runtime's own
@@ -136,6 +144,9 @@ function SignInAttempt({
   const early = useRef<LoginView[]>([]);
   const began = useRef(false);
   const attached = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const gaveUp = useRef(false);
   useEffect(() => {
     attached.current = true;
     return () => {
@@ -185,6 +196,13 @@ function SignInAttempt({
       },
     })
       .then((started) => {
+        // A deadline already ended the attempt: a login that arrives this late is cancelled
+        // unseen rather than left holding the runtime's sign-in slot.
+        if (gaveUp.current) {
+          if (started.status === "started")
+            void cancel({ data: { computerId, loginId: started.loginId } }).catch(() => {});
+          return;
+        }
         if (started.status !== "started") {
           dispatch({ type: "start_refused", status: started.status });
           return;
@@ -201,6 +219,37 @@ function SignInAttempt({
       })
       .catch(() => dispatch({ type: "start_failed" }));
   }, []);
+
+  // The dialog never waits forever: an unanswered start, a login that never reported, and any
+  // login past every adapter's own deadline each end in the timed_out the server would send.
+  useEffect(() => {
+    const end = () => {
+      const current = stateRef.current;
+      if (current.phase !== "starting" && current.phase !== "running") return;
+      gaveUp.current = true;
+      if (current.phase === "running" && loginId.current)
+        void cancel({ data: { computerId, loginId: loginId.current } }).catch(() => {});
+      dispatch({ type: "timed_out" });
+    };
+    const timers = [
+      setTimeout(() => {
+        if (stateRef.current.phase === "starting") end();
+      }, SIGN_IN_START_TIMEOUT_MS),
+      setTimeout(() => {
+        const current = stateRef.current;
+        // `sequence` stays under 1 until the daemon's first report; a bare record read is not one.
+        if (current.phase === "running" && current.sequence < 1) end();
+      }, SIGN_IN_SILENT_TIMEOUT_MS),
+      setTimeout(end, SIGN_IN_HARD_TIMEOUT_MS),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  useEffect(() => {
+    if (state.phase !== "running") return;
+    const id = setInterval(catchUp, SIGN_IN_CATCHUP_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [state.phase]);
 
   const running = state.phase === "starting" || state.phase === "running";
   const close = () => {

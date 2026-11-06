@@ -49,6 +49,8 @@ export type LoginAction =
   | { type: "started"; loginId: string }
   | { type: "start_refused"; status: "busy" | "offline" | "needs_upgrade" }
   | { type: "start_failed" }
+  /** The dialog's own deadline: nothing answered in time, whatever the transport did. */
+  | { type: "timed_out" }
   | { type: "view"; view: LoginView; now: number }
   | { type: "code_sent" }
   | { type: "code_invalid" }
@@ -111,6 +113,11 @@ export function loginReducer(state: LoginState, action: LoginAction): LoginState
       return { phase: "failed", failure: { kind: action.status } };
     case "start_failed":
       return { phase: "failed", failure: { kind: "start_failed" } };
+    case "timed_out":
+      return {
+        phase: "failed",
+        failure: { kind: "failed", reason: "timed_out" },
+      };
     case "ended":
       return { phase: "failed", failure: { kind: "ended" } };
   }
@@ -122,8 +129,12 @@ export function loginReducer(state: LoginState, action: LoginAction): LoginState
       return { ...state, checking: false };
     case "view": {
       const { view } = action;
-      if (view.loginId !== state.loginId || view.sequence <= state.sequence) return state;
+      if (view.loginId !== state.loginId) return state;
+      // A result is terminal and is the only thing a stale-sequence view may carry: the store's
+      // own timeouts (`neverStarted`, a failed publish) write one without moving the sequence,
+      // so it must be accepted even when it is not newer than the last view.
       if (view.result) return finished(view.result);
+      if (view.sequence <= state.sequence) return state;
       const next = {
         ...state,
         sequence: view.sequence,

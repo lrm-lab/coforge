@@ -123,3 +123,31 @@ test("only an https sign-in page is opened", () => {
   expect(safeSignInUrl("javascript:alert(1)")).toBeUndefined();
   expect(safeSignInUrl("not a url")).toBeUndefined();
 });
+
+test("the dialog's own deadline ends a silent start and a silent login as timed out", () => {
+  expect(run({ type: "timed_out" })).toEqual({
+    phase: "failed",
+    failure: { kind: "failed", reason: "timed_out" },
+  });
+  expect(run(started, { type: "timed_out" })).toEqual({
+    phase: "failed",
+    failure: { kind: "failed", reason: "timed_out" },
+  });
+});
+
+test("a result the store wrote without a newer sequence still ends the login", () => {
+  // The server's never-started timeout and a failed publish write `result` while `sequence`
+  // stays put; a bare record read may already have applied that sequence, so the result must
+  // not be dropped as stale.
+  const bareRead: LoginView = { loginId, sequence: 0 };
+  const timedOut: LoginView = {
+    loginId,
+    sequence: 0,
+    result: { kind: "failed", reason: "timed_out" },
+  };
+  const state = run(started, view(bareRead), view(timedOut));
+  expect(state).toEqual({
+    phase: "failed",
+    failure: { kind: "failed", reason: "timed_out" },
+  });
+});
