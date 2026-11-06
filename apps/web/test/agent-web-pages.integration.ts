@@ -143,7 +143,7 @@ test("an Agent makes a web page, reads its source, and saves it whole", async ()
     text: "<!doctype html><h1>Mine</h1>",
   });
   expect(stale).toMatchObject({ status: 409, body: { code: "CONFLICT" } });
-  expect(stale.body.error).toContain("artifact-base-moved");
+  expect(stale.body.error).toContain("artifact-agent-base-moved");
   expect((await post({ operation: "read", artifact })).body.text).toBe(PAGE_2);
 
   // Even when only the description moved since: a page's save starts from the newest version.
@@ -166,7 +166,7 @@ test("an Agent makes a web page, reads its source, and saves it whole", async ()
     text: "<!doctype html><h1>Mine</h1>",
   });
   expect(overSettings).toMatchObject({ status: 409, body: { code: "CONFLICT" } });
-  expect(overSettings.body.error).toContain("artifact-base-moved");
+  expect(overSettings.body.error).toContain("artifact-agent-base-moved");
 
   // The sandbox serves exactly what was saved.
   const sandbox = new ArtifactSandbox({
