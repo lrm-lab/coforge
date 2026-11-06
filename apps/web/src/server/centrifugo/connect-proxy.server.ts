@@ -1,5 +1,6 @@
 import {
   DAEMON_CONNECT_REJECTION_CODES,
+  DAEMON_DUPLICATE_CONNECTION_DISCONNECT,
   isRecord,
   type DaemonConnectRejectionReason,
 } from "@lrm/coforge-sdk/internal";
@@ -18,6 +19,10 @@ import {
   getComputerConnectRefusals,
   type ComputerConnectRefusals,
 } from "#src/server/centrifugo/computer-connect-refusals.server";
+import {
+  daemonControlChannel,
+  createCentrifugoServerApi,
+} from "#src/server/centrifugo/server-api.server";
 
 type ConnectRequest = {
   data?: unknown;
@@ -101,7 +106,14 @@ export type CentrifugoConnectDependencies = {
   /** Records a terminal refusal for the Computers page and clears it on the next good connect.
    * Absent only in tests; production always wires it. */
   connectRefusals?: ComputerConnectRefusals;
+  /** The instance ids of the clients already holding the binding's `daemon:` control channel,
+   * from Centrifugo presence (`undefined` for a connection that set no info). Absent only in
+   * tests; production always wires it. A failed read answers `undefined` and the connect
+   * proceeds: duplicate protection must never take a working Daemon offline. */
+  connectedDaemons?(channel: string): Promise<(string | undefined)[] | undefined>;
 };
+
+let centrifugoApi: ReturnType<typeof createCentrifugoServerApi> | undefined;
 
 export function centrifugoConnectDependencies(db: PrismaClient): CentrifugoConnectDependencies {
   const revocations = new DaemonCredentialRevocations(db);
@@ -116,6 +128,14 @@ export function centrifugoConnectDependencies(db: PrismaClient): CentrifugoConne
       ),
     revocationReason: (apiKeyHash) => revocations.reasonFor(apiKeyHash),
     connectRefusals: getComputerConnectRefusals(),
+    connectedDaemons: async (channel) => {
+      try {
+        centrifugoApi ??= createCentrifugoServerApi();
+        return (await centrifugoApi.presence(channel)).map((client) => client.info);
+      } catch {
+        return undefined;
+      }
+    },
   };
 }
 
@@ -131,6 +151,7 @@ export async function authenticateCentrifugoConnect(
     // once every online Computer runs a daemon that sends the header.
     const key =
       request.headers.get("x-coforge-daemon-api-key") ?? connectData(body.data).daemonApiKey;
+    const instanceId = request.headers.get("x-coforge-daemon-instance-id") ?? undefined;
     if (typeof key !== "string") throw new Error("Daemon API key missing");
     let principal: DaemonApiKeyClaims;
     try {
@@ -165,9 +186,22 @@ export async function authenticateCentrifugoConnect(
       return refuse("computer_unlinked", principal);
     }
     await clearRefusal(dependencies.connectRefusals, principal);
+    // One live Daemon per binding: a second connection for the same control channel is answered
+    // with a reconnectable disconnect, so it waits its turn instead of racing the first. The
+    // instance id tells this process's own half-open predecessor (same id — a quick reconnect
+    // while Centrifugo still counts the old socket) from a second daemon holding the binding
+    // (different id). Presence is live — a dropped connection stops counting the moment
+    // Centrifugo sees it go.
+    const channel = daemonControlChannel(principal.workspaceId, principal.computerId);
+    const connected = await dependencies.connectedDaemons?.(channel).catch(() => undefined);
+    if (connected !== undefined && connected.some((other) => other !== instanceId))
+      return Response.json({ disconnect: DAEMON_DUPLICATE_CONNECTION_DISCONNECT });
     return Response.json({
       result: {
         user: principal.userId,
+        // Client info Centrifugo keeps in the connection's presence record, so the next connect
+        // can match this daemon instance against the one already holding the channel.
+        ...(instanceId !== undefined ? { info: instanceId } : {}),
         meta: {
           workspace_id: principal.workspaceId,
           computer_id: principal.computerId,

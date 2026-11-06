@@ -40,8 +40,9 @@ export type CentrifugoStreams = {
 /** Centrifugo's server API for the connections themselves, not what is published on them. */
 export type CentrifugoConnections = {
   /** The clients subscribed to a channel whose namespace keeps presence
-   * (https://centrifugal.dev/docs/server/server_api#presence). */
-  presence(channel: string): Promise<{ client: string; user: string }[]>;
+   * (https://centrifugal.dev/docs/server/server_api#presence). `info` is the client info the
+   * connect proxy set, when the connection carried one. */
+  presence(channel: string): Promise<{ client: string; user: string; info?: string }[]>;
   /** Disconnects one client of a user with the given code
    * (https://centrifugal.dev/docs/server/server_api#disconnect). Whether the client reconnects is
    * the code's range: centrifuge-js stops only on 3500-3999 and 4500-4999. */
@@ -174,9 +175,25 @@ export function createCentrifugoServerApi(
     },
     async presence(channel) {
       const clients = Object.values((await call("presence", { channel }))?.presence ?? {});
-      return clients.flatMap(({ client, user }) =>
-        typeof client === "string" && typeof user === "string" ? [{ client, user }] : [],
-      );
+      return clients.flatMap((entry) => {
+        const {
+          client,
+          user,
+          conn_info: connInfo,
+        } = entry as {
+          client?: unknown;
+          user?: unknown;
+          conn_info?: { info?: unknown } | string | null;
+        };
+        if (typeof client !== "string" || typeof user !== "string") return [];
+        const info =
+          typeof connInfo === "object" && connInfo !== null && typeof connInfo.info === "string"
+            ? connInfo.info
+            : typeof connInfo === "string"
+              ? connInfo
+              : undefined;
+        return [{ client, user, ...(info !== undefined ? { info } : {}) }];
+      });
     },
     async disconnect({ user, client, disconnect }) {
       await call("disconnect", { user, client, disconnect });

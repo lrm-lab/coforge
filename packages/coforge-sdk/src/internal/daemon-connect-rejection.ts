@@ -27,6 +27,16 @@ export const DAEMON_CONNECT_REJECTION_CODES = {
  */
 export const DAEMON_RECONNECT_DISCONNECT = { code: 4001, reason: "reconnect" } as const;
 
+/**
+ * The Centrifugo custom disconnect the connect proxy answers a second live connection for one
+ * Workspace binding with. It is not a refusal for good: 4000-4499 makes the client reconnect,
+ * so the duplicate waits its turn and connects once the binding's first connection is gone.
+ */
+export const DAEMON_DUPLICATE_CONNECTION_DISCONNECT = {
+  code: 4003,
+  reason: "duplicate_connection",
+} as const;
+
 export function isDaemonConnectRejectionReason(
   value: unknown,
 ): value is DaemonConnectRejectionReason {

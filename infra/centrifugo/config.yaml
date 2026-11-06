@@ -41,6 +41,7 @@ client:
       # Centrifugo redacts in its command logs; connect data would be logged verbatim.
       emulated_headers:
         - x-coforge-daemon-api-key
+        - x-coforge-daemon-instance-id
       http:
         static_headers:
           X-CoForge-Centrifugo-Proxy-Secret: ${CENTRIFUGO_VAR_RPC_PROXY_SECRET}

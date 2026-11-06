@@ -367,6 +367,84 @@ describe("Centrifugo Connect Proxy", () => {
     expect(marker.cleared).toEqual([{ workspaceId: "workspace-1", computerId: "computer-1" }]);
   });
 
+  test("answers a second live connection for the binding with a reconnectable disconnect", async () => {
+    const keys = repository();
+    keys.token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+    });
+    const asked: string[] = [];
+    const response = await authenticateCentrifugoConnect(
+      connectRequest({ daemonApiKey: keys.token }),
+      {
+        daemonApiKeys: keys,
+        computerBelongsToWorkspace: async () => true,
+        revocationReason: async () => undefined,
+        connectedDaemons: async (channel) => {
+          asked.push(channel);
+          return ["another-instance"];
+        },
+      },
+    );
+    expect(asked).toEqual(["daemon:workspace-1:computer-1"]);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      disconnect: { code: 4003, reason: "duplicate_connection" },
+    });
+  });
+
+  test("lets the same daemon instance reconnect while its half-open predecessor still shows in presence", async () => {
+    const keys = repository();
+    keys.token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+    });
+    const response = await authenticateCentrifugoConnect(
+      new Request("http://backend", {
+        method: "POST",
+        headers: {
+          "x-coforge-daemon-api-key": keys.token,
+          "x-coforge-daemon-instance-id": "instance-1",
+        },
+        body: JSON.stringify({ data: {} }),
+      }),
+      {
+        daemonApiKeys: keys,
+        computerBelongsToWorkspace: async () => true,
+        revocationReason: async () => undefined,
+        connectedDaemons: async () => ["instance-1"],
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      result: { user: "user-1", info: "instance-1" },
+    });
+  });
+
+  test("connects when presence cannot be read, so duplicate protection never takes a Daemon offline", async () => {
+    const keys = repository();
+    keys.token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+    });
+    const response = await authenticateCentrifugoConnect(
+      connectRequest({ daemonApiKey: keys.token }),
+      {
+        daemonApiKeys: keys,
+        computerBelongsToWorkspace: async () => true,
+        revocationReason: async () => undefined,
+        connectedDaemons: async () => {
+          throw new Error("centrifugo unreachable");
+        },
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ result: { user: "user-1" } });
+  });
+
   describe("logs every refusal for good with its reason", () => {
     const warnings: unknown[] = [];
     let warn: ReturnType<typeof spyOn>;

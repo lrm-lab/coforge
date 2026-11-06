@@ -32,6 +32,10 @@ mechanics only; domain rules stay in the owning `src/server/` module.
   `daemon_connect:refused` with its reason. A refusal that names a Computer scope is also
   recorded by `computer-connect-refusals.server.ts` for the Computers page, and the next good
   connect clears it; a refusal with no known scope records nothing.
+- One live Daemon per binding: after a good connect the proxy reads the binding's `daemon:`
+  channel presence and answers a second live connection `DAEMON_DUPLICATE_CONNECTION_DISCONNECT`
+  (4003, reconnectable — the duplicate waits its turn). A presence read that fails lets the
+  connect proceed; duplicate protection never takes a working Daemon offline.
 - Disconnect one daemon connection, never a whole user: a daemon's connection
   user is its key owner, whose pages and other daemons share it.
   `reconnectDaemon` does this; otherwise find the client
