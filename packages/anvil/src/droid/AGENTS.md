@@ -29,8 +29,17 @@ These rules extend [`../../AGENTS.md`](../../AGENTS.md).
   never written and the session keeps the server's default (`auto-medium`).
 - Every answered turn carries `usage_update` (`{"used":348,"size":250000}` on a one-word
   prompt, verified on 1.4.1); the turn reader maps it to `context-usage`. That reading is the
-  context window, not plan usage: `readUsage` stays unimplemented, so
-  `RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN` stays false.
+  context window, never plan usage.
+- Plan usage has no machine-readable surface (no ACP field, no CLI flag, no public endpoint),
+  so `readUsage` drives the interactive TUI: spawn `droid` in a 160x40 PTY (`DROID_USAGE_SCREEN`
+  — at the transport's 120-column default the panel collapses to unreadable bars), send
+  `/limits`, Tab through the pool tabs, and parse the settled screens with `VtScreen`, the
+  minimal VT buffer in `vt-screen.ts` — deliberately not a terminal emulator. Verified on
+  1.5.0: Standard/Droid Core pools report 5-hour/Weekly/Monthly percentages with relative `↻`
+  resets (minute precision, resolved against the capture instant; an unreadable phrasing omits
+  `resetsAt`), Extra Usage reports a `$X.XX remaining` balance, and `You are using …` names the
+  active pool. Any anomaly — missing header, window row, balance, or tab bar — throws
+  unavailable rather than showing a wrong number; a sign-in screen is reauth. See `usage.ts`.
 - Droid 1.4.1 sent no `compaction_update` in the verified turn, so `reportsCompaction` stays
   false; the reader still translates one if a later build publishes it (UNSTABLE ACP event,
   advertised through `acp/connection.ts`).

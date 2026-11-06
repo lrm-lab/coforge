@@ -33,6 +33,7 @@ import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
 import { DroidAcpProvider, DroidRuntimeAuthAdapter } from "@lrm/coforge-anvil/droid";
 import { droidAcpRuntimeHost } from "#src/code-agent/droid/acp-host";
 import { createDroidAuthHost } from "#src/code-agent/droid/auth-host";
+import { createDroidUsageHost } from "#src/code-agent/droid/usage-host";
 import { createKiroAuthHost } from "#src/code-agent/kiro/auth-host";
 import { KiroRuntimeAuthAdapter } from "@lrm/coforge-anvil/kiro";
 import { KiroProvider } from "@lrm/coforge-anvil/kiro";
@@ -182,6 +183,7 @@ export function createCodeAgentProvider(
       return new DroidAcpProvider({
         host: droidAcpRuntimeHost,
         ...(executable ? { command: [executable] } : {}),
+        usageHost: createDroidUsageHost({ platform: options.platform }),
       });
     }
     default: {

@@ -1,6 +1,7 @@
 import type { AgentRuntimeEvent, AgentSessionOptions } from "@coforge/agent";
 import type { ProcessTreeSpawner } from "#src/process-tree";
 import type { CliVersionReader } from "#src/version-gate";
+import type { DroidUsageHost } from "./usage";
 
 /** What the daemon supplies the Droid ACP session: process trees, the session environment, the
  * `droid --version` probe, and reply-intent policies that stay host decisions. */
@@ -31,4 +32,7 @@ export interface DroidAcpProviderOptions {
   readonly command?: readonly string[];
   /** Startup/config waits only; prompt admission and full turns have no deadline. */
   readonly acpTimeoutMs?: number;
+  /** Plan-usage reads through the interactive TUI's `/limits` panel; absent means the provider
+   * exposes no `readUsage`, matching `RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN`. */
+  readonly usageHost?: DroidUsageHost;
 }
