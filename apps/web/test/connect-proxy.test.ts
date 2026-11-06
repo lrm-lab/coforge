@@ -23,6 +23,23 @@ const repository = (): DaemonApiKeyRepository & { token?: string } => {
 
 const REVOKED_KEY = `dk_${"a".repeat(43)}`;
 
+function refusals() {
+  const recorded: { scope: { workspaceId: string; computerId: string }; reason: string }[] = [];
+  const cleared: { workspaceId: string; computerId: string }[] = [];
+  return {
+    recorded,
+    cleared,
+    connectRefusals: {
+      async record(scope: { workspaceId: string; computerId: string }, reason: string) {
+        recorded.push({ scope, reason });
+      },
+      async clear(scope: { workspaceId: string; computerId: string }) {
+        cleared.push(scope);
+      },
+    },
+  };
+}
+
 function connectRequest(data: unknown): Request {
   return new Request("http://backend", { method: "POST", body: JSON.stringify({ data }) });
 }
@@ -170,6 +187,53 @@ describe("Centrifugo Connect Proxy", () => {
     });
   });
 
+  test("refuses a key whose row is revoked for good, even with no recorded revocation", async () => {
+    const keys = repository();
+    await keys.replaceActive({
+      apiKeyHash: hashDaemonApiKey(REVOKED_KEY),
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      ownerId: "user-1",
+      revokedAt: new Date(),
+      kind: "daemon",
+    });
+    const response = await authenticateCentrifugoConnect(
+      connectRequest({ daemonApiKey: REVOKED_KEY }),
+      {
+        daemonApiKeys: keys,
+        computerBelongsToWorkspace: async () => true,
+        revocationReason: async () => undefined,
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      disconnect: { code: 4503, reason: "credential_revoked" },
+    });
+  });
+
+  test("a recorded revocation reason still wins over the key row's own revokedAt", async () => {
+    const keys = repository();
+    await keys.replaceActive({
+      apiKeyHash: hashDaemonApiKey(REVOKED_KEY),
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      ownerId: "user-1",
+      revokedAt: new Date(),
+      kind: "daemon",
+    });
+    const response = await authenticateCentrifugoConnect(
+      connectRequest({ daemonApiKey: REVOKED_KEY }),
+      {
+        daemonApiKeys: keys,
+        computerBelongsToWorkspace: async () => true,
+        revocationReason: async () => "workspace_deleted",
+      },
+    );
+    expect(await response.json()).toEqual({
+      disconnect: { code: 4501, reason: "workspace_deleted" },
+    });
+  });
+
   test("keeps a key with no recorded revocation a retryable authentication failure", async () => {
     const response = await authenticateCentrifugoConnect(
       connectRequest({ daemonApiKey: REVOKED_KEY }),
@@ -197,6 +261,85 @@ describe("Centrifugo Connect Proxy", () => {
     );
     expect(looked).toBe(false);
     expect(response.status).toBe(401);
+  });
+
+  test("records a refusal for the Computers page when a bound key is refused for its Computer", async () => {
+    const keys = repository();
+    keys.token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+    });
+    const marker = refusals();
+    await authenticateCentrifugoConnect(connectRequest({ daemonApiKey: keys.token }), {
+      daemonApiKeys: keys,
+      computerBelongsToWorkspace: async () => false,
+      revocationReason: async () => undefined,
+      connectRefusals: marker.connectRefusals,
+    });
+    expect(marker.recorded).toEqual([
+      {
+        scope: { workspaceId: "workspace-1", computerId: "computer-1" },
+        reason: "computer_unlinked",
+      },
+    ]);
+  });
+
+  test("records a revoked key's refusal under the key row's own scope", async () => {
+    const keys = repository();
+    await keys.replaceActive({
+      apiKeyHash: hashDaemonApiKey(REVOKED_KEY),
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      ownerId: "user-1",
+      revokedAt: new Date(),
+      kind: "daemon",
+    });
+    const marker = refusals();
+    await authenticateCentrifugoConnect(connectRequest({ daemonApiKey: REVOKED_KEY }), {
+      daemonApiKeys: keys,
+      computerBelongsToWorkspace: async () => true,
+      revocationReason: async () => undefined,
+      connectRefusals: marker.connectRefusals,
+    });
+    expect(marker.recorded).toEqual([
+      {
+        scope: { workspaceId: "workspace-1", computerId: "computer-1" },
+        reason: "credential_revoked",
+      },
+    ]);
+  });
+
+  test("records nothing for a refusal that names no Computer scope", async () => {
+    const marker = refusals();
+    await authenticateCentrifugoConnect(connectRequest({ daemonApiKey: REVOKED_KEY }), {
+      daemonApiKeys: repository(),
+      computerBelongsToWorkspace: async () => true,
+      revocationReason: async () => "workspace_deleted",
+      connectRefusals: marker.connectRefusals,
+    });
+    expect(marker.recorded).toEqual([]);
+  });
+
+  test("clears a recorded refusal when the binding connects again", async () => {
+    const keys = repository();
+    keys.token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+    });
+    const marker = refusals();
+    const response = await authenticateCentrifugoConnect(
+      connectRequest({ daemonApiKey: keys.token }),
+      {
+        daemonApiKeys: keys,
+        computerBelongsToWorkspace: async () => true,
+        revocationReason: async () => undefined,
+        connectRefusals: marker.connectRefusals,
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(marker.cleared).toEqual([{ workspaceId: "workspace-1", computerId: "computer-1" }]);
   });
 
   describe("logs every refusal for good with its reason", () => {

@@ -32,6 +32,7 @@ import {
   reconnectDaemon,
 } from "#src/server/centrifugo/server-api.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
+import { getComputerConnectRefusals } from "#src/server/centrifugo/computer-connect-refusals.server";
 import { getModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
 import {
   ComputerModelCatalogRefresh,
@@ -144,7 +145,7 @@ export const listComputers = createServerFn({ method: "GET" })
       .map(({ computer }) => computer.id);
     const runtimeDetection = getComputerRuntimeDetection();
     // Each read needs only the connections, so they run side by side.
-    const [statuses, agentDisplays, detecting, upgrades, images] = await Promise.all([
+    const [statuses, agentDisplays, detecting, upgrades, images, refusals] = await Promise.all([
       // One round trip for every Computer's online lease, not one per Computer.
       computerStatus.getMany(computerScopes),
       getAgentDisplay().snapshotMany(agentScopes),
@@ -157,6 +158,10 @@ export const listComputers = createServerFn({ method: "GET" })
         .latestMany(computerScopes)
         .catch(() => []),
       readCloudComputerImages(cloudIds),
+      // Why the connect proxy last refused this binding for good, cleared by the next connect.
+      getComputerConnectRefusals()
+        .getMany(computerScopes)
+        .catch(() => computerScopes.map(() => null)),
     ]);
     const agentDisplayById = new Map(
       agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
@@ -191,6 +196,7 @@ export const listComputers = createServerFn({ method: "GET" })
             runtimes: computerRuntimes,
           }),
           online: statuses[index] ?? false,
+          connectRefusal: refusals[index] ?? null,
           runtimeDetecting: detecting[index] ?? false,
           agents: computer.agents.map((agent) => {
             const config = readableRuntimeConfig(agent.runtimeConfig, agent.id);

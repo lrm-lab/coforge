@@ -1,4 +1,5 @@
 import type {
+  DaemonConnectRejectionReason,
   RuntimeProvider,
   RuntimeUnavailableCode,
   AgentDisplaySnapshot,
@@ -23,6 +24,9 @@ export type ComputerDetailView = ComputerIdentity & {
   ownedByCurrentUser: boolean;
   canManageAgents: boolean;
   online: boolean;
+  /** Why the connect proxy last refused this binding for good, cleared by its next connect;
+   * `null` when it never refused. */
+  connectRefusal?: { reason: DaemonConnectRejectionReason; at: string } | null;
   /** A rescan of its runtimes is in flight; the runtimes listed are the last confirmed ones. */
   runtimeDetecting?: boolean;
   connectedAt: Date | string;

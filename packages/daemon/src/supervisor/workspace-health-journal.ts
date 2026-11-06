@@ -74,9 +74,11 @@ export function workspaceParkedDescription(
 ): string {
   const kept =
     "This Computer stopped connecting to it and stopped its Agents; local files are kept.";
-  return reason === "workspace_deleted"
-    ? `Workspace ${workspace.workspaceId} was deleted in CoForge (${reason}). ${kept}`
-    : `This Computer was removed from Workspace ${workspace.workspaceSlug ?? workspace.workspaceId} in CoForge (${reason}). ${kept}`;
+  if (reason === "workspace_deleted")
+    return `Workspace ${workspace.workspaceId} was deleted in CoForge (${reason}). ${kept}`;
+  if (reason === "credential_revoked")
+    return `This Computer's credential for Workspace ${workspace.workspaceSlug ?? workspace.workspaceId} was revoked in CoForge (${reason}). ${kept}`;
+  return `This Computer was removed from Workspace ${workspace.workspaceSlug ?? workspace.workspaceId} in CoForge (${reason}). ${kept}`;
 }
 
 /** The commands that move on from a parked Workspace. Without a slug the setup command keeps a
@@ -86,9 +88,9 @@ export function workspaceParkedRecovery(
   workspace: ParkedWorkspace,
 ): string {
   const selector = workspace.workspaceSlug ?? workspace.workspaceId;
-  return reason === "workspace_deleted"
-    ? `Run 'coforge-computer setup --workspace <workspace-slug>' to attach this Computer to another Workspace, or 'coforge-computer stop --workspace ${selector}' to stop this binding.`
-    : `Run 'coforge-computer setup --workspace ${workspace.workspaceSlug ?? "<workspace-slug>"}' to attach it again.`;
+  if (reason === "workspace_deleted")
+    return `Run 'coforge-computer setup --workspace <workspace-slug>' to attach this Computer to another Workspace, or 'coforge-computer stop --workspace ${selector}' to stop this binding.`;
+  return `Run 'coforge-computer setup --workspace ${workspace.workspaceSlug ?? "<workspace-slug>"}' to attach it again.`;
 }
 
 /** The one sentence every surface uses to report a parked Workspace: the description, then the

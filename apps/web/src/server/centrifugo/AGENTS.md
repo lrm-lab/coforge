@@ -29,7 +29,9 @@ mechanics only; domain rules stay in the owning `src/server/` module.
 - Who records a revocation: Workspace deletion
   ([`../workspaces/AGENTS.md`](../workspaces/AGENTS.md)), Computer removal, and
   a member leaving or being removed ([`../computers/AGENTS.md`](../computers/AGENTS.md)). Every refusal logs
-  `daemon_connect:refused` with its reason.
+  `daemon_connect:refused` with its reason. A refusal that names a Computer scope is also
+  recorded by `computer-connect-refusals.server.ts` for the Computers page, and the next good
+  connect clears it; a refusal with no known scope records nothing.
 - Disconnect one daemon connection, never a whole user: a daemon's connection
   user is its key owner, whose pages and other daemons share it.
   `reconnectDaemon` does this; otherwise find the client

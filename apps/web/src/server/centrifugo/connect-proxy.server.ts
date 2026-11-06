@@ -14,6 +14,10 @@ import {
 } from "#src/server/auth/daemon-api-key.server";
 import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
 import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
+import {
+  getComputerConnectRefusals,
+  type ComputerConnectRefusals,
+} from "#src/server/centrifugo/computer-connect-refusals.server";
 
 type ConnectRequest = {
   data?: unknown;
@@ -56,12 +60,47 @@ function refuse(
   });
 }
 
+/**
+ * A refusal or a good connect must never change the answer it accompanies: a Redis failure
+ * here is logged and the auth result stands, so a refused Daemon still parks and a working
+ * one still connects.
+ */
+async function recordRefusal(
+  refusals: ComputerConnectRefusals | undefined,
+  scope: { workspaceId: string; computerId: string } | undefined,
+  reason: DaemonConnectRejectionReason,
+) {
+  if (!refusals || !scope) return;
+  try {
+    await refusals.record({ workspaceId: scope.workspaceId, computerId: scope.computerId }, reason);
+  } catch {
+    console.warn(JSON.stringify({ event: "daemon_connect:refusal_record_failed", reason }));
+  }
+}
+
+async function clearRefusal(
+  refusals: ComputerConnectRefusals | undefined,
+  scope: { workspaceId: string; computerId: string },
+) {
+  try {
+    await refusals?.clear({
+      workspaceId: scope.workspaceId,
+      computerId: scope.computerId,
+    });
+  } catch {
+    console.warn(JSON.stringify({ event: "daemon_connect:refusal_clear_failed" }));
+  }
+}
+
 export type CentrifugoConnectDependencies = {
   daemonApiKeys: DaemonApiKeyRepository;
   computerBelongsToWorkspace(workspaceId: string, computerId: string): Promise<boolean>;
   /** Why a formerly valid key stopped being valid, if that was recorded (Workspace deleted,
    * Computer removed). */
   revocationReason(apiKeyHash: string): Promise<DaemonConnectRejectionReason | undefined>;
+  /** Records a terminal refusal for the Computers page and clears it on the next good connect.
+   * Absent only in tests; production always wires it. */
+  connectRefusals?: ComputerConnectRefusals;
 };
 
 export function centrifugoConnectDependencies(db: PrismaClient): CentrifugoConnectDependencies {
@@ -76,6 +115,7 @@ export function centrifugoConnectDependencies(db: PrismaClient): CentrifugoConne
         }),
       ),
     revocationReason: (apiKeyHash) => revocations.reasonFor(apiKeyHash),
+    connectRefusals: getComputerConnectRefusals(),
   };
 }
 
@@ -92,20 +132,34 @@ export async function authenticateCentrifugoConnect(
       principal = await verifyDaemonApiKey(key, dependencies.daemonApiKeys);
     } catch (error) {
       // A live key whose owner left the Workspace: its Computer has no place there any more.
-      if (error instanceof DaemonApiKeyOwnerNotMemberError)
+      if (error instanceof DaemonApiKeyOwnerNotMemberError) {
+        await recordRefusal(dependencies.connectRefusals, error.claims, "computer_unlinked");
         return refuse("computer_unlinked", error.claims);
+      }
       // Only the holder of a formerly valid key learns why it stopped working; any other key is
       // an ordinary, retryable authentication failure.
-      const reason = isDaemonApiKey(key)
-        ? await dependencies.revocationReason(hashDaemonApiKey(key))
-        : undefined;
-      if (reason) return refuse(reason);
+      if (isDaemonApiKey(key)) {
+        const hash = hashDaemonApiKey(key);
+        const reason = await dependencies.revocationReason(hash);
+        if (reason) return refuse(reason);
+        // A key row that exists but is revoked stopped working through a path that recorded
+        // no revocation reason (key migration, replacement): still terminal, never retried.
+        const record = await dependencies.daemonApiKeys.findByHash(hash);
+        if (record?.revokedAt) {
+          const scope = { workspaceId: record.workspaceId, computerId: record.computerId };
+          await recordRefusal(dependencies.connectRefusals, scope, "credential_revoked");
+          return refuse("credential_revoked", scope);
+        }
+      }
       throw error;
     }
     if (
       !(await dependencies.computerBelongsToWorkspace(principal.workspaceId, principal.computerId))
-    )
+    ) {
+      await recordRefusal(dependencies.connectRefusals, principal, "computer_unlinked");
       return refuse("computer_unlinked", principal);
+    }
+    await clearRefusal(dependencies.connectRefusals, principal);
     return Response.json({
       result: {
         user: principal.userId,

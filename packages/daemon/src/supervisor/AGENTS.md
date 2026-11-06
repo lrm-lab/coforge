@@ -44,8 +44,8 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
   `launchctl`/`ps` read must not turn a running Workspace into one reported
   down.
 - An explicit disabled state always wins over automatic restart or recovery.
-- A Workspace the cloud refused for good (`workspace_deleted`, `computer_unlinked`)
-  is parked in its health journal. Recovery, `start`, and `restart` never start
+- A Workspace the cloud refused for good (`workspace_deleted`, `computer_unlinked`,
+  `credential_revoked`) is parked in its health journal. Recovery, `start`, and `restart` never start
   it and never clear the park; an unscoped command still starts the other
   bindings and then refuses with the stable reason as `error_code`. Only
   `configure` (setup attaching it again) lifts the park. Parking never deletes

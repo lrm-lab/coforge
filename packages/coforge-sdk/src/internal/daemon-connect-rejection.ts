@@ -10,7 +10,11 @@ export type DaemonConnectData = {
  * Why the cloud refused a Daemon's Workspace connection for good. Restarting or reconnecting
  * cannot change either answer; only attaching the Computer again (setup) can.
  */
-export const DAEMON_CONNECT_REJECTION_REASONS = ["workspace_deleted", "computer_unlinked"] as const;
+export const DAEMON_CONNECT_REJECTION_REASONS = [
+  "workspace_deleted",
+  "computer_unlinked",
+  "credential_revoked",
+] as const;
 export type DaemonConnectRejectionReason = (typeof DAEMON_CONNECT_REJECTION_REASONS)[number];
 
 /**
@@ -20,6 +24,7 @@ export type DaemonConnectRejectionReason = (typeof DAEMON_CONNECT_REJECTION_REAS
 export const DAEMON_CONNECT_REJECTION_CODES = {
   workspace_deleted: 4501,
   computer_unlinked: 4502,
+  credential_revoked: 4503,
 } as const satisfies Record<DaemonConnectRejectionReason, number>;
 
 /**
