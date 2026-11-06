@@ -47,8 +47,13 @@ export async function releaseDeferred(
     (entry) => now.getTime() - entry.firstQueuedAt.getTime() <= MAX_DEFER_MS,
   );
   const newest = new Map<string, PhoneRelease & { queuedAt: Date }>();
-  for (const entry of fresh) {
-    const waiting = await store.deferredNotification(entry.messageId, userId);
+  const waitingEntries = await Promise.all(
+    fresh.map(async (entry) => ({
+      entry,
+      waiting: await store.deferredNotification(entry.messageId, userId),
+    })),
+  );
+  for (const { entry, waiting } of waitingEntries) {
     if (!waiting || waiting.read) continue;
     const kept = newest.get(waiting.conversationId);
     // A message that @mentions the person wins over a plain one; among equals, the newest.
