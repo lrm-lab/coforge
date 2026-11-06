@@ -24,7 +24,7 @@ export type ConversationFile = {
   iconUrl?: string;
   largeUrl?: string;
   /** The message this file was sent on, for locate-in-chat links; the hash anchor resolves a
-   * thread reply through its root, orphaned files (message deleted) have none. */
+   * thread reply through its root. The list holds only sent files (task #617). */
   messageId: string | null;
 };
 

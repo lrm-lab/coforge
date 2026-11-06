@@ -17,7 +17,13 @@ export async function listConversationFiles(
     input.conversationId,
   );
   const attachments = await db.attachment.findMany({
-    where: { conversationId: input.conversationId, workspaceId: input.workspaceId },
+    // An upload lands with `messageId` null and only a sent message claims it, so this lists
+    // files that were sent — never one someone uploaded and did not send (task #617).
+    where: {
+      conversationId: input.conversationId,
+      workspaceId: input.workspaceId,
+      messageId: { not: null },
+    },
     orderBy: { createdAt: "desc" },
     take: 200,
     select: {

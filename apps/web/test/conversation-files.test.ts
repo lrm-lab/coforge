@@ -61,7 +61,11 @@ describe("conversation files authorization", () => {
     ).resolves.toMatchObject({ files: [{ id: "attachment-1", fileName: "notes.txt" }] });
     expect(attachmentQueries).toHaveLength(1);
     expect(attachmentQueries[0]).toMatchObject({
-      where: { conversationId: "channel-1", workspaceId: "workspace-1" },
+      where: {
+        conversationId: "channel-1",
+        workspaceId: "workspace-1",
+        messageId: { not: null },
+      },
     });
   });
 
