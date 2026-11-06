@@ -9,7 +9,7 @@ import {
   activityReportSchema,
   notificationSettingsChangeSchema,
 } from "./notification-settings.schemas";
-import { unreachablePushService } from "#src/server/notifications/unreachable-push-services";
+import { unreachablePushService } from "#src/features/notifications/unreachable-push-services";
 
 /**
  * The Settings page's account notification settings (task #467): read them with this person's

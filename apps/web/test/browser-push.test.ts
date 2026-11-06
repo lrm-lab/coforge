@@ -23,6 +23,23 @@ afterEach(() => {
   }
 });
 
+test("no installation help while Apple's push service is out of reach (task #568)", () => {
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1",
+      maxTouchPoints: 5,
+    },
+  });
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { matchMedia: () => ({ matches: false }) },
+  });
+  expect(shouldShowAddToHomeScreenGuide()).toBeFalse();
+  expect(shouldShowAddToHomeScreenGuide(new Set(["google"]))).toBeTrue();
+});
+
 test("shows installation help only in iPhone and iPad Safari outside standalone mode", () => {
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
@@ -36,7 +53,7 @@ test("shows installation help only in iPhone and iPad Safari outside standalone 
     configurable: true,
     value: { matchMedia: () => ({ matches: false }) },
   });
-  expect(shouldShowAddToHomeScreenGuide()).toBeTrue();
+  expect(shouldShowAddToHomeScreenGuide(new Set())).toBeTrue();
 
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
@@ -46,13 +63,13 @@ test("shows installation help only in iPhone and iPad Safari outside standalone 
       maxTouchPoints: 5,
     },
   });
-  expect(shouldShowAddToHomeScreenGuide()).toBeTrue();
+  expect(shouldShowAddToHomeScreenGuide(new Set())).toBeTrue();
 
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: { matchMedia: () => ({ matches: true }) },
   });
-  expect(shouldShowAddToHomeScreenGuide()).toBeFalse();
+  expect(shouldShowAddToHomeScreenGuide(new Set())).toBeFalse();
 
   for (const userAgent of [
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 CriOS/140.0 Mobile/15E148 Safari/604.1",
@@ -68,7 +85,7 @@ test("shows installation help only in iPhone and iPad Safari outside standalone 
       configurable: true,
       value: { matchMedia: () => ({ matches: false }) },
     });
-    expect(shouldShowAddToHomeScreenGuide()).toBeFalse();
+    expect(shouldShowAddToHomeScreenGuide(new Set())).toBeFalse();
   }
 
   Object.defineProperty(globalThis, "navigator", {
@@ -78,7 +95,7 @@ test("shows installation help only in iPhone and iPad Safari outside standalone 
       maxTouchPoints: 0,
     },
   });
-  expect(shouldShowAddToHomeScreenGuide()).toBeFalse();
+  expect(shouldShowAddToHomeScreenGuide(new Set())).toBeFalse();
 });
 
 test("fails a browser push registration that never settles instead of hanging the UI", async () => {

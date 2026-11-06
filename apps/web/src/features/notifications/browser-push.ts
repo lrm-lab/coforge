@@ -1,3 +1,5 @@
+import { type PushService, UNREACHABLE_PUSH_SERVICES } from "./unreachable-push-services";
+
 export type BrowserNotificationPermission = NotificationPermission | "unsupported";
 
 export type SerializedBrowserPushSubscription = {
@@ -66,7 +68,12 @@ export function browserNotificationPermission(): BrowserNotificationPermission {
   return Notification.permission;
 }
 
-export function shouldShowAddToHomeScreenGuide() {
+/** Whether to teach an iPhone or iPad Safari tab to add CoForge to the home screen, the only way it
+ * gets pushes: not while Apple's push service is out of reach, when the steps would lead nowhere. */
+export function shouldShowAddToHomeScreenGuide(
+  unreachable: ReadonlySet<PushService> = UNREACHABLE_PUSH_SERVICES,
+) {
+  if (unreachable.has("apple")) return false;
   const userAgent = navigator.userAgent;
   const appleMobile =
     /iPad|iPhone|iPod/.test(userAgent) ||

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { unreachablePushService } from "#src/server/notifications/unreachable-push-services";
+import { unreachablePushService } from "#src/features/notifications/unreachable-push-services";
 
 test("Google's and Apple's push endpoints are the unreachable ones", () => {
   expect(unreachablePushService("https://fcm.googleapis.com/fcm/send/abc")).toBe("google");
