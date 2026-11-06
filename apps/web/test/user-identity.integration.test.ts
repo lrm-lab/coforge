@@ -1,7 +1,5 @@
 import { expect, test } from "bun:test";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "#src/generated/prisma/client";
-import { UserIdentityRepository } from "#src/server/auth/user-identity.repository.server";
+import { userIdentityFixture } from "./helpers/user-identity-fixture";
 
 /**
  * The login identity repository against local PostgreSQL: each successful browser login leaves
@@ -12,60 +10,8 @@ import { UserIdentityRepository } from "#src/server/auth/user-identity.repositor
  */
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 
-type LoginProfile = {
-  email?: string | null;
-  emailVerified?: boolean;
-  phone?: string | null;
-  phoneVerified?: boolean;
-  preferredUsername?: string | null;
-  name?: string | null;
-  nickname?: string | null;
-};
-
-async function setup() {
-  const db = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: connectionString! }),
-    log: [{ emit: "event", level: "query" }],
-  });
-  const statements: string[] = [];
-  db.$on("query", (event) => statements.push(event.query));
-  const suffix = crypto.randomUUID().slice(0, 8);
-  const userIds: string[] = [];
-  const login = async (subject: string, profile?: LoginProfile) => {
-    const user = await new UserIdentityRepository(db).resolve("authing", subject, profile);
-    userIds.push(user.id);
-    return user;
-  };
-  const storedEmail = async (userId: string) =>
-    (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } })).email;
-  const storedPhone = async (userId: string) =>
-    (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true } })).phone;
-  const storedVerification = async (userId: string) =>
-    db.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { emailVerified: true, phoneVerified: true },
-    });
-  const userWrites = () =>
-    statements.filter((query) => query.startsWith('UPDATE "public"."users"'));
-  const teardown = async () => {
-    await db.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => {});
-    await db.$disconnect();
-  };
-  return {
-    db,
-    suffix,
-    userIds,
-    login,
-    storedEmail,
-    storedPhone,
-    storedVerification,
-    userWrites,
-    teardown,
-  };
-}
-
 test.skipIf(!connectionString)("a first login stores the email the provider reported", async () => {
-  const { suffix, login, storedEmail, teardown } = await setup();
+  const { suffix, login, storedEmail, teardown } = await userIdentityFixture();
   try {
     const user = await login(`sub-first-${suffix}`, { email: `ada-${suffix}@example.com` });
 
@@ -79,7 +25,7 @@ test.skipIf(!connectionString)("a first login stores the email the provider repo
 test.skipIf(!connectionString)(
   "a later login with a different email updates the same User's email",
   async () => {
-    const { suffix, login, storedEmail, userWrites, teardown } = await setup();
+    const { suffix, login, storedEmail, userWrites, teardown } = await userIdentityFixture();
     try {
       const first = await login(`sub-change-${suffix}`, { email: `old-${suffix}@example.com` });
       const before = userWrites().length;
@@ -97,7 +43,7 @@ test.skipIf(!connectionString)(
 );
 
 test.skipIf(!connectionString)("a later login with the same email writes nothing", async () => {
-  const { suffix, login, storedEmail, userWrites, teardown } = await setup();
+  const { suffix, login, storedEmail, userWrites, teardown } = await userIdentityFixture();
   try {
     const first = await login(`sub-same-${suffix}`, { email: `same-${suffix}@example.com` });
     const before = userWrites().length;
@@ -115,7 +61,7 @@ test.skipIf(!connectionString)("a later login with the same email writes nothing
 test.skipIf(!connectionString)(
   "a login that reports no email keeps the stored one and creates a User without one",
   async () => {
-    const { suffix, login, storedEmail, teardown } = await setup();
+    const { suffix, login, storedEmail, teardown } = await userIdentityFixture();
     try {
       const known = await login(`sub-known-${suffix}`, { email: `kept-${suffix}@example.com` });
       await login(`sub-known-${suffix}`, { email: null });
@@ -133,7 +79,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a first login stores the phone number the provider reported",
   async () => {
-    const { suffix, login, storedPhone, teardown } = await setup();
+    const { suffix, login, storedPhone, teardown } = await userIdentityFixture();
     try {
       const user = await login(`sub-phone-${suffix}`, {
         email: `ada-${suffix}@example.com`,
@@ -151,7 +97,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a later login with a different phone number updates the same User, and one without keeps it",
   async () => {
-    const { suffix, login, storedPhone, userWrites, teardown } = await setup();
+    const { suffix, login, storedPhone, userWrites, teardown } = await userIdentityFixture();
     try {
       const first = await login(`sub-phone-change-${suffix}`, {
         email: `ada-${suffix}@example.com`,
@@ -181,7 +127,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a login records whether the provider verified each address, and follows a changed answer",
   async () => {
-    const { suffix, login, storedVerification, userWrites, teardown } = await setup();
+    const { suffix, login, storedVerification, userWrites, teardown } = await userIdentityFixture();
     try {
       const first = await login(`sub-verified-${suffix}`, {
         email: `ada-${suffix}@example.com`,
@@ -229,7 +175,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "the phone number is not an identity key: another subject with the same number is another User",
   async () => {
-    const { suffix, login, storedPhone, teardown } = await setup();
+    const { suffix, login, storedPhone, teardown } = await userIdentityFixture();
     try {
       const phone = "+8613800138000";
       const original = await login(`sub-phone-pool-a-${suffix}`, { phone });
@@ -247,7 +193,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "the email is not an identity key: another subject with the same email is another User",
   async () => {
-    const { suffix, login, storedEmail, teardown } = await setup();
+    const { suffix, login, storedEmail, teardown } = await userIdentityFixture();
     try {
       const email = `shared-${suffix}@example.com`;
       const original = await login(`sub-pool-a-${suffix}`, { email });
@@ -265,7 +211,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a preferred_username of 11 or more digits is a phone number, and never becomes the username",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       // Sign-up by phone number and nothing else: the username is the generated one.
       const phoneOnly = await login(`sub-phone-only-${suffix}`, {
@@ -291,7 +237,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a phone number hidden among letters or separators never becomes the username",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       const wechat = await login(`sub-wx-${suffix}`, {
         preferredUsername: "wx13800138000",
@@ -313,7 +259,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a preferred_username that is a name, even with digits in it, is still the username",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       const named = await login(`sub-named-${suffix}`, { preferredUsername: `ada2024-${suffix}` });
 
@@ -327,7 +273,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a first login gets a readable username and a name from the email's local part, not yet confirmed",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       const plain = await login(`sub-readable-${suffix}`, { email: `Grace-${suffix}@example.com` });
       const tagged = await login(`sub-tagged-${suffix}`, {
@@ -348,7 +294,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a taken username takes the smallest free -N, and only its own -N counts as a collision",
   async () => {
-    const { db, suffix, userIds, login, teardown } = await setup();
+    const { db, suffix, userIds, login, teardown } = await userIdentityFixture();
     try {
       const email = `lee-${suffix}@example.com`;
       // Names that merely start with the base, or carry the older hex suffix, do not block it.
@@ -375,7 +321,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "people who sign in at the same moment with the same base each get a distinct username",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       const email = `race-${suffix}@example.com`;
       const users = await Promise.all(
@@ -397,7 +343,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "the same person's two callbacks at the same moment resolve to one User",
   async () => {
-    const { db, suffix, login, teardown } = await setup();
+    const { db, suffix, login, teardown } = await userIdentityFixture();
     try {
       const subject = `sub-twice-${suffix}`;
       const email = `twice-${suffix}@example.com`;
@@ -421,7 +367,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a username starts with a letter: a digit start gets the prefix u, an 11-digit one is skipped",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       const digits = String(1_000_000_000 + Math.floor(Math.random() * 9_000_000_000));
       const qq = await login(`sub-qq-${suffix}`, { preferredUsername: digits });
@@ -446,7 +392,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a reserved word is never a username, and the next source is used",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       const user = await login(`sub-reserved-${suffix}`, {
         preferredUsername: "admin",
@@ -469,7 +415,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a name with no ASCII letters yields no username, so the nickname or the fallback is used",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       const nickname = await login(`sub-cjk-nick-${suffix}`, {
         name: "安栋",
@@ -488,7 +434,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "logins with nothing to name them by get distinct fallback usernames",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       const users = await Promise.all([1, 2, 3].map((n) => login(`sub-nothing-${n}-${suffix}`)));
 
@@ -504,7 +450,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a name too short to be a username is skipped, and a long one is cut so its -N still fits",
   async () => {
-    const { suffix, login, teardown } = await setup();
+    const { suffix, login, teardown } = await userIdentityFixture();
     try {
       const short = await login(`sub-short-${suffix}`, {
         preferredUsername: "ab",
@@ -527,7 +473,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "a sign-in from a QQ mailbox names the account qq<number>",
   async () => {
-    const { login, teardown } = await setup();
+    const { login, teardown } = await userIdentityFixture();
     try {
       const number = String(Math.floor(100_000_000 + Math.random() * 899_999_999));
       const user = await login(`sub-qq-${number}`, { email: `${number}@qq.com` });
@@ -542,7 +488,7 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "signing in never renames an existing account, whatever its username and name",
   async () => {
-    const { db, suffix, login, userWrites, teardown } = await setup();
+    const { db, suffix, login, userWrites, teardown } = await userIdentityFixture();
     try {
       await db.user.create({
         data: {
