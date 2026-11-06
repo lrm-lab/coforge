@@ -62,7 +62,7 @@ Details and the incidents behind these rules are in [delivery](docs/agents/deliv
 - Remove the worktree you created for a change once that change is on `main` (`git worktree remove <path>`); do not keep it for a next time.
 - Use concise English Conventional Commit messages, as the person running the Agent; never an Agent or bot identity.
 - Keep one concern per branch; claim a task and read the board row back before changing files.
-- A CR or direct-push commit message records scope, decisions, sources, checks, risks, follow-ups and the Agent session.
+- A CR or direct-push commit message records scope, decisions, sources, checks, risks, follow-ups and the Agent session, and ends with a `Revert-effect:` trailer naming what reverting it would break (`none` for docs and tests). One commit does one thing: a pure rename or code move never rides with a behavior change — split them, or mark a deliberate exception `Granularity-exempt: <reason>` ([hard rules](docs/agents/git-hooks/hard-rules.md#commit-granularity)).
 - Keep required CI short; a task is complete only after the checks pass and the change is on `main`.
 - Develop with TDD: a failing test first, the minimum implementation, no weakened tests.
 - Remove an export or mechanism completely: implementation, tests and every assertion that pins it.

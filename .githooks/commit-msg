@@ -1,0 +1,21 @@
+#!/bin/sh
+# CoForge commit-msg hook: the commit granularity message rule
+# (scripts/ci/commit-granularity.ts --message): every non-merge commit message carries a
+# `Revert-effect:` trailer; see docs/agents/git-hooks/hard-rules.md.
+# `bun install` enables it (core.hooksPath=.githooks); `git commit --no-verify` skips it.
+# Git runs this from the top of the work tree being committed and passes the message file
+# as $1, so the script is located from this file instead.
+hooks_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd) || exit 1
+scripts="$hooks_dir/../scripts"
+
+if command -v bun >/dev/null 2>&1; then
+  bun_path=bun
+elif command -v mise >/dev/null 2>&1; then
+  bun_path=$(CDPATH='' cd -- "$hooks_dir/.." && mise which bun 2>/dev/null) || bun_path=
+fi
+if [ -z "${bun_path:-}" ]; then
+  echo "commit-msg: bun was not found, so the commit message cannot be checked." >&2
+  echo "Install the toolchain (mise install), or bypass the checks once with git commit --no-verify." >&2
+  exit 1
+fi
+exec "$bun_path" "$scripts/ci/commit-granularity.ts" --message "$1"

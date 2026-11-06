@@ -27,6 +27,12 @@ import { linkPath, markdownLinks } from "./markdown-links";
 import { unquote } from "./unquote";
 import { MIGRATION_SAFETY_FIX, migrationSafetyViolations } from "../migration-safety/hard-rule";
 import { MIGRATION_IMMUTABLE_FIX, migrationImmutabilityViolations } from "./migration-immutable";
+import {
+  COMMIT_MIX_FIX,
+  granularityFor,
+  RENAME_PURITY_FIX,
+  REVERT_EFFECT_FIX,
+} from "./commit-granularity";
 
 type Rule =
   | "size-ratchet"
@@ -35,7 +41,10 @@ type Rule =
   | "new-suppression"
   | "author-identity"
   | "migration-safety"
-  | "migration-immutable";
+  | "migration-immutable"
+  | "revert-effect"
+  | "rename-purity"
+  | "commit-mix";
 type Violation = { rule: Rule; location: string; found: string };
 
 const FIX: Record<Rule, string> = {
@@ -50,6 +59,9 @@ const FIX: Record<Rule, string> = {
     "Commit as the person running the Agent, never as an Agent or bot (AGENTS.md); author and committer both count: set `git config user.name` and `git config user.email` to their own identity. Rewrite a listed commit not yet on main with `git rebase --exec 'git commit --amend --no-edit --reset-author' <base>`; one already on main is rewritten only when Frank asks. A Co-authored-by trailer is not checked.",
   "migration-safety": MIGRATION_SAFETY_FIX,
   "migration-immutable": MIGRATION_IMMUTABLE_FIX,
+  "revert-effect": REVERT_EFFECT_FIX,
+  "rename-purity": RENAME_PURITY_FIX,
+  "commit-mix": COMMIT_MIX_FIX,
 };
 
 // Rule 11: new suppressions. The token alternatives end in a character class so that this file's
@@ -386,6 +398,7 @@ const USAGE =
 async function check(args: string[]): Promise<Violation[] | string> {
   const [mode, ...rest] = args;
   if (mode === "--staged" && rest.length === 0) {
+    // Granularity needs the commit's message, which the index lacks: commit-msg and --range own it.
     return [
       ...(await fileViolations({ kind: "staged" })),
       ...identityViolations(stagedIdentities()),
@@ -411,6 +424,11 @@ async function check(args: string[]): Promise<Violation[] | string> {
     const authorsFrom = usable.length > 0 ? usable : [baseRev];
     return [
       ...(await fileViolations({ kind: "range", base, head })),
+      ...(await granularityFor(base, head)).map((v) => ({
+        rule: v.rule,
+        location: v.sha,
+        found: v.found,
+      })),
       ...identityViolations(commitIdentities([head, ...authorsFrom.map((rev) => `^${rev}`)])),
     ];
   }

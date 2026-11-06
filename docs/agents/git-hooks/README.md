@@ -5,7 +5,8 @@ script, `scripts/git-hooks/install-hooks-path.ts`, which sets the repository-loc
 to `.githooks`. Git resolves a relative hooks path from the root of the work tree, so the one
 setting serves every worktree. The installer does nothing outside a git work tree (a Docker build
 context, an unpacked tarball). It leaves an existing `core.hooksPath` of yours alone and prints one
-line; have your hooks call `.githooks/pre-commit` and `.githooks/pre-push` yourself. A CoForge
+line; have your hooks call `.githooks/pre-commit`, `.githooks/commit-msg` and
+`.githooks/pre-push` yourself. A CoForge
 Agent's own hook shims forward to the repository's hooks directory, so Agents run these too.
 
 In a fresh clone or worktree, no hook runs until the first `bun install` (`--ignore-scripts` skips
@@ -17,7 +18,8 @@ The repository uses plain `core.hooksPath`, not a hook manager: husky overwrites
 would be custom code either way.
 
 `.githooks/pre-commit` runs the [hard rules](hard-rules.md) on the content being committed (the
-[file size limit](size-limit.md) among them), and `.githooks/pre-push` on what a push sends; each
+[file size limit](size-limit.md) among them), `.githooks/commit-msg` checks the message's
+`Revert-effect:` trailer, and `.githooks/pre-push` the rules on what a push sends; each
 reports every violation before failing.
 
 ## Topics
@@ -33,8 +35,8 @@ reports every violation before failing.
 
 ## Sources
 
-- git hooks: [githooks](https://git-scm.com/docs/githooks) (`pre-commit`, `pre-push`,
-  `pre-merge-commit`, `pre-applypatch`, and the directory hooks run in).
+- git hooks: [githooks](https://git-scm.com/docs/githooks) (`pre-commit`, `commit-msg`,
+  `pre-push`, `pre-merge-commit`, `pre-applypatch`, and the directory hooks run in).
 - [`core.hooksPath`](https://git-scm.com/docs/git-config#Documentation/git-config.txt-corehooksPath)
   in git-config.
 - [gitattributes](https://git-scm.com/docs/gitattributes) (`text`, `eol`, pattern matching).

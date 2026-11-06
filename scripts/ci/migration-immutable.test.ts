@@ -63,7 +63,7 @@ test("a migration not yet pushed may be edited; one on the upstream may not", ()
 
   repo.write({ [added]: "CREATE TABLE b ();\n" });
   repo.ok("add", "-A");
-  repo.ok("commit", "-q", "-m", "add b");
+  repo.ok("commit", "-q", "-m", "add b", "-m", "Revert-effect: none");
   repo.write({ [added]: "CREATE TABLE b (id int);\n" });
   expect(repo.commitAll().exitCode).toBe(0);
 

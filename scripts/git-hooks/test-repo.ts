@@ -79,7 +79,8 @@ export class TestRepo {
   }
 
   /** Commits `files` and everything else in the work tree without the hook (the history a test
-   * starts from), and returns the commit. */
+   * starts from), and returns the commit. The trailer paragraph keeps seeded history valid
+   * under the commit-msg granularity rule when a later --range judges it. */
   seed(
     files: Record<string, string | Uint8Array>,
     { message = "seed", env = {} }: { message?: string; env?: Record<string, string> } = {},
@@ -87,22 +88,36 @@ export class TestRepo {
     this.write(files);
     this.ok("add", "-A");
     const result = this.run(
-      ["git", "commit", "-q", "--no-verify", "--allow-empty", "-m", message],
+      [
+        "git",
+        "commit",
+        "-q",
+        "--no-verify",
+        "--allow-empty",
+        "-m",
+        message,
+        "-m",
+        "Revert-effect: none",
+      ],
       env,
     );
     if (result.exitCode !== 0) throw new Error(`seed commit failed: ${result.stderr}`);
     return this.head();
   }
 
-  /** `git commit` of the index as it is, with the hook. */
+  /** `git commit` of the index as it is, with the hook. The trailer paragraph keeps the
+   * commit-msg granularity rule satisfied; callers may add their own `-m` paragraphs. */
   commit(...args: string[]): Run {
-    return this.run(["git", "commit", "-q", "-m", "change", ...args]);
+    return this.run(["git", "commit", "-q", "-m", "change", "-m", "Revert-effect: none", ...args]);
   }
 
   /** `git commit` with the hook, after staging everything. */
   commitAll(env: Record<string, string> = {}, ...args: string[]): Run {
     this.ok("add", "-A");
-    return this.run(["git", "commit", "-q", "-m", "change", ...args], env);
+    return this.run(
+      ["git", "commit", "-q", "-m", "change", "-m", "Revert-effect: none", ...args],
+      env,
+    );
   }
 
   /** The checker with `args`. */
