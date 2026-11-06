@@ -142,9 +142,18 @@ test("another open tab follows a channel's rename, description and archive live"
     await editor.clickText("button", "Save");
     await editor.waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${renamed}"`);
 
-    // The watcher never reloads: its header and sidebar row follow.
+    // The watcher never reloads: its header and sidebar row follow. A description left the
+    // header for the settings title, so the panel is where it is checked.
     await watcher.waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${renamed}"`);
-    await watcher.waitFor(`${channelHeader}.textContent.includes("Followed live")`);
+    await watcher.run("click", '[aria-label="Channel Details and Settings"]');
+    await watcher.waitFor(panelOpen);
+    await watcher.waitFor(
+      `[...document.querySelectorAll('[role="dialog"]')].some((dialog) => dialog.textContent.includes("Followed live"))`,
+    );
+    await watcher.run("press", "Escape");
+    await watcher.waitFor(
+      `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') === null`,
+    );
     await watcher.waitFor(sidebarHas(renamed));
     expect(await watcher.run("eval", sidebarHas(channelName))).toContain("false");
     await watcher.run("screenshot", join(artifacts, "renamed.png"));
