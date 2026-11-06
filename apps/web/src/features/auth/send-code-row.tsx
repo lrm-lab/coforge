@@ -19,15 +19,22 @@ export function CodeInput({
   onChange,
   isInvalid,
   className,
+  size,
+  hideLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
   isInvalid: boolean;
   className?: string;
+  size?: "md" | "lg";
+  /** The field names itself by its placeholder alone, as on the sign-in page. */
+  hideLabel?: boolean;
 }) {
   return (
     <Input
-      label={m.login_code_label()}
+      label={hideLabel ? undefined : m.login_code_label()}
+      placeholder={hideLabel ? m.login_code_placeholder() : undefined}
+      size={size}
       name="code"
       inputMode="numeric"
       autoComplete="one-time-code"
@@ -42,9 +49,11 @@ export function CodeInput({
 /** A field with the button that sends a code beside it, counting the minute down before another. */
 export function SendCodeRow({
   codeSending: { sending, secondsLeft, onSend },
+  size = "md",
   children,
 }: {
   codeSending: ReturnType<typeof useCodeSending>;
+  size?: "md" | "lg";
   /** The field, which takes the row's width (`min-w-0 flex-1`). */
   children: ReactNode;
 }) {
@@ -54,7 +63,7 @@ export function SendCodeRow({
       <Button
         type="button"
         color="secondary"
-        size="md"
+        size={size}
         className="shrink-0"
         isLoading={sending}
         isDisabled={secondsLeft > 0}

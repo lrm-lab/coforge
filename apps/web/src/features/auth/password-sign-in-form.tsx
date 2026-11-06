@@ -37,15 +37,15 @@ export function PasswordSignInForm({
   returnTo,
   prompt,
   initialAccount = "",
-  onCreateAccount,
+  onEmailCode,
 }: {
   returnTo?: string | undefined;
   /** `"login"` when the page was asked to sign the person in afresh; the reset page keeps it. */
   prompt?: "login" | undefined;
   /** What the account field starts with. */
   initialAccount?: string | undefined;
-  /** Takes someone without an account to the code sign-in, which creates one. */
-  onCreateAccount: () => void;
+  /** Takes someone to the code sign-in for an email. */
+  onEmailCode: () => void;
 }) {
   const submit = useServerFn(signInWithAccountPassword);
   const [account, setAccount] = useState(initialAccount);
@@ -81,9 +81,10 @@ export function PasswordSignInForm({
 
   return (
     <form noValidate onSubmit={onSubmit}>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5">
         <Input
-          label={m.login_account_label()}
+          size="lg"
+          placeholder={m.login_account_placeholder()}
           name="account"
           autoComplete="username"
           autoFocus
@@ -92,7 +93,8 @@ export function PasswordSignInForm({
           isInvalid={problem === "invalid_credentials"}
         />
         <Input
-          label={m.login_password_label()}
+          size="lg"
+          placeholder={m.login_password_placeholder()}
           name="password"
           type="password"
           autoComplete="current-password"
@@ -100,13 +102,6 @@ export function PasswordSignInForm({
           onChange={edit(setPassword)}
           isInvalid={problem === "invalid_credentials"}
         />
-        <Link
-          to="/login/reset-password"
-          search={{ returnTo, prompt }}
-          className="-mt-3 self-start text-md font-semibold text-brand-secondary hover:text-brand-secondary_hover"
-        >
-          {m.login_forgot_password()}
-        </Link>
         {problem ? (
           <HintText isInvalid role="alert" className="text-md">
             {problemText[problem]()}
@@ -116,18 +111,25 @@ export function PasswordSignInForm({
       <Button
         type="submit"
         size="lg"
-        className="mt-6 w-full"
+        className="mt-8 w-full"
         isLoading={submitting}
         showTextWhileLoading
       >
         {m.login_submit()}
       </Button>
-      <p className="mt-6 text-center text-md text-tertiary">
-        {m.login_no_account()} {/* lg is the link size whose text matches the line's text-md. */}
-        <Button color="link-color" size="lg" noTextPadding onPress={onCreateAccount}>
-          {m.login_create_account()}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        {/* lg is the link size whose text matches the row's text-md. */}
+        <Link
+          to="/login/reset-password"
+          search={{ returnTo, prompt }}
+          className="text-md font-semibold text-brand-secondary hover:text-brand-secondary_hover"
+        >
+          {m.login_forgot_password()}
+        </Link>
+        <Button color="link-gray" size="lg" noTextPadding onPress={onEmailCode}>
+          {m.login_email_code_link()}
         </Button>
-      </p>
+      </div>
     </form>
   );
 }

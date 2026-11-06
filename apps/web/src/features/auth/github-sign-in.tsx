@@ -42,8 +42,7 @@ export function GitHubSignIn({
   error?: SignInError | undefined;
 }) {
   return (
-    <div className="flex flex-col gap-6">
-      <hr className="border-secondary" />
+    <div className="flex flex-col gap-4">
       {error ? (
         <HintText isInvalid role="alert" className="text-md">
           {errorText[error]()}

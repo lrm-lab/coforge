@@ -23,8 +23,12 @@ const problemText = { ...codeProblemText, failed: () => m.login_failed() };
 export function CodeSignInForm({
   returnTo,
   initialDestination = "",
+  kind = "phone",
 }: {
   returnTo?: string | undefined;
+  /** What the destination field asks for. Either is accepted whichever it asks for: the field is
+   * only worded for the one the page leads with. */
+  kind?: "phone" | "email";
   /** What the destination field starts with. */
   initialDestination?: string | undefined;
 }) {
@@ -68,9 +72,10 @@ export function CodeSignInForm({
 
   return (
     <form noValidate onSubmit={onSubmit}>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5">
         <Input
-          label={m.login_destination_label()}
+          size="lg"
+          placeholder={kind === "email" ? m.login_email_placeholder() : m.login_phone_placeholder()}
           name="destination"
           autoComplete="username"
           autoFocus
@@ -78,8 +83,10 @@ export function CodeSignInForm({
           onChange={edit(setDestination)}
           isInvalid={problem === "invalid_destination"}
         />
-        <SendCodeRow codeSending={codeSending}>
+        <SendCodeRow codeSending={codeSending} size="lg">
           <CodeInput
+            size="lg"
+            hideLabel
             className="min-w-0 flex-1"
             value={code}
             onChange={edit(setCode)}
@@ -95,7 +102,7 @@ export function CodeSignInForm({
       <Button
         type="submit"
         size="lg"
-        className="mt-6 w-full"
+        className="mt-8 w-full"
         isLoading={submitting}
         showTextWhileLoading
       >

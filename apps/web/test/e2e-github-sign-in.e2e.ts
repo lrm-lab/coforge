@@ -221,7 +221,7 @@ test("signing in with GitHub", async () => {
     // The page and its button read in Simplified Chinese too.
     await browser("cookies", "clear");
     await browser("open", `${origin}/zh-CN/login`);
-    await waitFor(`!!${button("使用 GitHub 登录")}`);
+    await waitFor(`!!${button("使用 GitHub 账号登录")}`);
   } finally {
     await browser("close").catch(() => undefined);
     await stack?.stop();

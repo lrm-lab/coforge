@@ -15,6 +15,7 @@ import {
   openBrowser,
   passwordFieldSelector,
   passwordTab,
+  signInTab,
   personPassword,
   refusedPassword,
   removeSignInAccounts,
@@ -115,16 +116,18 @@ test("setting a new password with a code sent by SMS or email", async () => {
     await browser("set", "headers", JSON.stringify({ "X-Forwarded-For": "198.51.100.40" }));
     await mkdir(artifacts, { recursive: true });
 
-    // The password tab has no sign-up of its own: "No account?" switches to the code tab, whose
-    // first sign-in creates the account.
+    // The password tab's "Sign in with an email code" opens the code tab, worded for an email;
+    // the code tab itself (the phone one) is where a first sign-in creates the account.
     await browser("open", `${origin}/login?returnTo=${encodeURIComponent(returnTo)}`);
     await waitFor(onSignInHere);
     await browser("eval", `${passwordTab}.click()`);
     await waitFor(hydrated(accountField));
     await browser("screenshot", join(artifacts, "0-password-tab.png"));
-    await browser("eval", `${button("Create one with a code")}.click()`);
+    await browser("eval", `${button("Sign in with an email code")}.click()`);
     await waitFor(`!!${destinationField}`);
-    expect(await evaluate<string>(`${codeTab}.getAttribute("aria-selected")`)).toBe("true");
+    expect(await evaluate<string>(`${signInTab("Email code")}.getAttribute("aria-selected")`)).toBe(
+      "true",
+    );
 
     // The password tab's "Forgot password?" opens the reset page, which asks for the destination
     // first: no code or password field yet.

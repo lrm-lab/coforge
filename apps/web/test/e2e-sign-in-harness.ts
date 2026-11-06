@@ -126,8 +126,8 @@ export const destinationField = `document.querySelector(${JSON.stringify(destina
 /** The sign-in page's two tabs, by their labels. */
 export const signInTab = (label: string) =>
   `[...document.querySelectorAll('main [role="tab"]')].find((tab) => tab.textContent.trim() === ${JSON.stringify(label)})`;
-export const codeTab = signInTab("Sign in with a code");
-export const passwordTab = signInTab("Sign in with a password");
+export const codeTab = signInTab("Phone");
+export const passwordTab = signInTab("Password");
 
 /** The condition "the sign-in page is up on `origin` and its tabs are ready". */
 export const onSignInPage = (origin: string, tab = codeTab) =>
@@ -374,7 +374,7 @@ export function openBrowser(session: string) {
     await setInput(nameFieldSelector, displayName);
     await browser("eval", `${button(label)}.click()`);
   }
-  /** Opens the password tab (`Sign in with a password`, or `密码登录`), which waits for its form,
+  /** Opens the password tab (`Password`, or `账号密码登录`), which waits for its form,
    * and fills it and presses its button (`Sign In`, or `登录`). */
   async function submitSignIn(
     account: string,
