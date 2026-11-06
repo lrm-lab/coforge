@@ -22,8 +22,9 @@ export function TaskProperty({
         "flex min-h-8 min-w-0 items-center gap-3",
         // Beside the pages, the label sits above its value, as Jira's Details.
         "[[data-layout=sidebar]_&]:flex-col [[data-layout=sidebar]_&]:items-start [[data-layout=sidebar]_&]:gap-1",
-        // On a phone each property is a chip in one row: its value alone, the label for readers.
-        "[[data-layout=chips]_&]:min-h-7 [[data-layout=chips]_&]:shrink-0 [[data-layout=chips]_&]:gap-0 [[data-layout=chips]_&]:rounded-full [[data-layout=chips]_&]:px-2.5 [[data-layout=chips]_&]:text-xs [[data-layout=chips]_&]:ring-1 [[data-layout=chips]_&]:ring-secondary [[data-layout=chips]_&]:ring-inset",
+        // On a phone each property is a chip in one row: its value alone, the label for readers. A
+        // chip is at most 16rem; a longer value (a Project's or a parent's name) truncates in it.
+        "[[data-layout=chips]_&]:min-h-7 [[data-layout=chips]_&]:max-w-64 [[data-layout=chips]_&]:shrink-0 [[data-layout=chips]_&]:gap-0 [[data-layout=chips]_&]:rounded-full [[data-layout=chips]_&]:px-2.5 [[data-layout=chips]_&]:text-xs [[data-layout=chips]_&]:ring-1 [[data-layout=chips]_&]:ring-secondary [[data-layout=chips]_&]:ring-inset",
         className,
       )}
     >
@@ -37,7 +38,7 @@ export function TaskProperty({
       >
         {label}
       </dt>
-      <dd className="flex min-w-0 flex-1 items-center [[data-layout=chips]_&]:flex-none [[data-layout=sidebar]_&]:w-full">
+      <dd className="flex min-w-0 flex-1 items-center [[data-layout=chips]_&]:flex-initial [[data-layout=sidebar]_&]:w-full">
         {children}
       </dd>
     </div>

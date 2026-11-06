@@ -43,7 +43,12 @@ export function TaskProjectMenu({
     <span className="text-tertiary">{m.tasks_project_none()}</span>
   );
   return (
-    <span onPointerEnter={() => setWanted(true)} onFocus={() => setWanted(true)}>
+    // A flex item, so a long name truncates inside the property rather than widening it (task #588).
+    <span
+      className="flex min-w-0"
+      onPointerEnter={() => setWanted(true)}
+      onFocus={() => setWanted(true)}
+    >
       <EntityPicker
         trigger={
           <TaskFieldTrigger
