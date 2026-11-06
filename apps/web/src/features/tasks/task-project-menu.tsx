@@ -20,11 +20,14 @@ export function TaskProjectMenu({
   task,
   disabled,
   placement,
+  lastUsed,
   onSelect,
 }: {
   task: Pick<TaskView, "project">;
   disabled: boolean;
   placement?: Placement;
+  /** In a form making a Task: the Project the viewer last filed one under, offered first. */
+  lastUsed?: TaskProjectRef | null;
   /** A Project, or null to file the Task under no Project. */
   onSelect: (project: TaskProjectRef | null) => void;
 }) {
@@ -37,6 +40,7 @@ export function TaskProjectMenu({
     staleTime: 60_000,
   });
   const current = task.project ?? null;
+  const rest = (projects.data ?? []).filter((project) => project.slug !== lastUsed?.slug);
   const value = current ? (
     <span className="flex min-w-0 items-center gap-1.5">
       <Face face={{ kind: "project", name: current.name }} />
@@ -66,14 +70,24 @@ export function TaskProjectMenu({
         searchPlaceholder={m.tasks_project_search()}
         selectedKey={current?.slug ?? NONE}
         options={[
+          ...(lastUsed
+            ? [
+                {
+                  ...projectOption(lastUsed),
+                  id: lastUsed.slug,
+                  note: m.tasks_project_last_used(),
+                },
+              ]
+            : []),
           { id: NONE, label: m.tasks_project_none() },
-          ...(projects.data ?? []).map((project) => ({
+          ...rest.map((project) => ({
             ...projectOption(project),
             id: project.slug,
           })),
         ]}
         onSelect={(key) => {
           if (key === NONE) return onSelect(null);
+          if (key === lastUsed?.slug) return onSelect(lastUsed);
           const project = projects.data?.find((each) => each.slug === key);
           if (project) onSelect({ id: project.id, name: project.name, slug: project.slug });
         }}

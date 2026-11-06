@@ -1,8 +1,6 @@
-import type { TaskPriority, TaskProjectRef, TaskView } from "@lrm/coforge-sdk/internal";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
+import type { TaskPriority, TaskProjectRef, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
 import { ChevronRight, XClose } from "@untitledui/icons";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Heading, Input as AriaInput, TextArea } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -16,11 +14,13 @@ import { AssigneeMenu } from "./task-assignee-menu";
 import { TaskLabelsField } from "./task-labels";
 import { TaskProjectMenu } from "./task-project-menu";
 import { TaskPriorityMenu } from "./task-priority-menu";
-import { TaskProperty } from "./task-property";
+import { cn } from "#src/lib/utils";
+import { BARE_CHIP, TaskProperty } from "./task-property";
 import { TaskStatusIcon } from "./task-status-icon";
+import { StatusPicker } from "./task-status-menu";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
-import { loadTaskCreateDefaults } from "./tasks.functions";
-import { useWorkspaceLabels } from "./workspace-labels";
+import { useLastTaskProject } from "./use-last-task-project";
+import { draftLabels, useWorkspaceLabels } from "./workspace-labels";
 
 /** What a new Task is made with: its title, and what else was set before it was created. */
 export type TaskDraft = {
@@ -39,11 +39,12 @@ export type TaskDraft = {
 
 /**
  * A new Task, laid out as the Task popup lays out a Task (Frank, 11-05: "按照我们目前 task 的设计"):
- * where it goes above (the conversation, or the Task it is a step of), its title beside its To do
- * status, its owner and labels as the popup's chips, then its description. One Task per dialog
- * (Frank, 11-05: "就一次建一个吧"). In a conversation its Project is a chip too, starting at the one
- * the viewer last filed a Task under there, which a create naming none would take (task #485); a
- * sub-task takes its parent's, so it offers none.
+ * where it goes above (the conversation, or the Task it is a step of), its title beside its status,
+ * its description, then its owner, Project, labels and priority as a row of chips, as Linear's new
+ * issue reads (Frank, 11-06: not a form to fill in). The board's "New task" is this dialog too. One Task per dialog
+ * (Frank, 11-05: "就一次建一个吧"). In a conversation its Project is a chip too, with the one the
+ * viewer last filed a Task under there first among its options (Frank, 11-06: "给出选项"); a sub-task
+ * takes its parent's, so it offers none.
  */
 export function CreateTaskDialog({
   open,
@@ -53,6 +54,7 @@ export function CreateTaskDialog({
   where,
   members,
   conversationId,
+  board,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -67,6 +69,16 @@ export function CreateTaskDialog({
   members?: readonly Mentionable[];
   /** The conversation the Task goes in, so the form offers its Project. Absent for a sub-task. */
   conversationId?: string;
+  /** On a board, whose Task can go anywhere and start in any column: the control that picks where
+   * it goes takes `where`'s place, its status is a chip, and a Project's board starts at that
+   * Project. */
+  board?: {
+    place: ReactNode;
+    status: TaskStatus;
+    statuses: readonly TaskStatus[];
+    onStatusChange: (status: TaskStatus) => void;
+    project?: TaskProjectRef;
+  };
 }) {
   const [draft, setDraft] = useState(emptyDraft);
   const [error, setError] = useState("");
@@ -80,26 +92,16 @@ export function CreateTaskDialog({
   const assignable = access.canAssignOthers
     ? members
     : members?.filter((member) => member.kind === "user" && member.id === access.userId);
-  const loadDefaults = useServerFn(loadTaskCreateDefaults);
-  const defaults = useQuery({
-    queryKey: ["task-create-defaults", conversationId],
-    queryFn: () => loadDefaults({ data: { conversationId: conversationId! } }),
-    enabled: open && conversationId !== undefined,
-    staleTime: 0,
-  });
-  // The Project starts at the last-used one, once it is read; a pick made since stays.
-  useEffect(() => {
-    if (defaults.data && draft.project === undefined)
-      setDraft((current) =>
-        current.project === undefined ? { ...current, project: defaults.data.project } : current,
-      );
-  }, [defaults.data, draft.project]);
+  const lastProject = useLastTaskProject(conversationId, open);
   // A Task its creator takes on is made started, as the server makes it.
-  const status = draft.assignee === `user:${access.userId}` ? "in_progress" : "todo";
+  const status =
+    board?.status ?? (draft.assignee === `user:${access.userId}` ? "in_progress" : "todo");
+  const project = draft.project !== undefined ? draft.project : (board?.project ?? null);
+  const offersProject = conversationId !== undefined || board !== undefined;
 
   const owner = members?.find((member) => `${member.kind}:${member.id}` === draft.assignee);
   const draftTask: Pick<TaskView, "owner" | "labels" | "project"> = {
-    project: draft.project ?? null,
+    project,
     owner: owner
       ? {
           memberId: "",
@@ -110,11 +112,7 @@ export function CreateTaskDialog({
           avatarUrl: owner.avatarUrl ?? null,
         }
       : null,
-    labels: draft.labels.flatMap((name) => {
-      // The Workspace's labels hold the archived ones too (task #557); a draft names a live one.
-      const label = workspaceLabels.find((each) => each.name === name && !each.archivedAt);
-      return label ? [{ id: label.id, name: label.name, color: label.color }] : [];
-    }),
+    labels: draftLabels(draft.labels, workspaceLabels),
   };
 
   function change(patch: Partial<typeof draft>) {
@@ -138,8 +136,7 @@ export function CreateTaskDialog({
       ...(draft.assignee && { assignee: draft.assignee }),
       ...(draft.labels.length > 0 && { labels: draft.labels }),
       ...(draft.priority !== "none" && { priority: draft.priority }),
-      ...(conversationId !== undefined &&
-        draft.project !== undefined && { project: draft.project?.slug ?? null }),
+      ...(offersProject && { project: project?.slug ?? null }),
     };
     const key = JSON.stringify(made);
     const request =
@@ -185,9 +182,9 @@ export function CreateTaskDialog({
               {/* Where it goes, as the popup's trail: the conversation, or the Task above it. */}
               <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-4 sm:pl-6">
                 <p className="flex min-w-0 flex-1 items-center gap-1 text-sm text-tertiary">
-                  {where && (
+                  {(board || where) && (
                     <>
-                      <span className="truncate">{where.label}</span>
+                      {board?.place ?? <span className="truncate">{where?.label}</span>}
                       <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
                     </>
                   )}
@@ -221,56 +218,6 @@ export function CreateTaskDialog({
                     className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-primary outline-hidden placeholder:font-medium placeholder:text-placeholder"
                   />
                 </Heading>
-                {/* The popup's chips: its owner, Project and labels, each its own control. */}
-                <div
-                  data-layout="chips"
-                  className="mt-3 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden"
-                >
-                  {assignable && (
-                    <TaskProperty label={m.tasks_overview_owner()}>
-                      <AssigneeMenu
-                        task={draftTask}
-                        members={assignable}
-                        disabled={saving}
-                        onSelect={(assignee) => change({ assignee: assignee ?? undefined })}
-                      />
-                    </TaskProperty>
-                  )}
-                  <TaskProperty label={m.tasks_priority()}>
-                    <TaskPriorityMenu
-                      priority={draft.priority}
-                      disabled={saving}
-                      onSelect={(priority) => change({ priority })}
-                    />
-                  </TaskProperty>
-                  {conversationId !== undefined && (
-                    <TaskProperty label={m.tasks_project()}>
-                      <TaskProjectMenu
-                        task={draftTask}
-                        disabled={saving || draft.project === undefined}
-                        onSelect={(project) => change({ project })}
-                      />
-                    </TaskProperty>
-                  )}
-                  {/* As in the popup: labels are chips of their own, not a name to truncate. */}
-                  <TaskProperty
-                    label={m.tasks_labels()}
-                    className="[[data-layout=chips]_&]:max-w-none"
-                  >
-                    <TaskLabelsField
-                      task={draftTask}
-                      disabled={saving}
-                      onChange={({ add = [], remove = [] }) =>
-                        change({
-                          labels: [
-                            ...draft.labels.filter((name) => !remove.includes(name)),
-                            ...add.filter((name) => !draft.labels.includes(name)),
-                          ],
-                        })
-                      }
-                    />
-                  </TaskProperty>
-                </div>
                 <TextArea
                   aria-label={m.tasks_new_description()}
                   placeholder={m.tasks_new_description()}
@@ -279,8 +226,72 @@ export function CreateTaskDialog({
                   maxLength={50_000}
                   disabled={saving}
                   rows={4}
-                  className="mt-4 block w-full resize-none bg-transparent px-4 pb-4 text-sm text-primary outline-hidden placeholder:text-placeholder sm:px-6"
+                  className="mt-3 block w-full resize-none bg-transparent px-4 pb-4 text-sm text-primary outline-hidden placeholder:text-placeholder sm:px-6"
                 />
+              </div>
+              {/* What else it starts with, under what it says, as the popup's chips on a phone. */}
+              <div
+                data-layout="chips"
+                className="flex shrink-0 flex-wrap gap-1.5 px-4 pb-3 sm:px-6"
+              >
+                {board && (
+                  <TaskProperty label={m.tasks_overview_status()}>
+                    <StatusPicker
+                      status={board.status}
+                      options={board.statuses}
+                      disabled={saving}
+                      onSelect={board.onStatusChange}
+                    />
+                  </TaskProperty>
+                )}
+                {assignable && (
+                  <TaskProperty label={m.tasks_overview_owner()}>
+                    <AssigneeMenu
+                      task={draftTask}
+                      members={assignable}
+                      disabled={saving}
+                      onSelect={(assignee) => change({ assignee: assignee ?? undefined })}
+                    />
+                  </TaskProperty>
+                )}
+                <TaskProperty label={m.tasks_priority()}>
+                  <TaskPriorityMenu
+                    priority={draft.priority}
+                    disabled={saving}
+                    onSelect={(priority) => change({ priority })}
+                  />
+                </TaskProperty>
+                {offersProject && (
+                  <TaskProperty label={m.tasks_project()}>
+                    <TaskProjectMenu
+                      task={draftTask}
+                      disabled={saving}
+                      lastUsed={lastProject}
+                      onSelect={(project) => change({ project })}
+                    />
+                  </TaskProperty>
+                )}
+                <TaskProperty
+                  label={m.tasks_labels()}
+                  // As in the popup: labels are chips of their own, not a name to truncate.
+                  className={cn(
+                    "[[data-layout=chips]_&]:max-w-none",
+                    draft.labels.length > 0 && BARE_CHIP,
+                  )}
+                >
+                  <TaskLabelsField
+                    task={draftTask}
+                    disabled={saving}
+                    onChange={({ add = [], remove = [] }) =>
+                      change({
+                        labels: [
+                          ...draft.labels.filter((name) => !remove.includes(name)),
+                          ...add.filter((name) => !draft.labels.includes(name)),
+                        ],
+                      })
+                    }
+                  />
+                </TaskProperty>
               </div>
               {error && (
                 <p role="alert" className="shrink-0 px-4 pb-2 text-sm text-error-primary sm:px-6">
@@ -309,6 +320,6 @@ const emptyDraft = () => ({
   assignee: undefined as string | undefined,
   labels: [] as string[],
   priority: "none" as TaskPriority,
-  /** Undefined until the conversation's last-used Project is read. */
+  /** Undefined until the viewer picks: a Project's board then starts at that Project. */
   project: undefined as TaskProjectRef | null | undefined,
 });

@@ -12,7 +12,7 @@ import { AssigneeMenu } from "./task-assignee-menu";
 import { getTaskMoveCommand } from "./task-move";
 import { TaskPickerDialog } from "./task-picker";
 import { SubtaskPickerDialog } from "./task-subtask-picker";
-import { TaskProperty } from "./task-property";
+import { BARE_CHIP, TaskProperty } from "./task-property";
 import { openBlockers, relationRefusal, type VisibleTaskName } from "./task-relation-edits";
 import { TaskBlockedByValue, TaskBlockingValue, TaskParentValue } from "./task-relation-lines";
 import { TaskPriorityMenu } from "./task-priority-menu";
@@ -200,7 +200,10 @@ export function TaskSection({
             and the row scrolls sideways. */}
         <TaskProperty
           label={m.tasks_labels()}
-          className="[[data-layout=chips]_&]:order-2 [[data-layout=chips]_&]:max-w-none"
+          className={cn(
+            "[[data-layout=chips]_&]:order-2 [[data-layout=chips]_&]:max-w-none",
+            task.labels?.length && BARE_CHIP,
+          )}
         >
           <TaskLabelsField
             placement="left top"

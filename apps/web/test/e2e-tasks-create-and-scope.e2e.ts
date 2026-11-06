@@ -9,9 +9,9 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 /**
  * The Tasks page and a channel's Tasks tab in a real browser. The Tasks page lists channel Tasks
  * and none from a direct message (not even the viewer's own), and offers no way to create a Task.
- * A channel's Tasks tab creates them: the dialog refuses an empty title, starts its Project at the
- * one the viewer last filed a Task under there (task #485), and creates the Task in that channel
- * under it.
+ * A channel's Tasks tab creates them: the dialog refuses an empty title, offers first among its
+ * Projects the one the viewer last filed a Task under there (task #485), and creates the Task in
+ * that channel under the one picked.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user a member of
  * its Workspace (seed-dev). Each run seeds a fresh channel, Agent and direct message. Screenshots
@@ -167,7 +167,12 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
         `document.querySelector('[role="dialog"]').textContent.includes("#${channel.channelName}")`,
       ),
     ).toContain("true");
-    // Its Project chip starts at the last-used one.
+    // Its Project starts empty; the last-used one heads the picker's options (Frank, 11-06).
+    await browser("click", '[role="dialog"] button[aria-label="Change project: No project"]');
+    const lastUsed = `[...document.querySelectorAll('[role^="menuitem"], [role="option"]')][0]`;
+    await waitFor(`${lastUsed}?.textContent.includes(${JSON.stringify(project.name)})`);
+    expect(await browser("eval", `${lastUsed}.textContent`)).toContain("Last used");
+    await browser("eval", `${lastUsed}.click()`);
     await waitFor(
       `document.querySelector('[role="dialog"] [data-layout="chips"]')?.textContent.includes(${JSON.stringify(project.name)})`,
     );

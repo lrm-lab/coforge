@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 
 import { cn } from "#src/lib/utils";
 
+/** For a chip whose value is chips of its own (labels): no pill around them. */
+export const BARE_CHIP =
+  "[[data-layout=chips]_&]:max-w-none [[data-layout=chips]_&]:px-0 [[data-layout=chips]_&]:ring-0";
+
 /** One line of the Task popup's property grid: a short label, then its value (or the control that
  * edits it). */
 export function TaskProperty({

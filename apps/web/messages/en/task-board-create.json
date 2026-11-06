@@ -3,17 +3,15 @@
   "task_board_create_new_task": "New task",
   "task_board_create_task": "Task",
   "task_board_create_task_placeholder": "Write the launch checklist",
-  "task_board_create_channel": "Channel",
-  "task_board_create_column": "Column",
-  "task_board_create_labels": "Labels",
-  "task_board_create_priority": "Priority",
-  "task_board_create_owner": "Who has it",
-  "task_board_create_lands": "Lands in {channel} · {status}",
   "task_board_create_submit": "Create task",
   "task_board_create_cancel": "Cancel",
   "task_board_add_here": "Add a task here",
   "task_board_sort_priority": "Sort by priority",
   "task_board_add_to": "Add a task to {status}",
   "task_board_steps": "{finished}/{total} done",
-  "task_board_waiting": "Waiting on #{number} {title}"
+  "task_board_waiting": "Waiting on #{number} {title}",
+  "task_board_create_assign_to": "Assign to",
+  "task_board_create_assign_search": "Search channels and people",
+  "task_board_create_assign_pick": "Choose",
+  "tasks_project_last_used": "Last used"
 }

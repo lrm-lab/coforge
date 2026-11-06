@@ -13,6 +13,15 @@ type WorkspaceLabels = Awaited<ReturnType<typeof loadWorkspaceLabels>>;
 /** The query key of the Workspace's labels, read by every picker and refreshed by their events. */
 export const workspaceLabelsKey = (workspaceId: string) => ["workspace-labels", workspaceId];
 
+/** The labels a form holds by name; the Workspace's hold the archived ones too (task #557), and a
+ * draft names a live one. */
+export function draftLabels(names: readonly string[], labels: WorkspaceLabels["labels"]) {
+  return names.flatMap((name) => {
+    const label = labels.find((each) => each.name === name && !each.archivedAt);
+    return label ? [{ id: label.id, name: label.name, color: label.color }] : [];
+  });
+}
+
 /**
  * The Workspace's labels for a picker, read once and kept fresh by `label.changed.v1` (and
  * `label.group.changed.v1`, which can rename what a label is listed under), and whether the viewer

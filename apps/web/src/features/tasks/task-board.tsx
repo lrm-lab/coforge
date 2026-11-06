@@ -30,7 +30,7 @@ import type { FinishedColumn, FinishedTasks } from "./use-finished-tasks";
 export type BoardTask = TaskView &
   FilterableTask & {
     /** The conversation it lives in (`#channel`), on the Workspace Tasks page. */
-    source?: { label: string };
+    source?: { label: string; channelName?: string | null };
   };
 
 /** What only a conversation's Tasks tab has. */
@@ -250,8 +250,7 @@ export function TaskBoard<T extends BoardTask>({
           open={creating !== null}
           status={creating ?? "todo"}
           places={newTaskChoice.places}
-          people={newTaskChoice.people}
-          labels={newTaskChoice.labels}
+          boardProject={newTaskChoice.boardProject}
           onOpenChange={(open) => !open && setCreating(null)}
           onCreated={newTask.onCreated}
         />

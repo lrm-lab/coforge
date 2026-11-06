@@ -80,6 +80,22 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       members: { create: [{ userId: DEV_BROWSER_USER.id }, { userId: people[0]!.id }] },
     },
   });
+  // Has no Task yet, so only a list of everyone offers them on the board (task #621).
+  const assignAgent = await db.agent.create({
+    data: {
+      workspaceId,
+      name: `e2e-board-agent-${process.pid}`,
+      displayName: `Board Agent ${process.pid}`,
+      ownerId: DEV_BROWSER_USER.id,
+      runtimeConfig: {
+        runtime: "pi",
+        provider: { kind: "default" },
+        model: "",
+        modelProvider: "",
+        reasoning: "",
+      },
+    },
+  });
   // A Task's comments are its own conversation's messages, which Tasks v2 makes.
   const experiments = new PrismaExperimentsRepository(db);
   const before = (await experiments.read(workspaceId)).taskConversations;
@@ -310,8 +326,44 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "New task")?.click()`,
     );
     await browser("wait", "--fn", `document.querySelector('[role="dialog"] input') !== null`);
+    // On a Project's board a new Task starts under that Project (task #621).
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"] button[aria-label="Change project: ${project.name}"]') !== null`,
+    );
     await browser("fill", '[role="dialog"] input', "Write the launch checklist");
     await shot(`${prefix}-dialog-1440`);
+    // Assign to reaches everyone, not only who is on the board's Tasks (task #621).
+    await browser("click", '[role="dialog"] button[aria-label^="Assign to"]');
+    const assignRow = `[...document.querySelectorAll('[role^="menuitem"], [role="option"]')].find((row) => row.textContent.includes(${JSON.stringify(assignAgent.displayName)}))`;
+    await browser("wait", "--fn", `${assignRow} !== undefined`);
+    await shot(`${prefix}-assign-to-1440`);
+    await browser("eval", `${assignRow}.click()`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"] button[aria-label="Assign to: @${assignAgent.displayName}"]') !== null`,
+    );
+    await browser(
+      "eval",
+      `[...document.querySelectorAll('[role="dialog"] button[type="submit"]')][0].click()`,
+    );
+    await browser("wait", "--fn", `document.querySelector('[role="dialog"]') === null`);
+    const assigned = await db.task.findFirstOrThrow({
+      where: { title: "Write the launch checklist", projectId: project.id },
+      select: {
+        conversation: { select: { directKey: true } },
+        owner: { select: { agentId: true } },
+      },
+    });
+    expect(assigned.conversation.directKey).toContain(assignAgent.id);
+    expect(assigned.owner?.agentId).toBe(assignAgent.id);
+    await browser(
+      "eval",
+      `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "New task")?.click()`,
+    );
+    await browser("wait", "--fn", `document.querySelector('[role="dialog"] input') !== null`);
     await browser("press", "Escape");
     await browser("tab", "t1");
     await browser("open", `${origin}/en/w/${workspace.slug}/projects?layout=board`);
@@ -327,6 +379,15 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
     await browser("wait", "--fn", `document.querySelector('[role="dialog"] input') !== null`);
     await browser("fill", '[role="dialog"] input', "Write the launch checklist");
     await shot(`${prefix}-dialog-390`);
+    // Many labels: the popup's picker, whose chips wrap in the form (Frank, 11-06).
+    await browser("click", '[role="dialog"] button[aria-label="Edit labels"]');
+    const labelRows = `[...document.querySelectorAll('[role^="menuitem"]')]`;
+    await browser("wait", "--fn", `${labelRows}.length > 0`);
+    const labelCount = await evaluate<number>(`${labelRows}.length`);
+    for (let index = 0; index < Math.min(labelCount, 5); index += 1)
+      await browser("eval", `${labelRows}[${index}].click()`);
+    await browser("press", "Escape");
+    await shot(`${prefix}-labels-390`);
 
     // A Task in the viewer's own DM, filed under the Project, is on All tasks for them (only).
     await browser("press", "Escape");
@@ -371,6 +432,10 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
     await db.task.deleteMany({ where: { projectId: project.id } }).catch(() => {});
     await db.conversation.deleteMany({ where: { id: { in: [site.id, ops.id] } } }).catch(() => {});
     await db.task.deleteMany({ where: { conversationId: dm.id } }).catch(() => {});
+    await db.conversation
+      .deleteMany({ where: { directKey: { contains: assignAgent.id } } })
+      .catch(() => {});
+    await db.agent.deleteMany({ where: { id: assignAgent.id } }).catch(() => {});
     await db.conversation.delete({ where: { id: dm.id } }).catch(() => {});
     await db.project.deleteMany({ where: { id: { in: [project.id, empty.id] } } }).catch(() => {});
     await db.workspaceMembership

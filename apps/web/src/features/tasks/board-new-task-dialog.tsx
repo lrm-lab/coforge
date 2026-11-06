@@ -1,45 +1,38 @@
-import type { TaskPriority, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskProjectRef, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState, type FormEvent } from "react";
-import { Heading } from "react-aria-components";
+import { useEffect, useState } from "react";
 
-import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
-import { Input } from "#src/components/base/input/input";
-import { Select } from "#src/components/base/select/select";
-import {
-  DialogAction,
-  DialogCancel,
-  useDialogControlSize,
-} from "#src/components/ui/dialog-actions";
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { LabelDot } from "./task-label-chip";
-import { TaskPriorityIcon } from "./task-priority-icon";
-import { statusLabel } from "./task-status-icon";
+import { joinPublicChannel } from "#src/features/conversations/channels.functions";
+import { openDirectConversation } from "#src/features/conversations/conversations.functions";
+import type { ForwardTarget } from "#src/features/conversations/message-forward";
+import { BoardAssignTo, useAssignTargets } from "./board-assign-to";
+import { CreateTaskDialog } from "./create-task-dialog";
 import { executeTask } from "./tasks.functions";
-import { priorityLabel } from "./task-history-more";
-import { m } from "#src/paraglide/messages";
 
-/** A channel a new Task can go in: its conversation and, on a Project's board, the Project the
- * Task is filed under. */
-export type NewTaskPlace = { conversationId: string; label: string; projectSlug?: string };
+/** A channel a new Task can go in. */
+export type NewTaskPlace = { conversationId: string; label: string };
 
 /** The columns a new Task can start in; Closed is for work that was dropped. */
 const STATUSES = ["todo", "in_progress", "in_review", "done"] as const satisfies TaskStatus[];
 export const canCreateIn = (status: TaskStatus) =>
   (STATUSES as readonly TaskStatus[]).includes(status);
-const PRIORITIES = ["low", "medium", "high", "urgent"] as const satisfies TaskPriority[];
+
+/** Who has a Task assigned to `target`; a channel's has no owner yet. */
+function assignee(target: ForwardTarget) {
+  if (target.kind === "person") return `user:${target.userId}`;
+  return target.kind === "agent" ? `agent:${target.agentId}` : undefined;
+}
 
 /**
- * "New task" on the board (task #596): its name, which channel it lands in and in which column,
- * who has it, its labels and priority; the footer says where it lands. A Task lives in a channel,
- * so the channel is asked for, starting at the one the board's Tasks were last filed in.
+ * "New task" on the board (task #596): the create dialog, with the control that picks where it goes
+ * (Frank, 11-06: a channel, or a person or an Agent, whose Task goes in the viewer's DM with them)
+ * and its column. It starts at the channel the board's Tasks were last filed in.
  */
 export function BoardNewTaskDialog({
   open,
   status,
   places,
-  people,
-  labels,
+  boardProject,
   onOpenChange,
   onCreated,
 }: {
@@ -47,238 +40,138 @@ export function BoardNewTaskDialog({
   /** The column it was opened from. */
   status: TaskStatus;
   places: readonly NewTaskPlace[];
-  people: readonly NonNullable<TaskView["owner"]>[];
-  labels: readonly { id: string; name: string; color: string }[];
+  /** The Project of the board it was opened on. */
+  boardProject?: TaskProjectRef;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
 }) {
-  const controlSize = useDialogControlSize();
   const execute = useServerFn(executeTask);
-  const [title, setTitle] = useState("");
-  const [place, setPlace] = useState(places[0]?.conversationId);
+  const join = useServerFn(joinPublicChannel);
+  const openDirect = useServerFn(openDirectConversation);
+  const reach = useAssignTargets();
+  /** Whom the viewer picked, until which it is the channel the board last filed in. */
+  const [picked, setPicked] = useState<ForwardTarget>();
   const [column, setColumn] = useState<TaskStatus>(status);
-  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
-  const [priority, setPriority] = useState<TaskPriority>("medium");
-  const [owner, setOwner] = useState<string>("none");
-  const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (open) setColumn(status);
   }, [open, status]);
-  useEffect(() => {
-    if (!place && places[0]) setPlace(places[0].conversationId);
-  }, [place, places]);
-  const where = places.find((each) => each.conversationId === place);
+  const assignTo = picked ?? defaultTarget(places, reach.targets);
+  // A person or an Agent with no DM yet has no conversation to read a last-used Project from.
+  const conversationId = assignTo?.conversationId ?? undefined;
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!title.trim() || !where) return;
-    setSaving(true);
-    try {
-      const owned = people.find((person) => `${person.kind}:${person.id}` === owner);
-      await execute({
-        data: {
-          operation: "create",
-          idempotencyKey: crypto.randomUUID(),
-          conversationId: where.conversationId,
-          title: title.trim(),
-          ...(where.projectSlug && { project: where.projectSlug }),
-          priority,
-          ...(picked.size > 0 && {
-            labels: labels.filter((each) => picked.has(each.id)).map((each) => each.name),
-          }),
-          ...(owned && { assignee: `${owned.kind}:${owned.id}` }),
-          ...(column !== "todo" && { status: column }),
-        },
-      });
-      setTitle("");
-      onCreated();
-      onOpenChange(false);
-    } finally {
-      setSaving(false);
+  /** Where a Task for `target` goes: a channel, joined if need be, or the DM with them, opened on
+   * first use. */
+  async function conversationOf(target: ForwardTarget) {
+    if (target.kind === "channel") {
+      if (!target.joined) await join({ data: { channelId: target.conversationId } });
+      return target.conversationId;
     }
+    if (target.conversationId) return target.conversationId;
+    const { conversationId: opened } = await openDirect({
+      data: target.kind === "person" ? { userId: target.userId } : { agentId: target.agentId },
+    });
+    return opened;
   }
 
   return (
-    <ModalOverlay isOpen={open} onOpenChange={onOpenChange} isDismissable>
-      <Modal className="w-full sm:w-[min(32rem,calc(100vw-2rem))]">
-        <Dialog aria-label={m.task_board_create_new_task()} className="flex flex-col">
-          {({ close }) => (
-            <form onSubmit={(event) => void submit(event)} className="flex flex-col">
-              <Heading
-                slot="title"
-                level={2}
-                className="border-b border-secondary px-6 py-4 text-md font-semibold text-primary"
-              >
-                {m.task_board_create_new_task()}
-              </Heading>
-              <div className="flex flex-col gap-5 px-6 py-5">
-                <Input
-                  size={controlSize}
-                  label={m.task_board_create_task()}
-                  placeholder={m.task_board_create_task_placeholder()}
-                  value={title}
-                  onChange={setTitle}
-                  autoFocus
-                  maxLength={500}
-                  hideRequiredIndicator
-                />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Select
-                    size={controlSize}
-                    label={m.task_board_create_channel()}
-                    selectedKey={place ?? null}
-                    onSelectionChange={(key) => key && setPlace(String(key))}
-                  >
-                    {places.map((each) => (
-                      <Select.Item
-                        key={each.conversationId}
-                        id={each.conversationId}
-                        label={each.label}
-                      />
-                    ))}
-                  </Select>
-                  <Select
-                    size={controlSize}
-                    label={m.task_board_create_column()}
-                    selectedKey={column}
-                    onSelectionChange={(key) => key && setColumn(key as TaskStatus)}
-                  >
-                    {STATUSES.map((each) => (
-                      <Select.Item key={each} id={each} label={statusLabel(each)} />
-                    ))}
-                  </Select>
-                  <Select
-                    size={controlSize}
-                    label={m.task_board_create_owner()}
-                    selectedKey={owner}
-                    onSelectionChange={(key) => key && setOwner(String(key))}
-                  >
-                    {[
-                      <Select.Item key="none" id="none" label={m.tasks_unassigned()} />,
-                      ...people.map((person) => (
-                        <Select.Item
-                          key={`${person.kind}:${person.id}`}
-                          id={`${person.kind}:${person.id}`}
-                          label={person.name}
-                          avatarUrl={person.avatarUrl ?? undefined}
-                        />
-                      )),
-                    ]}
-                  </Select>
-                </div>
-                {labels.length > 0 && (
-                  <fieldset className="flex flex-col gap-1.5">
-                    <legend className="mb-1.5 text-sm font-medium text-secondary">
-                      {m.task_board_create_labels()}
-                    </legend>
-                    <ButtonGroup
-                      size="sm"
-                      selectionMode="multiple"
-                      selectedKeys={picked}
-                      onSelectionChange={(keys) => setPicked(new Set([...keys].map(String)))}
-                      aria-label={m.task_board_create_labels()}
-                    >
-                      {labels.map((each) => (
-                        <ButtonGroupItem
-                          key={each.id}
-                          id={each.id}
-                          iconLeading={<LabelDot color={each.color} />}
-                        >
-                          {each.name}
-                        </ButtonGroupItem>
-                      ))}
-                    </ButtonGroup>
-                  </fieldset>
-                )}
-                <fieldset className="flex flex-col gap-1.5">
-                  <legend className="mb-1.5 text-sm font-medium text-secondary">
-                    {m.task_board_create_priority()}
-                  </legend>
-                  <ButtonGroup
-                    size="sm"
-                    selectedKeys={[priority]}
-                    disallowEmptySelection
-                    onSelectionChange={(keys) => {
-                      const [key] = [...keys];
-                      if (key) setPriority(key as TaskPriority);
-                    }}
-                    aria-label={m.task_board_create_priority()}
-                  >
-                    {PRIORITIES.map((each) => (
-                      <ButtonGroupItem
-                        key={each}
-                        id={each}
-                        iconLeading={
-                          <TaskPriorityIcon
-                            priority={each}
-                            className="size-3.5 text-fg-quaternary"
-                          />
-                        }
-                      >
-                        {priorityLabel(each)}
-                      </ButtonGroupItem>
-                    ))}
-                  </ButtonGroup>
-                </fieldset>
-              </div>
-              <div className="flex items-center gap-3 border-t border-secondary px-6 py-4">
-                <p className="min-w-0 flex-1 truncate text-sm text-tertiary">
-                  {where &&
-                    m.task_board_create_lands({
-                      channel: where.label,
-                      status: statusLabel(column),
-                    })}
-                </p>
-                <DialogCancel type="button" isDisabled={saving} onPress={close}>
-                  {m.task_board_create_cancel()}
-                </DialogCancel>
-                <DialogAction type="submit" isLoading={saving} isDisabled={!title.trim() || !where}>
-                  {m.task_board_create_submit()}
-                </DialogAction>
-              </div>
-            </form>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+    <CreateTaskDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      conversationId={conversationId}
+      board={{
+        place: (
+          <BoardAssignTo
+            value={assignTo}
+            targets={reach.targets}
+            onSearch={reach.setQuery}
+            disabled={false}
+            onChange={setPicked}
+          />
+        ),
+        status: column,
+        statuses: STATUSES,
+        onStatusChange: setColumn,
+        project: boardProject,
+      }}
+      onCreate={async (draft, idempotencyKey) => {
+        if (!assignTo) throw new Error("no place");
+        await execute({
+          data: {
+            operation: "create",
+            idempotencyKey,
+            conversationId: await conversationOf(assignTo),
+            title: draft.title,
+            ...(draft.description && { description: draft.description }),
+            project: draft.project ?? null,
+            ...(draft.priority && { priority: draft.priority }),
+            ...(draft.labels && { labels: draft.labels }),
+            ...(assignee(assignTo) && { assignee: assignee(assignTo) }),
+            ...(column !== "todo" && { status: column }),
+          },
+        });
+        setPicked(undefined);
+        onCreated();
+      }}
+    />
   );
+}
+
+/** The board's newest channel the viewer can still post in; an archived one cannot (task #621). */
+function defaultTarget(
+  places: readonly NewTaskPlace[],
+  targets: readonly ForwardTarget[],
+): ForwardTarget | undefined {
+  for (const place of places) {
+    const known = targets.find(
+      (target) => target.kind === "channel" && target.conversationId === place.conversationId,
+    );
+    if (known) {
+      if (known.canSend) return known;
+      continue;
+    }
+    return {
+      kind: "channel",
+      conversationId: place.conversationId,
+      name: place.label.replace(/^#/, ""),
+      visibility: "public",
+      joined: true,
+      canSend: true,
+    };
+  }
+  return undefined;
 }
 
 /**
  * What the dialog offers on a board, read from the Tasks the board shows: their channels, the one
  * most recently filed in first (a direct conversation is no channel to file in), the people who
- * hold them and their labels. On a Project's board `projectSlug` files the new Task under that
- * Project; on All tasks it goes under none.
+ * hold them and, on a Project's board, that Project.
  */
 export function newTaskChoices(
   tasks: readonly {
     conversationId: string;
     createdAt: string;
-    source?: { label: string };
+    source?: { label: string; channelName?: string | null };
     owner?: TaskView["owner"];
-    labels?: TaskView["labels"];
+    project?: TaskView["project"];
   }[],
   projectSlug?: string,
 ) {
   const byConversation = new Map<string, NewTaskPlace & { at: string }>();
-  const byOwner = new Map<string, NonNullable<TaskView["owner"]>>();
-  const byLabel = new Map<string, { id: string; name: string; color: string }>();
   for (const task of tasks) {
-    if (task.owner) byOwner.set(`${task.owner.kind}:${task.owner.id}`, task.owner);
-    for (const label of task.labels ?? []) byLabel.set(label.id, label);
-    if (!task.source || task.source.label.startsWith("@")) continue;
+    // A direct message has no channelName; its Tasks do not make it a place.
+    if (!task.source?.channelName) continue;
     const known = byConversation.get(task.conversationId);
     if (!known || known.at < task.createdAt)
       byConversation.set(task.conversationId, {
         conversationId: task.conversationId,
         label: task.source.label,
-        projectSlug,
         at: task.createdAt,
       });
   }
   return {
     places: [...byConversation.values()].sort((a, b) => b.at.localeCompare(a.at)),
-    people: [...byOwner.values()],
-    labels: [...byLabel.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    boardProject: projectSlug
+      ? (tasks.find((task) => task.project?.slug === projectSlug)?.project ?? undefined)
+      : undefined,
   };
 }

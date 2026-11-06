@@ -3,17 +3,15 @@
   "task_board_create_new_task": "新建任务",
   "task_board_create_task": "任务",
   "task_board_create_task_placeholder": "写上线检查清单",
-  "task_board_create_channel": "频道",
-  "task_board_create_column": "列",
-  "task_board_create_labels": "标签",
-  "task_board_create_priority": "优先级",
-  "task_board_create_owner": "负责人",
-  "task_board_create_lands": "放进 {channel} · {status}",
   "task_board_create_submit": "创建任务",
   "task_board_create_cancel": "取消",
   "task_board_add_here": "在这一列加任务",
   "task_board_sort_priority": "按优先级排序",
   "task_board_add_to": "在{status}里加任务",
   "task_board_steps": "完成 {finished}/{total}",
-  "task_board_waiting": "等待 #{number} {title}"
+  "task_board_waiting": "等待 #{number} {title}",
+  "task_board_create_assign_to": "分配给",
+  "task_board_create_assign_search": "搜索群和成员",
+  "task_board_create_assign_pick": "选择",
+  "tasks_project_last_used": "上次使用"
 }

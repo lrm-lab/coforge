@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { useFilter } from "react-aria";
 import {
   Autocomplete as AriaAutocomplete,
@@ -58,6 +58,9 @@ export type PickerOption = {
   face?: PickerFace;
   /** Faint at the end of the row: an Agent's `@handle`. */
   addon?: string;
+  /** Faint after the label whatever the other rows are called: why the row is where it is (the
+   * Project a new Task was last filed under, listed first). */
+  note?: string;
   /** The row's accessible name, when its face carries meaning the label lacks (a channel's `#`). */
   ariaLabel?: string;
   /** How many there are of it (a filter's Tasks), after the addon. */
@@ -118,6 +121,9 @@ type MenuBase = {
   options: readonly PickerOption[];
   /** What the search field asks for. */
   searchPlaceholder?: string;
+  /** The caller searches, for a list too long to send whole: the field is always there, and the
+   * rows are shown as given. Stable; told "" when the menu closes. */
+  onSearchChange?: (term: string) => void;
 };
 
 /** Every picker's search field and list, so the label picker and the member picker read alike. */
@@ -137,6 +143,7 @@ export function PickerMenu({
   searchPlaceholder = m.picker_search(),
   autoFocus = true,
   onClose,
+  onSearchChange,
   ...choice
 }: MenuBase &
   (SingleChoice | MultipleChoice) & {
@@ -149,6 +156,7 @@ export function PickerMenu({
   }) {
   const { contains } = useFilter({ sensitivity: "base" });
   const [search, setSearch] = useState("");
+  useEffect(() => () => onSearchChange?.(""), [onSearchChange]);
   const multiple = "selectedKeys" in choice;
   // In a list with faces, a row without one ("None", "Unassigned") gets an empty ring in its place,
   // so every name starts at one edge.
@@ -197,6 +205,7 @@ export function PickerMenu({
           {option.addon && (named.get(option.label) ?? 0) > 1 && (
             <span className="shrink-0 truncate text-quaternary">{option.addon}</span>
           )}
+          {option.note && <span className="shrink-0 text-quaternary">{option.note}</span>}
           {option.count !== undefined && (
             <span className="ml-auto shrink-0 text-xs text-quaternary tabular-nums">
               {option.count}
@@ -206,9 +215,17 @@ export function PickerMenu({
       ))}
     </AriaMenu>
   );
-  if (!onClose && options.length < SEARCH_FROM) return list;
+  if (!onClose && !onSearchChange && options.length < SEARCH_FROM) return list;
+  const typed = (term: string) => {
+    setSearch(term);
+    onSearchChange?.(term);
+  };
   return (
-    <AriaAutocomplete filter={contains} inputValue={search} onInputChange={setSearch}>
+    <AriaAutocomplete
+      {...(!onSearchChange && { filter: contains })}
+      inputValue={search}
+      onInputChange={typed}
+    >
       {/* Esc with nothing typed closes the picker (with text, it clears the text first): the
           search field hands Esc to the list, which keeps it. */}
       <div
@@ -216,12 +233,7 @@ export function PickerMenu({
           if (event.key === "Escape" && !search) onClose?.();
         }}
       >
-        <AriaSearchField
-          aria-label={label}
-          value={search}
-          onChange={setSearch}
-          autoFocus={autoFocus}
-        >
+        <AriaSearchField aria-label={label} value={search} onChange={typed} autoFocus={autoFocus}>
           <AriaInput placeholder={searchPlaceholder} className={PICKER_SEARCH_INPUT} />
         </AriaSearchField>
       </div>
