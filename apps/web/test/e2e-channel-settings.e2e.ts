@@ -177,6 +177,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     // Info: renaming changes the header title.
     await browser("fill", '[role="dialog"] input[type="text"]', renamed);
     await clickText("button", "Save");
+    await waitFor(`${byText("button", "Changes saved")} !== undefined`);
     await waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${renamed}"`);
     expect(
       (await db.conversation.findUniqueOrThrow({ where: { id: channelId } })).channelName,
