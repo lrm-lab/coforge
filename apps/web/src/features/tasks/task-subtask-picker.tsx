@@ -7,8 +7,9 @@ import {
   Heading,
   SearchField as AriaSearchField,
 } from "react-aria-components";
-import { SearchLg } from "@untitledui/icons";
+import { Plus, SearchLg } from "@untitledui/icons";
 
+import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
@@ -54,10 +55,12 @@ type Props = {
   /** While an earlier change is still saving, nothing can be picked. */
   disabled?: boolean;
   onPick: (task: VisibleTaskName) => void;
+  /** Make a new sub-task instead of choosing one. */
+  onNew: () => void;
 };
 
 /**
- * "Add existing sub-task" (task #505, after Linear's "Add existing sub-issue"): a search over the
+ * "Add sub-task": a new one from the footer, or an existing one (task #505) from a search over the
  * conversation's unfinished Tasks, by number or title. The Task itself and its sub-tasks are left
  * out; the Tasks above it, and those the viewer may not move, are listed greyed with the reason. A
  * Task that already has a parent is moved only after the dialog says from where.
@@ -69,6 +72,7 @@ export function SubtaskPickerDialog({
   onOpenChange,
   disabled,
   onPick,
+  onNew,
 }: Props) {
   return (
     <ModalOverlay isOpen={open} onOpenChange={onOpenChange} isDismissable>
@@ -80,6 +84,7 @@ export function SubtaskPickerDialog({
               currentMemberId={currentMemberId}
               disabled={disabled}
               onCancel={() => onOpenChange(false)}
+              onNew={onNew}
               onPick={(picked) => {
                 onOpenChange(false);
                 onPick(picked);
@@ -99,6 +104,7 @@ function SubtaskPicker({
   disabled,
   onCancel,
   onPick,
+  onNew,
 }: Omit<Props, "open" | "onOpenChange"> & { onCancel: () => void }) {
   const { contains } = useFilter({ sensitivity: "base" });
   const [search, setSearch] = useState("");
@@ -133,7 +139,7 @@ function SubtaskPicker({
   return (
     <>
       <Heading slot="title" className="px-4 pt-4 pb-1 text-md font-semibold text-primary">
-        {m.tasks_pick_subtask()}
+        {m.tasks_add_subtask()}
       </Heading>
       <AriaAutocomplete filter={contains} inputValue={search} onInputChange={setSearch}>
         <div className="border-b border-secondary py-1">
@@ -153,7 +159,7 @@ function SubtaskPicker({
           </AriaSearchField>
         </div>
         <Dropdown.Menu
-          aria-label={m.tasks_pick_subtask()}
+          aria-label={m.tasks_add_subtask()}
           className="max-h-72"
           // Only a change still saving disables the rows; a refused one stays reachable and says
           // why (TaskPickerItem), and choosing it does nothing.
@@ -191,7 +197,10 @@ function SubtaskPicker({
           })}
         </Dropdown.Menu>
       </AriaAutocomplete>
-      <div className="flex justify-end px-4 py-3">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <Button color="secondary" size="sm" iconLeading={Plus} onClick={onNew}>
+          {m.tasks_new_subtask()}
+        </Button>
         <DialogCancel type="button" onPress={onCancel}>
           {m.tasks_create_cancel()}
         </DialogCancel>

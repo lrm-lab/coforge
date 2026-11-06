@@ -26,7 +26,7 @@ import { useTaskRelations, type DetailCommand } from "./use-task-relations";
 
 /** What the header menu asked to add, each in a dialog: a parent, a blocker, a new sub-task, or an
  * existing Task as a sub-task (task #505). */
-export type RelationPicker = "parent" | "blocker" | "subtask" | "existing-subtask";
+export type RelationPicker = "parent" | "blocker" | "subtask" | "new-subtask";
 
 export type SectionError = "permission" | "denied" | "invalid" | "other";
 
@@ -263,7 +263,7 @@ export function TaskSection({
             onPick={(blocker) => void relations.addBlocker(blocker)}
           />
           <CreateTaskDialog
-            open={picker === "subtask"}
+            open={picker === "new-subtask"}
             onOpenChange={closePicker}
             onCreate={async (draft, idempotencyKey) => {
               const created = await relations.createSubtasks(draft, idempotencyKey);
@@ -279,8 +279,9 @@ export function TaskSection({
             }}
           />
           <SubtaskPickerDialog
-            open={picker === "existing-subtask"}
+            open={picker === "subtask"}
             onOpenChange={closePicker}
+            onNew={() => onPickerChange("new-subtask")}
             task={task}
             currentMemberId={currentMemberId}
             disabled={pending}

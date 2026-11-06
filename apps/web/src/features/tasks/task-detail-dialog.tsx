@@ -279,12 +279,7 @@ export function TaskDetailDialog({
                       <Dropdown.Menu
                         onAction={(key) => {
                           if (key === "delete") setDeleting(true);
-                          else if (
-                            key === "parent" ||
-                            key === "blocker" ||
-                            key === "subtask" ||
-                            key === "existing-subtask"
-                          )
+                          else if (key === "parent" || key === "blocker" || key === "subtask")
                             setPicker(key);
                         }}
                       >
@@ -350,7 +345,6 @@ export function TaskDetailDialog({
                       task={task}
                       canAdd={relations.canEdit}
                       onAdd={() => setPicker("subtask")}
-                      onAddExisting={() => setPicker("existing-subtask")}
                       onOpen={onOpenRelated}
                     />
                   ),

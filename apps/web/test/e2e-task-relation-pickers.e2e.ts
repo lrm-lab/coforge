@@ -159,6 +159,17 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
 
       // A sub-task, from its own create dialog.
       await menu("Add sub-task");
+      await browser(
+        "wait",
+        "--fn",
+        `[...document.querySelectorAll('[role="dialog"] button')].some((el) => el.textContent.trim() === "New sub-task")`,
+      );
+      await shoot(`${label}-subtask-picker`);
+      await mark(
+        `[...document.querySelectorAll('[role="dialog"] button')].find((el) => el.textContent.trim() === "New sub-task")`,
+        "new",
+      );
+      await browser("click", '[data-e2e="new"]');
       const field = '[role="dialog"] input[placeholder="Task title"]';
       await browser("wait", "--fn", `document.querySelector('${field}') !== null`);
       await browser("fill", field, `Write the copy ${label} ${tail}`);

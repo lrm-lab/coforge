@@ -251,12 +251,5 @@ export function taskRelationMenuItems({
       isDisabled={!canEdit}
       label={m.tasks_menu_add_subtask()}
     />,
-    <Dropdown.Item
-      key="existing-subtask"
-      id="existing-subtask"
-      icon={Dataflow02}
-      isDisabled={!canEdit}
-      label={m.tasks_menu_add_existing_subtask()}
-    />,
   ];
 }

@@ -9,7 +9,7 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * "Set an existing task as sub-task" (task #505): from the Task popup's ··· menu, a search over the
+ * "Add sub-task" with an existing Task (task #505): from the Task popup's ··· menu, a search over the
  * channel's unfinished Tasks. The Task above the open one is listed greyed ("Above this task"); one
  * under another parent says so, and picking it first asks whether to move it. Each pick is saved
  * as the picked Task's parent. On a wide screen and on a phone.
@@ -99,14 +99,14 @@ test("an existing Task is put under the open one, and one under another parent i
           "more",
         );
         await browser("click", '[data-e2e="more"]');
-        await browser("wait", "--fn", `${item("Set an existing task as sub-task")} !== undefined`);
-        await mark(item("Set an existing task as sub-task"), "item");
+        await browser("wait", "--fn", `${item("Add sub-task")} !== undefined`);
+        await mark(item("Add sub-task"), "item");
         await browser("click", '[data-e2e="item"]');
         // "Fix login" is listed both times: under another parent until it is moved here.
         await browser(
           "wait",
           "--fn",
-          `${dialogs}.some((el) => el.textContent.includes("Choose a task to add as a sub-task")) && ${item(name("Fix login"))} !== undefined && ${settled}`,
+          `${dialogs}.some((el) => el.textContent.includes("New sub-task")) && ${item(name("Fix login"))} !== undefined && ${settled}`,
         );
       };
 
@@ -199,7 +199,7 @@ test("an existing Task is put under the open one, and one under another parent i
         await Bun.sleep(100);
       expect(await parentOf(login!)).toBe(task);
 
-      // The sub-tasks tab lists both, with the new button beside "Add sub-task". Read afresh, as
+      // The sub-tasks tab lists both, with one "Add sub-task" button. Read afresh, as
       // e2e-task-relation-pickers does: the popup's own copy follows by announcement.
       await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${task}`);
       await browser(
@@ -215,7 +215,7 @@ test("an existing Task is put under the open one, and one under another parent i
       await browser(
         "wait",
         "--fn",
-        `${popup}?.textContent.includes(${JSON.stringify(name("Write the docs"))}) && ${popup}?.textContent.includes(${JSON.stringify(name("Fix login"))}) && ${popup}?.textContent.includes("Add existing task")`,
+        `${popup}?.textContent.includes(${JSON.stringify(name("Write the docs"))}) && ${popup}?.textContent.includes(${JSON.stringify(name("Fix login"))}) && ${popup}?.textContent.includes("Add sub-task")`,
       );
       await shoot(`${label}-subtasks`);
       expect((await browser("errors")).trim()).toBe("");

@@ -3,7 +3,7 @@ import { taskNameLabel, type TaskLink, type TaskView } from "@lrm/coforge-sdk/in
 
 import { subtaskCandidates } from "#src/features/tasks/task-relation-edits";
 
-/** "Add existing sub-task" (task #505): which of the conversation's Tasks the picker offers. */
+/** "Add sub-task" with an existing Task (task #505): which of the conversation's Tasks the picker offers. */
 
 const person = (memberId: string) =>
   ({ memberId, kind: "user", id: memberId, name: memberId, handle: memberId }) as const;
