@@ -11,7 +11,6 @@ import { NoticeActionClocks } from "./notice-action-clocks";
 import { countDistinctMessages } from "./agent-history-read";
 import {
   AGENT_MESSAGE_ACK_METHOD,
-  HELD_CONTEXT_LIMIT,
   SEEN_EXACT_SEQS_LIMIT,
   isValidMessageSender,
   mergeSeenExactSeqs,
@@ -27,7 +26,6 @@ import {
   latestCreatedAtField,
 } from "./message-attention-fields";
 import { isTrackedMention } from "./mention-delivery-tracker";
-import { isCardEvent } from "./agent-message-attention-index-helpers";
 import { printableSender } from "./agent-notice-sender";
 import {
   acceptNotice,
@@ -50,11 +48,15 @@ import type {
 } from "#src/persistence/agent-consumed-seq-store";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import {
+  PENDING_WINDOW_LIMIT,
+  REMEMBERED_DELIVERIES,
   byNumber,
   containsSorted,
   firstAbove,
   isAscending,
+  isCardEvent,
   sameThreadRoot,
+  type PendingWindowEntry,
 } from "./agent-message-attention-index-helpers";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
@@ -69,24 +71,6 @@ export type MessageAttention = Readonly<{
   latestSenderHandle?: string;
   flags: readonly string[];
 }>;
-
-/**
- * Delivery and message ids remembered per Agent for duplicate suppression. The
- * oldest are forgotten first; a redelivery older than this window is treated
- * as new, which only costs one extra inbox notice.
- */
-const REMEMBERED_DELIVERIES = 4096;
-
-/** How many of the newest unreviewed deliveries per target the index keeps for a locally decided
- * freshness hold to show: exactly `HELD_CONTEXT_LIMIT` (in the SDK's `freshness-decision.ts`),
- * because the hold shows the newest that many and no more — and anything older is consumed by the
- * same frontier anyway. No invented slack. */
-const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
-
-/** One unreviewed delivery plus the moment this daemon learned about it. Deliveries carry no
- * message timestamp of their own (only the server knows when a message was written), so the
- * arrival time is what a locally built preview can honestly show. */
-export type PendingWindowEntry = { delivery: AgentMessageDelivery; receivedAt: number };
 
 /** Daemon-owned volatile attention and model-visible sequence index. */
 export class AgentMessageAttentionIndex {
@@ -293,8 +277,14 @@ export class AgentMessageAttentionIndex {
     );
   }
 
-  /** Whether the Agent already saw this sequence or its preview. */
-  #alreadyRead(agentId: string, message: { target: string; sequence: number }): boolean {
+  /** Whether the Agent already saw this sequence or its preview. The delivery's conversation is
+   * bound first: a cursor still counting another conversation's sequences (the channel was
+   * recreated under the same name) says nothing about this message and is reset by the bind. */
+  #alreadyRead(
+    agentId: string,
+    message: { target: string; sequence: number; conversationId: string },
+  ): boolean {
+    this.bindConversation(agentId, message.target, message.conversationId);
     return (
       this.hasSeen(agentId, message.target, message.sequence) ||
       this.#previewSeen.has(agentId, message.target, message.sequence)
@@ -455,7 +445,6 @@ export class AgentMessageAttentionIndex {
       )
         throw new Error("invalid Agent recovery message");
       suppliedTargets.add(message.target);
-      this.bindConversation(agentId, message.target, message.conversationId);
       if (this.#alreadyRead(agentId, message)) {
         continue;
       }
