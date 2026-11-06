@@ -1,4 +1,9 @@
-import { TASK_STATUSES, type TaskStatus, type TaskView } from "@lrm/coforge-sdk/internal";
+import {
+  TASK_STATUSES,
+  taskPriorityRank,
+  type TaskStatus,
+  type TaskView,
+} from "@lrm/coforge-sdk/internal";
 import {
   DndContext,
   DragOverlay,
@@ -56,6 +61,7 @@ export function TaskWorkflow<T extends TaskView>({
   hidden,
   onHiddenChange,
   showMoveError,
+  adding,
 }: {
   tasks: readonly T[];
   layout: TaskLayout;
@@ -75,6 +81,8 @@ export function TaskWorkflow<T extends TaskView>({
   /** False where the page already says a refused command failed (a conversation's board), so a
    * refused move is not said twice. */
   showMoveError: boolean;
+  /** Starts a new Task in a board column: the statuses that take one, and what opens the form. */
+  adding?: { statuses: readonly TaskStatus[]; onAdd: (status: TaskStatus) => void };
 }) {
   const id = useId();
   const [active, setActive] = useState<T>();
@@ -84,6 +92,9 @@ export function TaskWorkflow<T extends TaskView>({
     revision: number;
     status: TaskStatus;
   }>();
+  // Columns the viewer ordered by priority, a view of the loaded cards only: the default order
+  // is the server's and returns when it is switched off.
+  const [byPriority, setByPriority] = useState<ReadonlySet<TaskStatus>>(new Set());
   const saving = useRef(false);
   const [error, setError] = useState(false);
   const sensors = useSensors(
@@ -102,6 +113,10 @@ export function TaskWorkflow<T extends TaskView>({
       tasks: displayedTasks.filter((task) => task.status === status),
     }));
   }, [tasks, pending, statuses]);
+  const ordered = (group: (typeof groups)[number]) =>
+    byPriority.has(group.status)
+      ? [...group.tasks].sort((a, b) => taskPriorityRank(a.priority) - taskPriorityRank(b.priority))
+      : group.tasks;
 
   // Hiding applies to a board of several columns; a single-status view shows its column.
   const hides = layout === "board" && groups.length > 1 && hidden !== undefined;
@@ -166,14 +181,28 @@ export function TaskWorkflow<T extends TaskView>({
             dropState={dropState(group.status)}
             hidable={hides}
             onHide={hides && onHiddenChange ? () => onHiddenChange(group.status, true) : undefined}
+            onAdd={
+              adding?.statuses.includes(group.status) ? () => adding.onAdd(group.status) : undefined
+            }
+            onSortByPriority={(on) =>
+              setByPriority((current) => {
+                const next = new Set(current);
+                if (on) next.add(group.status);
+                else next.delete(group.status);
+                return next;
+              })
+            }
+            sortedByPriority={byPriority.has(group.status)}
           >
             {(shown) => (
               <>
-                {group.tasks.slice(0, shown).map((task) => (
-                  <div key={task.id} data-task-drag-node aria-busy={pending?.id === task.id}>
-                    {renderTask(task, controls(task))}
-                  </div>
-                ))}
+                {ordered(group)
+                  .slice(0, shown)
+                  .map((task) => (
+                    <div key={task.id} data-task-drag-node aria-busy={pending?.id === task.id}>
+                      {renderTask(task, controls(task))}
+                    </div>
+                  ))}
               </>
             )}
           </TaskGroup>

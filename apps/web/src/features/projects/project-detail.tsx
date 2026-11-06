@@ -108,7 +108,7 @@ export function ProjectDetail({
           className="flex min-h-0 flex-1 flex-col outline-hidden max-md:overflow-y-auto"
         >
           {/* A phone's list layout, its default, is the task tree (task #462). */}
-          <WorkspaceTaskBoard search={search} project={project.id} />
+          <WorkspaceTaskBoard search={search} project={project.id} projectSlug={project.slug} />
         </TabPanel>
         {hasCode && (
           <TabPanel id="code" className="min-h-0 flex-1 overflow-y-auto outline-hidden">

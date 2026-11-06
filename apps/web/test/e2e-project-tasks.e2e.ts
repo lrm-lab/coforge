@@ -91,6 +91,8 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
       await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
     };
     const projectPage = `${origin}/zh-CN/w/${workspace.slug}/projects/${home.slug}`;
+    // A Project opens on its Tasks (task #596); the Overview is the second tab.
+    const overviewPage = `${projectPage}?tab=overview`;
     // The sub-task's row sits in a list nested in its main Task's item.
     const nested = `[...document.querySelectorAll("li li")].some((li) => li.textContent.includes(${JSON.stringify(subTitle)}))`;
     for (const [width, height, label] of [
@@ -98,7 +100,7 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
       [390, 844, "phone"],
     ] as const) {
       await browser("set", "viewport", String(width), String(height));
-      await browser("open", projectPage);
+      await browser("open", overviewPage);
       await browser(
         "wait",
         "--fn",
@@ -121,7 +123,7 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     const heading = (text: string) =>
       `[...document.querySelectorAll("h2")].some((h) => h.textContent.startsWith(${JSON.stringify(text)}))`;
     await browser("set", "viewport", "1280", "860");
-    await browser("open", projectPage);
+    await browser("open", overviewPage);
     await browser(
       "wait",
       "--fn",
@@ -132,7 +134,7 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     }
     // No repository linked: no Code tab.
     const tabs = `[...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent)`;
-    expect(await evaluate<string[]>(tabs)).toEqual(["概览", "任务"]);
+    expect(await evaluate<string[]>(tabs)).toEqual(["任务", "概览"]);
     await shoot("desktop-overview");
 
     // The Tasks tab is the Project's board: no Project filter, no Project pill on the cards.
