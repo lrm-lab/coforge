@@ -176,7 +176,20 @@ jobs:
         run: bun run --cwd packages/coforge-sdk generate
 
       - name: Request an OIDC token for Alibaba Cloud
-        uses: ./.github/actions/aliyun-oidc-token
+        # A local action resolves from the checked-out workspace, which here is inputs.commit and
+        # may predate the action; the exchange stays in workflow YAML. The publish job aliases it.
+        run: &aliyun-oidc-run |
+          token_file="$RUNNER_TEMP/aliyun-oidc-token"
+          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.aliyuncs.com" \
+            | jq -r '.value' > "$token_file"
+          chmod 600 "$token_file"
+          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+          # The RAM role's trust policy matches these three claims exactly; print them so a
+          # trust-policy mismatch is diagnosable from the run log. The payload is public run
+          # metadata; the signature (the only secret part) is never printed.
+          payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
+          printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
 
       - name: Refuse a version that is already published
         id: plan
@@ -244,7 +257,7 @@ jobs:
           path: installer-bin
 
       - name: Request an OIDC token for Alibaba Cloud
-        uses: ./.github/actions/aliyun-oidc-token
+        run: *aliyun-oidc-run
 
       - name: Package, upload, and verify every object, write the manifest, and move installer/latest
         env:

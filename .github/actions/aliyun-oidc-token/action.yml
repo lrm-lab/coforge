@@ -2,9 +2,9 @@ name: Alibaba Cloud OIDC token
 description: >-
   Requests the job's GitHub OIDC token for the sts.aliyuncs.com audience and exports
   its file path as ALIBABA_CLOUD_OIDC_TOKEN_FILE for the job's later Alibaba Cloud
-  steps. It is a composite action, not a repo script: release jobs check out the
-  approved commit, which may predate the script, while a local action always
-  resolves from the ref the workflow itself runs on.
+  steps. Only jobs whose checkout is the workflow's own ref may use it: a local action
+  resolves from the checked-out workspace, so a job that checks out inputs.commit —
+  a release that may predate this action — inlines the same exchange in workflow YAML.
 
 runs:
   using: composite

@@ -253,10 +253,19 @@ test("production signs in as staging does, pins every action, and keeps inputs o
     for (const [jobName, job] of Object.entries(workflow.jobs)) {
       if (job.permissions?.["id-token"] === "write") {
         const oidc = job.steps!.find((step) => step.name === OIDC_STEP);
-        // The token request is a composite action so jobs that check out an older
-        // release commit still find it: local actions resolve from the workflow's ref.
-        expect(oidc?.uses, `${name}.${jobName}`).toBe("./.github/actions/aliyun-oidc-token");
-        expect(oidc?.uses, `${name}.${jobName}`).toBe(stagingOidc.uses!);
+        expect(oidc, `${name}.${jobName}`).toBeDefined();
+        // A local action resolves from the checked-out workspace: a job that checks out
+        // inputs.commit — a release that may predate the action — must inline the
+        // exchange in workflow YAML; jobs on the workflow's own ref share the action.
+        const checkout = job.steps!.find((step) => step.uses?.startsWith("actions/checkout@"));
+        if (checkout?.with?.ref === "${{ inputs.commit }}") {
+          expect(oidc!.uses, `${name}.${jobName}`).toBeUndefined();
+          expect(oidc!.run, `${name}.${jobName}`).toContain("ACTIONS_ID_TOKEN_REQUEST_URL");
+          expect(oidc!.run, `${name}.${jobName}`).toContain("ALIBABA_CLOUD_OIDC_TOKEN_FILE");
+        } else {
+          expect(oidc!.uses, `${name}.${jobName}`).toBe("./.github/actions/aliyun-oidc-token");
+          expect(oidc!.uses, `${name}.${jobName}`).toBe(stagingOidc.uses!);
+        }
       }
     }
     for (const { name: jobName, step } of steps(workflow)) {
