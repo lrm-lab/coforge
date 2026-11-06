@@ -1,7 +1,7 @@
 import type { TaskLabel } from "@lrm/coforge-sdk/internal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Trash01 } from "@untitledui/icons";
+import { Archive } from "@untitledui/icons";
 import { useState } from "react";
 import {
   Button as AriaButton,
@@ -11,8 +11,8 @@ import {
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { BadgeWithDot } from "#src/components/base/badges/badges";
+import { useAppToast } from "#src/components/ui/toast";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -47,12 +47,11 @@ export function TaskLabelChip({ label, className }: { label: TaskLabel; classNam
 
 /**
  * A Task's label chip for an owner or admin: it opens a small menu to recolor the label (a pick
- * applies at once) or delete it. Deleting archives the label, which takes it off every Task and out
+ * applies at once) or archive it. Archiving, which takes it off every Task and out
  * of the pickers and filters but keeps its rows, so it can come back.
  */
 export function ManageableLabelChip({ label }: { label: TaskLabel }) {
   const [open, setOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [failed, setFailed] = useState(false);
   const { color } = useCachedLabel(label);
   const [picked, setPicked] = useState(color);
@@ -62,7 +61,34 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
   const key = workspaceLabelsKey(useCurrentWorkspaceId() ?? "");
   useCloseOnBack(open && !desktop, () => setOpen(false));
 
-  function patch(change: { color?: string; archivedAt?: Date }) {
+  const toast = useAppToast();
+
+  /** Settings can restore it, so it does not ask (Frank, 11-06); the toast says where it went
+   * and offers Undo. */
+  async function archive() {
+    setFailed(false);
+    try {
+      await update({ data: { id: label.id, archived: true } });
+      patch({ archivedAt: new Date() });
+      toast.success(m.tasks_label_archived_toast({ name: label.name }), {
+        key: `label-archive-${label.id}`,
+        action: { label: m.action_undo(), onClick: () => void restore() },
+      });
+    } catch {
+      setFailed(true);
+    }
+  }
+
+  async function restore() {
+    try {
+      await update({ data: { id: label.id, archived: false } });
+      patch({ archivedAt: null });
+    } catch {
+      setFailed(true);
+    }
+  }
+
+  function patch(change: { color?: string; archivedAt?: Date | null }) {
     queryClient.setQueryData<WorkspaceLabels>(
       key,
       (data) =>
@@ -104,11 +130,8 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
         </AriaButton>
         <Dropdown.Popover placement="bottom start" className="w-56">
           <AriaDialog aria-label={label.name} className="outline-hidden">
-            <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-              <LabelDot color={color} />
-              <span className="truncate text-sm font-medium text-primary">{label.name}</span>
-            </div>
-            <div className="px-3 pb-3">
+            {/* The chip it opens from already names the label: no label inside a label (Frank). */}
+            <div className="p-3">
               <LabelColorSwatches
                 value={picked}
                 onChange={setPicked}
@@ -120,12 +143,12 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
               <AriaButton
                 onPress={() => {
                   setOpen(false);
-                  setConfirming(true);
+                  void archive();
                 }}
-                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-error-primary outline-hidden hover:bg-error-primary focus-visible:bg-error-primary"
+                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-secondary outline-hidden hover:bg-primary_hover focus-visible:bg-primary_hover"
               >
-                <Trash01 aria-hidden="true" className="size-4" />
-                {m.tasks_label_delete()}
+                <Archive aria-hidden="true" className="size-4 text-fg-quaternary" />
+                {m.tasks_label_archive()}
               </AriaButton>
             </div>
           </AriaDialog>
@@ -136,20 +159,6 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
           {m.tasks_label_color_failed()}
         </span>
       )}
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title={m.tasks_label_delete_title({ name: label.name })}
-        description={m.tasks_label_delete_body()}
-        confirmLabel={m.tasks_label_delete()}
-        pendingLabel={m.tasks_label_delete_pending()}
-        errorMessage={m.tasks_label_delete_failed()}
-        onConfirm={async () => {
-          await update({ data: { id: label.id, archived: true } });
-          patch({ archivedAt: new Date() });
-          setConfirming(false);
-        }}
-      />
     </>
   );
 }

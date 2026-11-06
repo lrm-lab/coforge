@@ -317,7 +317,7 @@ function DangerDialog({
                 </DialogCancel>
                 <DialogAction
                   type="submit"
-                  color="primary-destructive"
+                  color="secondary-destructive"
                   isDisabled={busy || isConfirmDisabled}
                   isLoading={busy}
                   showTextWhileLoading

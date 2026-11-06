@@ -68,7 +68,7 @@ export function LabelSettingsRow({
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirming, setConfirming] = useState<"archive" | "delete" | null>(null);
+  const [confirming, setConfirming] = useState(false);
   // The delete was refused as no longer archived: read the list again when its dialog closes.
   // Not at once, as the row then moves out of the archived list and the refusal with it.
   const restoredMeanwhile = useRef(false);
@@ -230,7 +230,8 @@ export function LabelSettingsRow({
                 onAction={(key) => {
                   if (key === "description") start("description");
                   else if (key === "restore") void save({ archived: false });
-                  else if (key === "archive" || key === "delete") setConfirming(key);
+                  else if (key === "archive") void save({ archived: true });
+                  else if (key === "delete") setConfirming(true);
                 }}
               >
                 {archived
@@ -271,29 +272,10 @@ export function LabelSettingsRow({
       )}
 
       <ConfirmDialog
-        open={confirming === "archive"}
-        onOpenChange={(open) => !open && setConfirming(null)}
-        // Archiving can be undone: the primary button, not the red one.
-        tone="default"
-        title={m.labels_settings_archive_title({ name: label.name })}
-        description={
-          label.taskCount === 0
-            ? m.labels_settings_archive_body_unused()
-            : m.labels_settings_archive_body({ count: label.taskCount })
-        }
-        confirmLabel={m.labels_settings_archive()}
-        errorMessage={(cause) => changeError(cause, label.name)}
-        onConfirm={async () => {
-          await update({ data: { id: label.id, archived: true } });
-          await onChanged();
-          setConfirming(null);
-        }}
-      />
-      <ConfirmDialog
-        open={confirming === "delete"}
+        open={confirming}
         onOpenChange={(open) => {
           if (open) return;
-          setConfirming(null);
+          setConfirming(false);
           // Someone restored it meanwhile: the list shows it live again once the refusal is read.
           if (restoredMeanwhile.current) {
             restoredMeanwhile.current = false;
@@ -316,7 +298,7 @@ export function LabelSettingsRow({
             throw cause;
           }
           await onChanged();
-          setConfirming(null);
+          setConfirming(false);
         }}
       />
     </li>

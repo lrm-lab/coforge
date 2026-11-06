@@ -94,7 +94,7 @@ export function RejectReviewDialog({
                 </DialogCancel>
                 <DialogAction
                   type="submit"
-                  color="primary-destructive"
+                  color="secondary-destructive"
                   isLoading={pending}
                   showTextWhileLoading
                 >

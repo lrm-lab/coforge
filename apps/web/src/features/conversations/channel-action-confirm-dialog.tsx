@@ -178,7 +178,7 @@ export function ChannelActionConfirmDialog({
                 </DialogCancel>
                 <DialogAction
                   autoFocus
-                  color={copy.permanent ? "primary-destructive" : "primary"}
+                  color={copy.permanent ? "secondary-destructive" : "primary"}
                   isDisabled={busy}
                   isLoading={busy}
                   showTextWhileLoading

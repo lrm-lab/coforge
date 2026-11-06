@@ -137,7 +137,7 @@ export function AgentRuntimeCredentialDialog({
                     </DialogCancel>
                     <DialogAction
                       type="button"
-                      color="primary-destructive"
+                      color="secondary-destructive"
                       isDisabled={saving}
                       isLoading={saving}
                       showTextWhileLoading

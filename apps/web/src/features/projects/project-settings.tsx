@@ -296,7 +296,7 @@ export function ProjectSettingsPage({
             )}
             <Button
               type="submit"
-              color={deleting ? "primary-destructive" : "primary"}
+              color={deleting ? "secondary-destructive" : "primary"}
               isLoading={busy}
               isDisabled={deleting ? confirmation !== project.name : !name.trim()}
               showTextWhileLoading

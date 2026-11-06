@@ -230,19 +230,12 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     );
     expect(await dbColor(name("Bug"))).toBe("purple");
 
-    // Delete archives the label after a confirmation: off the Task, out of the picker and the
+    // Archive takes the label off at once: off the Task, out of the picker and the
     // filter, its row kept.
     await browser("click", chipSelector(name("Design")));
-    const deleteItem = `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Delete label")`;
-    await browser("wait", "--fn", `${deleteItem} != null`);
-    await evaluate(`(${deleteItem}.click(), true)`);
-    const confirmTitle = `[...document.querySelectorAll("h2, [slot=title]")].find((h) => h.textContent.includes("Delete label “${name("Design")}”?"))`;
-    await browser("wait", "--fn", `${confirmTitle} != null`);
-    await settled();
-    await shoot("desktop-5-delete-confirm");
-    const confirmButton = `[...${confirmTitle}.closest('[role="dialog"], [role="alertdialog"]').querySelectorAll("button")].find((b) => b.textContent.trim() === "Delete label")`;
-    await evaluate(`(${confirmButton}.click(), true)`);
-    await browser("wait", "--fn", `${confirmTitle} == null`);
+    const archiveItem = `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Archive label")`;
+    await browser("wait", "--fn", `${archiveItem} != null`);
+    await evaluate(`(${archiveItem}.click(), true)`);
     await browser("wait", "--fn", `!${props}.includes(${JSON.stringify(name("Design"))})`);
     const archived = await db.label.findFirstOrThrow({
       where: { workspaceId, name: name("Design") },
@@ -250,6 +243,14 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     });
     expect(archived.archivedAt).not.toBeNull();
     expect(await onTask()).not.toContain(name("Design"));
+    // Undo in the toast brings it back onto the Task; archive again for the checks below.
+    const undo = `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Undo")`;
+    await evaluate(`(${undo}.click(), true)`);
+    await browser("wait", "--fn", `${props}.includes(${JSON.stringify(name("Design"))})`);
+    await browser("click", chipSelector(name("Design")));
+    await browser("wait", "--fn", `${archiveItem} != null`);
+    await evaluate(`(${archiveItem}.click(), true)`);
+    await browser("wait", "--fn", `!${props}.includes(${JSON.stringify(name("Design"))})`);
     await openPicker();
     expect(await evaluate<boolean>(`${item(name("Design"))} == null`)).toBe(true);
     expect(await evaluate<boolean>(`${item(name("Bug"))} != null`)).toBe(true);
@@ -376,10 +377,9 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
       `(document.querySelector(${JSON.stringify(chipSelector(name("Bug")))}).scrollIntoView({ inline: "center" }), true)`,
     );
     await browser("click", chipSelector(name("Bug")));
-    await browser("wait", "--fn", `${deleteItem} != null`);
-    await evaluate(`(${deleteItem}.click(), true)`);
-    await browser("wait", "--fn", `${confirmTitle.replace(name("Design"), name("Bug"))} != null`);
-    await shoot("phone-4-delete-confirm");
+    await browser("wait", "--fn", `${archiveItem} != null`);
+    await evaluate(`(${archiveItem}.click(), true)`);
+    await browser("wait", "--fn", `!${props}.includes(${JSON.stringify(name("Bug"))})`);
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);

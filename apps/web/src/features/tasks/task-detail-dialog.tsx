@@ -22,7 +22,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TaskStatusIcon } from "./task-status-icon";
 import { TaskTrail } from "./task-trail";
-import { TaskDeleteDialog, taskDeleteMenuItem, useCanDeleteTask } from "./task-delete";
+import { taskDeleteMenuItem, useCanDeleteTask, useDeleteTask } from "./task-delete";
 import type { VisibleTaskName } from "./task-relation-edits";
 import { taskRelationMenuItems } from "./task-relation-lines";
 import {
@@ -70,7 +70,7 @@ export function TaskDetailMenu({
   onOpenDetails?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const deleteTask = useDeleteTask({ task, onCommand: dialog.onCommand });
   const [menuOpen, setMenuOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const canDelete = useCanDeleteTask(task, dialog.currentMemberId);
@@ -89,7 +89,7 @@ export function TaskDetailMenu({
           <Dropdown.Menu
             onAction={(key) => {
               if (key === "details") return onOpenDetails ? onOpenDetails() : setOpen(true);
-              if (key === "delete") return setDeleting(true);
+              if (key === "delete") return void deleteTask();
               moves.find((move) => move.status === key)?.onMove();
             }}
           >
@@ -122,12 +122,6 @@ export function TaskDetailMenu({
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown.Root>
-      <TaskDeleteDialog
-        task={task}
-        open={deleting}
-        onOpenChange={setDeleting}
-        onCommand={dialog.onCommand}
-      />
       {!onOpenDetails && (
         <TaskDetailDialog task={task} open={open} onOpenChange={setOpen} {...dialog} />
       )}
@@ -177,7 +171,14 @@ export function TaskDetailDialog({
   thread,
   onOpenRelated,
 }: TaskDetailDialogProps) {
-  const [deleting, setDeleting] = useState(false);
+  const deleteTask = useDeleteTask({
+    task,
+    onCommand,
+    onDeleted: () => {
+      onOpenChange(false);
+      onDeleted?.();
+    },
+  });
   // The relation pickers belong to the popup, not its task section: the header menu opens them too.
   const [picker, setPicker] = useState<RelationPicker | null>(null);
   const [tab, setTab] = useState<TaskDetailTab>("discussion");
@@ -277,7 +278,7 @@ export function TaskDetailDialog({
                     <Dropdown.Popover placement="bottom end">
                       <Dropdown.Menu
                         onAction={(key) => {
-                          if (key === "delete") setDeleting(true);
+                          if (key === "delete") void deleteTask();
                           else if (key === "parent" || key === "blocker" || key === "subtask")
                             setPicker(key);
                         }}
@@ -359,16 +360,6 @@ export function TaskDetailDialog({
           </div>
         </Modal>
       </TaskPopupOverlay>
-      <TaskDeleteDialog
-        task={task}
-        open={deleting}
-        onOpenChange={setDeleting}
-        onCommand={onCommand}
-        onDeleted={() => {
-          onOpenChange(false);
-          onDeleted?.();
-        }}
-      />
     </>
   );
 }

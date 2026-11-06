@@ -119,7 +119,7 @@ export function ChatSectionDialog({
                 {m.controls_cancel()}
               </DialogCancel>
               <DialogAction
-                color={deleting ? "primary-destructive" : "primary"}
+                color={deleting ? "secondary-destructive" : "primary"}
                 type="submit"
                 isDisabled={saving || (!deleting && !parsed.success)}
                 isLoading={saving}

@@ -52,7 +52,7 @@ export function UnsavedChangesDialog({
                 Discard. */}
             <DialogAction
               autoFocus={!onSave}
-              color={onSave ? "secondary-destructive" : "primary-destructive"}
+              color="secondary-destructive"
               isDisabled={saving}
               onPress={onDiscard}
             >
