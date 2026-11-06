@@ -12,6 +12,8 @@ export type DeferredOutcome = "sent" | "waiting" | "suppressed" | "gone";
 /** A message to ring a person's phones with now. */
 export type PhoneRelease = { messageId: string; waiting: DeferredNotification };
 
+const DEFERRED_READ_CONCURRENCY = 16;
+
 /**
  * A person whose phone notifications were waiting, looked at again (task #467). While they still
  * use the computer the check reads only their settings and activity, and looks again when that
@@ -47,12 +49,19 @@ export async function releaseDeferred(
     (entry) => now.getTime() - entry.firstQueuedAt.getTime() <= MAX_DEFER_MS,
   );
   const newest = new Map<string, PhoneRelease & { queuedAt: Date }>();
-  const waitingEntries = await Promise.all(
-    fresh.map(async (entry) => ({
-      entry,
-      waiting: await store.deferredNotification(entry.messageId, userId),
-    })),
-  );
+  const waitingEntries: { entry: (typeof fresh)[number]; waiting: DeferredNotification | null }[] =
+    [];
+  for (let offset = 0; offset < fresh.length; offset += DEFERRED_READ_CONCURRENCY) {
+    const window = fresh.slice(offset, offset + DEFERRED_READ_CONCURRENCY);
+    waitingEntries.push(
+      ...(await Promise.all(
+        window.map(async (entry) => ({
+          entry,
+          waiting: await store.deferredNotification(entry.messageId, userId),
+        })),
+      )),
+    );
+  }
   for (const { entry, waiting } of waitingEntries) {
     if (!waiting || waiting.read) continue;
     const kept = newest.get(waiting.conversationId);
