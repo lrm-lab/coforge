@@ -119,15 +119,13 @@ export function HandledActionCard({ view }: { view: ToolActionCardView }) {
   const workspaceSlug = useWorkspaceSlug();
   const outcome = outcomeOf(view);
   const verb = actionCardHandledVerb(view);
-  if (view.state === "cancelled" || view.state === "expired" || view.state === "answered_in_chat") {
+  if (view.state === "cancelled" || view.state === "expired") {
     const closed =
       view.state === "expired"
         ? m.action_card_expired()
-        : view.state === "answered_in_chat"
-          ? m.action_card_answered_in_chat()
-          : view.kind === "app:grant_agent"
-            ? m.app_card_denied()
-            : m.action_card_cancelled();
+        : view.kind === "app:grant_agent"
+          ? m.app_card_denied()
+          : m.action_card_cancelled();
     const closedBy = view.committedBy?.isViewer ? undefined : view.committedBy;
     return (
       <p className="text-sm wrap-anywhere text-tertiary">

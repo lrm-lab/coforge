@@ -248,11 +248,11 @@ test("the asked person answers a choice card in its own last row", async () => {
     await browser("wait", "--fn", `document.querySelector('[role="tooltip"]') !== null`);
     await browser("screenshot", join(artifacts, "answered-by-peer.png"));
 
-    // Answered in the chat instead, the card says so; withdrawn by someone else, its tooltip says
+    // Closed without an answer, the card says why; withdrawn by someone else, its tooltip says
     // who (task #472).
     await db.actionCard.update({
       where: { messageId: shown },
-      data: { state: "answered_in_chat" },
+      data: { state: "expired" },
     });
     await db.actionCard.update({
       where: { messageId: others },
@@ -260,7 +260,7 @@ test("the asked person answers a choice card in its own last row", async () => {
     });
     await browser("open", page("en"));
     await browser("wait", "--fn", pageHydrated);
-    await browser("wait", "--fn", `${cardText(shown)}.includes("Answered in the chat")`);
+    await browser("wait", "--fn", `${cardText(shown)}.includes("Expired")`);
     await browser("wait", "--fn", `${cardText(others)}.includes("Cancelled")`);
     await browser("click", "textarea[data-composer]");
     await browser("hover", `${card(others)} button`);

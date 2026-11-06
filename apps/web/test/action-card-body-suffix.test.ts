@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { actionCardBodySuffix } from "#src/server/conversations/agent-message-view.server";
+import { effectiveActionCardState } from "#src/server/conversations/action-card-view.server";
 
 test("choice executed includes the option id", () => {
   expect(
@@ -49,4 +50,9 @@ test("questions executed names each question's picks, a skipped one as skipped (
       },
     }),
   ).toBe("[action card: executed; webhook=keep; agent=(skipped); notify=ops,owner]");
+});
+
+test("a row left in the removed answered_in_chat state reads as expired (task #616)", () => {
+  expect(actionCardBodySuffix({ state: "answered_in_chat" })).toBe("[action card: expired]");
+  expect(effectiveActionCardState("answered_in_chat", null)).toBe("expired");
 });

@@ -69,7 +69,6 @@ export async function actionCardViews(
       draftHint: true,
       state: true,
       expiresAt: true,
-      answeredInChatMessageId: true,
       committedByUserId: true,
       committedAt: true,
       result: true,
@@ -191,9 +190,6 @@ export async function actionCardViews(
         : undefined,
       committedAt: card.committedAt?.toISOString(),
       expiresAt: card.expiresAt?.toISOString(),
-      answeredInChat: card.answeredInChatMessageId
-        ? { messageId: card.answeredInChatMessageId }
-        : undefined,
       canCommit: false,
       canCancel: pending && (card.preparedByAgent.ownerId === viewerUserId || isAdminViewer),
     };
