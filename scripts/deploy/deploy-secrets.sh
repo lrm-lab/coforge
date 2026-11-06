@@ -16,8 +16,10 @@ load_compose_secrets() {
 	# Optional deployment values; required Compose fields still fail closed.
 	for name in COFORGE_CLOUD_CLUSTER_TOKEN COFORGE_CLOUD_IMAGE_UPDATES_PAUSED COFORGE_GITHUB_CLIENT_SECRET COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY COFORGE_GITHUB_APP_SLUG COFORGE_COMMIT_COAUTHOR COFORGE_GITHUB_WEBHOOK_SECRET COFORGE_RETAINED_CLOUD_IMAGE_IDS COFORGE_PLATFORM_OPERATORS COFORGE_OIDC_SIGNING_JWKS; do
 		printf -v "$name" '%s' ""
-		if [ -f "$secrets_dir/${name,,}" ]; then
-			printf -v "$name" '%s' "$(cat "$secrets_dir/${name,,}")"
+		# ${name,,} needs bash 4; /bin/bash on macOS is 3.2 and the tests run this under it.
+		file="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+		if [ -f "$secrets_dir/$file" ]; then
+			printf -v "$name" '%s' "$(cat "$secrets_dir/$file")"
 		fi
 	done
 	for name in AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY; do
@@ -62,7 +64,9 @@ compose() {
 		COFORGE_COMMIT_COAUTHOR="$COFORGE_COMMIT_COAUTHOR" \
 		COFORGE_GITHUB_WEBHOOK_SECRET="$COFORGE_GITHUB_WEBHOOK_SECRET" \
 		COFORGE_OIDC_SIGNING_JWKS="$COFORGE_OIDC_SIGNING_JWKS" \
-		docker compose "${COMPOSE_ARGS[@]}" "$@"
+		# ${arr[@]+...} keeps an empty COMPOSE_ARGS from tripping `set -u` on bash < 4.4
+		# (macOS's /bin/bash is 3.2; the tests run this under it).
+		docker compose "${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"}" "$@"
 }
 
 write_deploy_env() {

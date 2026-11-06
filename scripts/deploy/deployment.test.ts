@@ -114,8 +114,9 @@ describe("parseState", () => {
 describe("remote-deploy.sh compose invocation shape", () => {
   test("passes secrets only to Compose and places global arguments before its subcommand", async () => {
     const script = await Bun.file(secretsScript).text();
-    const directInvocations = script.split("\n").filter((line) => line.includes("docker compose"));
-    expect(directInvocations).toEqual(['\t\tdocker compose "${COMPOSE_ARGS[@]}" "$@"']);
+    expect(script.split("\n").filter((line) => line.includes("docker compose"))).toEqual([
+      '\t\tdocker compose "${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"}" "$@"',
+    ]);
     expect(script).not.toContain("export AUTHING_APP_ID");
   });
 
