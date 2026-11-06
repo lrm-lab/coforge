@@ -32,7 +32,8 @@ export function CreateProjectDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: () => Promise<void>;
+  /** The new Project, by the slug it was made with. */
+  onCreated: (project: { slug: string }) => Promise<void>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const repositories = useServerFn(listAccessibleGitHubRepositories);
@@ -201,7 +202,7 @@ export function CreateProjectDialog({
             ? { name, slug, fullName: publicName }
             : { name, slug },
       });
-      await onCreated();
+      await onCreated({ slug });
       onOpenChange(false);
     } catch (cause) {
       setError(

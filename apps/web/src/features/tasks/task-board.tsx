@@ -5,7 +5,6 @@ import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { PageHeader } from "#src/components/layout/page-header";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useTaskHiddenColumns } from "#src/features/settings/task-hidden-columns";
 import { cn } from "#src/lib/utils";
@@ -129,11 +128,10 @@ export function TaskBoard<T extends BoardTask>({
   // What a Task waits on and its tree show on its card only with Tasks v2 on; read once here, not
   // per card.
   const relationsOn = useTaskConversationsOn() === true;
-  // The Tasks page is the page's main content; a conversation's or Project's tab sits inside its
-  // page.
-  const Root = conversation || project ? "section" : "main";
+  // The board sits inside its page: All tasks or a Project (with their header), or a conversation's
+  // Tasks tab, which brings its own header.
   return (
-    <Root
+    <section
       aria-label={m.tasks_board()}
       // Cards inside follow the viewer's shown fields (Display → Show).
       data-task-board=""
@@ -142,7 +140,7 @@ export function TaskBoard<T extends BoardTask>({
         !conversation && "h-full max-h-full",
       )}
     >
-      {conversation ? conversation.header : !project && <PageHeader heading={m.tasks_tab()} />}
+      {conversation?.header}
       <TaskToolbar
         tasks={tree ? tree.tasks : choices}
         filter={filter}
@@ -236,7 +234,7 @@ export function TaskBoard<T extends BoardTask>({
           }}
         />
       )}
-    </Root>
+    </section>
   );
 }
 

@@ -227,5 +227,7 @@
   "project_people": "People",
   "project_in_progress": "In progress",
   "project_up_next": "Up next",
-  "project_recently_done": "Recently done"
+  "project_recently_done": "Recently done",
+  "projects_all_tasks": "All tasks",
+  "projects_switch": "Switch Project"
 }

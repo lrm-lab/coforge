@@ -225,5 +225,7 @@
   "project_people": "在做的人",
   "project_in_progress": "进行中",
   "project_up_next": "接下来",
-  "project_recently_done": "最近完成"
+  "project_recently_done": "最近完成",
+  "projects_all_tasks": "全部任务",
+  "projects_switch": "切换项目"
 }

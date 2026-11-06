@@ -3,7 +3,6 @@ import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
-  CheckSquare as ListTodo,
   File02 as FileText,
   Folder,
   LogOut01 as LogOut,
@@ -104,7 +103,6 @@ function useNavItems(
       badge: activityDot,
     },
     { label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 },
-    { label: m.tasks_tab(), ...item("tasks"), icon: ListTodo },
     { label: m.projects_title(), ...item("projects"), icon: Folder },
     {
       label: m.navigation_agents(),

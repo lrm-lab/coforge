@@ -44,13 +44,17 @@ const PLACEHOLDERS: Record<TaskStatus, number> = {
 };
 
 /**
- * The Tasks page while it loads: its header, toolbar and every status group in place, with
+ * All tasks while it loads: its header, toolbar and every status group in place, with
  * placeholder cards, so the page keeps its shape when the Tasks arrive.
  */
 export function TasksPending({ layout }: { layout?: TaskLayout }) {
   return (
     <main className="flex h-full max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary">
-      <PageHeader heading={m.tasks_tab()} />
+      {/* As All tasks' header reads (`ProjectsHeader`), without its controls yet. */}
+      <PageHeader
+        heading={m.projects_title()}
+        meta={<span className="text-lg text-tertiary">/ {m.projects_all_tasks()}</span>}
+      />
       <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 border-b border-secondary px-4 py-1.5 md:px-6">
         <Button size="sm" color="tertiary" iconLeading={FilterLines} isDisabled>
           {m.tasks_filter()}
