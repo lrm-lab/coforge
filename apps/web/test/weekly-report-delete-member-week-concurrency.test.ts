@@ -29,7 +29,10 @@ test("deleteMemberWeek cancels settings streams concurrently", async () => {
         await pause();
         activeReads -= 1;
         return where.settingsId
-          ? { id: `format-${where.settingsId}`, content: { tabs: { Summary: { markdown: "live" } } } }
+          ? {
+              id: `format-${where.settingsId}`,
+              content: { tabs: { Summary: { markdown: "live" } } },
+            }
           : null;
       },
       deleteMany: async () => ({ count: templates.length }),

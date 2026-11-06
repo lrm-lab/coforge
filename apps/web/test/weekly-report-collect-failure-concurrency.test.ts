@@ -43,8 +43,10 @@ test("failRunningCollectSlotsForAgent accepts multiple slots concurrently", asyn
         return null;
       },
       update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-        Object.assign(slots.find((slot) => slot.id === where.id), data);
-        return slots.find((slot) => slot.id === where.id);
+        const slot = slots.find((slot) => slot.id === where.id);
+        if (!slot) throw new Error(`unknown slot ${where.id}`);
+        Object.assign(slot, data);
+        return slot;
       },
     },
     weeklyReportCollectRun: {
