@@ -101,9 +101,17 @@ export interface WebPushSubscriptionStore {
     messageId: string,
     userId: string,
   ): Promise<RecipientNotification | null>;
-  deferredNotification(messageId: string, userId: string): Promise<DeferredNotification | null>;
+  deferredNotification(
+    messageId: string,
+    userId: string,
+    notification?: { settings: NotificationSettings; timeZone: string; language?: string | null },
+  ): Promise<DeferredNotification | null>;
   /** A person's settings and the zone quiet hours read, for a check that needs no message. */
-  settingsFor(userId: string): Promise<{ settings: NotificationSettings; timeZone: string }>;
+  settingsFor(userId: string): Promise<{
+    settings: NotificationSettings;
+    timeZone: string;
+    language?: string | null;
+  }>;
   subscriptionsForUser(userId: string): Promise<StoredWebPushSubscription[]>;
   saveSubscription(userId: string, subscription: WebPushSubscriptionInput): Promise<void>;
   removeSubscription(userId: string, endpoint: string): Promise<void>;

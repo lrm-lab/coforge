@@ -33,7 +33,7 @@ export async function releaseDeferred(
   userId: string,
 ): Promise<{ outcome: DeferredOutcome; sent: number }> {
   const { store, queue, activity, now } = input;
-  const { settings, timeZone } = await store.settingsFor(userId);
+  const { settings, timeZone, language } = await store.settingsFor(userId);
   if (suppression(settings, timeZone, now)) {
     await queue.takeMessages(userId);
     return { outcome: "suppressed", sent: 0 };
@@ -57,7 +57,11 @@ export async function releaseDeferred(
       ...(await Promise.all(
         window.map(async (entry) => ({
           entry,
-          waiting: await store.deferredNotification(entry.messageId, userId),
+          waiting: await store.deferredNotification(entry.messageId, userId, {
+            settings,
+            timeZone,
+            language,
+          }),
         })),
       )),
     );

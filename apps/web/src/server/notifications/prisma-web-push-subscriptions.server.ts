@@ -29,6 +29,7 @@ import {
   NotificationSettingsStore,
   type PersonNotificationSettings,
 } from "./notification-settings.server";
+import type { NotificationSettings } from "./notification-rules.server";
 
 const SUBSCRIPTION_SELECT = {
   id: true,
@@ -342,6 +343,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
   async deferredNotification(
     messageId: string,
     userId: string,
+    notification?: { settings: NotificationSettings; timeZone: string; language?: string | null },
   ): Promise<DeferredNotification | null> {
     const context = await this.loadMessageContext(messageId);
     if (!context) return null;
@@ -362,7 +364,9 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
     const readThrough = context.message.threadRootId
       ? (thread?.readThroughSequence ?? 0)
       : readThroughSequence;
-    const settings = await new NotificationSettingsStore(this.db).read(userId);
+    const resolvedSettings = notification
+      ? { ...notification, language: notification.language ?? null }
+      : await new NotificationSettingsStore(this.db).read(userId);
     return {
       conversationId: context.message.conversationId,
       mentioned: context.mentionedUserIds.includes(userId),
@@ -371,7 +375,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
       sender: context.sender,
       ...(context.system ? { system: context.system } : {}),
       url: context.url,
-      recipient: recipientOf(row, settings),
+      recipient: recipientOf(row, resolvedSettings),
       read: readThrough >= context.message.sequence,
     };
   }
