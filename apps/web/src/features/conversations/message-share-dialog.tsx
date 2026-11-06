@@ -23,20 +23,38 @@ import {
 import {
   SHARE_CARD_WIDE_WIDTH,
   SHARE_CARD_WIDTH,
+  SHARE_RATIOS,
+  shareRatioSize,
   sharePageMaxHeight,
   sharePages,
+  type ShareRatio,
 } from "./message-share-image-model";
 
 type SharePage = { png: Blob; url: string };
 
 /** The stage draws everything to measure it, then the pages to capture them; then it is gone. */
-type ShareStep =
-  | { name: "measuring"; width: number; chosen?: boolean }
-  | { name: "capturing"; width: number; chosen?: boolean; split: number[][] }
-  | { name: "ready"; width: number; pages: SharePage[] }
-  | { name: "failed"; width: number; chosen?: boolean };
+type ShareStep = { ratio: ShareRatio; width: number } & (
+  | { name: "measuring" }
+  | { name: "capturing"; split: number[][] }
+  | { name: "ready"; pages: SharePage[] }
+  | { name: "failed" }
+);
 
-const START: ShareStep = { name: "measuring", width: SHARE_CARD_WIDTH };
+const start = (ratio: ShareRatio): ShareStep => ({
+  name: "measuring",
+  ratio,
+  width: shareRatioSize(ratio).width,
+});
+
+/** The tallest run of messages a page of this `ratio` holds: for a fixed one, what the card's own
+ * padding and foot leave of its height. */
+function pageMaxHeight(ratio: ShareRatio, width: number, stage: HTMLElement) {
+  const { height } = shareRatioSize(ratio);
+  const card = stage.querySelector<HTMLElement>("[data-share-page]");
+  const rows = stage.querySelector<HTMLElement>("[data-share-rows]");
+  if (height === undefined || !card || !rows) return sharePageMaxHeight(width);
+  return height - (card.offsetHeight - rows.offsetHeight);
+}
 
 /**
  * "Share preview" (as Raft's): the selected messages drawn out of sight, split into pages by their
@@ -53,13 +71,13 @@ export function MessageShareDialog({
   const toast = useAppToast();
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const stage = useRef<HTMLDivElement>(null);
-  const [step, setStep] = useState<ShareStep>(START);
+  const [step, setStep] = useState<ShareStep>(() => start("auto"));
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
     const root = stage.current;
     if (!root || step.name === "ready" || step.name === "failed") return;
-    const { name, width: stageWidth, chosen } = step;
+    const { name, ratio, width: stageWidth } = step;
     let stale = false;
     const run = async () => {
       await shareContentReady(root);
@@ -71,11 +89,11 @@ export function MessageShareDialog({
           (row, at) =>
             (rows[at + 1]?.offsetTop ?? row.offsetTop + row.offsetHeight) - row.offsetTop,
         );
-        const split = sharePages(slots, sharePageMaxHeight(stageWidth));
-        // More than one narrow page, unless asked for: wider, so the same words take fewer pages.
-        if (split.length > 1 && stageWidth === SHARE_CARD_WIDTH && !chosen)
-          setStep({ name: "measuring", width: SHARE_CARD_WIDE_WIDTH });
-        else setStep({ name: "capturing", width: stageWidth, chosen, split });
+        const split = sharePages(slots, pageMaxHeight(ratio, stageWidth, root));
+        // More than one narrow page: wider, so the same words take fewer pages.
+        if (split.length > 1 && ratio === "auto" && stageWidth === SHARE_CARD_WIDTH)
+          setStep({ name: "measuring", ratio, width: SHARE_CARD_WIDE_WIDTH });
+        else setStep({ name: "capturing", ratio, width: stageWidth, split });
         return;
       }
       const pngs: Blob[] = [];
@@ -84,10 +102,10 @@ export function MessageShareDialog({
         if (stale) return;
       }
       const pages = pngs.map((png) => ({ png, url: URL.createObjectURL(png) }));
-      setStep({ name: "ready", pages, width: stageWidth });
+      setStep({ name: "ready", ratio, pages, width: stageWidth });
     };
     run().catch(() => {
-      if (!stale) setStep({ name: "failed", width: stageWidth, chosen });
+      if (!stale) setStep({ name: "failed", ratio, width: stageWidth });
     });
     return () => {
       stale = true;
@@ -102,7 +120,7 @@ export function MessageShareDialog({
   }, [step]);
 
   const pages = step.name === "ready" ? step.pages : [];
-  const { width } = step;
+  const { ratio, width } = step;
   const total = pages.length;
   const page = pages[index];
   const copy = async () => {
@@ -140,17 +158,7 @@ export function MessageShareDialog({
                   <p role="alert" className="text-sm text-secondary">
                     {m.message_share_failed()}
                   </p>
-                  <Button
-                    size="sm"
-                    color="secondary"
-                    onClick={() =>
-                      setStep(
-                        step.chosen
-                          ? { name: "measuring", width: step.width, chosen: true }
-                          : START,
-                      )
-                    }
-                  >
+                  <Button size="sm" color="secondary" onClick={() => setStep(start(ratio))}>
                     {m.message_share_retry()}
                   </Button>
                 </div>
@@ -166,22 +174,21 @@ export function MessageShareDialog({
             <div className="flex flex-wrap items-center gap-2 px-4 py-3 safe-area-padding">
               <ButtonGroup
                 size="sm"
-                aria-label={m.message_share_format()}
-                selectedKeys={[String(width)]}
+                aria-label={m.message_share_ratio()}
+                selectedKeys={[ratio]}
                 disallowEmptySelection
                 onSelectionChange={(keys) => {
-                  const picked = Number([...keys][0]);
-                  if (picked === width) return;
+                  const picked = [...keys][0] as ShareRatio;
+                  if (picked === ratio) return;
                   setIndex(0);
-                  setStep({ name: "measuring", width: picked, chosen: true });
+                  setStep(start(picked));
                 }}
               >
-                <ButtonGroupItem id={String(SHARE_CARD_WIDTH)}>
-                  {m.message_share_format_phone()}
-                </ButtonGroupItem>
-                <ButtonGroupItem id={String(SHARE_CARD_WIDE_WIDTH)}>
-                  {m.message_share_format_desktop()}
-                </ButtonGroupItem>
+                {SHARE_RATIOS.map((each) => (
+                  <ButtonGroupItem key={each} id={each}>
+                    {each === "auto" ? m.message_share_ratio_auto() : each}
+                  </ButtonGroupItem>
+                ))}
               </ButtonGroup>
               {total > 1 && (
                 <div className="flex items-center gap-1 text-sm text-secondary tabular-nums">
@@ -237,6 +244,7 @@ export function MessageShareDialog({
                 <MessageShareCard
                   key={rows[0]}
                   width={step.width}
+                  height={shareRatioSize(step.ratio).height}
                   messages={rows.flatMap((row) => messages[row] ?? [])}
                 />
               ))

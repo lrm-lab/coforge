@@ -12,7 +12,6 @@
   "message_share_download_all": "Download all",
   "message_share_previous": "Previous page",
   "message_share_next": "Next page",
-  "message_share_format": "Image format",
-  "message_share_format_phone": "Phone",
-  "message_share_format_desktop": "Desktop"
+  "message_share_ratio": "Image ratio",
+  "message_share_ratio_auto": "Auto"
 }

@@ -13,20 +13,25 @@ import { groupsWithPrevious, type MessageView } from "./message-view";
 /**
  * What a share image shows: the messages as a stream draws them, a sender's run under one heading,
  * and at the foot, quietly, where they come from. It follows the viewer's theme, as the image is
- * what they see. A narrow image keeps its words large wherever it is shown at a screen's width;
- * `width` is wider only for more than a narrow page holds.
+ * what they see. `height` is the least it fills, for an image of a fixed ratio.
  */
 export function MessageShareCard({
   messages,
   width,
+  height,
 }: {
   messages: readonly MessageView[];
   width: number;
+  height?: number;
 }) {
   return (
-    <div data-share-page className="bg-secondary p-4" style={{ width }}>
-      <div className="rounded-2xl border border-secondary bg-primary">
-        <div className="px-5 pt-5 pb-1">
+    <div
+      data-share-page
+      className="flex flex-col bg-secondary p-4"
+      style={{ width, minHeight: height }}
+    >
+      <div className="flex flex-1 flex-col rounded-2xl border border-secondary bg-primary">
+        <div data-share-rows className="flex-1 px-5 pt-5 pb-1">
           {messages.map((message, index) => {
             const previous = messages[index - 1];
             const grouped = groupsWithPrevious(message, previous, false, false).grouped;

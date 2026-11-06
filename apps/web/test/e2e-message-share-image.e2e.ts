@@ -198,10 +198,17 @@ test("picked messages become one share image, at three times the card's width", 
   expect(await pageWidth()).toBe(1440);
   expect(await evaluate<boolean>(`${dialogButton("Download")} !== undefined`)).toBe(true);
   await shot("short-1440");
-  // The other format is drawn again at its own width.
-  await browser("find", "role", "radio", "click", "--name", "Desktop");
-  await waitFor(`${preview} !== null && ${preview}.naturalWidth === 2160`);
-  await shot("short-desktop-1440");
+  // A ratio is drawn again at its own size, however little there is to show.
+  await browser("find", "role", "radio", "click", "--name", "16:9");
+  await waitFor(
+    `${preview} !== null && ${preview}.naturalWidth === 2400 && ${preview}.naturalHeight === 1350`,
+  );
+  await shot("short-16-9-1440");
+  await browser("find", "role", "radio", "click", "--name", "3:4");
+  await waitFor(
+    `${preview} !== null && ${preview}.naturalWidth === 1440 && ${preview}.naturalHeight === 1920`,
+  );
+  await shot("short-3-4-1440");
 }, 90_000);
 
 test("the image follows the viewer's theme, and a phone previews it whole", async () => {

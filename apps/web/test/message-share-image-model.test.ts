@@ -6,9 +6,11 @@ import {
   SHARE_CANVAS_MAX_AREA,
   SHARE_CANVAS_MAX_SIDE,
   SHARE_IMAGE_SCALE,
+  SHARE_RATIOS,
   shareFileName,
   shareImageAddress,
   shareImageScale,
+  shareRatioSize,
   sharePageMaxHeight,
   sharePages,
 } from "#src/features/conversations/message-share-image-model";
@@ -78,4 +80,14 @@ test("a CDN's attachment or avatar is read through this site, and nothing else i
     "https://images.coforge.cn/projects/icon.webp",
   ])
     expect(shareImageAddress(url, at)).toBeUndefined();
+});
+
+test("a fixed ratio's size is that ratio, and auto leaves the height to its messages", () => {
+  expect(shareRatioSize("auto")).toEqual({ width: SHARE_CARD_WIDTH });
+  for (const ratio of SHARE_RATIOS) {
+    if (ratio === "auto") continue;
+    const [across = 0, down = 0] = ratio.split(":").map(Number);
+    const { width, height = 0 } = shareRatioSize(ratio);
+    expect(width * down).toBe(height * across);
+  }
 });

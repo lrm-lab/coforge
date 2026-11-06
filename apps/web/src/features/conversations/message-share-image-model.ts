@@ -12,6 +12,23 @@ export function sharePageMaxHeight(width: number): number {
   return width * SHARE_PAGE_ASPECT;
 }
 
+/** The shapes an image comes in. "auto" is as tall as its messages, and as wide as they need. */
+export const SHARE_RATIOS = ["auto", "3:4", "1:1", "4:3", "16:9"] as const;
+export type ShareRatio = (typeof SHARE_RATIOS)[number];
+
+const SHARE_RATIO_SIZES = {
+  "3:4": { width: 480, height: 640 },
+  "1:1": { width: 600, height: 600 },
+  "4:3": { width: 720, height: 540 },
+  "16:9": { width: 800, height: 450 },
+} as const;
+
+/** An image's CSS size: `height` is absent for "auto", and a fixed one is the card's least, since a
+ * message taller than it stays whole. */
+export function shareRatioSize(ratio: ShareRatio): { width: number; height?: number } {
+  return ratio === "auto" ? { width: SHARE_CARD_WIDTH } : SHARE_RATIO_SIZES[ratio];
+}
+
 /** How many image pixels a CSS pixel becomes: sharp on any phone. */
 export const SHARE_IMAGE_SCALE = 3;
 

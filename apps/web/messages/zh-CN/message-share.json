@@ -12,7 +12,6 @@
   "message_share_download_all": "下载全部",
   "message_share_previous": "上一页",
   "message_share_next": "下一页",
-  "message_share_format": "图片版式",
-  "message_share_format_phone": "手机版",
-  "message_share_format_desktop": "电脑版"
+  "message_share_ratio": "图片比例",
+  "message_share_ratio_auto": "自动"
 }
