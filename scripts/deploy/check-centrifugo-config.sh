@@ -73,15 +73,22 @@ for config in "${configs[@]}"; do
 		continue
 	fi
 	# CENTRIFUGO_VAR_RPC_PROXY_SECRET only needs a value here: checkconfig
-	# parses the file, it never starts serving traffic with it.
+	# parses the file, it never starts serving traffic with it. It does resolve the proxy
+	# endpoint names while loading, though, and host.docker.internal exists only on Docker
+	# Desktop — where its answer can stall the lookup for minutes instead of failing fast.
+	# The check validates the file's syntax, not endpoint reachability (a refused connection
+	# passes), so the names are pointed at loopback in a temporary copy.
+	check_config="$(mktemp "${TMPDIR:-/tmp}/centrifugo-config.XXXXXX")"
+	sed 's/host\.docker\.internal/127.0.0.1/g' "$config" >"$check_config"
 	if ! docker run --rm \
-		-v "$config:/config.yaml:ro" \
+		-v "$check_config:/config.yaml:ro" \
 		-e CENTRIFUGO_VAR_RPC_PROXY_SECRET=ci-placeholder \
 		"$image" \
 		centrifugo checkconfig -c /config.yaml; then
 		printf 'check-centrifugo-config: %s failed Centrifugo configuration validation\n' "$config" >&2
 		failed=1
 	fi
+	rm -f "$check_config"
 done
 
 if [ "$failed" -ne 0 ]; then
