@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { lastUsedTaskProject } from "#src/server/tasks/task-projects.server";
 import { refuseUnclaimed } from "#src/server/tasks/task-claims.server";
 import { browserTaskBoard } from "#src/server/tasks/browser-task-board.server";
 import { CONVERSATION_TASK_NUMBERS_MAX } from "./conversation-task-subset";
@@ -132,3 +133,19 @@ export const loadTaskAssignmentAccess = createServerFn({ method: "GET" })
   .handler(({ context: { db, workspaceId, user } }) =>
     canAssignOther(db, workspaceId, { userId: user.id }),
   );
+
+/** What the New Task form starts with in a conversation (task #485): the Project the viewer last
+ * filed a Task under there, which a create naming none would take anyway. */
+export const loadTaskCreateDefaults = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ conversationId: z.uuid() }).strict())
+  .handler(async ({ context, data }) => {
+    const { user, db, workspaceId } = context;
+    return {
+      project: await lastUsedTaskProject(db, {
+        workspaceId,
+        conversationId: data.conversationId,
+        userId: user.id,
+      }),
+    };
+  });
