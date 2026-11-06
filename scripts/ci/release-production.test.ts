@@ -15,6 +15,8 @@ type Job = {
   "runs-on"?: string;
   if?: string;
   needs?: string | string[];
+  uses?: string;
+  with?: Record<string, unknown>;
   environment?: string;
   permissions?: Record<string, string>;
   env?: Record<string, string>;
@@ -35,6 +37,7 @@ const ci = await load("ci.yml");
 const computerStaging = await load("release-staging.yml");
 const computer = await load("release-production.yml");
 const installer = await load("release-installer-production.yml");
+const installerBuild = await load("release-installer-build.yml");
 const workflows = { computer, installer };
 
 const PRODUCTION_ROLE = "acs:ram::1085194890307801:role/coforge-release-publisher-production";
@@ -137,7 +140,18 @@ test("every bucket call names the production bucket, and every build compiles in
   }
   const publish = computer.jobs.publish!.steps!.find((step) => step.run?.includes("publish.ts"))!;
   expect(publish.run).toContain(`--feed-url "${PRODUCTION_FEED}"`);
-  expect(installer.jobs.build!.env!.COFORGE_RELEASE_FEED_URL).toBe(PRODUCTION_FEED);
+  expect(installerBuild.jobs.build!.env!.COFORGE_RELEASE_FEED_URL).toBe(PRODUCTION_FEED);
+});
+
+test("the installer build is a reusable workflow building the approved commit", () => {
+  const call = installer.jobs.build!;
+  expect(call.uses).toBe("./.github/workflows/release-installer-build.yml");
+  expect(call.with?.commit).toBe("${{ inputs.commit }}");
+  const checkout = installerBuild.jobs.build!.steps!.find((step) =>
+    step.uses?.startsWith("actions/checkout@"),
+  );
+  expect(checkout?.with?.ref).toBe("${{ inputs.commit }}");
+  expect(checkout?.with?.["persist-credentials"]).toBe(false);
 });
 
 test("publication waits for the staging evidence of the same commit and builds exactly that commit", () => {
@@ -202,10 +216,17 @@ test("a job that compiles the installer holds no token, and the builds match ins
         entry.runner,
       ])
       .sort();
-  expect(targets(build!)).toEqual(targets(ci.jobs["installer-crate"]!));
-  for (const [name, job] of Object.entries(installer.jobs)) {
-    const compiles = (job.steps ?? []).some((step) => /\bcargo\b|\brustup\b/.test(step.run ?? ""));
-    if (compiles) expect(job.permissions?.["id-token"], name).toBeUndefined();
+  expect(targets(installerBuild.jobs.build!)).toEqual(targets(ci.jobs["installer-crate"]!));
+  for (const [wf, jobs] of [
+    ["installer", installer.jobs],
+    ["installer-build", installerBuild.jobs],
+  ] as const) {
+    for (const [name, job] of Object.entries(jobs)) {
+      const compiles = (job.steps ?? []).some((step) =>
+        /\bcargo\b|\brustup\b/.test(step.run ?? ""),
+      );
+      if (compiles) expect(job.permissions?.["id-token"], `${wf}.${name}`).toBeUndefined();
+    }
   }
 });
 

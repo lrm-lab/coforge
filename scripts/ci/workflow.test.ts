@@ -200,7 +200,13 @@ test("a push to main starts no deployment or publication", async () => {
     // Web integration suites daily, web-e2e.yml the listed browser e2es (task #438); neither
     // deploys or publishes anything.
     const scheduled = ["cdn-certificates.yml", "web-integration.yml", "web-e2e.yml"].includes(file);
-    const expected = scheduled ? ["schedule", "workflow_dispatch"] : ["workflow_dispatch"];
+    // release-installer-build.yml is callable only: it has no trigger of its own.
+    const callableOnly = file === "release-installer-build.yml";
+    const expected = callableOnly
+      ? []
+      : scheduled
+        ? ["schedule", "workflow_dispatch"]
+        : ["workflow_dispatch"];
     expect(triggers, file).toEqual(expected);
   }
 });
