@@ -320,6 +320,7 @@ export const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
       /\b(?:ECONNRESET|ECONNREFUSED|EPIPE|ENOTFOUND|EAI_AGAIN)\b/.test(message) ||
       /\bconnection (?:reset|refused|closed|failed)\b/i.test(message) ||
       /\bunable to connect\b/i.test(message) ||
+      /\berror sending request for url\b/i.test(message) ||
       /\bnetwork (?:error|unreachable)\b/i.test(message),
   },
   {

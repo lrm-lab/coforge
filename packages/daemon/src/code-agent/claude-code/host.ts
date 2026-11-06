@@ -5,6 +5,7 @@ import {
   withDefaultAutoCompactWindow,
   parseClaudeAutoCompactWindow,
   CLAUDE_AUTO_COMPACT_WINDOW_ENV,
+  CLAUDE_DISABLE_AUTO_MEMORY_ENV,
   type ClaudeRuntimeHost,
 } from "@lrm/coforge-anvil/claude-code";
 import { agentEnvironment } from "#src/code-agent/environment";
@@ -29,6 +30,8 @@ function claudeLaunchEnvironment(
       gitHooks: options.gitHooks,
     }),
   );
+  // Set after composition so neither an inherited value nor an Agent envVar re-enables it.
+  environment[CLAUDE_DISABLE_AUTO_MEMORY_ENV] = "1";
   return {
     environment,
     autoCompactWindow: parseClaudeAutoCompactWindow(environment[CLAUDE_AUTO_COMPACT_WINDOW_ENV]),

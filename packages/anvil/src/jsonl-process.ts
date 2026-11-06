@@ -355,8 +355,15 @@ export class JsonlProcess {
     }
   }
 
+  /** The process's exit code once `#observeExit` has seen it; `undefined` while it runs. */
+  #exitCode: number | undefined;
+
+  get exitCode(): number | undefined {
+    return this.#exitCode;
+  }
+
   async #observeExit(): Promise<void> {
-    const exitCode = await this.#child.exited;
+    const exitCode = (this.#exitCode = await this.#child.exited);
     const expectedExit = this.#state.type === "disposing" || this.#state.type === "closed";
     const properties = {
       event: "code_agent.process.exited",

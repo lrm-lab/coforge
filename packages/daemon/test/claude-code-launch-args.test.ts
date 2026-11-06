@@ -97,6 +97,24 @@ test("model, effort and Fast mode are appended after the prompt file", () => {
   expect(plain).not.toContain("--settings");
 });
 
+test("Fast mode is dropped for Opus 4.8, with or without the 1M suffix", () => {
+  for (const model of ["claude-opus-4-8", "claude-opus-4-8[1m]"]) {
+    const argv = claudeLaunchCommand(BASE, {
+      promptPath: "/p",
+      createSessionId: "id",
+      runtime: {
+        provider: "claude-code",
+        model,
+        modelProvider: "",
+        reasoning: "high",
+        fastMode: true,
+      },
+    });
+    expect(argv).not.toContain("--settings");
+    expect(argv).toContain(model);
+  }
+});
+
 test("a launched Claude process sees no CLAUDECODE even when the host and launch set it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "coforge-claude-launch-env-"));
   try {

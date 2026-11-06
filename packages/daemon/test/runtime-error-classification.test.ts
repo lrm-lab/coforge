@@ -36,6 +36,15 @@ test("classifies a connection reset as a retryable provider connection error", (
   expect(result.retryDecision).toBe(RUNTIME_ERROR_RETRY_DECISION.RETRY);
 });
 
+test("classifies 'error sending request for url' as a retryable provider connection error", () => {
+  const result = classifyRuntimeErrorText(
+    "error sending request for url (https://api.anthropic.com/v1/messages)",
+  );
+  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.PROVIDER_CONNECTION);
+  expect(result.errorReason).toBe("provider_connection_error");
+  expect(result.retryDecision).toBe(RUNTIME_ERROR_RETRY_DECISION.RETRY);
+});
+
 test("classifies an unexpectedly closed stream as a retryable provider stream error", () => {
   const result = classifyRuntimeErrorText("stream closed unexpectedly before completion");
   expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.PROVIDER_STREAM);

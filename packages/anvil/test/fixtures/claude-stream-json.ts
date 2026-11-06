@@ -35,6 +35,12 @@ if (process.argv.includes("resume-auth-error")) {
   console.error("Authentication required");
   process.exit(1);
 }
+if (process.argv.includes("root-refusal")) {
+  console.error(
+    "--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons",
+  );
+  process.exit(1);
+}
 if (process.argv.includes("--no-session-persistence")) throw new Error("persistence disabled");
 if (Bun.env.COFORGE_EXPECTED_SESSION) {
   if (

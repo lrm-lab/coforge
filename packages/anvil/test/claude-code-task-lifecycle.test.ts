@@ -1,8 +1,14 @@
 import { expect, test } from "bun:test";
+import { tmpdir } from "node:os";
 
 import { type AgentRuntimeEvent, type AgentSubagentTaskKind } from "@lrm/coforge-anvil";
 
-import { controlledClaude, waitForEvent } from "./fixtures/claude-feed";
+import {
+  claudeFixtureProvider,
+  controlledClaude,
+  TEST_AGENT_INSTRUCTIONS,
+  waitForEvent,
+} from "./fixtures/claude-feed";
 
 test("Claude Code relays every non-ambient task's lifecycle as subagent-progress", async () => {
   // Shaped like Claude Code 2.1.300 stream-json: a foreground subagent, then a background Bash
@@ -178,4 +184,16 @@ test("Claude Code interruptSubagent sends stop_task for a live task only", async
   } finally {
     await fixture.dispose();
   }
+});
+
+test("Claude Code's root/sudo refusal fails the launch naming the reason", async () => {
+  // Raft's isClaudeRootRefusal: exit 1 with the exact stderr line before any turn.
+  await expect(
+    claudeFixtureProvider("root-refusal").createAgentSession({
+      agentWorkspaceDirectory: tmpdir(),
+      instructions: TEST_AGENT_INSTRUCTIONS,
+    }),
+  ).rejects.toThrow(
+    "Claude Code cannot start with root or sudo privileges while permission checks are disabled",
+  );
 });

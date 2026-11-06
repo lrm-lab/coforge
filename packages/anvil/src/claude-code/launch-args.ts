@@ -38,8 +38,20 @@ export function claudeLaunchCommand(
     launch.promptPath,
     ...(runtime?.model ? ["--model", runtime.model] : []),
     ...(runtime?.reasoning ? ["--effort", runtime.reasoning] : []),
-    ...(runtime?.fastMode ? ["--settings", JSON.stringify({ fastMode: true })] : []),
+    ...(runtime?.fastMode && claudeModelSupportsFastMode(runtime.model)
+      ? ["--settings", JSON.stringify({ fastMode: true })]
+      : []),
   ];
+}
+
+/** Models whose fast mode a launch must not request (Raft 1.0.63's
+ * `RUNTIME_FAST_MODE_UNSUPPORTED_MODELS`): Opus 4.8 dropped it, so a saved fast-mode flag is
+ * ignored for it. The `[1m]` context suffix is not part of the model's identity. */
+const CLAUDE_FAST_MODE_UNSUPPORTED_MODELS = new Set(["claude-opus-4-8"]);
+
+export function claudeModelSupportsFastMode(model: string | undefined): boolean {
+  if (model === undefined) return true;
+  return !CLAUDE_FAST_MODE_UNSUPPORTED_MODELS.has(model.replace(/\[1m\]$/, ""));
 }
 
 /** Drops `CLAUDECODE`: inherited from a daemon started inside a Claude Code session, it makes the
@@ -55,6 +67,32 @@ export function withoutClaudeCodeMarker(
  * auto-compact window"). Chosen over `--autocompact` because an older CLI rejects an unknown flag
  * but ignores an unknown variable. */
 export const CLAUDE_AUTO_COMPACT_WINDOW_ENV = "CLAUDE_CODE_AUTO_COMPACT_WINDOW";
+
+/** Claude Code's own auto-memory writes a second memory store next to the Agent's MEMORY.md
+ * files; a headless Agent keeps only the CoForge-injected memory, so the feature stays off
+ * (Raft 1.0.63 sets the same variable in its Claude spawn env). */
+export const CLAUDE_DISABLE_AUTO_MEMORY_ENV = "CLAUDE_CODE_DISABLE_AUTO_MEMORY";
+
+/** Claude Code's exact stderr line when `--dangerously-skip-permissions` meets root/sudo
+ * (Raft 1.0.63's `CLAUDE_ROOT_REFUSAL`); matched whole-line only. */
+export const CLAUDE_ROOT_REFUSAL =
+  "--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons";
+
+/** Raft's `isClaudeRootRefusal`: exit 1 with the refusal line on stderr, before any turn —
+ * in practice always during launch, so the launch fails with this named reason instead of a
+ * generic spawn error. Call after the process's stderr has drained (`dispose`). */
+export function isClaudeRootRefusal(process: {
+  readonly exitCode?: number;
+  stderrExcerpt(): string;
+}): boolean {
+  return (
+    process.exitCode === 1 &&
+    process
+      .stderrExcerpt()
+      .split("\n")
+      .some((line) => line.trim() === CLAUDE_ROOT_REFUSAL)
+  );
+}
 
 /** The auto-compact window a long-lived Agent gets unless its `envVars` or the Daemon's own
  * environment set one: a 1M-context model would otherwise compact only near 967k. A plain token

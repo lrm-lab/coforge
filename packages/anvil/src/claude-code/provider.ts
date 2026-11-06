@@ -4,7 +4,7 @@ import { type CodeAgentProvider } from "#src/contract";
 import { JsonlProcess } from "#src/jsonl-process";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { readClaudeCodeUsage } from "./usage";
-import { claudeLaunchCommand } from "./launch-args";
+import { claudeLaunchCommand, isClaudeRootRefusal } from "./launch-args";
 import { readClaudeRecycleBriefing } from "./recycle-briefing";
 import { readClaudeSessionResumeFacts } from "./session-transcript";
 import { ClaudeCodeAgentSession } from "./session";
@@ -93,6 +93,13 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
       } finally {
         await prompt.remove();
       }
+      // Raft's isClaudeRootRefusal: dispose has drained stderr, so the refusal line and the
+      // exit code are both settled. The launch then fails with the reason a person can act on.
+      if (process && isClaudeRootRefusal(process))
+        throw new Error(
+          "Claude Code cannot start with root or sudo privileges while permission checks " +
+            "are disabled. Run CoForge Computer as a non-root user, then start the agent again.",
+        );
       throw error;
     }
   }
