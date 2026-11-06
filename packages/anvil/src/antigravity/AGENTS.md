@@ -34,11 +34,18 @@
   `authenticate` (`oauth-personal`/`oauth-business`) launches the server's browser flow on a
   short-lived `agy acp` process — never the running Agent session — and `logout` clears it;
   `session/new` and `session/load` `-32000 "Authentication required"` are `runtime_login_required`,
-  `-32800` is a cancelled sign-in, and a Computer without a desktop (`canOpenBrowser`: Linux needs
-  `DISPLAY`/`WAYLAND_DISPLAY`, `COFORGE_COMPUTER_CLOUD=1` never qualifies) refuses before spawn.
-  On macOS reached over SSH the flow still starts — the browser attempt fails only at the
-  five-minute timeout, which is by design. The credentials
-  stay on the server's side: the adapter never reads, stores, or logs them.
+  `-32800` is a cancelled sign-in. A Computer without a desktop (`canOpenBrowser`: Linux needs
+  `DISPLAY`/`WAYLAND_DISPLAY`, `COFORGE_COMPUTER_CLOUD=1` never qualifies) signs in through
+  `agy acp --login` instead (`auth-terminal.ts`): the adapter probes `agy acp --help` for the
+  flag, relays only an `accounts.google.com` link as `auth_url`, feeds the pasted code or
+  redirect URL to the child's stdin, and re-verifies with the `session/new` probe after exit 0.
+  Only `oauth-personal` has this path — headless `oauth-business` is refused as before. On macOS
+  reached over SSH the browser flow still starts — the attempt fails only at the five-minute
+  timeout, which is by design. The credentials
+  stay on the server's side: the adapter never reads, stores, or logs them. A person who
+  instead SSHes in and runs `agy acp --login` by hand gets agy's file-based token store when
+  the machine has a credential manager, while the Daemon's SSH-stripped environment reads the
+  keyring store — the two logins do not share credentials there.
 - The model catalog is `session/new`'s `model` config option (`acp-catalog.ts`), not
   `agy models`. Per-turn usage is not reported through ACP prompt responses in a shape the
   adapter can attribute per turn — the steer's `usage` covers the merged turn; account usage

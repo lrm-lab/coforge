@@ -26,6 +26,55 @@ if (stateFile) {
 const persistSignedIn = async () => {
   if (stateFile) await writeFile(stateFile, signedIn ? "1" : "0");
 };
+if (process.argv.includes("--help")) {
+  // `agy acp --help` — NO_LOGIN_FLAG leaves --login out, standing in for an agy that predates it.
+  const flags = Bun.env.AGY_ACP_FIXTURE_NO_LOGIN_FLAG
+    ? ""
+    : "  --login                           Log in with Google interactively, then exit (ACP terminal auth)\n";
+  console.log(`Usage: agy acp [flags]\n\nFlags:\n${flags}`);
+  process.exit(0);
+}
+if (process.argv.includes("--login")) {
+  // `agy acp --login` — the headless terminal auth flow: print the link, take the paste on
+  // stdin, and persist the sign-in the way the ACP process's state file already does.
+  const url =
+    Bun.env.AGY_ACP_FIXTURE_LOGIN_URL ??
+    "https://accounts.google.com/o/oauth2/auth?client_id=fixture&state=s";
+  if (!Bun.env.AGY_ACP_FIXTURE_LOGIN_NO_URL)
+    console.log(`Open this link in a browser to log in with Google:\n\n  ${url}\n`);
+  const prompt = () =>
+    console.log(
+      "Then paste the authorization code, or the full URL of the page you land on, and press Enter:",
+    );
+  prompt();
+  if (Bun.env.AGY_ACP_FIXTURE_LOGIN_HANG) await new Promise(() => {});
+  let rejects = 0;
+  for await (const line of console) {
+    const code = line.trim();
+    if (!code) {
+      console.log("login cancelled: no authorization code was entered");
+      process.exit(1);
+    }
+    if (Bun.env.AGY_ACP_FIXTURE_LOGIN_REJECT && code !== "good-code") {
+      rejects += 1;
+      // One re-prompt, then the process gives up — the adapter must read the non-zero exit
+      // as a rejected sign-in rather than waiting for another paste.
+      if (rejects >= 2) {
+        console.log("login failed: too many rejected authorization codes");
+        process.exit(1);
+      }
+      console.log("login failed: authorization code was not accepted");
+      prompt();
+      continue;
+    }
+    signedIn = true;
+    await persistSignedIn();
+    console.log("login successful");
+    process.exit(0);
+  }
+  console.log("login cancelled: no authorization code was entered");
+  process.exit(1);
+}
 let currentSessionId = sessionId;
 const write = (value: unknown) => console.log(JSON.stringify(value));
 const update = (value: unknown) =>

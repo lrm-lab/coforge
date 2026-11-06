@@ -123,16 +123,161 @@ test("an aborted login disposes the auth process", async () => {
   }
 });
 
-test("a login on a desktop-less Computer is refused before any process spawns", async () => {
+test("a headless business login is refused before any process spawns", async () => {
   const dir = await cwd();
   try {
     const adapter = new AntigravityRuntimeAuthAdapter(authHost(dir, {}, false));
     const result = await adapter.startLogin(
-      { workingDirectory: dir },
+      { workingDirectory: dir, antigravityMethodId: "oauth-business" },
       { onEvent: () => {}, prompt: async () => "" },
     );
     expect(result.status).toBe("failed");
-    expect((result as { detail?: string }).detail).toMatch(/desktop/i);
+    expect((result as { detail?: string }).detail).toMatch(/desktop/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a headless personal login runs agy acp --login and signs the status read in", async () => {
+  const dir = await cwd();
+  try {
+    const adapter = new AntigravityRuntimeAuthAdapter(
+      authHost(dir, { AGY_ACP_FIXTURE_SIGNED_OUT: "1" }, false),
+    );
+    const events: { kind: string; verificationUrl?: string }[] = [];
+    const prompts: string[] = [];
+    const secrets: string[] = [];
+    const result = await adapter.startLogin(
+      { workingDirectory: dir, onSecret: (secret) => secrets.push(secret) },
+      {
+        onEvent: (event) => events.push(event),
+        prompt: async ({ message }) => {
+          prompts.push(message ?? "");
+          return "4/fixture-code";
+        },
+      },
+    );
+    expect(result.status).toBe("logged_in");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: "auth_url",
+        verificationUrl: expect.stringContaining("accounts.google.com"),
+      }),
+    );
+    expect(events).toContainEqual(expect.objectContaining({ kind: "code_prompt" }));
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(secrets).toContain("4/fixture-code");
+    const status = await adapter.readStatus({ workingDirectory: dir });
+    expect(status.state).toBe("logged_in");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a headless login refuses a sign-in link that is not a Google address", async () => {
+  const dir = await cwd();
+  try {
+    const adapter = new AntigravityRuntimeAuthAdapter(
+      authHost(
+        dir,
+        {
+          AGY_ACP_FIXTURE_SIGNED_OUT: "1",
+          AGY_ACP_FIXTURE_LOGIN_URL: "https://evil.example.com/o/oauth2/auth",
+        },
+        false,
+      ),
+    );
+    const result = await adapter.startLogin(
+      { workingDirectory: dir },
+      { onEvent: () => {}, prompt: async () => "4/fixture-code" },
+    );
+    expect(result).toEqual(expect.objectContaining({ status: "failed", reason: "process_failed" }));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a headless login on an agy without --login asks for an upgrade", async () => {
+  const dir = await cwd();
+  const spawned: string[][] = [];
+  try {
+    const host = authHost(dir, { AGY_ACP_FIXTURE_NO_LOGIN_FLAG: "1" }, false);
+    const baseSpawn = host.processTreeSpawner.spawn.bind(host.processTreeSpawner);
+    host.processTreeSpawner = {
+      ...host.processTreeSpawner,
+      spawn: (...args: Parameters<typeof baseSpawn>) => {
+        spawned.push([...args[0]]);
+        return baseSpawn(...args);
+      },
+    };
+    const adapter = new AntigravityRuntimeAuthAdapter(host);
+    const result = await adapter.startLogin(
+      { workingDirectory: dir },
+      { onEvent: () => {}, prompt: async () => "" },
+    );
+    expect(result).toEqual(
+      expect.objectContaining({ status: "unsupported", reason: "version_unsupported" }),
+    );
+    // Only the --help probe ran; no --login child was ever spawned.
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0]).toContain("--help");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a headless login that agy rejects reports rejected, not a crash", async () => {
+  const dir = await cwd();
+  try {
+    const adapter = new AntigravityRuntimeAuthAdapter(
+      authHost(dir, { AGY_ACP_FIXTURE_SIGNED_OUT: "1", AGY_ACP_FIXTURE_LOGIN_REJECT: "1" }, false),
+    );
+    const result = await adapter.startLogin(
+      { workingDirectory: dir },
+      { onEvent: () => {}, prompt: async () => "bad-code" },
+    );
+    expect(result).toEqual(expect.objectContaining({ status: "failed", reason: "rejected" }));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a headless login prompt with no link fails instead of waiting forever", async () => {
+  const dir = await cwd();
+  try {
+    const adapter = new AntigravityRuntimeAuthAdapter(
+      authHost(dir, { AGY_ACP_FIXTURE_SIGNED_OUT: "1", AGY_ACP_FIXTURE_LOGIN_NO_URL: "1" }, false),
+    );
+    const result = await adapter.startLogin(
+      { workingDirectory: dir, timeoutMs: 30_000 },
+      { onEvent: () => {}, prompt: async () => "4/fixture-code" },
+    );
+    expect(result).toEqual(expect.objectContaining({ status: "failed", reason: "process_failed" }));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a headless login hangs are bounded by the timeout and by abort", async () => {
+  const dir = await cwd();
+  try {
+    const adapter = new AntigravityRuntimeAuthAdapter(
+      authHost(dir, { AGY_ACP_FIXTURE_LOGIN_HANG: "1" }, false),
+    );
+    const never = () => new Promise<string>(() => {});
+    const timedOut = await adapter.startLogin(
+      { workingDirectory: dir, timeoutMs: 500 },
+      { onEvent: () => {}, prompt: never },
+    );
+    expect(timedOut).toEqual(expect.objectContaining({ status: "failed", reason: "timed_out" }));
+    const controller = new AbortController();
+    const pending = adapter.startLogin(
+      { workingDirectory: dir, timeoutMs: 120_000 },
+      { onEvent: () => {}, prompt: never, signal: controller.signal },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    controller.abort();
+    expect(await pending).toEqual({ status: "cancelled" });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

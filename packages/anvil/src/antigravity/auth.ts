@@ -10,9 +10,11 @@ import {
   type RuntimeAuthLoginInteraction,
   type RuntimeAuthLoginResult,
   type RuntimeAuthLogoutResult,
+  type RuntimeAuthSecretSink,
   type RuntimeAuthStatus,
 } from "#src/contract";
 import { ANTIGRAVITY_ACP_PROFILE } from "./acp-session";
+import { antigravityTerminalLogin } from "./auth-terminal";
 
 /** `session/new`'s refusal before a user signs in to this server's own account. */
 export const ANTIGRAVITY_AUTH_REQUIRED_CODE = -32000;
@@ -64,16 +66,11 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
     options: {
       workingDirectory: string;
       timeoutMs?: number;
+      onSecret?: RuntimeAuthSecretSink;
       antigravityMethodId?: AntigravityAuthMethod;
     },
     interaction: RuntimeAuthLoginInteraction,
   ): Promise<RuntimeAuthLoginResult> {
-    if (!this.host.canOpenBrowser)
-      return {
-        status: "failed",
-        reason: "interaction_failed",
-        detail: "antigravity_no_desktop",
-      };
     const methodId = options.antigravityMethodId ?? "oauth-personal";
     if (!SUPPORTED_METHODS.includes(methodId))
       return {
@@ -81,6 +78,26 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
         reason: "unsupported_installation",
         detail: `Antigravity login supports ${SUPPORTED_METHODS.join(" and ")}.`,
       };
+    if (!this.host.canOpenBrowser) {
+      // Gemini Enterprise's `authenticate` has no terminal path; only the personal OAuth flow
+      // exists as `agy acp --login`.
+      if (methodId === "oauth-business")
+        return {
+          status: "failed",
+          reason: "interaction_failed",
+          detail: "antigravity_no_desktop",
+        };
+      return antigravityTerminalLogin(
+        this.host,
+        {
+          workingDirectory: options.workingDirectory,
+          timeoutMs: options.timeoutMs,
+          onSecret: options.onSecret,
+        },
+        interaction,
+        () => this.readStatus({ workingDirectory: options.workingDirectory }),
+      );
+    }
     const timeoutMs = options.timeoutMs ?? ANTIGRAVITY_AUTH_TIMEOUT_MS;
     interaction.onEvent({ kind: "info", message: RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN });
     const transport = acpProcess(ANTIGRAVITY_ACP_PROFILE, {
@@ -129,7 +146,8 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
   }
 
   async submitCode(): Promise<void> {
-    // `authenticate` is a browser flow — no code ever rides back to paste.
+    // Neither flow takes a code here: `authenticate` is browser-only, and `agy acp --login`'s
+    // paste arrives through the login interaction's `manual_code` prompt.
   }
 
   async logout(options: {
