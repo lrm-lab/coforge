@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { Await, Link } from "@tanstack/react-router";
 import {
-  ArrowLeft,
   ArrowUpRight,
   CheckCircle,
   Circle,
@@ -13,7 +12,6 @@ import {
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
-import { PageHeader } from "#src/components/layout/page-header";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
@@ -23,7 +21,7 @@ import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/t
 import { WorkspaceTaskBoard } from "#src/features/tasks/workspace-task-board";
 import { ProjectOverview } from "./project-overview";
 import type { getProject, getProjectRepository } from "./projects.functions";
-import { ProjectImage } from "./project-image";
+import { ProjectsHeader } from "./projects-header";
 import { ProjectReadme } from "./project-readme";
 import { findReadmeEntry } from "./readme-entry";
 import { RepositorySection } from "./repository-section";
@@ -52,11 +50,12 @@ export function ProjectDetail({
   const workspaceSlug = useWorkspaceSlug();
   const hasCode = Boolean(project.githubFullName);
   const tab: ProjectTab =
-    search.tab === "code" && !hasCode ? "overview" : (search.tab ?? "overview");
+    // A Project's page opens on its board (task #596): the Tasks are the Project.
+    search.tab === "code" && !hasCode ? "tasks" : (search.tab ?? "tasks");
   return (
     <main className="flex h-full min-w-0 flex-col bg-primary">
-      <PageHeader
-        heading={project.name}
+      <ProjectsHeader
+        project={project}
         meta={
           <Link
             to="/w/$workspaceSlug/projects/$projectSlug/settings"
@@ -67,19 +66,6 @@ export function ProjectDetail({
             <Settings01 aria-hidden="true" className="size-5" />
           </Link>
         }
-        leading={
-          <>
-            <Link
-              to="/w/$workspaceSlug/projects"
-              params={{ workspaceSlug }}
-              aria-label={m.project_back()}
-              className="shrink-0 rounded-lg p-2 text-tertiary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
-            >
-              <ArrowLeft aria-hidden="true" className="size-5" />
-            </Link>
-            <ProjectImage name={project.name} url={project.iconUrl} />
-          </>
-        }
         actions={
           project.githubFullName && (
             <a
@@ -87,7 +73,7 @@ export function ProjectDetail({
               target="_blank"
               rel="noreferrer"
               aria-label={project.githubFullName}
-              className="flex items-center gap-1 text-sm text-tertiary hover:text-primary"
+              className="flex items-center gap-1 text-sm text-tertiary hover:text-primary max-sm:hidden"
             >
               GitHub
               <ArrowUpRight aria-hidden="true" className="size-4" />
@@ -109,8 +95,8 @@ export function ProjectDetail({
             aria-label={m.project_sections()}
             className="-mb-px gap-6 px-page before:hidden"
           >
-            <Tab id="overview">{m.project_overview()}</Tab>
             <Tab id="tasks">{m.project_tasks()}</Tab>
+            <Tab id="overview">{m.project_overview()}</Tab>
             {hasCode && <Tab id="code">{m.project_code()}</Tab>}
           </TabList>
         </div>
