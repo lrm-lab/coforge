@@ -58,7 +58,7 @@ export async function latestTopLevelMessageRows(
       ORDER BY m."sequence" DESC LIMIT 1
     ) latest
     LEFT JOIN "conversation_members" sender ON sender."id" = latest."senderMemberId"
-    LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id"
+    LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id" AND forward."position" = 0
     LEFT JOIN "system_messages" notice ON notice."messageId" = latest."id"
     LEFT JOIN "action_cards" card ON card."messageId" = latest."id"
     WHERE c."id" = ANY(${[...conversationIds]}::uuid[])

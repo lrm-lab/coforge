@@ -1,3 +1,4 @@
+import type { ForwardCopy } from "#src/server/conversations/message-forward-view.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_FORWARD_SELECT } from "./direct-conversation-agent-message.server";
 
@@ -61,11 +62,17 @@ export async function recoverySecondPass(
         }),
         db.messageForward.findMany({
           where: { messageId: { in: ids } },
+          orderBy: { position: "asc" },
           select: {
             messageId: true,
             ...AGENT_FORWARD_SELECT.select,
             message: {
-              select: { attachments: { select: { id: true }, orderBy: { position: "asc" } } },
+              select: {
+                attachments: {
+                  select: { id: true, forwardPosition: true },
+                  orderBy: { position: "asc" },
+                },
+              },
             },
           },
         }),
@@ -80,6 +87,19 @@ export async function recoverySecondPass(
   return {
     mentionsByMessage,
     hintsByMessage: new Map(hints.map((hint) => [hint.messageId, hint.id])),
-    forwardsByMessage: new Map(forwardRows.map((forward) => [forward.messageId, forward])),
+    forwardsByMessage: groupForwards(forwardRows),
   };
+}
+
+/** A forward's snapshot rows by message, in position order, beside the message's attachments. */
+function groupForwards<T extends { messageId: string; message: { attachments: ForwardCopy[] } }>(
+  rows: readonly T[],
+): Map<string, { forwards: T[]; attachments: ForwardCopy[] }> {
+  const byMessage = new Map<string, { forwards: T[]; attachments: ForwardCopy[] }>();
+  for (const row of rows) {
+    const entry = byMessage.get(row.messageId);
+    if (entry) entry.forwards.push(row);
+    else byMessage.set(row.messageId, { forwards: [row], attachments: row.message.attachments });
+  }
+  return byMessage;
 }

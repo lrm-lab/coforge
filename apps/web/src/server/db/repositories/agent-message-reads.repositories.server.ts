@@ -131,7 +131,7 @@ export async function agentMessagesByIds(
       sender: MESSAGE_SENDER_SELECT,
       attachments: { orderBy: { position: "asc" } },
       mentions: MESSAGE_MENTIONS_SELECT,
-      forward: AGENT_FORWARD_SELECT,
+      forwards: AGENT_FORWARD_SELECT,
     },
   });
   const coordination = await readChannelCoordination(
@@ -154,9 +154,15 @@ function agentContextRecord<
     sender: Parameters<typeof agentMessageSender>[0];
     body: string;
     mentions: readonly MessageMentionRef[];
-    forward?: StoredAgentForward | null;
+    forwards?: StoredAgentForward[];
     createdAt: Date;
-    attachments: { id: string; fileName: string; contentType: string; sizeBytes: number }[];
+    attachments: {
+      id: string;
+      fileName: string;
+      contentType: string;
+      sizeBytes: number;
+      forwardPosition: number | null;
+    }[];
   },
 >(m: Row, canonicalTarget: string, channelCoordination?: string) {
   const sender = agentMessageSender(m.sender);

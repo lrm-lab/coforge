@@ -45,8 +45,8 @@ function Preview({ message }: { message: ActivityInboxItem["latest"] }) {
   if (cardText) return <>{cardText}</>;
   if (message.body) return <MessagePreview body={message.body} mentions={message.mentions} />;
   // A forward sent without a note previews as what it forwards.
-  if (message.forwarded)
-    return <>{m.message_forward_preview({ text: message.forwarded.sourceBody })}</>;
+  if (message.forwarded?.[0])
+    return <>{m.message_forward_preview({ text: message.forwarded[0].sourceBody })}</>;
   return <>{message.attachments[0]?.fileName ?? ""}</>;
 }
 

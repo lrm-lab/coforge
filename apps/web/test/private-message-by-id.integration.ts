@@ -208,7 +208,8 @@ test.skipIf(!connectionString)(
       sourceAccessible: false,
     };
     const card = async (userId: string) =>
-      (await attachForwardedAccess(db, ws, userId, [{ forwarded }]))[0]!.forwarded;
+      (await attachForwardedAccess(db, ws, userId, [{ forwarded: [forwarded] }]))[0]!
+        .forwarded?.[0];
     for (const userId of outsiders)
       expect(await card(userId)).toMatchObject({
         sourceAccessible: false,

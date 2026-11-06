@@ -4,6 +4,7 @@ import { useDbClient } from "@tanstack/react-db";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { ForwardHost } from "./message-forward-host";
+import { MessageSelectionHost } from "./message-selection";
 import { MessageTaskHost } from "./message-task-host";
 import { savedMessagesQuery } from "./conversation-queries";
 import type { ChannelSuggestion } from "./reference-completion";
@@ -64,7 +65,9 @@ export function ConversationHostProvider({
     <SavedMessagesContext value={savedMessages}>
       <ChannelsContext value={channels}>
         <ForwardHost channels={channels}>
-          <MessageTaskHost>{children}</MessageTaskHost>
+          <MessageSelectionHost>
+            <MessageTaskHost>{children}</MessageTaskHost>
+          </MessageSelectionHost>
         </ForwardHost>
       </ChannelsContext>
     </SavedMessagesContext>

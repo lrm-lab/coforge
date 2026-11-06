@@ -44,7 +44,7 @@ const assistantMessageInclude = {
   sender: MESSAGE_SENDER_SELECT,
   mentions: MESSAGE_MENTIONS_SELECT,
   actionCard: { select: { state: true } },
-  forward: AGENT_FORWARD_SELECT,
+  forwards: AGENT_FORWARD_SELECT,
   attachments: { orderBy: { position: "asc" } },
 } satisfies Prisma.MessageInclude;
 function assistantMessage(

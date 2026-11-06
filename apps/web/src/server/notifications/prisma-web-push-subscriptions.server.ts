@@ -135,7 +135,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
           },
         },
         mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
-        forward: { select: { sourceBody: true } },
+        forwards: { select: { sourceBody: true }, orderBy: { position: "asc" }, take: 1 },
         systemMessage: { select: { kind: true, params: true } },
         attachmentComment: { select: { attachmentId: true } },
         conversation: {
@@ -181,7 +181,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
     // A forward sent without a note previews as what it forwards.
     const readableBody = forwardPreviewText(
       peopleReadableBody(message.body, message.mentions.map(browserMessageMention)),
-      message.forward?.sourceBody,
+      message.forwards[0]?.sourceBody,
     );
     const mentionedUserIds = message.mentions
       .filter((mention) => mention.kind === "user")

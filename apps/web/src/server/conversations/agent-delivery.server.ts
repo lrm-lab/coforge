@@ -27,14 +27,14 @@ export function channelTarget(channelName: string): string {
  * The one way a message is encoded for an Agent's daemon. Its body always goes through
  * `agentReadableBody` here, with the message's mention rows, so no stored token (`<@agent:…>`,
  * `<@task:N>`, `<@channel:…>`, `<@thread:…>`) ever reaches a daemon, whichever path sends it. A body that is
- * already readable reads back unchanged. A forward's original (`forwarded`) is read into the body
+ * already readable reads back unchanged. A forward's originals (`forwarded`) are read into the body
  * after the note, as the wire has no field for it.
  */
 export function encodeAgentDelivery(
   delivery: Omit<AgentMessageDelivery, "protocolMajor" | "method" | "createdAtMs"> & {
     mentions: readonly MessageMentionRef[];
-    /** The original a forwarded message carries. */
-    forwarded?: ForwardedMessage;
+    /** The originals a forwarded message carries, oldest first. */
+    forwarded?: readonly ForwardedMessage[];
     /** When the message was created: every path that delivers one knows it, so none may omit it. */
     createdAtMs: number;
     /** A task reference as this recipient reads it (see `taskReferenceView`). */

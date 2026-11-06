@@ -67,6 +67,7 @@ test("signals the sender's own channel with the sender named, so their other tab
               agent: null,
             },
             mentions: [],
+            forwards: [],
           };
         },
       },

@@ -36,7 +36,7 @@ test("only a person's or an Agent's own plain message can be forwarded", () => {
   expect(canForwardMessage({ senderKind: "user" })).toBe(true);
   expect(canForwardMessage({ senderKind: "agent" })).toBe(true);
   expect(canForwardMessage({ senderKind: "system" })).toBe(false);
-  expect(canForwardMessage({ senderKind: "user", forwarded })).toBe(false);
+  expect(canForwardMessage({ senderKind: "user", forwarded: [forwarded] })).toBe(false);
   expect(canForwardMessage({ senderKind: "agent", actionCard: {} as never })).toBe(false);
 });
 

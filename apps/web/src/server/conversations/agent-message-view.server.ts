@@ -1,3 +1,4 @@
+import { copiesOf, type ForwardCopy } from "./message-forward-view.server";
 import {
   MESSAGE_LINE_SEPARATOR,
   renderForwardedMessage,
@@ -40,13 +41,14 @@ export type StoredAgentForward = {
 
 /** A stored message as the Agent projection needs it: its body and the mention rows that resolve
  * the body's mention tokens, plus an action card's state when the reader shows one, and the
- * snapshot (with the message's own attachments) when it is a forward. */
+ * snapshots, oldest first (with the message's own attachments), when it is a forward. */
 type StoredAgentMessage = {
   body: string;
   mentions: readonly MessageMentionRef[];
   actionCard?: { state: string; kind?: string; result?: unknown } | null;
-  forward?: StoredAgentForward | null;
-  attachments?: readonly { id: string }[];
+  forwards?: readonly StoredAgentForward[];
+  /** With which original of a forward of several each is a copy of. */
+  attachments?: readonly ForwardCopy[];
 };
 
 /**
@@ -158,7 +160,22 @@ export function questionsResultBody(
   return `${who} answered your questions in ${target}:\n${lines.join("\n")}` as AgentReadableBody;
 }
 
-/** A forward's snapshot as an Agent reads it. The snapshot body is already plain text. */
+/** A forward's originals as an Agent reads them, oldest first, each with its own attachments. */
+export function agentForwards(
+  forwards: readonly StoredAgentForward[],
+  attachments: readonly ForwardCopy[] = [],
+): ForwardedMessage[] {
+  // One original owns every attachment of its message; with several, each copy names its own.
+  if (forwards.length === 1) return [agentForwarded(forwards[0]!, attachments)];
+  return forwards.map((forward, position) =>
+    agentForwarded(
+      forward,
+      copiesOf(attachments, position).map((id) => ({ id })),
+    ),
+  );
+}
+
+/** One original as an Agent reads it. The snapshot body is already plain text. */
 export function agentForwarded(
   forward: StoredAgentForward,
   attachments: readonly { id: string }[] = [],
@@ -185,7 +202,9 @@ export function agentForwarded(
  *   has not been acted on as a committed resource.
  * - With a `readerAgentId`, `mentionsAgent: true` is present when the message personally mentions
  *   that Agent.
- * - A forward's `body` stays the forwarder's note; the original is `forwarded`.
+ * - A forward's `body` stays the forwarder's note; its originals, oldest first, are
+ *   `forwardedMessages` (one item for a single message). `forwarded` repeats the first, only for
+ *   Computers whose CLI predates the list.
  */
 export function agentMessageView(
   message: StoredAgentMessage,
@@ -195,6 +214,10 @@ export function agentMessageView(
   body: AgentReadableBody;
   channelCoordination?: string;
   mentionsAgent?: true;
+  forwardedMessages?: ForwardedMessage[];
+  /** @deprecated Wire compatibility only, derived from `forwardedMessages[0]`: a CLI before the
+   * list reads this field. Remove once every online Computer runs a CLI that reads
+   * `forwardedMessages` (task #2 in Frank's DM, 11-06). Nothing in this repository reads it. */
   forwarded?: ForwardedMessage;
 } {
   const { text, mentionsAgent, forwarded } = projectMessage(message, readerAgentId);
@@ -202,14 +225,14 @@ export function agentMessageView(
     body: text as AgentReadableBody,
     ...(channelCoordination ? { channelCoordination } : {}),
     ...(mentionsAgent ? { mentionsAgent } : {}),
-    ...(forwarded ? { forwarded } : {}),
+    ...(forwarded[0] ? { forwardedMessages: forwarded, forwarded: forwarded[0] } : {}),
   };
 }
 
 /**
  * `agentMessageView` for what an Agent's daemon is handed as one body, whose delivery carries a
- * body and nothing else (recoveries and pending deliveries): a forward's original is read into
- * the body after the note (`withForwarded`), so the Agent sees it where the notice shows the
+ * body and nothing else (recoveries and pending deliveries): a forward's originals are read into
+ * the body after the note (`withForwarded`), so the Agent sees them where the notice shows the
  * message. The structured `forwarded` is left out, as there is no field for it.
  */
 export function agentDeliveryView(
@@ -220,7 +243,7 @@ export function agentDeliveryView(
 ): { body: AgentReadableBody; mentionsAgent?: true } {
   const { text, mentionsAgent, forwarded } = projectMessage(message, readerAgentId, taskView);
   return {
-    body: (forwarded ? withForwarded(text, forwarded) : text) as AgentReadableBody,
+    body: (forwarded.length ? withForwarded(text, forwarded) : text) as AgentReadableBody,
     ...(mentionsAgent ? { mentionsAgent } : {}),
   };
 }
@@ -229,19 +252,22 @@ function projectMessage(
   message: StoredAgentMessage,
   readerAgentId?: string,
   taskView?: (reference: TaskReference) => string | undefined,
-): { text: string; mentionsAgent?: true; forwarded?: ForwardedMessage } {
+): { text: string; mentionsAgent?: true; forwarded: ForwardedMessage[] } {
   const readable = agentReadableBody(message.body, message.mentions, taskView);
   return {
     text: message.actionCard ? `${readable} ${actionCardBodySuffix(message.actionCard)}` : readable,
     ...(readerAgentId && deliveryMentionsAgent(message.mentions, readerAgentId)
       ? { mentionsAgent: true as const }
       : {}),
-    ...(message.forward ? { forwarded: agentForwarded(message.forward, message.attachments) } : {}),
+    forwarded: agentForwards(message.forwards ?? [], message.attachments),
   };
 }
 
-/** A delivery body with a forward's original after the note; the note may be empty. */
-export function withForwarded(note: string, forwarded: ForwardedMessage): string {
-  const original = renderForwardedMessage(forwarded, { withAttachmentIds: true });
-  return note ? `${note}\n${original}` : original;
+/** A delivery body with a forward's originals after the note, oldest first; the note may be
+ * empty. */
+export function withForwarded(note: string, forwarded: readonly ForwardedMessage[]): string {
+  const originals = forwarded
+    .map((original) => renderForwardedMessage(original, { withAttachmentIds: true }))
+    .join("\n");
+  return note ? `${note}\n${originals}` : originals;
 }

@@ -180,7 +180,7 @@ test.skipIf(!connectionString)(
           workspaceId: ws,
           userId,
           requestId: crypto.randomUUID(),
-          sourceMessageId: open.message.id,
+          sourceMessageIds: [open.message.id],
           destinations,
         })
       ).results.map((result) => (result.status === "failed" ? result.error.code : "sent"));

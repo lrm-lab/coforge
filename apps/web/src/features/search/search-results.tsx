@@ -356,8 +356,8 @@ function SearchResultRow({
     actionCardPreviewText(message.card) ||
     (message.body
       ? messagePlainText({ body: message.body, mentions: message.mentions })
-      : message.forwarded
-        ? m.message_forward_preview({ text: message.forwarded.sourceBody })
+      : message.forwarded?.[0]
+        ? m.message_forward_preview({ text: message.forwarded[0].sourceBody })
         : (message.attachments[0]?.fileName ?? ""));
   const target = messagePreviewTarget(conversation, message);
   const onClick = useResultClick({

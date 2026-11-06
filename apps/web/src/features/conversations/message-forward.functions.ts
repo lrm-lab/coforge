@@ -42,7 +42,7 @@ export const forwardMessage = createServerFn({ method: "POST" })
       workspaceId,
       userId: user.id,
       requestId: data.requestId,
-      sourceMessageId: data.sourceMessageIds[0]!,
+      sourceMessageIds: data.sourceMessageIds,
       destinations: data.destinations,
       note: data.note,
     });

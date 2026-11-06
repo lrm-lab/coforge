@@ -7,6 +7,7 @@ import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { useIsMessageSaved } from "./conversation-host";
 import { useOpenForward } from "./message-forward-host";
+import { useMessageSelection } from "./message-selection";
 import { useMakeTaskFromMessage } from "./message-task-host";
 import { canForwardMessage } from "./message-forward-model";
 import type { ReadState } from "./conversation-pane-layout";
@@ -26,8 +27,11 @@ export function useMessageRowActions({
   onOpenThread,
   onToggleReaction,
   onToggleSave,
+  inStream = false,
 }: {
   message: MessageView;
+  /** The conversation's own stream, which offers select mode; a thread pane does not. */
+  inStream?: boolean;
   conversationId?: string;
   channelNames?: ReadonlyMap<string, string>;
   readState?: ReadState;
@@ -38,6 +42,7 @@ export function useMessageRowActions({
   const toast = useAppToast();
   const saveSaved = useIsMessageSaved(message.id);
   const openForward = useOpenForward();
+  const selection = useMessageSelection();
   const makeTask = useMakeTaskFromMessage();
   // The mobile shell (single-pane below `lg`) has no hover to reveal the reply/reaction
   // actions, and keeping the toolbar always visible puts two buttons on every message.
@@ -90,8 +95,16 @@ export function useMessageRowActions({
       openForward && conversationId && canForwardMessage(message)
         ? () =>
             openForward({
-              message,
+              messages: [{ message, plainBody: messagePlainText(message, channelNames) }],
               conversationId,
+            })
+        : undefined,
+    // Select mode starts with this message picked; it picks what a forward can carry.
+    onSelect:
+      selection && inStream && conversationId && canForwardMessage(message)
+        ? () =>
+            selection.toggle(conversationId, {
+              message,
               plainBody: messagePlainText(message, channelNames),
             })
         : undefined,

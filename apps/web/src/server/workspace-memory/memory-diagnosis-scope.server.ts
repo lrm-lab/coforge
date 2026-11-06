@@ -72,8 +72,8 @@ export async function resolveMemoryDiagnosisScope(
       createdAt: true,
       sender: { select: { agentId: true, agent: { select: { name: true } } } },
       mentions: MESSAGE_MENTIONS_SELECT,
-      forward: AGENT_FORWARD_SELECT,
-      attachments: { orderBy: { position: "asc" }, select: { id: true } },
+      forwards: AGENT_FORWARD_SELECT,
+      attachments: { orderBy: { position: "asc" }, select: { id: true, forwardPosition: true } },
     },
   });
   let remaining = MAX_CHARACTERS;

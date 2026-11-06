@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
   ATTACHMENT_VIEW_SELECT,
@@ -61,11 +61,11 @@ const SOURCE_SELECT = {
     },
   },
   mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
-  forward: { select: { messageId: true } },
+  forwards: { select: { messageId: true }, take: 1 },
   actionCard: { select: { messageId: true } },
   conversation: { select: { kind: true, channelName: true } },
   attachments: { select: ATTACHMENT_VIEW_SELECT, orderBy: { position: "asc" as const } },
-} as const;
+} as const satisfies Prisma.MessageSelect;
 
 /**
  * The message a person forwards, if they may: one they can see in a channel or direct conversation
@@ -122,7 +122,7 @@ export async function loadForwardSource(
   }
   // A server notice has no sender, and a sender with neither a user nor an Agent has no handle.
   const sourceSenderHandle = browserSenderHandle(message.sender);
-  if (message.forward || message.actionCard || sourceSenderHandle === undefined)
+  if (message.forwards.length || message.actionCard || sourceSenderHandle === undefined)
     throw new AppError("INVALID_INPUT", { errorId: FORWARD_NOT_FORWARDABLE });
   const sourceMentions = message.mentions.map(browserMessageMention);
   const sourceRawBody = withoutChannelIds(message.body);

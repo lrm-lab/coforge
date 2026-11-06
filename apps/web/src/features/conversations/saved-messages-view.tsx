@@ -185,8 +185,8 @@ function SavedMessageCard({
             {actionCardPreviewText(message.card) ||
               (message.body
                 ? messagePlainText({ body: message.body, mentions: message.mentions })
-                : message.forwarded
-                  ? m.message_forward_preview({ text: message.forwarded.sourceBody })
+                : message.forwarded?.[0]
+                  ? m.message_forward_preview({ text: message.forwarded[0].sourceBody })
                   : (attachmentName ?? ""))}
           </p>
         </AriaLink>

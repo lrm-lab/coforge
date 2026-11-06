@@ -65,8 +65,8 @@ export async function sendChannel(
     withinSend?: SentMessageHook;
     /** A forward's body is the forwarder's note and may be empty; no other send accepts that. */
     allowEmptyBody?: boolean;
-    /** The forwarded original as an Agent that is delivered the message reads it. */
-    forwarded?: ForwardedMessage;
+    /** The forwarded originals, oldest first, as an Agent that is delivered the message reads them. */
+    forwarded?: readonly ForwardedMessage[];
   },
 ) {
   const { workspaceId, userId, channelId, idempotencyKey, attachmentIds, threadRootId } = input;

@@ -39,7 +39,7 @@ const note = `Please read ${suffix}`;
 let workspaceId: string;
 let workspaceSlug: string;
 let writerId: string;
-let ids: { a: string; b: string; c: string; source: string };
+let ids: { a: string; b: string; c: string; source: string; follow: string };
 const objectKey = `e2e/forward/${suffix}/original`;
 
 const click = (selector: string) => browser("click", selector);
@@ -67,6 +67,30 @@ async function openForwardDialog(conversationId: string) {
   );
 }
 
+/** Nothing still fading or easing: a shot taken mid-fade shows the page through a dialog, and
+ * one mid-transition a picked row (or a theme switch) half tinted. */
+const settle = () =>
+  waitFor(
+    `!document.querySelector("[data-entering], [data-exiting]") && document.getAnimations().every((animation) => !(animation instanceof CSSTransition) || animation.playState !== "running")`,
+  );
+
+async function shot(name: string) {
+  await settle();
+  await browser("screenshot", join(artifacts, `${name}.png`));
+}
+
+/** Light, then the same frame dark. */
+async function shotBoth(name: string) {
+  await shot(name);
+  await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+  await settle();
+  await browser("screenshot", join(artifacts, `${name}-dark.png`));
+  await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+}
+
+const rowOf = (messageId: string) => `li[data-message-id="${messageId}"]`;
+const selectedCount = `document.querySelector("[data-selection-bar]")?.textContent ?? ""`;
+
 /** The dialog's labelled send button, by what it says ("Forward", or "Join and forward"). */
 const sendButton = (label: string) =>
   `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
@@ -76,13 +100,6 @@ async function pick(search: string, label: string) {
   await browser("fill", 'input[placeholder="Search targets"]', search);
   await waitFor(`document.querySelector(${JSON.stringify(targetRow(label))}) !== null`);
   await click(targetRow(label));
-}
-
-/** A screenshot once no dialog is still fading in or out: one taken mid-fade shows the page
- * through it. */
-async function shot(name: string) {
-  await waitFor(`!document.querySelector("[data-entering], [data-exiting]")`);
-  await browser("screenshot", join(artifacts, `${name}.png`));
 }
 
 beforeAll(async () => {
@@ -131,6 +148,16 @@ beforeAll(async () => {
       body: `Release notes draft ${suffix}\nsecond line`,
     },
   });
+  const follow = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: a.id,
+      senderMemberId: a.members[0]!.id,
+      sequence: 2,
+      body: `Budget follow-up ${suffix}`,
+      createdAt: new Date(source.createdAt.getTime() + 60_000),
+    },
+  });
   await files.put(objectKey, new Blob(["Forwarded file body"]), "text/plain");
   await db.attachment.create({
     data: {
@@ -144,7 +171,7 @@ beforeAll(async () => {
       sizeBytes: 19,
     },
   });
-  ids = { a: a.id, b: b.id, c: c.id, source: source.id };
+  ids = { a: a.id, b: b.id, c: c.id, source: source.id, follow: follow.id };
 });
 
 afterAll(async () => {
@@ -199,7 +226,7 @@ test("forwards a message with its attachment to a channel and a new DM, with a n
     where: {
       workspaceId,
       directKey: { not: null },
-      messages: { some: { forward: { isNot: null } } },
+      messages: { some: { forwards: { some: {} } } },
     },
   });
   await browser("open", pageUrl(`dm/${dm.id}`));
@@ -271,4 +298,94 @@ test("on a phone the targets and the note are two steps", async () => {
     `document.querySelector('[role="dialog"] input[placeholder="Search targets"]')?.offsetParent !== null`,
   );
   await browser("press", "Escape");
+  // Headless agent-browser marks the page hidden after an Escape, which freezes every exit
+  // animation and transition the next tests wait on; selecting the tab shows it again.
+  await browser("tab", "t1");
+  expect(await evaluate<string>("document.visibilityState")).toBe("visible");
+}, 90_000);
+
+test("select mode forwards several messages as one card, oldest first, and copies their links", async () => {
+  await browser("set", "viewport", "1440", "900");
+  await browser("open", pageUrl(`channel/${ids.a}`));
+  await waitFor(`document.querySelector('${rowOf(ids.follow)}') !== null`);
+  // Start from the newer message's menu; the older one is picked by a click on its row.
+  await browser(
+    "eval",
+    `document.querySelector('${rowOf(ids.follow)} [aria-label="More"]').click()`,
+  );
+  await clickNamed("menuitem", "Select messages");
+  await waitFor(`${selectedCount}.includes("1 selected")`);
+  // The composer gives its place to the bar.
+  expect(await evaluate<boolean>(`document.querySelector("[data-selection-bar]") !== null`)).toBe(
+    true,
+  );
+  await click(`${rowOf(ids.source)} [data-scroll-anchor]`);
+  await waitFor(`${selectedCount}.includes("2 selected")`);
+  await shotBoth("1440-select-two");
+
+  await clickNamed("button", "Copy link");
+  await waitFor(bodyIncludes("Copied 2 links."));
+  // Which links, in which order: message-selection-model.test.ts.
+
+  await browser(
+    "eval",
+    `[...document.querySelectorAll("[data-selection-bar] button")].find((b) => b.textContent.trim() === "Forward").click()`,
+  );
+  await waitFor(
+    `document.querySelector('[role="dialog"] input[placeholder="Search targets"]') !== null`,
+  );
+  await pick(channelB, `#${channelB}`);
+  await shotBoth("1440-select-dialog");
+  await send();
+  await waitFor(bodyIncludes(`Forwarded to #${channelB}.`));
+  // A forward that reached its destination ends select mode.
+  await waitFor(`document.querySelector("[data-selection-bar]") === null`);
+
+  const forwarded = await db.message.findFirstOrThrow({
+    where: { conversationId: ids.b, forwards: { some: { position: 1 } } },
+    include: { forwards: { orderBy: { position: "asc" } } },
+  });
+  expect(forwarded.forwards.map((row) => row.sourceMessageId)).toEqual([ids.source, ids.follow]);
+  await browser("open", pageUrl(`channel/${ids.b}`));
+  await waitFor(`document.querySelector('${rowOf(forwarded.id)} [data-forwarded-card]') !== null`);
+  const card = await evaluate<string>(
+    `document.querySelector('${rowOf(forwarded.id)} [data-forwarded-card]').textContent`,
+  );
+  expect(card).toContain("Forwarded 2 messages");
+  expect(card.indexOf(`Release notes draft ${suffix}`)).toBeLessThan(
+    card.indexOf(`Budget follow-up ${suffix}`),
+  );
+  expect(card).toContain(fileName);
+  await browser(
+    "eval",
+    `document.querySelector('${rowOf(forwarded.id)}').scrollIntoView({ block: "center" })`,
+  );
+  await shotBoth("1440-card-several");
+}, 120_000);
+
+test("on a phone select mode is reached from the action sheet and leaves with Cancel", async () => {
+  await browser("set", "viewport", "390", "844");
+  await browser("open", pageUrl(`channel/${ids.a}`));
+  await waitFor(`document.querySelector('${rowOf(ids.follow)}') !== null`);
+  await click(`${rowOf(ids.follow)} [data-scroll-anchor]`);
+  await waitFor(`document.querySelector("[data-message-actions-popover]") !== null`);
+  await browser(
+    "eval",
+    `[...document.querySelectorAll("[data-message-actions-popover] button")].find((b) => b.textContent.trim() === "Select messages").click()`,
+  );
+  await waitFor(`${selectedCount}.includes("1 selected")`);
+  // The sheet closes on its choice.
+  await waitFor(
+    `!document.querySelector("[data-message-actions-popover], [data-entering], [data-exiting]")`,
+  );
+  // In select mode a tap picks rather than opening the sheet.
+  await click(`${rowOf(ids.source)} [data-scroll-anchor]`);
+  await waitFor(`${selectedCount}.includes("2 selected")`);
+  expect(
+    await evaluate<boolean>(`document.querySelector("[data-message-actions-popover]") === null`),
+  ).toBe(true);
+  await shotBoth("390-select-two");
+  await clickNamed("button", "Cancel");
+  await waitFor(`document.querySelector("[data-selection-bar]") === null`);
+  await waitFor(`document.querySelector("[data-select-checkbox]") === null`);
 }, 90_000);

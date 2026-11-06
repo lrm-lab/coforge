@@ -62,8 +62,8 @@ export class SendDirectMessage {
     withinSend?: SentMessageHook;
     /** A forward's body is the forwarder's note and may be empty; no other send accepts that. */
     allowEmptyBody?: boolean;
-    /** The forwarded original as an Agent that is delivered the message reads it. */
-    forwarded?: ForwardedMessage;
+    /** The forwarded originals, oldest first, as an Agent that is delivered the message reads them. */
+    forwarded?: readonly ForwardedMessage[];
   }) {
     if (!input.idempotencyKey || (!input.body && !input.allowEmptyBody))
       throw new Error("invalid direct message");
@@ -292,7 +292,7 @@ export class SendDirectMessage {
     conversationId: string,
     message: Awaited<ReturnType<DirectConversationRepository["sendMessage"]>>,
     attachmentCount: number,
-    forwarded?: ForwardedMessage,
+    forwarded?: readonly ForwardedMessage[],
   ) {
     if (!message) throw new Error("message publication is unavailable");
     if (!message.deliveryId) throw new Error("message delivery is unavailable");

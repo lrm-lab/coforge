@@ -50,10 +50,12 @@ export function attachmentSuffix(message: AgentMessageRecord): string {
   return ` [${attachments.length} ${noun}: ${list} — use \`coforge attachment view --id <attachmentId> --output <path>\` to download]`;
 }
 
-/** A forwarded message's original under the message line: the header and the snapshot quoted. The
- * attachment ids are already in the line's own attachment list. */
+/** A forwarded message's originals under the message line, oldest first: each header and its
+ * snapshot quoted. The attachment ids are already in the line's own attachment list. */
 export function forwardedSuffix(message: AgentMessageRecord): string {
-  return message.forwarded ? `\n${renderForwardedMessage(message.forwarded)}` : "";
+  return (message.forwardedMessages ?? [])
+    .map((original) => `\n${renderForwardedMessage(original)}`)
+    .join("");
 }
 
 export function taskSuffix(message: AgentMessageRecord): string {

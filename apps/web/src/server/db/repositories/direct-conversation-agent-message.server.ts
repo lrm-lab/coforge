@@ -1,3 +1,4 @@
+import type { ForwardCopy } from "#src/server/conversations/message-forward-view.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { MessageTaskMetadata, TaskStatus } from "@lrm/coforge-sdk/internal";
 import { isAttachmentCommentAnchor } from "@lrm/coforge-sdk/agent";
@@ -37,8 +38,9 @@ const ACTION_CARD_STATE_SELECT = {
   select: { state: true, kind: true, result: true },
 } satisfies NonNullable<Prisma.MessageInclude["actionCard"]>;
 
-/** The snapshot an Agent reads of a forwarded message (`agentForwarded`). */
+/** The snapshots an Agent reads of a forwarded message's originals, in order (`agentForwards`). */
 export const AGENT_FORWARD_SELECT = {
+  orderBy: { position: "asc" },
   select: {
     sourceConversationName: true,
     sourceThreadRootId: true,
@@ -46,7 +48,7 @@ export const AGENT_FORWARD_SELECT = {
     sourceCreatedAt: true,
     sourceBody: true,
   },
-} satisfies NonNullable<Prisma.MessageInclude["forward"]>;
+} satisfies Prisma.Message$forwardsArgs;
 
 /** Message projection sent to an Agent. */
 export const AGENT_MESSAGE_INCLUDE = {
@@ -56,7 +58,7 @@ export const AGENT_MESSAGE_INCLUDE = {
   task: TASK_METADATA_SELECT,
   actionCard: ACTION_CARD_STATE_SELECT,
   mentions: MESSAGE_MENTIONS_SELECT,
-  forward: AGENT_FORWARD_SELECT,
+  forwards: AGENT_FORWARD_SELECT,
   attachmentComment: { select: { attachmentId: true, anchorType: true, anchorData: true } },
   // The thread's reply count, so a history line can say how many answers a message has.
   _count: { select: { replies: true } },
@@ -157,14 +159,15 @@ export function toAgentMessage(
   row: Pick<DirectConversationMessageRow, "id" | "sequence" | "body" | "createdAt"> & {
     sender: Parameters<typeof agentMessageSender>[0];
     task: Parameters<typeof messageTask>[0];
-    attachments: AttachmentMetadata[];
+    /** With which original of a forward of several each is a copy of. */
+    attachments: (AttachmentMetadata & ForwardCopy)[];
     attachmentComment?: {
       attachmentId: string;
       anchorType: string | null;
       anchorData: unknown;
     } | null;
     actionCard?: { state: string } | null;
-    forward?: StoredAgentForward | null;
+    forwards?: StoredAgentForward[];
     memoryHint?: { id: string; targetAgentId: string; deliveredAt: Date | null } | null;
     mentions?: MessageMentionRef[];
     _count?: { replies: number };
@@ -187,7 +190,7 @@ export function toAgentMessage(
         body: row.body,
         mentions: row.mentions ?? [],
         actionCard: row.actionCard,
-        forward: row.forward,
+        forwards: row.forwards,
         attachments: row.attachments,
       },
       readerAgentId,
@@ -195,7 +198,8 @@ export function toAgentMessage(
     ),
     createdAt: row.createdAt,
     target,
-    attachments: row.attachments,
+    // Which original a copy is of reaches the Agent as `forwardedMessages[].attachments`, not here.
+    attachments: row.attachments.map(({ forwardPosition: _, ...attachment }) => attachment),
     ...(row._count?.replies ? { replyCount: row._count.replies } : {}),
     ...(task ? { task } : {}),
     ...(anchor ? { attachmentCommentAnchor: anchor } : {}),

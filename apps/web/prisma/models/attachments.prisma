@@ -9,6 +9,9 @@ model Attachment {
   messageId       String?      @db.Uuid
   /// Stable per-message ordering for multiple attachments; irrelevant while messageId is null.
   position        Int          @default(0)
+  /// On a copy a forward of several messages made: the `position` of the original it copies
+  /// (`MessageForward`). Null on any other attachment, a single forward's copies included.
+  forwardPosition Int?
   objectKey       String       @unique
   fileName        String
   contentType     String

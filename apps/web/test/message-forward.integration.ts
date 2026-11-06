@@ -32,12 +32,13 @@ import {
   sourceMessage,
   storage,
   suffix,
+  upload,
   workspaceId,
 } from "./helpers/message-forward-world";
 
 /**
- * Forwarding a message: the snapshot, the copied uploads, who is notified, per-destination
- * results and their retry, what cannot be forwarded, and who may open the original.
+ * Forwarding a message or a selection: the snapshots, the copied uploads, who is notified,
+ * per-destination results and their retry, what cannot be forwarded, and who may open the original.
  */
 forwardWorld();
 
@@ -48,7 +49,7 @@ test("forwards to a channel and a DM: a snapshot as plain text, the note's menti
     workspaceId,
     userId: alice.id,
     requestId: request(),
-    sourceMessageId: message.id,
+    sourceMessageIds: [message.id],
     destinations: [news.id, dmWithBob],
     note,
   });
@@ -60,12 +61,12 @@ test("forwards to a channel and a DM: a snapshot as plain text, the note's menti
 
   const toChannel = await db.message.findFirstOrThrow({
     where: { conversationId: news.id },
-    include: { forward: true, mentions: true, attachments: true },
+    include: { forwards: true, mentions: true, attachments: true },
   });
   expect(toChannel.body).toBe(`fyi <@human:${bob.id}>`);
   // The note's @mention is a real mention; the original's is text in the snapshot.
   expect(toChannel.mentions.map((mention) => mention.actorId)).toEqual([bob.id]);
-  expect(toChannel.forward).toMatchObject({
+  expect(toChannel.forwards[0]).toMatchObject({
     sourceMessageId: message.id,
     sourceConversationId: product.id,
     sourceConversationName: `product-${suffix}`,
@@ -74,26 +75,26 @@ test("forwards to a channel and a DM: a snapshot as plain text, the note's menti
     sourceThreadRootId: null,
     sourceBody: "ping @Bob about the plan",
   });
-  expect(toChannel.forward!.sourceBody).not.toContain("<@");
+  expect(toChannel.forwards[0]!.sourceBody).not.toContain("<@");
   // The card draws the original's chips from the stored body and the mentions as they were, and
   // the plain text every other surface reads is computed from those same two.
-  expect(toChannel.forward).toMatchObject({
+  expect(toChannel.forwards[0]).toMatchObject({
     sourceRawBody: `ping <@human:${bob.id}> about the plan`,
     sourceMentions: [{ kind: "user", actorId: bob.id, handle: `fwd-bob-${suffix}`, label: "Bob" }],
   });
-  expect(toChannel.forward!.sourceBody).toBe(
+  expect(toChannel.forwards[0]!.sourceBody).toBe(
     peopleReadableBody(
-      toChannel.forward!.sourceRawBody!,
-      toChannel.forward!.sourceMentions as MentionRef[],
+      toChannel.forwards[0]!.sourceRawBody!,
+      toChannel.forwards[0]!.sourceMentions as MentionRef[],
     ),
   );
-  expect(toChannel.forward!.sourceCreatedAt).toEqual(message.createdAt);
+  expect(toChannel.forwards[0]!.sourceCreatedAt).toEqual(message.createdAt);
 
   const toDm = await db.message.findFirstOrThrow({
     where: { conversationId: dmWithBob },
-    include: { forward: true, attachments: true },
+    include: { forwards: true, attachments: true },
   });
-  expect(toDm.forward?.sourceBody).toBe("ping @Bob about the plan");
+  expect(toDm.forwards[0]?.sourceBody).toBe("ping @Bob about the plan");
   // Forwarded by alice, sent as alice.
   const sender = await db.conversationMember.findUniqueOrThrow({
     where: { id: toDm.senderMemberId! },
@@ -127,11 +128,11 @@ test("deleting the original leaves the forward, its copied files and its snapsho
     workspaceId,
     userId: alice.id,
     requestId: request(),
-    sourceMessageId: message.id,
+    sourceMessageIds: [message.id],
     destinations: [news.id],
   });
   const forwarded = await db.message.findFirstOrThrow({
-    where: { conversationId: news.id, forward: { sourceMessageId: message.id } },
+    where: { conversationId: news.id, forwards: { some: { sourceMessageId: message.id } } },
     include: { attachments: true },
   });
   // A forward with no note has an empty body.
@@ -141,7 +142,9 @@ test("deleting the original leaves the forward, its copied files and its snapsho
   await storage.remove(file.objectKey);
   await db.message.delete({ where: { id: message.id } });
 
-  const after = await db.messageForward.findUniqueOrThrow({ where: { messageId: forwarded.id } });
+  const after = await db.messageForward.findUniqueOrThrow({
+    where: { messageId_position: { messageId: forwarded.id, position: 0 } },
+  });
   expect(after.sourceMessageId).toBeNull();
   expect(after.sourceBody).toBe("keep this");
   const copy = forwarded.attachments[0]!;
@@ -155,11 +158,11 @@ test("deleting the original leaves the forward, its copied files and its snapsho
   const [view] = await attachForwardedAccess(db, workspaceId, alice.id, [
     mapBrowserMessage(row, workspaceId),
   ]);
-  expect(view!.forwarded).toMatchObject({
+  expect(view!.forwarded?.[0]).toMatchObject({
     sourceSenderHandle: `fwd-carol-${suffix}`,
     sourceAccessible: false,
   });
-  expect(view!.forwarded).not.toHaveProperty("sourceMessageId");
+  expect(view!.forwarded?.[0]).not.toHaveProperty("sourceMessageId");
 });
 
 test("a retry under the same request id replays what succeeded and sends only what failed", async () => {
@@ -169,7 +172,7 @@ test("a retry under the same request id replays what succeeded and sends only wh
     workspaceId,
     userId: alice.id,
     requestId,
-    sourceMessageId: message.id,
+    sourceMessageIds: [message.id],
     note: "again",
   };
   // Not joined, archived: each refused with its own reason, and the rest still go through.
@@ -205,7 +208,7 @@ test("a retry under the same request id replays what succeeded and sends only wh
   expect(second.results[1]!.status).toBe("success");
   expect(
     await db.message.count({
-      where: { conversationId: news.id, forward: { sourceMessageId: message.id } },
+      where: { conversationId: news.id, forwards: { some: { sourceMessageId: message.id } } },
     }),
   ).toBe(1);
   expect(
@@ -225,7 +228,7 @@ test("refuses the whole request for a source that is a forward, a notice, an act
     workspaceId,
     userId: alice.id,
     requestId: request(),
-    sourceMessageId: message.id,
+    sourceMessageIds: [message.id],
     destinations: [news.id],
   });
   const forwardId =
@@ -266,7 +269,7 @@ test("refuses the whole request for a source that is a forward, a notice, an act
         workspaceId,
         userId: alice.id,
         requestId: request(),
-        sourceMessageId: messageId,
+        sourceMessageIds: [messageId],
         destinations: [news.id],
       })
       .catch((caught: unknown) => caught);
@@ -284,7 +287,7 @@ test("refuses the whole request for a source that is a forward, a notice, an act
     await db.message.count({
       where: {
         conversationId: news.id,
-        forward: { sourceMessageId: { in: [forwardId, notice.id, card.id, hidden.id] } },
+        forwards: { some: { sourceMessageId: { in: [forwardId, notice.id, card.id, hidden.id] } } },
       },
     }),
   ).toBe(0);
@@ -297,15 +300,18 @@ test("a thread reply, a Task's message and an Agent's message forward as snapsho
     workspaceId,
     userId: alice.id,
     requestId: request(),
-    sourceMessageId: reply.id,
+    sourceMessageIds: [reply.id],
     destinations: [dmWithBob],
   });
   expect(result.outcome).toBe("success");
   const forwarded = await db.message.findFirstOrThrow({
-    where: { conversationId: dmWithBob, forward: { sourceMessageId: reply.id } },
-    include: { forward: true },
+    where: { conversationId: dmWithBob, forwards: { some: { sourceMessageId: reply.id } } },
+    include: { forwards: true },
   });
-  expect(forwarded.forward).toMatchObject({ sourceThreadRootId: root.id, sourceBody: "a reply" });
+  expect(forwarded.forwards[0]).toMatchObject({
+    sourceThreadRootId: root.id,
+    sourceBody: "a reply",
+  });
 });
 
 test("only a viewer who can read the source's conversation can open the original", async () => {
@@ -315,7 +321,7 @@ test("only a viewer who can read the source's conversation can open the original
     workspaceId,
     userId: alice.id,
     requestId: request(),
-    sourceMessageId: secret.id,
+    sourceMessageIds: [secret.id],
     destinations: [news.id],
     note: "look",
   });
@@ -324,15 +330,15 @@ test("only a viewer who can read the source's conversation can open the original
   const row = await db.message.findUniqueOrThrow({ where: { id }, select: browserMessageFields });
   const mapped = mapBrowserMessage(row, workspaceId);
   // Unsettled, a card opens nothing.
-  expect(mapped.forwarded).toMatchObject({
+  expect(mapped.forwarded?.[0]).toMatchObject({
     sourceBody: "just us",
     sourceConversation: { id: dmAliceCarol, name: null },
     sourceMessageId: secret.id,
     sourceAccessible: false,
   });
   const accessible = async (userId: string) =>
-    (await attachForwardedAccess(db, workspaceId, userId, [mapped]))[0]!.forwarded!
-      .sourceAccessible;
+    (await attachForwardedAccess(db, workspaceId, userId, [mapped]))[0]!.forwarded?.[0]
+      ?.sourceAccessible;
   expect(await accessible(alice.id)).toBe(true);
   expect(await accessible(carol.id)).toBe(true);
   expect(await accessible(bob.id)).toBe(false);
@@ -344,21 +350,24 @@ test("an Agent reads a forward as its note and a structured original with the co
     workspaceId,
     userId: alice.id,
     requestId: request(),
-    sourceMessageId: message.id,
+    sourceMessageIds: [message.id],
     destinations: [news.id],
   });
   const id = result.results[0]!.status === "success" ? result.results[0].message.id : "";
   const row = await db.message.findUniqueOrThrow({ where: { id }, include: AGENT_MESSAGE_INCLUDE });
   const agentView = toAgentMessage(row, `#news-${suffix}`);
   expect(agentView.body as string).toBe("");
-  expect(agentView.forwarded).toEqual({
-    from: `#product-${suffix}`,
-    sender: `@fwd-carol-${suffix}`,
-    sentAt: message.createdAt.toISOString(),
-    body: "read by an agent",
-    attachments: row.attachments.map((attachment) => attachment.id),
-  });
-  expect(agentView.forwarded!.attachments).toHaveLength(1);
+  expect(agentView.forwardedMessages).toEqual([
+    {
+      from: `#product-${suffix}`,
+      sender: `@fwd-carol-${suffix}`,
+      sentAt: message.createdAt.toISOString(),
+      body: "read by an agent",
+      attachments: row.attachments.map((attachment) => attachment.id),
+    },
+  ]);
+  expect(agentView.forwardedMessages![0]!.attachments).toHaveLength(1);
+  expect(agentView.forwarded).toEqual(agentView.forwardedMessages![0]!);
 });
 
 test("a normal send still refuses an empty body", async () => {
@@ -371,4 +380,81 @@ test("a normal send still refuses an empty body", async () => {
       body: "   ",
     }),
   ).rejects.toThrow();
+});
+
+test("a selection forwards as one message carrying its originals oldest first, each with its own copies", async () => {
+  // Picked newest first: the forward still reads as the conversation did.
+  const { message: first, file } = await sourceMessage();
+  const second = await rawMessage(product.id, carol.id, "and the budget");
+  const budget = await upload(product.id, carol.id, "budget.txt", "the budget");
+  await db.attachment.update({ where: { id: budget.id }, data: { messageId: second.id } });
+  const result = await forwards.forward({
+    workspaceId,
+    userId: alice.id,
+    requestId: request(),
+    sourceMessageIds: [second.id, first.id],
+    destinations: [news.id],
+  });
+  expect(result.outcome).toBe("success");
+  const id = result.results[0]!.status === "success" ? result.results[0].message.id : "";
+  const forwarded = await db.message.findUniqueOrThrow({
+    where: { id },
+    include: {
+      forwards: { orderBy: { position: "asc" } },
+      attachments: { orderBy: { position: "asc" } },
+    },
+  });
+  expect(forwarded.body).toBe("");
+  expect(forwarded.forwards.map((row) => [row.position, row.sourceMessageId])).toEqual([
+    [0, first.id],
+    [1, second.id],
+  ]);
+  // Each copy names the original it is of.
+  expect(
+    forwarded.attachments.map((attachment) => [attachment.fileName, attachment.forwardPosition]),
+  ).toEqual([
+    [file.fileName, 0],
+    ["budget.txt", 1],
+  ]);
+  const [planCopy, budgetCopy] = forwarded.attachments.map((attachment) => attachment.id);
+  // The browser reads both, in order, each with its own copy.
+  const row = await db.message.findUniqueOrThrow({ where: { id }, select: browserMessageFields });
+  expect(
+    mapBrowserMessage(row, workspaceId).forwarded?.map((original) => [
+      original.sourceBody,
+      original.attachmentIds,
+    ]),
+  ).toEqual([
+    ["ping @Bob about the plan", [planCopy]],
+    ["and the budget", [budgetCopy]],
+  ]);
+  // So does an Agent.
+  const agentRow = await db.message.findUniqueOrThrow({
+    where: { id },
+    include: AGENT_MESSAGE_INCLUDE,
+  });
+  expect(
+    toAgentMessage(agentRow, `#news-${suffix}`).forwardedMessages?.map(
+      (original) => original.attachments,
+    ),
+  ).toEqual([[planCopy], [budgetCopy]]);
+});
+
+test("one original that cannot be forwarded refuses the whole selection, and nothing is sent", async () => {
+  const { message } = await sourceMessage();
+  const notice = await rawMessage(product.id, null, "a server notice");
+  await expect(
+    forwards.forward({
+      workspaceId,
+      userId: alice.id,
+      requestId: request(),
+      sourceMessageIds: [message.id, notice.id],
+      destinations: [lounge.id],
+    }),
+  ).rejects.toThrow();
+  expect(
+    await db.message.count({
+      where: { conversationId: lounge.id, forwards: { some: { sourceMessageId: message.id } } },
+    }),
+  ).toBe(0);
 });

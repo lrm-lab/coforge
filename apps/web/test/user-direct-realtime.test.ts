@@ -43,6 +43,7 @@ const storedMessage = {
       agent: null,
     },
     mentions: [],
+    forwards: [],
   }),
 };
 

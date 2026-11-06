@@ -1,12 +1,16 @@
 /// A message forwarded from another conversation: the new message's `body` is the forwarder's
-/// note (possibly empty) and this row is the snapshot of the original it carries. The snapshot is
-/// frozen at forward time: `sourceBody` has its mentions and references already read back as
+/// note (possibly empty) and its rows here are the snapshots of the originals it carries, in
+/// `position` order (one for a single message; several, oldest first, for a selection). Each
+/// snapshot is frozen at forward time: `sourceBody` has its mentions and references already read back as
 /// plain text, so forwarding notifies nobody the original named, and a later edit or delete of
 /// the original changes nothing here. The new message's own attachments are copies of the
-/// original's.
+/// originals': with one original all of them are its, and with several each copy names its
+/// original (`Attachment.forwardPosition`).
 model MessageForward {
   /// The new message, in the destination conversation.
-  messageId              String   @id @db.Uuid
+  messageId              String   @db.Uuid
+  /// This original's place among the ones the message carries, from 0.
+  position               Int      @default(0)
   /// The original, until it is deleted; the snapshot then stays and only "open original" goes.
   sourceMessageId        String?  @db.Uuid
   sourceConversationId   String   @db.Uuid
@@ -29,6 +33,7 @@ model MessageForward {
   message                Message  @relation("MessageForwardOf", fields: [messageId], references: [id], onDelete: Cascade)
   sourceMessage          Message? @relation("MessageForwardSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
 
+  @@id([messageId, position])
   /// Serves the `SET NULL` when an original is deleted.
   @@index([sourceMessageId])
   @@map("message_forwards")

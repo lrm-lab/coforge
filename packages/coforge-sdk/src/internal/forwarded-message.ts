@@ -1,7 +1,7 @@
 import { foldUntrustedLine, MESSAGE_LINE_SEPARATOR } from "./untrusted-text";
 
 /**
- * The original a forwarded message carries, as an Agent reads it (`AgentMessageRecord.forwarded`).
+ * The original a forwarded message carries, as an Agent reads it (an item of `AgentMessageRecord.forwardedMessages`).
  * The message's own `body` stays the forwarder's note; this is the frozen snapshot beside it.
  */
 export type ForwardedMessage = {

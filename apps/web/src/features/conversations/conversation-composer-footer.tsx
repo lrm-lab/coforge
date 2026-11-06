@@ -6,6 +6,8 @@ import type { DirectConversationView } from "./conversation-types";
 import { ConversationUpdateNotice } from "./conversation-update-notice";
 import { useMentionCandidates } from "./mention-candidates";
 import { MessageComposer } from "./message-composer";
+import { useSelectionIn } from "./message-selection";
+import { MessageSelectionBar } from "./message-selection-bar";
 import { useRecentConversationHandles } from "./use-recent-conversation-handles";
 
 type ComposerProps = ComponentProps<typeof MessageComposer>;
@@ -55,26 +57,32 @@ export function ConversationComposerFooter({
   // ranks these candidates ahead of alphabetical order within a match tier. Deduplicated by
   // handle so the same person's older messages don't push their own recent one down.
   const recentHandles = useRecentConversationHandles(conversation.messages);
+  // Select mode's bar takes the composer's place in the stream; the composer stays mounted, with
+  // its draft, under it.
+  const selecting = useSelectionIn(conversation.conversationId) !== null && !root;
   return (
     <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
       {!narrow && <ConversationUpdateNotice conversation={conversation} />}
-      {!readOnlyNotice && !narrow && <NotificationActivationBanner />}
-      {readOnlyNotice ?? (
-        <MessageComposer
-          conversationId={conversation.conversationId}
-          threadRootId={root?.id}
-          inThread={narrow}
-          target={narrow ? undefined : composerTarget}
-          mentionables={mentionCandidates}
-          mentionOutsiders={conversation.mentionOutsiders}
-          recentHandles={recentHandles}
-          channels={channels}
-          onSend={onSend}
-          canSendAsTask={canSendAsTask}
-          onSent={onSent}
-          quotedDraft={quotedDraft}
-        />
-      )}
+      {!readOnlyNotice && !narrow && !selecting && <NotificationActivationBanner />}
+      {selecting && <MessageSelectionBar conversationId={conversation.conversationId} />}
+      <div className={selecting ? "hidden" : "contents"}>
+        {readOnlyNotice ?? (
+          <MessageComposer
+            conversationId={conversation.conversationId}
+            threadRootId={root?.id}
+            inThread={narrow}
+            target={narrow ? undefined : composerTarget}
+            mentionables={mentionCandidates}
+            mentionOutsiders={conversation.mentionOutsiders}
+            recentHandles={recentHandles}
+            channels={channels}
+            onSend={onSend}
+            canSendAsTask={canSendAsTask}
+            onSent={onSent}
+            quotedDraft={quotedDraft}
+          />
+        )}
+      </div>
     </div>
   );
 }

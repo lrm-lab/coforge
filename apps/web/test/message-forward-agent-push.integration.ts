@@ -106,7 +106,7 @@ test("an Agent notified outside the channel is pushed the forward's original aft
     workspaceId,
     userId: alice.id,
     requestId: crypto.randomUUID(),
-    sourceMessageId: source.id,
+    sourceMessageIds: [source.id],
     destinations: [news.id],
     note: "look",
   });

@@ -185,7 +185,7 @@ export class PrismaDirectConversationPreferences {
             AND m."threadRootId" IS NULL
           ORDER BY m."sequence" DESC LIMIT 1
         ) latest
-        LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id"
+        LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id" AND forward."position" = 0
         LEFT JOIN "system_messages" notice ON notice."messageId" = latest."id"
         LEFT JOIN "action_cards" card ON card."messageId" = latest."id"
         WHERE cm."userId" = ${userId}::uuid

@@ -67,8 +67,9 @@ function failureOf(error: unknown): ForwardFailureCode {
 type Settled = { result: ForwardDestinationResult; replay: boolean };
 
 /**
- * Forwards one message to several conversations. The original is read once, whole, and refused
- * as a whole when it cannot be forwarded; each destination then takes its own send, under the
+ * Forwards one message, or a selection of several, to several conversations as one message that
+ * carries them oldest first. The originals are read once, whole, and the request is refused as a
+ * whole when any cannot be forwarded; each destination then takes its own send, under the
  * forwarder's normal permission to post there, so one can fail while the rest go through, and a
  * retry under the same request id sends only what failed.
  */
@@ -79,19 +80,26 @@ export class MessageForwards {
     workspaceId: string;
     userId: string;
     requestId: string;
-    sourceMessageId: string;
+    sourceMessageIds: readonly string[];
     destinations: readonly string[];
     note?: string;
   }): Promise<ForwardMessageResult> {
-    const source = await loadForwardSource(this.ports.db, {
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      messageId: input.sourceMessageId,
-    });
+    const sources: ForwardSource[] = [];
+    // One after another: a refusal of any stops the read, and says nothing of the rest.
+    for (const messageId of input.sourceMessageIds)
+      sources.push(
+        await loadForwardSource(this.ports.db, {
+          workspaceId: input.workspaceId,
+          userId: input.userId,
+          messageId,
+        }),
+      );
+    // The card reads as the conversation did: oldest first, whatever order they were picked in.
+    sources.sort((a, b) => a.sourceCreatedAt.getTime() - b.sourceCreatedAt.getTime());
     const settled: Settled[] = [];
-    // One after another: each copies the original's uploads, and ten at once would hold them all.
+    // One after another: each copies the originals' uploads, and ten at once would hold them all.
     for (const destination of input.destinations)
-      settled.push(await this.forwardTo(source, { ...input, destination }));
+      settled.push(await this.forwardTo(sources, { ...input, destination }));
     const results = settled.map((entry) => entry.result);
     const succeeded = results.filter((result) => result.status === "success").length;
     const outcome =
@@ -106,7 +114,7 @@ export class MessageForwards {
   }
 
   private async forwardTo(
-    source: ForwardSource,
+    sources: readonly ForwardSource[],
     input: {
       workspaceId: string;
       userId: string;
@@ -145,12 +153,15 @@ export class MessageForwards {
 
     let copies: CopiedAttachments | undefined;
     try {
-      copies = await this.copyAttachments(source, { workspaceId, userId, destination });
+      const copied = await this.copyAttachments(sources, { workspaceId, userId, destination });
+      copies = copied;
       const sent = await this.send(route.kind, {
         ...input,
         idempotencyKey: scope.idempotencyKey,
-        attachmentIds: copies.ids,
-        source,
+        originals: sources.map((source, index) => ({
+          source,
+          attachmentIds: copied.bySource[index] ?? [],
+        })),
       });
       return succeeded(sent, false);
     } catch (error) {
@@ -236,19 +247,21 @@ export class MessageForwards {
       destination: string;
       note?: string;
       idempotencyKey: string;
-      attachmentIds: string[];
-      source: ForwardSource;
+      originals: readonly { source: ForwardSource; attachmentIds: readonly string[] }[];
     },
   ): Promise<{ id: string; sequence: number }> {
     const { db, idempotency, centrifugo, realtime, notifications } = this.ports;
-    const { workspaceId, userId, destination } = input;
-    // The snapshot is written in the send's own transaction; the Agent reads the same one.
+    const { workspaceId, userId, destination, originals } = input;
+    const attachmentIds = originals.flatMap((original) => original.attachmentIds);
+    // The snapshots are written in the send's own transaction; the Agent reads the same ones.
     const forwarding = {
-      withinSend: recordForward(input.source),
+      withinSend: recordForward(originals.map((original) => original.source)),
       allowEmptyBody: true,
-      forwarded: agentForwarded(
-        input.source,
-        input.attachmentIds.map((id) => ({ id })),
+      forwarded: originals.map((original) =>
+        agentForwarded(
+          original.source,
+          original.attachmentIds.map((id) => ({ id })),
+        ),
       ),
     };
     if (kind === "channel")
@@ -260,7 +273,7 @@ export class MessageForwards {
           channelId: destination,
           idempotencyKey: input.idempotencyKey,
           body: input.note ?? "",
-          attachmentIds: input.attachmentIds,
+          attachmentIds,
           ...forwarding,
         },
       );
@@ -272,7 +285,7 @@ export class MessageForwards {
       {
         idempotencyKey: input.idempotencyKey,
         body: input.note ?? "",
-        attachmentIds: input.attachmentIds,
+        attachmentIds,
         ...forwarding,
       },
       { idempotency, centrifugo, realtime },
@@ -280,12 +293,13 @@ export class MessageForwards {
   }
 
   /**
-   * Copies the original's uploads for the destination: new objects in storage and new unlinked
+   * Copies the originals' uploads for the destination: new objects in storage and new unlinked
    * attachments of the forwarder's in the destination conversation, which the send then links.
-   * Neither object touches the other afterwards. A failure leaves nothing behind.
+   * Neither object touches the other afterwards. A failure leaves nothing behind. `bySource` names
+   * each original's copies, in its order.
    */
   private async copyAttachments(
-    source: ForwardSource,
+    sources: readonly ForwardSource[],
     scope: { workspaceId: string; userId: string; destination: string },
   ): Promise<CopiedAttachments> {
     const { db } = this.ports;
@@ -298,13 +312,17 @@ export class MessageForwards {
         .catch(() => undefined);
       await files.removeMany(copied.map((copy) => copy.objectKey)).catch(() => undefined);
     };
-    if (!source.attachments.length) return { ids: [], discard };
+    const originals = sources.flatMap((source, index) =>
+      source.attachments.map((attachment) => ({ attachment, index })),
+    );
+    const bySource = sources.map((): string[] => []);
+    if (!originals.length) return { bySource, discard };
     try {
       const files = await this.ports.storage();
       // Wait for every copy before discarding on failure: a sibling may finish after the first
       // error, and `copied` must contain every object and row the cleanup can reach.
       const results = await Promise.allSettled(
-        source.attachments.map(async (original) => {
+        originals.map(async ({ attachment: original, index }) => {
           const id = randomUUID();
           const objectKey = `workspaces/${scope.workspaceId}/attachments/${id}/original`;
           await files.copyObject(original.objectKey, objectKey);
@@ -321,6 +339,9 @@ export class MessageForwards {
               sizeBytes: original.sizeBytes,
               imageWidth: original.imageWidth,
               imageHeight: original.imageHeight,
+              // A forward of several names which original each copy is of; one of a single
+              // message owns them all.
+              ...(sources.length > 1 && { forwardPosition: index }),
             },
           });
           return id;
@@ -328,13 +349,11 @@ export class MessageForwards {
       );
       const failed = results.find((result) => result.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
-      return {
-        ids: results.map((result) => {
-          if (result.status !== "fulfilled") throw result.reason;
-          return result.value;
-        }),
-        discard,
-      };
+      results.forEach((result, at) => {
+        if (result.status !== "fulfilled") throw result.reason;
+        bySource[originals[at]!.index]!.push(result.value);
+      });
+      return { bySource, discard };
     } catch (error) {
       await discard();
       throw error;
@@ -342,4 +361,4 @@ export class MessageForwards {
   }
 }
 
-type CopiedAttachments = { ids: string[]; discard: () => Promise<void> };
+type CopiedAttachments = { bySource: string[][]; discard: () => Promise<void> };

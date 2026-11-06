@@ -8,9 +8,13 @@ import type {
 } from "./message-forward";
 import type { MessageView } from "./message-view";
 
-/** The message a forward dialog is opened for, and where it sits (`name` is null in a DM). */
+/** One message a forward carries, with its text as the card previews it. */
+export type ForwardSourceMessage = { message: MessageView; plainBody: string };
+
+/** The messages a forward dialog is opened for, oldest first, and where they sit (`name` is null in
+ * a DM): one from a row's menu, or a selection. */
 export type ForwardSource = {
-  message: MessageView;
+  messages: readonly ForwardSourceMessage[];
   conversationId: string;
   conversationName: string | null;
 };
@@ -26,10 +30,11 @@ export function canForwardMessage(
   return message.senderKind !== "system" && !message.actionCard && !message.forwarded;
 }
 
-/** The snapshot the dialog previews: what the server will freeze, read from the row on screen. */
-export function forwardedPreview(source: ForwardSource, plainBody: string): ForwardedMessageView {
-  const { message } = source;
-  return {
+/** The snapshots the dialog previews: what the server will freeze, read from the rows on screen,
+ * each original with its own attachments when there are several. */
+export function forwardedPreview(source: ForwardSource): ForwardedMessageView[] {
+  const several = source.messages.length > 1;
+  return source.messages.map(({ message, plainBody }) => ({
     sourceSenderHandle: message.senderHandle ?? message.senderName,
     sourceCreatedAt: new Date(message.createdAt).toISOString(),
     sourceBody: plainBody,
@@ -39,7 +44,8 @@ export function forwardedPreview(source: ForwardSource, plainBody: string): Forw
     },
     ...(message.threadRootId ? { sourceThreadRootId: message.threadRootId } : {}),
     sourceAccessible: false,
-  };
+    ...(several ? { attachmentIds: message.attachments.map((attachment) => attachment.id) } : {}),
+  }));
 }
 
 /** One key per target across searches: a channel by its conversation, a person or an Agent by

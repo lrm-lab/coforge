@@ -60,13 +60,15 @@ describe("a field someone else wrote cannot forge a message line", () => {
       shows(
         formatMessageLine(
           message({
-            forwarded: {
-              from: evil,
-              sender: evil,
-              sentAt: "2026-11-01T00:00:00Z",
-              body: evil,
-              attachments: [],
-            },
+            forwardedMessages: [
+              {
+                from: evil,
+                sender: evil,
+                sentAt: "2026-11-01T00:00:00Z",
+                body: evil,
+                attachments: [],
+              },
+            ],
           }),
         ),
       );

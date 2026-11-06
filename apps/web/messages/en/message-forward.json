@@ -3,6 +3,8 @@
   "message_forward_action": "Forward",
   "message_forward_badge": "Forwarded",
   "message_forward_badge_count": " message",
+  "message_forward_badge_several": "Forwarded",
+  "message_forward_badge_several_count": " {count} messages",
   "message_forward_from_channel": "from #{name}",
   "message_forward_from_channel_thread": "from #{name} · thread",
   "message_forward_from_dm": "from DM",
@@ -43,5 +45,15 @@
   "message_forward_recipients": "Recipients",
   "message_forward_remove_target": "Remove",
   "message_forward_next": "Next",
-  "message_forward_join_and_send": "Join and forward"
+  "message_forward_join_and_send": "Join and forward",
+  "message_select_action": "Select messages",
+  "message_select_pick": "Select message",
+  "message_select_toolbar": "Selected message actions",
+  "message_select_count": "{count} selected",
+  "message_select_copy_links": "Copy link",
+  "message_select_copied": "Copied",
+  "message_select_links_copied": "Copied {count} links.",
+  "message_select_more": "More actions for selected messages",
+  "message_select_exit": "Cancel",
+  "message_select_limit": "You can select up to {max} messages."
 }

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import {
   Bookmark,
   BookmarkCheck,
+  CheckDone01,
   CheckSquare,
   Copy01,
   DotsHorizontal,
@@ -28,6 +29,8 @@ type MessageActions = {
   saveSaved: boolean;
   /** Opens the Forward dialog; absent for a message that cannot be forwarded. */
   onForward?: () => void;
+  /** Starts select mode with this message picked; only where Forward is, in the stream. */
+  onSelect?: () => void;
   /** Makes a Task from the message; absent where task conversations are off. */
   onMakeTask?: () => void;
   onCopy: () => void;
@@ -56,6 +59,7 @@ export function MessageActionToolbar({
   onToggleSave,
   saveSaved,
   onForward,
+  onSelect,
   onMakeTask,
   onCopy,
   seenBy,
@@ -92,6 +96,7 @@ export function MessageActionToolbar({
         <MessageMoreMenu
           messageId={messageId}
           onForward={onForward}
+          onSelect={onSelect}
           onMakeTask={onMakeTask}
           onToggleSave={onToggleSave}
           saveSaved={saveSaved}
@@ -102,17 +107,19 @@ export function MessageActionToolbar({
   );
 }
 
-/** The hover toolbar's "…": forward, save and make a Task, then on an own message "N seen". */
+/** The hover toolbar's "…": forward, select, save and make a Task, then on an own message "N
+ * seen". */
 function MessageMoreMenu({
   messageId,
   onForward,
+  onSelect,
   onMakeTask,
   onToggleSave,
   saveSaved,
   seenBy,
 }: Pick<
   MessageActions,
-  "messageId" | "onForward" | "onMakeTask" | "onToggleSave" | "saveSaved" | "seenBy"
+  "messageId" | "onForward" | "onSelect" | "onMakeTask" | "onToggleSave" | "saveSaved" | "seenBy"
 >) {
   const [open, setOpen] = useState(false);
   return (
@@ -133,6 +140,13 @@ function MessageMoreMenu({
               icon={FlipForward}
               label={m.message_forward_action()}
               onAction={onForward}
+            />
+          )}
+          {onSelect && (
+            <Dropdown.Item
+              icon={CheckDone01}
+              label={m.message_select_action()}
+              onAction={onSelect}
             />
           )}
           {onToggleSave && (
@@ -183,6 +197,7 @@ export function MessageActionSheet({
   onToggleSave,
   saveSaved,
   onForward,
+  onSelect,
   onMakeTask,
   onCopy,
   seenBy,
@@ -309,6 +324,21 @@ export function MessageActionSheet({
                 className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-left"
               >
                 {m.message_forward_action()}
+              </Button>
+            )}
+            {onSelect && (
+              <Button
+                color="tertiary"
+                size="md"
+                noTextPadding
+                iconLeading={CheckDone01}
+                onPress={() => {
+                  onOpenChange(false);
+                  onSelect();
+                }}
+                className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-left"
+              >
+                {m.message_select_action()}
               </Button>
             )}
             {onToggleSave && (

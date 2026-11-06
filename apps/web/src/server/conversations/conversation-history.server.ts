@@ -39,7 +39,8 @@ export const browserMessageFields = {
   body: true,
   createdAt: true,
   attachments: {
-    select: ATTACHMENT_VIEW_SELECT,
+    // Which original of a forward of several each copy is of.
+    select: { ...ATTACHMENT_VIEW_SELECT, forwardPosition: true },
     orderBy: { position: "asc" as const },
   },
   sender: {
@@ -58,8 +59,8 @@ export const browserMessageFields = {
   // overstate it, so the page still shows any newer `message.reaction.v1` it hears.
   reactionVersion: true,
   reactions: MESSAGE_REACTIONS_SELECT,
-  // The snapshot a forwarded message carries; null for every other message.
-  forward: BROWSER_FORWARD_SELECT,
+  // The snapshots a forwarded message carries, in order; none for every other message.
+  forwards: BROWSER_FORWARD_SELECT,
   // A server notice's structured kind and parameters; null for every other message.
   systemMessage: { select: { kind: true, params: true } },
 } satisfies Prisma.MessageSelect;
@@ -173,11 +174,13 @@ export function mapBrowserMessage(
     // Attached by the caller (`conversations.functions.ts`, `ActionCards.viewsFor`) in one
     // batched lookup per page; this function never queries `ActionCard` rows itself.
     actionCard: undefined as ActionCardView | undefined,
-    // The snapshot of a forwarded message, with `sourceAccessible` false: each caller settles it
+    // The snapshots of a forwarded message, with `sourceAccessible` false: each caller settles it
     // for its viewer in one batched lookup per page (`attachForwardedAccess`), never per row.
     // Absent for every other message, and typed optional so an echo that carries none still fits.
-    ...((message.forward ? { forwarded: browserForwarded(message.forward) } : {}) as {
-      forwarded?: ForwardedMessageView;
+    ...((message.forwards?.length
+      ? { forwarded: browserForwarded(message.forwards, message.attachments) }
+      : {}) as {
+      forwarded?: ForwardedMessageView[];
     }),
   };
 }

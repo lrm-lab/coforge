@@ -9,7 +9,9 @@ import { attachForwardedAccess } from "./message-forward-view.server";
  * page: the action card's state and who may act on it, and whether a forward's original is open
  * to them. Every page-shaped read of `mapBrowserMessage` rows ends in this.
  */
-export async function attachViewerViews<T extends { id: string; forwarded?: ForwardedMessageView }>(
+export async function attachViewerViews<
+  T extends { id: string; forwarded?: ForwardedMessageView[] },
+>(
   db: PrismaClient,
   workspaceId: string,
   viewerUserId: string,

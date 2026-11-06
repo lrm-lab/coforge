@@ -183,7 +183,7 @@ export function ForwardNotePane({
   onSend,
   notice,
 }: {
-  forwarded: ForwardedMessageView;
+  forwarded: readonly ForwardedMessageView[];
   attachments: MessageView["attachments"];
   picked: readonly ForwardTarget[];
   onRemove: (target: ForwardTarget) => void;

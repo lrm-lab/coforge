@@ -9,9 +9,12 @@ export const FORWARD_NOTE_MAX_LENGTH = 8_000;
 /** Most conversations one forward reaches. */
 export const FORWARD_DESTINATIONS_MAX = 10;
 
+/** Most messages one forward carries: what select mode lets a person pick. */
+export const FORWARD_SOURCES_MAX = 50;
+
 /**
- * What a forwarded message carries in a browser message (`mapBrowserMessage`): the snapshot of the
- * original, frozen when it was forwarded. `sourceBody` is plain text (mentions already read back as
+ * One original a forwarded message carries in a browser message (`mapBrowserMessage`): its
+ * snapshot, frozen when it was forwarded. `sourceBody` is plain text (mentions already read back as
  * names), never a stored body. The card's attachments are the message's own `attachments`.
  */
 export type ForwardedMessageView = {
@@ -32,13 +35,22 @@ export type ForwardedMessageView = {
   /** True only when this viewer can open the original now: it still exists and they can see its
    * conversation. Computed per viewer. */
   sourceAccessible: boolean;
+  /** Which of the message's attachments are this original's copies; absent on a forward of one
+   * message, whose original has all of them. */
+  attachmentIds?: string[];
 };
 
 export const forwardMessageInputSchema = z.object({
   /** One id per forward attempt; a retry with the same id re-sends only what failed. */
   requestId: z.uuid(),
-  /** Exactly one message for now. */
-  sourceMessageIds: z.array(z.uuid()).length(1),
+  /** The messages, in any order: the forward carries them oldest first. */
+  sourceMessageIds: z
+    .array(z.uuid())
+    .min(1)
+    .max(FORWARD_SOURCES_MAX)
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "sourceMessageIds must not contain duplicates",
+    }),
   /** Destination conversation ids (channels or direct conversations). */
   destinations: z
     .array(z.uuid())

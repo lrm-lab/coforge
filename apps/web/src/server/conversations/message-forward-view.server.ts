@@ -6,8 +6,9 @@ import { canReadChannel } from "./channel-read-access.server";
 import type { ForwardSource } from "./message-forward-source.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 
-/** The snapshot columns a browser message of a forward is built from. */
+/** The snapshot columns a browser message of a forward is built from, its originals in order. */
 export const BROWSER_FORWARD_SELECT = {
+  orderBy: { position: "asc" },
   select: {
     sourceMessageId: true,
     sourceConversationId: true,
@@ -19,16 +20,40 @@ export const BROWSER_FORWARD_SELECT = {
     sourceRawBody: true,
     sourceMentions: true,
   },
-} satisfies NonNullable<Prisma.MessageSelect["forward"]>;
+} satisfies Prisma.Message$forwardsArgs;
 
 type BrowserForwardRow = Prisma.MessageForwardGetPayload<typeof BROWSER_FORWARD_SELECT>;
 
 /**
- * A forward as the browser reads it. `sourceAccessible` starts false: whether this viewer may
- * open the original is decided per viewer, in one batched lookup per page
- * (`attachForwardedAccess`), so a surface that never runs it shows a card with no "open original".
+ * A forward's originals as the browser reads them, oldest first; undefined for a message that is
+ * not a forward. `sourceAccessible` starts false: whether this viewer may open an original is
+ * decided per viewer, in one batched lookup per page (`attachForwardedAccess`), so a surface that
+ * never runs it shows a card with no "open original".
  */
-export function browserForwarded(row: BrowserForwardRow): ForwardedMessageView {
+export function browserForwarded(
+  rows: readonly BrowserForwardRow[],
+  attachments: readonly ForwardCopy[],
+): ForwardedMessageView[] | undefined {
+  if (!rows.length) return undefined;
+  // One original owns every attachment of its message; with several, each copy names its own.
+  if (rows.length === 1) return [browserForwardedOne(rows[0]!)];
+  return rows.map((row, position) => ({
+    ...browserForwardedOne(row),
+    attachmentIds: copiesOf(attachments, position),
+  }));
+}
+
+/** An attachment of a forward's message, as far as telling whose copy it is goes. */
+export type ForwardCopy = { id: string; forwardPosition: number | null };
+
+/** The ids of the copies of the original at `position` in a forward of several. */
+export function copiesOf(attachments: readonly ForwardCopy[], position: number): string[] {
+  return attachments
+    .filter((attachment) => attachment.forwardPosition === position)
+    .map((attachment) => attachment.id);
+}
+
+function browserForwardedOne(row: BrowserForwardRow): ForwardedMessageView {
   return {
     sourceSenderHandle: row.sourceSenderHandle,
     sourceCreatedAt: row.sourceCreatedAt.toISOString(),
@@ -55,7 +80,7 @@ export function browserForwarded(row: BrowserForwardRow): ForwardedMessageView {
  * to its members, and only while the original still exists. A channel they cannot read keeps the
  * name the forward stored, never its current one.
  */
-export async function attachForwardedAccess<T extends { forwarded?: ForwardedMessageView }>(
+export async function attachForwardedAccess<T extends { forwarded?: ForwardedMessageView[] }>(
   db: Pick<PrismaClient, "conversation">,
   workspaceId: string,
   viewerUserId: string,
@@ -63,7 +88,8 @@ export async function attachForwardedAccess<T extends { forwarded?: ForwardedMes
 ): Promise<T[]> {
   const sourceIds = new Set<string>();
   for (const message of messages)
-    if (message.forwarded?.sourceMessageId) sourceIds.add(message.forwarded.sourceConversation.id);
+    for (const original of message.forwarded ?? [])
+      if (original.sourceMessageId) sourceIds.add(original.sourceConversation.id);
   if (!sourceIds.size) return [...messages];
   const conversations = await db.conversation.findMany({
     where: { id: { in: [...sourceIds] }, workspaceId, ...VISIBLE_CONVERSATION_WHERE },
@@ -76,11 +102,10 @@ export async function attachForwardedAccess<T extends { forwarded?: ForwardedMes
     },
   });
   const byId = new Map(conversations.map((conversation) => [conversation.id, conversation]));
-  return messages.map((message) => {
-    const forwarded = message.forwarded;
-    if (!forwarded?.sourceMessageId) return message;
+  const settle = (forwarded: ForwardedMessageView): ForwardedMessageView => {
+    if (!forwarded.sourceMessageId) return forwarded;
     const conversation = byId.get(forwarded.sourceConversation.id);
-    if (!conversation) return message;
+    if (!conversation) return forwarded;
     // A channel by its active members (`canReadChannel`); a DM by any member row, as
     // `ConversationHistory.authorize` opens it.
     const [member] = conversation.members;
@@ -88,27 +113,32 @@ export async function attachForwardedAccess<T extends { forwarded?: ForwardedMes
       conversation.channelName !== null
         ? canReadChannel(conversation, member?.leftAt === null)
         : conversation.directKey !== null && member !== undefined;
-    if (!accessible) return message;
+    if (!accessible) return forwarded;
     return {
-      ...message,
-      forwarded: {
-        ...forwarded,
-        sourceConversation: {
-          ...forwarded.sourceConversation,
-          name: conversation.channelName ?? forwarded.sourceConversation.name,
-        },
-        sourceAccessible: true,
+      ...forwarded,
+      sourceConversation: {
+        ...forwarded.sourceConversation,
+        name: conversation.channelName ?? forwarded.sourceConversation.name,
       },
+      sourceAccessible: true,
     };
-  });
+  };
+  return messages.map((message) =>
+    message.forwarded ? { ...message, forwarded: message.forwarded.map(settle) } : message,
+  );
 }
 
-/** Stores the forward's snapshot with the message that carries it, in the send's transaction. */
-export function recordForward(source: ForwardSource): SentMessageHook {
+/**
+ * Stores the forward's snapshots with the message that carries them, in the send's transaction:
+ * each original at its place. Its attachment copies name their original themselves
+ * (`Attachment.forwardPosition`, set as they are copied).
+ */
+export function recordForward(sources: readonly ForwardSource[]): SentMessageHook {
   return async (tx, message) => {
-    await tx.messageForward.create({
-      data: {
+    await tx.messageForward.createMany({
+      data: sources.map((source, position) => ({
         messageId: message.id,
+        position,
         sourceMessageId: source.sourceMessageId,
         sourceConversationId: source.sourceConversationId,
         sourceThreadRootId: source.sourceThreadRootId,
@@ -119,7 +149,7 @@ export function recordForward(source: ForwardSource): SentMessageHook {
         sourceBody: source.sourceBody,
         sourceRawBody: source.sourceRawBody,
         sourceMentions: source.sourceMentions,
-      },
+      })),
     });
   };
 }

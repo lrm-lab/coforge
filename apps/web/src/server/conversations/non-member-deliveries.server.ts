@@ -5,7 +5,7 @@ import {
 } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { AGENT_FORWARD_SELECT } from "#src/server/db/repositories/direct-conversation-agent-message.server";
 import { AgentDeliveryPublisher, channelTarget } from "./agent-delivery.server";
-import { agentForwarded } from "./agent-message-view.server";
+import { agentForwards } from "./agent-message-view.server";
 import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { MESSAGE_MENTIONS_SELECT } from "./mentions.server";
 import { agentMessageSender } from "./sender-display.server";
@@ -41,8 +41,11 @@ export async function publishNonMemberDeliveries(
           createdAt: true,
           body: true,
           mentions: MESSAGE_MENTIONS_SELECT,
-          forward: AGENT_FORWARD_SELECT,
-          attachments: { orderBy: { position: "asc" }, select: { id: true } },
+          forwards: AGENT_FORWARD_SELECT,
+          attachments: {
+            orderBy: { position: "asc" },
+            select: { id: true, forwardPosition: true },
+          },
           conversation: { select: { channelName: true } },
           sender: {
             select: {
@@ -75,8 +78,8 @@ export async function publishNonMemberDeliveries(
         createdAtMs: row.message.createdAt.getTime(),
         body: row.message.body,
         mentions: row.message.mentions,
-        ...(row.message.forward
-          ? { forwarded: agentForwarded(row.message.forward, row.message.attachments) }
+        ...(row.message.forwards.length
+          ? { forwarded: agentForwards(row.message.forwards, row.message.attachments) }
           : {}),
         target: `${channelTarget(row.message.conversation.channelName ?? "")}${row.message.threadRootId ? `:${row.message.threadRootId}` : ""}`,
         latestSenderKind: sender.kind,

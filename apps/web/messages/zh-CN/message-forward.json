@@ -3,6 +3,8 @@
   "message_forward_action": "转发",
   "message_forward_badge": "转发",
   "message_forward_badge_count": "的消息",
+  "message_forward_badge_several": "已转发",
+  "message_forward_badge_several_count": " {count} 条消息",
   "message_forward_from_channel": "来自 #{name}",
   "message_forward_from_channel_thread": "来自 #{name} · 话题",
   "message_forward_from_dm": "来自私信",
@@ -43,5 +45,15 @@
   "message_forward_recipients": "接收方",
   "message_forward_remove_target": "移除",
   "message_forward_next": "下一步",
-  "message_forward_join_and_send": "加入并转发"
+  "message_forward_join_and_send": "加入并转发",
+  "message_select_action": "选择消息",
+  "message_select_pick": "选择这条消息",
+  "message_select_toolbar": "已选消息操作",
+  "message_select_count": "已选 {count} 条",
+  "message_select_copy_links": "复制链接",
+  "message_select_copied": "已复制",
+  "message_select_links_copied": "已复制 {count} 条链接。",
+  "message_select_more": "更多已选消息操作",
+  "message_select_exit": "取消",
+  "message_select_limit": "最多只能选 {max} 条消息。"
 }

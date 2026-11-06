@@ -44,9 +44,10 @@ export type MessageView = {
    * Replaces the plain-text draft hint line with the interactive card; the
    * underlying `body` stays available to assistive technology. */
   actionCard?: ActionCardView;
-  /** Present when this message is a forward: the frozen original its card shows. The message's
-   * own `body` is then the forwarder's note and its `attachments` the card's. */
-  forwarded?: ForwardedMessageView;
+  /** Present when this message is a forward: the frozen originals its card shows, oldest first
+   * (one, or a selection of several). The message's own `body` is then the forwarder's note and
+   * its `attachments` the card's. */
+  forwarded?: ForwardedMessageView[];
   weeklyReportSuggestion?: WeeklyReportMessageSuggestion;
   weeklyReportDisplayBody?: string;
   /** Platform wake stored for the Agent. The conversation pane omits the row. */

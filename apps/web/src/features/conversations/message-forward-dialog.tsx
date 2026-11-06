@@ -44,20 +44,20 @@ type ForwardChannel = Extract<ForwardTarget, { kind: "channel" }>;
 type Notice = { text: string; retry?: boolean };
 
 /**
- * The Forward dialog for one message (task #237): pick up to ten destinations, optionally add a
- * note, and send. Wide screens show the targets beside the preview and note; a phone shows them
+ * The Forward dialog for one message (task #237) or a selection of several, carried as one card:
+ * pick up to ten destinations, optionally add a note, and send. Wide screens show the targets beside the preview and note; a phone shows them
  * as two steps. It mounts per opening, so its request id is one per opening: pressing send again
  * after a partial failure retries only the destinations that failed.
  */
 export function MessageForwardDialog({
   source,
-  plainBody,
   onClose,
+  onForwarded,
 }: {
   source: ForwardSource;
-  /** The message as plain text, as the card previews it. */
-  plainBody: string;
   onClose: () => void;
+  /** Every destination took it; the dialog closes too. */
+  onForwarded?: () => void;
 }) {
   const desktop = useBreakpoint("lg");
   const router = useRouter();
@@ -164,7 +164,7 @@ export function MessageForwardDialog({
       const result = await forward({
         data: {
           requestId,
-          sourceMessageIds: [source.message.id],
+          sourceMessageIds: source.messages.map(({ message }) => message.id),
           destinations,
           note: note.trim() || undefined,
         },
@@ -172,6 +172,7 @@ export function MessageForwardDialog({
       const outcome = forwardOutcomeView(result);
       if (outcome.kind === "done") {
         announce(picked, destinations);
+        onForwarded?.();
         onClose();
         return;
       }
@@ -305,8 +306,8 @@ export function MessageForwardDialog({
                 }
               >
                 <ForwardNotePane
-                  forwarded={forwardedPreview(source, plainBody)}
-                  attachments={source.message.attachments}
+                  forwarded={forwardedPreview(source)}
+                  attachments={source.messages.flatMap(({ message }) => message.attachments)}
                   picked={picked}
                   onRemove={(target) => toggle(target, false)}
                   note={note}

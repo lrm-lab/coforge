@@ -99,8 +99,11 @@ export async function readPendingAgentDeliveries(
           threadRootId: true,
           sender: MESSAGE_SENDER_SELECT,
           mentions: MESSAGE_MENTIONS_SELECT,
-          forward: AGENT_FORWARD_SELECT,
-          attachments: { select: { id: true }, orderBy: { position: "asc" } },
+          forwards: AGENT_FORWARD_SELECT,
+          attachments: {
+            select: { id: true, forwardPosition: true },
+            orderBy: { position: "asc" },
+          },
           pendingMentionActions: { where: NOTIFIED_AGENT_WHERE(agentId), select: { id: true } },
           memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
           actionCard: {
@@ -290,8 +293,8 @@ export async function readAgentRecoveryContext(
         {
           body: row.body,
           mentions: mentionsByMessage.get(row.id) ?? [],
-          forward: forwardsByMessage.get(row.id),
-          attachments: forwardsByMessage.get(row.id)?.message.attachments,
+          forwards: forwardsByMessage.get(row.id)?.forwards,
+          attachments: forwardsByMessage.get(row.id)?.attachments,
         },
         agentId,
         await taskReferenceView(ports.db, workspaceId, agentId, row.conversationId, row.body),

@@ -39,7 +39,7 @@ function row(overrides: {
       mentions: [],
       reactionVersion: 0,
       reactions: [],
-      forward: null,
+      forwards: [],
       actionCard: null,
       ...overrides.message,
     },

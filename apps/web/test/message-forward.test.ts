@@ -39,7 +39,7 @@ test("a destination's send key is stable, distinct per destination and a UUID", 
   expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
-test("a forward names one message and distinct destinations, and its note is optional", () => {
+test("a forward names up to 50 distinct messages and distinct destinations, and its note is optional", () => {
   const input = {
     requestId: SOURCE_MESSAGE,
     sourceMessageIds: [SOURCE_MESSAGE],
@@ -47,9 +47,18 @@ test("a forward names one message and distinct destinations, and its note is opt
   };
   expect(forwardMessageInputSchema.safeParse(input).success).toBe(true);
   expect(forwardMessageInputSchema.safeParse({ ...input, note: "  hi  " }).data?.note).toBe("hi");
+  expect(
+    forwardMessageInputSchema.safeParse({ ...input, sourceMessageIds: [SOURCE_MESSAGE, SOURCE_DM] })
+      .success,
+  ).toBe(true);
+  const many = Array.from(
+    { length: 51 },
+    (_, at) => `${"0".repeat(8)}-0000-4000-8000-${String(at).padStart(12, "0")}`,
+  );
   for (const bad of [
     { ...input, sourceMessageIds: [] },
-    { ...input, sourceMessageIds: [SOURCE_MESSAGE, SOURCE_DM] },
+    { ...input, sourceMessageIds: [SOURCE_MESSAGE, SOURCE_MESSAGE] },
+    { ...input, sourceMessageIds: many },
     { ...input, destinations: [] },
     { ...input, destinations: [SOURCE_DM, SOURCE_DM] },
     { ...input, destinations: ["not-a-uuid"] },
@@ -72,12 +81,16 @@ test("an Agent reads a forward's original beside its note, from a channel or a D
   const view = agentMessageView({
     body: "",
     mentions: [],
-    forward: stored,
-    attachments: [{ id: "a1" }],
+    forwards: [stored],
+    attachments: [{ id: "a1", forwardPosition: null }],
   });
   expect(view.body as string).toBe("");
-  expect(view.forwarded?.body).toBe("ship it");
-  expect(agentMessageView({ body: "plain", mentions: [] })).not.toHaveProperty("forwarded");
+  // One original is a list of one; `forwarded` repeats it for CLIs that predate the list.
+  expect(view.forwardedMessages?.map((original) => original.body)).toEqual(["ship it"]);
+  expect(view.forwarded).toEqual(view.forwardedMessages![0]!);
+  const plain = agentMessageView({ body: "plain", mentions: [] });
+  expect(plain).not.toHaveProperty("forwardedMessages");
+  expect(plain).not.toHaveProperty("forwarded");
 });
 
 test("a daemon delivery carries the original in its body, and an empty note still has a body", () => {
@@ -97,16 +110,18 @@ test("a daemon delivery carries the original in its body, and an empty note stil
     mentions: [],
     createdAtMs: 1_700_000_000_000,
   };
-  const live = decodeAgentMessageDelivery(encodeAgentDelivery({ ...base, body: "", forwarded }));
+  const live = decodeAgentMessageDelivery(
+    encodeAgentDelivery({ ...base, body: "", forwarded: [forwarded] }),
+  );
   expect(live.body).toBe(
     "[forwarded from #product by @ada at 2026-10-30 08:00:00Z]\n> ship it\n[forwarded attachments: a1]",
   );
   const withNote = decodeAgentMessageDelivery(
-    encodeAgentDelivery({ ...base, body: "see this", forwarded }),
+    encodeAgentDelivery({ ...base, body: "see this", forwarded: [forwarded] }),
   );
   expect(withNote.body.startsWith("see this\n[forwarded from #product")).toBe(true);
   // A recovery reads the original into the body once, and the encoder adds nothing more.
-  const recovered = agentDeliveryView({ body: "see this", mentions: [], forward: stored });
+  const recovered = agentDeliveryView({ body: "see this", mentions: [], forwards: [stored] });
   expect(recovered).not.toHaveProperty("forwarded");
   expect(decodeAgentMessageDelivery(encodeAgentDelivery({ ...base, ...recovered })).body).toBe(
     withNote.body.replace("\n[forwarded attachments: a1]", ""),
@@ -127,7 +142,7 @@ function forwardRow(sourceConversationId: string, sourceMessageId: string | null
   };
 }
 
-function browserRow(forward: BrowserMessageRow["forward"]): BrowserMessageRow {
+function browserRow(forward: BrowserMessageRow["forwards"][number] | null): BrowserMessageRow {
   return {
     id: "m1",
     sequence: 1,
@@ -141,7 +156,7 @@ function browserRow(forward: BrowserMessageRow["forward"]): BrowserMessageRow {
     mentions: [],
     reactionVersion: 0,
     reactions: [],
-    forward,
+    forwards: forward ? [forward] : [],
   };
 }
 
@@ -150,14 +165,16 @@ test("a browser message carries the snapshot, unopenable until a viewer's access
     browserRow(forwardRow(SOURCE_CHANNEL, SOURCE_MESSAGE)),
     WORKSPACE_ID,
   );
-  expect(view.forwarded).toEqual({
-    sourceSenderHandle: "ada",
-    sourceCreatedAt: "2026-10-30T08:00:00.000Z",
-    sourceBody: "ship it",
-    sourceConversation: { id: SOURCE_CHANNEL, name: "product" },
-    sourceMessageId: SOURCE_MESSAGE,
-    sourceAccessible: false,
-  });
+  expect(view.forwarded).toEqual([
+    {
+      sourceSenderHandle: "ada",
+      sourceCreatedAt: "2026-10-30T08:00:00.000Z",
+      sourceBody: "ship it",
+      sourceConversation: { id: SOURCE_CHANNEL, name: "product" },
+      sourceMessageId: SOURCE_MESSAGE,
+      sourceAccessible: false,
+    },
+  ]);
   expect(mapBrowserMessage(browserRow(null), WORKSPACE_ID)).not.toHaveProperty("forwarded");
 });
 
@@ -199,13 +216,13 @@ test("a viewer opens an original in a channel, or in a DM of theirs, and only wh
     VIEWER,
     [channel, dm, deleted, plain],
   );
-  expect(openChannel!.forwarded).toMatchObject({
+  expect(openChannel!.forwarded?.[0]).toMatchObject({
     sourceAccessible: true,
     sourceConversation: { id: SOURCE_CHANNEL, name: "renamed" },
   });
   // Not a member of that DM: the snapshot shows, the original does not open.
-  expect(closedDm!.forwarded?.sourceAccessible).toBe(false);
-  expect(goneOriginal!.forwarded?.sourceAccessible).toBe(false);
+  expect(closedDm!.forwarded?.[0]?.sourceAccessible).toBe(false);
+  expect(goneOriginal!.forwarded?.[0]?.sourceAccessible).toBe(false);
   expect(ordinary).toBe(plain);
   // One lookup for the whole page.
   expect(lookups).toHaveLength(1);
@@ -224,7 +241,7 @@ test("a forward that kept the original's body and mentions hands both to the car
     }),
     WORKSPACE_ID,
   );
-  expect(kept.forwarded).toMatchObject({
+  expect(kept.forwarded?.[0]).toMatchObject({
     sourceBody: "ship it",
     sourceRawBody: `ship it <@human:${VIEWER}> see <@task:68>`,
     sourceMentions: mentions,
@@ -253,4 +270,42 @@ test("a snapshot keeps a channel or thread token's name and drops its ids", asyn
     withoutChannelIds(`see <@channel:${channel}:product> and <@thread:${channel}:${root}:product>`),
   ).toBe(`see <@channel:${nil}:product> and <@thread:${nil}:${nil}:product>`);
   expect(withoutChannelIds("plain <@task:7> text")).toBe("plain <@task:7> text");
+});
+
+test("an Agent reads a forward of several in order, each original with its own attachments", () => {
+  const second = {
+    ...stored,
+    sourceSenderHandle: "bob",
+    sourceBody: "agreed",
+  };
+  // Each copy names the original it is of; an untagged one belongs to none of several.
+  const attachments = [
+    { id: "a1", forwardPosition: 0 },
+    { id: "a2", forwardPosition: 1 },
+    { id: "stray", forwardPosition: null },
+  ];
+  const view = agentMessageView({
+    body: "",
+    mentions: [],
+    forwards: [stored, second],
+    attachments,
+  });
+  // The list has them all; `forwarded` (wire compatibility) is only the first.
+  expect(view.forwarded).toMatchObject({ sender: "@ada", attachments: ["a1"] });
+  expect(
+    view.forwardedMessages?.map((original) => [original.sender, original.attachments]),
+  ).toEqual([
+    ["@ada", ["a1"]],
+    ["@bob", ["a2"]],
+  ]);
+  const delivered = agentDeliveryView({
+    body: "",
+    mentions: [],
+    forwards: [stored, second],
+    attachments,
+  });
+  expect(delivered.body as string).toBe(
+    "[forwarded from #product by @ada at 2026-10-30 08:00:00Z]\n> ship it\n[forwarded attachments: a1]\n" +
+      "[forwarded from #product by @bob at 2026-10-30 08:00:00Z]\n> agreed\n[forwarded attachments: a2]",
+  );
 });

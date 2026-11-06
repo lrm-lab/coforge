@@ -26,31 +26,35 @@ function fromLabel({ sourceConversation, sourceThreadRootId }: ForwardedMessageV
     : m.message_forward_from_channel({ name });
 }
 
+/** An original's attachments: the ones it names, or all of the message's when it is the only one. */
+function attachmentsOf(
+  forwarded: ForwardedMessageView,
+  attachments: MessageView["attachments"],
+): MessageView["attachments"] {
+  const ids = forwarded.attachmentIds;
+  return ids ? attachments.filter((attachment) => ids.includes(attachment.id)) : attachments;
+}
+
 /**
- * A forwarded message's card: the frozen original in a bordered box under the forwarder's note.
- * The row stream, Saved, search and Activity draw it for a forward, and the Forward dialog draws
- * the same card for what it is about to send, where the original is not accessible yet. The
- * card holds the attachments, copies of the original's. Its "from #x" label opens the original
- * ("Open source message") only where the viewer can open it now.
+ * A forwarded message's card: the frozen originals in a bordered box under the forwarder's note,
+ * oldest first, one or a selection of several. The row stream, Saved, search and Activity draw it
+ * for a forward, and the Forward dialog draws the same card for what it is about to send, where
+ * the originals are not accessible yet. The card holds the attachments, copies of the originals',
+ * each under its own original. Its "from #x" label opens the (first) original ("Open source
+ * message") only where the viewer can open it now; a selection comes from one conversation.
  */
 export function ForwardedMessageCard({
   forwarded,
   attachments,
 }: {
-  forwarded: ForwardedMessageView;
+  forwarded: readonly ForwardedMessageView[];
   attachments: MessageView["attachments"];
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const hydrated = useHydrated();
-  const timeFormat = useTimeFormat();
-  const target = forwarded.sourceAccessible ? forwardSourceTarget(workspaceSlug, forwarded) : null;
-  // The snapshot keeps the original's body as stored, an image-only send's filename placeholder
-  // included; the row drops that placeholder, and so does the card.
-  const body = attachmentMessageDisplayBody({ body: forwarded.sourceBody, attachments });
-  const rawBody =
-    forwarded.sourceRawBody === undefined
-      ? undefined
-      : attachmentMessageDisplayBody({ body: forwarded.sourceRawBody, attachments });
+  const [first] = forwarded;
+  if (!first) return null;
+  const target = first.sourceAccessible ? forwardSourceTarget(workspaceSlug, first) : null;
+  const several = forwarded.length > 1;
   return (
     <div
       data-forwarded-card
@@ -59,12 +63,21 @@ export function ForwardedMessageCard({
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="inline-flex shrink-0 items-center gap-1 font-medium text-secondary">
           <FlipForward aria-hidden="true" className="size-3.5" />
-          <span>
-            {m.message_forward_badge()}
-            {/* Raft's "Forwarded message": the kind of thing, lighter. The space is the
-                language's own (none in Chinese), so it lives in the message. */}
-            <span className="font-normal text-tertiary">{m.message_forward_badge_count()}</span>
-          </span>
+          {/* "Forwarded message" / "已转发 2 条消息": the kind of thing, lighter. The
+              space is the language's own (none in Chinese), so it lives in the message. */}
+          {several ? (
+            <span>
+              {m.message_forward_badge_several()}
+              <span className="font-normal text-tertiary">
+                {m.message_forward_badge_several_count({ count: forwarded.length })}
+              </span>
+            </span>
+          ) : (
+            <span>
+              {m.message_forward_badge()}
+              <span className="font-normal text-tertiary">{m.message_forward_badge_count()}</span>
+            </span>
+          )}
         </span>
         {/* As Raft's: where it came from is also the way back to it, when the viewer can open it. */}
         {target ? (
@@ -73,37 +86,69 @@ export function ForwardedMessageCard({
             aria-label={m.message_forward_open_source()}
             className="min-w-0 truncate text-tertiary hover:text-secondary hover:underline"
           >
-            {fromLabel(forwarded)}
+            {fromLabel(first)}
           </Link>
         ) : (
-          <span className="min-w-0 truncate text-tertiary">{fromLabel(forwarded)}</span>
+          <span className="min-w-0 truncate text-tertiary">{fromLabel(first)}</span>
         )}
       </div>
+      <div className={several ? "flex min-w-0 flex-col gap-3" : "contents"}>
+        {forwarded.map((original, index) => (
+          <ForwardedOriginal
+            key={original.sourceMessageId ?? index}
+            original={original}
+            attachments={attachmentsOf(original, attachments)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One original in the card: its author by handle and its moment, its words, its attachments. */
+function ForwardedOriginal({
+  original,
+  attachments,
+}: {
+  original: ForwardedMessageView;
+  attachments: MessageView["attachments"];
+}) {
+  const hydrated = useHydrated();
+  const timeFormat = useTimeFormat();
+  // The snapshot keeps the original's body as stored, an image-only send's filename placeholder
+  // included; the row drops that placeholder, and so does the card.
+  const body = attachmentMessageDisplayBody({ body: original.sourceBody, attachments });
+  const rawBody =
+    original.sourceRawBody === undefined
+      ? undefined
+      : attachmentMessageDisplayBody({ body: original.sourceRawBody, attachments });
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
       {/* As Raft draws it: the author by handle and the month, day and time, no picture; the
           snapshot keeps no avatar, and the moment does not age the way the row's own time does. */}
       <p className="flex min-w-0 items-center gap-1.5 text-xs">
         <span className="min-w-0 truncate font-semibold text-secondary">
-          @{forwarded.sourceSenderHandle}
+          @{original.sourceSenderHandle}
         </span>
         <span aria-hidden="true" className="text-quaternary">
           ·
         </span>
         <time
-          dateTime={forwarded.sourceCreatedAt}
+          dateTime={original.sourceCreatedAt}
           suppressHydrationWarning
           className="shrink-0 text-tertiary tabular-nums"
         >
           {hydrated
-            ? formatMonthDayTime(forwarded.sourceCreatedAt, null, getLocale(), timeFormat)
+            ? formatMonthDayTime(original.sourceCreatedAt, null, getLocale(), timeFormat)
             : ""}
         </time>
       </p>
-      {forwarded.sourceRawBody !== undefined && forwarded.sourceMentions
+      {original.sourceRawBody !== undefined && original.sourceMentions
         ? // The original's own words with their chips. A task it names is the source
           // conversation's, so no conversation is in scope to read it from: it stays `task #N`.
           rawBody && (
             <ConversationIdProvider conversationId={undefined}>
-              <MessageBody body={rawBody} mentions={forwarded.sourceMentions} />
+              <MessageBody body={rawBody} mentions={original.sourceMentions} />
             </ConversationIdProvider>
           )
         : body && <p className="message-markdown whitespace-pre-wrap text-primary">{body}</p>}

@@ -80,7 +80,8 @@ export async function announceMessage(
         },
       },
       mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
-      forward: { select: { sourceBody: true } },
+      // A note-less forward previews as its first original.
+      forwards: { select: { sourceBody: true }, orderBy: { position: "asc" }, take: 1 },
       systemMessage: { select: { kind: true, params: true } },
       actionCard: ACTION_CARD_PREVIEW_SELECT,
     },
@@ -103,7 +104,7 @@ export async function announceMessage(
     preview: messagePreviewLine(
       stored.body,
       stored.mentions.map((mention) => browserMessageMention(mention)),
-      stored.forward?.sourceBody,
+      stored.forwards[0]?.sourceBody,
     ),
     ...previewNoticeOf(stored.systemMessage?.kind ?? null, stored.systemMessage?.params),
     ...previewCardFieldOf(stored.actionCard),

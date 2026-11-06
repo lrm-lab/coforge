@@ -28,6 +28,7 @@ async function notificationFor(input: {
         threadRootId: null,
         sender: input.sender,
         mentions: input.mentions ?? [],
+        forwards: [],
         conversation: { channelName: input.channelName, workspace: { slug: "acme" } },
       }),
     },

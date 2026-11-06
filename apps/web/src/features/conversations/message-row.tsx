@@ -31,6 +31,7 @@ import { OwnMessageTicks } from "./message-status-markers";
 import { MessageSenderGutter } from "./message-sender-gutter";
 import { MessageActionSheet, MessageActionToolbar } from "./message-actions";
 import { useMessageRowActions } from "./message-row-actions";
+import { useRowSelection } from "./message-selection";
 import { ForwardedMessageCard } from "./message-forward-card";
 import { ReviewLanding } from "./attachment-review-address";
 import type { MessageView } from "./message-view";
@@ -221,7 +222,10 @@ export const MessageRow = memo(function MessageRow({
       onOpenThread,
       onToggleReaction,
       onToggleSave,
+      inStream: showsTask,
     });
+  // Select mode (`message-selection.tsx`): only the conversation's own stream, which shows Tasks.
+  const selection = useRowSelection({ message, conversationId, channelNames, inStream: showsTask });
   const writtenBody = attachmentMessageDisplayBody(message);
   const displayBody = useBodyWithArtifactTitles(writtenBody);
   // A system notice renders as one muted line, not a person talking (`SystemMessageRow`).
@@ -266,14 +270,17 @@ export const MessageRow = memo(function MessageRow({
       <div
         id={`message-${message.id}`}
         data-message={own ? "own" : "other"}
-        onClick={openActions}
+        onClick={selection?.onClick ?? openActions}
         className={cn(
           "group/message relative mx-1 flex scroll-m-6 rounded-lg px-3 transition-[background-color,box-shadow] duration-500 hover:bg-message-hover focus-within:bg-message-hover target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:mx-3",
           highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           "gap-3",
           messagePaddingClass(grouped),
+          selection?.selected &&
+            "bg-brand-solid/8 hover:bg-brand-solid/8 focus-within:bg-brand-solid/8 dark:bg-brand-solid/15 dark:hover:bg-brand-solid/15 dark:focus-within:bg-brand-solid/15",
         )}
       >
+        {selection?.checkbox}
         <MessageSenderGutter
           message={message}
           grouped={grouped}
@@ -374,7 +381,7 @@ export const MessageRow = memo(function MessageRow({
             />
           </ReviewLanding>
         </div>
-        {hasActions && <MessageActionToolbar {...actions} grouped={grouped} />}
+        {hasActions && !selection && <MessageActionToolbar {...actions} grouped={grouped} />}
         {sheetActions && hasActions && (
           <MessageActionSheet
             {...actions}
