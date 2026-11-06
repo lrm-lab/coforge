@@ -194,7 +194,12 @@ export function TaskSection({
             }
           />
         </TaskProperty>
-        <TaskProperty label={m.tasks_labels()} className="[[data-layout=chips]_&]:order-2">
+        {/* Labels are chips of their own, not a name to truncate: uncapped, the chip fits them
+            and the row scrolls sideways. */}
+        <TaskProperty
+          label={m.tasks_labels()}
+          className="[[data-layout=chips]_&]:order-2 [[data-layout=chips]_&]:max-w-none"
+        >
           <TaskLabelsField
             task={task}
             disabled={pending}

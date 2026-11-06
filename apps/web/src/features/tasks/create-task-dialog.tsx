@@ -252,7 +252,11 @@ export function CreateTaskDialog({
                       />
                     </TaskProperty>
                   )}
-                  <TaskProperty label={m.tasks_labels()}>
+                  {/* As in the popup: labels are chips of their own, not a name to truncate. */}
+                  <TaskProperty
+                    label={m.tasks_labels()}
+                    className="[[data-layout=chips]_&]:max-w-none"
+                  >
                     <TaskLabelsField
                       task={draftTask}
                       disabled={saving}
