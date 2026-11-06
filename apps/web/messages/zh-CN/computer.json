@@ -10,7 +10,7 @@
   "computer_detail_load_error": "无法加载电脑详情。",
   "computer_empty_title": "连接你的第一台电脑",
   "computer_connect_command": "连接命令",
-  "computer_connect_instructions": "复制以下命令到终端运行。如需登录，请使用终端显示的设备码在浏览器中完成授权。",
+  "computer_connect_instructions": "打开终端（macOS 上是“终端”，Windows 上是 PowerShell），粘贴下面的命令并按回车。如果它给出链接，请在浏览器打开，并输入它显示的验证码。",
   "computer_connect_done": "完成",
   "computer_add_title": "添加电脑",
   "computer_add_description": "选择将电脑添加到此工作区的方式。",
