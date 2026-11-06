@@ -55,11 +55,11 @@ export function TasksPending({ layout }: { layout?: TaskLayout }) {
         heading={m.projects_title()}
         meta={<span className="text-lg text-tertiary">/ {m.projects_all_tasks()}</span>}
       />
-      <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 border-b border-secondary px-4 py-1.5 md:px-6">
-        <Button size="sm" color="tertiary" iconLeading={FilterLines} isDisabled>
+      <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-4 py-1.5 md:px-6">
+        <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ml-3" isDisabled>
           {m.tasks_filter()}
         </Button>
-        <Button size="sm" color="secondary" iconLeading={Sliders04} isDisabled>
+        <Button size="sm" color="tertiary" iconLeading={Sliders04} isDisabled>
           {m.tasks_display()}
         </Button>
       </div>

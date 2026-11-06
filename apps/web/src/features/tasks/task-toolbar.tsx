@@ -195,10 +195,11 @@ export function TaskToolbar({
   const chips = candidates.filter((chip) => chip !== false && chip !== undefined);
 
   return (
-    <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 border-b border-secondary px-4 py-1.5 md:px-6">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-4 py-1.5 md:px-6">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
         <Dropdown.Root>
-          <Button size="sm" color="tertiary" iconLeading={FilterLines}>
+          {/* The two views of the board read alike, and Filter's icon starts on the page's edge. */}
+          <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ml-3">
             {m.tasks_filter()}
           </Button>
           <Dropdown.Popover placement="bottom start" className="w-52">
@@ -279,7 +280,6 @@ export function TaskToolbar({
         }
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {action}
         <DisplayMenu
           layout={layout}
           onLayoutChange={onLayoutChange}
@@ -290,6 +290,7 @@ export function TaskToolbar({
             conversation ? CONVERSATION_FIELDS : project ? PROJECT_FIELDS : TASK_DISPLAY_FIELDS
           }
         />
+        {action}
       </div>
     </div>
   );
@@ -400,7 +401,7 @@ function DisplayMenu({
   const [fields, setFields] = useTaskDisplayFields();
   return (
     <DialogTrigger>
-      <Button size="sm" color="secondary" iconLeading={Sliders04}>
+      <Button size="sm" color="tertiary" iconLeading={Sliders04}>
         {m.tasks_display()}
       </Button>
       <Dropdown.Popover placement="bottom end" className="w-72">
