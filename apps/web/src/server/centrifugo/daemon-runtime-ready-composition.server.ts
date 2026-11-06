@@ -61,19 +61,24 @@ export function daemonRuntimeReadyPorts(input: {
           where: { workspaceId, computerId, ...ACTIVE_AGENT_WHERE },
           select: { id: true, ownerId: true },
         });
-        await Promise.all(
-          agents.map(async (agent) => {
-            const bytes = await reminders.snapshot({
+        const publications = await Promise.all(
+          agents.map(async (agent) => ({
+            channel: daemonControlChannel(workspaceId, computerId),
+            data: await reminders.snapshot({
               protocolMajor: 1,
               requestId: crypto.randomUUID(),
               workspaceId,
               computerId,
               agentId: agent.id,
               userId: agent.ownerId,
-            });
-            await centrifugo.publish(daemonControlChannel(workspaceId, computerId), bytes);
-          }),
+            }),
+          })),
         );
+        const results = await centrifugo.publishBatch(publications);
+        const failed = results.find(
+          (result): result is PromiseRejectedResult => result.status === "rejected",
+        );
+        if (failed) throw failed.reason;
       },
     },
     migrationRecovery: {
