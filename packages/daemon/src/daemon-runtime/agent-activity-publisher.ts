@@ -1,4 +1,8 @@
-import { AGENT_ACTIVITY_DETAIL_KIND, type AgentActivity } from "@lrm/coforge-sdk/internal";
+import {
+  AGENT_ACTIVITY_DETAIL_KIND,
+  type AgentActivity,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 
 /** An activity envelope before the launch assigns its sequence metadata. */
@@ -10,6 +14,9 @@ export type PublishedActivityLaunch = {
   launchId: string;
   clientSeq: number;
   stopping: boolean;
+  /** The runtime provider this launch runs, stamped on every frame as `runtimeProvider`
+   * (task #611). Optional so test doubles and non-runtime launches may omit it. */
+  provider?: RuntimeProvider;
 };
 
 /** One Agent that is still mid-turn when the runner hold is polled. */
@@ -133,6 +140,9 @@ export class AgentActivityPublisher<L extends PublishedActivityLaunch> {
     }
     this.#ports.transport.sendAgentActivity?.({
       ...activity,
+      // The launch's provider is authoritative over anything a draft carried: it is the
+      // runtime the frame's Agent actually ran under (task #611).
+      ...(launch.provider ? { runtimeProvider: launch.provider } : {}),
       launchId: launch.launchId,
       clientSeq: ++launch.clientSeq,
       observedAtMs: Date.now(),

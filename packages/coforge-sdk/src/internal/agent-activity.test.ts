@@ -241,3 +241,22 @@ test("rejects an outcome on a frame that is not a tool_end, or an invalid outcom
   ])
     expect(() => encodeAgentActivity(invalid as AgentActivity)).toThrow("invalid agent activity");
 });
+
+test("round trips the runtime provider the launch ran under", () => {
+  const withProvider: AgentActivity = { ...activity, runtimeProvider: "claude-code" };
+  expect(decodeAgentActivity(encodeAgentActivity(withProvider))).toEqual(withProvider);
+});
+
+test("omits runtimeProvider on decode when the frame was sent by an older daemon", () => {
+  const decoded = decodeAgentActivity(encodeAgentActivity(activity));
+  expect(decoded).not.toHaveProperty("runtimeProvider");
+});
+
+test("drops a runtime provider value this build does not know", () => {
+  const unknown = {
+    ...activity,
+    runtimeProvider: "future-provider" as AgentActivity["runtimeProvider"],
+  };
+  const decoded = decodeAgentActivity(encodeAgentActivity(unknown));
+  expect(decoded).not.toHaveProperty("runtimeProvider");
+});

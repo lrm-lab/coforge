@@ -3,6 +3,7 @@ import { parseActivityEntries, type ActivityTrajectoryEntry } from "./activity-e
 import { isActivityToolOutcome } from "./activity-tool-outcome";
 import { safeUint64 } from "./agent-observation-codec";
 import { decodeRuntimeError, encodeRuntimeError } from "./runtime-error-action";
+import { parseRuntimeProvider } from "./runtime-provider";
 import {
   ActivitySystemEntrySchema,
   AgentActivitySchema,
@@ -89,6 +90,10 @@ export function agentActivityFromMessage(v: AgentActivityMessage): AgentActivity
       return { kind: entry.content.case, text: entry.content.value, ...scope };
     throw new Error("missing activity entry content");
   });
+  // A provider value this build does not know is dropped like an absent field: the frame
+  // still decodes, and consumers that need a provider (usage-limit events, task #611) simply
+  // see none — the same answer an older daemon gives.
+  const runtimeProvider = parseRuntimeProvider(v.runtimeProvider);
   const value = {
     protocolMajor: v.protocolMajor,
     requestId: v.requestId,
@@ -121,6 +126,7 @@ export function agentActivityFromMessage(v: AgentActivityMessage): AgentActivity
     ...(v.conversationId ? { conversationId: v.conversationId } : {}),
     ...(v.conversationTarget ? { conversationTarget: v.conversationTarget } : {}),
     ...(decodeRuntimeError(v) ? { runtimeError: decodeRuntimeError(v) } : {}),
+    ...(runtimeProvider ? { runtimeProvider } : {}),
   };
   validateAgentActivity(value);
   return value;

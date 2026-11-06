@@ -214,6 +214,10 @@ export class AgentOfflineResidency {
     if (!record) return;
     this.#ports.sendAgentActivity({
       ...record.draft,
+      // Same stamp the publisher puts on live frames (task #611): the dead
+      // launch still knows its provider, and a restated quota report is often
+      // the first frame the cloud sees for it.
+      ...(record.launch.provider ? { runtimeProvider: record.launch.provider } : {}),
       requestId: crypto.randomUUID(),
       launchId: record.launch.launchId,
       clientSeq: ++record.launch.clientSeq,

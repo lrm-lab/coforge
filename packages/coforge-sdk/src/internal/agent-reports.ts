@@ -195,6 +195,9 @@ export type AgentActivity = {
    * rows only. */
   producerFactId?: string;
   runtimeError?: import("./runtime-error-action").AgentActivityRuntimeError;
+  /** The runtime provider the Agent ran under when the daemon sent this frame; absent from
+   * older daemons and whenever the daemon cannot name one (task #611). */
+  runtimeProvider?: RuntimeProvider;
 };
 export type AgentStatus = {
   protocolMajor: number;

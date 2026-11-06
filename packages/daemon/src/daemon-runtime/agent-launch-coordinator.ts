@@ -210,6 +210,7 @@ export class AgentLaunchCoordinator {
       launchId,
       clientSeq: reused ? this.ports.agentProcessManager.lastClientSeq(agentId) : 0,
       stopping: false,
+      provider: config.provider,
     };
     if (!control)
       logger.info("Agent self-initiated launch resolved its launch identity", {

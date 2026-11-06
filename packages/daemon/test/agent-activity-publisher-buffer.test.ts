@@ -67,3 +67,40 @@ test("nothing queued survives a disable, and a new launch's frames are published
   value.publish("agent-a", live, idleActivityDraft(WORKSPACE, "agent-a"));
   expect(sent).toHaveLength(1);
 });
+
+test("a launch's provider is stamped on every published frame", () => {
+  const live = {
+    launchId: "launch-1",
+    clientSeq: 0,
+    stopping: false,
+    provider: "claude-code" as const,
+  };
+  const sent: { runtimeProvider?: string }[] = [];
+  const value = new AgentActivityPublisher<typeof live>({
+    currentLaunch: () => live,
+    transport: {
+      sendAgentActivity: (activity) => sent.push({ runtimeProvider: activity.runtimeProvider }),
+    },
+    recordClientSeq: () => {},
+    reconcileIdleTurn: () => false,
+  });
+  value.enable();
+  value.publish("agent-a", live, idleActivityDraft(WORKSPACE, "agent-a"));
+  expect(sent).toEqual([{ runtimeProvider: "claude-code" }]);
+});
+
+test("a launch without a provider publishes frames without runtimeProvider", () => {
+  const live = launchFor();
+  const sent: { runtimeProvider?: string }[] = [];
+  const value = new AgentActivityPublisher<Launch>({
+    currentLaunch: () => live,
+    transport: {
+      sendAgentActivity: (activity) => sent.push({ runtimeProvider: activity.runtimeProvider }),
+    },
+    recordClientSeq: () => {},
+    reconcileIdleTurn: () => false,
+  });
+  value.enable();
+  value.publish("agent-a", live, idleActivityDraft(WORKSPACE, "agent-a"));
+  expect(sent).toEqual([{}]);
+});

@@ -442,6 +442,10 @@ message AgentActivity {
   // The ISO time a retryable runtime failure named as its next attempt (`retryNotBefore` in the
   // daemon's classification); empty when the failure named none. Additive: protocol_major stays 1.
   string runtime_error_retry_not_before = 25;
+  // The runtime provider this Activity's Agent ran under when the daemon sent it (a
+  // RuntimeProvider value such as "claude-code"); empty from older daemons and whenever the
+  // daemon cannot name one. Additive: protocol_major stays 1.
+  string runtime_provider = 26;
 }
 
 // An Agent is about to post (`phase` "start") or no longer is ("end") for one tool call, `call_id`.
