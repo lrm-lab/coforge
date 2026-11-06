@@ -89,7 +89,14 @@ export function SystemMessageRow({
                   typeof part === "string" ? (
                     part
                   ) : (
-                    <ActorName key={index} actor={noticeActor(part, members)} inline />
+                    <ActorName
+                      key={index}
+                      actor={noticeActor(part, members)}
+                      inline
+                      // The people are what the notice is about: their names a step darker
+                      // and heavier than its words; no pill or @ (the pill read heavy, #591).
+                      className="font-medium text-secondary"
+                    />
                   ),
                 )}
               </TooltipTrigger>
