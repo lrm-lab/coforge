@@ -32,6 +32,8 @@
   "tasks_history_blockers_added": "Added: {names}",
   "tasks_history_blockers_removed": "Removed: {names}",
   "tasks_tab_discussion": "Discussion",
+  "task_card_replies": "Comments: {count}",
+  "task_card_files": "Files: {count}",
   "tasks_tabs_label": "Task details",
   "tasks_ref_hidden": "Task you can't view",
   "tasks_ref_hidden_hint": "You don't have access to this task",

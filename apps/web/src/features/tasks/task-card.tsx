@@ -9,7 +9,7 @@ import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { taskStepsProgressClass } from "./task-steps-progress";
-import { Folder } from "@untitledui/icons";
+import { Folder, MessageChatCircle, Paperclip } from "@untitledui/icons";
 
 import type { FilterableTask } from "./task-filters";
 import { openBlockers, type TaskRelations } from "./task-relation-edits";
@@ -28,6 +28,29 @@ function TaskCreatedAt({ at }: { at: string | Date }) {
   return (
     <span className="shrink-0 text-xs whitespace-nowrap text-tertiary tabular-nums">
       {formatMonthDay(at, timeZone, getLocale())}
+    </span>
+  );
+}
+
+/** One of a card's counts at its foot: nothing while there are none. */
+function TaskCount({
+  icon: Icon,
+  count,
+  label,
+}: {
+  icon: typeof Paperclip;
+  count: number | undefined;
+  label: (count: number) => string;
+}) {
+  if (!count) return null;
+  return (
+    <span
+      role="img"
+      aria-label={label(count)}
+      className="flex shrink-0 items-center gap-1 text-xs text-tertiary tabular-nums"
+    >
+      <Icon aria-hidden="true" className="size-3.5" />
+      {count}
     </span>
   );
 }
@@ -215,8 +238,7 @@ export function TaskCard({
           </span>
         </div>
       )}
-      {/* Its owner, and later how much talk it holds (task #598: the comment count, from the
-          board's read, goes at this row's end once the row carries one). With a touch pointer the
+      {/* Its owner, then how much talk it holds and when it was made. With a touch pointer the
           tools sit at this row's end, so it keeps room for them and stays even with no owner. */}
       <div
         className={cn(
@@ -225,7 +247,19 @@ export function TaskCard({
         )}
       >
         <TaskOwnerAvatar owner={task.owner} />
-        <TaskCreatedAt at={task.createdAt} />
+        <span className="flex min-w-0 items-center gap-3">
+          <TaskCount
+            icon={MessageChatCircle}
+            count={task.replyCount}
+            label={(count) => m.task_card_replies({ count })}
+          />
+          <TaskCount
+            icon={Paperclip}
+            count={task.fileCount}
+            label={(count) => m.task_card_files({ count })}
+          />
+          <TaskCreatedAt at={task.createdAt} />
+        </span>
       </div>
       {tools && (
         // After the title in the DOM so assistive tech names the task first. With a mouse, over

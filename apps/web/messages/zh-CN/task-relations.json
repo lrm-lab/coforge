@@ -32,6 +32,8 @@
   "tasks_history_blockers_added": "添加：{names}",
   "tasks_history_blockers_removed": "移除：{names}",
   "tasks_tab_discussion": "讨论",
+  "task_card_replies": "评论：{count}",
+  "task_card_files": "文件：{count}",
   "tasks_tabs_label": "任务详情",
   "tasks_ref_hidden": "无权查看的任务",
   "tasks_ref_hidden_hint": "你没有权限查看这个任务",
