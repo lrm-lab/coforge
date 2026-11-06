@@ -248,6 +248,7 @@ export function observeRuntimeEvent(
       }
       if (
         quiet &&
+        !launch.lastTurnInterrupted &&
         event.taskStatus &&
         launch.backgroundTasks?.count === 0 &&
         launch.subagentWake?.takeWake()
@@ -387,6 +388,8 @@ export function observeRuntimeEvent(
   // The turn's boundary, paired with `agent.turn.started`: how long an accepted notice waited is
   // measurable from the log alone, and a turn that never reports its end stands out.
   noteTurnFinished(agentId, event.status, event.conversation?.conversationId);
+  // Raft's `lastTurnEndInterrupted`: an interrupted turn's quiet subagent endings earn no wake.
+  launch.lastTurnInterrupted = event.status === "interrupted";
   // Capture provider error text before clearing crashDetail for Activity wording.
   const collectorFailReason =
     event.status === "failed"

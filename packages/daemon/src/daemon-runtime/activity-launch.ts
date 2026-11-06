@@ -33,6 +33,8 @@ export type ActivityLaunch = PublishedActivityLaunch & {
   backgroundTasks?: OutstandingBackgroundTasks;
   /** Subagent wake bookkeeping, only for a provider that wakes after subagents (Codex). */
   subagentWake?: SubagentWakeTracker;
+  /** Raft's `lastTurnEndInterrupted`: an interrupted last turn suppresses the subagent wake. */
+  lastTurnInterrupted?: boolean;
   // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
   // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
   // — `AgentSession.onExit` itself carries no exit code or signal, so this is the only fact the

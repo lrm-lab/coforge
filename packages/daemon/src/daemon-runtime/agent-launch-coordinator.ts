@@ -35,11 +35,11 @@ import { TaskIdleNudge } from "./task-idle-nudge";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
-/** Raft's `formatSubagentsFinishedRuntimeInput`, adapted: the results live on the subagent
- * threads, so the notice names where to continue rather than claiming they are inline. */
+/** Raft's `formatSubagentsFinishedRuntimeInput`, verbatim: Codex only queues their results for
+ * the next turn, so the notice says where they are and to finish the work. */
 const SUBAGENTS_FINISHED_WAKE =
-  "Your background subagents have finished. Their results are available. " +
-  "Continue your work with them.";
+  "Your sub-agents have finished. Their results are above. " +
+  "Continue your work with them. Complete all your work before stopping.";
 
 type Connection = { workspaceId: string; computerId: string; workspaceRoot: string };
 type Drafts = ReturnType<typeof agentActivityDrafts>;
