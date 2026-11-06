@@ -95,16 +95,9 @@ export function ChannelConversationHeader({
         identity={
           <>
             <ConversationListButton />
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <h1 className="min-w-0 shrink truncate text-md font-semibold">
-                <ChannelTitle name={conversation.name} visibility={conversation.visibility} />
-              </h1>
-              {conversation.description && (
-                <p className="hidden min-w-0 truncate text-sm text-tertiary sm:block">
-                  {conversation.description}
-                </p>
-              )}
-            </div>
+            <h1 className="min-w-0 flex-1 truncate text-md font-semibold">
+              <ChannelTitle name={conversation.name} visibility={conversation.visibility} />
+            </h1>
           </>
         }
         actions={
