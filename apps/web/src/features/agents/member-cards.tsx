@@ -46,7 +46,7 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
           name={person.displayName}
           src={person.avatarUrl}
         />
-        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
+        <h2 className="min-w-0 flex-1 text-sm font-semibold break-words text-primary">
           <Link
             to="/w/$workspaceSlug/members"
             params={{ workspaceSlug }}
@@ -154,7 +154,7 @@ export function AgentCard({
           size="lg"
         />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-semibold text-primary">
+          <h2 className="text-sm break-words font-semibold text-primary">
             <Link
               to="/w/$workspaceSlug/members"
               params={{ workspaceSlug }}
@@ -221,8 +221,8 @@ export function AgentCard({
       <p className="line-clamp-2 text-sm break-words text-secondary sm:min-h-10">
         {member.description}
       </p>
-      <div className="mt-auto flex min-w-0 items-center gap-4 pt-1 text-sm text-tertiary">
-        <span className="flex max-w-[40%] min-w-0 shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
+      <div className="mt-auto flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 pt-1 text-sm text-tertiary">
+        <span className="flex max-w-full min-w-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
           <Monitor aria-hidden="true" className="size-3.5 shrink-0" />
           <span className="truncate">
             {member.computerId === null

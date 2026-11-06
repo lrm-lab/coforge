@@ -233,7 +233,7 @@ export function AgentsContent({
           <GridList
             aria-label={onAgentTab ? m.member_tab_agents() : m.member_tab_humans()}
             layout="grid"
-            className="mt-4 grid gap-4 outline-none md:grid-cols-[repeat(auto-fill,minmax(18rem,1fr))]"
+            className="mt-4 grid gap-4 outline-none md:grid-cols-[repeat(auto-fill,minmax(26rem,1fr))]"
           >
             {listedPeople.map((person) => (
               <PersonCard

@@ -56,7 +56,7 @@ export function AgentsPending() {
           <section
             aria-busy="true"
             aria-label={m.navigation_agents()}
-            className="mt-4 grid gap-4 md:grid-cols-[repeat(auto-fill,minmax(18rem,1fr))]"
+            className="mt-4 grid gap-4 md:grid-cols-[repeat(auto-fill,minmax(26rem,1fr))]"
           >
             {[0, 1, 2, 3, 4, 5].map((index) => (
               <div
