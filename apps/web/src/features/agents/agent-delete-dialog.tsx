@@ -5,7 +5,12 @@ import { Heading, Text } from "react-aria-components";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { m } from "#src/paraglide/messages";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
@@ -30,6 +35,7 @@ export function AgentDeleteDialog({
   /** Performs the delete; throws when the server refuses it. */
   onDelete: (confirmation: string) => Promise<void>;
 }) {
+  const controlSize = useDialogControlSize();
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
   const [deleting, guard] = useSubmitGuard();
@@ -95,6 +101,7 @@ export function AgentDeleteDialog({
                 <label className="grid gap-1 px-6 pt-5 text-sm font-medium">
                   {m.agent_delete_confirm()}
                   <Input
+                    size={controlSize}
                     autoFocus
                     value={confirmation}
                     onChange={setConfirmation}

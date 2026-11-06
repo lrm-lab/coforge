@@ -7,6 +7,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Select } from "#src/components/base/select/select";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { Spinner } from "#src/components/ui/spinner";
 import { useAppToast } from "#src/components/ui/toast";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
@@ -67,6 +68,7 @@ export function MessageShareDialog({
   messages: readonly MessageView[];
   onClose: () => void;
 }) {
+  const controlSize = useDialogControlSize();
   const toast = useAppToast();
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const stage = useRef<HTMLDivElement>(null);
@@ -174,7 +176,7 @@ export function MessageShareDialog({
             <div className="flex items-center gap-2 px-4 py-3 safe-area-padding">
               <Select
                 aria-label={m.message_share_ratio()}
-                size="sm"
+                size={controlSize}
                 className="w-24"
                 selectedKey={ratio}
                 onSelectionChange={(key) => {

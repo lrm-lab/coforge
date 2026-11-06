@@ -13,7 +13,12 @@ import {
   useReportDirty,
   useUnsavedChangesGuard,
 } from "#src/components/ui/unsaved-changes-dialog";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { m } from "#src/paraglide/messages";
 import { agentEnvironmentNameError, agentEnvironmentRowsChanged } from "./agent-form";
@@ -82,6 +87,7 @@ export function AgentRuntimeConfigForm({
   onDirtyChange?: (dirty: boolean) => void;
   onSave: (form: FormData, changed: { runtime: boolean; environment: boolean }) => void;
 }) {
+  const controlSize = useDialogControlSize();
   const [selectedComputerId, setSelectedComputerId] = useState(
     computerId || computers?.[0]?.id || "",
   );
@@ -124,7 +130,7 @@ export function AgentRuntimeConfigForm({
             name="computerId"
             isRequired
             isDisabled={computerLocked || saving}
-            size="sm"
+            size={controlSize}
             label={m.agent_form_computer()}
             className="min-w-0"
             selectedKey={selectedComputerId || null}
@@ -201,7 +207,7 @@ export function AgentRuntimeConfigForm({
                     <div key={index} className="flex min-w-0 items-start gap-2">
                       <Input
                         name="envKey"
-                        size="sm"
+                        size={controlSize}
                         className="min-w-0 flex-1"
                         placeholder={m.agent_env_key_placeholder()}
                         isInvalid={Boolean(envKeyErrors[index])}
@@ -220,7 +226,7 @@ export function AgentRuntimeConfigForm({
                       </span>
                       <Input
                         name="envValue"
-                        size="sm"
+                        size={controlSize}
                         className="min-w-0 flex-1"
                         placeholder={m.agent_env_value_placeholder()}
                         value={row.value}

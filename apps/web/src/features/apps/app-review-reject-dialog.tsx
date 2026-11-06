@@ -2,7 +2,12 @@ import { useState } from "react";
 import { Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Alert } from "#src/components/ui/alert";
 import {
@@ -27,6 +32,7 @@ export function RejectReviewDialog({
   /** Throws when the server refuses the decision. */
   onReject: (reason: string) => Promise<void>;
 }) {
+  const controlSize = useDialogControlSize();
   const [reason, setReason] = useState("");
   const [error, setError] = useState(false);
   const [pending, guard] = useSubmitGuard();
@@ -56,6 +62,7 @@ export function RejectReviewDialog({
               {m.apps_review_reject_title({ name: appName })}
             </Heading>
             <TextArea
+              size={controlSize}
               label={m.apps_review_reject_reason()}
               value={reason}
               onChange={setReason}

@@ -3,6 +3,7 @@ import { AtSign, RefreshCw05 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
 import { m } from "#src/paraglide/messages";
 
@@ -35,6 +36,7 @@ export function AgentUsernameField({
   /** While a create runs: the name it sent stays the name shown. */
   isReadOnly?: boolean;
 }) {
+  const controlSize = useDialogControlSize();
   const directory = useWorkspaceDirectory();
   const taken = useMemo(
     () => new Set((directory.data?.agents ?? []).map((agent) => agent.handle.toLowerCase())),
@@ -57,7 +59,7 @@ export function AgentUsernameField({
         name="name"
         isRequired
         hideRequiredIndicator
-        size="sm"
+        size={controlSize}
         icon={AtSign}
         autoFocus={autoFocus}
         isReadOnly={isReadOnly}

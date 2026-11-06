@@ -6,7 +6,11 @@ import { Heading } from "react-aria-components";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
-import { DialogAction, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { LabelDot } from "./task-label-chip";
 import { TaskPriorityIcon } from "./task-priority-icon";
@@ -48,6 +52,7 @@ export function BoardNewTaskDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
 }) {
+  const controlSize = useDialogControlSize();
   const execute = useServerFn(executeTask);
   const [title, setTitle] = useState("");
   const [place, setPlace] = useState(places[0]?.conversationId);
@@ -108,6 +113,7 @@ export function BoardNewTaskDialog({
               </Heading>
               <div className="flex flex-col gap-5 px-6 py-5">
                 <Input
+                  size={controlSize}
                   label={m.task_board_create_task()}
                   placeholder={m.task_board_create_task_placeholder()}
                   value={title}
@@ -118,7 +124,7 @@ export function BoardNewTaskDialog({
                 />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Select
-                    size="sm"
+                    size={controlSize}
                     label={m.task_board_create_channel()}
                     selectedKey={place ?? null}
                     onSelectionChange={(key) => key && setPlace(String(key))}
@@ -132,7 +138,7 @@ export function BoardNewTaskDialog({
                     ))}
                   </Select>
                   <Select
-                    size="sm"
+                    size={controlSize}
                     label={m.task_board_create_column()}
                     selectedKey={column}
                     onSelectionChange={(key) => key && setColumn(key as TaskStatus)}
@@ -142,7 +148,7 @@ export function BoardNewTaskDialog({
                     ))}
                   </Select>
                   <Select
-                    size="sm"
+                    size={controlSize}
                     label={m.task_board_create_owner()}
                     selectedKey={owner}
                     onSelectionChange={(key) => key && setOwner(String(key))}

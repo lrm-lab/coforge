@@ -5,6 +5,7 @@ import { ComboBoxStateContext } from "react-aria-components";
 import { ComboBox } from "#src/components/base/select/combobox";
 import { SelectItem } from "#src/components/base/select/select-item";
 import { m } from "#src/paraglide/messages";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { searchModelChoices, type ModelChoice } from "./model-search";
 
 const showEverything = () => true;
@@ -80,6 +81,7 @@ export function ModelComboBox({
   className?: string;
   popoverClassName?: string;
 }) {
+  const controlSize = useDialogControlSize();
   const selectedLabel = choices.find((choice) => choice.id === selectedKey)?.label ?? "";
   // What the viewer has typed; null while the input shows the chosen model.
   const [query, setQuery] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export function ModelComboBox({
   return (
     <ComboBox
       label={label}
-      size="sm"
+      size={controlSize}
       shortcut={false}
       icon={<ListToggle searching={query !== null} />}
       placeholder={m.agent_form_model_search()}

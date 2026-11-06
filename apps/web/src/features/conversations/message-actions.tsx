@@ -12,6 +12,7 @@ import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { Dialog } from "#src/components/application/modals/modal";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { cn } from "#src/lib/utils";
@@ -214,6 +215,7 @@ export function MessageActionSheet({
   plainText: string;
   copyable: boolean;
 }) {
+  const controlSize = useDialogControlSize();
   return (
     <AriaModalOverlay
       isOpen={isOpen}
@@ -298,7 +300,7 @@ export function MessageActionSheet({
             {copyable && (
               <Button
                 color="tertiary"
-                size="md"
+                size={controlSize}
                 noTextPadding
                 iconLeading={Copy01}
                 onPress={() => {
@@ -316,7 +318,7 @@ export function MessageActionSheet({
             {onForward && (
               <Button
                 color="tertiary"
-                size="md"
+                size={controlSize}
                 noTextPadding
                 iconLeading={FlipForward}
                 onPress={() => {
@@ -331,7 +333,7 @@ export function MessageActionSheet({
             {onSelect && (
               <Button
                 color="tertiary"
-                size="md"
+                size={controlSize}
                 noTextPadding
                 iconLeading={CheckDone01}
                 onPress={() => {
@@ -346,7 +348,7 @@ export function MessageActionSheet({
             {onToggleSave && (
               <Button
                 color="tertiary"
-                size="md"
+                size={controlSize}
                 noTextPadding
                 iconLeading={saveSaved ? BookmarkCheck : Bookmark}
                 onPress={() => {
@@ -361,7 +363,7 @@ export function MessageActionSheet({
             {onMakeTask && (
               <Button
                 color="tertiary"
-                size="md"
+                size={controlSize}
                 noTextPadding
                 iconLeading={CheckSquare}
                 onPress={() => {

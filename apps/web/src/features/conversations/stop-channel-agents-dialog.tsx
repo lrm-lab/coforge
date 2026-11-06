@@ -4,7 +4,12 @@ import { Text } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { isAppError } from "#src/lib/app-error";
 import { CHANNEL_AGENT_GUIDANCE_MAX_LENGTH } from "#src/lib/channel-agent-guidance";
@@ -54,6 +59,7 @@ export function StopChannelAgentsDialog({
   channelName: string;
   onClose: () => void;
 }) {
+  const controlSize = useDialogControlSize();
   const stop = useServerFn(stopChannelAgents);
   const resume = useServerFn(resumeChannelAgents);
   const [busy, setBusy] = useState(false);
@@ -135,6 +141,7 @@ export function StopChannelAgentsDialog({
                     {m.channel_resume_agents_guidance_hint()}
                   </p>
                   <TextArea
+                    size={controlSize}
                     aria-label={m.channel_resume_agents_guidance_hint()}
                     placeholder={m.channel_resume_agents_guidance_placeholder()}
                     value={guidance}

@@ -5,6 +5,7 @@ import { XClose as X } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import {
   UnsavedChangesDialog,
   useReportDirty,
@@ -174,6 +175,7 @@ export function AgentCreateFooter({
   submitting: boolean;
   submitDisabled?: boolean;
 }) {
+  const controlSize = useDialogControlSize();
   // While a create runs, Cancel stops it at once, as before; otherwise it asks about edits first.
   const guarded = useContext(AgentCreateGuardContext)?.requestClose;
   const requestClose = submitting || !guarded ? onCancel : guarded;
@@ -183,7 +185,7 @@ export function AgentCreateFooter({
       <Button
         type="button"
         color="secondary"
-        size="md"
+        size={controlSize}
         isDisabled={cancelDisabled}
         onPress={requestClose}
       >
@@ -192,7 +194,7 @@ export function AgentCreateFooter({
       <Button
         type="submit"
         color="primary"
-        size="md"
+        size={controlSize}
         // Pending, not disabled, while it runs: focus stays on it, so Escape still reaches the dialog.
         isDisabled={submitDisabled}
         isLoading={submitting}

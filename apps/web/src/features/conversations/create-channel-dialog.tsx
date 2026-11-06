@@ -8,7 +8,12 @@ import {
   useReportDirty,
   useUnsavedChangesGuard,
 } from "#src/components/ui/unsaved-changes-dialog";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -180,6 +185,7 @@ function CreateChannelForm({
   onDirtyChange,
   close,
 }: CreateChannelFormProps) {
+  const controlSize = useDialogControlSize();
   const [name, setName] = useState(defaultName);
   const [makePrivate, setMakePrivate] = useState(false);
   const [startingKeys] = useState(() => initialKeys(initialMembers));
@@ -242,6 +248,7 @@ function CreateChannelForm({
   }
   const nameField = (
     <Input
+      size={controlSize}
       label={m.channel_name()}
       hint={m.channel_name_hint()}
       value={name}

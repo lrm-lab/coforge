@@ -1,5 +1,6 @@
 import { Select } from "#src/components/base/select/select";
 import { m } from "#src/paraglide/messages";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 
 /** The Reasoning choice of an Agent's runtime: the provider's default, or one of the levels the
  * selected model reports. */
@@ -12,10 +13,11 @@ export function AgentReasoningField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const controlSize = useDialogControlSize();
   return (
     <Select
       label={m.agent_form_reasoning()}
-      size="sm"
+      size={controlSize}
       className="min-w-0"
       selectedKey={value}
       onSelectionChange={(key) => key !== null && onChange(String(key))}

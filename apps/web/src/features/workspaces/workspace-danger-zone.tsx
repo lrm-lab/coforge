@@ -15,7 +15,12 @@ import { m } from "#src/paraglide/messages";
 import { leaveWorkspace } from "./members.functions";
 import { canDeleteWorkspace } from "./workspace-roles";
 import { deleteWorkspace } from "./workspaces.functions";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 
 type DialogProps = { open: boolean; workspaceName: string; onClose: () => void };
 
@@ -183,6 +188,7 @@ function DeleteWorkspaceDialog({
   workspaceSlug,
   onClose,
 }: DialogProps & { workspaceSlug: string }) {
+  const controlSize = useDialogControlSize();
   const remove = useServerFn(deleteWorkspace);
   const [typed, setTyped] = useState("");
   const { busy, error, depart, clearError } = useWorkspaceDeparture({
@@ -210,6 +216,7 @@ function DeleteWorkspaceDialog({
     >
       <div className="mx-6 mt-4">
         <Input
+          size={controlSize}
           label={m.settings_delete_workspace_type_slug({ slug: workspaceSlug })}
           placeholder={workspaceSlug}
           autoFocus

@@ -10,7 +10,12 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { m } from "#src/paraglide/messages";
 import { executePiChat } from "./pi-chat.functions";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 
 /** The same discoverable actions work from a session row and its open conversation. */
 export function PiChatSessionActions({
@@ -26,6 +31,7 @@ export function PiChatSessionActions({
   onChanged(): void;
   onDeleted(): void;
 }) {
+  const controlSize = useDialogControlSize();
   const execute = useServerFn(executePiChat);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -92,6 +98,7 @@ export function PiChatSessionActions({
                 {m.pi_chat_rename()}
               </Heading>
               <Input
+                size={controlSize}
                 aria-label={m.pi_chat_name()}
                 value={title}
                 onChange={setTitle}

@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Check } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { DIALOG_BUTTON_SIZE } from "#src/components/ui/dialog-actions";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { isAppError } from "#src/lib/app-error";
@@ -119,6 +119,7 @@ export function InfoForm({
 }) {
   const isGeneral = channelName === "general";
   const locked = archived || form.saving;
+  const controlSize = useDialogControlSize();
   return (
     <form
       className="flex flex-col gap-4"
@@ -128,6 +129,7 @@ export function InfoForm({
       }}
     >
       <Input
+        size={controlSize}
         label={m.channel_settings_name()}
         placeholder={m.channel_settings_name_placeholder()}
         value={form.name}
@@ -137,6 +139,7 @@ export function InfoForm({
         hint={isGeneral ? m.channel_settings_general_cannot_rename() : m.channel_name_hint()}
       />
       <TextArea
+        size={controlSize}
         label={m.channel_settings_description()}
         placeholder={m.channel_settings_description_placeholder()}
         value={form.description}
@@ -151,7 +154,7 @@ export function InfoForm({
       )}
       <div className="flex justify-end gap-2">
         <Button
-          size={DIALOG_BUTTON_SIZE}
+          size={controlSize}
           color="secondary"
           isDisabled={!form.dirty || locked}
           onPress={form.reset}
@@ -160,7 +163,7 @@ export function InfoForm({
         </Button>
         <Button
           type="submit"
-          size={DIALOG_BUTTON_SIZE}
+          size={controlSize}
           iconLeading={form.saved ? Check : undefined}
           isDisabled={!form.dirty || locked}
           isLoading={form.saving}

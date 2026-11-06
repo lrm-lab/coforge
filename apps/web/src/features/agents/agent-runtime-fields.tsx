@@ -9,6 +9,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
@@ -75,6 +76,7 @@ export function AgentRuntimeFields({
    * not-signed-in notice). */
   providerNotice?: (provider: RuntimeProvider) => ReactNode;
 }) {
+  const controlSize = useDialogControlSize();
   const [provider, setProvider] = useState(initial?.provider ?? RUNTIME_PROVIDER.COFORGE);
   const [modelProvider, setModelProvider] = useState(initial?.modelProvider ?? "");
   const [piProviderChoice, setPiProviderChoice] = useState(
@@ -293,7 +295,7 @@ export function AgentRuntimeFields({
         <Input
           label={m.agent_form_model_provider()}
           name="modelProvider"
-          size="sm"
+          size={controlSize}
           isRequired={provider === RUNTIME_PROVIDER.COFORGE}
           maxLength={100}
           defaultValue={modelProvider}
@@ -308,7 +310,7 @@ export function AgentRuntimeFields({
       {!failed && !RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider] && (
         <Select
           label={m.agent_form_model_provider()}
-          size="sm"
+          size={controlSize}
           className="min-w-0"
           isDisabled={!options}
           // The Pi provider picker carries no hint: the sentence that used to sit here explained
@@ -347,7 +349,7 @@ export function AgentRuntimeFields({
         <Input
           label={m.agent_form_model()}
           name="model"
-          size="sm"
+          size={controlSize}
           isRequired
           maxLength={200}
           defaultValue={initial?.model}
@@ -405,7 +407,7 @@ export function AgentRuntimeFields({
       {piConfigured && customModelActive && (
         <Input
           label={m.agent_form_model_custom_id()}
-          size="sm"
+          size={controlSize}
           className="min-w-0"
           placeholder="provider/model-id"
           value={customModelText}
@@ -421,7 +423,7 @@ export function AgentRuntimeFields({
       {showApiKeyField && (
         <Input
           label={m.agent_runtime_api_key({ provider: apiKeyProviderId })}
-          size="sm"
+          size={controlSize}
           className="min-w-0"
           name="apiKey"
           type="password"
@@ -447,7 +449,7 @@ export function AgentRuntimeFields({
           <Button
             type="button"
             color="secondary"
-            size="sm"
+            size={controlSize}
             className="justify-self-start"
             onPress={() => {
               setFailedComputerId(undefined);

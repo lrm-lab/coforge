@@ -9,7 +9,12 @@ import { m } from "#src/paraglide/messages";
 import { chatSectionFields, type ChatSection } from "./chat-section.schemas";
 import { useSidebarActions } from "./sidebar-lists";
 import { ChatSectionEmojiPicker, DEFAULT_SECTION_EMOJI } from "./chat-section-emoji-picker";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 
 /** Mounted for each create/edit, preserving input after an unsuccessful save. */
 export function ChatSectionDialog({
@@ -24,6 +29,7 @@ export function ChatSectionDialog({
   /** What follows a new section's creation (moving the row it was made from into it). */
   onCreated?: (section: ChatSection) => void;
 }) {
+  const controlSize = useDialogControlSize();
   const [name, setName] = useState(section?.name ?? "");
   // A new section starts with the folder mark already chosen; an edited one keeps its own (or none).
   const [emoji, setEmoji] = useState<string | null>(
@@ -91,6 +97,7 @@ export function ChatSectionDialog({
               <div className="flex items-start gap-3">
                 <ChatSectionEmojiPicker value={emoji} onChange={setEmoji} isDisabled={saving} />
                 <Input
+                  size={controlSize}
                   label={m.chat_section_name()}
                   value={name}
                   onChange={setName}

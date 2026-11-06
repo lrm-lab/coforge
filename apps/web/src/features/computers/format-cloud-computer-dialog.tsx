@@ -7,7 +7,12 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 
 /** Formats a cloud computer's disk only after the owner types its name. The server checks it again. */
 export function FormatCloudComputerDialog({
@@ -21,6 +26,7 @@ export function FormatCloudComputerDialog({
   name: string;
   onConfirm: (confirmName: string) => Promise<void>;
 }) {
+  const controlSize = useDialogControlSize();
   const [typed, setTyped] = useState("");
   const [error, setError] = useState("");
   const [formatting, guard] = useSubmitGuard();
@@ -84,6 +90,7 @@ export function FormatCloudComputerDialog({
               <label className="grid gap-1 px-6 pt-5 text-sm font-medium">
                 {m.computer_format_confirm({ name })}
                 <Input
+                  size={controlSize}
                   autoFocus
                   value={typed}
                   onChange={setTyped}

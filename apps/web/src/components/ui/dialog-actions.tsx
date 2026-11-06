@@ -1,12 +1,18 @@
 import type { ReactNode } from "react";
 
 import { Button, type Props as ButtonProps } from "#src/components/base/buttons/button";
+import { useMediaQuery } from "#src/hooks/use-media-query";
 import { cx } from "#src/utils/cx";
 
-/** Every button a dialog or popconfirm shows, in its button row or beside a field, and the form
- * and action buttons of a conversation's settings panel: the height of the app's inputs (40px).
- * Raft gives the same places one size, its inputs' height (32px there, measured 2026-11-03). */
-export const DIALOG_BUTTON_SIZE = "md";
+/** A dialog's control size by pointer (task #224, Frank 11-06): `sm` (36px) on a precise pointer,
+ * `md` (40px) on touch, where small targets are hard to hit. Buttons and the dialog's fields share
+ * it — `DialogCancel`/`DialogAction` read it here, a bespoke `Button`/`Input`/`Select`/`TextArea`/
+ * `ComboBox` inside a dialog takes `size={useDialogControlSize()}` — so a dialog never mixes sizes,
+ * and Raft's rule holds: controls the same height, one size per device. Untitled UI's pairs are
+ * `sm`/`sm` and `md`/`md`; there is no 32px input, so 36 is the smallest matched pair. */
+export function useDialogControlSize(): "sm" | "md" {
+  return useMediaQuery("(pointer: coarse)", false) ? "md" : "sm";
+}
 
 /**
  * A dialog's button row, as on Raft: right-aligned and 8px apart, with no rule above it; Cancel or
@@ -36,19 +42,21 @@ type RowButtonProps<K extends keyof ButtonProps> = ButtonProps extends infer P
 
 /** The row's Cancel or Close: borderless, as Raft's ghost button. */
 export function DialogCancel(props: RowButtonProps<"size" | "color">) {
+  const size = useDialogControlSize();
   // Narrowed per variant: Button is overloaded for links and buttons, not for their union.
   return "href" in props ? (
-    <Button {...props} size={DIALOG_BUTTON_SIZE} color="tertiary" />
+    <Button {...props} size={size} color="tertiary" />
   ) : (
-    <Button {...props} size={DIALOG_BUTTON_SIZE} color="tertiary" />
+    <Button {...props} size={size} color="tertiary" />
   );
 }
 
 /** The row's action, primary unless the caller picks another colour. */
 export function DialogAction({ color = "primary", ...props }: RowButtonProps<"size">) {
+  const size = useDialogControlSize();
   return "href" in props ? (
-    <Button {...props} size={DIALOG_BUTTON_SIZE} color={color} />
+    <Button {...props} size={size} color={color} />
   ) : (
-    <Button {...props} size={DIALOG_BUTTON_SIZE} color={color} />
+    <Button {...props} size={size} color={color} />
   );
 }

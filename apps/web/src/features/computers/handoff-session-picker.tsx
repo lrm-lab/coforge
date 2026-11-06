@@ -10,6 +10,7 @@ import {
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Badge } from "#src/components/base/badges/badges";
 import { Input } from "#src/components/base/input/input";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { m } from "#src/paraglide/messages";
@@ -48,6 +49,7 @@ export function HandoffSessionPicker({
   onPickerChange: (picker: HandoffPickerState) => void;
   onSelect: (session: LocalSessionEntry) => void;
 }) {
+  const controlSize = useDialogControlSize();
   const sessions = state.kind === "ready" ? state.sessions : NO_SESSIONS;
   const byTool = useMemo(() => sessionsByProvider(sessions), [sessions]);
   const tool = picker.tool ?? defaultProvider(sessions);
@@ -55,7 +57,7 @@ export function HandoffSessionPicker({
     <div className="flex flex-col gap-3">
       <Input
         type="search"
-        size="sm"
+        size={controlSize}
         icon={SearchLg}
         aria-label={m.handoff_search_placeholder()}
         placeholder={m.handoff_search_placeholder()}

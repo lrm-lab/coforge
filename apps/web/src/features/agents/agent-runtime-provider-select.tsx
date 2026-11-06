@@ -1,6 +1,7 @@
 import { type RuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 import { Select } from "#src/components/base/select/select";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { runtimeUnavailableReason } from "#src/features/computers/runtime-unavailable-reason";
 import { m } from "#src/paraglide/messages";
 import type { RuntimeOptions } from "./agent-runtime-fields-state";
@@ -22,10 +23,11 @@ export function AgentRuntimeProviderSelect({
   className?: string;
   onChange: (key: string | number) => void;
 }) {
+  const controlSize = useDialogControlSize();
   return (
     <Select
       label={m.agent_form_provider()}
-      size="sm"
+      size={controlSize}
       className={className}
       selectedKey={provider}
       onSelectionChange={(key) => {

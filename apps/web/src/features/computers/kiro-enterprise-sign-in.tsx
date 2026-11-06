@@ -5,7 +5,12 @@ import {
   type KiroIdentityCenterOptions,
 } from "@lrm/coforge-sdk/internal";
 import { Input } from "#src/components/base/input/input";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 
 /** The two native IAM Identity Center inputs precede the shared runtime login progress. */
@@ -16,6 +21,7 @@ export function KiroEnterpriseSignIn({
   onStart: (target: KiroIdentityCenterOptions) => void;
   onClose: () => void;
 }) {
+  const controlSize = useDialogControlSize();
   const [startUrl, setStartUrl] = useState("");
   const [region, setRegion] = useState("");
   const [invalid, setInvalid] = useState(false);
@@ -39,6 +45,7 @@ export function KiroEnterpriseSignIn({
           className="p-0"
         />
         <Input
+          size={controlSize}
           label={m.runtime_auth_kiro_start_url()}
           value={startUrl}
           onChange={setStartUrl}
@@ -47,6 +54,7 @@ export function KiroEnterpriseSignIn({
           isRequired
         />
         <Input
+          size={controlSize}
           label={m.runtime_auth_kiro_region()}
           value={region}
           onChange={setRegion}

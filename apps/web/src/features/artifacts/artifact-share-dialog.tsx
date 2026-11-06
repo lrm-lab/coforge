@@ -5,6 +5,7 @@ import { Building02, Check, Copy01, Lock01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ArtifactAccess, ArtifactAccessState } from "./artifact-access";
@@ -95,6 +96,7 @@ function ShareBody({
   close: () => void;
 }) {
   const { access, canChange, locksOut, pending, error } = state;
+  const controlSize = useDialogControlSize();
   /** The narrower level, chosen by one it would shut out, until they confirm or keep it. */
   const [confirming, setConfirming] = useState(false);
   // Who may change it is unknown until read: greyed meanwhile, with no word on why.
@@ -198,10 +200,10 @@ function ShareBody({
         </p>
       )}
       <div className="mt-5 flex items-center gap-2">
-        <Button size="md" color="secondary" iconLeading={Copy01} onClick={onCopyLink}>
+        <Button size={controlSize} color="secondary" iconLeading={Copy01} onClick={onCopyLink}>
           {m.doc_copy_link()}
         </Button>
-        <Button size="md" color="primary" className="ml-auto" onClick={close}>
+        <Button size={controlSize} color="primary" className="ml-auto" onClick={close}>
           {m.doc_share_done()}
         </Button>
       </div>

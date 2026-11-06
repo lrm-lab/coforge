@@ -7,7 +7,12 @@ import { AlertCircle, SwitchHorizontal01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Select } from "#src/components/base/select/select";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { Alert } from "#src/components/ui/alert";
@@ -137,6 +142,7 @@ export function AgentMigrationForm({
   onSelect: (computerId: string) => void;
   disabled?: boolean;
 }) {
+  const controlSize = useDialogControlSize();
   return (
     <div className="grid gap-4 px-6 pt-4">
       {computers.length === 0 ? (
@@ -145,7 +151,7 @@ export function AgentMigrationForm({
         <Select
           isRequired
           isDisabled={disabled}
-          size="md"
+          size={controlSize}
           label={m.agent_migration_dialog_target()}
           placeholder={m.agent_migration_dialog_target_placeholder()}
           selectedKey={selected}

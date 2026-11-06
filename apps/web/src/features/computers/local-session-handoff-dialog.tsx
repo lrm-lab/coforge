@@ -9,6 +9,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Select } from "#src/components/base/select/select";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -61,6 +62,7 @@ function HandoffContent({
   onBusyChange: (busy: boolean) => void;
   onClose: () => void;
 }) {
+  const controlSize = useDialogControlSize();
   const workspaceId = useCurrentWorkspaceId();
   const loadComputers = useServerFn(listComputers);
   // Read each time the dialog opens: a Computer may have come online since the last look.
@@ -119,7 +121,7 @@ function HandoffContent({
       ) : (
         <>
           <Select
-            size="sm"
+            size={controlSize}
             label={m.handoff_computer()}
             isDisabled={session !== undefined}
             selectedKey={computerId}
@@ -208,12 +210,13 @@ function HandoffSteps({
 
 function NoComputers({ onClose }: { onClose: () => void }) {
   const workspaceSlug = useWorkspaceSlug();
+  const controlSize = useDialogControlSize();
   return (
     <div className="flex flex-col items-center gap-4 py-6 text-center">
       <p className="text-sm text-tertiary">{m.handoff_no_computers()}</p>
       <Button
         color="secondary"
-        size="md"
+        size={controlSize}
         href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
         onPress={onClose}
       >

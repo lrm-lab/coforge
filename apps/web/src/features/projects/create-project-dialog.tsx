@@ -19,7 +19,12 @@ import { m } from "#src/paraglide/messages";
 import { parseGitHubRepositoryInput } from "./github-repository-input";
 import { createProject } from "./projects.functions";
 import { isValidProjectSlug, PROJECT_SLUG_MAX_LENGTH } from "./projects.schemas";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 
 type Source = "scratch" | "github";
 type GitHubConnection = Awaited<ReturnType<typeof getGitHubConnection>>;
@@ -35,6 +40,7 @@ export function CreateProjectDialog({
   /** The new Project, by the slug it was made with. */
   onCreated: (project: { slug: string }) => Promise<void>;
 }) {
+  const controlSize = useDialogControlSize();
   const workspaceSlug = useWorkspaceSlug();
   const repositories = useServerFn(listAccessibleGitHubRepositories);
   const githubConnection = useServerFn(getGitHubConnection);
@@ -263,9 +269,16 @@ export function CreateProjectDialog({
               ) : (
                 <form onSubmit={submit}>
                   <div className="grid gap-4 px-6 py-6">
-                    <Input label={m.project_name()} isRequired value={name} onChange={changeName} />
+                    <Input
+                      size={controlSize}
+                      label={m.project_name()}
+                      isRequired
+                      value={name}
+                      onChange={changeName}
+                    />
                     <div className="grid gap-1.5">
                       <Input
+                        size={controlSize}
                         label={m.project_slug()}
                         isRequired
                         pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
@@ -283,6 +296,7 @@ export function CreateProjectDialog({
                     {needsRepository && (
                       <>
                         <ComboBox
+                          size={controlSize}
                           label={m.project_repository()}
                           placeholder={m.project_repository_url_placeholder()}
                           shortcut={false}

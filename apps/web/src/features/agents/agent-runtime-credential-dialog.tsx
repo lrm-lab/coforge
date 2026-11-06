@@ -2,10 +2,10 @@ import { useState, type FormEvent } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import {
-  DIALOG_BUTTON_SIZE,
   DialogAction,
   DialogActions,
   DialogCancel,
+  useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
@@ -61,6 +61,7 @@ export function AgentRuntimeCredentialDialog({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   /** Set when the confirm row is cancelled, so focus lands back on the entry button it replaced. */
   const [returnFocusToDeleteEntry, setReturnFocusToDeleteEntry] = useState(false);
+  const controlSize = useDialogControlSize();
   return (
     <ModalOverlay
       isOpen={open}
@@ -152,7 +153,7 @@ export function AgentRuntimeCredentialDialog({
                     {credentialHint && onDelete && (
                       <Button
                         type="button"
-                        size={DIALOG_BUTTON_SIZE}
+                        size={controlSize}
                         color="secondary-destructive"
                         autoFocus={returnFocusToDeleteEntry}
                         isDisabled={saving}

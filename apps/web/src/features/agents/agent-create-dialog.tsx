@@ -4,7 +4,12 @@ import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/interna
 
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { localizeHref } from "#src/paraglide/runtime";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { StatusDot } from "#src/components/ui/status-dot";
@@ -86,6 +91,7 @@ export function LocalAgentForm({
   headless?: boolean;
   onBusyChange: (busy: boolean) => void;
 }) {
+  const controlSize = useDialogControlSize();
   const [submitting, guard] = useSubmitGuard();
   const workspaceSlug = useWorkspaceSlug();
   const [error, setError] = useState("");
@@ -204,7 +210,7 @@ export function LocalAgentForm({
             isRequired
             hideRequiredIndicator
             isDisabled={computerLocked}
-            size="sm"
+            size={controlSize}
             label={m.agent_create_computer()}
             className="min-w-0"
             selectedKey={computerId}
@@ -234,7 +240,7 @@ export function LocalAgentForm({
           <TextArea
             label={m.agent_create_description()}
             name="description"
-            size="sm"
+            size={controlSize}
             rows={3}
             defaultValue={defaults?.description}
             placeholder={m.agent_form_description_placeholder()}

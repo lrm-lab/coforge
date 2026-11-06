@@ -1,5 +1,10 @@
 import { Input } from "#src/components/base/input/input";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
@@ -19,6 +24,7 @@ export function RecordSideRenameDialog({
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const controlSize = useDialogControlSize();
   if (!open) return null;
   return (
     <ModalOverlay isOpen isDismissable onOpenChange={(next) => !next && onClose()}>
@@ -29,6 +35,7 @@ export function RecordSideRenameDialog({
           </h2>
           <div className="mt-3">
             <Input
+              size={controlSize}
               value={draft}
               onChange={onDraftChange}
               placeholder={m.records_side_chat_rename_placeholder()}

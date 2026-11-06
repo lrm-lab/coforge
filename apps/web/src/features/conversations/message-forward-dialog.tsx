@@ -9,6 +9,7 @@ import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { useAppToast } from "#src/components/ui/toast";
 import {
   UnsavedChangesDialog,
@@ -60,6 +61,7 @@ export function MessageForwardDialog({
   onForwarded?: () => void;
 }) {
   const desktop = useBreakpoint("lg");
+  const controlSize = useDialogControlSize();
   const router = useRouter();
   const toast = useAppToast();
   const workspaceSlug = useWorkspaceSlug();
@@ -326,7 +328,11 @@ export function MessageForwardDialog({
             </div>
             {!desktop && step === "destinations" && (
               <div className="flex shrink-0 justify-end border-t border-secondary px-4 py-3 pb-[max(0.75rem,var(--spacing-safe-bottom))]">
-                <Button size="md" isDisabled={picked.length === 0} onPress={() => setStep("note")}>
+                <Button
+                  size={controlSize}
+                  isDisabled={picked.length === 0}
+                  onPress={() => setStep("note")}
+                >
                   {m.message_forward_next()}
                 </Button>
               </div>

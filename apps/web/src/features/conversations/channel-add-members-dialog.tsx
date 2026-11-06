@@ -21,7 +21,12 @@ import {
 } from "./channel-member-picker";
 import { useChannelMembers } from "./channel-members-query";
 import { channelMembersQueryKey } from "./conversation-query-keys";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 
 /** One person or Agent an action card proposes adding. */
 type ProposedMember = { id: string; displayName: string };
@@ -85,6 +90,7 @@ export function ChannelAddMembersDialog({
     onCommitted: () => void;
   };
 }) {
+  const controlSize = useDialogControlSize();
   const queryClient = useQueryClient();
   const { openAgentProfile } = useOpenAgentProfile();
   const members = useChannelMembers(channelId);
@@ -181,7 +187,7 @@ export function ChannelAddMembersDialog({
                   // first thing to do here is read the proposal, and a mobile keyboard over the
                   // dialog would hide the Add button.
                   <Input
-                    size="sm"
+                    size={controlSize}
                     label={m.channel_members_search()}
                     placeholder={m.channel_members_name_placeholder()}
                     icon={SearchLg}

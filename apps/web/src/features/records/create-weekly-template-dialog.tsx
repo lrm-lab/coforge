@@ -28,7 +28,12 @@ import { parseTemplateSections, type TemplateOutlineSection } from "./template-o
 import { ActorName } from "#src/features/avatars/actor-name";
 import { memberLabel, weekdayLabel, type TemplateMemberOption } from "./weekly-template-members";
 import type { WeeklyTemplateList } from "./weekly-report-settings";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import { Field, OutlineRow } from "./weekly-template-fields";
 import {
   emptySection,
@@ -105,6 +110,7 @@ export function CreateWeeklyTemplateDialog({
   members: TemplateMemberOption[];
   initial?: WeeklyTemplateDraft | null;
 }) {
+  const controlSize = useDialogControlSize();
   const editing = Boolean(initial);
   const [name, setName] = useState(FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME);
   const {
@@ -295,6 +301,7 @@ export function CreateWeeklyTemplateDialog({
                 <p className="text-sm font-semibold text-primary">{m.records_template_details()}</p>
 
                 <Input
+                  size={controlSize}
                   label={m.records_template_name()}
                   value={name}
                   hideRequiredIndicator
@@ -345,7 +352,7 @@ export function CreateWeeklyTemplateDialog({
                       </div>
                     </div>
                   ))}
-                  <Button type="button" size="sm" color="secondary" onPress={addSection}>
+                  <Button type="button" size={controlSize} color="secondary" onPress={addSection}>
                     {m.records_template_add_heading_level_one()}
                   </Button>
                 </div>
@@ -426,7 +433,7 @@ export function CreateWeeklyTemplateDialog({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Select
                     label={m.records_template_frequency()}
-                    size="sm"
+                    size={controlSize}
                     selectedKey={frequency}
                     onSelectionChange={() => {}}
                     hideRequiredIndicator
@@ -435,7 +442,7 @@ export function CreateWeeklyTemplateDialog({
                   </Select>
                   <Select
                     label={m.records_template_send_weekday()}
-                    size="sm"
+                    size={controlSize}
                     selectedKey={String(sendWeekday)}
                     onSelectionChange={(key) => setSendWeekday(key ? Number(key) : 5)}
                     hideRequiredIndicator
@@ -448,7 +455,7 @@ export function CreateWeeklyTemplateDialog({
 
                 <Select
                   label={m.records_template_send_time()}
-                  size="sm"
+                  size={controlSize}
                   selectedKey={sendTime}
                   onSelectionChange={(key) => setSendTime(key ? String(key) : "15:00")}
                   hideRequiredIndicator
@@ -460,7 +467,7 @@ export function CreateWeeklyTemplateDialog({
 
                 <Select
                   label={m.records_template_enabled()}
-                  size="sm"
+                  size={controlSize}
                   selectedKey={enabled ? "yes" : "no"}
                   onSelectionChange={(key) => setEnabled(key !== "no")}
                   hideRequiredIndicator
