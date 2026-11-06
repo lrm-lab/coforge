@@ -131,8 +131,10 @@ test("the installer release signs in exactly as Computer publication does", asyn
     if (job.permissions?.["id-token"] !== "write") continue;
     const step = job.steps!.find((candidate) => candidate.name === OIDC_STEP);
     expect(step, name).toBeDefined();
-    expect(step!.run, name).toBe(computerOidc.run!);
-    expect(step!.env, name).toEqual(computerOidc.env!);
+    // A composite action, not a repo script: jobs checking out an older release
+    // commit still find it, because local actions resolve from the workflow's ref.
+    expect(step!.uses, name).toBe("./.github/actions/aliyun-oidc-token");
+    expect(computerOidc.uses).toBe(step!.uses);
     signedIn += 1;
   }
   expect(signedIn).toBe(3);
@@ -154,7 +156,9 @@ test("the installer release builds every release target on the runner installer-
 test("the installer release pins every action, and caller-controlled input never enters a script body", () => {
   for (const [name, job] of Object.entries(installerRelease.jobs)) {
     for (const step of job.steps ?? []) {
-      if (step.uses) expect(step.uses, `${name}: ${step.uses}`).toMatch(/@[0-9a-f]{40}$/);
+      // Third-party actions are pinned by SHA; local composite actions are repo code.
+      if (step.uses && !step.uses.startsWith("./"))
+        expect(step.uses, `${name}: ${step.uses}`).toMatch(/@[0-9a-f]{40}$/);
       // `inputs.pointer_only` is free text: it may reach a script only through an env var.
       expect(step.run ?? "", name).not.toContain("${{ inputs.");
     }

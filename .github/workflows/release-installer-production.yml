@@ -176,7 +176,7 @@ jobs:
         run: bun run --cwd packages/coforge-sdk generate
 
       - name: Request an OIDC token for Alibaba Cloud
-        run: bash scripts/release/aliyun-oidc-token.sh
+        uses: ./.github/actions/aliyun-oidc-token
 
       - name: Refuse a version that is already published
         id: plan
@@ -377,7 +377,7 @@ jobs:
           path: installer-bin
 
       - name: Request an OIDC token for Alibaba Cloud
-        run: bash scripts/release/aliyun-oidc-token.sh
+        uses: ./.github/actions/aliyun-oidc-token
 
       - name: Package, upload, and verify every object, write the manifest, and move installer/latest
         env:
@@ -439,7 +439,7 @@ jobs:
         run: bun run --cwd packages/coforge-sdk generate
 
       - name: Request an OIDC token for Alibaba Cloud
-        run: bash scripts/release/aliyun-oidc-token.sh
+        uses: ./.github/actions/aliyun-oidc-token
 
       - name: Move installer/latest
         # inputs.pointer_only is caller-controlled text: it goes through an env var, never into the

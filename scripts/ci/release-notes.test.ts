@@ -103,7 +103,9 @@ test("notes reach the script only through env vars, and so does the token", () =
       for (const step of definition.steps ?? []) {
         expect(step.run ?? "", name).not.toContain("${{ inputs.");
         expect(step.run ?? "", name).not.toContain("secrets.");
-        if (step.uses) expect(step.uses, name).toMatch(/@[0-9a-f]{40}$/);
+        // Third-party actions are pinned by SHA; local composite actions are repo code.
+        if (step.uses && !step.uses.startsWith("./"))
+          expect(step.uses, name).toMatch(/@[0-9a-f]{40}$/);
         if (step.uses?.startsWith("actions/checkout@"))
           expect(step.with?.["persist-credentials"], name).toBe(false);
       }

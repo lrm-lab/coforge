@@ -232,12 +232,16 @@ test("production signs in as staging does, pins every action, and keeps inputs o
     for (const [jobName, job] of Object.entries(workflow.jobs)) {
       if (job.permissions?.["id-token"] === "write") {
         const oidc = job.steps!.find((step) => step.name === OIDC_STEP);
-        expect(oidc?.run, `${name}.${jobName}`).toBe(stagingOidc.run!);
-        expect(oidc?.env, `${name}.${jobName}`).toEqual(stagingOidc.env!);
+        // The token request is a composite action so jobs that check out an older
+        // release commit still find it: local actions resolve from the workflow's ref.
+        expect(oidc?.uses, `${name}.${jobName}`).toBe("./.github/actions/aliyun-oidc-token");
+        expect(oidc?.uses, `${name}.${jobName}`).toBe(stagingOidc.uses!);
       }
     }
     for (const { name: jobName, step } of steps(workflow)) {
-      if (step.uses) expect(step.uses, `${name}.${jobName}`).toMatch(/@[0-9a-f]{40}$/);
+      // Third-party actions are pinned by SHA; local composite actions are repo code.
+      if (step.uses && !step.uses.startsWith("./"))
+        expect(step.uses, `${name}.${jobName}`).toMatch(/@[0-9a-f]{40}$/);
       expect(step.run ?? "", `${name}.${jobName}`).not.toContain("${{ inputs.");
     }
   }
