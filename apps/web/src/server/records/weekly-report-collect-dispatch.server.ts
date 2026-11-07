@@ -6,7 +6,11 @@ import { getMessageRequestIdempotency } from "#src/server/conversations/redis-me
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
-import { COLLECT_RUN_STATUS } from "./weekly-report-collect-run.server";
+import {
+  COLLECT_RUN_STATUS,
+  COLLECT_SLOT_STATUS,
+  collectWaveExhausted,
+} from "./weekly-report-collect-run.server";
 
 /** Wake text for a per-Computer collector Agent. */
 export function buildCollectorWakeBody(input: {
@@ -51,9 +55,24 @@ export function buildCollectorWakeBody(input: {
   ].join("\n");
 }
 
+export const COLLECT_DISPATCH_FAILED_REASON = "collector dispatch failed";
+
+type CollectorWakeSlot = {
+  id: string;
+  collectorAgentId: string;
+  computerId: string;
+  scanPaths: string[];
+};
+
 /**
  * Wakes each running slot's collector Agent with its Collect Run wake DM.
- * Throws the first dispatch error after settling the run when any send fails.
+ *
+ * One slot's failed send must not judge the wave's other slots: a slot whose
+ * DM already landed keeps running so its collector can still submit, while a
+ * slot whose send threw is marked `failed` — reopenable, because a stored DM
+ * can still reach the Agent and a late report beats a cancelled slot (#695).
+ * The run is cancelled only once every slot is terminal with nothing to
+ * synthesize; the first error is rethrown only when no slot was dispatched.
  */
 export async function dispatchCollectorWakes(
   db: PrismaClient,
@@ -62,22 +81,12 @@ export async function dispatchCollectorWakes(
     userId: string;
     reportId: string;
     runId: string;
-    slots: Array<{
-      id: string;
-      collectorAgentId: string;
-      computerId: string;
-      scanPaths: string[];
-    }>;
+    slots: CollectorWakeSlot[];
     windowStart: Date;
     windowEnd: Date;
   },
+  sendWake?: (slot: CollectorWakeSlot, body: string) => Promise<void>,
 ): Promise<void> {
-  const conversations = new PrismaDirectConversationRepository(db);
-  const centrifugo = createCentrifugoServerApi();
-  const idempotency = getMessageRequestIdempotency();
-  const realtime = new CentrifugoConversationRealtime(centrifugo);
-  const sender = new SendDirectMessage(conversations, idempotency, centrifugo, realtime);
-
   const owner = await db.user.findUnique({
     where: { id: input.userId },
     select: {
@@ -88,8 +97,14 @@ export async function dispatchCollectorWakes(
   });
   if (!owner) throw new AppError("NOT_FOUND");
 
-  try {
-    for (const slot of input.slots) {
+  let deliver = sendWake;
+  if (!deliver) {
+    const conversations = new PrismaDirectConversationRepository(db);
+    const centrifugo = createCentrifugoServerApi();
+    const idempotency = getMessageRequestIdempotency();
+    const realtime = new CentrifugoConversationRealtime(centrifugo);
+    const sender = new SendDirectMessage(conversations, idempotency, centrifugo, realtime);
+    deliver = async (slot, body) => {
       const opened = await conversations.memberForUser(
         input.workspaceId,
         input.userId,
@@ -101,7 +116,18 @@ export async function dispatchCollectorWakes(
         conversationId: opened.conversationId,
         senderMemberId: opened.senderMemberId,
         senderUserId: input.userId,
-        body: buildCollectorWakeBody({
+        body,
+      });
+    };
+  }
+
+  const failedSlotIds: string[] = [];
+  let firstError: unknown;
+  for (const slot of input.slots) {
+    try {
+      await deliver(
+        slot,
+        buildCollectorWakeBody({
           runId: input.runId,
           reportId: input.reportId,
           slotId: slot.id,
@@ -112,30 +138,45 @@ export async function dispatchCollectorWakes(
           ownerDisplayName: owner.displayName,
           ownerGitHubLogin: owner.gitHubConnection?.login ?? null,
         }),
-      });
+      );
+    } catch (error) {
+      failedSlotIds.push(slot.id);
+      firstError ??= error;
+      console.error(
+        JSON.stringify({
+          event: "weekly_report.collect_dispatch_slot_failed",
+          run_id: input.runId,
+          report_id: input.reportId,
+          slot_id: slot.id,
+          computer_id: slot.computerId,
+          error_type: error instanceof Error ? error.name : typeof error,
+          error_message: thrownMessage(error),
+        }),
+      );
     }
-  } catch (error) {
-    // Do not leave a collecting Run behind when dispatch fails halfway through the wave.
-    // Otherwise the card shows a permanently running collection and every retry adds another
-    // orphan Run. Keep the original error so the browser can render its safe AppError code.
-    await db.weeklyReportCollectSlot.updateMany({
-      where: { runId: input.runId, status: "running" },
-      data: { status: "cancelled", failureReason: "collector dispatch failed" },
-    });
+  }
+  if (failedSlotIds.length === 0) return;
+
+  // No requestId fence: the send may have stored the DM before throwing, so a
+  // late submit must still be able to settle this slot.
+  await db.weeklyReportCollectSlot.updateMany({
+    where: { id: { in: failedSlotIds }, status: COLLECT_SLOT_STATUS.running },
+    data: { status: COLLECT_SLOT_STATUS.failed, failureReason: COLLECT_DISPATCH_FAILED_REASON },
+  });
+
+  const refreshed = await db.weeklyReportCollectRun.findFirst({
+    where: { id: input.runId },
+    include: { slots: { orderBy: { computerId: "asc" } } },
+  });
+  if (
+    refreshed?.status === COLLECT_RUN_STATUS.collecting &&
+    collectWaveExhausted(refreshed.slots)
+  ) {
     await db.weeklyReportCollectRun.updateMany({
       where: { id: input.runId, status: COLLECT_RUN_STATUS.collecting },
       data: { status: COLLECT_RUN_STATUS.cancelled, completedAt: new Date() },
     });
-    console.error(
-      JSON.stringify({
-        event: "weekly_report.collect_dispatch_failed",
-        run_id: input.runId,
-        report_id: input.reportId,
-        computer_ids: input.slots.map((slot) => slot.computerId),
-        error_type: error instanceof Error ? error.name : typeof error,
-        error_message: thrownMessage(error),
-      }),
-    );
-    throw error;
   }
+
+  if (failedSlotIds.length === input.slots.length) throw firstError;
 }
