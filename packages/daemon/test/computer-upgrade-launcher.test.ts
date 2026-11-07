@@ -32,6 +32,27 @@ test("launches Linux upgrades in an independent user service", () => {
   ]);
 });
 
+test("carries a channel-selected official feed through the external job", () => {
+  expect(
+    computerUpgradeCommand(
+      "darwin",
+      "/coforge-computer",
+      id,
+      "1.2.3",
+      "https://releases-staging.coforge.cn",
+    ),
+  ).toEqual([
+    "/coforge-computer",
+    "__remote-upgrade",
+    "--request-id",
+    id,
+    "--version",
+    "1.2.3",
+    "--release-feed",
+    "https://releases-staging.coforge.cn",
+  ]);
+});
+
 test("darwin upgrades run the same action inside a one-shot launchd job, never launchctl submit", () => {
   const command = computerUpgradeCommand("darwin", "/coforge-computer", id, "1.2.3");
   expect(command).toEqual([

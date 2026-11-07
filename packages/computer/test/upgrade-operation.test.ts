@@ -46,6 +46,40 @@ test("a remote upgrade operation ignores the retired environment handoff", () =>
   }
 });
 
+test("a channel-selected external upgrade carries only an official release feed", () => {
+  const operation = parseRemoteUpgradeOperation([
+    "__remote-upgrade",
+    "--request-id",
+    id,
+    "--version",
+    "1.0.0",
+    "--release-feed",
+    "https://releases-staging.coforge.cn",
+  ]);
+  expect(operation.releaseFeedUrl).toBe("https://releases-staging.coforge.cn");
+  expect(() =>
+    parseRemoteUpgradeOperation([
+      "__remote-upgrade",
+      "--request-id",
+      id,
+      "--version",
+      "1.0.0",
+      "--release-feed",
+      "https://example.com",
+    ]),
+  ).toThrow(/official CoForge build environment/);
+  expect(() =>
+    parseRemoteUpgradeOperation([
+      "__remote-upgrade",
+      "--request-id",
+      id,
+      "--version",
+      "1.0.0",
+      "--release-feed",
+    ]),
+  ).toThrow(/--release-feed requires a value/);
+});
+
 test.each([
   [["__remote-upgrade", "--version", "1.0.0"], "valid UUID request ID"],
   [["__remote-upgrade", "--request-id", "not-a-uuid", "--version", "1.0.0"], "valid UUID"],

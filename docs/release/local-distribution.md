@@ -33,6 +33,13 @@ lock; see [Upgrade operations](upgrade-operations.md). Computer fetches the
 installer through the same embedded scripts and then runs it. With the feed unreachable it runs
 the most recently used cached installer that still hashes to its directory name.
 
+The Computer CLI persists a release selector in its state directory (`coforge-computer channel
+show|set`). `latest` follows the compiled environment, `alpha` follows the official staging feed,
+and `pinned:<version>` resolves one exact version. The selected feed is carried into the external
+upgrade job and checked against the closed official environment mapping before the job starts.
+Named feature channels are reserved for a future feed index; they are rejected rather than treated
+as an alias for `latest`.
+
 Only the installer registers the Coordinator service with the platform manager (launchd, systemd
 user, Task Scheduler). The Computer renders the definition (`__lifecycle service-definition`) and,
 when the manager does not know the service, runs `coforge-installer start`, which registers the

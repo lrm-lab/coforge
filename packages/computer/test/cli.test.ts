@@ -170,6 +170,42 @@ test.each(["y", " YES "])(
   },
 );
 
+test("an explicit release channel reaches version resolution and the upgrade operation", async () => {
+  const calls: Array<{ method: string; value?: string; feed?: string }> = [];
+  const dependencies = {
+    login: { async run() {} },
+    setup: { async run() {} },
+    updater: {
+      async resolveChannel() {
+        return "latest" as const;
+      },
+      resolveFeedUrl(channel: string) {
+        calls.push({ method: "feed", value: channel });
+        return "https://releases-staging.coforge.cn";
+      },
+      async resolveVersion(selector: string, options?: { channel?: string }) {
+        calls.push({ method: "resolve", value: `${selector}:${options?.channel}` });
+        return "1.0.19";
+      },
+      async getCurrentVersion() {
+        return "1.0.18";
+      },
+      async install(version: string, options: { releaseFeedUrl?: string }) {
+        calls.push({ method: "install", value: version, feed: options.releaseFeedUrl });
+      },
+      async upgrade() {},
+      async repair() {
+        return 0;
+      },
+    },
+  };
+  await expect(runCli(["install", "--channel", "alpha"], dependencies)).resolves.toBe(0);
+  expect(calls).toEqual([
+    { method: "feed", value: "alpha" },
+    { method: "install", value: "latest", feed: "https://releases-staging.coforge.cn" },
+  ]);
+});
+
 test("post-upgrade hint reports each Workspace binding left stopped", () => {
   const output: string[] = [];
   reportStoppedWorkspaces(
