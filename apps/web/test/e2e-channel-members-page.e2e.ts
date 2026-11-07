@@ -36,7 +36,8 @@ test("the settings panel shows a channel's members as a page, adds and removes o
    * load compiles on the dev server, so it gets longer. */
   const waitFor = (condition: string, ms = 20_000) =>
     Promise.race([
-      browser("wait", "--fn", condition),
+      // agent-browser's own wait caps at 25 s; pass the budget through or a 60 s wait dies at 25.
+      browser("wait", "--fn", condition, "--timeout", String(ms)),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
       ),
