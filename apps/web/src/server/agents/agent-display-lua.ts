@@ -21,8 +21,14 @@ if current then
 end
 if not accepted then return reject_projection(projected, state) end
 -- A fresh active process means the Agent runs again: the stop reason the last failure left
--- no longer describes it. "inactive" keeps it — that is the transition the reason explains.
-if ARGV[5] == "active" then state.stopReason = nil; state.stopDetail = nil end
+-- no longer describes it, and neither does a failure reason still parked for a lease that
+-- never lapsed. "inactive" keeps both — that is the transition the reason explains.
+if ARGV[5] == "active" then
+  state.stopReason = nil
+  state.stopDetail = nil
+  state.pendingStopReason = nil
+  state.pendingStopDetail = nil
+end
 
 local preserve_provisional = not current and state.activityVisible and state.activity and
   state.activity.daemonInstanceId == ARGV[6]
@@ -43,6 +49,9 @@ state.processExpired = false
 -- Any accepted observation is real evidence from the daemon, so it cancels a
 -- pending liveness probe the same way a real Activity observation does.
 state.probe = nil
+-- An accepted "inactive" is itself the offline transition a parked failure reason was
+-- waiting for; promote it now so this very response already carries the reason.
+promote_pending_stop(state, now)
 if ARGV[5] == "inactive" then
   redis.call("ZREM", KEYS[3], ARGV[2] .. ":" .. ARGV[3] .. ":" .. ARGV[4])
 end
@@ -86,6 +95,8 @@ end
 if record_reason then
   state.stopReason = ARGV[16]
   state.stopDetail = ARGV[17] ~= "" and ARGV[17] or nil
+  state.pendingStopReason = nil
+  state.pendingStopDetail = nil
   state.stopLaunch = { launchId = ARGV[7], observedAt = tonumber(ARGV[11]) }
   state.retiredLaunchId = ARGV[7]
   revision(state)
@@ -136,9 +147,13 @@ state.activityVisible = true
 if ARGV[16] ~= "" then
   state.stopReason = ARGV[16]
   state.stopDetail = ARGV[17] ~= "" and ARGV[17] or nil
+  state.pendingStopReason = nil
+  state.pendingStopDetail = nil
 elseif ARGV[5] ~= "error" then
   state.stopReason = nil
   state.stopDetail = nil
+  state.pendingStopReason = nil
+  state.pendingStopDetail = nil
 end
 -- Any accepted observation is real evidence from the daemon (a probe reply
 -- included), so it cancels a pending liveness probe outright.
@@ -160,8 +175,11 @@ return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
 // passes through, including paths whose runtime_error Activity never reached the display
 // (a reused launchId the Activity fence already claimed, an older Daemon). The reason it
 // carries is the same LAUNCH_FAILURE_REASON vocabulary the Activity's errorReason uses.
-// The write only lands while the display sees the Agent as not running: a live process
-// must never keep a failure reason for its next clean exit to surface. A bare re-record
+// A live process never shows the reason: under a live lease it parks as pending, and
+// project() promotes it the moment the display goes offline — the lease proving the
+// process live is often the stale one a failed launch leaves behind, so dropping the
+// write would lose the reason exactly when it is needed. A genuinely running Agent's
+// next status or Activity clears it, same lifecycle as stopReason. A bare re-record
 // of the same reason keeps provider words an Activity already wrote; a different reason
 // replaces both, since the old words described the old failure.
 export const RECORD_STOP_REASON = `${LUA_COMMON}
@@ -172,8 +190,21 @@ local reason = ARGV[5]
 if reason == "" then return reject_projection(projected, state) end
 local process = state.process
 local offline = not process or process.status ~= "active" or now >= process.leaseUntil
-if not offline then return reject_projection(projected, state) end
 local detail = ARGV[6] ~= "" and ARGV[6] or nil
+if not offline then
+  local pending_detail = detail
+  if state.pendingStopReason == reason and detail == nil then
+    pending_detail = state.pendingStopDetail
+  end
+  if state.pendingStopReason == reason and state.pendingStopDetail == pending_detail then
+    return reject_projection(projected, state)
+  end
+  state.pendingStopReason = reason
+  state.pendingStopDetail = pending_detail
+  revision(state)
+  save(state)
+  return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
+end
 local stop_detail = detail
 if state.stopReason == reason and detail == nil then stop_detail = state.stopDetail end
 if state.stopReason == reason and state.stopDetail == stop_detail then
@@ -181,6 +212,8 @@ if state.stopReason == reason and state.stopDetail == stop_detail then
 end
 state.stopReason = reason
 state.stopDetail = stop_detail
+state.pendingStopReason = nil
+state.pendingStopDetail = nil
 revision(state)
 save(state)
 return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)

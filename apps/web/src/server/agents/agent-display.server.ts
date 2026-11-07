@@ -73,8 +73,9 @@ export interface AgentDisplay {
    * asked for), guarded by the same ordering rule `putContextUsage` uses. */
   putServiceTier(message: AgentServiceTier): Promise<AgentDisplaySnapshot | undefined>;
   /** Records why a settled control operation failed, for every managed path that never
-   * produced a runtime_error Activity. Lands only while the display sees the Agent as not
-   * running; `detail` is the provider's own words when the settling path has them. */
+   * produced a runtime_error Activity. Writes while the display sees the Agent as not
+   * running; under a live lease the reason parks and surfaces when the display goes
+   * offline. `detail` is the provider's own words when the settling path has them. */
   recordStopReason(
     scope: Scope,
     reason: string,

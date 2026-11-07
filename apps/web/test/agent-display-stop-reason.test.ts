@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { RedisClient } from "bun";
 import type { AgentActivity, AgentStatus } from "@lrm/coforge-sdk/internal";
 import { RedisAgentDisplay } from "#src/server/agents/agent-display.server";
+import { AGENT_STATUS_LEASE_MS } from "#src/server/agents/agent-status.server";
 
 const redisServer = Bun.which("redis-server");
 const port = 20_000 + Math.floor(Math.random() * 20_000);
@@ -363,13 +364,52 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
     expect(again).toBeUndefined();
   });
 
-  test("a control failure never writes a reason onto a live process", async () => {
+  test("a control failure under a live lease parks its reason without showing it", async () => {
     await redis.send("FLUSHDB", []);
     const subject = display();
     await subject.observeStatus(status(1));
     const recorded = await subject.recordStopReason(scope, "runtime_login_required");
-    expect(recorded).toBeUndefined();
+    expect(recorded?.activityKind).toBe("online");
+    expect(recorded?.stopReason).toBeNull();
     expect((await subject.snapshot(scope)).stopReason).toBeNull();
+  });
+
+  test("a failure recorded under a live lease surfaces its reason when the lease expires", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    // The control result settles while the previous process's lease is still live — the
+    // common shape of a failed launch, since the display often still holds the last run's
+    // active lease. The reason must not be dropped: it appears once the lease lapses.
+    await subject.recordStopReason(scope, "runtime_login_required");
+    now += AGENT_STATUS_LEASE_MS + 1;
+    const offline = await subject.snapshot(scope);
+    expect(offline.activityKind).toBe("offline");
+    expect(offline.stopReason).toBe("runtime_login_required");
+  });
+
+  test("an inactive status after a parked failure carries the reason at once", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.recordStopReason(scope, "runtime_login_required");
+    const inactive = await subject.observeStatus(status(2, "inactive"));
+    expect(inactive?.activityKind).toBe("offline");
+    expect(inactive?.stopReason).toBe("runtime_login_required");
+  });
+
+  test("a live process's next status clears a parked failure reason", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.recordStopReason(scope, "runtime_login_required");
+    // The process was genuinely alive, so its next status refresh proves the settled
+    // failure is moot — the parked reason must not surface after the lease lapses.
+    await subject.observeStatus(status(2));
+    now += AGENT_STATUS_LEASE_MS + 1;
+    const offline = await subject.snapshot(scope);
+    expect(offline.activityKind).toBe("offline");
+    expect(offline.stopReason).toBeNull();
   });
 
   test("an error-kind Activity without a reason keeps the last stop reason", async () => {

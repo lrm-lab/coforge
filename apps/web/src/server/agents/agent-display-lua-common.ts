@@ -30,6 +30,25 @@ local function save(state, state_key)
   redis.call("SET", state_key, cjson.encode(state), "EX", 86400)
 end
 
+-- A control failure recorded while the display still saw a live process parks its reason
+-- as pending (RECORD_STOP_REASON): that lease is often the stale one a failed launch
+-- leaves behind, so dropping the write would lose the reason exactly when it is needed.
+-- The moment the display goes offline the parked reason becomes the stop reason, in the
+-- same lazy transition that flips the kind — no sweep, no second store. A genuinely
+-- running Agent's next status or Activity clears it exactly like stopReason.
+local function promote_pending_stop(state, now)
+  local process = state.process
+  local offline = not process or process.status ~= "active" or now >= process.leaseUntil
+  if offline and not state.stopReason and state.pendingStopReason then
+    state.stopReason = state.pendingStopReason
+    state.stopDetail = state.pendingStopDetail
+    state.pendingStopReason = nil
+    state.pendingStopDetail = nil
+    return true
+  end
+  return false
+end
+
 local function project(state, now, revision_key)
   local changed = false
   if state.process and state.process.status == "active" and not state.processExpired and
@@ -44,6 +63,7 @@ local function project(state, now, revision_key)
     state.activityVisible = false
     changed = true
   end
+  if promote_pending_stop(state, now) then changed = true end
   if changed then revision(state, revision_key) end
   return changed
 end
