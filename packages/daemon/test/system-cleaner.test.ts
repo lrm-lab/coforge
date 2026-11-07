@@ -263,9 +263,14 @@ describe("SystemCleaner period log", () => {
       agent_id: OWNER,
       revision: 1,
       files: [
-        { file: "MEMORY.md", bytes: 70 * KIB, threshold_bytes: 64 * KIB, due: "first" },
         {
-          file: "notes/active-context.md",
+          file: join("/agents-root", OWNER, "MEMORY.md"),
+          bytes: 70 * KIB,
+          threshold_bytes: 64 * KIB,
+          due: "first",
+        },
+        {
+          file: join("/agents-root", OWNER, "notes", "active-context.md"),
           not_established: "missing",
           threshold_bytes: 4 * KIB,
         },
@@ -288,8 +293,17 @@ describe("SystemCleaner period log", () => {
     );
     expect(periodRecord?.properties).toMatchObject({
       files: [
-        { file: "MEMORY.md", bytes: 10 * KIB, threshold_bytes: 64 * KIB },
-        { file: "notes/active-context.md", bytes: 5 * KIB, threshold_bytes: 4 * KIB, due: "first" },
+        {
+          file: join("/agents-root", OWNER, "MEMORY.md"),
+          bytes: 10 * KIB,
+          threshold_bytes: 64 * KIB,
+        },
+        {
+          file: join("/agents-root", OWNER, "notes", "active-context.md"),
+          bytes: 5 * KIB,
+          threshold_bytes: 4 * KIB,
+          due: "first",
+        },
       ],
       disk: { available_bytes: 10 * GIB, total_bytes: 500 * GIB, low: true, due: true },
     });
@@ -317,14 +331,14 @@ describe("SystemCleaner present log", () => {
       {
         event: "system_cleaner:present_skipped",
         agent_id: OWNER,
-        file: "MEMORY.md",
+        file: join("/agents-root", OWNER, "MEMORY.md"),
         bytes: 10 * KIB,
         threshold_bytes: 64 * KIB,
       },
       {
         event: "system_cleaner:present_skipped",
         agent_id: OWNER,
-        file: "MEMORY.md",
+        file: join("/agents-root", OWNER, "MEMORY.md"),
         not_established: "missing",
       },
     ]);
@@ -347,8 +361,16 @@ describe("SystemCleaner presented log", () => {
     expect(presented?.properties).toMatchObject({
       agent_id: OWNER,
       files: [
-        { file: "MEMORY.md", bytes: 70 * KIB, threshold_bytes: 64 * KIB },
-        { file: "notes/active-context.md", bytes: 5 * KIB, threshold_bytes: 4 * KIB },
+        {
+          file: join("/agents-root", OWNER, "MEMORY.md"),
+          bytes: 70 * KIB,
+          threshold_bytes: 64 * KIB,
+        },
+        {
+          file: join("/agents-root", OWNER, "notes", "active-context.md"),
+          bytes: 5 * KIB,
+          threshold_bytes: 4 * KIB,
+        },
       ],
     });
   });

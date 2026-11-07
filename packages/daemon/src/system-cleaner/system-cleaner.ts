@@ -14,6 +14,7 @@ import {
   isDiskLow,
   measureDiskSpace,
   measureMemoryFile,
+  withMeasurementTimeout,
   type DiskMeasurement,
   type MemoryMeasurement,
 } from "./system-cleaner-measure";
@@ -271,8 +272,12 @@ export class SystemCleaner {
     return this.#states.get(ownerAgentId) === state;
   }
 
+  #filePath(ownerAgentId: string, kind: FileKind): string {
+    return join(this.options.agentsDirectory, ownerAgentId, FILE_HINTS[kind].path);
+  }
+
   #measureFile(ownerAgentId: string, relativePath: string): Promise<MemoryMeasurement> {
-    return this.#withTimeout(() =>
+    return withMeasurementTimeout(this.#clock, this.#measurementTimeoutMs, () =>
       this.#measureMemoryFile(join(this.options.agentsDirectory, ownerAgentId, relativePath)),
     );
   }
@@ -290,7 +295,10 @@ export class SystemCleaner {
   ): Promise<PeriodFileRow | undefined> {
     const hint = FILE_HINTS[kind];
     const thresholdBytes = this.#fileThreshold(state, kind);
-    const row: PeriodFileRow = { file: hint.path, threshold_bytes: thresholdBytes };
+    const row: PeriodFileRow = {
+      file: this.#filePath(ownerAgentId, kind),
+      threshold_bytes: thresholdBytes,
+    };
     const measurement = await this.#measureFile(ownerAgentId, hint.path);
     if (!this.#isCurrent(ownerAgentId, state)) return undefined;
     if (measurement.kind === "not_established" || measurement.bytes <= thresholdBytes) {
@@ -318,7 +326,7 @@ export class SystemCleaner {
   }
 
   async #checkDisk(ownerAgentId: string, state: OwnerState): Promise<PeriodDiskRow | undefined> {
-    const measurement = await this.#withTimeout(() =>
+    const measurement = await withMeasurementTimeout(this.#clock, this.#measurementTimeoutMs, () =>
       this.#measureDiskSpace(this.options.agentsDirectory),
     );
     if (this.#states.get(ownerAgentId) !== state) return undefined;
@@ -358,7 +366,7 @@ export class SystemCleaner {
       if (result) {
         minted.push(result.item);
         presentedFiles.push({
-          file: FILE_HINTS[kind].path,
+          file: this.#filePath(ownerAgentId, kind),
           bytes: result.bytes,
           thresholdBytes: result.thresholdBytes,
         });
@@ -423,7 +431,7 @@ export class SystemCleaner {
       logger.info("System Cleaner due hint not presented", {
         event: "system_cleaner:present_skipped",
         agent_id: ownerAgentId,
-        file: hint.path,
+        file: this.#filePath(ownerAgentId, kind),
         ...(measurement.kind === "not_established"
           ? { not_established: measurement.reason }
           : { bytes: measurement.bytes, threshold_bytes: thresholdBytes }),
@@ -477,24 +485,5 @@ export class SystemCleaner {
         this.options.inbox.remove(ownerAgentId, systemCleanerItemId(kind, ownerAgentId)),
         ownerAgentId,
       );
-  }
-
-  #withTimeout<T extends { kind: string }>(
-    measure: () => Promise<T>,
-  ): Promise<T | Readonly<{ kind: "not_established"; reason: string }>> {
-    return new Promise((resolve) => {
-      // A second call is a no-op: `resolve` keeps the first result, and the timer is gone.
-      const finish = (result: T | Readonly<{ kind: "not_established"; reason: string }>) => {
-        this.#clock.cancel(timer);
-        resolve(result);
-      };
-      const timer = this.#clock.schedule(
-        () => finish({ kind: "not_established", reason: "timeout" }),
-        this.#measurementTimeoutMs,
-      );
-      Promise.resolve()
-        .then(measure)
-        .then(finish, () => finish({ kind: "not_established", reason: "read_failed" }));
-    });
   }
 }

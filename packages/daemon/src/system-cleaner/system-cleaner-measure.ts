@@ -1,4 +1,5 @@
 import { lstat, statfs } from "node:fs/promises";
+import type { ReminderClock } from "#src/agent-reminder/reminder-clock";
 
 export type MemoryMeasurement =
   | Readonly<{ kind: "measured"; bytes: number }>
@@ -17,6 +18,28 @@ export function isDiskLow(availableBytes: number, totalBytes: number): boolean {
     availableBytes < DISK_LOW_MAX_AVAILABLE_BYTES &&
     (availableBytes / totalBytes) * 100 < DISK_LOW_MAX_AVAILABLE_PERCENT
   );
+}
+
+/** A measurement that never answers is `not_established`, never a hang. */
+export function withMeasurementTimeout<T extends { kind: string }>(
+  clock: ReminderClock,
+  timeoutMs: number,
+  measure: () => Promise<T>,
+): Promise<T | Readonly<{ kind: "not_established"; reason: string }>> {
+  return new Promise((resolve) => {
+    // A second call is a no-op: `resolve` keeps the first result, and the timer is gone.
+    const finish = (result: T | Readonly<{ kind: "not_established"; reason: string }>) => {
+      clock.cancel(timer);
+      resolve(result);
+    };
+    const timer = clock.schedule(
+      () => finish({ kind: "not_established", reason: "timeout" }),
+      timeoutMs,
+    );
+    Promise.resolve()
+      .then(measure)
+      .then(finish, () => finish({ kind: "not_established", reason: "read_failed" }));
+  });
 }
 
 /** MEMORY.md's size, measurable only when it is a regular file (never a symlink). */
