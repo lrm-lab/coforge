@@ -99,6 +99,18 @@ export const changeArtifactAccess = createServerFn({ method: "POST" })
     return { access: data.access };
   });
 
+/** Whether an artifact can have a public link, and the one it has (task #646). */
+export const loadArtifactLinkSharing = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ artifactId: id }).strict())
+  .handler(({ context, data }) =>
+    productionArtifacts(context.db).publicLinks.read({
+      workspaceId: context.workspaceId,
+      artifactId: data.artifactId,
+      userId: context.user.id,
+    }),
+  );
+
 export const setArtifactLinkSharing = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactId: id, enabled: z.boolean() }).strict())
