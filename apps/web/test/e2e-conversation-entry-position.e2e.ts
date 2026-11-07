@@ -19,7 +19,14 @@ if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugo
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL must target local Centrifugo");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/conversation-entry-position");
+const lateRows = join(artifacts, "late-thread-rows.js");
 const { browser, evaluate } = browserSession(browserPath, `entry-position-${process.pid}`);
+// The late-rows script has to be one of the session's launch init scripts: agent-browser only
+// reads `--init-script` paths when it (re)launches the browser, and a mid-session change waits
+// for a relaunch that did not replay it on the Linux runner (CI run 42336592014: the page loaded
+// but `window.__lateRowsWrapped` stayed unset). The first `set viewport` below carries the flag;
+// the daemon then replays the script into every tab the session opens.
+let lateRowsInitPending = true;
 let workspaceId: string;
 let workspaceSlug: string;
 let writerId: string;
@@ -28,6 +35,39 @@ const position = `(() => { const h=${history}; return h && {distance:h.scrollHei
 
 beforeAll(async () => {
   await mkdir(artifacts, { recursive: true });
+  // Registrations persist for the session, so every page the tests open re-runs this on a fresh
+  // document; the flag inside keeps one wrapper per document. On pages without a thread preview
+  // the fill retries find nothing and change nothing.
+  await Bun.write(
+    lateRows,
+    `if (!Element.prototype.scrollTo.__entryLateRows) {
+  const scrollTo = Element.prototype.scrollTo;
+  let armed = false;
+  let tries = 0;
+  const wrapper = function (...args) {
+    scrollTo.apply(this, args);
+    if (armed || !this.matches('[aria-label="Message history" i]')) return;
+    armed = true;
+    window.__lateRowsArmed = true;
+    const fill = () => {
+      const preview = [...this.querySelectorAll("[data-thread-preview]")].at(-1);
+      window.__lateRowsFired = (window.__lateRowsFired || 0) + 1;
+      window.__lateRowsPreview = !!preview;
+      if (!preview) {
+        if (tries++ < 40) setTimeout(fill, 250);
+        return;
+      }
+      preview.style.paddingBottom = "136px";
+      this.scrollTop += 60;
+      window.__rowsFilledIn = true;
+    };
+    setTimeout(fill, 400);
+  };
+  wrapper.__entryLateRows = true;
+  Element.prototype.scrollTo = wrapper;
+  window.__lateRowsWrapped = true;
+}`,
+  );
   await db.user.upsert({
     where: { id: DEV_BROWSER_USER.id },
     update: {},
@@ -193,49 +233,13 @@ for (const width of [1440, 390]) {
         // the resize does (the order Frank's phone left the last reply row cut off in). Emulated in
         // one task, after the open's scrolls: grow the last preview (a style, not DOM React owns)
         // and move the position by part of the growth.
-        const lateRows = join(artifacts, "late-thread-rows.js");
-        if (thread)
-          await Bun.write(
-            lateRows,
-            // Registrations persist for the session, so a later thread test re-runs this on a
-            // page the first one already patched; the flag keeps one wrapper per document.
-            `if (!Element.prototype.scrollTo.__entryLateRows) {
-  const scrollTo = Element.prototype.scrollTo;
-  let armed = false;
-  let tries = 0;
-  const wrapper = function (...args) {
-    scrollTo.apply(this, args);
-    if (armed || !this.matches('[aria-label="Message history" i]')) return;
-    armed = true;
-    window.__lateRowsArmed = true;
-    const fill = () => {
-      const preview = [...this.querySelectorAll("[data-thread-preview]")].at(-1);
-      window.__lateRowsFired = (window.__lateRowsFired || 0) + 1;
-      window.__lateRowsPreview = !!preview;
-      if (!preview) {
-        if (tries++ < 40) setTimeout(fill, 250);
-        return;
-      }
-      preview.style.paddingBottom = "136px";
-      this.scrollTop += 60;
-      window.__rowsFilledIn = true;
-    };
-    setTimeout(fill, 400);
-  };
-  wrapper.__entryLateRows = true;
-  Element.prototype.scrollTo = wrapper;
-  window.__lateRowsWrapped = true;
-}`,
-          );
         // `open url --init-script file` leaves the tab on about:blank under the Linux runner's
-        // Chrome; the flag has to precede the command, the way e2e-notification-settings does.
-        await browser(
-          ...(thread ? ["--init-script", lateRows] : []),
-          "set",
-          "viewport",
-          String(width),
-          "900",
-        );
+        // Chrome; the flag has to precede the command. It is carried once, by the first test's
+        // `set viewport`, which launches the session's browser with the script in its init
+        // scripts — see `lateRowsInitPending`.
+        const initScript = lateRowsInitPending ? ["--init-script", lateRows] : [];
+        await browser(...initScript, "set", "viewport", String(width), "900");
+        lateRowsInitPending = false;
         await browser("open", `${proxy.origin}/en/w/${workspaceSlug}/channel/${channel.id}`);
         await browser(
           "wait",
