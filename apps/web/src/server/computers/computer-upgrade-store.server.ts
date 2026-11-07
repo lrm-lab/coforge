@@ -12,30 +12,16 @@ import {
   REPLACE_IF_ACCEPTED,
   STORE_NEWER_IDENTITY,
 } from "./computer-upgrade-lua";
+import {
+  parseComputerUpgradeIdentity,
+  parseComputerUpgradeRecord,
+  reportedRequestId,
+  type ComputerUpgradeIdentity,
+  type ComputerUpgradeRecord,
+  type ComputerUpgradeScope,
+  type ReportedComputerUpgradeResult,
+} from "./computer-upgrade-record";
 
-type Scope = { workspaceId: string; computerId: string };
-/** One Computer upgrade operation's terminal receipt, as the Daemon reported it. */
-export type ReportedComputerUpgradeResult = {
-  requestId: string;
-  status: "succeeded" | "failed";
-  version?: string;
-  error?: string;
-  errorCode?: string;
-  completedAtMs: number;
-};
-type Identity = {
-  workerInstanceId: string;
-  computerVersion: string;
-  daemonVersion: string;
-  startedAt: number;
-};
-type Stored = ComputerUpgradeStatus & {
-  previousWorkerInstanceId?: string;
-  /** Cloud image replace: the daemon reconnects without recovering this request. */
-  completeOnIdentity?: true;
-  /** Cloud image replace: complete when the host heartbeat shows this layer. */
-  expectedImageId?: string;
-};
 /** An upgrade request's deadline, long enough to poll a Computer to completion, and how long a
  * settled record survives. */
 const REQUEST_TTL = 10 * 60;
@@ -56,21 +42,21 @@ export class RedisComputerUpgradeStore {
     private readonly now = Date.now,
     private readonly runningImage?: (computerId: string) => Promise<string | undefined>,
   ) {}
-  async identity(scope: Scope): Promise<Identity | undefined> {
-    return this.parseIdentity(await this.redis.get(this.identityKey(scope)));
+  async identity(scope: ComputerUpgradeScope): Promise<ComputerUpgradeIdentity | undefined> {
+    return parseComputerUpgradeIdentity(await this.redis.get(this.identityKey(scope)));
   }
   async begin(
-    scope: Scope,
+    scope: ComputerUpgradeScope,
     requestId: string,
     expectedVersion: string,
     options?: { completeOnIdentity?: boolean; expectedImageId?: string },
   ) {
     const existingRaw = await this.redis.get(this.requestKey(scope, requestId));
-    const existing = existingRaw ? this.parse(existingRaw) : undefined;
+    const existing = existingRaw ? parseComputerUpgradeRecord(existingRaw) : undefined;
     if (existing) return { status: this.public(existing), created: false };
     const current = await this.identity(scope);
     if (!current) throw new AppError("COMPUTER_IDENTITY_UNKNOWN");
-    const record: Stored = {
+    const record: ComputerUpgradeRecord = {
       requestId,
       status: "accepted",
       expectedVersion,
@@ -88,7 +74,7 @@ export class RedisComputerUpgradeStore {
     );
     if (result === null) {
       const racedRaw = await this.redis.get(this.requestKey(scope, requestId));
-      const raced = racedRaw ? this.parse(racedRaw) : undefined;
+      const raced = racedRaw ? parseComputerUpgradeRecord(racedRaw) : undefined;
       if (raced) return { status: this.public(raced), created: false };
       throw new Error("upgrade request could not be registered");
     }
@@ -101,7 +87,9 @@ export class RedisComputerUpgradeStore {
    * The upgrade most recently begun on each Computer, while its record lives, in the scopes'
    * order: two round trips for the list page however many Computers it shows.
    */
-  async latestMany(scopes: readonly Scope[]): Promise<Array<ComputerUpgradeStatus | undefined>> {
+  async latestMany(
+    scopes: readonly ComputerUpgradeScope[],
+  ): Promise<Array<ComputerUpgradeStatus | undefined>> {
     if (scopes.length === 0) return [];
     const requestIds = await this.redis.mget(...scopes.map((scope) => this.latestKey(scope)));
     const requestKeys = scopes.flatMap((scope, index) => {
@@ -118,9 +106,9 @@ export class RedisComputerUpgradeStore {
       }),
     );
   }
-  async publicationFailed(scope: Scope, requestId: string) {
+  async publicationFailed(scope: ComputerUpgradeScope, requestId: string) {
     const raw = await this.redis.get(this.requestKey(scope, requestId));
-    const current = raw ? this.parse(raw) : undefined;
+    const current = raw ? parseComputerUpgradeRecord(raw) : undefined;
     await this.replaceAccepted(
       scope,
       requestId,
@@ -138,9 +126,12 @@ export class RedisComputerUpgradeStore {
    * the Computer must still come back with an identity that proves the new version is running -
    * so it only completes a request whose identity evidence already agrees.
    */
-  async reported(scope: Scope, result: ReportedComputerUpgradeResult): Promise<void> {
-    const raw = await this.redis.get(this.requestKey(scope, requestId(result)));
-    const current = raw ? this.parse(raw) : undefined;
+  async reported(
+    scope: ComputerUpgradeScope,
+    result: ReportedComputerUpgradeResult,
+  ): Promise<void> {
+    const raw = await this.redis.get(this.requestKey(scope, reportedRequestId(result)));
+    const current = raw ? parseComputerUpgradeRecord(raw) : undefined;
     // A settled request is never reopened by a late or contradictory report.
     if (!raw || current?.status !== "accepted") return;
     if (result.status === "failed") {
@@ -174,18 +165,21 @@ export class RedisComputerUpgradeStore {
       completedAt: new Date(this.now()).toISOString(),
     });
   }
-  async status(scope: Scope, requestId: string): Promise<ComputerUpgradeStatus | undefined> {
+  async status(
+    scope: ComputerUpgradeScope,
+    requestId: string,
+  ): Promise<ComputerUpgradeStatus | undefined> {
     return this.statusOf(scope, requestId, await this.redis.get(this.requestKey(scope, requestId)));
   }
   /** A stored record as it reads now: past its deadline it has timed out, and a cloud image
    * replace completes once the Computer's identity shows the new image. */
   private async statusOf(
-    scope: Scope,
+    scope: ComputerUpgradeScope,
     requestId: string,
     raw: string | null,
   ): Promise<ComputerUpgradeStatus | undefined> {
     if (!raw) return undefined;
-    const current = this.parse(raw);
+    const current = parseComputerUpgradeRecord(raw);
     if (!current) return { requestId, status: "unknown", reason: "corrupt" };
     if (current.status === "accepted" && current.completeOnIdentity) {
       const completed = await this.completeFromIdentity(scope, requestId, raw, current);
@@ -201,10 +195,14 @@ export class RedisComputerUpgradeStore {
     }
     return this.public(current);
   }
-  async ready(scope: Scope, identity: Identity, recoveredIds: readonly string[]) {
+  async ready(
+    scope: ComputerUpgradeScope,
+    identity: ComputerUpgradeIdentity,
+    recoveredIds: readonly string[],
+  ) {
     for (const requestId of recoveredIds) {
       const raw = await this.redis.get(this.requestKey(scope, requestId));
-      const current = raw ? this.parse(raw) : undefined;
+      const current = raw ? parseComputerUpgradeRecord(raw) : undefined;
       if (
         raw &&
         current?.status === "accepted" &&
@@ -238,17 +236,17 @@ export class RedisComputerUpgradeStore {
    * across the deploy would keep the old lease until it happened to reconnect on its own. Safe to
    * remove once every Computer has re-reported `ready` at least once after this change ships.
    */
-  async touchIdentity(scope: Scope): Promise<void> {
+  async touchIdentity(scope: ComputerUpgradeScope): Promise<void> {
     const raw = await this.redis.get(this.identityKey(scope));
-    if (!raw || !this.parseIdentity(raw)) return;
+    if (!raw || !parseComputerUpgradeIdentity(raw)) return;
     await this.redis.send("EVAL", [STORE_NEWER_IDENTITY, "1", this.identityKey(scope), raw]);
   }
   private async completeFromIdentity(
-    scope: Scope,
+    scope: ComputerUpgradeScope,
     requestId: string,
     raw: string,
-    current: Stored,
-  ): Promise<Stored | undefined> {
+    current: ComputerUpgradeRecord,
+  ): Promise<ComputerUpgradeRecord | undefined> {
     if (current.status !== "accepted") return undefined;
     const identity = await this.identity(scope);
     const runningImageId = current.expectedImageId
@@ -278,7 +276,7 @@ export class RedisComputerUpgradeStore {
       identity.computerVersion !== identity.daemonVersion
     )
       return undefined;
-    const record: Stored = {
+    const record: ComputerUpgradeRecord = {
       requestId,
       status: "completed",
       expectedVersion: current.expectedVersion,
@@ -288,7 +286,7 @@ export class RedisComputerUpgradeStore {
     if (await this.commitReady(scope, requestId, raw, identity, record)) return record;
     return undefined;
   }
-  private async storeNewerIdentity(scope: Scope, identity: Identity) {
+  private async storeNewerIdentity(scope: ComputerUpgradeScope, identity: ComputerUpgradeIdentity) {
     await this.redis.send("EVAL", [
       STORE_NEWER_IDENTITY,
       "1",
@@ -296,7 +294,11 @@ export class RedisComputerUpgradeStore {
       JSON.stringify(identity),
     ]);
   }
-  private async replace(scope: Scope, requestId: string, record: Stored) {
+  private async replace(
+    scope: ComputerUpgradeScope,
+    requestId: string,
+    record: ComputerUpgradeRecord,
+  ) {
     const current = await this.redis.get(this.requestKey(scope, requestId));
     return current
       ? (await this.redis.send("EVAL", [
@@ -309,9 +311,13 @@ export class RedisComputerUpgradeStore {
         ])) === 1
       : false;
   }
-  private async replaceAccepted(scope: Scope, requestId: string, record: Stored) {
+  private async replaceAccepted(
+    scope: ComputerUpgradeScope,
+    requestId: string,
+    record: ComputerUpgradeRecord,
+  ) {
     const current = await this.redis.get(this.requestKey(scope, requestId));
-    if (!current || this.parse(current)?.status !== "accepted") return false;
+    if (!current || parseComputerUpgradeRecord(current)?.status !== "accepted") return false;
     return (
       (await this.redis.send("EVAL", [
         REPLACE_IF_ACCEPTED,
@@ -324,11 +330,11 @@ export class RedisComputerUpgradeStore {
     );
   }
   private async commitReady(
-    scope: Scope,
+    scope: ComputerUpgradeScope,
     requestId: string,
     current: string,
-    identity: Identity,
-    record: Stored,
+    identity: ComputerUpgradeIdentity,
+    record: ComputerUpgradeRecord,
   ) {
     return (
       (await this.redis.send("EVAL", [
@@ -344,11 +350,14 @@ export class RedisComputerUpgradeStore {
     );
   }
   /** Keeps the image-replace marker so a later public status still names the Image row. */
-  private withUpgradeTarget(current: Stored | undefined, next: Stored): Stored {
+  private withUpgradeTarget(
+    current: ComputerUpgradeRecord | undefined,
+    next: ComputerUpgradeRecord,
+  ): ComputerUpgradeRecord {
     return current?.expectedImageId ? { ...next, expectedImageId: current.expectedImageId } : next;
   }
 
-  private public(stored: Stored): ComputerUpgradeStatus {
+  private public(stored: ComputerUpgradeRecord): ComputerUpgradeStatus {
     const {
       previousWorkerInstanceId: _previous,
       completeOnIdentity: _completeOnIdentity,
@@ -359,65 +368,7 @@ export class RedisComputerUpgradeStore {
     // Image replaces store the offered layer id; runtime upgrades (cloud or local) do not.
     return { ...value, target: expectedImageId ? "image" : "runtime" };
   }
-  private parse(raw: string): Stored | undefined {
-    try {
-      const value = JSON.parse(raw) as Stored;
-      if (typeof value?.requestId !== "string" || value.requestId.length === 0) return undefined;
-      if (value.status === "accepted")
-        return typeof value.expectedVersion === "string" &&
-          value.expectedVersion.length > 0 &&
-          typeof value.expiresAt === "string" &&
-          Number.isFinite(Date.parse(value.expiresAt)) &&
-          typeof value.previousWorkerInstanceId === "string" &&
-          value.previousWorkerInstanceId.length > 0
-          ? value
-          : undefined;
-      if (value.status === "completed")
-        return typeof value.expectedVersion === "string" &&
-          value.expectedVersion.length > 0 &&
-          typeof value.computerVersion === "string" &&
-          value.computerVersion.length > 0 &&
-          typeof value.daemonVersion === "string" &&
-          value.daemonVersion.length > 0 &&
-          typeof value.workerInstanceId === "string" &&
-          value.workerInstanceId.length > 0 &&
-          typeof value.completedAt === "string" &&
-          Number.isFinite(Date.parse(value.completedAt))
-          ? value
-          : undefined;
-      if (value.status === "failed")
-        return (value.reason === "timeout" ||
-          value.reason === "publication" ||
-          value.reason === "evidence" ||
-          value.reason === "reported") &&
-          (value.error === undefined || typeof value.error === "string") &&
-          (value.errorCode === undefined || typeof value.errorCode === "string")
-          ? value
-          : undefined;
-      return value.status === "unknown" && value.reason === "corrupt" ? value : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  private parseIdentity(raw: string | null): Identity | undefined {
-    if (!raw) return undefined;
-    try {
-      const value = JSON.parse(raw) as Identity;
-      return typeof value.workerInstanceId === "string" &&
-        value.workerInstanceId.length > 0 &&
-        typeof value.computerVersion === "string" &&
-        value.computerVersion.length > 0 &&
-        typeof value.daemonVersion === "string" &&
-        value.daemonVersion.length > 0 &&
-        Number.isSafeInteger(value.startedAt) &&
-        value.startedAt >= 0
-        ? value
-        : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  private scope(scope: Scope) {
+  private scope(scope: ComputerUpgradeScope) {
     return workspaceRedisKey({
       workspaceId: scope.workspaceId,
       computerId: scope.computerId,
@@ -425,20 +376,15 @@ export class RedisComputerUpgradeStore {
       version: "v1",
     });
   }
-  private identityKey(scope: Scope) {
+  private identityKey(scope: ComputerUpgradeScope) {
     return `${this.scope(scope)}:identity`;
   }
-  private latestKey(scope: Scope) {
+  private latestKey(scope: ComputerUpgradeScope) {
     return `${this.scope(scope)}:latest`;
   }
-  private requestKey(scope: Scope, requestId: string) {
+  private requestKey(scope: ComputerUpgradeScope, requestId: string) {
     return `${this.scope(scope)}:request:${encodeURIComponent(requestId)}`;
   }
-}
-
-function requestId(result: ReportedComputerUpgradeResult): string {
-  if (!result.requestId) throw new Error("Computer upgrade result has no request");
-  return result.requestId;
 }
 
 let singleton: RedisComputerUpgradeStore | undefined;
