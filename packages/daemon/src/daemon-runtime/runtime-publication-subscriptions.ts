@@ -217,11 +217,17 @@ export class RuntimePublicationSubscriptions {
     return subscriptions;
   }
 
-  /** How many publications wait behind the ready handshake, control intents first. Reported by
-   * the ready-wait watch so a stalled handshake is visible instead of looking like a healthy
-   * daemon that ignores every intent (task #630). */
+  /** How many publications wait behind the ready handshake: those its subscribers buffered, plus
+   * those the connection still holds itself — nothing reaches a subscriber until the cloud accepts
+   * ready, so during an outage the connection's hold is the one that grows. Reported by the
+   * ready-wait watch so a stalled hold is visible instead of looking like a healthy daemon that
+   * ignores every intent (task #630). */
   heldCount(): number {
-    return this.#heldControl.size() + this.#heldMessages.size();
+    return (
+      this.#heldControl.size() +
+      this.#heldMessages.size() +
+      (this.ports.transport.heldPublicationCount?.() ?? 0)
+    );
   }
 
   /** Stops buffering and returns the control work before delivery notices, preserving the old

@@ -32,6 +32,8 @@ async function heldStartup() {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
   let stop!: (intent: AgentStopIntent) => void;
+  /** What the connection still holds itself, which no subscriber has been given yet. */
+  let connectionHeld = 0;
   const handshakePending = Promise.withResolvers<{
     attempt: () => void;
     answer: () => void;
@@ -57,6 +59,7 @@ async function heldStartup() {
             });
             return settled.promise;
           },
+          heldPublicationCount: () => connectionHeld,
           async stop() {},
         }) as unknown as DaemonConnectionClient,
     },
@@ -67,6 +70,7 @@ async function heldStartup() {
   return {
     runtime,
     held: handshakePending.promise,
+    holdInConnection: (count: number) => (connectionHeld = count),
     // A publication the hold keeps: the stop of an Agent that was still starting.
     stopAgent: (agentId: string) =>
       stop({
@@ -106,6 +110,27 @@ test("a ready retried as it fails reports the hold and the attempts behind it", 
     ready_attempts: 41,
   });
   expect(Number(waits[0]?.properties.waited_ms)).toBeGreaterThanOrEqual(READY_WAIT_LOG_TIMEOUT_MS);
+});
+
+test("the count includes what the connection itself holds behind the handshake", async () => {
+  jest.useFakeTimers();
+  const startup = await heldStartup();
+  const { records } = await captureDaemonLogs(async () => {
+    const starting = startup.runtime.start(connection);
+    const held = await startup.held;
+    // An outage queues Starts and Stops in the connection, not in the runtime's subscribers: they
+    // only see a publication once the cloud has accepted ready, so counting them alone says zero
+    // for the whole outage — the opposite of what a stuck hold is.
+    startup.holdInConnection(3);
+    jest.advanceTimersByTime(READY_WAIT_LOG_TIMEOUT_MS + 1);
+    held.answer();
+    await starting;
+  });
+  jest.useRealTimers();
+  await startup.runtime.stop();
+
+  const [wait] = records.filter((record) => record.properties.event === "runtime:ready_wait_long");
+  expect(wait?.properties.held_control_count).toBe(3);
 });
 
 test("a hold still not released repeats its report until the handshake answers", async () => {

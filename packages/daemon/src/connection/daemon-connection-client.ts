@@ -179,6 +179,9 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   stop(): Promise<void>;
   /** Why the latest connect attempt failed, while the connection is not up. */
   connectFailure?(): string | undefined;
+  /** How many control publications and delivery notices the connection itself holds because a
+   * ready handshake has not completed; they reach the runtime's own buffer only after it does. */
+  heldPublicationCount?(): number;
   onReconnect?(callback: () => void): () => void;
   /** The release feed's newest Computer version as a ready reply named it; nothing when the
    * server is older or the feed read failed. */
