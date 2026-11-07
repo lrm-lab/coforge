@@ -47,7 +47,7 @@ end
 if not accepted then return reject() end
 -- A fresh active process means the Agent runs again: the stop reason the last failure left
 -- no longer describes it. "inactive" keeps it — that is the transition the reason explains.
-if ARGV[5] == "active" then state.stopReason = nil end
+if ARGV[5] == "active" then state.stopReason = nil; state.stopDetail = nil end
 
 local preserve_provisional = not current and state.activityVisible and state.activity and
   state.activity.daemonInstanceId == ARGV[6]
@@ -132,8 +132,10 @@ state.activityVisible = true
 -- no longer describes a stop; an error-kind frame without a reason keeps the last one.
 if ARGV[16] ~= "" then
   state.stopReason = ARGV[16]
+  state.stopDetail = ARGV[17] ~= "" and ARGV[17] or nil
 elseif ARGV[5] ~= "error" then
   state.stopReason = nil
+  state.stopDetail = nil
 end
 -- Any accepted observation is real evidence from the daemon (a probe reply
 -- included), so it cancels a pending liveness probe outright.
@@ -344,6 +346,7 @@ export class RedisAgentDisplay implements AgentDisplay {
       WORKING_LEASE_MS,
       isFiller ? "1" : "0",
       activity.runtimeError?.errorReason ?? "",
+      activity.runtimeError?.providerMessage ?? "",
     ]);
   }
 

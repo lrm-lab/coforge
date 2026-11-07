@@ -83,6 +83,7 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
           errorClass: "ProviderQuotaError",
           errorReason: "billing_exhausted",
           fingerprint: "fp-1",
+          providerMessage: "Your credit balance is too low.",
         },
       }),
       fence,
@@ -94,8 +95,56 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
     const offline = await subject.snapshot(scope);
     expect(offline.activityKind).toBe("offline");
     expect(offline.stopReason).toBe("billing_exhausted");
+    expect(offline.stopDetail).toBe("Your credit balance is too low.");
     await subject.observeStatus(status(4));
-    expect((await subject.snapshot(scope)).stopReason).toBeNull();
+    const back = await subject.snapshot(scope);
+    expect(back.stopReason).toBeNull();
+    expect(back.stopDetail).toBeNull();
+  });
+
+  test("the provider's words go with the reason once a non-error Activity moves on", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeActivity(
+      activity(2, "runtime_error", {
+        level: "error",
+        runtimeError: {
+          errorClass: "ProviderQuotaError",
+          errorReason: "billing_exhausted",
+          fingerprint: "fp-1",
+          providerMessage: "Your credit balance is too low.",
+        },
+      }),
+      fence,
+    );
+    await subject.observeActivity(activity(3, "model_request_started"), fence);
+    await subject.observeStatus(status(4, "inactive"));
+    const offline = await subject.snapshot(scope);
+    expect(offline.activityKind).toBe("offline");
+    expect(offline.stopReason).toBeNull();
+    expect(offline.stopDetail).toBeNull();
+  });
+
+  test("a failure from an older daemon keeps its reason and no words", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeActivity(
+      activity(2, "runtime_error", {
+        level: "error",
+        runtimeError: {
+          errorClass: "ProviderQuotaError",
+          errorReason: "billing_exhausted",
+          fingerprint: "fp-1",
+        },
+      }),
+      fence,
+    );
+    await subject.observeStatus(status(3, "inactive"));
+    const offline = await subject.snapshot(scope);
+    expect(offline.stopReason).toBe("billing_exhausted");
+    expect(offline.stopDetail).toBeNull();
   });
 
   test("an Activity without a runtime error leaves no stop reason", async () => {

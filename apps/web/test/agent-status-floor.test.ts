@@ -34,6 +34,7 @@ test("agentStatusOnlySnapshot keeps the status floor and drops every Activity wo
     contextUsage: { usedTokens: 10, windowTokens: 100, observedAtMs: 1 },
     fastMode: { requested: true, observed: "on", observedAtMs: 1 },
     stopReason: "billing_exhausted",
+    stopDetail: "the provider's words",
   });
   const floor = agentStatusOnlySnapshot(full);
   expect(floor).toEqual({

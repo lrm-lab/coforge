@@ -41,6 +41,12 @@ export type AgentDisplaySnapshot = {
    */
   stopReason?: string | null;
   /**
+   * What the provider said in that Activity (`runtimeError.providerMessage`), redacted: Activity
+   * content, so never on the status floor. Absent or `null` under the same rules as `stopReason`,
+   * and `null` too when the Daemon sent none.
+   */
+  stopDetail?: string | null;
+  /**
    * `true` on the status floor a private Agent also publishes on the shared Workspace status
    * channel: `activityKind`, `stopReason` and `expiresAt` only, with `detailKind`, `detail`
    * and `entries` always empty — never what the Agent is doing. Absent on a full snapshot.
@@ -86,6 +92,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
   const contextUsage = parseContextUsage(item.contextUsage);
   const fastMode = parseFastMode(item.fastMode);
   const stopReason = parseStopReason(item.stopReason);
+  const stopDetail = parseStopDetail(item.stopDetail);
   const statusOnly = parseStatusOnly(item);
   return {
     protocolMajor: 1,
@@ -101,6 +108,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
     ...(contextUsage !== undefined ? { contextUsage } : {}),
     ...(fastMode !== undefined ? { fastMode } : {}),
     ...(stopReason !== undefined ? { stopReason } : {}),
+    ...(stopDetail !== undefined ? { stopDetail } : {}),
     ...(statusOnly ? { statusOnly } : {}),
   } as AgentDisplaySnapshot;
 }
@@ -116,7 +124,8 @@ function parseStatusOnly(item: Record<string, unknown>): true | undefined {
     !Array.isArray(item.entries) ||
     item.entries.length !== 0 ||
     item.contextUsage !== undefined ||
-    item.fastMode !== undefined
+    item.fastMode !== undefined ||
+    item.stopDetail !== undefined
   )
     throw new Error("invalid Agent display snapshot");
   return true;
@@ -129,6 +138,13 @@ function parseStopReason(value: unknown): AgentDisplaySnapshot["stopReason"] {
   if (value === null) return null;
   if (typeof value !== "string" || [...value].length > 128)
     throw new Error("invalid Agent display snapshot");
+  return value;
+}
+
+/** As `parseStopReason`; the Daemon bounds these words. */
+function parseStopDetail(value: unknown): AgentDisplaySnapshot["stopDetail"] {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "string") throw new Error("invalid Agent display snapshot");
   return value;
 }
 
