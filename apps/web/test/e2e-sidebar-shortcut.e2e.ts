@@ -48,9 +48,11 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
       await browser("wait", "100");
     }
   }
-  /** Hovers until the button's tooltip opens: a hover spent while the rail still settles can
-   * open nothing, and the tooltip's own delay then never starts. `title` names the tooltip
-   * wanted, so a previous button's still-closing tooltip does not count. */
+  /** Hovers until the button's tooltip opens and returns its text, read in the same page
+   * evaluation that first sees it: a tooltip can close again before a second DOM read (a hover
+   * end, another trigger's warmup, an unmount), so seeing it and reading it must be one
+   * observation. `title` names the tooltip wanted, so a previous button's still-closing tooltip
+   * does not count. */
   async function tooltipAfterHover(selector: string, title: string) {
     for (let attempt = 0; attempt < 4; attempt++) {
       await hover(selector);
@@ -60,22 +62,19 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
           `new Promise((done) => {
             const started = Date.now();
             const tick = () => {
-              const open = [...document.querySelectorAll('[role="tooltip"]')].some((tip) => tip.textContent.includes(${JSON.stringify(title)}));
-              if (open) done(true);
-              else if (Date.now() - started > 4000) done(false);
+              const tip = [...document.querySelectorAll('[role="tooltip"]')].find((tip) => tip.textContent.includes(${JSON.stringify(title)}));
+              if (tip) done(tip.textContent);
+              else if (Date.now() - started > 4000) done(null);
               else setTimeout(tick, 100);
             };
             tick();
           })`,
         ),
-      );
-      if (shown) return;
+      ) as string | null;
+      if (shown !== null) return shown;
     }
+    throw new Error(`the ${selector} tooltip never opened`);
   }
-  const tooltip = (title: string) =>
-    evaluate<string | null>(
-      `[...document.querySelectorAll('[role="tooltip"]')].find((tip) => tip.textContent.includes(${JSON.stringify(title)}))?.textContent ?? null`,
-    );
 
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
@@ -93,9 +92,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     const [press, label] = mac ? ["Meta+b", "⌘B"] : ["Control+b", "Ctrl+B"];
 
     // The collapse button's tooltip names the shortcut.
-    await tooltipAfterHover(COLLAPSE, "Collapse sidebar");
-    await wait(`document.querySelector('[role="tooltip"]') !== null`);
-    expect(await tooltip("Collapse sidebar")).toBe(`Collapse sidebar${label}`);
+    expect(await tooltipAfterHover(COLLAPSE, "Collapse sidebar")).toBe(`Collapse sidebar${label}`);
     await browser("screenshot", join(artifacts, "collapse-tooltip.png"));
 
     // From the page, and from the message composer while typing, the key collapses and expands.
@@ -107,9 +104,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     // The collapse animates the rail's width; measuring the expand button mid-transition
     // puts the pointer where the button was, and no tooltip ever opens.
     await wait(`document.getAnimations().every((a) => a.playState !== "running")`);
-    await tooltipAfterHover(EXPAND, "Expand Sidebar");
-    await wait(`document.querySelector('[role="tooltip"]') !== null`);
-    expect(await tooltip("Expand Sidebar")).toBe(`Expand Sidebar${label}`);
+    expect(await tooltipAfterHover(EXPAND, "Expand Sidebar")).toBe(`Expand Sidebar${label}`);
     await browser("screenshot", join(artifacts, "expand-tooltip.png"));
     await browser("focus", "textarea");
     await browser("press", press);
