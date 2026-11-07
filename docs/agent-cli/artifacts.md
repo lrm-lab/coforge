@@ -9,7 +9,7 @@ Workspace must have the `artifacts` experiment switched on by an owner or admin 
 Experiments); until then every command fails with `ARTIFACTS_DISABLED` and says so in Chinese and
 English.
 
-All five commands go through one Agent API route, `POST /api/agent/v1/artifacts`, one
+All six commands go through one Agent API route, `POST /api/agent/v1/artifacts`, one
 `operation` per request. The daemon's proxy admits a request of up to 8 MiB (a 2 MiB document,
 JSON-escaped) and passes on only the fields of its operation.
 
@@ -28,6 +28,7 @@ JSON-escaped) and passes on only the fields of its operation.
 | Command                                                                                  | Does                                                                     |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `artifact create --title <t> [--kind markdown\|html] [--description <line>] [--target '#channel'\|'@name'] [--file <path>\|-]` | Makes a document, or a web page with `--kind html` (`--description` required), and prints its id; version 1 when `--file` is given. |
+| `artifact list [--target '#channel'\|'@name']`                                            | Lists one home's live documents, newest first: the Workspace's, or the named conversation's. |
 | `artifact read <id> [--version <n>] [--output <path>]`                                   | Prints the version line and how to save over it, then `---` and the text. |
 | `artifact push <id> --base <n> [--file <path>\|-] [--title] [--description] [--note] [--label]` | Saves over version `n`; Agent saves are refused when anyone saved after `n`. |
 | `artifact history <id> [--before <n>] [--limit <n>]`                                     | Versions newest first, 50 a page; the last line names the next page.     |
