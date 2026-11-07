@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { AgentContexts } from "#src/daemon-runtime/agent-contexts";
-import { PhaseBookkeeping } from "#src/daemon-runtime/phase-bookkeeping";
+import {
+  PhaseBookkeeping,
+  COMPACTION_LOG_ERROR_CHARS,
+} from "#src/daemon-runtime/phase-bookkeeping";
 import type { ActivityLaunch } from "#src/daemon-runtime/activity-launch";
 import type { ActivityDraft } from "#src/daemon-runtime/agent-activity-publisher";
 import { captureDaemonLogs } from "./log-capture";
@@ -100,9 +103,120 @@ test("a cancelled compaction is not a failure, however many times it happens", (
   });
   for (let round = 0; round < 3; round++) {
     bookkeeping.start("compaction", "agent-a", launch, undefined);
-    bookkeeping.interrupt("compaction", "agent-a", launch, undefined);
+    bookkeeping.interrupt("compaction", "agent-a", launch, undefined, {
+      interruptedBy: "aborted",
+      reason: "threshold",
+    });
   }
   expect(counted).toEqual([]);
+});
+
+test("a compaction the runtime reports as failed counts, and its text picks the kind", () => {
+  // Task #548: Pi reported a failed compaction only as `compaction-interrupted`, and nothing
+  // counted it, so "compaction keeps failing → reset the session" never fired for Pi at all.
+  const kinds: string[] = [];
+  const published: unknown[] = [];
+  const bookkeeping = new PhaseBookkeeping({
+    launchFor: () => launch,
+    publish: (_agentId, _launch, draft) => published.push(draft),
+    activityDraft: (_agentId, kind) => ({ kind }) as never,
+    contexts: {
+      newContext: () => {},
+      compactionSucceeded: () => {},
+      compactionFailed: (_agentId, kind = "compaction_failed") => {
+        kinds.push(kind);
+        return { consecutive: kinds.length, terminal: kinds.length >= 3 };
+      },
+    },
+  });
+  for (const message of [
+    "Compaction failed: 500",
+    "Compaction failed: 500 again",
+    "Compaction failed: context length exceeded",
+    "Compaction failed: 500 once more",
+  ]) {
+    bookkeeping.start("compaction", "agent-a", launch, undefined);
+    bookkeeping.interrupt("compaction", "agent-a", launch, undefined, {
+      interruptedBy: "failed",
+      reason: "threshold",
+      errorMessage: message,
+    });
+  }
+  // Each attempt closed before the next one opened, so the kind is the single-attempt one; the
+  // input-too-large text is spent on its own.
+  expect(kinds).toEqual([
+    "compaction_failed",
+    "compaction_failed",
+    "compaction_input_too_large",
+    "compaction_failed",
+  ]);
+  // One reset notice, however many failures follow the threshold.
+  expect(
+    published.filter((draft) => (draft as { kind?: string }).kind === "runtime_error"),
+  ).toHaveLength(1);
+});
+
+test("an interrupted compaction logs why it ended, and how much of the failure it keeps", async () => {
+  const bookkeeping = new PhaseBookkeeping({
+    launchFor: () => launch,
+    publish: () => {},
+    activityDraft: (_agentId, kind) => ({ kind }) as never,
+    contexts: {
+      newContext: () => {},
+      compactionSucceeded: () => {},
+      compactionFailed: () => ({ consecutive: 1, terminal: false }),
+    },
+    contextUsage: () => undefined,
+  });
+  const { records } = await captureDaemonLogs(async () => {
+    bookkeeping.start("compaction", "agent-a", launch, undefined);
+    bookkeeping.interrupt("compaction", "agent-a", launch, undefined, {
+      interruptedBy: "failed",
+      reason: "overflow",
+      errorMessage: `Compaction failed: ${"x".repeat(1000)}`,
+    });
+  });
+  const line = records
+    .map((record: { properties: Record<string, unknown> }) => record.properties)
+    .find(
+      (properties: Record<string, unknown>) =>
+        properties.event === "agent.runtime.compaction_tokens",
+    );
+  expect(line).toMatchObject({
+    outcome: "interrupted",
+    interrupted_by: "failed",
+    reason: "overflow",
+  });
+  expect(String(line?.error_message).length).toBe(COMPACTION_LOG_ERROR_CHARS);
+  expect(line?.tokens_before).toBeUndefined();
+});
+
+test("an interruption nobody explained is logged as unexplained, not as a plain ending", async () => {
+  // Every other adapter emits a bare `compaction-interrupted`; the line says so rather than
+  // leaving a reader to guess which runtime had detail and which did not.
+  const bookkeeping = new PhaseBookkeeping({
+    launchFor: () => launch,
+    publish: () => {},
+    activityDraft: (_agentId, kind) => ({ kind }) as never,
+    contexts: {
+      newContext: () => {},
+      compactionSucceeded: () => {},
+      compactionFailed: () => ({ consecutive: 1, terminal: false }),
+    },
+    contextUsage: () => undefined,
+  });
+  const { records } = await captureDaemonLogs(async () => {
+    bookkeeping.start("compaction", "agent-a", launch, undefined);
+    // What every adapter other than Pi sends: the event with nothing on it.
+    bookkeeping.interrupt("compaction", "agent-a", launch, undefined, {});
+  });
+  const line = records
+    .map((record: { properties: Record<string, unknown> }) => record.properties)
+    .find(
+      (properties: Record<string, unknown>) =>
+        properties.event === "agent.runtime.compaction_tokens",
+    );
+  expect(line).toMatchObject({ outcome: "interrupted", interrupted_by: null, reason: null });
 });
 
 test("an error outside an open compaction is not counted as a compaction failure", () => {

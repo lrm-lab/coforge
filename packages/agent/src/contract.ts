@@ -205,8 +205,17 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
   // `fast_mode_disabled_reason`), left uninterpreted.
   | { type: "service-tier"; state: AgentServiceTierObserved; reason?: string }
   // Only providers that can observe an aborted compaction report this; a provider with no such
-  // signal never emits it.
-  | { type: "compaction-interrupted"; occurredAt?: string }
+  // signal never emits it. `interruptedBy` separates the two endings a runtime folds into one:
+  // `aborted` is something stopping it (a turn interrupt, a stop, a restart), `failed` is its own
+  // attempt failing — the daemon counts only failures. `reason` is the runtime's own word for why
+  // it compacted and `errorMessage` the text it gave for the failure, both left uninterpreted.
+  | {
+      type: "compaction-interrupted";
+      occurredAt?: string;
+      interruptedBy?: "aborted" | "failed";
+      reason?: string;
+      errorMessage?: string;
+    }
   // A provider's review mode entered or exited, relayed the same way as compaction: the daemon
   // core alone decides what Activity each one becomes.
   | { type: "review-started"; occurredAt?: string }

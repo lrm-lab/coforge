@@ -35,8 +35,34 @@ describe("piSessionEvents", () => {
 
   test("reports compaction start, finish and interruption", () => {
     expect(events({ type: "compaction_start" })).toEqual([{ type: "compaction-started" }]);
-    expect(events({ type: "compaction_end", aborted: true })).toEqual([
-      { type: "compaction-interrupted" },
+    expect(events({ type: "compaction_end", aborted: true, reason: "threshold" })).toEqual([
+      { type: "compaction-interrupted", interruptedBy: "aborted", reason: "threshold" },
+    ]);
+  });
+
+  test("an aborted compaction and a failed one are told apart, with Pi's own wording", () => {
+    // Task #548: both endings used to collapse into the same empty event, so a log reader could
+    // not tell a person's stop from summarization failing — and only the failure is the session
+    // failing to compact.
+    expect(
+      events({ type: "compaction_end", aborted: true, reason: "manual", result: undefined }),
+    ).toEqual([{ type: "compaction-interrupted", interruptedBy: "aborted", reason: "manual" }]);
+    expect(
+      events({
+        type: "compaction_end",
+        aborted: false,
+        reason: "overflow",
+        result: undefined,
+        willRetry: false,
+        errorMessage: "Compaction failed: 400 context too large",
+      }),
+    ).toEqual([
+      {
+        type: "compaction-interrupted",
+        interruptedBy: "failed",
+        reason: "overflow",
+        errorMessage: "Compaction failed: 400 context too large",
+      },
     ]);
   });
 
@@ -67,10 +93,11 @@ describe("piSessionEvents", () => {
   });
 
   test("a compaction that produced no result is not reported as finished", () => {
-    // A failed attempt, or one queued for a retry (`willRetry`): nothing compacted yet.
+    // A failed attempt, or one queued for a retry (`willRetry`): nothing compacted yet. Pi did
+    // not abort it, so it is the compaction failing rather than something stopping it.
     expect(
       events({ type: "compaction_end", aborted: false, result: undefined, willRetry: true }),
-    ).toEqual([{ type: "compaction-interrupted" }]);
+    ).toEqual([{ type: "compaction-interrupted", interruptedBy: "failed", reason: undefined }]);
   });
 
   test.each(["auto_retry_start", "summarization_retry_scheduled"])(

@@ -21,7 +21,11 @@ import {
 import { runtimeDisplayName } from "./session-invalidate-activity";
 import { subagentProgressDetail } from "#src/agent-runtime/subagent-progress-activity";
 import { SubagentWakeTracker } from "#src/agent-runtime/subagent-progress-activity";
-import { compactionTokens, PHASE_EDGES } from "#src/agent-runtime/runtime-phases";
+import {
+  compactionInterruption,
+  compactionTokens,
+  PHASE_EDGES,
+} from "#src/agent-runtime/runtime-phases";
 import { runtimeFailureDiagnostic, safeRuntimeActivityMessage } from "./runtime-activity-text";
 import { toolStartActivity } from "#src/code-agent/tool-activity";
 import { noteTurnFinished } from "./turn-boundaries";
@@ -230,7 +234,14 @@ export function observeRuntimeEvent(
         event.conversation,
         compactionTokens(event),
       );
-    else ports.phaseBookkeeping.interrupt(phase, agentId, launch, event.conversation);
+    else
+      ports.phaseBookkeeping.interrupt(
+        phase,
+        agentId,
+        launch,
+        event.conversation,
+        compactionInterruption(event),
+      );
     return;
   }
   if (event.type === "subagent-progress") {

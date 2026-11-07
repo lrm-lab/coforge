@@ -50,6 +50,21 @@ export function compactionTokens(
   };
 }
 
+/** What an interruption says about itself, when the runtime says anything: the same line reports
+ * an aborted compaction and a failed one, and only a failure counts (task #548). */
+export type CompactionInterruption = Readonly<{
+  interruptedBy?: "aborted" | "failed";
+  reason?: string;
+  errorMessage?: string;
+}>;
+
+/** The interruption detail a compaction's own event carries, absent for every other phase. */
+export function compactionInterruption(
+  event: AgentRuntimeEvent,
+): CompactionInterruption | undefined {
+  return event.type === "compaction-interrupted" ? event : undefined;
+}
+
 /**
  * What each phase reports: its start, its explicit finish, its interruption (a provider signal
  * that does not say whether it was aborted or failed - a failure also arrives as its own error -

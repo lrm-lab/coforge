@@ -6,6 +6,7 @@ import {
   inferredCompactionFinish,
   RUNTIME_PHASES,
   type CompactionInference,
+  type CompactionInterruption,
   type PhaseActivity,
   type RuntimePhase,
 } from "#src/agent-runtime/runtime-phases";
@@ -15,6 +16,10 @@ import type { ActivityDraft, PublishedActivityLaunch } from "./agent-activity-pu
 import { compactionFailureKind } from "./compaction-failure-kind";
 
 const logger = getLogger(["coforge", "daemon", "daemon-runtime"]);
+
+/** How much of a runtime's own compaction failure text one log line keeps. The line is a
+ * diagnostic, not the error surface: the Activity and the launch failure path carry the rest. */
+export const COMPACTION_LOG_ERROR_CHARS = 400;
 
 /** The token numbers a finished compaction reports for itself, when its runtime has them. */
 export type CompactionTokens = Readonly<{
@@ -53,6 +58,9 @@ export class PhaseBookkeeping {
   /** Failures seen while this compaction stayed open: the second one means its recovery did not
    * help, and Raft counts it as exhausted. */
   readonly #compactionAttempts = new Map<string, number>();
+  /** Agents already told that their session needs a reset: the notice is worth one row, and the
+   * counter that produced it does not fall by saying the same thing again. */
+  readonly #resetNoticeSent = new Set<string>();
 
   constructor(private readonly ports: PhaseBookkeepingPorts) {
     this.#phases = {
@@ -68,6 +76,7 @@ export class PhaseBookkeeping {
     agentId: string,
     outcome: "finished" | "inferred" | "interrupted",
     reported?: CompactionTokens,
+    interruption?: CompactionInterruption,
   ): void {
     const observedBefore = this.#compactionBefore.get(agentId);
     this.#compactionBefore.delete(agentId);
@@ -80,6 +89,17 @@ export class PhaseBookkeeping {
       tokens_before: reported?.tokensBefore ?? observedBefore,
       tokens_after: reported?.tokensAfter ?? usage?.usedTokens,
       window_tokens: reported?.windowTokens ?? usage?.windowTokens,
+      // An interruption nobody explained stays visibly unexplained rather than reading as a plain
+      // ending, and the runtime's own reason and failure text are bounded like every log field.
+      ...(interruption
+        ? {
+            reason: interruption.reason ?? null,
+            interrupted_by: interruption.interruptedBy ?? null,
+            ...(interruption.errorMessage
+              ? { error_message: interruption.errorMessage.slice(0, COMPACTION_LOG_ERROR_CHARS) }
+              : {}),
+          }
+        : {}),
     });
   }
 
@@ -121,6 +141,8 @@ export class PhaseBookkeeping {
     if (phase === "compaction") {
       this.ports.contexts.newContext(agentId);
       this.ports.contexts.compactionSucceeded(agentId);
+      // Recovered: a later exhaustion is news again.
+      this.#resetNoticeSent.delete(agentId);
       this.#logCompactionTokens(agentId, "finished", reported);
     }
   }
@@ -138,27 +160,35 @@ export class PhaseBookkeeping {
     this.#logCompactionTokens(agentId, "inferred");
   }
 
-  /** Ends an open phase once as interrupted, for a phase that reports interruptions. */
+  /** Ends an open phase once as interrupted, for a phase that reports interruptions.
+   *
+   * A compaction that keeps failing leaves the session unable to make room; past the threshold it
+   * is spent, and only a fresh session helps. A cancelled compaction is the person (or the daemon)
+   * stopping it, not the context failing to compact — counting it would condemn a session after a
+   * few stops — so only `interruptedBy: "failed"` counts, whatever the runtime's own wording. */
   interrupt(
     phase: RuntimePhase,
     agentId: string,
     launch: ActivityLaunch,
     conversation: AgentRuntimeEvent["conversation"],
+    interruption?: CompactionInterruption,
   ): void {
     const interrupted = RUNTIME_PHASES[phase].interrupted;
-    if (!interrupted || this.#phases[phase].interrupt(agentId) !== "interrupted") return;
+    if (!interrupted) return;
+    const failed = phase === "compaction" && interruption?.interruptedBy === "failed";
+    // Before the phase closes: the count only applies to an attempt that is still open.
+    if (failed)
+      this.compactionError(agentId, launch, interruption?.errorMessage ?? "compaction failed");
+    if (this.#phases[phase].interrupt(agentId) !== "interrupted") return;
     this.#publish(agentId, launch, interrupted, conversation);
     if (phase !== "compaction") return;
-    // A compaction that keeps failing leaves the session unable to make room; past the threshold
-    // it is spent, and only a fresh session helps — so this says that instead of retrying.
-    // A cancelled compaction is the person (or the daemon) stopping it, not the context failing
-    // to compact; counting it would condemn a session after a few stops. Only errors count, below.
-    this.#logCompactionTokens(agentId, "interrupted");
+    this.#logCompactionTokens(agentId, "interrupted", undefined, interruption);
   }
 
   /** A runtime error that arrives while a compaction is open is that compaction failing. Counted
    * once per attempt: a second failure with the compaction still open is a recovery that did not
-   * help. Past the threshold the session is spent, and only a reset helps. */
+   * help. Past the threshold the session is spent, and only a reset helps — said once per launch,
+   * not once more for every failure that follows the threshold. */
   compactionError(agentId: string, launch: PublishedActivityLaunch, message: string): void {
     if (!this.#phases.compaction.isActive(agentId)) return;
     const attempts = (this.#compactionAttempts.get(agentId) ?? 0) + 1;
@@ -167,7 +197,8 @@ export class PhaseBookkeeping {
       agentId,
       compactionFailureKind(message, attempts),
     );
-    if (!terminal) return;
+    if (!terminal || this.#resetNoticeSent.has(agentId)) return;
+    this.#resetNoticeSent.add(agentId);
     this.ports.publish(
       agentId,
       launch,
@@ -201,6 +232,8 @@ export class PhaseBookkeeping {
   /** Forgets one Agent's open phases and stops their watchdogs. */
   dispose(agentId: string): void {
     for (const tracker of Object.values(this.#phases)) tracker.dispose(agentId);
+    // A relaunch is a new attempt at the same session's problem: it may say so again.
+    this.#resetNoticeSent.delete(agentId);
   }
 
   /** Forgets every Agent's open phases; used on full daemon shutdown. */

@@ -51,8 +51,18 @@ export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): A
     case "compaction_end": {
       // A compaction that produced no result failed or is queued for a retry (`willRetry`): its
       // completion is not confirmed, so it reports what an unfinished one reports instead of a
-      // "finished" nobody can point at.
-      if (event.aborted || !event.result) return [{ type: "compaction-interrupted" }];
+      // "finished" nobody can point at. Pi says which of the two it was, and why it compacted:
+      // an abort is the person or the daemon stopping it, a failure is summarization failing,
+      // and only the second counts toward the session being spent (task #548).
+      if (event.aborted || !event.result)
+        return [
+          {
+            type: "compaction-interrupted",
+            interruptedBy: event.aborted ? "aborted" : "failed",
+            reason: event.reason,
+            ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+          },
+        ];
       return [
         {
           type: "compaction-finished",
