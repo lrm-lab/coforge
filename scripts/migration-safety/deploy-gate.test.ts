@@ -97,7 +97,8 @@ describe("deploy gate", () => {
 
   test("an applied migration is never judged, annotated or not", async () => {
     const dir = migrations({ "20261001000000_old": "DROP TABLE legacy;\n" });
-    expect((await gate(fakeSource(["20261001000000_old"], []), dir)).code).toBe(0);
+    const source = fakeSource(["20261001000000_old"], [stat("tasks", 1000)]);
+    expect((await gate(source, dir)).code).toBe(0);
   });
 
   test("a pending high-risk migration without an annotation stops the deploy with the fix", async () => {
@@ -167,7 +168,15 @@ describe("deploy gate", () => {
       "20261101000000_create": "CREATE TABLE ghosts (id int);\n",
       "20261102000000_alter": annotate(sql, [], ["ghosts"]),
     });
-    expect((await gate(fakeSource([], []), dir)).code).toBe(0);
+    expect((await gate(fakeSource([], [stat("tasks", 1000)]), dir)).code).toBe(0);
+  });
+
+  test("a live catalog that reports every table as zero bytes stops the deploy", async () => {
+    const dir = migrations({ "20261101000000_plain": "SELECT 1;\n" });
+    const zeroed = [stat("messages", 0), stat("tasks", 0)];
+    const result = await gate(fakeSource([], zeroed), dir);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("every table as zero bytes");
   });
 
   test("a failure to read the catalog stops the deploy", async () => {

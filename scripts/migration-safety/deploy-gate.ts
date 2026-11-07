@@ -6,7 +6,7 @@ import type { CatalogSource } from "./catalog-query";
 import { isGrandfathered } from "./grandfather";
 import { listMigrations } from "./migration-files";
 import { createdTables } from "./rules";
-import { catalogOf } from "./snapshot";
+import { assertPlausibleTables, catalogOf } from "./snapshot";
 import { verifyMigration } from "./verify";
 
 export async function deployGate(
@@ -21,7 +21,9 @@ export async function deployGate(
   try {
     const applied = new Set(await source.applied());
     const pending = listMigrations(migrationsDir).filter(({ name }) => !applied.has(name));
-    const catalog = catalogOf({ tables: await source.tables() });
+    const tables = await source.tables();
+    assertPlausibleTables(tables);
+    const catalog = catalogOf({ tables });
     // Tables the pending migrations create one after another are not in the live catalog yet.
     const created = new Set<string>();
     const problems: string[] = [];

@@ -44,11 +44,13 @@ export function parseSnapshot(text: string): Snapshot {
       typeof table.totalBytes !== "number"
     )
       throw new Error("the catalog snapshot has a malformed table entry");
+  const stats = tables as TableStat[];
+  assertPlausibleSnapshot(stats);
   return {
     version: 1,
     generatedAt,
     environment,
-    tables: tables as TableStat[],
+    tables: stats,
   };
 }
 
@@ -77,6 +79,24 @@ export const isLarge = (stat: Pick<TableStat, "approxRows" | "totalBytes">): boo
 export function assertPlausibleTables(tables: TableStat[]): void {
   if (tables.every((table) => table.totalBytes === 0))
     throw new Error("the catalog reports every table as zero bytes");
+}
+
+/** Tables a deployed database is known to hold data in; a zero-byte read of one is the same broken
+ * signature as an all-zero catalog, caught even when the other tables look plausible. Checked on
+ * the read side only: a staging catalog may legitimately hold an empty `messages`, but the
+ * production snapshot the check consumes never does. */
+const KNOWN_DATA_TABLES = ["messages", "agent_activities"];
+
+/** The read-side plausibility bar for a snapshot file: the all-zero signature, plus the known data
+ * tables. `liveSnapshot` already refuses an all-zero live catalog; a snapshot can also arrive by
+ * hand or from a changed generator, so the same evidence is required when it is read back. */
+export function assertPlausibleSnapshot(tables: TableStat[]): void {
+  assertPlausibleTables(tables);
+  for (const name of KNOWN_DATA_TABLES) {
+    const table = tables.find((entry) => entry.name === name);
+    if (table !== undefined && table.totalBytes === 0)
+      throw new Error(`the catalog reports ${name} as zero bytes`);
+  }
 }
 
 export function snapshotAgeDays(snapshot: Snapshot, now: Date): number {
