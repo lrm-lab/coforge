@@ -53,7 +53,7 @@ export function AgentMascotAvatar({
       className={className}
       contentClassName={deleted ? DELETED_PICTURE_CLASS : undefined}
       badge={
-        cornerDot && display && !deleted ? (
+        cornerDot && !deleted ? (
           <StatusDot tone={view.tone} pulse={view.pulse} className="avatar-status-dot absolute" />
         ) : undefined
       }

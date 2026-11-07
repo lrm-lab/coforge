@@ -32,15 +32,16 @@ export function AgentDisplayAvatar({
    * identity is recognisable outside message rows too (DM header, mention chips, member cards). */
   deleted?: boolean;
   size?: AvatarSize;
-  /** Draw the status dot on the avatar's corner. Off where the status already reads inline
-   * beside the name (the DM header), so it is not shown twice. */
+  /** Draw the status dot on the avatar's corner, grey with no display yet: every member sees an
+   * Agent's status (task #587), so none goes without one. Off where the status already reads
+   * inline beside the name (the DM header), so it is not shown twice. */
   cornerDot?: boolean;
   className?: string;
 }) {
   const view = agentDisplay(display, { stopped });
   const picture = src ?? agentAvatarUrl(agentId);
   const badge =
-    cornerDot && display && !deleted ? (
+    cornerDot && !deleted ? (
       <StatusDot tone={view.tone} pulse={view.pulse} className="avatar-status-dot absolute" />
     ) : undefined;
   return (

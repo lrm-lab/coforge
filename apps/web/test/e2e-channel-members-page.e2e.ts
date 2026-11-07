@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { browserSession } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -37,23 +38,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const session = `channel-members-page-${process.pid}`;
-  async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
-  }
+  const { browser, evaluate } = browserSession(browserPath!, `channel-members-page-${process.pid}`);
   /** Waits for `condition`, failing with its text rather than at the test timeout; a first page
    * load compiles on the dev server, so it gets longer. */
   const waitFor = (condition: string, ms = 20_000) =>
@@ -121,8 +106,15 @@ test("the settings panel shows a channel's members as a page, adds and removes o
   });
   const workspacePath = `/en/w/${membership.workspace.slug}`;
   const workspaceId = membership.workspaceId;
-  const attached = await db.workspaceComputer.findFirstOrThrow({
-    where: { workspaceId, computer: { ownerId: DEV_BROWSER_USER.id } },
+  const computer = await db.computer.create({
+    data: {
+      ownerId: DEV_BROWSER_USER.id,
+      machineId: `e2e-members-${process.pid}`,
+      name: `e2e-members-${process.pid}.local`,
+      displayName: "E2E Studio",
+      kind: "local",
+      workspaces: { create: { workspaceId } },
+    },
   });
   const channel = await db.conversation.create({
     data: { workspaceId, channelName: `e2e-members-${process.pid}`, description: "" },
@@ -134,7 +126,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
         name: `e2e-members-${name}-${process.pid}`,
         displayName: `Members ${name} ${process.pid}`,
         ownerId: DEV_BROWSER_USER.id,
-        computerId: attached.computerId,
+        computerId: computer.id,
         runtimeConfig: {
           runtime: "pi",
           provider: { kind: "default" },
@@ -193,13 +185,17 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     // alike, and so do the faces beside the messages, the viewer's and the Agent's (Frank, 11-04).
     const dot = ".bg-fg-success-secondary";
     const agentDot = ".avatar-status-dot";
-    const messagesWithDots = `document.querySelectorAll("[data-message-id]").length === 2 && [...document.querySelectorAll("[data-message-id]")].every((row) => row.querySelector("${dot}, ${agentDot}") !== null)`;
+    // The two sent messages; the membership notices the test goes on to cause have no sender's face.
+    const sentRows = `[...document.querySelectorAll("[data-message-id]")].filter((row) => row.querySelector("[data-avatar]") !== null)`;
+    const messagesWithDots = `${sentRows}.length === 2 && ${sentRows}.every((row) => row.querySelector("${dot}, ${agentDot}") !== null)`;
     // The header's faces: the "Members" group that holds the viewer's face (the sidebar's
     // Members link is labelled the same).
     const headerFaces = `[...document.querySelectorAll('[aria-label="Members"]')].find((el) => !${panel}?.contains(el) && el.textContent.includes(${JSON.stringify(DEV_BROWSER_USER.name)}))`;
     const chat = `${origin}${workspacePath}/channel/${channel.id}`;
     await browser("open", chat);
     await waitFor(`${headerFaces}?.querySelector("${dot}") != null`, 60_000);
+    // An Agent that has reported nothing yet still has its dot, grey (task #510).
+    await waitFor(`${headerFaces}?.querySelector("${agentDot}") != null`);
     await waitFor(messagesWithDots);
     await shootBoth("chat-dots");
 
@@ -379,6 +375,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
   } finally {
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => {});
     await db.agent.deleteMany({ where: { id: { in: agentIds } } }).catch(() => {});
+    await db.computer.delete({ where: { id: computer.id } }).catch(() => {});
     await browser("close").catch(() => undefined);
     proxy.stop();
     await db.$disconnect();
