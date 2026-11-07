@@ -1,29 +1,17 @@
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import { AgentAuthorizationError, launchFailureLogFields } from "#src/agent-runtime/launch-failure";
 import { AgentStartup } from "#src/agent-runtime/agent-startup";
-import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
-import { ProviderProgress } from "./stalled-recovery";
 import { openLaunchSessionMemory } from "./session-memory-launch";
 import { assertSessionNotSpent } from "./session-reset-guard";
 import { LaunchPhaseTiming } from "./launch-phase-timing";
 import { sessionIdReporter } from "./launch-session-report";
-import {
-  StalledTurnTracker,
-  stalledTurnNotice,
-  stalledTurnSilenceMs,
-} from "./stalled-turn-indicator";
-import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
-import {
-  OutstandingBackgroundTasks,
-  SubagentWakeTracker,
-} from "#src/agent-runtime/subagent-progress-activity";
+import { trackAgentLaunch } from "./agent-launch-tracking";
 import { buildRuntimeCrashedActivity } from "#src/agent-runtime/runtime-error-activity";
 import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
-import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import { ResumedEarlyCrashWatch, type ResumedEarlyCrashStreak } from "./resumed-early-crash";
 import { isBusyActivityDetailKind } from "./agent-activity-publisher";
 import { runtimeDisplayName } from "./session-invalidate-activity";
@@ -34,7 +22,7 @@ import { restoreSupersededProxyToken } from "./agent-launch-revocation";
 import { wakeReusedAgent } from "./agent-wake-control";
 import { logAgentApiKeyRevokeFailed } from "./agent-failure-logs";
 import { getLogger } from "@logtape/logtape";
-import type { AgentRuntimeConfig, AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { ActivityLaunch } from "./activity-launch";
 import type { LaunchRequest } from "./runtime-launch-types";
@@ -214,53 +202,14 @@ export async function launchAgentProcess(
       requestId,
     });
     launch.startup = new AgentStartup(() => ports.scheduleStartupFailure(agentId, launch));
-    const trajectories = new Map<string, ActivityTrajectory>();
-    const trajectoryFor = (scope: AgentRuntimeEvent["conversation"]) => {
-      const key = scope?.conversationId ?? "";
-      let trajectory = trajectories.get(key);
-      if (!trajectory) {
-        trajectory = new ActivityTrajectory((event) =>
-          ports.observeRuntimeEvent(agentId, launch, config, runtime, Boolean(control), {
-            ...event,
-            ...(scope ? { conversation: scope } : {}),
-          }),
-        );
-        trajectories.set(key, trajectory);
-      }
-      return trajectory;
-    };
-    const trajectory = {
-      accept: (event: AgentRuntimeEvent) => trajectoryFor(event.conversation).accept(event),
-      flush: () => {
-        for (const item of trajectories.values()) item.flush();
-      },
-      dispose: () => {
-        for (const item of trajectories.values()) item.dispose();
-        trajectories.clear();
-      },
-    };
-    launch.trajectory = trajectory;
-    const progress = new ProviderProgress();
-    launch.progress = progress;
-    const toolCalls = new ToolCallLedger();
-    launch.toolCalls = toolCalls;
-    launch.stalled = new StalledTurnTracker(
-      stalledTurnNotice(launch, {
-        isCurrent: (id) => ports.currentActivityLaunches.get(id) === launch,
-        publish: (id, detail) =>
-          ports.activityPublisher.publish(
-            id,
-            launch,
-            ports.activity(id, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED, "error", detail),
-          ),
-      }),
-      stalledTurnSilenceMs(config.envVars),
+    const { trajectory, progress, toolCalls, replyIntents } = trackAgentLaunch(
+      ports,
+      agentId,
+      launch,
+      config,
+      runtime,
+      control,
     );
-    const replyIntents = ports.replyIntents.tracker(agentId, launch);
-    launch.replyIntents = replyIntents;
-    launch.backgroundTasks = new OutstandingBackgroundTasks();
-    if (runtime.session.wakesAfterSubagents === true)
-      launch.subagentWake = new SubagentWakeTracker();
     const unsubscribe = runtime.session.subscribe((event) => {
       progress.observe(event);
       toolCalls.observe(event);
