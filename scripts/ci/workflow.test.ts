@@ -72,7 +72,9 @@ test("deploy and release jobs restore nothing from the Actions cache", async () 
       }
     }
   }
-  expect(checked).toBe(23);
+  // 24 cache-disabled setup steps across the deploy, release, and post-deploy
+  // check workflows (perf-check.yml added one with task #594).
+  expect(checked).toBe(24);
 });
 
 test("the aggregate gate executes even after failure and rejects missing, skipped, or cancelled required jobs", () => {
@@ -202,12 +204,24 @@ test("a push to main starts no deployment or publication", async () => {
     const scheduled = ["cdn-certificates.yml", "web-integration.yml", "web-e2e.yml"].includes(file);
     // release-installer-build.yml is callable only: it has no trigger of its own.
     const callableOnly = file === "release-installer-build.yml";
+    // perf-check.yml observes deploy completions; it deploys and publishes nothing itself.
+    const postDeployCheck = file === "perf-check.yml";
     const expected = callableOnly
       ? []
       : scheduled
         ? ["schedule", "workflow_dispatch"]
-        : ["workflow_dispatch"];
+        : postDeployCheck
+          ? ["workflow_run"]
+          : ["workflow_dispatch"];
     expect(triggers, file).toEqual(expected);
+    if (postDeployCheck) {
+      const run = workflow.on.workflow_run;
+      expect([...(run.workflows ?? [])].sort(), file).toEqual([
+        "Deploy Web (production)",
+        "Deploy Web (staging)",
+      ]);
+      expect(run.types, file).toEqual(["completed"]);
+    }
   }
 });
 
