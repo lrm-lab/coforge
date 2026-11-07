@@ -7,7 +7,7 @@ import type { browserSession } from "./browser-e2e";
  * `artifacts`.
  */
 export function labelSettingsPage(
-  { browser, evaluate }: ReturnType<typeof browserSession>,
+  { browser, evaluate }: Pick<ReturnType<typeof browserSession>, "browser" | "evaluate">,
   artifacts: string,
 ) {
   const row = (label: string) =>

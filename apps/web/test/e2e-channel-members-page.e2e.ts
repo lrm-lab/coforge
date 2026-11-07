@@ -31,7 +31,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser, evaluate, waitFor, byText, clickText } = browserSession(
+  const { browser, evaluate, waitFor, clickText } = browserSession(
     browserPath,
     `channel-members-page-${process.pid}`,
   );
