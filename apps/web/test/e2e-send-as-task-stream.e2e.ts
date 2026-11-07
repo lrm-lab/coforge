@@ -153,8 +153,9 @@ test("a message sent as a Task shows its Task in the stream, with task conversat
         expect(task.sourceMessageId).not.toBeNull();
       } else expect(task.messageId).not.toBeNull();
 
-      // The chip under the message names its Task by title (task #449).
-      const parts = [`Ship the release notes (${mode})`];
+      // The chip under the message shows its Task's number (task #13 moved the title to the
+      // peek): still proof the badge is this Task's.
+      const parts = [`#${task.number}`];
       const shows = `(() => { const text = ${badgeOf(body)}?.textContent ?? ""; return ${JSON.stringify(parts)}.every((part) => text.includes(part)); })()`;
       // At once, from the announced Task.
       await waitFor(shows);
