@@ -91,3 +91,45 @@ test("a notice the session refused records nothing as seen", async () => {
   await index.receive(message("one", { sequence: 4 })).catch(() => undefined);
   expect(index.seenExactSequences("agent-1", "#coforge")).toEqual([]);
 });
+
+test("a whole previewed message stops holding the send gate without settling pending", async () => {
+  const { index } = subject();
+  await index.receive(message("one", { sequence: 4 }));
+  // Shown in full: the send gate must not hold for it, and no hold window shows it again.
+  expect(index.pendingMessageCount("agent-1", "#coforge")).toBe(0);
+  expect(index.pendingMaxSequence("agent-1", "#coforge")).toBe(0);
+  expect(index.pendingWindow("agent-1", "#coforge", 10)).toHaveLength(0);
+  expect(index.unreadDeliveries("agent-1")).toEqual([]);
+  // Volatile only: attention still counts it until a read or continue settles it.
+  expect(index.check("agent-1")[0]).toMatchObject({ pendingCount: 1 });
+});
+
+test("pending reads skip only the previewed sequences", async () => {
+  const { index } = subject();
+  await index.receive(message("one", { sequence: 4 }));
+  // A truncated preview is shown but never counts as seen whole.
+  await index.receive(
+    message("long", {
+      sequence: 5,
+      deliveryId: "delivery-long",
+      body: "x".repeat(200),
+    }),
+  );
+  expect(index.pendingMessageCount("agent-1", "#coforge")).toBe(1);
+  expect(index.pendingMaxSequence("agent-1", "#coforge")).toBe(5);
+  expect(
+    index.pendingWindow("agent-1", "#coforge", 10).map((entry) => entry.delivery.sequence),
+  ).toEqual([5]);
+  expect(index.unreadDeliveries("agent-1")).toEqual([{ target: "#coforge", count: 1 }]);
+});
+
+test("a new context restores the pending hold a preview had cleared", async () => {
+  const { index } = subject();
+  await index.receive(message("one", { sequence: 4 }));
+  expect(index.pendingMessageCount("agent-1", "#coforge")).toBe(0);
+  index.clearPreviewSeen("agent-1");
+  expect(index.pendingMessageCount("agent-1", "#coforge")).toBe(1);
+  expect(index.pendingMaxSequence("agent-1", "#coforge")).toBe(4);
+  expect(index.pendingWindow("agent-1", "#coforge", 10)).toHaveLength(1);
+  expect(index.unreadDeliveries("agent-1")).toEqual([{ target: "#coforge", count: 1 }]);
+});
