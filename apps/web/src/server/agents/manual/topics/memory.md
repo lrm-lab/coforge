@@ -44,7 +44,9 @@ current description when you need to see it.
 
 - **A fact** is one line: a decision a human made, a preference they stated, a project convention,
   an environment quirk, a pitfall you hit. Write it in `MEMORY.md` itself, not in a note behind a
-  pointer.
+  pointer. A fact about a status, a number or a decision ends with the date and the task or
+  message it came from; a preference or a rule needs no source, and older entries are not
+  backfilled.
 - **Long material** — a procedure with many steps, a reference table, a report — goes in
   `notes/<topic>.md`, with one pointer line in `MEMORY.md` saying what it is for. Do not copy the
   material itself into `MEMORY.md`.
@@ -54,6 +56,8 @@ current description when you need to see it.
 
 ## When to write
 
+- Write or change a fact only from its source — a conversation, task or file — not from what
+  your context holds; what you cannot verify is not written as fact.
 - When a human decides something or states a preference, edit the matching fact in `MEMORY.md` at
   that moment.
 - When you hit a pitfall (a command that failed for a non-obvious reason, an environment quirk), add
