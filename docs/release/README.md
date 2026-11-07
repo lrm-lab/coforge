@@ -69,6 +69,7 @@ Read this overview first, then the topic files the task needs.
 | [Main to staging](main-to-staging.md)                               | The operator-dispatched cloud deployment and local publication paths to staging                            |
 | [Staging to production](staging-to-production.md)                   | The two-party production promotion for each track                                                          |
 | [Health verification](health-verification.md)                       | Cloud health checks, diagnostics, local readiness gates, and upgrade health checks                         |
+| [Post-deploy performance check](perf-regression-check.md)           | The 30-minute Server Function latency/error comparison after each Web deploy, its thresholds, and coverage |
 | [Upgrade operations](upgrade-operations.md)                         | Installer-run upgrades and downgrades, receipts, recovery, and the restart runner hold                     |
 | [Rollback](rollback.md)                                             | Rollback authorization and targets for each track                                                          |
 | [Audit records](audit-records.md)                                   | What every release, promotion, failure, and rollback record must preserve                                  |
