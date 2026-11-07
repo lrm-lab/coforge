@@ -42,6 +42,15 @@ export async function abandonLaunch(
   ports.stops.markStopping(agentId);
   ports.inputDrain.close(agentId, error);
   const activityLaunch = ports.currentActivityLaunches.get(agentId);
+  // The other producer of `Turn stopped` (a turn interrupt is the first): without this line a
+  // teardown the daemon started is indistinguishable from a stop the server asked for (task #630).
+  logger.info("Agent launch abandoned", {
+    event: "agent:launch_abandoned",
+    agent_id: agentId,
+    ...(activityLaunch ? { launch_id: activityLaunch.launchId } : {}),
+    error_code: diagnosticErrorCode(error),
+    outcome: "abandoned",
+  });
   activityLaunch?.startup?.dispose();
   if (activityLaunch) activityLaunch.stopping = true;
   ports.interruptIfBusy(agentId, activityLaunch);

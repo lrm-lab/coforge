@@ -1,3 +1,4 @@
+import { getLogger } from "@logtape/logtape";
 import type { AgentTurnInterruptIntent, AgentTurnInterruptResult } from "@lrm/coforge-sdk/internal";
 import type {
   AgentTurnInterruptOptions,
@@ -12,6 +13,22 @@ import type { StalledTurnTracker } from "./stalled-turn-indicator";
 export const AGENT_TURN_INTERRUPT_TIMEOUT_MS = 10_000;
 /** How long the restart's graceful release gets before the turn-scoped forced kill. */
 export const AGENT_TURN_INTERRUPT_RELEASE_TIMEOUT_MS = 5_000;
+
+const logger = getLogger(["coforge", "daemon", "runtime"]);
+
+/** An interrupt the daemon received and answered. Identity and outcome only: the intent carries
+ * no user content, and this line is what tells a server-requested stop apart from a teardown the
+ * daemon started on its own (task #630). */
+function logAccepted(intent: AgentTurnInterruptIntent, status: string): void {
+  logger.info("Agent turn interrupt accepted", {
+    event: "agent_turn_interrupt:accepted",
+    request_id: intent.requestId,
+    agent_id: intent.agentId,
+    launch_id: intent.launchId,
+    status,
+    outcome: "accepted",
+  });
+}
 
 /** The slice of a launch's Activity state a turn interrupt reads and settles. */
 export type TurnInterruptLaunch = Readonly<{
@@ -58,6 +75,7 @@ export async function interruptAgentTurn<Launch extends TurnInterruptLaunch>(
 ): Promise<void> {
   const launch = host.launch(intent.agentId);
   if (!launch || launch.launchId !== intent.launchId) {
+    logAccepted(intent, "not_running");
     await host.report?.({ ...intent, status: "not_running" });
     return;
   }
@@ -66,6 +84,7 @@ export async function interruptAgentTurn<Launch extends TurnInterruptLaunch>(
   if (intent.subagentTaskId !== undefined) {
     const status =
       (await host.interruptSubagent?.(intent.agentId, intent.subagentTaskId)) ?? "unsupported";
+    logAccepted(intent, status);
     // A task the user stopped is not an unread result: its ending must not wake the Agent.
     if (status === "interrupted") launch.subagentWake?.noteUserStop(intent.subagentTaskId);
     await host.report?.({ ...intent, status });
@@ -78,6 +97,7 @@ export async function interruptAgentTurn<Launch extends TurnInterruptLaunch>(
     releaseTimeoutMs: AGENT_TURN_INTERRUPT_RELEASE_TIMEOUT_MS,
     cutoffAtMs: turnInterruptCutoffAtMs(launch),
   });
+  logAccepted(intent, status);
   // The restart may have replaced the launch; read the live one for what to show and report.
   const current = host.launch(intent.agentId);
   if (current && status !== "not_running") host.publish(intent.agentId, current, status);
