@@ -74,6 +74,11 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
     };
     let turnScoped = false;
     let turnSnapshot: OwnedProcessIdentity[] | undefined;
+    // Descendants that left the child's process group stay reachable across terminate() calls:
+    // the polite rung can kill an escapee's parent and reparent it to init before the forced
+    // rung runs, breaking the ppid chain a fresh snapshot walks. Each retained identity is
+    // re-verified against a live table before every signal, so a recycled pid is never hit.
+    const escapedMembers = new Map<number, OwnedProcessIdentity>();
     // Start times have the process table's resolution, so the fence is compared at that resolution.
     let turnFenceMs = 0;
     const fenced = (entry: OwnedProcessIdentity) => entry.startedAtMs >= turnFenceMs;
@@ -100,6 +105,8 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
         // escaped member can be signaled by pid afterwards. A failed observation degrades to
         // the broadcast alone rather than skipping it.
         const descendants = child.exitCode === null ? await this.#ownedDescendants(pid) : [];
+        for (const entry of descendants)
+          if (entry.pgid !== pid) escapedMembers.set(entry.pid, entry);
         if (child.exitCode === null) {
           // The pid is still this process (running, or a zombie Bun has not reaped), so its
           // process group can only hold this tree's members and a broadcast is safe.
@@ -109,7 +116,7 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
             if (!this.#groupIsGone(error)) throw error;
           }
         } else if (!options?.terminal) await this.#killOrphanedGroupMembers(pid, force);
-        await this.#signalEscapedDescendants(pid, descendants, force);
+        await this.#signalEscapedDescendants(pid, [...escapedMembers.values()], force);
         if (live)
           for (const member of terminalMembers.values()) {
             if (!sameOwnedProcess(member, live.get(member.pid)) || member.pgid === pid) continue;

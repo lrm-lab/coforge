@@ -29,6 +29,9 @@ const ESCAPE_SCRIPT = `perl -MPOSIX -e 'setsid(); exec "sleep", "30"' & echo $!;
 // Same escape, but the main process loops instead of waiting, so it provably outlives the
 // descendant's death.
 const ESCAPE_SCRIPT_LOOP = `perl -MPOSIX -e 'setsid(); exec "sleep", "30"' & echo $!; while :; do sleep 1; done`;
+// The escapee ignores SIGTERM, so the polite rung cannot take it; its parent dies on that same
+// rung and the survivor is reparented before the forced rung runs (task #577 review).
+const IGNORE_TERM_SCRIPT = `perl -MPOSIX -e 'setsid(); $SIG{TERM}="IGNORE"; sleep 30' & echo $!; wait`;
 
 function alive(pid: number): boolean {
   try {
@@ -118,6 +121,36 @@ test.skipIf(process.platform === "win32")(
       // killTurnDescendants never touches the owned main process.
       expect(tree.child.exitCode).toBeNull();
       expect(alive(tree.child.pid!)).toBe(true);
+    } finally {
+      if (alive(escaped)) globalThis.process.kill(escaped, "SIGKILL");
+      await reader.cancel().catch(() => {});
+      await tree.terminate(true).catch(() => {});
+    }
+  },
+  20_000,
+);
+
+test.skipIf(process.platform === "win32")(
+  "terminate's forced rung still signals an escapee reparented during the polite rung",
+  async () => {
+    const tree = new ProcessTreeOwner().spawn(["sh", "-c", IGNORE_TERM_SCRIPT], tmpdir(), env);
+    const { escaped, reader } = await spawnEscaped(tree);
+    try {
+      await tree.terminate(false);
+      await tree.child.exited;
+      // The escapee ignored TERM; once its parent is gone it is reparented and a fresh
+      // descendant snapshot can no longer reach it through the ppid chain.
+      const deadline = performance.now() + 5_000;
+      for (;;) {
+        const entry = (await hostProcessTable.list()).find((process) => process.pid === escaped);
+        if (entry && entry.ppid !== tree.child.pid) break;
+        if (performance.now() >= deadline)
+          throw new Error(`escaped descendant ${escaped} was never reparented`);
+        await Bun.sleep(20);
+      }
+      expect(alive(escaped)).toBe(true);
+      await tree.terminate(true);
+      expect(await exited(escaped)).toBe(true);
     } finally {
       if (alive(escaped)) globalThis.process.kill(escaped, "SIGKILL");
       await reader.cancel().catch(() => {});
