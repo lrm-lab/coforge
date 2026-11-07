@@ -66,6 +66,11 @@ import {
   type MachineUpgradeContext,
 } from "./machine-supervisor-upgrades";
 import {
+  clearLifecycleFailure,
+  recordLifecycleFailureAfterAnswer,
+  type MachineFailureContext,
+} from "./machine-supervisor-failures";
+import {
   type LifecycleFailure,
   type PendingUpgradeSettler,
   type RestartResult,
@@ -291,50 +296,17 @@ export class MachineSupervisor {
       if (this.#stopIntents.get(id) === sequence) this.#stopIntents.delete(id);
   }
 
-  /**
-   * Nobody waits for a command that failed after it answered, so its failure is logged and
-   * recorded on the Workspaces it had not handled yet, where `status` shows it. A park or a stop
-   * or configure that took over is not a failure of this kind: `status` already shows the park,
-   * and the operator asked for the takeover.
-   */
   #failedAfterAnswer(
     operation: LifecycleFailure["operation"],
     workspaceIds: readonly string[],
     error: unknown,
   ): void {
-    const message =
-      thrownMessage(error) ||
-      `The ${operation} failed without a reason; the Computer log has the details.`;
-    if (error instanceof WorkspaceParkedError || error instanceof WorkspaceLifecycleSupersededError)
-      return;
-    logger.warn("A lifecycle command failed after it had already answered", {
-      event: "lifecycle:command_failed_after_answer",
-      operation,
-      workspace_ids: workspaceIds,
-      error_message: message,
-    });
-    void this.#serialize(async () => {
-      await this.#refresh();
-      for (const id of workspaceIds) {
-        const binding = this.#bindings.find((entry) => entry.workspaceId === id);
-        if (binding)
-          await this.#saveBinding({
-            ...binding,
-            lastFailure: { operation, message: message.slice(0, 500), at: this.now() },
-          });
-      }
-    }).catch((recordError: unknown) => {
-      logger.warn("Recording a lifecycle failure for status failed", {
-        event: "lifecycle:failure_record_failed",
-        error_message: thrownMessage(recordError),
-      });
-    });
+    recordLifecycleFailureAfterAnswer(this.#failureOps, operation, workspaceIds, error);
   }
 
   /** Drops a Workspace's recorded failure once a lifecycle step for it succeeded. */
   async #clearFailure(workspaceId: string): Promise<void> {
-    const binding = this.#bindings.find((entry) => entry.workspaceId === workspaceId);
-    if (binding?.lastFailure) await this.#saveBinding({ ...binding, lastFailure: undefined });
+    return clearLifecycleFailure(this.#failureOps, workspaceId);
   }
 
   /**
@@ -755,6 +727,18 @@ export class MachineSupervisor {
       bindings: () => this.#bindings,
       saveBinding: (binding) => this.#saveBinding(binding),
       settlePendingUpgrade: this.settlePendingUpgrade,
+      now: this.now,
+    };
+  }
+
+  /** The failure recorder's view; unlike the upgrade operations it re-enters `#serialize`
+   * itself, so its context exposes it. */
+  get #failureOps(): MachineFailureContext {
+    return {
+      refresh: () => this.#refresh(),
+      bindings: () => this.#bindings,
+      saveBinding: (binding) => this.#saveBinding(binding),
+      serialize: (operation) => this.#serialize(operation),
       now: this.now,
     };
   }
