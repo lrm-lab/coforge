@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { FileComputerConfig, loadBuildProfile } from "#src/local-config";
@@ -159,4 +160,35 @@ test("registration lookup resolves either Workspace id or slug without singleton
   });
   expect(await config.loadRegistration("missing")).toBeNull();
   await expect(config.loadRegistration()).rejects.toThrow("multiple");
+});
+
+test("discarding a registration removes its directory, not just the file", async () => {
+  // `detach` promises this machine keeps nothing about a Workspace the server confirmed it left
+  // (task #417, #696): the record named the workspace id, computer id and slug.
+  const directory = await temporaryDirectory();
+  const config = new FileComputerConfig(directory);
+  const other = await config.saveRegistration({
+    id: "workspace-b",
+    slug: "bravo",
+    computerId: "c",
+  });
+  const file = await config.saveRegistration({
+    id: "workspace-a",
+    slug: "alpha",
+    computerId: "c",
+  });
+  const registration = { id: "workspace-a", slug: "alpha", computerId: "c" };
+
+  await config.discardRegistration(registration);
+
+  expect(await config.loadRegistration("alpha")).toBeNull();
+  expect(existsSync(file)).toBe(false);
+  expect(existsSync(dirname(file))).toBe(false);
+  // Another Workspace's registration is untouched, and switching still never deletes one.
+  expect(await Bun.file(other).exists()).toBe(true);
+  expect(await config.loadRegistration("bravo")).toEqual({
+    id: "workspace-b",
+    slug: "bravo",
+    computerId: "c",
+  });
 });

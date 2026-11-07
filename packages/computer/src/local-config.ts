@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import { basename, dirname, join } from "node:path";
 import { CliError, loginError, setupError } from "./errors";
@@ -114,9 +114,16 @@ export class FileComputerConfig implements ComputerConfig {
     return registrations;
   }
 
+  /** Drops one Workspace's local registration, and the directory that held it, once the server
+   * confirmed this Computer left that Workspace (task #417, #696). Switching between Workspaces
+   * still never deletes anything: only `detach` calls this. */
   async discardRegistration(registration: RegisteredWorkspaceConnection): Promise<void> {
-    // Kept as a compatibility no-op. Switching never deletes prior local state.
-    void registration;
+    const directory = join(
+      this.directory,
+      "workspaces",
+      Buffer.from(registration.id, "utf8").toString("base64url"),
+    );
+    await rm(directory, { recursive: true, force: true });
   }
 }
 
