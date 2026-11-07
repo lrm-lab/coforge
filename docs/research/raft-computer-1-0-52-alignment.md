@@ -44,9 +44,13 @@ Raft 的 Computer 页面同时提供 `Remove`（解除某个服务器绑定）�
 
 实施前需要确定 channel 是否属于 release feed 的公共契约、服务器触发升级是否允许跟随 channel、以及 feature channel 的保留和撤销规则。不要用任意 URL 或未签名 channel 名称绕过当前的官方环境闭集。
 
-### P1：补齐本地登录退出与显式 Computer 采用
+### P1：补齐本地登录退出与显式 Computer 采用（当前 main 已实现）
 
-Raft 1.0.52 的 `logout` 只清理本机登录凭据，已连接的服务器和本地 Computer 绑定保留；CoForge 现在已提供同语义的 `coforge-computer logout`，包括稳定的 `--json` 输出，并覆盖多服务器凭据文件的单服务器删除。剩余差异是 `setup --machine`、`--fresh`、`--verbose`、`--yes` 的显式采用与迁移证据合同：CoForge 当前仍按本机 `machineId` 注册/复用，尚未把“采用已有 Computer”与“明确新建”做成用户可复核的选项。
+Raft 1.0.52 的 `logout` 只清理本机登录凭据，已连接的服务器和本地 Computer 绑定保留；CoForge 现在已提供同语义的 `coforge-computer logout`，包括稳定的 `--json` 输出，并覆盖多服务器凭据文件的单服务器删除。
+
+CoForge 当前 main 已通过 `407aa8347 feat(computer): align setup identity adoption` 增加显式采用：`setup --machine <server-or-machine-id>` 从 User-authenticated `computer:list` roster 选择已有 owned local Computer，`--fresh` 明确创建新身份，`--verbose` 输出 adoption plan/evidence，`--yes` 才跳过确认；服务端 `computer:list` 只返回当前 User 自己的 local Computer。`--machine` 与 `--fresh` 同时出现会被拒绝，身份迁移前保留旧 daemon 证据。
+
+剩余工作是跑真实浏览器/设备注册验证，并把 adoption evidence 的用户可见输出与迁移失败场景补入面向用户的 Computer 文档；当前实现已不应再描述为“按本机 machineId 静默复用”。
 
 ### P1：如果开放外部 Agent，采用“持久 inbox + cursor ack + seen frontier”合同
 
