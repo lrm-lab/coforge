@@ -245,22 +245,8 @@ export class DaemonRuntime {
       has: (agentId) => this.#offlineResidency.has(agentId),
       restate: (agentId) => this.#offlineResidency.restate(agentId),
     },
-    queuedInputDeliveries: (agentId) =>
-      this.#inputDrain
-        .get(agentId)
-        ?.items.flatMap((item) => (item.kind === "delivery" ? [item.message] : [])) ?? [],
-    drainInputDeliveries: (agentId) => {
-      const queue = this.#inputDrain.get(agentId);
-      const kept: AgentMessageDelivery[] = [];
-      if (queue)
-        queue.items = queue.items.filter((item) => {
-          if (item.kind !== "delivery") return true;
-          item.completion.resolve();
-          kept.push(item.message);
-          return false;
-        });
-      return kept;
-    },
+    queuedInputDeliveries: (agentId) => this.#inputDrain.queuedDeliveries(agentId),
+    drainInputDeliveries: (agentId) => this.#inputDrain.drainDeliveries(agentId),
     closeAgentInputQueue: (agentId, error) => this.#inputDrain.close(agentId, error),
     dropMentionAsUnknown: (message) =>
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),

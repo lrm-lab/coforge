@@ -78,6 +78,30 @@ export class AgentInputDrain {
     return completion;
   }
 
+  /** Delivery-kind messages still waiting in this Agent's queue (no removal). */
+  queuedDeliveries(agentId: string): AgentMessageDelivery[] {
+    return (
+      this.#queues
+        .get(agentId)
+        ?.items.flatMap((item) => (item.kind === "delivery" ? [item.message] : [])) ?? []
+    );
+  }
+
+  /** Removes and returns the delivery-kind items still waiting, resolving each kept item's
+   * completion — they are kept for the next launch, not failed. */
+  drainDeliveries(agentId: string): AgentMessageDelivery[] {
+    const queue = this.#queues.get(agentId);
+    const kept: AgentMessageDelivery[] = [];
+    if (!queue) return kept;
+    queue.items = queue.items.filter((item) => {
+      if (item.kind !== "delivery") return true;
+      item.completion.resolve();
+      kept.push(item.message);
+      return false;
+    });
+    return kept;
+  }
+
   /** Puts an input at the front of this Agent's queue, creating it if no input is pending. */
   prepend(
     agentId: string,
