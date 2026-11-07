@@ -43,6 +43,7 @@ import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs"
 import { setupComputerOptions } from "./setup-computers";
 import { AgentProfileTab } from "./agent-profile-tab";
 import {
+  agentMigrationRuntime,
   profileDiagnosticFacts,
   profileRuntimeSelection,
   profileUpdateInput,
@@ -122,6 +123,9 @@ export function AgentProfilePanel({
   const canManage = profile && !deleted ? canManageAgent(profile) : false;
   usePrefetchAgentActivityFeed(agentId, canManage);
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
+  // `undefined` for an unreadable stored config: the migration section's refusal names need a
+  // runtime and model, so it stays hidden with the rest of the runtime block (task #517).
+  const migrationRuntime = agentMigrationRuntime(profile?.runtimeConfig);
   const loadComputers = useServerFn(listComputers);
   // An unbound Agent needs a Computer before its runtime can be saved; once bound, only
   // "Move to another Computer" changes it.
@@ -367,14 +371,14 @@ export function AgentProfilePanel({
               ) : undefined
             }
             migration={
-              profile.computer && !deleted ? (
+              profile.computer && !deleted && migrationRuntime ? (
                 <AgentMigrationSection
                   agentId={profile.id}
                   agentName={profile.displayName || profile.name}
                   currentComputerId={profile.computer.id}
                   canMove={canManage}
-                  runtime={profile.runtimeConfig!.runtime}
-                  model={profile.runtimeConfig!.model}
+                  runtime={migrationRuntime.runtime}
+                  model={migrationRuntime.model}
                 />
               ) : undefined
             }

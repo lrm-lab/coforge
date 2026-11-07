@@ -60,6 +60,15 @@ export function profileRuntimeSelection(
   };
 }
 
+/** What the migration section's refusal names: the Agent's runtime and model. `undefined` when
+ * the stored config could not be read — the section cannot be built then and stays hidden, as
+ * the runtime rows and the config dialog already do (task #517). */
+export function agentMigrationRuntime(
+  config: RuntimeProfile["runtimeConfig"],
+): { runtime: RuntimeProvider; model: string } | undefined {
+  return config ? { runtime: config.runtime, model: config.model } : undefined;
+}
+
 /** The facts the panel's diagnostics copy writes: workspace and Computer context, the runtime
  * line ("unknown" when the stored config could not be read), the stop flag and the status. */
 export function profileDiagnosticFacts(profile: {
