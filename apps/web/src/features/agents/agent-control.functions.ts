@@ -3,6 +3,7 @@ import { declareNoStore } from "#src/features/no-store-response.server";
 import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { userAgentControl } from "#src/server/agents/user-agent-control.server";
+import { AppError } from "#src/lib/app-error";
 
 const agentId = z.uuid();
 const executeInput = z.object({
@@ -18,7 +19,14 @@ export const executeAgentControl = createServerFn({ method: "POST" })
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     declareNoStore();
     const result = await userAgentControl(db).execute({ ...data, userId: user.id, workspaceId });
-    if (result.phase === "failed") throw new Error("Agent control failed");
+    // The Daemon's reason crosses to the page, so a failed Start says why (task #682).
+    if (result.phase === "failed")
+      throw result.error
+        ? new AppError("CONFLICT", {
+            errorId: "agent-control-failed",
+            details: { reason: result.error },
+          })
+        : new Error("Agent control failed");
     if (result.error === "workspace_clear_failed")
       throw new Error("Agent workspace files could not be fully deleted");
   });

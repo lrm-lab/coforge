@@ -32,7 +32,7 @@ export function AgentErrorBanner({
   // "Error: <detail>", the same label the DM header and the Activity log give this state; a state
   // to act on shows the provider's own words (Frank, 11-07), or our guidance where none was kept.
   const status = agentDisplay(display);
-  const label = (status.alert && (display.stopDetail || status.statusDetail)) || status.label;
+  const label = status.alertText || status.label;
   return (
     <div
       role="status"

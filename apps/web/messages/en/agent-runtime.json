@@ -5,5 +5,21 @@
   "agent_form_fast_mode_help": "Run faster, at a higher cost per token.",
   "agent_form_fast_mode_not_applied": "Not applied",
   "agent_migration_error_fast_mode_unsupported": "{runtime} on {computer} cannot apply Fast mode, which this Agent uses. Turn Fast mode off, or choose another Computer.",
-  "agent_form_runtime_signed_out": "{runtime} isn’t signed in on {computer}."
+  "agent_form_runtime_signed_out": "{runtime} isn’t signed in on {computer}.",
+  "agent_stop_sign_in": "Runtime not signed in",
+  "agent_stop_sign_in_detail": "Sign in to the runtime on the Computer page, then start the Agent.",
+  "agent_stop_install": "Runtime not installed",
+  "agent_stop_install_detail": "Install the runtime on the Computer, then start the Agent.",
+  "agent_stop_update": "Runtime out of date",
+  "agent_stop_update_detail": "Update the runtime on the Computer, then start the Agent.",
+  "agent_stop_unusable": "Runtime unusable",
+  "agent_stop_unusable_detail": "Check the runtime on the Computer page, then start the Agent.",
+  "agent_stop_private": "Runtime not shared",
+  "agent_stop_private_detail": "Only the Computer's owner can use this runtime. Pick another runtime, or ask the owner to share it.",
+  "agent_stop_model": "Model unavailable",
+  "agent_stop_model_detail": "Pick another model in the Agent's runtime settings, then start the Agent.",
+  "agent_stop_environment": "Invalid environment variable",
+  "agent_stop_environment_detail": "Fix the Agent's environment variables, then start the Agent.",
+  "agent_stop_reason_sentence": "{label}. {detail}",
+  "agent_stop_reason_with_words": "{label}: {words} {detail}"
 }

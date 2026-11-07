@@ -115,3 +115,39 @@ test("a stopped Agent reads in the provider's words, and ours where none were ke
     );
   }
 });
+
+test("a runtime signed out names the reason, the runtime's own words, and what to do", () => {
+  for (const stopReason of ["runtime_login_required", "auth_failed"]) {
+    const view = agentDisplay(
+      display({ activityKind: "offline", stopReason, stopDetail: "Not logged in" }),
+    );
+    expect(view.label).toBe(m.agent_stop_sign_in());
+    expect(view.statusDetail).toBe(m.agent_stop_sign_in_detail());
+    expect(view.alert).toBe(true);
+    expect(view.alertText).toBe(
+      m.agent_stop_reason_with_words({
+        label: m.agent_stop_sign_in(),
+        words: "Not logged in",
+        detail: m.agent_stop_sign_in_detail(),
+      }),
+    );
+  }
+  // A launch failure carries no words of its own: the reason and what to do.
+  expect(
+    agentDisplay(display({ activityKind: "offline", stopReason: "runtime_login_required" }))
+      .alertText,
+  ).toBe(
+    m.agent_stop_reason_sentence({
+      label: m.agent_stop_sign_in(),
+      detail: m.agent_stop_sign_in_detail(),
+    }),
+  );
+});
+
+test("a reason nobody has to act on leaves the plain offline status", () => {
+  for (const stopReason of ["rate_limited", "runtime_start_failed", "toString", null]) {
+    const view = agentDisplay(display({ activityKind: "offline", stopReason }));
+    expect(view.label).toBe(m.agent_status_offline());
+    expect(view.alert).toBeUndefined();
+  }
+});

@@ -12,3 +12,29 @@ test("a control action names why it was refused, and asks to retry only when ret
   );
   expect(agentControlFailureMessage(new Error("network"))).toBe(m.agent_control_submit_error());
 });
+
+test("a Start the Computer refused says why and what to do", () => {
+  // As it reaches the page: the wire message, not the server's AppError instance.
+  const wire = new Error(
+    new AppError("CONFLICT", {
+      errorId: "agent-control-failed",
+      details: { reason: "runtime_login_required" },
+    }).message,
+  );
+  expect(agentControlFailureMessage(wire)).toBe(
+    m.agent_stop_reason_sentence({
+      label: m.agent_stop_sign_in(),
+      detail: m.agent_stop_sign_in_detail(),
+    }),
+  );
+});
+
+test("a reason with no guidance keeps the general message", () => {
+  const wire = new Error(
+    new AppError("CONFLICT", {
+      errorId: "agent-control-failed",
+      details: { reason: "runtime_start_failed" },
+    }).message,
+  );
+  expect(agentControlFailureMessage(wire)).toBe(m.agent_control_submit_error());
+});

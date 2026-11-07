@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { stopReasonCopy, stopReasonSentence } from "./agent-stop-reason";
 
 export type AgentControlRequest = {
   agentId: string;
@@ -161,5 +162,10 @@ export function agentControlFailureMessage(cause: unknown) {
     return m.agent_control_migrating();
   if (isAppErrorCode(cause, "CONFLICT") && cause.errorId === "agent-runtime-config-unreadable")
     return m.agent_control_runtime_config_invalid();
+  // A Start the Computer could not carry out: why, and what to do (task #682).
+  if (isAppErrorCode(cause, "CONFLICT") && cause.errorId === "agent-control-failed") {
+    const reason = stopReasonCopy(String(cause.details?.reason ?? ""));
+    if (reason) return stopReasonSentence(reason);
+  }
   return m.agent_control_submit_error();
 }

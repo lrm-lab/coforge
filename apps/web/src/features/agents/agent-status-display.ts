@@ -1,6 +1,7 @@
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import { m } from "#src/paraglide/messages";
+import { stopReasonCopy, stopReasonSentence } from "./agent-stop-reason";
 import {
   isBusyTone,
   presentActivity,
@@ -9,7 +10,7 @@ import {
 } from "./agent-activity-presentation";
 
 /** Shapes both of `agentDisplay`'s branches alike: most displays carry neither field. */
-const NO_CAPTION: { statusDetail?: string; alert?: boolean } = {};
+const NO_CAPTION: { statusDetail?: string; alert?: boolean; alertText?: string } = {};
 
 /**
  * Format a cloud decision. No clocks, process facts or history reduction here.
@@ -18,8 +19,9 @@ const NO_CAPTION: { statusDetail?: string; alert?: boolean } = {};
  * `label` — the Start/Stop button choice and the short status word stay exactly what the Daemon
  * reports. It only adds `statusDetail`, a caption shown only when the display itself is already
  * offline: normally the un-internationalized "Stopped — …" sentence, or — when the cloud display
- * carries a `billing_exhausted` stop reason — the localized quota guidance instead (the provider's
- * words replace the status word). A stopped Agent whose Daemon has not yet caught up is still
+ * carries a stop reason only a person can clear (`stopReasonCopy`) — what to do about it, with the
+ * reason as the status word (for `billing_exhausted`, the provider's own words, task #667). A
+ * stopped Agent whose Daemon has not yet caught up is still
  * described by its real display kind, not overridden into looking offline early.
  */
 export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped?: boolean }) {
@@ -34,12 +36,13 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
     };
   const kind = display.activityKind;
   const row = presentActivity({ ...display, level: kind === "error" ? "error" : "info" }).at(-1);
-  // A runtime failure that stopped the Agent with no reset (billing_exhausted) keeps its reason
-  // on the offline display; the status word names it and the caption says what to do.
-  const quotaExhausted = display.stopReason === "billing_exhausted";
-  const label = quotaExhausted
-    ? // The provider's own words (Frank, 11-07); our word only where none was kept.
-      display.stopDetail || m.agent_status_quota_exhausted()
+  // A failure only a person can clear (a quota gone, a runtime signed out) keeps its reason on
+  // the offline display; the status word names it and the caption says what to do.
+  const reason = stopReasonCopy(display.stopReason);
+  // The provider's own words for a quota (Frank, 11-07); our word only where none was kept.
+  const providerWords = display.stopReason === "billing_exhausted" ? display.stopDetail : null;
+  const label = reason
+    ? providerWords || reason.label()
     : kind === "online"
       ? m.agent_status_online()
       : kind === "offline"
@@ -60,8 +63,13 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
     tone: kind === "online" ? ("idle" as const) : kind,
     pulse: isBusyTone(kind),
     // `alert`: someone has to act, so the word reads red, with a warning sign (`AgentStatusMarker`).
-    ...(quotaExhausted
-      ? { statusDetail: m.agent_status_quota_exhausted_detail(), alert: true }
+    ...(reason
+      ? {
+          statusDetail: reason.detail(),
+          alert: true,
+          // The one line a banner has: the provider's words, or our reason and what to do.
+          alertText: providerWords || stopReasonSentence(reason, display.stopDetail),
+        }
       : options?.stopped === true && kind === "offline"
         ? { statusDetail: STOPPED_STATUS_DETAIL }
         : NO_CAPTION),
