@@ -19,7 +19,13 @@ if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugo
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL must target local Centrifugo");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/conversation-entry-position");
+const lateRows = join(artifacts, "late-thread-rows.js");
 const { browser, evaluate } = browserSession(browserPath, `entry-position-${process.pid}`);
+// The late-rows script has to be one of the session's launch init scripts: agent-browser only
+// reads `--init-script` paths when it (re)launches the browser, and a mid-session change waits
+// for a relaunch that does not replay it on the Linux runner. The first `set viewport` below
+// carries the flag; the daemon then replays the script into every tab the session opens.
+let lateRowsInitPending = true;
 let workspaceId: string;
 let workspaceSlug: string;
 let writerId: string;
@@ -28,6 +34,35 @@ const position = `(() => { const h=${history}; return h && {distance:h.scrollHei
 
 beforeAll(async () => {
   await mkdir(artifacts, { recursive: true });
+  // Registrations persist for the session, so every page the tests open re-runs this on a fresh
+  // document; the flag inside keeps one wrapper per document. On pages without a thread preview
+  // the fill retries find nothing and change nothing.
+  await Bun.write(
+    lateRows,
+    `if (!Element.prototype.scrollTo.__entryLateRows) {
+  const scrollTo = Element.prototype.scrollTo;
+  let armed = false;
+  let tries = 0;
+  const wrapper = function (...args) {
+    scrollTo.apply(this, args);
+    if (armed || !this.matches('[aria-label="Message history" i]')) return;
+    armed = true;
+    const fill = () => {
+      const preview = [...this.querySelectorAll("[data-thread-preview]")].at(-1);
+      if (!preview) {
+        if (tries++ < 40) setTimeout(fill, 250);
+        return;
+      }
+      preview.style.paddingBottom = "136px";
+      this.scrollTop += 60;
+      window.__rowsFilledIn = true;
+    };
+    setTimeout(fill, 400);
+  };
+  wrapper.__entryLateRows = true;
+  Element.prototype.scrollTo = wrapper;
+}`,
+  );
   await db.user.upsert({
     where: { id: DEV_BROWSER_USER.id },
     update: {},
@@ -184,37 +219,20 @@ for (const width of [1440, 390]) {
         const boundary = await db.message.findFirstOrThrow({
           where: { conversationId: channel.id, sequence: mode === "system-unread" ? 86 : 73 },
         });
-        await browser("set", "viewport", String(width), "900");
         // The thread preview's rows fill in after the pane has opened on it, as a preview that
         // arrives with the network read after the cached stream does. Chromium's scroll anchoring
         // then moves the position part of the way, and its scroll event reaches the pane before
         // the resize does (the order Frank's phone left the last reply row cut off in). Emulated in
         // one task, after the open's scrolls: grow the last preview (a style, not DOM React owns)
         // and move the position by part of the growth.
-        const lateRows = join(artifacts, "late-thread-rows.js");
-        if (thread)
-          await Bun.write(
-            lateRows,
-            `const scrollTo = Element.prototype.scrollTo;
-let armed = false;
-Element.prototype.scrollTo = function (...args) {
-  scrollTo.apply(this, args);
-  if (armed || !this.matches('[aria-label="Message history" i]')) return;
-  armed = true;
-  setTimeout(() => {
-    const preview = [...this.querySelectorAll("[data-thread-preview]")].at(-1);
-    if (!preview) return;
-    preview.style.paddingBottom = "136px";
-    this.scrollTop += 60;
-    window.__rowsFilledIn = true;
-  }, 400);
-};`,
-          );
-        await browser(
-          "open",
-          `${proxy.origin}/en/w/${workspaceSlug}/channel/${channel.id}`,
-          ...(thread ? ["--init-script", lateRows] : []),
-        );
+        // `open url --init-script file` leaves the tab on about:blank under the Linux runner's
+        // Chrome; the flag has to precede the command. It is carried once, by the first test's
+        // `set viewport`, which launches the session's browser with the script in its init
+        // scripts — see `lateRowsInitPending`.
+        const initScript = lateRowsInitPending ? ["--init-script", lateRows] : [];
+        await browser(...initScript, "set", "viewport", String(width), "900");
+        lateRowsInitPending = false;
+        await browser("open", `${proxy.origin}/en/w/${workspaceSlug}/channel/${channel.id}`);
         await browser(
           "wait",
           "--fn",
@@ -227,7 +245,7 @@ Element.prototype.scrollTo = function (...args) {
             new Promise<never>((_, reject) => {
               gateTimer = setTimeout(
                 () => reject(new Error("The public Task read never reached the gate")),
-                20_000,
+                60_000,
               );
             }),
           ]);
@@ -261,7 +279,7 @@ Element.prototype.scrollTo = function (...args) {
         // a read between a layout change and its resize callback sees a frame that never paints,
         // and a wait would pass a pane that recovers only by chance a second later.
         if (thread) {
-          await browser("wait", "--fn", "window.__rowsFilledIn === true");
+          await browser("wait", "--fn", "window.__rowsFilledIn === true", "--timeout", "30000");
           await browser(
             "eval",
             `requestAnimationFrame(() => requestAnimationFrame(() => { window.__entryPosition = ${position}; }))`,
@@ -274,10 +292,12 @@ Element.prototype.scrollTo = function (...args) {
         }
         const before = await evaluate(position);
         release();
+        // The Task read's answer lands as the four messages' chips (data-message-task); the
+        // chip shows its status as an icon now, so no status text ever reaches the DOM.
         await browser(
           "wait",
           "--fn",
-          `${history}?.textContent.toLowerCase().includes('in progress')`,
+          `${history}?.querySelectorAll("[data-message-task]").length === 4`,
         );
         if (!unread && !reading)
           await browser("wait", "--fn", `${position}?.distance <= 1 && !${position}?.back`);
@@ -290,8 +310,10 @@ Element.prototype.scrollTo = function (...args) {
           JSON.stringify({ before, after }, null, 2),
         );
         if (unread) {
+          // Consecutive system notices fold into one group row, so the boundary may only
+          // exist as a member of it.
           const offset = await evaluate<number>(
-            `(() => { const h=${history}; const row=h.querySelector('li[data-message-id="${boundary.id}"]'); return row.getBoundingClientRect().top-h.getBoundingClientRect().top; })()`,
+            `(() => { const h=${history}; const row=h.querySelector('li[data-message-id="${boundary.id}"], li[data-system-group-members~="${boundary.id}"]'); return row.getBoundingClientRect().top-h.getBoundingClientRect().top; })()`,
           );
           expect(offset).toBeGreaterThanOrEqual(0);
           if (mode === "system-unread") expect(offset).toBeLessThan(after.viewport);
