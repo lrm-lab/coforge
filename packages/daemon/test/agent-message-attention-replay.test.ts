@@ -80,6 +80,73 @@ test("a replacement session does not recover a message already consumed by the p
   }
 });
 
+/** The phantom-notice shape end to end: a task read moves the durable cursor, the daemon
+ * restarts, and the recovery pass the server still counts the message in must not notify —
+ * and must say so in the decision log. */
+test("a recovery after restart does not notify a message the task read already consumed", async () => {
+  const root = join(tmpdir(), `coforge-replay-${crypto.randomUUID()}`);
+  try {
+    const store = new AgentConsumedSeqStore(root);
+    const notices: string[] = [];
+    const ports = {
+      session: () => session((notice) => notices.push(notice)),
+    };
+    const hold = { shouldHold: () => false, enqueue: () => {}, busy: () => {} };
+    const before = new AgentMessageAttentionIndex(
+      "workspace-1",
+      ports,
+      async () => {},
+      () => {},
+      { ...hold, consumedSeqs: store },
+    );
+    before.bindConversation("agent-1", "#team", "conversation-1");
+    before.recordHistoryRead("agent-1", {
+      spelling: "#team",
+      target: "#team",
+      shown: [],
+      through: 5,
+    });
+
+    // A new daemon process: volatile state gone, only the consumed-seqs file remains.
+    const after = new AgentMessageAttentionIndex(
+      "workspace-1",
+      ports,
+      async () => {},
+      () => {},
+      { ...hold, consumedSeqs: store },
+    );
+    const recovered = {
+      messageId: "message-read-before-restart",
+      deliveryId: "delivery-read-before-restart",
+      conversationId: "conversation-1",
+      sequence: 3,
+      target: "#team",
+      latestSenderKind: "human" as const,
+      latestSenderHandle: "ada",
+      latestSenderDescription: "",
+      body: "already read",
+    };
+    const decisions = (
+      await captureDaemonLogs(() => after.recover("agent-1", [recovered], {}))
+    ).records
+      .filter((record) => record.properties.event === "agent.message.attention_decision")
+      .map((record) => record.properties);
+
+    expect(notices).toEqual([]);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        delivery_id: "delivery-read-before-restart",
+        target: "#team",
+        sequence: 3,
+        outcome: "consumed",
+        model_seen_seq: 5,
+      }),
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("an answer to the Agent's own card notifies even though the card is already read", async () => {
   // The server delivers an answered card as a `choice` delivery carrying the card's own
   // sequence, and the Agent wrote (so read) that card: the read state cannot cover the answer.
