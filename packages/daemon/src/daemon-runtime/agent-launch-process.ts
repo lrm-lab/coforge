@@ -17,6 +17,14 @@ import { isBusyActivityDetailKind } from "./agent-activity-publisher";
 import { runtimeDisplayName } from "./session-invalidate-activity";
 import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
 import { requestAgentLaunchConfig } from "./agent-launch-config";
+import { agentLaunchTag } from "#src/platform/agent-launch-tag";
+import {
+  agentRelaunchPending,
+  claimAgentLaunchTagSweep,
+  clearAgentLaunchTag,
+  setAgentLaunchTag,
+  sweepAgentLaunchTagStrays,
+} from "./agent-launch-tags";
 import { restoreSupersededAgentApiKey } from "./agent-api-key-revoke";
 import { restoreSupersededProxyToken } from "./agent-launch-revocation";
 import { wakeReusedAgent } from "./agent-wake-control";
@@ -65,6 +73,8 @@ export async function launchAgentProcess(
   // credential nor its local proxy binding mid-flight.
   let priorAgentApiKey: string | undefined;
   let priorProxyToken: string | undefined;
+  // Minted inside the try; empty until then so the catch can drop a failed launch's token.
+  let launchTagToken = "";
   let proxyToken: string | undefined;
   let localContext: string | undefined;
   try {
@@ -141,6 +151,12 @@ export async function launchAgentProcess(
     // request, and whether the provider produced model output before the process ended.
     const earlyCrashWatch = new ResumedEarlyCrashWatch();
     // The adapter's own spawn + ACP initialize complete with this call; one phase covers both.
+    // The launch tag is minted per process launch, never the reused launch identity: a wake
+    // reusing `launchId` must still produce a token no earlier stray can share (task #673).
+    launchTagToken = crypto.randomUUID();
+    // Registered before the spawn so a concurrent sweep's spare check already protects the
+    // new runtime's processes; a failed start leaves a token no live process carries.
+    setAgentLaunchTag(agentId, launchTagToken);
     const runtime = await ports.agentProcessManager.start(
       agentId,
       {
@@ -164,6 +180,7 @@ export async function launchAgentProcess(
             agentWorkspaceDirectory: workspaceDirectory,
             identity: launchConfig.identity,
           }),
+          COFORGE_AGENT_LAUNCH_TAG: agentLaunchTag(agentId, launchTagToken),
         },
         runtimeId: launch.launchId,
         onSessionId: sessionIds.onSessionId,
@@ -180,6 +197,8 @@ export async function launchAgentProcess(
       },
     );
     timing.phase("provider_session");
+    // Strays from before this Daemon started are collected once, on the Agent's first launch.
+    if (claimAgentLaunchTagSweep(agentId)) sweepAgentLaunchTagStrays(agentId, "launch");
     await openLaunchSessionMemory({
       agentId,
       launchId: launch.launchId,
@@ -254,6 +273,9 @@ export async function launchAgentProcess(
         logAgentApiKeyRevokeFailed(agentId, revokeError);
       });
       unsubscribe();
+      // The exited launch's token leaves the registry so its strays are never spared as
+      // "current"; the guarded clear leaves a newer launch's token alone (task #673).
+      clearAgentLaunchTag(agentId, launchTagToken);
       if (launch.stopping) return;
       // A process that ended without a crash has stopped working too.
       if (!launch.crashDetail) {
@@ -313,6 +335,17 @@ export async function launchAgentProcess(
         streak: ports.resumedEarlyCrash,
         coldStart: (id, stale) => ports.coldStartResumedSession(id, launch, stale),
       });
+      // Collect strays only when a crash leaves the Agent stopped for good: an automatic
+      // relaunch, a pending managed Start or a quota wait means it continues under a new
+      // token and keeps its background processes (#673).
+      if (
+        (launch.crashDetail !== undefined || launch.offlineError !== undefined) &&
+        !ports.isStopping() &&
+        !agentRelaunchPending(agentId) &&
+        !ports.agentControl.startPending(agentId) &&
+        !ports.offlineResidency.hasLaunchWait(agentId)
+      )
+        sweepAgentLaunchTagStrays(agentId, "exit");
     });
     if (reused)
       wakeReusedAgent(runtime.session, (identity) =>
@@ -323,6 +356,9 @@ export async function launchAgentProcess(
   } catch (error) {
     ports.desktops.end(agentId);
     launch.startup?.dispose();
+    // A failed launch's token must not stay registered: its partial spawn's strays would
+    // otherwise be spared as "current" by every later sweep (task #673).
+    if (launchTagToken) clearAgentLaunchTag(agentId, launchTagToken);
     restoreSupersededProxyToken(ports.agentProxyTokens, agentId, proxyToken, priorProxyToken);
     // Only what this launch issued is revoked: a launch that failed before the issue touches
     // no table entry, and the running process's own pair is never read as this launch's.

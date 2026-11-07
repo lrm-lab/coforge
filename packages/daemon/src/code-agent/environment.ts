@@ -42,6 +42,10 @@ export const DAEMON_LAUNCH_ENV_KEYS = [
   "COFORGE_CURRENT_COMPUTER_VERSION",
   "COFORGE_CURRENT_AGENT_WORKSPACE_PATH",
   "COFORGE_GIT_CONFIG_BASE_COUNT",
+  // The per-launch process tag the descendant sweep collects by (task #673). Daemon-owned like
+  // the identity variables above: an Agent must not forge another launch's tag onto its own
+  // stray processes, nor strip it from them.
+  "COFORGE_AGENT_LAUNCH_TAG",
   // A Workspace Daemon's own scope (`supervisor/`, and `daemon-host/` for the connection
   // endpoint). Nothing inside an Agent reads them; an Agent's tools that inherited them would act
   // on that Workspace (a Daemon test run from an Agent's checkout booted out every Agent job of

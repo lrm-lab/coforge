@@ -28,6 +28,7 @@ import {
 import { type AgentActivity } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { launchAgentProcess } from "./agent-launch-process";
+import { noteAgentRelaunchPending } from "./agent-launch-tags";
 import { getLogger } from "@logtape/logtape";
 import type { AgentSessionReport } from "@lrm/coforge-sdk/internal";
 import { SystemCleaner } from "#src/system-cleaner/system-cleaner";
@@ -302,6 +303,9 @@ export class AgentLaunchCoordinator {
         sessionMode: "create",
       });
     this.ports.agentProcessManager.clearRestartSession(agentId);
+    // The exit that triggered this cold start must not sweep the strays the relaunch keeps
+    // using; the mark clears when the new launch registers its tag token (task #673).
+    noteAgentRelaunchPending(agentId);
     this.ports.relaunchResumed(agentId, restart.config, {
       sessionMode: "create",
       replacedSessionId: staleSessionId,

@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONTAINER_BINDING_ENV_KEYS } from "@coforge/computer/src/host/container-binding-env";
 import { DAEMON_LAUNCH_ENV_KEYS } from "@lrm/coforge-daemon/src/code-agent/environment";
+import { AGENT_LAUNCH_TAG_ENV } from "@lrm/coforge-daemon/src/platform/agent-launch-tag";
 
 /** The parent's environment without any Agent's or Workspace's CoForge variables, with the
  * Daemon's state directory at `daemonHome` (its default is the machine's real `~/.coforge/daemon`).
@@ -27,6 +28,10 @@ export function isolatedTestEnvironment(
   withoutDaemonGitConfig(environment);
   for (const name of [...DAEMON_LAUNCH_ENV_KEYS, ...CONTAINER_BINDING_ENV_KEYS])
     delete environment[name];
+  // The launch tag is opaque and grants nothing; keeping it lets the Agent's descendant sweep
+  // still collect servers a test run leaves behind (task #673).
+  const launchTag = parent[AGENT_LAUNCH_TAG_ENV];
+  if (launchTag !== undefined) environment[AGENT_LAUNCH_TAG_ENV] = launchTag;
   environment.COFORGE_DAEMON_HOME = daemonHome;
   return environment;
 }

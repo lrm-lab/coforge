@@ -9,6 +9,11 @@ import type { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 import { logAgentApiKeyRevokeFailed } from "./agent-failure-logs";
+import {
+  agentLaunchTagToken,
+  clearAgentLaunchTag,
+  sweepAgentLaunchTagStrays,
+} from "./agent-launch-tags";
 
 export type AgentStopCoordinatorPorts = {
   agentLaunches: Map<string, Promise<AgentRuntime>>;
@@ -61,6 +66,15 @@ export class AgentStopCoordinator {
         logAgentApiKeyRevokeFailed(agentId, error);
       });
     await this.ports.processManager.stop(agentId);
+    // Descendants that escaped the process-tree cleanup still carry launch tags from every
+    // launch this Agent ran; embedded providers have no process-exit event to sweep from, so
+    // the stop path collects them here (task #673). The sweep is Agent-scoped — a deliberate
+    // Stop ends every launch's strays, including one already in flight: only a launch that
+    // registers its token after this clear is spared. It runs even with no registered
+    // token: the exited launch's own handler clears the registry before this point.
+    const stoppedTagToken = agentLaunchTagToken(agentId);
+    if (stoppedTagToken !== undefined) clearAgentLaunchTag(agentId, stoppedTagToken);
+    sweepAgentLaunchTagStrays(agentId, "stop");
     this.ports.messageAttention.clearAgent(agentId);
     this.ports.deliveryQueue.clearAgent(agentId);
     this.ports.runtimeErrorHold.forget(agentId);

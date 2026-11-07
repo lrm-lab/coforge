@@ -11,6 +11,8 @@ import {
   stopLaunchdAgents,
 } from "#src/platform/launchd-process";
 import { workspaceLaunchdIdentity } from "#src/supervisor/launchd-workspace-instance";
+import { agentLaunchTag } from "#src/platform/agent-launch-tag";
+import { sweepAgentLaunchTags } from "#src/platform/agent-launch-tag-sweep";
 import { readLines } from "./fixtures/read-lines";
 
 // Explicit invocation, macOS only, from packages/daemon:
@@ -155,6 +157,55 @@ test("stopping one Agent cleans its descendants without stopping its peer", asyn
     await rm(root, { recursive: true, force: true });
   }
 }, 15_000);
+
+test("a double-forked launchd escapee is collected by the launch-tag sweep with zero survivors", async () => {
+  const root = await mkdtemp("/private/tmp/coforge-agent-test-");
+  const prefix = agentPrefix(root);
+  const owner = new LaunchdProcessOwner({
+    directory: root,
+    prefix,
+    runner: [process.execPath, `${import.meta.dir}/fixtures/launchd-agent-runner.ts`],
+  });
+  const agentId = crypto.randomUUID();
+  const token = crypto.randomUUID();
+  // The escapee double-forks and setsids before exec'ing Bun, so it is parented to launchd
+  // before any descendant snapshot can see it; only its inherited launch tag identifies it.
+  // Bun is used because Apple platform binaries do not expose their environment to `ps eww`.
+  // The token inside the evaluated code makes the escapee findable by pgrep -f.
+  const code = `setTimeout(() => {}, 300000);//${token}`;
+  const script = `/usr/bin/perl -MPOSIX -e 'if (fork) { wait } else { setsid(); if (fork) { exit } exec $ENV{COFORGE_BUN}, "-e", $ENV{COFORGE_BUN_CODE} }' & wait`;
+  const tree = owner.spawn(["/bin/sh", "-c", script], root, {
+    PATH: "/usr/bin:/bin",
+    COFORGE_BUN: process.execPath,
+    COFORGE_BUN_CODE: code,
+    COFORGE_AGENT_LAUNCH_TAG: agentLaunchTag(agentId, token),
+  });
+  let escapeePid = 0;
+  try {
+    // Wait until the double-forked escapee is actually running before stopping the tree.
+    for (let i = 0; i < 50 && escapeePid === 0; i++) {
+      const found = Bun.spawnSync(["pgrep", "-f", token]);
+      escapeePid = Number(new TextDecoder().decode(found.stdout).trim().split("\n")[0]) || 0;
+      if (escapeePid === 0) await Bun.sleep(100);
+    }
+    expect(escapeePid).toBeGreaterThan(0);
+    await tree.terminate(false);
+    expect(await tree.waitForExit(5000)).toBe(true);
+    const report = await sweepAgentLaunchTags({ agentId, trigger: "test" });
+    expect(report.matched).toBeGreaterThanOrEqual(1);
+    expect(report.killed).toBe(report.matched);
+    expect(report.unkilled).toEqual([]);
+    await Bun.sleep(300);
+    expect(() => process.kill(escapeePid, 0)).toThrow();
+  } finally {
+    try {
+      process.kill(escapeePid, "SIGKILL");
+    } catch {}
+    await tree.terminate(true);
+    await stopLaunchdAgents(prefix, root);
+    await rm(root, { recursive: true, force: true });
+  }
+}, 20_000);
 
 for (const ignoresTerm of [false, true]) {
   test(`native PTY job ${ignoresTerm ? "escalates an unresponsive child" : "preserves TTY, input and TERM flush"}`, async () => {

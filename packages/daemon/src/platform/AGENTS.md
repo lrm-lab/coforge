@@ -40,6 +40,28 @@ Rules for OS primitives in `src/platform/`. They extend
   children in a Job Object and waits for an empty job before allowing a
   replacement launch. When the Job Object APIs cannot be loaded, it fails
   closed.
+- `agent-launch-tag.ts` owns the `COFORGE_AGENT_LAUNCH_TAG` name and its
+  `<agentId>:<launchToken>` value; `agent-launch-tag-sweep.ts` collects the
+  processes carrying it — including descendants that setsid, double-forked or
+  reparented to launchd before the process-tree snapshot. It runs only where
+  the Daemon decided the Agent really stopped: an explicit Stop, a crash exit
+  no relaunch will replace, or the Agent's first launch since this Daemon
+  process started (which clears what a previous Daemon's crash left). A wake,
+  cold-idle recycle, stalled recovery or turn boundary never sweeps, so
+  background processes the Agent still uses survive them. The sweep extracts
+  the tag while parsing and never retains raw environment text, verifies pid
+  plus start time before every signal, and a scan failure degrades to the
+  previous cleanup behavior. Documented boundaries it cannot reach: a
+  descendant that scrubs its environment (`env -i`), a process launchd or
+  `open` starts outside the Agent's own chain, a provider tool that spawns
+  outside the session environment (a Pi extension that defines its own bash
+  tool), and — on macOS only — a process whose executable is an Apple
+  platform binary (`sh`, `sleep`, `tail`): the kernel does not expose their
+  environment to `ps eww`, so they are invisible to the scan. Linux `/proc`
+  has no such restriction. On macOS `ps eww` also mixes command arguments
+  into the same tail as the environment, so a command argument containing a
+  complete tag-shaped value can match; the value's rigid UUID:UUID shape
+  makes accidental matches vanishingly unlikely.
 
 ## Login-shell PATH and environment
 

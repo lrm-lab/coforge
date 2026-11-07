@@ -6,6 +6,15 @@ export {};
 // every `coforge:startup:` mark); written here because nothing else is loaded yet.
 performance.mark("coforge:startup:main");
 
+// A CoForge service or management process started from an Agent's shell (an upgrade, a restart,
+// a foreground start) would inherit the Agent's launch tag and be collected as one of its
+// strays, then pass the tag to everything it spawns (task #673). Agent-facing modes keep it:
+// `__managed-agent` relays it into the Agent runtime itself, `__agent-cli` runs inside the
+// Agent's own process tree. The literal mirrors `AGENT_LAUNCH_TAG_ENV` in the daemon package —
+// importing it here would pull the Daemon into every CLI invocation.
+if (Bun.argv[2] !== "__managed-agent" && Bun.argv[2] !== "__agent-cli")
+  delete Bun.env.COFORGE_AGENT_LAUNCH_TAG;
+
 // Dispatch before importing either runtime so Agent commands never initialize
 // Computer logging, Daemon sockets, or Workspace recovery.
 if (Bun.argv[2] === "__pi-chat") {
