@@ -45,8 +45,9 @@ const activeMemberships = (workspaceId: string, agentId: string) => Prisma.sql`
  *
  * Our own definition of unread, not Raft's: the top-level messages other people wrote after the
  * Agent's read position (`agentReadThroughSequence`, the one `message read` advances). Thread
- * replies are followed through their threads and left out, as are the Agent's own messages, App
- * event conversations, archived channels and channels hidden from the Workspace.
+ * replies are followed through their threads and left out, as are the Agent's own messages, system
+ * notices (no sender member, the same rule `HUMAN_UNREAD_BASE_SQL` uses), App event conversations,
+ * archived channels and channels hidden from the Workspace.
  */
 async function unreadConversations(
   db: Pick<PrismaClient, "$queryRaw">,
@@ -68,6 +69,7 @@ async function unreadConversations(
       WHERE x."conversationId" = mine."conversationId" AND x."threadRootId" IS NULL
         AND x.sequence > mine."readSeq"
         AND (${directConversationSql("mine")} OR x."createdAt" >= mine."joinedAt")
+        AND x."senderMemberId" IS NOT NULL
         AND x."senderMemberId" IS DISTINCT FROM mine."memberId"
     ) u
     LEFT JOIN LATERAL (
@@ -112,6 +114,7 @@ async function unreadThreads(
       FROM "messages" x
       WHERE x."conversationId" = tf."conversationId" AND x."threadRootId" = tf."rootMessageId"
         AND x.sequence > COALESCE(tr."readThroughSequence", 0)
+        AND x."senderMemberId" IS NOT NULL
         AND x."senderMemberId" IS DISTINCT FROM mine."memberId"
     ) u
     WHERE mine."channelName" IS NOT NULL AND u.unread > 0`;
