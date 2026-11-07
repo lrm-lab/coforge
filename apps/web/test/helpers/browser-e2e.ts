@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 
 /** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
 export function seededUuid(key: string): string {
@@ -36,6 +38,46 @@ export function localBrowserE2e() {
   if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
     throw new Error("DATABASE_URL must target local PostgreSQL");
   return { origin, browserPath, databaseUrl };
+}
+
+/**
+ * Init script for a desktop e2e on a headless Linux runner: with no input devices Chrome reports
+ * `(hover: none)` and `(any-pointer: coarse)` there (headed Chrome and macOS headless report a
+ * fine pointer), and product code takes its coarse-pointer layout — a members row's actions sit
+ * behind a menu button instead of inline ones. This answers queries made of pointer and hover
+ * features as a desktop mouse would; a query that also names a width, scheme or motion, and every
+ * other feature, still comes from the real `matchMedia`.
+ */
+export const DESKTOP_POINTER_INIT = `(() => {
+  const real = window.matchMedia.bind(window);
+  window.matchMedia = (query) => {
+    const q = String(query);
+    if (
+      /(any-)?(pointer|hover)/.test(q) &&
+      !/width|height|min-|max-|resolution|aspect|orientation|color|motion|scan|grid|update|overflow|display-mode|forced-colors|inverted-colors|prefers-/.test(q)
+    ) {
+      const matches = !/coarse|none/.test(q);
+      return {
+        matches,
+        media: q,
+        onchange: null,
+        addListener() {},
+        removeListener() {},
+        addEventListener() {},
+        removeEventListener() {},
+        dispatchEvent: () => false,
+      };
+    }
+    return real(query);
+  };
+})();`;
+
+/** Writes {@link DESKTOP_POINTER_INIT} under `directory` and returns its path for `--init-script`. */
+export async function desktopPointerInitScript(directory: string) {
+  await mkdir(directory, { recursive: true });
+  const file = join(directory, "desktop-pointer.js");
+  await Bun.write(file, DESKTOP_POINTER_INIT);
+  return file;
 }
 
 /** One agent-browser session: its commands, and a page expression read back as JSON. */
