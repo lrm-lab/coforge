@@ -3,6 +3,7 @@ import { getLogger } from "@logtape/logtape";
 import { redactCredentials } from "@lrm/coforge-sdk/internal";
 import { JsonlProtocolError, JsonlRequestError } from "./jsonl-error";
 import { scrubRuntimeErrorText } from "./runtime-error-text";
+import { newestLinesWithin, STDERR_EXCERPT_MAX_CHARS } from "./stderr-excerpt";
 import {
   PROCESS_TREE_EXIT_GRACE_MS,
   type OwnedChildProcess,
@@ -82,7 +83,8 @@ export class JsonlProcess {
 
   /** What stderr has said so far, secrets stripped and capped. Empty until a non-empty line arrives. */
   stderrExcerpt(): string {
-    return this.#stderrTail.length === 0 ? "" : scrubRuntimeErrorText(this.#stderrTail.join("\n"));
+    if (this.#stderrTail.length === 0) return "";
+    return newestLinesWithin(this.#stderrTail.map(scrubRuntimeErrorText), STDERR_EXCERPT_MAX_CHARS);
   }
 
   onRecord(listener: (record: JsonRecord) => void): () => void {

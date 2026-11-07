@@ -355,6 +355,62 @@ test("a hung session/new from a silent runtime keeps the plain timeout error", a
   }
 });
 
+test("a hung session/new carries the routine log line that names the stalled path", async () => {
+  // What the cloud computer showed (task #683): stderr holds nothing but routine INFO narrative,
+  // and the last line before the hang is the runtime's `watcher subscribe`. It is still the only
+  // thing that says where the open is stuck, so the deadline's error has to carry it.
+  const routine =
+    'timestamp=2026-11-07T14:00:00.000Z level=INFO run=abc message="cli starting"\n' +
+    'timestamp=2026-11-07T14:00:01.000Z level=INFO run=abc message="watcher subscribe" path=/mnt/data type=directory ignores=0';
+  const f = await fixture(
+    { OPENCODE_ACP_FIXTURE_HANG_SESSION_OPEN: "1", OPENCODE_ACP_FIXTURE_STDERR: routine },
+    800,
+  );
+  try {
+    const error = await f.provider
+      .createAgentSession(options(f.cwd) as never)
+      .then(() => null)
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("session/new timed out");
+    expect((error as Error).message).toContain("watcher subscribe");
+    expect((error as Error).message).toContain("/mnt/data");
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("a hung session/new keeps the newest log line when the tail outgrows the error budget", async () => {
+  // The visible error is capped at 512 characters from its start. The runtime's routine narrative
+  // is long, and the line that names the stalled path arrives last — so a head-first cut drops
+  // exactly the line that says where the open is stuck (task #683).
+  const filler = Array.from(
+    { length: 4 },
+    (_, index) =>
+      `timestamp=2026-11-07T14:00:0${index}.000Z level=INFO run=abc message="cli starting phase ${index}" detail=${"x".repeat(120)}`,
+  ).join("\n");
+  const last =
+    'timestamp=2026-11-07T14:00:09.000Z level=INFO run=abc message="watcher subscribe" path=/mnt/data type=directory ignores=0';
+  const f = await fixture(
+    {
+      OPENCODE_ACP_FIXTURE_HANG_SESSION_OPEN: "1",
+      OPENCODE_ACP_FIXTURE_STDERR: `${filler}\n${last}`,
+    },
+    800,
+  );
+  try {
+    const error = await f.provider
+      .createAgentSession(options(f.cwd) as never)
+      .then(() => null)
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("session/new timed out");
+    expect((error as Error).message).toContain("/mnt/data");
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("routine --print-logs stderr on a normal session end raises no warning", async () => {
   const hints: string[][] = [];
   const routine =
