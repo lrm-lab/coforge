@@ -30,6 +30,7 @@ test("an operation logs received then result_sent under one request id", async (
     }),
   ]);
   const [received, sent] = phases(records);
+  if (!received || !sent) throw new Error("expected received and result_sent phases");
   expect(typeof received.elapsed_ms).toBe("number");
   expect(typeof received.since_previous_ms).toBe("number");
   expect(sent.elapsed_ms as number).toBeGreaterThanOrEqual(received.elapsed_ms as number);
