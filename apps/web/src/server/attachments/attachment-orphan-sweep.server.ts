@@ -16,6 +16,8 @@ import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 
 /** How long an unclaimed upload may sit before the sweep removes it (task #627: seven days). */
 export const ORPHAN_ATTACHMENT_RETENTION_MS = 7 * 86_400_000;
+/** A `verifying` session untouched this long is counted as a zombie (task #627: one hour). */
+export const UPLOAD_SESSION_ZOMBIE_MS = 60 * 60 * 1_000;
 /** The sweep's period: once a day, on every instance. */
 export const ATTACHMENT_ORPHAN_SWEEP_MS = 24 * 60 * 60 * 1_000;
 /** Candidates one statement handles, so no delete holds a long lock. */
@@ -30,6 +32,7 @@ export function orphanAttachmentCutoff(now: Date): Date {
 
 type OrphanCandidate = { id: string; objectKey: string };
 type OrphanSweepDb = Pick<PrismaClient, "attachment">;
+type UploadSessionSweepDb = Pick<PrismaClient, "attachmentUploadSession">;
 
 /** One batch of unclaimed attachments older than the cutoff, oldest first. */
 export async function orphanAttachmentCandidates(
@@ -118,6 +121,88 @@ export async function sweepOrphanedAttachmentRows(
   return { candidates, deleted, objectRemoveFailures };
 }
 
+/**
+ * Upload sessions abandoned past their own expiry: a `pending` session whose `expiresAt` has
+ * passed can never complete (`complete` expires it itself), so the sweep removes the row and
+ * its reserved object. `verifying` sessions are never touched — a stuck one is only counted
+ * ({@link countVerifyingUploadSessionZombies}) until there is data on how often they occur.
+ */
+export async function expiredUploadSessionCandidates(
+  db: UploadSessionSweepDb,
+  now: Date,
+  take: number = SWEEP_BATCH,
+): Promise<OrphanCandidate[]> {
+  return db.attachmentUploadSession.findMany({
+    where: { state: "pending", expiresAt: { lt: now } },
+    orderBy: { expiresAt: "asc" },
+    take,
+    select: { id: true, objectKey: true },
+  });
+}
+
+/**
+ * Deletes the candidates still `pending` and returns the object keys of the rows it removed.
+ * The `state: "pending"` fence re-checks inside the delete, so a session `complete` claimed
+ * for verification after the candidate read keeps its row and its object.
+ */
+export async function deleteExpiredUploadSessions(
+  db: UploadSessionSweepDb,
+  candidates: readonly OrphanCandidate[],
+): Promise<string[]> {
+  if (candidates.length === 0) return [];
+  const ids = candidates.map((row) => row.id);
+  const deleted = await db.attachmentUploadSession.deleteMany({
+    where: { id: { in: ids }, state: "pending" },
+  });
+  if (deleted.count === 0) return [];
+  const survivors = await db.attachmentUploadSession.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  const survivorIds = new Set(survivors.map((row) => row.id));
+  return candidates.filter((row) => !survivorIds.has(row.id)).map((row) => row.objectKey);
+}
+
+/** `verifying` sessions whose last state change is over an hour old — the zombie count. */
+export async function countVerifyingUploadSessionZombies(
+  db: UploadSessionSweepDb,
+  now: Date,
+): Promise<number> {
+  return db.attachmentUploadSession.count({
+    where: {
+      state: "verifying",
+      updatedAt: { lt: new Date(now.getTime() - UPLOAD_SESSION_ZOMBIE_MS) },
+    },
+  });
+}
+
+export type OrphanUploadSessionSweepStats = OrphanAttachmentSweepStats & {
+  verifyingZombies: number;
+};
+
+/** One pass over expired `pending` upload sessions plus the zombie count; see above. */
+export async function sweepOrphanedUploadSessions(
+  db: UploadSessionSweepDb,
+  files: () => Promise<BulkFileRemoval>,
+  now: Date = new Date(),
+): Promise<OrphanUploadSessionSweepStats> {
+  const objectKeys: string[] = [];
+  let candidates = 0;
+  let deleted = 0;
+  for (let batch = 0; batch < SWEEP_MAX_BATCHES; batch += 1) {
+    const rows = await expiredUploadSessionCandidates(db, now);
+    if (rows.length === 0) break;
+    candidates += rows.length;
+    const keys = await deleteExpiredUploadSessions(db, rows);
+    deleted += keys.length;
+    objectKeys.push(...keys);
+    if (rows.length < SWEEP_BATCH) break;
+  }
+  const objectRemoveFailures = await removeOrphanObjects(files, objectKeys);
+  const verifyingZombies = await countVerifyingUploadSessionZombies(db, now);
+  return { candidates, deleted, objectRemoveFailures, verifyingZombies };
+}
+
 let started = false;
 let sweeping = false;
 
@@ -132,29 +217,49 @@ export function ensureAttachmentOrphanSweep(): void {
   const sweep = async () => {
     if (sweeping) return;
     sweeping = true;
-    const began = Date.now();
     try {
-      const stats = await sweepOrphanedAttachmentRows(
-        requireDatabaseClient(),
-        getFileStorage,
-        new Date(),
-      );
-      console.info(
-        JSON.stringify({
-          event: "attachment_orphans:swept",
-          attachment_candidates: stats.candidates,
-          attachments_deleted: stats.deleted,
-          object_remove_failures: stats.objectRemoveFailures,
-          duration_ms: Date.now() - began,
-        }),
-      );
-    } catch (error) {
-      console.warn(
-        JSON.stringify({
-          event: "attachment_orphans:sweep_failed",
-          error_type: errorType(error),
-        }),
-      );
+      const db = requireDatabaseClient();
+      const began = Date.now();
+      try {
+        const stats = await sweepOrphanedAttachmentRows(db, getFileStorage, new Date());
+        console.info(
+          JSON.stringify({
+            event: "attachment_orphans:swept",
+            attachment_candidates: stats.candidates,
+            attachments_deleted: stats.deleted,
+            object_remove_failures: stats.objectRemoveFailures,
+            duration_ms: Date.now() - began,
+          }),
+        );
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            event: "attachment_orphans:sweep_failed",
+            error_type: errorType(error),
+          }),
+        );
+      }
+      const sessionsBegan = Date.now();
+      try {
+        const stats = await sweepOrphanedUploadSessions(db, getFileStorage, new Date());
+        console.info(
+          JSON.stringify({
+            event: "attachment_upload_sessions:swept",
+            session_candidates: stats.candidates,
+            sessions_deleted: stats.deleted,
+            object_remove_failures: stats.objectRemoveFailures,
+            verifying_sessions_over_1h: stats.verifyingZombies,
+            duration_ms: Date.now() - sessionsBegan,
+          }),
+        );
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            event: "attachment_upload_sessions:sweep_failed",
+            error_type: errorType(error),
+          }),
+        );
+      }
     } finally {
       sweeping = false;
     }
