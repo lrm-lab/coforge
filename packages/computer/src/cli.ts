@@ -4,7 +4,7 @@ import { Command, CommanderError } from "commander";
 import { homedir } from "os";
 
 import { resolveComputerInstallDirectory } from "@lrm/coforge-daemon";
-import { CliError, setupError } from "./errors";
+import { setupError } from "./errors";
 import { resolveComputerStateDirectory, resolveDaemonSocketPath } from "./paths";
 import { COFORGE_RELEASE_FEED_URL, COFORGE_SERVER_URL } from "./release-channel";
 import { FileComputerConfig } from "./local-config";
@@ -26,6 +26,7 @@ import { createStatusPorts } from "#src/status/create-status-ports";
 import { createStatusCommand, type StatusCommand } from "#src/status/status-command";
 import { createDoctorCommand, type DoctorCommand } from "#src/doctor/doctor-command";
 import { registerDiagnosticCommands } from "#src/cli/diagnostic-commands";
+import { registerLifecycleCommands } from "#src/cli/lifecycle-commands";
 import {
   createLogoutCommand,
   registerLogoutCommand,
@@ -243,75 +244,18 @@ export async function runCli(
     .action(async () => {
       exitCode = await requireUpdater(dependencies).repair();
     });
-  program
-    .command("start")
-    .description("Start the Daemon and all configured Daemon Runtimes.")
-    .option("--workspace <slug-or-id>", "Affect only this local Workspace binding")
-    .action((options: { workspace?: string }) =>
-      requireDaemon(dependencies).start(options.workspace),
-    );
-  program
-    .command("stop")
-    .description("Stop the Daemon and all Daemon Runtimes.")
-    .option("--workspace <slug-or-id>", "Affect only this local Workspace binding")
-    .action((options: { workspace?: string }) =>
-      requireDaemon(dependencies).stop(options.workspace),
-    );
-  program
-    .command("detach")
-    .description("Detach this Computer from a Workspace: stop its Daemon and remove its key.")
-    .option("--workspace <slug-or-id>", "Detach this local Workspace binding")
-    .option("--json", "write one stable JSON result to stdout")
-    .action(async (options: { workspace?: string; json?: boolean }) => {
-      json = options.json ?? false;
-      const outcome = await requireDaemon(dependencies).detach(options.workspace);
-      if (outcome.kind === "unconfirmed")
-        io.stdout(
-          `The server could not confirm detaching '${outcome.workspaceSlug}'; the local registration was kept.`,
-        );
-      else if (outcome.kind === "not_bound")
-        io.stdout(
-          `'${outcome.workspaceSlug}' is not bound on this machine's supervisor; the local registration was kept.`,
-        );
-      else if (outcome.kind === "detached") io.stdout(`Detached '${outcome.workspaceSlug}'.`);
-      else if (outcome.kind === "key_revoked")
-        io.stdout(
-          `The key on this computer has already been revoked; detached '${outcome.workspaceSlug}' locally.`,
-        );
-      else if (outcome.kind === "not_attached")
-        io.stdout("This computer is not attached to that Workspace.");
-    });
-  program
-    .command("restart")
-    .description("Restart the Daemon and all configured Daemon Runtimes.")
-    .option("--workspace <slug-or-id>", "Affect only this local Workspace binding")
-    .option(
-      "--supervisor",
-      "Restart the Computer supervisor process itself (not a Workspace runtime), through the platform's process manager",
-    )
-    .action((options: { workspace?: string; supervisor?: boolean }) => {
-      if (options.supervisor && options.workspace)
-        throw new CliError(
-          "RESTART_CONFLICTING_TARGET",
-          "--supervisor and --workspace cannot be used together.",
-          "Use --supervisor to restart the Computer supervisor itself, or --workspace to restart one Workspace runtime, not both.",
-        );
-      if (options.supervisor) {
-        const daemon = requireDaemon(dependencies);
-        if (!daemon.restartSupervisor)
-          throw new Error("Supervisor restart is unavailable in this build");
-        return daemon.restartSupervisor();
-      }
-      return requireDaemon(dependencies).restart(options.workspace);
-    });
-  program
-    .command("foreground")
-    .description("Run the Daemon supervisor in the foreground for external supervision.")
-    .action(() => requireForeground(dependencies).run());
-  program
-    .command("logs")
-    .description("Follow the Computer log, including rotated log files.")
-    .action(() => requireLogs(dependencies).follow());
+  registerLifecycleCommands(
+    program,
+    {
+      daemon: dependencies.daemon,
+      logs: dependencies.logs,
+      foreground: dependencies.foreground,
+    },
+    io,
+    (value) => {
+      json = value;
+    },
+  );
   registerDiagnosticCommands(
     program,
     { status: dependencies.status, doctor: dependencies.doctor },
@@ -397,22 +341,6 @@ function readSetupIntentWorkspace(): string | undefined {
 function requireUpdater(dependencies: CliDependencies): UpdateCommand {
   if (!dependencies.updater) throw new Error("Updater is unavailable in this build");
   return dependencies.updater;
-}
-
-function requireDaemon(dependencies: CliDependencies): DaemonCommand {
-  if (!dependencies.daemon) throw new Error("Daemon coordinator is unavailable in this build");
-  return dependencies.daemon;
-}
-
-function requireLogs(dependencies: CliDependencies): LogsCommand {
-  if (!dependencies.logs) throw new Error("Computer logs are unavailable in this build");
-  return dependencies.logs;
-}
-
-function requireForeground(dependencies: CliDependencies): ForegroundCommand {
-  if (!dependencies.foreground)
-    throw new Error("Foreground supervisor is unavailable in this build");
-  return dependencies.foreground;
 }
 
 function hostSetting(flag: string | undefined, envName: string): string {
