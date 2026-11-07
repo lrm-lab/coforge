@@ -94,9 +94,14 @@ export function useAttachmentReviewAddressAmong(attachmentIds: readonly string[]
     (attachmentId: string) => {
       release();
       following.set(attachmentId, token.current);
-      // A hosted pane (`open`) lands by `msg`, a conversation page by `message`.
-      const current = router.state.location.search as AttachmentReviewSearch & { open?: unknown };
-      const key = current.open ? "msg" : "message";
+      const current = router.state.location.search as AttachmentReviewSearch & {
+        open?: unknown;
+        task?: unknown;
+      };
+      const key = reviewLandingKey(current);
+      // A Task popup's rows are in the popup, not in the host page's stream: a landing there would
+      // send the page looking for a message it does not hold.
+      const lands = Boolean(landing) && !current.task;
       keepsLanding.current = current[key] !== undefined;
       void router.navigate({
         to: ".",
@@ -106,7 +111,7 @@ export function useAttachmentReviewAddressAmong(attachmentIds: readonly string[]
           ...previous,
           file: attachmentId,
           comment: undefined,
-          ...(landing && !keepsLanding.current ? { [key]: landing } : {}),
+          ...(lands && !keepsLanding.current ? { [key]: landing } : {}),
         }),
       });
     },
@@ -130,6 +135,11 @@ export function useAttachmentReviewAddressAmong(attachmentIds: readonly string[]
     show,
     clear,
   };
+}
+
+/** Where a landing is written: a hosted pane (`open`) lands by `msg`, a conversation page by `message`. */
+function reviewLandingKey(search: { open?: unknown }) {
+  return search.open ? "msg" : "message";
 }
 
 /** Whether a one-shot landing stays in the address after it is used: while a file's review is named
