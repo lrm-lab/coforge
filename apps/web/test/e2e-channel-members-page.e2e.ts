@@ -31,27 +31,10 @@ test("the settings panel shows a channel's members as a page, adds and removes o
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser, evaluate } = browserSession(browserPath, `channel-members-page-${process.pid}`);
-  /** Waits for `condition`, failing with its text rather than at the test timeout; a first page
-   * load compiles on the dev server, so it gets longer. */
-  const waitFor = (condition: string, ms = 20_000) =>
-    Promise.race([
-      // agent-browser's own wait caps at 25 s; pass the budget through or a 60 s wait dies at 25.
-      browser("wait", "--fn", condition, "--timeout", String(ms)),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
-      ),
-    ]);
-  const byText = (selector: string, text: string) =>
-    `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((element) => element.textContent.trim() === ${JSON.stringify(text)}).at(-1)`;
-  async function clickText(selector: string, text: string) {
-    await waitFor(`${byText(selector, text)} !== undefined`);
-    const clicked = await browser(
-      "eval",
-      `(() => { const target = ${byText(selector, text)}; target?.click(); return Boolean(target); })()`,
-    );
-    if (!clicked.includes("true")) throw new Error(`"${text}" disappeared before it was clicked`);
-  }
+  const { browser, evaluate, waitFor, byText, clickText } = browserSession(
+    browserPath,
+    `channel-members-page-${process.pid}`,
+  );
   /** The settings' Members row: its name, then the counts this channel's two members give. */
   async function openMembers() {
     const row = `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.includes("1 human · 1 agent"))`;
