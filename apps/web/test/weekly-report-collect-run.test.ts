@@ -462,7 +462,7 @@ test("buildCollectSynthesizerWakeText includes status board and ready packs", as
 
 test("buildCollectorWakeBody requires owner-scoped harvest and lists identity hints", async () => {
   const { buildCollectorWakeBody } =
-    await import("#src/server/records/weekly-report-collect-orchestrate.server");
+    await import("#src/server/records/weekly-report-collect-dispatch.server");
   const text = buildCollectorWakeBody({
     runId: "run-1",
     reportId: "report-1",
