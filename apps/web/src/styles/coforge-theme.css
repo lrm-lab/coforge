@@ -196,8 +196,8 @@
   }
 }
 
-/* Violet is the primary action and what is picked (a filled checkbox, radio or toggle), through
-   `bg-brand-solid`, and the keyboard focus ring: nothing else. Every other brand token (active
+/* In the chrome, violet is the primary action and what is picked (a filled checkbox, radio or
+   toggle), through `bg-brand-solid`, and the keyboard focus ring. Every other brand token (active
    tabs, links, selected cards, tints, spinners) reads as the neutral ink or surface in both themes,
    so a screen has one violet thing and it is the thing to press. */
 :root,
@@ -217,6 +217,17 @@
   --color-bg-brand-primary: var(--color-bg-secondary);
   --color-bg-brand-primary_alt: var(--color-bg-secondary);
   --color-bg-brand-secondary: var(--color-bg-tertiary);
+}
+
+/* A reference in message text (an @mention, a channel, a thread, a link) is content, not chrome: a
+   reader scans for it, so it keeps its violet tint while the chrome around it stays neutral. */
+:root {
+  --color-reference-bg: #f3f1ff;
+  --color-reference-text: var(--color-brand-700);
+}
+.dark-mode {
+  --color-reference-bg: color-mix(in srgb, var(--color-brand-500) 24%, transparent);
+  --color-reference-text: var(--color-brand-300);
 }
 
 /* Sidebar background is a gradient, which can't be expressed as a single `--color-*` token

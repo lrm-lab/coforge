@@ -48,7 +48,9 @@ Untitled 自己的暗色模式规则是**不改梯度数值，只改语义 token
 机制，仅在 `.dark-mode` 下把 `--color-focus-ring` 指向 `--color-brand-400`
 （即 `#a993ff`），其余语义 token 沿用 Untitled 官方默认指向。
 
-紫色只用于主操作按钮、已勾选的控件（都走 `bg-brand-solid`）和键盘焦点环。其余品牌语义 token（激活 tab、链接、选中卡片、浅色底、加载图标）在两个主题下都指向中性色，由 `coforge-theme.css` 统一覆盖，组件不用改。
+界面框架里紫色只用于主操作按钮、已勾选的控件（都走 `bg-brand-solid`）和键盘焦点环。其余品牌语义 token（激活 tab、选中卡片、浅色底、加载图标）在两个主题下都指向中性色，由 `coforge-theme.css` 统一覆盖，组件不用改。
+
+消息正文里的引用是内容，不是框架：@ 提及、频道、讨论串和链接走 `--color-reference-bg` / `--color-reference-text`，保留紫色；@ 自己用 `bg-brand-solid`。读者要靠颜色在正文里找到它们。
 
 > **已知偏差，待 Frank 确认**：原计划是暗色模式下品牌主按钮（`bg-brand-solid`）改用更亮的 `#a993ff`
 > 并配深色文字（“dark ink”），视觉上对应旧版 `--primary: #a993ff` / `--primary-foreground: #101319`。

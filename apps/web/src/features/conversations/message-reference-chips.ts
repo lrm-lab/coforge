@@ -16,8 +16,9 @@ import type { Element } from "hast";
  * the stable hook the stylesheet and the component use to recognise a chip.
  */
 const CHIP_BASE = "message-markdown-mention rounded-sm px-0.5 font-medium";
-export const MENTION_CHIP_CLASS = `${CHIP_BASE} bg-brand-primary text-brand-secondary`;
-export const MENTION_CHIP_SELF_CLASS = `${CHIP_BASE} bg-fg-primary text-(--color-bg-primary)`;
+const REFERENCE_TINT = "bg-(--color-reference-bg) text-(--color-reference-text)";
+export const MENTION_CHIP_CLASS = `${CHIP_BASE} ${REFERENCE_TINT}`;
+export const MENTION_CHIP_SELF_CLASS = `${CHIP_BASE} bg-brand-solid text-white`;
 /** Added by the renderer to a mention chip that opens a profile (a host passed the handler), so the
  * stylesheet gives it the pointer and hover affordance of a control; an inert chip lacks it. */
 export const MENTION_CHIP_OPENABLE_CLASS = "message-markdown-mention-openable";
@@ -28,7 +29,7 @@ export const MENTION_CHIP_OPENABLE_CLASS = "message-markdown-mention-openable";
  * `message-body.tsx`).
  */
 export const CHANNEL_CHIP_CLASS =
-  "message-markdown-channel-reference rounded-sm px-0.5 font-medium bg-brand-primary text-brand-secondary";
+  "message-markdown-channel-reference rounded-sm px-0.5 font-medium bg-(--color-reference-bg) text-(--color-reference-text)";
 /** The chip's `className` list, split once; nothing mutates it. */
 const CHANNEL_CHIP_CLASSES = CHANNEL_CHIP_CLASS.split(" ");
 
@@ -38,7 +39,7 @@ const CHANNEL_CHIP_CLASSES = CHANNEL_CHIP_CLASS.split(" ");
  * `message-body.tsx`).
  */
 export const THREAD_CHIP_CLASS =
-  "message-markdown-thread-reference rounded-sm px-0.5 font-medium bg-brand-primary text-brand-secondary";
+  "message-markdown-thread-reference rounded-sm px-0.5 font-medium bg-(--color-reference-bg) text-(--color-reference-text)";
 const THREAD_CHIP_CLASSES = THREAD_CHIP_CLASS.split(" ");
 
 /** A resolved mention as a chip needs the mentioned actor's id (who the viewer is compared with,

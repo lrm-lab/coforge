@@ -84,6 +84,6 @@ const PREVIEW_COMPONENTS: Components = {
   code: ({ children }) => (
     <code className="rounded-sm bg-secondary px-1 font-mono text-xs">{children}</code>
   ),
-  a: ({ children }) => <span className="text-brand-secondary underline">{children}</span>,
+  a: ({ children }) => <span className="text-(--color-reference-text) underline">{children}</span>,
   img: ({ alt }) => <span>{alt}</span>,
 };

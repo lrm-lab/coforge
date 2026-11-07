@@ -293,16 +293,16 @@
   font-weight: 600;
 }
 
-/* Links — brand text with a softened underline, matching the Records prose treatment. */
+/* Links — the reference colour with a softened underline. */
 .message-markdown a {
-  color: var(--color-text-brand-secondary);
+  color: var(--color-reference-text);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--color-text-brand-secondary) 40%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--color-reference-text) 40%, transparent);
   text-underline-offset: 2px;
 }
 
 .message-markdown a:hover {
-  text-decoration-color: var(--color-text-brand-secondary);
+  text-decoration-color: var(--color-reference-text);
 }
 
 .message-markdown a:focus-visible {
