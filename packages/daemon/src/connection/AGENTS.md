@@ -45,13 +45,15 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
   (`ready failed: <stage>`) or a connect attempt since the connection last
   came up.
 - Publications that arrive while a ready waits are held in
-  `HeldPublications`: only the latest start and the latest stop per Agent
-  (so a restart survives), and `HELD_NOTICE_CAP` delivery notices, past which
-  each Agent keeps only its latest (a notice wakes its Agent; what it reads
-  comes from the cloud's read boundary). The server republishes pending
-  deliveries while it handles ready, before it answers, so that replay lands
-  in this hold too. A dropped notice is never ACKed and stays pending for the
-  next accepted ready.
+  `ReadyPublicationHold` (`ready-publication-hold.ts`): only the latest start
+  and the latest stop per Agent (so a restart survives), and `HELD_NOTICE_CAP`
+  delivery notices, past which each Agent keeps only its latest (a notice wakes
+  its Agent; what it reads comes from the cloud's read boundary). The server
+  republishes pending deliveries while it handles ready, before it answers, so
+  that replay lands in this hold too. A dropped notice is never ACKed and stays
+  pending for the next accepted ready. Nothing reaches a subscriber before ready
+  is accepted, so what a stuck start holds is this hold, not the runtime's own
+  pre-ready buffer; `heldPublicationCount()` reports it.
 - Every initial ready, reconnect ready, and ready retry obtains a fresh request
   and the current running Agent ID snapshot from the runtime. Never reuse a
   cached one.

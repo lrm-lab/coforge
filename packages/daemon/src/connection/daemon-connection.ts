@@ -85,7 +85,7 @@ import {
 } from "../openviking-read-proxy";
 import { DaemonConnectionRefusedError } from "./daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "./daemon-connection-stopped-error";
-import { HELD_NOTICE_CAP, HeldPublications } from "./held-publications";
+import { ReadyPublicationHold } from "./ready-publication-hold";
 import { InboundQuietness } from "./connection-liveness";
 import { encodeDaemonConnectionStatus } from "./connection-status-payload";
 import {
@@ -325,7 +325,7 @@ export class DaemonConnection
   /** Connects the client again after it gave up; see `#resumeAfterGiveUp`. */
   #resumeTimer: unknown;
   /** Publications received between a ready request and its acknowledgement, in arrival order. */
-  #readyPublications: HeldPublications<() => void> | undefined;
+  #readyPublications = new ReadyPublicationHold();
   #readyRequestFactory: (() => DaemonRuntimeReadyRequest) | undefined;
   #readyRecoveryClient: CentrifugeWorkspaceClient | undefined;
   #readyRetryTimer: unknown;
@@ -455,7 +455,7 @@ export class DaemonConnection
         for (const status of this.#latestStatuses.values()) this.#queueAgentStatus(client, status);
         this.#startStatusRefresh(config);
         if (reconnect && this.#readyRequestFactory) {
-          this.#readyPublications ??= new HeldPublications();
+          this.#readyPublications.hold();
           this.#startReadyRecovery(client, this.#readyRequestFactory);
         }
         resolve();
@@ -1354,23 +1354,6 @@ export class DaemonConnection
     return revokeAgentApiKey(this.#agentApiKeyEndpoint(), agentApiKey, scope);
   }
 
-  /** Delivers now or after the in-flight ready handshake; a held `key` replaces its earlier
-   * item and `notice` is capped. */
-  #deliver<Value extends { agentId?: string }>(
-    slot: ListenerSlot<(value: Value) => void>,
-    value: Value,
-    hold?: "start" | "stop" | "probe" | "notice",
-  ): void {
-    const held = this.#readyPublications;
-    // The common case: nothing is held, so nothing is allocated either.
-    if (!held) return void slot.current?.(value);
-    const run = () => slot.current?.(value);
-    const agentId = value.agentId ?? "";
-    if (hold === "notice") held.notice(agentId, run);
-    else if (hold) held.latestFor(agentId, hold, run);
-    else held.add(run);
-  }
-
   /**
    * Decodes `data` as one publication kind and lets `accept` handle it. Returns whether the
    * publication was consumed; a decode failure or a rejected `accept` moves on to the next kind.
@@ -1410,24 +1393,24 @@ export class DaemonConnection
       this.#queries.receive(data, config) ||
       this.#route(data, decodeReminderSync, (sync) => {
         if (sync.messageType !== REMINDER_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;
-        this.#deliver(this.#reminderSync, sync);
+        this.#readyPublications.deliver(this.#reminderSync, sync);
         return true;
       }) ||
       this.#route(data, decodeAppConfigSync, (sync) => {
         // The decoder already refuses any other message type.
         if (!ownsDaemon(sync)) return false;
-        this.#deliver(this.#appConfigSync, sync);
+        this.#readyPublications.deliver(this.#appConfigSync, sync);
         return true;
       }) ||
       this.#route(data, decodeAppRegistrationNotice, (notice) => {
         if (!ownsDaemon(notice)) return false;
-        this.#deliver(this.#appRegistrationNotice, notice);
+        this.#readyPublications.deliver(this.#appRegistrationNotice, notice);
         return true;
       }) ||
       this.#route(data, decodeAgentMigrationLease, (lease) => {
         if (!ownsDaemon(lease)) return false;
         // The lease runs from its arrival here, so no clock is compared with the server's.
-        this.#deliver(this.#agentMigrationLease, {
+        this.#readyPublications.deliver(this.#agentMigrationLease, {
           ...lease,
           deadline: Date.now() + lease.expiresInMs,
         });
@@ -1435,7 +1418,7 @@ export class DaemonConnection
       }) ||
       this.#route(data, decodeAgentMigrationCancel, (cancel) => {
         if (!ownsDaemon(cancel)) return false;
-        this.#deliver(this.#agentMigrationCancel, cancel);
+        this.#readyPublications.deliver(this.#agentMigrationCancel, cancel);
         return true;
       }) ||
       this.#route(data, decodeComputerUpgradeIntent, (upgrade) => {
@@ -1467,18 +1450,19 @@ export class DaemonConnection
         return true;
       }) ||
       this.#route(data, decodeAgentWorkspaceResetRequest, (request) => {
-        if (request.workspaceId === workspaceId) this.#deliver(this.#agentWorkspaceReset, request);
+        if (request.workspaceId === workspaceId)
+          this.#readyPublications.deliver(this.#agentWorkspaceReset, request);
         return true;
       }) ||
       this.#providerPublications.route(data, workspaceId) ||
       this.#route(data, decodeAgentActivityProbe, (probe) => {
         if (probe.protocolMajor !== 1 || !ownsDaemon(probe)) return false;
-        this.#deliver(this.#agentActivityProbe, probe, "probe");
+        this.#readyPublications.deliver(this.#agentActivityProbe, probe, "probe");
         return true;
       }) ||
       this.#route(data, decodeAgentInboxPurge, (purge) => {
         if (purge.protocolMajor !== 1 || !ownsDaemon(purge)) return false;
-        this.#deliver(this.#agentInboxPurge, purge);
+        this.#readyPublications.deliver(this.#agentInboxPurge, purge);
         return true;
       });
     if (handled) return;
@@ -1487,7 +1471,7 @@ export class DaemonConnection
       {
         kind: "agent_message",
         decode: () =>
-          this.#deliver(
+          this.#readyPublications.deliver(
             this.#agentMessage,
             this.#ownedIntent(decodeAgentMessageDelivery(data), workspaceId),
             "notice",
@@ -1497,21 +1481,22 @@ export class DaemonConnection
         kind: "agent_stop",
         decode: () => {
           const intent = this.#ownedIntent(decodeAgentStopIntent(data), workspaceId);
-          this.#deliver(this.#agentStop, intent, "stop");
+          this.#readyPublications.deliver(this.#agentStop, intent, "stop");
         },
       },
       {
         kind: "agent_turn_interrupt",
         decode: () => {
           const intent = this.#ownedIntent(decodeAgentTurnInterruptIntent(data), workspaceId);
-          if (!this.#readyPublications) this.#deliver(this.#agentTurnInterrupt, intent);
+          if (!this.#readyPublications.holding)
+            this.#readyPublications.deliver(this.#agentTurnInterrupt, intent);
         },
       },
       {
         kind: "agent_start",
         decode: () => {
           const intent = this.#ownedIntent(decodeAgentStartIntent(data), workspaceId);
-          this.#deliver(this.#agentStart, intent, "start");
+          this.#readyPublications.deliver(this.#agentStart, intent, "start");
         },
       },
     ];
@@ -1650,7 +1635,7 @@ export class DaemonConnection
   async ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void> {
     const client = this.#requireClient();
     signal?.throwIfAborted();
-    this.#readyPublications = new HeldPublications();
+    this.#readyPublications.hold();
     // The first ready takes the reconnect path: a failure is retried with the same backoff and
     // escalation instead of failing the start and leaving the Workspace connected but dead.
     this.#readyRequestFactory = createRequest;
@@ -1787,7 +1772,7 @@ export class DaemonConnection
     this.#readyFailure = undefined;
     this.#stableSinceMs = this.#nowMs();
     this.#readyRecoveryClient = undefined;
-    this.#dispatchReadyPublications();
+    this.#readyPublications.dispatch();
     const firstReady = this.#firstReady;
     if (!firstReady) {
       this.#reconnect.current?.();
@@ -1812,17 +1797,10 @@ export class DaemonConnection
     this.#readyRecoveryClient = undefined;
   }
 
-  #dispatchReadyPublications(): void {
-    const held = this.#readyPublications?.take();
-    this.#readyPublications = undefined;
-    if (!held) return;
-    if (held.dropped > 0)
-      logger.warning("Delivery notices held during ready were dropped; the cloud resends them", {
-        event: "daemon_ready:notices_dropped",
-        dropped: held.dropped,
-        held_cap: HELD_NOTICE_CAP,
-      });
-    for (const dispatch of held.items) dispatch();
+  /** How many publications wait behind a pending ready handshake: what a start held at ready is
+   * waiting for. */
+  heldPublicationCount(): number {
+    return this.#readyPublications.size();
   }
 
   async stop(): Promise<void> {
@@ -1865,7 +1843,7 @@ export class DaemonConnection
       this.#connectionRefused,
     ])
       slot.clear();
-    this.#readyPublications = undefined;
+    this.#readyPublications.clear();
     this.#readyRequestFactory = undefined;
     for (const collection of [
       this.#pendingActivity,
