@@ -2,11 +2,7 @@ import { useEffect, useEffectEvent, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
-import { Edit01 as Pencil } from "@untitledui/icons";
-
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { isAppErrorCode } from "#src/lib/app-error";
-import { m } from "#src/paraglide/messages";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import {
   useLiveAgent,
@@ -15,10 +11,8 @@ import {
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentReminders } from "#src/features/agents/agent-reminders";
 import { useAgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
-import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { executeAgentControl } from "#src/features/agents/agent-control.functions";
 import { AgentRestartDialog } from "#src/features/agents/agent-control-dialogs";
-import { AgentRuntimeCredentialDialog } from "#src/features/agents/agent-runtime-credential-dialog";
 import {
   AgentRuntimeConfigDialog,
   type AgentEnvironmentState,
@@ -34,12 +28,11 @@ import {
   updateAgent,
   setAgentMascot,
   updateAgentRole,
-  saveAgentRuntimeCredential,
-  deleteAgentRuntimeCredential,
   saveAgentEnvironment,
 } from "#src/features/agents/agents.functions";
 import { AgentArchiveSection } from "./agent-archive-section";
 import { AgentMigrationSection } from "./agent-migration-section";
+import { AgentRuntimeCredentialSection } from "./agent-runtime-credential-section";
 import { AgentProfileConfirmationDialogs } from "./agent-profile-confirmation-dialogs";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { agentModelsQueryKey } from "#src/features/agents/agent-models";
@@ -186,13 +179,8 @@ export function AgentProfilePanel({
   const update = useServerFn(updateAgent);
   const pickMascot = useServerFn(setAgentMascot);
   const updateRole = useServerFn(updateAgentRole);
-  const saveCredential = useServerFn(saveAgentRuntimeCredential);
-  const deleteCredential = useServerFn(deleteAgentRuntimeCredential);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [visibilityTarget, setVisibilityTarget] = useState<AgentVisibility | null>(null);
-  const [runtimeDialogOpen, setRuntimeDialogOpen] = useState(false);
-  const [runtimeSaving, guardRuntime] = useSubmitGuard();
-  const [runtimeError, setRuntimeError] = useState("");
   const onLoadRuntimeOptions = useAgentRuntimeOptionsLoader();
   const [runtimeEditing, setRuntimeEditing] = useState(false);
   const [runtimeFormSaving, guardRuntimeForm] = useSubmitGuard();
@@ -394,72 +382,12 @@ export function AgentProfilePanel({
               profile.canChangeVisibility ? (target) => setVisibilityTarget(target) : undefined
             }
             runtimeCredentialDialog={
-              owned && profile.runtimeConfig?.provider.kind === "coforge" ? (
-                <>
-                  <ButtonUtility
-                    aria-label={m.agent_runtime_edit()}
-                    tooltip={m.agent_runtime_edit()}
-                    icon={Pencil}
-                    size="xs"
-                    color="tertiary"
-                    onClick={() => {
-                      setRuntimeError("");
-                      setRuntimeDialogOpen(true);
-                    }}
-                  />
-                  {runtimeDialogOpen && (
-                    <AgentRuntimeCredentialDialog
-                      open={runtimeDialogOpen}
-                      onOpenChange={setRuntimeDialogOpen}
-                      saving={runtimeSaving}
-                      runtimeLabel={runtimeProviderLabel(profile.runtimeConfig.runtime)}
-                      providerId={
-                        profile.runtimeConfig.provider.kind === "coforge"
-                          ? profile.runtimeConfig.provider.providerId
-                          : ""
-                      }
-                      credentialHint={profile.runtimeCredential?.hint}
-                      error={runtimeError}
-                      modelFields={[
-                        {
-                          label: m.agent_form_model(),
-                          value: profile.runtimeConfig.model || m.agent_form_provider_default(),
-                        },
-                        {
-                          label: m.agent_form_reasoning(),
-                          value: profile.runtimeConfig.reasoning || m.agent_form_provider_default(),
-                        },
-                      ]}
-                      onSave={(apiKey) =>
-                        guardRuntime(async () => {
-                          setRuntimeError("");
-                          try {
-                            await saveCredential({ data: { agentId, apiKey } });
-                            setRuntimeDialogOpen(false);
-                            await invalidate();
-                          } catch {
-                            setRuntimeError(m.agent_runtime_save_error());
-                          }
-                        })
-                      }
-                      onDelete={
-                        profile.runtimeCredential
-                          ? () =>
-                              guardRuntime(async () => {
-                                setRuntimeError("");
-                                try {
-                                  await deleteCredential({ data: agentId });
-                                  setRuntimeDialogOpen(false);
-                                  await invalidate();
-                                } catch {
-                                  setRuntimeError(m.agent_runtime_delete_error());
-                                }
-                              })
-                          : undefined
-                      }
-                    />
-                  )}
-                </>
+              owned ? (
+                <AgentRuntimeCredentialSection
+                  agentId={agentId}
+                  runtimeConfig={profile.runtimeConfig}
+                  runtimeCredential={profile.runtimeCredential}
+                />
               ) : null
             }
           />
