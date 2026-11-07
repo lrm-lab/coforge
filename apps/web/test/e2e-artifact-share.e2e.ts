@@ -35,8 +35,14 @@ test("an artifact's Share: who can see it", async () => {
   });
   const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
-  const agent = await db.agent.findFirstOrThrow({
-    where: { workspaceId, deletedAt: null, visibility: "public", weeklyReportAssistant: null },
+  const agent = await db.agent.create({
+    data: {
+      workspaceId,
+      name: `e2e-share-${tail}`,
+      displayName: "Share",
+      ownerId: DEV_BROWSER_USER.id,
+      runtimeConfig: {},
+    },
   });
   const channel = await db.conversation.create({
     data: {
@@ -245,6 +251,7 @@ test("an artifact's Share: who can see it", async () => {
     await db.conversation.deleteMany({ where: { workspaceId: other.id } }).catch(() => undefined);
     await db.workspace.delete({ where: { id: other.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: noor.id } }).catch(() => undefined);
+    await db.agent.delete({ where: { id: agent.id } }).catch(() => undefined);
     await experiments.write(workspaceId, "artifacts", before).catch(() => undefined);
     await db.$disconnect();
   }
