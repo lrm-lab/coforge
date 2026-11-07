@@ -42,6 +42,18 @@ export const activityInboxQuery = (workspaceId: string, filter: ActivityInboxFil
       replaceEqualDeep(held, keepLaterFirstPage(held as ReadPages, next as ReadPages)),
   });
 
+/** Marks every cached filter stale without refetching inactive views. The realtime message path
+ * refreshes the selected filter itself; preloaded filters must not be reused as fresh snapshots. */
+export function invalidateActivityInboxLists(
+  queryClient: QueryClient,
+  workspaceId: string,
+): Promise<void> {
+  return queryClient.invalidateQueries({
+    queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId],
+    refetchType: "none",
+  });
+}
+
 /** A read that knows where it stood in the viewer's channels. */
 type StreamRead = { streamPositions: StreamPositions };
 type ReadPages = InfiniteData<StreamRead> | undefined;

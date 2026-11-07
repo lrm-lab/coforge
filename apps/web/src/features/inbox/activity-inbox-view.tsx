@@ -31,6 +31,7 @@ import {
   ACTIVITY_INBOX_LISTS_KEY,
   ACTIVITY_INBOX_QUERY_PREFIX,
   activityInboxQuery,
+  invalidateActivityInboxLists,
   type ActivityInboxPage,
   WAITING_CHOICE_CARDS_KEY,
   waitingChoiceCardsQuery,
@@ -158,6 +159,7 @@ export function ActivityInboxView({
   const loadFirstPage = useServerFn(loadActivityInbox);
   const refreshFirstPage = useCallback(() => {
     const queryKey = activityInboxQuery(workspaceId, filter).queryKey;
+    void invalidateActivityInboxLists(queryClient, workspaceId);
     void loadFirstPage({ data: { filter } })
       .then((page) =>
         queryClient.setQueryData<{ pages: ActivityInboxPage[]; pageParams: unknown[] }>(

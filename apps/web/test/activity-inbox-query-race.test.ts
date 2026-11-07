@@ -11,6 +11,7 @@ import {
   ACTIVITY_INBOX_LISTS_KEY,
   cancelActivityInboxListReads,
   activityInboxQuery,
+  invalidateActivityInboxLists,
   projectPendingActivityCompletions,
 } from "#src/features/inbox/activity-inbox-queries";
 
@@ -99,6 +100,24 @@ test("a later refetch cannot restore another completion that is still pending", 
   expect(projectPendingActivityCompletions(cached, pendingActivityDoneItems(pending))).toEqual(
     cached,
   );
+  queryClient.clear();
+});
+
+test("a message makes preloaded Activity filters stale until their own page is refreshed", async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const allKey = [...ACTIVITY_INBOX_LISTS_KEY, "workspace-1", "all"];
+  const unreadKey = [...ACTIVITY_INBOX_LISTS_KEY, "workspace-1", "unread"];
+  queryClient.setQueryData(allKey, activityData([item("conversation:all")]));
+  queryClient.setQueryData(unreadKey, activityData([]));
+
+  await invalidateActivityInboxLists(queryClient, "workspace-1");
+
+  expect(queryClient.getQueryState(allKey)?.isInvalidated).toBe(true);
+  expect(queryClient.getQueryState(unreadKey)?.isInvalidated).toBe(true);
+
+  queryClient.setQueryData(allKey, activityData([item("conversation:new")]));
+  expect(queryClient.getQueryState(allKey)?.isInvalidated).toBe(false);
+  expect(queryClient.getQueryState(unreadKey)?.isInvalidated).toBe(true);
   queryClient.clear();
 });
 
