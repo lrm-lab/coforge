@@ -268,6 +268,7 @@ test("a changed provider in retry backoff is not refreshed early", async () => {
   } as unknown as DaemonConnectionClient;
 
   await sync.reportRuntimes(live);
+  const start = Date.now();
   await sync.refreshModels(
     {
       protocolMajor: 1,
@@ -280,7 +281,9 @@ test("a changed provider in retry backoff is not refreshed early", async () => {
   );
   expect(calls).toEqual([{ force: true, provider: "antigravity" }]);
 
-  await sync.recheckCatalogs(live, Date.now() + CATALOG_RETRY_BASE_MS - 1);
+  // The deadline is stamped inside refreshModels, so anchor the early check to a time
+  // provably before it: a fresh Date.now() can cross a millisecond boundary and expire it.
+  await sync.recheckCatalogs(live, start + CATALOG_RETRY_BASE_MS - 1);
   expect(calls).toHaveLength(1);
 
   await sync.recheckCatalogs(live, Date.now() + CATALOG_RETRY_BASE_MS + 1);
