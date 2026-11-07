@@ -298,6 +298,19 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
       });
       void writes.catch(fail);
     };
+    const signal = (value: string) => {
+      // The runner can exit and close the relay between the caller's liveness
+      // check and this write landing; a rejected signal write is not a cleanup
+      // failure — the bounded exit check alone decides that. Swallowing here
+      // also keeps the write chain usable for later sends.
+      writes = writes
+        .then(async () => {
+          await ready;
+          channel.send({ type: "signal", signal: value });
+          await channel.flush();
+        })
+        .catch(() => {});
+    };
     return {
       child: {
         get pid() {
@@ -330,7 +343,7 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
         if (!options?.terminal) return stop();
         try {
           if (!closed) {
-            send({ type: "signal", signal: force ? "SIGKILL" : "SIGTERM" });
+            signal(force ? "SIGKILL" : "SIGTERM");
             await writes;
           }
           if (force)
@@ -350,7 +363,7 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
         }
       },
       terminateForTurn: async (force) => {
-        if (!closed) send({ type: "signal", signal: force ? "SIGKILL" : "SIGTERM" });
+        if (!closed) signal(force ? "SIGKILL" : "SIGTERM");
         return { killed: [], leftAlone: [] };
       },
       killTurnDescendants: async (startedAfterMs, startedBeforeMs) => {
