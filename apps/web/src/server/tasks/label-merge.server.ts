@@ -37,35 +37,43 @@ export async function mergeLabels(
       where: { labelId: fromId },
       select: { taskId: true },
     });
+    const taskIds = carried.map(({ taskId }) => taskId);
+    const existingInto = taskIds.length
+      ? await tx.taskLabel.findMany({
+          where: { taskId: { in: taskIds }, labelId: intoId },
+          select: { taskId: true },
+        })
+      : [];
+    const existingIntoTaskIds = new Set(existingInto.map(({ taskId }) => taskId));
+    const clashes =
+      taskIds.length && into.groupId && into.group?.selection === "single"
+        ? await tx.taskLabel.findMany({
+            where: {
+              taskId: { in: taskIds },
+              labelId: { notIn: [intoId, fromId] },
+              label: { groupId: into.groupId },
+            },
+            select: { taskId: true, label: { select: { id: true, name: true, color: true } } },
+          })
+        : [];
+    const clashByTask = new Map<string, { id: string; name: string; color: string }>();
+    for (const clash of clashes)
+      if (!clashByTask.has(clash.taskId)) clashByTask.set(clash.taskId, clash.label);
     let moved = 0;
     let dropped = 0;
     for (const { taskId } of carried) {
-      const already = await tx.taskLabel.findUnique({
-        where: { taskId_labelId: { taskId, labelId: intoId } },
-        select: { taskId: true },
-      });
-      if (already) {
+      if (existingIntoTaskIds.has(taskId)) {
         await tx.taskLabel.delete({ where: { taskId_labelId: { taskId, labelId: fromId } } });
         dropped += 1;
         continue;
       }
       // A single group allows one label: the one already there goes, `into` takes its place.
-      const clash =
-        into.groupId && into.group?.selection === "single"
-          ? await tx.taskLabel.findFirst({
-              where: {
-                taskId,
-                labelId: { notIn: [intoId, fromId] },
-                label: { groupId: into.groupId },
-              },
-              select: { label: { select: { id: true, name: true, color: true } } },
-            })
-          : null;
+      const clash = clashByTask.get(taskId);
       if (clash) {
         await tx.taskLabel.delete({
-          where: { taskId_labelId: { taskId, labelId: clash.label.id } },
+          where: { taskId_labelId: { taskId, labelId: clash.id } },
         });
-        await recordMergeRemoval(tx, taskId, clash.label);
+        await recordMergeRemoval(tx, taskId, clash);
         dropped += 1;
       }
       await tx.taskLabel.update({
