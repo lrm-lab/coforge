@@ -67,7 +67,7 @@ function SidebarExpandedPanel({
     >
       <div className="mt-2 flex h-12 shrink-0 items-center gap-2.5 px-4">
         <CoForgeMark className="h-6" />
-        <span className="text-lg font-bold text-primary">CoForge</span>
+        <span className="text-lg font-semibold text-primary">CoForge</span>
         {onCollapse && (
           <Tooltip title={<SidebarToggleTooltip label={m.navigation_collapse_sidebar()} />}>
             <ButtonUtility

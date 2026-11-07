@@ -320,7 +320,7 @@ const MemberRow = memo(function MemberRow({
   const roleAction = demotes ? m.channel_members_demote() : m.channel_members_promote();
   const actionsLabel = m.channel_members_actions_name({ name: member.displayName });
   const badge = role && (
-    <Badge type="modern" size="sm" color="gray" className="font-mono">
+    <Badge type="modern" size="sm" color="gray">
       {role}
     </Badge>
   );

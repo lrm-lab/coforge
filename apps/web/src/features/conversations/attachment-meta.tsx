@@ -8,7 +8,7 @@ export function FileTypeTag({ fileName, contentType }: { fileName: string; conte
   const label = fileTypeLabel(fileName, contentType);
   if (!label) return null;
   return (
-    <span className="inline-flex shrink-0 items-center rounded-[4px] bg-secondary px-1 font-mono text-xs font-semibold text-tertiary ring-1 ring-secondary ring-inset">
+    <span className="inline-flex shrink-0 items-center rounded-[4px] bg-secondary px-1 text-xs font-semibold text-tertiary ring-1 ring-secondary ring-inset">
       {label}
     </span>
   );

@@ -147,19 +147,19 @@
   }
 
   &:where(h1 strong) {
-    font-weight: 900;
+    font-weight: 600;
     color: inherit;
   }
   &:where(h2 strong) {
-    font-weight: 800;
+    font-weight: 600;
     color: inherit;
   }
   &:where(h3 strong) {
-    font-weight: 700;
+    font-weight: 600;
     color: inherit;
   }
   &:where(h4 strong) {
-    font-weight: 700;
+    font-weight: 600;
     color: inherit;
   }
 
@@ -235,7 +235,7 @@
   &:where(code:not(pre code)) {
     font-size: 0.875rem;
     line-height: 1.25rem;
-    font-weight: 700;
+    font-weight: 600;
     border-radius: 6px;
     padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5);
     margin: calc(var(--spacing) * -0.5) 0px;
@@ -411,7 +411,7 @@
     &:where(code:not(pre code)) {
       font-size: 0.875rem;
       line-height: 1.25rem;
-      font-weight: 700;
+      font-weight: 600;
       border-radius: 6px;
       padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5);
       margin: calc(var(--spacing) * -0.5) 0px;

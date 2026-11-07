@@ -317,7 +317,7 @@ function AppRow({
         <AppLogo name={name} url={logoUrl} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold break-words text-primary">{name}</p>
-          <p className="font-mono text-xs text-tertiary">{time}</p>
+          <p className="text-xs text-tertiary">{time}</p>
           {source && <p className="text-xs text-tertiary">{source}</p>}
         </div>
         <span className="shrink-0">{badge}</span>

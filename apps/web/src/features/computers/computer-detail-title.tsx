@@ -131,7 +131,7 @@ export function ComputerDetailWhere({
     <p className={cn("min-w-0 text-sm text-tertiary", className)}>
       {computer.name && computer.name !== label && (
         <>
-          <span className="font-mono">{computer.name}</span>
+          {computer.name}
           {" · "}
         </>
       )}

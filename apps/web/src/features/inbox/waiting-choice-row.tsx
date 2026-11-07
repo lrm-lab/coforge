@@ -69,7 +69,7 @@ export function WaitingChoiceRow({
             <RelativeTime
               value={card.createdAt}
               plain
-              className="ml-auto shrink-0 pl-2 font-mono text-xs text-quaternary tabular-nums"
+              className="ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums"
             />
           </span>
           <span className="truncate text-sm text-tertiary">

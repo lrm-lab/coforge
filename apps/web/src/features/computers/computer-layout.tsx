@@ -129,19 +129,17 @@ export function ComputerLayout({
                             {refusalLabel(refusal.reason)}
                           </span>
                         ) : computer.name && computer.name !== computerLabel(computer) ? (
-                          <span className="truncate font-mono text-xs text-tertiary">
-                            {computer.name}
-                          </span>
+                          <span className="truncate text-xs text-tertiary">{computer.name}</span>
                         ) : (
                           <span className="truncate text-xs text-tertiary">
                             {operatingSystemLabel(computer)}
                           </span>
                         )}
-                        {/* The same version the detail panel states, in mono like that panel's own
+                        {/* The same version the detail panel states, like that panel's own
                             row. The hostname or OS gives up its width first: the release is short and
                             is what this row was asked to carry. */}
                         {computer.computerVersion && (
-                          <span className="shrink-0 font-mono text-xs text-tertiary">
+                          <span className="shrink-0 text-xs text-tertiary">
                             {computerVersionLabel(computer)}
                           </span>
                         )}

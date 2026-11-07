@@ -96,7 +96,7 @@ export function CollapsibleSection({
               className={cn("size-4 transition-transform", open && "rotate-180")}
             />
           }
-          className="min-w-0 flex-1 justify-start px-2 text-left text-sm font-medium text-primary uppercase"
+          className="min-w-0 flex-1 justify-start px-2 text-left text-sm font-medium text-primary"
         >
           <span className="truncate">{title}</span>
           {marker ? (

@@ -20,9 +20,7 @@ export function ComputersPending() {
           <h1 className="text-lg font-semibold text-primary">{m.computer_page_title()}</h1>
         </div>
         <div className="mt-2 flex h-7 shrink-0 items-center pl-5">
-          <span className="text-xs font-semibold tracking-wide text-quaternary uppercase">
-            {m.computer_page_title()}
-          </span>
+          <span className="text-xs font-semibold text-tertiary">{m.computer_page_title()}</span>
         </div>
         <div aria-hidden="true" className="space-y-1 px-3 pt-1 motion-safe:animate-pulse">
           {["w-3/5", "w-2/5", "w-1/2"].map((width) => (

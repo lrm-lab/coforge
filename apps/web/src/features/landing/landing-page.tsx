@@ -130,7 +130,7 @@ export function LandingPage({ installOrigin }: { installOrigin: string }) {
             <div className="relative w-full py-12 sm:py-10">
               <div className="mx-auto w-full min-w-0 max-w-2xl px-12 text-center sm:px-24 lg:w-[64%] lg:px-0">
                 <ShimmerText
-                  className="text-xs font-medium tracking-[0.22em] text-white/55 uppercase [--shimmer-contrast:rgba(255,255,255,1)]"
+                  className="text-sm font-medium text-white/55 [--shimmer-contrast:rgba(255,255,255,1)]"
                   duration={1.6}
                   delay={1.4}
                 >

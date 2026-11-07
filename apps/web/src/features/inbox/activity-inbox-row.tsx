@@ -186,7 +186,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                 value={item.latest.createdAt}
                 plain
                 className={cn(
-                  "ml-auto shrink-0 pl-2 font-mono text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0",
+                  "ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0",
                   current && "[@media(hover:hover)]:opacity-0",
                 )}
               />

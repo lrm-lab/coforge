@@ -1,3 +1,4 @@
+import { DotsHorizontal } from "@untitledui/icons";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import {
   AvatarSticker,
@@ -39,8 +40,8 @@ export function GroupAvatar({
         if (placed.overflow) {
           return (
             <span key="overflow" className="absolute" style={placed.css}>
-              <span className="avatar-group-photo flex items-center justify-center bg-tertiary font-semibold text-tertiary">
-                …
+              <span className="avatar-group-photo flex items-center justify-center bg-tertiary text-tertiary">
+                <DotsHorizontal aria-hidden="true" className="size-3/4" />
               </span>
             </span>
           );

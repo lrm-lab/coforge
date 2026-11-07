@@ -41,7 +41,7 @@ export function AgentPeerDmList({
               <span className="min-w-0 shrink truncate text-sm font-semibold text-primary">
                 {peerName}
               </span>
-              <span className="min-w-0 shrink-[3] truncate font-mono text-xs text-tertiary">
+              <span className="min-w-0 shrink-[3] truncate text-xs text-tertiary">
                 @{card.peer.name}
               </span>
               <span className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -54,7 +54,7 @@ export function AgentPeerDmList({
                   value={card.at}
                   timeZone={timeZone}
                   plain
-                  className="font-mono text-xs text-tertiary"
+                  className="text-xs text-tertiary"
                 />
               </span>
             </div>
@@ -67,7 +67,7 @@ export function AgentPeerDmList({
               <p className="text-sm text-tertiary">{m.agent_peer_dm_no_messages()}</p>
             )}
             <Tooltip title={m.agent_peer_dm_activity_tooltip()}>
-              <TooltipTrigger className="self-start font-mono text-xs text-quaternary">
+              <TooltipTrigger className="self-start text-xs text-quaternary">
                 {m.agent_peer_dm_activity_only()}
               </TooltipTrigger>
             </Tooltip>

@@ -268,7 +268,7 @@
   "agent_role_admin": "Admin",
   "agent_role_member": "Member",
   "agent_profile_resize": "Resize profile",
-  "agent_deleted_badge": "ARCHIVED",
+  "agent_deleted_badge": "Archived",
   "agent_profile_action_delete": "Archive Agent",
   "agent_delete_dialog_title": "Archive {name}?",
   "agent_delete_dialog_description": "The Agent stops and leaves Members and Chat. Its profile, messages, tasks and history stay readable, marked as archived. Archiving cannot be undone, and its username is released for a new Agent to use.",

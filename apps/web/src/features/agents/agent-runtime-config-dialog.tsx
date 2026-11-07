@@ -187,7 +187,7 @@ export function AgentRuntimeConfigForm({
               type="button"
               color="tertiary"
               size="sm"
-              className="w-max gap-1 px-0 text-xs font-medium tracking-wide text-tertiary uppercase"
+              className="w-max gap-1 px-0 text-xs font-medium text-tertiary"
               iconLeading={ChevronDown}
             >
               {m.agent_env_more()}
@@ -198,9 +198,7 @@ export function AgentRuntimeConfigForm({
               ) : (
                 <>
                   <div className="grid gap-1">
-                    <p className="text-xs font-medium tracking-wide text-tertiary uppercase">
-                      {m.agent_env_title()}
-                    </p>
+                    <p className="text-xs font-medium text-tertiary">{m.agent_env_title()}</p>
                     <p className="text-sm text-tertiary">{m.agent_env_description()}</p>
                   </div>
                   {envRows.map((row, index) => (

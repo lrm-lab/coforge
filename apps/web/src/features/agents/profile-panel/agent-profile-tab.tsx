@@ -246,7 +246,7 @@ function AgentProfileTabBody({
                   {ComputerIcon && (
                     <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
                   )}
-                  <span className="truncate font-mono">
+                  <span className="truncate">
                     {profile.computer?.label || m.agent_profile_computer_unassigned()}
                   </span>
                 </p>
@@ -260,7 +260,7 @@ function AgentProfileTabBody({
                       ? m.agent_profile_computer_connected()
                       : m.agent_profile_computer_offline()}
                     {profile.computer.computerVersion && (
-                      <span className="font-mono">· {profile.computer.computerVersion}</span>
+                      <span>· {profile.computer.computerVersion}</span>
                     )}
                   </p>
                 )}

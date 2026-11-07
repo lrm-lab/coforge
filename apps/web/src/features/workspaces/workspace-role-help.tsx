@@ -93,7 +93,7 @@ function RoleMatrix() {
               <th
                 scope="colgroup"
                 colSpan={WORKSPACE_MEMBER_ROLES.length + 1}
-                className="pt-4 pb-1 text-left text-xs font-semibold tracking-wide text-quaternary uppercase"
+                className="pt-4 pb-1 text-left text-xs font-semibold text-tertiary"
               >
                 {group.label()}
               </th>

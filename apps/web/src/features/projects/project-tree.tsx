@@ -164,7 +164,7 @@ export function ProjectTree({ slug, path }: { slug: string; path: string }) {
       maxSize="45"
       className="flex min-h-0 min-w-0 flex-col"
     >
-      <h2 className="px-5 pt-4 pb-2 text-xs font-semibold tracking-wide text-quaternary uppercase">
+      <h2 className="px-5 pt-4 pb-2 text-xs font-semibold text-tertiary">
         {m.project_tree_files()}
       </h2>
       {tree("min-h-0 flex-1 px-2 pb-3")}

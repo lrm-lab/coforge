@@ -215,7 +215,7 @@ function AppEventRow({
         <AppLogo name={name} url={logoUrl} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold break-words text-primary">{name}</p>
-          <p className="font-mono text-xs text-tertiary">
+          <p className="text-xs text-tertiary">
             <RelativeTime value={time} timeZone={timeZone} showExact />
           </p>
           {note && <p className="text-xs text-tertiary">{note}</p>}
@@ -248,7 +248,7 @@ function EventRow({
         <AppLogo name={event.appName} url={event.appLogoUrl} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold break-words text-primary">{event.appName}</p>
-          <p className="font-mono text-xs text-tertiary">
+          <p className="text-xs text-tertiary">
             <RelativeTime value={event.createdAt} timeZone={timeZone} showExact />
           </p>
         </div>

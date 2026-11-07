@@ -21,7 +21,7 @@ export function SettingsGroup({
 }) {
   return (
     <section aria-label={label}>
-      <h2 className="flex items-center gap-2 pb-3 text-xs font-semibold tracking-wide text-tertiary uppercase">
+      <h2 className="flex items-center gap-2 pb-3 text-xs font-semibold text-tertiary">
         <Icon aria-hidden="true" className="size-4" />
         {label}
         {badge}

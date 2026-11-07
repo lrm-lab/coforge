@@ -58,15 +58,11 @@ export function ComputerDetailStats({
           <MachineUsage reading={computer.machine?.memory ?? null} base={1024} />
         </Stat>
         <Stat label={m.computer_version()}>
-          <span className="font-mono">
-            {computerVersionLabel({ computerVersion: currentVersion })}
-          </span>
+          {computerVersionLabel({ computerVersion: currentVersion })}
         </Stat>
         {isCloud && (
           <Stat label={m.computer_image_version()}>
-            <span className="font-mono">
-              {computerImageVersionLabel({ imageVersion: currentImageVersion })}
-            </span>
+            {computerImageVersionLabel({ imageVersion: currentImageVersion })}
           </Stat>
         )}
         {computer.creator && (

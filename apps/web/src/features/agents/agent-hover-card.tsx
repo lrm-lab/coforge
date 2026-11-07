@@ -168,7 +168,7 @@ function AgentCard({
           </div>
           {/* The handle only when it says something the name does not. */}
           {shownHandle && shownHandle !== displayName && (
-            <p className="truncate font-mono text-xs text-tertiary">@{shownHandle}</p>
+            <p className="truncate text-xs text-tertiary">@{shownHandle}</p>
           )}
           {profile.isError ? (
             <p className="mt-2 border-t border-secondary pt-2 text-xs text-tertiary">
@@ -182,7 +182,7 @@ function AgentCard({
               )}
             </div>
           ) : (
-            <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-secondary pt-2 font-mono text-xs">
+            <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-secondary pt-2 text-xs">
               <CardFact label={m.agent_profile_computer()}>
                 {data && (data.computer?.label || m.agent_profile_computer_unassigned())}
               </CardFact>
@@ -260,7 +260,7 @@ function CardRecentActivity({
       </Button>
       <ol className="space-y-1.5">
         {rows.map((entry) => (
-          <li key={entry.key} className="flex min-w-0 items-center gap-2 font-mono text-xs">
+          <li key={entry.key} className="flex min-w-0 items-center gap-2 text-xs">
             <ClockTime
               value={new Date(entry.observedAtMs)}
               timeZone={timeZone}

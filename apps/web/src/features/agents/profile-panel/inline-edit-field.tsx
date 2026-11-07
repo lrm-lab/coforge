@@ -7,14 +7,13 @@ import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { m } from "#src/paraglide/messages";
 
-/** The panel's small uppercase field-group caption — the same style as the chat sidebar's
+/** The panel's small field-group caption — the same style as the chat sidebar's
  * "CHANNELS" caption (`conversation-directory.tsx`), reused here for section labels (INFO,
- * RUNTIME CONFIG, ACTIONS) and the two top-level editable field labels (Display name,
+ * Runtime config, Actions) and the two top-level editable field labels (Display name,
  * Description). */
-export const SECTION_CAPTION_CLASS =
-  "text-xs font-semibold tracking-wide text-quaternary uppercase";
+export const SECTION_CAPTION_CLASS = "text-xs font-semibold text-tertiary";
 
-/** The secondary, non-uppercase field label used inside a fact column (Role, Computer, Created,
+/** The secondary field label used inside a fact column (Role, Computer, Created,
  * Creator, Runtime, Model, Reasoning) — smaller and quieter than the section caption above. */
 export const SUBFIELD_LABEL_CLASS = "text-xs text-tertiary";
 

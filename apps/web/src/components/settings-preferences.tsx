@@ -107,9 +107,7 @@ export function PreferencesSettings({
             </ButtonGroup>
           </SettingsField>
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-semibold tracking-wide text-tertiary uppercase">
-              {m.preferences_preview()}
-            </p>
+            <p className="text-xs font-semibold text-tertiary">{m.preferences_preview()}</p>
             <MessageFontSizePreview senderName={profile.name} senderAvatarUrl={profile.avatarUrl} />
           </div>
         </SettingsCard>

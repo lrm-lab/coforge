@@ -154,7 +154,7 @@ export function AccountSettings({
             {/* Edit sits with the name it changes, not at the far edge of a wide window; while
                 editing, Cancel and Save close the form below instead. */}
             <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-              <h2 className="min-w-0 break-words text-display-xs font-semibold text-primary">
+              <h2 className="min-w-0 break-words text-lg font-semibold text-primary">
                 {profile.name}
               </h2>
               {!editing && (

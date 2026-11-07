@@ -126,5 +126,5 @@ export function AutoSendCountdown({ until }: { until: Date | null | undefined })
 export function SendCountdownBadge({ until }: { until: Date | null | undefined }) {
   const countdown = useSendWindowCountdown(until);
   if (!countdown) return null;
-  return <span className="mr-1 font-mono text-xs text-brand-secondary">{countdown}</span>;
+  return <span className="mr-1 text-xs text-brand-secondary tabular-nums">{countdown}</span>;
 }
