@@ -20,6 +20,19 @@ test("past the cap, each Agent keeps only its latest notice and the rest are dro
   expect(held.take()).toEqual({ items: ["a1", "a2", "a4", "b1"], dropped: 1 });
 });
 
+test("size reports what is held without taking it", () => {
+  const held = new HeldPublications<string>();
+  expect(held.size()).toBe(0);
+  held.latestFor("agent-a", "start", "start-1");
+  held.notice("agent-b", "b");
+  // Replacing an Agent's latest intent keeps one entry, so a superseded intent is not counted.
+  held.latestFor("agent-a", "start", "start-2");
+
+  expect(held.size()).toBe(2);
+  expect([...held.take().items].sort()).toEqual(["b", "start-2"]);
+  expect(held.size()).toBe(0);
+});
+
 test("take empties the buffer and starts a fresh count", () => {
   const held = new HeldPublications<string>(1);
   held.notice("agent-a", "a");

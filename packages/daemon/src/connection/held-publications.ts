@@ -57,6 +57,11 @@ export class HeldPublications<Item> {
     return replaced;
   }
 
+  /** How many items are held right now, for the ready-wait report. */
+  size(): number {
+    return this.#held.size;
+  }
+
   /** Everything held, in arrival order, and how many notices were dropped; empties the buffer. */
   take(): { items: Item[]; dropped: number } {
     const taken = { items: [...this.#held.values()], dropped: this.#dropped };

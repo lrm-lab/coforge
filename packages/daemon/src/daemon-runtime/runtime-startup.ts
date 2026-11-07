@@ -37,6 +37,7 @@ import type { StalledRecoverySweep } from "./stalled-recovery-sweep";
 import type { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
 import type { runtimeMachineStatus } from "./machine-status-reporter";
 import { readyCapabilities } from "./ready-capabilities";
+import { RuntimeReadyWaitWatch } from "./runtime-ready-wait";
 import { subscribeRuntimeAuth } from "./runtime-auth-subscription";
 import { subscribeRuntimeReconnect } from "./runtime-reconnect";
 import { subscribeProviderScans } from "./provider-scan-handlers";
@@ -120,6 +121,11 @@ export class RuntimeStartup {
   #subscriptions: Array<() => void> = [];
   #piChat?: PiChatRelay;
   #authControl: RuntimeAuthController | undefined;
+  /** Watches publications held before ready across every start attempt; settled only when they
+   * are released or the runtime is going away. */
+  #readyWait: RuntimeReadyWaitWatch | undefined;
+  /** The current attempt's hold, which the watch reads its count from. */
+  #publications: RuntimePublicationSubscriptions | undefined;
   readonly #localSessions = new LocalSessionCatalog();
 
   constructor(private readonly ports: RuntimeStartupPorts) {}
@@ -149,6 +155,7 @@ export class RuntimeStartup {
   /** Closes the connection's local capabilities synchronously; the promise settles once the Pi
    * chat relay has closed. */
   close(): Promise<void> {
+    this.#readyWait?.settle();
     this.#started = false;
     this.#authControl?.stop();
     this.#authControl = undefined;
@@ -165,6 +172,7 @@ export class RuntimeStartup {
 
   /** Ends a start still waiting for the cloud, so a stop never waits on an unreachable server. */
   abort(): void {
+    this.#readyWait?.settle();
     this.#abort?.abort(new DaemonConnectionStoppedError());
   }
 
@@ -275,6 +283,14 @@ export class RuntimeStartup {
       // Register publication listeners after the auxiliary query/scanning listeners, matching the
       // original start order; the server may recover persisted Agents immediately at ready.
       for (const unsubscribe of await publications.install()) this.#subscribe(unsubscribe);
+      this.#publications = publications;
+      // Publications are held from here until the handshake completes. A start that fails and is
+      // retried installs fresh listeners and holds again, so the watch counts the attempt but
+      // keeps its clock: an outage answers each ready in seconds while the hold lasts hours.
+      this.#readyWait ??= new RuntimeReadyWaitWatch({
+        heldCount: () => this.#publications?.heldCount() ?? 0,
+      });
+      this.#readyWait.begin(connection.workspaceId);
       await transport.start(token, {
         workspaceId: connection.workspaceId,
         computerId: connection.computerId,
@@ -289,8 +305,11 @@ export class RuntimeStartup {
       await ports.agentSessions.replay();
       // Off the event loop, once: the OS version only changes with an upgrade.
       await ports.operatingSystem.read();
-      await transport.ready(
-        () => ({
+      // The connection asks for a fresh request per ready attempt — a retry included — so this
+      // factory is also where the hold learns how many attempts it has outlasted.
+      await transport.ready(() => {
+        this.#readyWait?.attempt();
+        return {
           protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
           requestId: crypto.randomUUID(),
           workspaceId: connection.workspaceId,
@@ -306,15 +325,15 @@ export class RuntimeStartup {
           recoveredRestartRequestIds: ports.lifecycle.recoveredRestartRequestIds ?? [],
           recoveredUpgradeRequestIds: ports.lifecycle.recoveredUpgradeRequestIds ?? [],
           capabilities: readyCapabilities(!!ports.publications.migration, !!this.#authControl),
-        }),
-        signal,
-      );
+        };
+      }, signal);
       await ports.upgradeResults.report();
       await Promise.all(
         ports.readyRunningAgentIds().map((agentId) => ports.requestReminderSnapshot(agentId)),
       );
       ports.resyncAppConfigs();
       const { buffered, dropped } = publications.release();
+      this.#readyWait?.settle();
       if (dropped > 0)
         logger.warn("Delivery notices held during start were dropped; the cloud resends them", {
           event: "daemon_runtime:notices_dropped",
@@ -337,6 +356,8 @@ export class RuntimeStartup {
         .then((report) => ports.codeAgentInventory.refreshStaleCatalogs(report, transport))
         .catch(() => {});
     } catch (error) {
+      // The hold itself is not settled: a retry installs fresh listeners and holds again, so the
+      // wait keeps running until the publications are released or the runtime goes away.
       this.#authControl?.stop();
       this.#authControl = undefined;
       this.unsubscribeAll();

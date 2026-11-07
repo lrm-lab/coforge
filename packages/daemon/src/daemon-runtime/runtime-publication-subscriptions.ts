@@ -217,6 +217,13 @@ export class RuntimePublicationSubscriptions {
     return subscriptions;
   }
 
+  /** How many publications wait behind the ready handshake, control intents first. Reported by
+   * the ready-wait watch so a stalled handshake is visible instead of looking like a healthy
+   * daemon that ignores every intent (task #630). */
+  heldCount(): number {
+    return this.#heldControl.size() + this.#heldMessages.size();
+  }
+
   /** Stops buffering and returns the control work before delivery notices, preserving the old
    * replay order. A dropped notice is reported to the cloud, which resends it later. */
   release(): { buffered: Array<() => Promise<void>>; dropped: number } {
