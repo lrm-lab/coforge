@@ -179,6 +179,25 @@ describe("deploy gate", () => {
     expect(result.stderr).toContain("every table as zero bytes");
   });
 
+  test("a fresh database — no applied migrations and no tables — passes unchecked", async () => {
+    const dir = migrations({
+      "20261001000000_old": "CREATE TABLE tasks (id int);\n",
+      // Unannotated and high-risk on purpose: a fresh database has no data to protect, so the
+      // gate does not judge it.
+      "20261101000000_new": RISKY,
+    });
+    const result = await gate(fakeSource([], []), dir);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain("fresh database");
+  });
+
+  test("an empty catalog after migrations have run is a broken read, not a fresh database", async () => {
+    const dir = migrations({ "20261101000000_plain": "SELECT 1;\n" });
+    const result = await gate(fakeSource(["20261001000000_old"], []), dir);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("every table as zero bytes");
+  });
+
   test("a failure to read the catalog stops the deploy", async () => {
     const dir = migrations({ "20261101000000_plain": "SELECT 1;\n" });
     const result = await gate(fakeSource(new Error("connection refused"), []), dir);

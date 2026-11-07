@@ -22,6 +22,16 @@ export async function deployGate(
     const applied = new Set(await source.applied());
     const pending = listMigrations(migrationsDir).filter(({ name }) => !applied.has(name));
     const tables = await source.tables();
+    // A database with no applied migrations and no tables is a fresh install: there is no data
+    // to protect, so the gate has nothing to judge against and lets it through. An empty catalog
+    // alongside applied migrations — or any all-zero read — is a broken catalog, not an empty
+    // database, and stops the deploy below.
+    if (applied.size === 0 && tables.length === 0) {
+      console.error(
+        `migration-safety: fresh database (no applied migrations, no tables); ${pending.length} pending migration(s) pass unchecked`,
+      );
+      return 0;
+    }
     assertPlausibleTables(tables);
     const catalog = catalogOf({ tables });
     // Tables the pending migrations create one after another are not in the live catalog yet.
