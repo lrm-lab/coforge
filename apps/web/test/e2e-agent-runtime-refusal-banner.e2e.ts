@@ -62,7 +62,7 @@ test("each runtime refusal shows its own sentence on the Agent's error banner", 
   });
   const display = getAgentDisplay();
   /** The banner's sentence: the status line that carries the error, without its buttons. */
-  const banner = `[...document.querySelectorAll('[role="status"] .line-clamp-2')].map((el) => el.textContent ?? "").find((text) => text.startsWith("Error:"))`;
+  const banner = `[...document.querySelectorAll('[role="status"] span')].map((el) => el.textContent ?? "").find((text) => text.startsWith("Error:"))`;
   try {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
