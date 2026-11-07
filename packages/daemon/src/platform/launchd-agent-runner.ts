@@ -82,8 +82,11 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
           if (terminalTree) {
             try {
               await cleanTerminal();
-            } catch {
-              channel.send({ type: "cleanup_failed" });
+            } catch (error) {
+              channel.send({
+                type: "cleanup_failed",
+                reason: error instanceof Error ? error.message : String(error),
+              });
               await channel.flush();
               process.exit(1);
             }
@@ -111,8 +114,11 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
       ["SIGINT", "SIGTERM", "SIGKILL"].includes(String(record.signal))
     ) {
       if (terminalTree && record.signal !== "SIGINT") {
-        void terminalTree.terminate(record.signal === "SIGKILL").catch(() => {
-          channel.send({ type: "cleanup_failed" });
+        void terminalTree.terminate(record.signal === "SIGKILL").catch((error: unknown) => {
+          channel.send({
+            type: "cleanup_failed",
+            reason: error instanceof Error ? error.message : String(error),
+          });
           void channel.flush().finally(shutdown);
         });
       } else child.kill(record.signal as "SIGINT" | "SIGTERM" | "SIGKILL");

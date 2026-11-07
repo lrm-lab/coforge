@@ -198,6 +198,7 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
         cleanupFailed = true;
         getLogger(["coforge", "daemon", "launchd"]).error("Terminal process cleanup failed", {
           event: "launchd:terminal_cleanup_failed",
+          reason: String(record.reason ?? "unspecified"),
         });
         finish(1);
         void forceStop().catch(() => {});
@@ -207,12 +208,13 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
         finish(Number(record.code));
       } else throw new Error("invalid Agent job response");
     });
-    const fail = (_error: unknown) => {
+    const fail = (error: unknown) => {
       if (closed) return;
       if (options?.terminal) {
         cleanupFailed = true;
         getLogger(["coforge", "daemon", "launchd"]).error("Terminal process cleanup failed", {
           event: "launchd:terminal_cleanup_failed",
+          reason: error instanceof Error ? error.message : String(error),
         });
       }
       readyReject(new Error("native Agent job failed"));
@@ -352,6 +354,7 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
           cleanupFailed = true;
           getLogger(["coforge", "daemon", "launchd"]).error("Terminal process cleanup failed", {
             event: "launchd:terminal_cleanup_failed",
+            reason: error instanceof Error ? error.message : String(error),
           });
           throw error;
         } finally {
