@@ -17,7 +17,7 @@ const choice = (to: string, prompt = "Which color?") => ({
   ],
 });
 
-test("a prepared card expires 7 days after it is posted, and reads expired before the sweep", async () => {
+test("a prepared card expires 24 hours after it is posted, and reads expired before the sweep", async () => {
   const ctx = await setupActionCards();
   try {
     const prepared = await ctx.actionCards.prepare(ctx.principal, {
@@ -29,6 +29,7 @@ test("a prepared card expires 7 days after it is posted, and reads expired befor
       select: { expiresAt: true, createdAt: true },
     });
     expect(card.expiresAt).not.toBeNull();
+    expect(ACTION_CARD_TTL_MS).toBe(24 * 60 * 60 * 1_000);
     const window = card.expiresAt!.getTime() - card.createdAt.getTime();
     expect(window).toBeLessThanOrEqual(ACTION_CARD_TTL_MS);
     expect(window).toBeGreaterThan(ACTION_CARD_TTL_MS - 5_000);

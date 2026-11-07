@@ -9,7 +9,7 @@ export type ActionCardPrepareResult = AgentActionPrepareResponse;
 export type ActionCardState = "pending" | "executed" | "cancelled" | "expired";
 
 /** How long a pending card waits before it expires, from the moment it is posted. */
-export const ACTION_CARD_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+export const ACTION_CARD_TTL_MS = 24 * 60 * 60 * 1_000;
 
 /**
  * The state a reader sees: a pending row whose `expiresAt` has passed reads as expired even before
@@ -42,7 +42,7 @@ export type ActionCardViewBase = {
   /** Who committed it; `isViewer` lets the handled line name only someone else. */
   committedBy?: ActionCardActor;
   committedAt?: string;
-  /** When a pending card expires (7 days after it was posted). */
+  /** When a pending card expires (24 hours after it was posted). */
   expiresAt?: string;
   /** Whether the viewer may commit this card right now (implies `state === "pending"`). */
   canCommit: boolean;
