@@ -1,4 +1,5 @@
 import { RFC_UUID_PATTERN } from "@lrm/coforge-sdk/internal";
+import { assertOfficialReleaseFeedUrl } from "#src/release-channel";
 
 /** Who asked for the operation. Remote operations owe the server a terminal result. */
 export type UpgradeOperationOrigin = "remote" | "cli";
@@ -19,6 +20,8 @@ export type UpgradeOperation = {
    * boundary (`createLocalUpgradeOperation`); a remote operation never carries it.
    */
   allowDowngrade?: boolean;
+  /** Official feed selected by an interactive channel choice; absent for server-triggered latest. */
+  releaseFeedUrl?: string;
 };
 
 export function assertUpgradeRequestId(value: unknown): asserts value is string {
@@ -36,18 +39,26 @@ export function parseRemoteUpgradeOperation(argv: readonly string[]): UpgradeOpe
   assertUpgradeRequestId(requestId);
   const selection = value("--version");
   if (!selection) throw new Error("remote upgrade requires --version");
-  return { requestId, selection, origin: "remote" };
+  const releaseFeedFlag = argv.indexOf("--release-feed");
+  const rawReleaseFeedUrl = value("--release-feed");
+  if (releaseFeedFlag >= 0 && !rawReleaseFeedUrl)
+    throw new Error("remote upgrade --release-feed requires a value");
+  const releaseFeedUrl = rawReleaseFeedUrl
+    ? assertOfficialReleaseFeedUrl(rawReleaseFeedUrl)
+    : undefined;
+  return { requestId, selection, origin: "remote", ...(releaseFeedUrl ? { releaseFeedUrl } : {}) };
 }
 
 /** Builds the operation an interactive `upgrade` or `install` command runs. */
 export function createLocalUpgradeOperation(
   selection: string,
-  options: { allowDowngrade: boolean },
+  options: { allowDowngrade: boolean; releaseFeedUrl?: string },
 ): UpgradeOperation {
   return {
     requestId: crypto.randomUUID(),
     selection,
     origin: "cli",
     allowDowngrade: options.allowDowngrade,
+    releaseFeedUrl: options.releaseFeedUrl,
   };
 }

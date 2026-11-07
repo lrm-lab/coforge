@@ -47,6 +47,9 @@ relative to `src/`.
 | `paths.ts`                                 | Platform-native state and credential paths                                                          |
 | `local-config.ts`                          | Reading and validating the persisted profile                                                        |
 | `release-channel.ts`                       | Compiled official feed/server mapping                                                               |
+| `release/channel-state.ts`                 | Durable local release-channel selector and fail-closed parser                                       |
+| `cli/release-channel-command.ts`           | Channel CLI registration and persisted selector command                                             |
+| `cli/update-command-registration.ts`       | Install and upgrade CLI option registration and channel propagation                                 |
 | `daemon-client/`                           | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                       |
 | `daemon-service/`                          | The daemon host's inputs for this machine, shared by `cli.ts` and `__lifecycle service-definition`  |
 | `host/`                                    | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them                     |

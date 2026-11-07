@@ -97,7 +97,7 @@ export async function runUpgradeOperation(
   await assertOutsideManagedSupervisor();
   const { requestId, origin, selection, allowDowngrade } = operation;
   const launch = {
-    feedUrl: options.feedUrl,
+    feedUrl: operation.releaseFeedUrl ?? options.feedUrl,
     target: options.target,
     installRoot: options.installRoot,
   };

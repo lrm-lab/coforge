@@ -17,6 +17,7 @@ export function computerUpgradeAction(
   executablePath: string,
   requestId: string,
   expectedVersion: string,
+  feedUrl?: string,
 ): string[] {
   return [
     executablePath,
@@ -25,6 +26,7 @@ export function computerUpgradeAction(
     requestId,
     "--version",
     expectedVersion,
+    ...(feedUrl ? ["--release-feed", feedUrl] : []),
   ];
 }
 
@@ -33,10 +35,11 @@ export function computerUpgradeCommand(
   executablePath: string,
   requestId: string,
   expectedVersion: string,
+  feedUrl?: string,
 ): string[] {
   if (!RFC_UUID_PATTERN.test(requestId)) throw new Error("invalid Computer upgrade request ID");
   if (!expectedVersion) throw new Error("missing expected Computer release version");
-  const action = computerUpgradeAction(executablePath, requestId, expectedVersion);
+  const action = computerUpgradeAction(executablePath, requestId, expectedVersion, feedUrl);
   if (platform === "linux")
     return [
       "systemd-run",
@@ -104,6 +107,8 @@ export function computerUpgradeJobPaths(
 export type WindowsUpgradeTaskRunner = (command: string[]) => Promise<number>;
 
 export type LaunchComputerUpgradeOptions = ComputerUpgradeJobPathOptions & {
+  /** Explicit official feed selected by the local channel command. */
+  feedUrl?: string;
   /** Injectable native launchd access, for tests only. */
   jobPlatform?: LaunchdJobPlatform;
   /** Injectable Windows `schtasks` runner, for tests only. */
@@ -139,7 +144,13 @@ export async function launchComputerUpgrade(
   options: LaunchComputerUpgradeOptions = {},
 ): Promise<void> {
   const platform = options.platform ?? process.platform;
-  const command = computerUpgradeCommand(platform, process.execPath, requestId, expectedVersion);
+  const command = computerUpgradeCommand(
+    platform,
+    process.execPath,
+    requestId,
+    expectedVersion,
+    options.feedUrl,
+  );
   if (platform === "darwin") {
     const paths = computerUpgradeJobPaths(requestId, options);
     // RunAtLoad with no KeepAlive: launchd runs the job once when bootstrapped and never
@@ -161,7 +172,7 @@ export async function launchComputerUpgrade(
   if (platform === "linux" && !(options.hasSystemd ?? systemdPresent())) {
     const { logPath } = computerUpgradeJobPaths(requestId, options);
     (options.spawnDetached ?? spawnDetachedUpgrade)(
-      computerUpgradeAction(process.execPath, requestId, expectedVersion),
+      computerUpgradeAction(process.execPath, requestId, expectedVersion, options.feedUrl),
       logPath,
     );
     return;

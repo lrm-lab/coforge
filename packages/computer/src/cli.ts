@@ -9,6 +9,7 @@ import { resolveComputerStateDirectory, resolveDaemonSocketPath } from "./paths"
 import { COFORGE_RELEASE_FEED_URL, COFORGE_SERVER_URL } from "./release-channel";
 import { FileComputerConfig } from "./local-config";
 import { resolveComputerConfigDirectory } from "./paths";
+import type { ReleaseChannel } from "#src/release/channel-state";
 import { currentComputerPlatform } from "./platform";
 import { COFORGE_DAEMON_SERVER_URL, runMachineSupervisor } from "@lrm/coforge-daemon";
 import { isValidComputerWorkspaceSlug } from "#src/workspace/workspace-slug";
@@ -17,7 +18,6 @@ import { createLoginCommand, createSetupCommand } from "#src/cli/login-setup-com
 import { createCommand, createLogsCommand } from "#src/cli/daemon-commands";
 import type { DetachOutcome } from "#src/detach/detach";
 import { createUpdateCommand } from "#src/cli/update-command";
-import { describeUpgradePlan, planUpgrade } from "#src/cli/upgrade-plan";
 import { configureComputerLogger } from "#src/logging/computer-logger";
 import { COFORGE_COMPUTER_VERSION as VERSION } from "./version";
 import { createStatusPorts } from "#src/status/create-status-ports";
@@ -34,6 +34,12 @@ import { prepareContainerBinding } from "#src/host/container-binding";
 import { runHostProcess } from "#src/host/run-host";
 import { confirmSetupIdentityChange } from "#src/cli/setup-identity-confirmation";
 import { resolveSetupWorkspace } from "#src/cli/setup-workspace";
+import {
+  createReleaseChannelCommand,
+  registerChannelCommand,
+  type ChannelCommand,
+} from "#src/cli/release-channel-command";
+import { registerUpdateCommands } from "#src/cli/update-command-registration";
 
 export interface LoginCommand {
   run(serverUrl: string, options: { json: boolean }): Promise<void>;
@@ -56,10 +62,13 @@ export interface SetupCommand {
 /** `--allow-downgrade`: the target may be older than the installed version. */
 export interface UpdateOptions {
   allowDowngrade: boolean;
+  releaseFeedUrl?: string;
 }
 
 export interface UpdateCommand {
-  resolveVersion(selector: string): Promise<string>;
+  resolveVersion(selector: string, options?: { channel?: string }): Promise<string>;
+  resolveChannel?(): Promise<ReleaseChannel>;
+  resolveFeedUrl?(channel: ReleaseChannel): string;
   getCurrentVersion(): Promise<string | null>;
   install(version: string, options: UpdateOptions): Promise<void>;
   upgrade(version: string, options: UpdateOptions): Promise<void>;
@@ -113,6 +122,7 @@ interface CliDependencies {
   status?: StatusCommand;
   doctor?: DoctorCommand;
   host?: HostCommand;
+  channel?: ChannelCommand;
 }
 
 export async function runCli(
@@ -147,6 +157,7 @@ export async function runCli(
       json = options.json ?? false;
       return dependencies.login.run(COFORGE_SERVER_URL, { json });
     });
+  registerChannelCommand(program, dependencies.channel);
   registerLogoutCommand(program, dependencies.logout, (value) => {
     json = value;
   });
@@ -220,52 +231,9 @@ export async function runCli(
         });
       },
     );
-  program
-    .command("install")
-    .description("Install one verified Computer version for the current user.")
-    .option("--version <selector>", "latest|<version>", "latest")
-    .option("--allow-downgrade", "Allow --version to be older than the installed Computer")
-    .action((options: { version: string; allowDowngrade?: boolean }) =>
-      requireUpdater(dependencies).install(options.version, {
-        allowDowngrade: options.allowDowngrade === true,
-      }),
-    );
-  program
-    .command("upgrade")
-    .description(
-      "Atomically move to one verified Computer version, newer or older (an older --version needs --allow-downgrade).",
-    )
-    .option("--version <selector>", "latest|<version>", "latest")
-    .option("--allow-downgrade", "Allow --version to be older than the installed Computer")
-    .option(
-      "--dry-run",
-      "Show the version this would move to, and whether it would be refused, without changing anything",
-    )
-    .action(async (options: { version: string; allowDowngrade?: boolean; dryRun?: boolean }) => {
-      const allowDowngrade = options.allowDowngrade === true;
-      const updater = requireUpdater(dependencies);
-      const target = await updater.resolveVersion(options.version);
-      if (options.dryRun) {
-        const report = describeUpgradePlan(
-          planUpgrade(await updater.getCurrentVersion(), target, allowDowngrade),
-        );
-        for (const line of report.lines) io.stdout(line);
-        exitCode = report.exitCode;
-        return;
-      }
-      if ((await updater.getCurrentVersion()) === target) {
-        io.stdout(`Already up to date: ${target}`);
-        return;
-      }
-      const answer = (io.prompt ?? globalThis.prompt)(
-        `Upgrade CoForge Computer to ${target}? [y/N] `,
-      );
-      if (!/^(y|yes)$/i.test(answer?.trim() ?? "")) {
-        io.stdout("Upgrade cancelled.");
-        return;
-      }
-      return updater.upgrade(target, { allowDowngrade });
-    });
+  registerUpdateCommands(program, dependencies.updater, io, (value) => {
+    exitCode = value;
+  });
   program
     .command("repair")
     .description("Re-register a missing or stale service definition, stopping nothing.")
@@ -462,6 +430,7 @@ export async function runComputer(): Promise<void> {
       {
         login: createLoginCommand(io, config),
         logout: createLogoutCommand(io),
+        channel: createReleaseChannelCommand(stateDirectory, io),
         setup: createSetupCommand(io, config),
         updater: createUpdateCommand(io),
         daemon: createCommand(

@@ -8,7 +8,10 @@ import {
 } from "#src/release/upgrade-runner";
 import { nextUpgradeCommandHint, reportStoppedWorkspaces } from "./upgrade-output";
 import { createLocalUpgradeOperation } from "#src/release/upgrade-operation";
-import { COFORGE_RELEASE_FEED_URL } from "#src/release-channel";
+import { resolveReleaseFeedForChannel } from "#src/release-channel";
+import { parseReleaseChannel, readReleaseChannel } from "#src/release/channel-state";
+import { resolveComputerStateDirectory } from "#src/paths";
+import { homedir } from "node:os";
 import { runInstallationSource } from "#src/release/installation-source";
 import { runDetachedUpgrade } from "#src/release/detached-upgrade";
 import { UpgradeFailedError } from "#src/release/upgrade-receipt";
@@ -24,9 +27,17 @@ export function createUpdateCommand(
   dependencies: {
     detachedUpgrade?: typeof runDetachedUpgrade;
     inPlaceUpgrade?: typeof runUpgradeOperation;
+    stateDirectory?: string;
   } = {},
 ): UpdateCommand {
   const { installRoot, target } = resolveUpgradeRunnerPaths();
+  const stateDirectory =
+    dependencies.stateDirectory ??
+    resolveComputerStateDirectory({
+      platform: process.platform,
+      homeDirectory: homedir(),
+      environment: process.env,
+    });
   const updater = new ComputerUpdater({ installRoot });
   /**
    * Moves the Computer through an OS one-shot job and waits for its receipt: the operation is
@@ -42,6 +53,7 @@ export function createUpdateCommand(
       );
     const outcome = await (dependencies.detachedUpgrade ?? runDetachedUpgrade)({
       version,
+      feedUrl: options.releaseFeedUrl,
       installRoot,
       // The job's own progress lines are diagnostics: they belong on stderr, never on the
       // command's stdout, which a `--json` caller reads.
@@ -61,8 +73,26 @@ export function createUpdateCommand(
   };
 
   return {
-    resolveVersion: (selection) =>
-      runInstallationSource({ baseUrl: COFORGE_RELEASE_FEED_URL, target, selection }),
+    resolveChannel: () => readReleaseChannel(stateDirectory),
+    resolveFeedUrl: (channel) => resolveReleaseFeedForChannel(channel),
+    resolveVersion: async (selection, options = {}) => {
+      const saved = await readReleaseChannel(stateDirectory);
+      const channel = options.channel === undefined ? saved : parseReleaseChannel(options.channel);
+      if (channel === null)
+        throw new Error(
+          `invalid release channel "${options.channel}"; use latest, alpha, or pinned:<version>`,
+        );
+      const feedUrl = resolveReleaseFeedForChannel(channel);
+      const effectiveSelection =
+        channel.startsWith("pinned:") && selection === "latest"
+          ? channel.slice("pinned:".length)
+          : selection;
+      return await runInstallationSource({
+        baseUrl: feedUrl,
+        target,
+        selection: effectiveSelection,
+      });
+    },
     getCurrentVersion: () => updater.getCurrentVersion(),
     async install(version, options) {
       const result = await move(version, options);

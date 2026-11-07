@@ -42,7 +42,15 @@ const binaryPath = resolve(
           // backslash paths that would miss a `/`-only filter and leave staging URLs baked in.
           build.onLoad({ filter: /(?:^|[\\/])computer[\\/]src[\\/]release-channel\.ts$/ }, () => ({
             contents: `export const COFORGE_SERVER_URL = ${JSON.stringify(server)};
-            export const COFORGE_RELEASE_FEED_URL = ${JSON.stringify(releaseFeed)};`,
+            export const COFORGE_RELEASE_FEED_URL = ${JSON.stringify(releaseFeed)};
+            export function assertOfficialReleaseFeedUrl(value) {
+              if (value !== ${JSON.stringify(releaseFeed)}) throw new Error("fixture release feed mismatch");
+              return value;
+            }
+            export function resolveReleaseFeedForChannel(channel) {
+              if (channel === "latest" || channel === "alpha" || channel.startsWith("pinned:")) return ${JSON.stringify(releaseFeed)};
+              throw new Error("fixture feature channel is unavailable");
+            }`,
             loader: "ts",
           }));
           build.onLoad(

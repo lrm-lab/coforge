@@ -16,6 +16,8 @@ export const DETACHED_UPGRADE_POLL_MS = 1_000;
 export type DetachedUpgradeOptions = {
   /** The version the operation moves to, validated by the caller's own plan. */
   version: string;
+  /** Official feed selected for this operation; omitted uses the compiled environment. */
+  feedUrl?: string;
   /** The operation's durable id; a caller that already has one (a retry) passes it. */
   requestId?: string;
   installRoot?: string;
@@ -67,6 +69,7 @@ export async function runDetachedUpgrade(
   // unit's cgroup, so stopping that unit cannot end it. Raft has no `systemd-run` and must check.
   note(`Upgrade ${requestId} starts outside this process; its result is kept on this Computer.`);
   await launch(requestId, options.version, {
+    feedUrl: options.feedUrl,
     stateDirectory: options.stateDirectory,
     homeDirectory: home,
   });

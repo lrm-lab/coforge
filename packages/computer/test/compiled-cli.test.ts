@@ -307,7 +307,10 @@ test("local test build strips terminal controls from device authorization instru
           name: "local-test-server",
           setup(build) {
             build.onLoad({ filter: /\/computer\/src\/release-channel\.ts$/ }, () => ({
-              contents: `export const COFORGE_SERVER_URL = ${JSON.stringify(server.url.origin)}; export const COFORGE_RELEASE_FEED_URL = "https://releases.coforge.cn";`,
+              contents: `export const COFORGE_SERVER_URL = ${JSON.stringify(server.url.origin)};
+                export const COFORGE_RELEASE_FEED_URL = "https://releases.coforge.cn";
+                export function assertOfficialReleaseFeedUrl(value) { if (value !== "https://releases.coforge.cn") throw new Error("test feed mismatch"); return value; }
+                export function resolveReleaseFeedForChannel(channel) { if (channel === "latest" || channel === "alpha" || channel.startsWith("pinned:")) return "https://releases.coforge.cn"; throw new Error("test feature channel unavailable"); }`,
               loader: "ts",
             }));
           },

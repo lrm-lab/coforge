@@ -1,3 +1,5 @@
+import type { ReleaseChannel } from "#src/release/channel-state";
+
 /** Release and package builds both replace the direct
  * `process.env.COFORGE_RELEASE_FEED_URL` expression through Bun.build's `define`.
  * Keep that read direct so it cannot become a runtime override. The build scripts
@@ -47,4 +49,31 @@ export function resolveServerUrl(releaseFeedUrl: string): string {
   );
 }
 
+export function assertOfficialReleaseFeedUrl(value: string): string {
+  const normalized = value.endsWith("/") ? value.slice(0, -1) : value;
+  resolveServerUrl(normalized);
+  return normalized;
+}
+
 export const COFORGE_SERVER_URL = resolveServerUrl(COFORGE_RELEASE_FEED_URL);
+
+/**
+ * Resolve the public feed that can actually serve a channel in the current distribution model.
+ * `latest` stays in the compiled environment; `alpha` is the official staging feed. A pinned
+ * selector is an exact version on the compiled feed. Feature channels are parsed and persisted
+ * by the CLI for forward compatibility, but there is no channel index or channel-specific tree in
+ * the current feed contract, so using one fails closed instead of silently installing latest.
+ */
+export function resolveReleaseFeedForChannel(channel: ReleaseChannel): string {
+  if (channel === "latest" || channel.startsWith("pinned:")) return COFORGE_RELEASE_FEED_URL;
+  if (channel === "alpha") {
+    const staging = OFFICIAL_RELEASE_ENVIRONMENTS.find(
+      (candidate) => candidate.server === "https://staging.coforge.cn",
+    );
+    if (!staging) throw new Error("the official staging release environment is not configured");
+    return staging.feed;
+  }
+  throw new Error(
+    `release channel ${channel} is not published by the CoForge feed; use latest, alpha, or pinned:<version>`,
+  );
+}

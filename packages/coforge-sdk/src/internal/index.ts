@@ -150,6 +150,7 @@ export * from "./upgrade-error-code";
 export const COMPUTER_CLI_COMMANDS = [
   "login",
   "logout",
+  "channel",
   "attach",
   "setup",
   "detach",
