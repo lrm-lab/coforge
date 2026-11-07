@@ -67,8 +67,9 @@ export class TaskIdleNudge {
 
   /** Called where a turn ends or a process exits; never throws, never blocks that path. */
   maybeAsk(agentId: string): void {
-    if (this.#inFlight.has(agentId) || !this.ports.idle(agentId)) return;
-    if (this.#now() < this.#unsupportedUntil) return;
+    if (this.#inFlight.has(agentId)) return this.#skipped(agentId, "in_flight");
+    if (!this.ports.idle(agentId)) return this.#skipped(agentId, "not_idle");
+    if (this.#now() < this.#unsupportedUntil) return this.#skipped(agentId, "unsupported");
     const sessionId = this.ports.sessionId(agentId);
     const fresh =
       this.ports.freshSession(agentId) &&
@@ -85,6 +86,21 @@ export class TaskIdleNudge {
 
   #now(): number {
     return this.ports.now?.() ?? Date.now();
+  }
+
+  /** A gate that kept this Agent from being asked, logged at most once per interval per reason —
+   * the same throttle a declined answer gets, so a busy Agent does not write a line per trigger. */
+  #skipped(agentId: string, reason: string): void {
+    const now = this.#now();
+    const key = `${agentId} ${reason}`;
+    const lastLogged = this.#skippedLoggedAt.get(key);
+    if (lastLogged !== undefined && now - lastLogged < IDLE_NUDGE_SKIPPED_LOG_INTERVAL_MS) return;
+    this.#skippedLoggedAt.set(key, now);
+    logger.info("Task idle nudge was skipped before asking", {
+      event: "task_idle_nudge:skipped",
+      agent_id: agentId,
+      reason,
+    });
   }
 
   async #ask(agentId: string, request: IdleNudgeRequest): Promise<void> {
