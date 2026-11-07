@@ -7,6 +7,7 @@ import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection"
 import { OPENCODE_ACP_PROFILE } from "./acp-session";
 import type { OpenCodeAcpRuntimeHost } from "./acp-host";
 import { scrubStderrHint } from "#src/stderr-hint";
+import { isRoutineOpenCodeStderr } from "./stderr";
 
 /** opencode's own `default` is the provider default. Callers store that as an empty string. */
 const PROVIDER_DEFAULT_EFFORT = "default";
@@ -74,6 +75,7 @@ export async function readOpenCodeModelEfforts(
   let transport: AcpConnection | undefined;
   let sessionId: string | undefined;
   let stderrHint: string | undefined;
+  let lastStderrLine: string | undefined;
   const expires = setTimeout(() => {
     void transport?.dispose();
   }, sweepTimeoutMs);
@@ -85,7 +87,11 @@ export async function readOpenCodeModelEfforts(
       clientInfo: host.clientInfo,
       processTreeSpawner: host.processTreeSpawner,
       onStderr: (line) => {
-        if (stderrHint === undefined && line.trim()) stderrHint = scrubStderrHint(line);
+        // --print-logs opens with routine INFO narrative; the hint is the first real diagnostic,
+        // falling back to the last line so a silent hang still shows where it stalled.
+        if (!line.trim()) return;
+        if (stderrHint === undefined && !isRoutineOpenCodeStderr(line)) stderrHint = line;
+        lastStderrLine = line;
       },
     });
     await transport.initialize(timeoutMs);
@@ -148,11 +154,12 @@ export async function readOpenCodeModelEfforts(
     }
     return reads;
   } catch (error) {
+    const hint = stderrHint ?? lastStderrLine;
     logger.warn("code_agent_catalog:effort_sweep_failed", {
       provider: RUNTIME_PROVIDER.OPENCODE,
       error_code: diagnosticErrorCode(error),
       error_message: error instanceof Error ? error.message : String(error),
-      ...(stderrHint ? { stderr_hint: stderrHint } : {}),
+      ...(hint ? { stderr_hint: scrubStderrHint(hint) } : {}),
     });
     const failed: OpenCodeEffortRead = { status: "failed", code: failureCode(error) };
     for (const modelId of modelIds) if (!reads.has(modelId)) reads.set(modelId, failed);

@@ -34,6 +34,9 @@ export type AcpRuntimeProfile = Readonly<{
   configReady?(option: SessionConfigOption, category: string): boolean;
   /** Refuses an initialize response whose capabilities this runtime needs. */
   capabilityCheck?(response: InitializeResponse): void;
+  /** Stderr lines the runtime emits as routine narrative on every run; the process-stderr
+   * warning stays quiet for a run that wrote only those. */
+  routineStderrLine?(line: string): boolean;
   messages: AcpProfileMessages;
 }>;
 

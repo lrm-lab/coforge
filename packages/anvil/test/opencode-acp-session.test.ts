@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { OpenCodeAcpProvider } from "#src/opencode/acp-provider";
+import { captureDaemonLogs } from "./fixtures/log-capture";
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
 const TEST_ACP_TIMEOUT_MS = 10_000;
@@ -25,14 +26,18 @@ const testHost = (log: string) => ({
   isShellToolName: () => false,
 });
 
-async function fixture(environment: Record<string, string> = {}) {
+async function fixture(
+  environment: Record<string, string> = {},
+  acpTimeoutMs = TEST_ACP_TIMEOUT_MS,
+  hostPatch: Record<string, unknown> = {},
+) {
   const cwd = await mkdtemp(join(tmpdir(), "anvil-oc-acp-"));
   const log = join(cwd, "rpc.jsonl");
-  const host = testHost(log);
+  const host = { ...testHost(log), ...hostPatch };
   if (Object.keys(environment).length)
     host.buildEnvironment = () => ({ ...testHost(log).buildEnvironment(), ...environment });
   const provider = new OpenCodeAcpProvider({
-    acpTimeoutMs: TEST_ACP_TIMEOUT_MS,
+    acpTimeoutMs,
     command: [process.execPath, new URL("./fixtures/opencode-acp.ts", import.meta.url).pathname],
     host,
   });
@@ -310,6 +315,88 @@ test("a launch against opencode below the ACP floor is refused without spawning 
     );
     expect(spawns).toBe(0);
     expect(existsSync(join(f.cwd, "rpc.jsonl"))).toBe(false);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("a hung session/new fails at the deadline carrying the runtime's stderr diagnostics", async () => {
+  const f = await fixture(
+    {
+      OPENCODE_ACP_FIXTURE_HANG_SESSION_OPEN: "1",
+      OPENCODE_ACP_FIXTURE_STDERR:
+        'timestamp=2026-11-07T14:00:01.000Z level=ERROR run=abc message="provider bootstrap stalled"',
+    },
+    800,
+  );
+  try {
+    const error = await f.provider
+      .createAgentSession(options(f.cwd) as never)
+      .then(() => null)
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("session/new timed out");
+    expect((error as Error).message).toContain("provider bootstrap stalled");
+    // The hang is real: session/new was sent and never answered.
+    expect((await f.requests()).some((r) => r.method === "session/new")).toBe(true);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("a hung session/new from a silent runtime keeps the plain timeout error", async () => {
+  const f = await fixture({ OPENCODE_ACP_FIXTURE_HANG_SESSION_OPEN: "1" }, 800);
+  try {
+    await expect(f.provider.createAgentSession(options(f.cwd) as never)).rejects.toThrow(
+      /session\/new timed out/,
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("routine --print-logs stderr on a normal session end raises no warning", async () => {
+  const hints: string[][] = [];
+  const routine =
+    'timestamp=2026-11-07T14:00:00.000Z level=INFO run=abc message="cli starting"\n' +
+    'timestamp=2026-11-07T14:00:01.000Z level=INFO run=abc message="session ready"';
+  const f = await fixture({ OPENCODE_ACP_FIXTURE_STDERR: routine }, TEST_ACP_TIMEOUT_MS, {
+    stderrHint: (lines: readonly string[]) => hints.push([...lines]),
+  });
+  try {
+    const { records } = await captureDaemonLogs(async () => {
+      const session = await f.provider.createAgentSession(options(f.cwd) as never);
+      await session.dispose();
+    });
+    expect(hints).toEqual([]);
+    expect(records.filter((r) => r.properties.event === "code_agent.process.stderr")).toEqual([]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("a diagnostic stderr line on close reaches stderrHint without the routine chatter", async () => {
+  const hints: string[][] = [];
+  const diagnostic =
+    'timestamp=2026-11-07T14:00:01.000Z level=ERROR run=abc message="provider bootstrap exploded"';
+  const f = await fixture(
+    {
+      OPENCODE_ACP_FIXTURE_STDERR:
+        'timestamp=2026-11-07T14:00:00.000Z level=INFO run=abc message="cli starting"\n' +
+        diagnostic,
+    },
+    TEST_ACP_TIMEOUT_MS,
+    { stderrHint: (lines: readonly string[]) => hints.push([...lines]) },
+  );
+  try {
+    const { records } = await captureDaemonLogs(async () => {
+      const session = await f.provider.createAgentSession(options(f.cwd) as never);
+      await session.dispose();
+    });
+    expect(hints).toEqual([[diagnostic]]);
+    expect(
+      records.filter((r) => r.properties.event === "code_agent.process.stderr").length,
+    ).toBeGreaterThan(0);
   } finally {
     await f.cleanup();
   }

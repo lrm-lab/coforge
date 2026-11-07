@@ -34,6 +34,8 @@ export type AcpConnectionOptions = {
   configReady?(option: SessionConfigOption, category: string): boolean;
   /** Refuses an initialize response whose capabilities this runtime needs. */
   capabilityCheck?(response: InitializeResponse): void;
+  /** Stderr lines the runtime emits as routine narrative on every run. */
+  routineStderrLine?(line: string): boolean;
   /** A stderr line from the runtime, for a failure it reports only there. */
   onStderr?(line: string): void;
   /** Extra ACP notification methods this runtime publishes, observed like `session/update`. */
@@ -85,6 +87,7 @@ export function acpProcess(
     onStderr: options.onStderr,
     configReady: profile.configReady,
     capabilityCheck: profile.capabilityCheck,
+    routineStderrLine: profile.routineStderrLine,
   });
 }
 
@@ -109,6 +112,8 @@ export class AcpConnection {
       options.cwd,
       options.environment,
       host.processTreeSpawner,
+      undefined,
+      options.routineStderrLine,
     );
     this.process.onStderr((line) => options.onStderr?.(line));
     this.connection = client({ name: host.clientInfo.name })

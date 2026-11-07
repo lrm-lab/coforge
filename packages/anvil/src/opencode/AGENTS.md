@@ -39,3 +39,10 @@ These rules extend [`../../AGENTS.md`](../../AGENTS.md).
   `session/new`, dispose.
 - A `tool_call_update` ends a call only through `acpToolUpdateEnded`; a status the set misses
   leaves the call open forever and suppresses stalled recovery.
+- The launch passes `--print-logs` so the runtime's diagnostics ride this process's stderr —
+  its data-dir `opencode.log` is shared by every opencode on the machine and would quote other
+  Agents' lines. Stdout stays the clean ACP channel, and the shared stderr excerpt carries the
+  tail onto a failed session open. Routine `level=INFO|DEBUG|TRACE` lines are narrative, not
+  diagnostics (`stderr.ts`): they stay out of `stderrHint` and the process-stderr warning, while
+  WARN and above — or anything outside the log format — still report. Catalog and effort probe
+  hints take the first diagnostic line, falling back to the last line for a silent hang.

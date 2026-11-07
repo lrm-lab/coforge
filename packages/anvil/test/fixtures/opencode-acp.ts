@@ -3,6 +3,9 @@ if (process.argv.includes("--version")) {
   console.log("2.1.0");
   process.exit(0);
 }
+// `--print-logs` puts the runtime's diagnostics on stderr; the fixture plays that part when a
+// test names the line, so a failed open can be checked for carrying it.
+if (Bun.env.OPENCODE_ACP_FIXTURE_STDERR) console.error(Bun.env.OPENCODE_ACP_FIXTURE_STDERR);
 const log = Bun.env.OPENCODE_ACP_FIXTURE_LOG;
 if (Bun.env.OPENCODE_ACP_FIXTURE_REQUIRE_CONFIG) {
   // Launch must arrive with the instructions overlay: `OPENCODE_CONFIG_CONTENT` naming a
@@ -78,6 +81,11 @@ for await (const line of console) {
       break;
     case "session/new":
     case "session/load":
+      if (Bun.env.OPENCODE_ACP_FIXTURE_HANG_SESSION_OPEN) {
+        // The real hang: the request is accepted and never answered while the process stays
+        // alive, so only the client's own deadline can end the wait.
+        break;
+      }
       if (request.method === "session/load" && request.params.sessionId === "missing-session") {
         write({
           jsonrpc: "2.0",

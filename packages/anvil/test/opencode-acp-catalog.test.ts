@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverOpenCodeAcpCatalog } from "@lrm/coforge-anvil/opencode";
+import { captureDaemonLogs } from "./fixtures/log-capture";
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
 const FIXTURE = new URL("./fixtures/opencode-acp.ts", import.meta.url).pathname;
@@ -68,6 +69,32 @@ test("a session/new without a model option yields no catalog, never a thrown err
       10_000,
     );
     expect(catalog).toBeUndefined();
+  });
+});
+
+test("a failed probe's stderr_hint is the diagnostic line, not routine --print-logs chatter", async () => {
+  await withCwd(async (cwd) => {
+    const { runtimeHost } = host();
+    const { result, records: logs } = await captureDaemonLogs(async () =>
+      discoverOpenCodeAcpCatalog(
+        [process.execPath, FIXTURE],
+        cwd,
+        {
+          OPENCODE_ACP_FIXTURE_HANG_SESSION_OPEN: "1",
+          OPENCODE_ACP_FIXTURE_STDERR:
+            'timestamp=2026-11-07T14:00:00.000Z level=INFO run=abc message="spawning process"\n' +
+            'timestamp=2026-11-07T14:00:01.000Z level=ERROR run=abc message="provider bootstrap exploded"',
+        },
+        runtimeHost,
+        800,
+      ),
+    );
+    expect(result).toBeUndefined();
+    const failure = logs.find((record) =>
+      record.message.join("").includes("code_agent_catalog:discovery_failed"),
+    );
+    expect(failure?.properties.stderr_hint).toContain("provider bootstrap exploded");
+    expect(String(failure?.properties.stderr_hint)).not.toContain("spawning process");
   });
 });
 

@@ -11,6 +11,7 @@ import { asRecord } from "#src/json-record";
 import { OPENCODE_ACP_PROFILE } from "./acp-session";
 import type { OpenCodeAcpRuntimeHost } from "./acp-host";
 import { assertOpenCodeAcpVersionSupported } from "./acp-version";
+import { isRoutineOpenCodeStderr } from "./stderr";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.OPENCODE]);
 
@@ -29,6 +30,7 @@ export async function discoverOpenCodeAcpCatalog(
   let transport: AcpConnection | undefined;
   let sessionId: string | undefined;
   let stderrHint: string | undefined;
+  let lastStderrLine: string | undefined;
   try {
     // The version gate runs before the server spawns: a below-floor opencode is an upgrade
     // prompt, not a failed ACP launch.
@@ -40,7 +42,11 @@ export async function discoverOpenCodeAcpCatalog(
       clientInfo: host.clientInfo,
       processTreeSpawner: host.processTreeSpawner,
       onStderr: (line) => {
-        if (stderrHint === undefined && line.trim()) stderrHint = scrubStderrHint(line);
+        // --print-logs opens with routine INFO narrative; the hint is the first real diagnostic,
+        // falling back to the last line so a silent hang still shows where it stalled.
+        if (!line.trim()) return;
+        if (stderrHint === undefined && !isRoutineOpenCodeStderr(line)) stderrHint = line;
+        lastStderrLine = line;
       },
     });
     await transport.initialize(timeoutMs);
@@ -74,11 +80,12 @@ export async function discoverOpenCodeAcpCatalog(
     if (models.length === 0) throw new Error("opencode acp model catalog unavailable");
     return { provider: RUNTIME_PROVIDER.OPENCODE, models };
   } catch (error) {
+    const hint = stderrHint ?? lastStderrLine;
     logger.warn("code_agent_catalog:discovery_failed", {
       provider: RUNTIME_PROVIDER.OPENCODE,
       error_code: diagnosticErrorCode(error),
       error_message: catalogErrorMessage(error),
-      ...(stderrHint ? { stderr_hint: stderrHint } : {}),
+      ...(hint ? { stderr_hint: scrubStderrHint(hint) } : {}),
     });
     return undefined;
   } finally {

@@ -108,6 +108,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/code-agent/devin/`                  | Devin host environment, process, version, auth-login and `thought_level` effort-sweep capabilities for its native ACP session                              |
 | `src/code-agent/droid/`                  | Droid host environment, process, version, the PTY/doctor auth capabilities, and the wide-PTY `/limits` usage spawn for its native ACP session              |
 | `src/code-agent/grok/host.ts`            | Host environment, client identity, reply intent and account-label policies for Grok                                                                        |
+| `src/code-agent/opencode/`               | OpenCode ACP host environment and per-model effort reads                                                                                                   |
 | `src/code-agent/process-host.ts`         | Platform process-tree spawning for Anvil execution                                                                                                         |
 | `src/code-agent/catalog-host.ts`         | Environment and process capabilities for Anvil JSONL catalog execution                                                                                     |
 | `src/code-agent/codex/host.ts`           | Codex environment, client identity, masking, file I/O and native CLI process capabilities                                                                  |

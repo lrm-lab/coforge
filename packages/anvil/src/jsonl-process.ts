@@ -44,6 +44,9 @@ export class JsonlProcess {
   readonly #stderrPromise: Promise<void>;
   /** The last few stderr lines, for the failure log and for attaching to a surfaced error. */
   readonly #stderrTail: string[] = [];
+  /** Lines the runtime writes as routine narrative on every run; stderr holding only those is
+   * not worth a warning. */
+  readonly #routineStderrLine: ((line: string) => boolean) | undefined;
   static readonly STDERR_TAIL_LINES = 4;
 
   constructor(
@@ -52,7 +55,9 @@ export class JsonlProcess {
     environment: Readonly<Record<string, string>>,
     processTreeOwner: ProcessTreeSpawner,
     onStderrDiagnostic?: (diagnostic: string) => void,
+    routineStderrLine?: (line: string) => boolean,
   ) {
+    this.#routineStderrLine = routineStderrLine;
     this.#tree = processTreeOwner.spawn(command, cwd, environment);
     this.#child = this.#tree.child;
     logger.info("Started code agent process", {
@@ -298,6 +303,10 @@ export class JsonlProcess {
     let line = "";
     let oversized = false;
     let diagnostic = "";
+    let sawDiagnosticStderr = false;
+    const noteLine = (reported: string) => {
+      if (reported.trim() && !this.#routineStderrLine?.(reported)) sawDiagnosticStderr = true;
+    };
     try {
       for await (const chunk of this.#child.stderr) {
         bytes += chunk.byteLength;
@@ -328,6 +337,7 @@ export class JsonlProcess {
             this.#stderrTail.push(reported);
             if (this.#stderrTail.length > JsonlProcess.STDERR_TAIL_LINES) this.#stderrTail.shift();
           }
+          noteLine(reported);
           keepForLog(reported);
           for (const listener of this.#stderrListeners) listener(reported);
           line = "";
@@ -343,6 +353,7 @@ export class JsonlProcess {
           this.#stderrTail.push(reported);
           if (this.#stderrTail.length > JsonlProcess.STDERR_TAIL_LINES) this.#stderrTail.shift();
         }
+        noteLine(reported);
         keepForLog(reported);
         for (const listener of this.#stderrListeners) listener(reported);
       }
@@ -353,7 +364,7 @@ export class JsonlProcess {
         ...logTail,
       ];
       const excerpt = this.stderrExcerpt();
-      if (bytes > 0)
+      if (bytes > 0 && sawDiagnosticStderr)
         logger.warning("Code agent process wrote diagnostics to stderr", {
           event: "code_agent.process.stderr",
           pid: this.#child.pid,

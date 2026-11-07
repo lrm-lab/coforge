@@ -9,6 +9,7 @@ import { RuntimeModelNotFoundError } from "#src/contract";
 import type { OpenCodeAcpRuntimeHost } from "./acp-host";
 import { OpenCodeAcpTurnEvents } from "./acp-update-events";
 import { OPENCODE_CONFIG_CONTENT_ENV, type OpenCodeInstructions } from "./instructions";
+import { isRoutineOpenCodeStderr } from "./stderr";
 
 /** How long a production session waits for each bounded ACP answer. */
 export const OPENCODE_ACP_TIMEOUT_MS = 120_000;
@@ -34,7 +35,13 @@ export class OpenCodeUnsupportedOptionError extends Error {
 }
 
 export const OPENCODE_ACP_PROFILE: AcpRuntimeProfile = {
-  args: ["acp"],
+  // `--print-logs` routes the runtime's diagnostics to this process's stderr — its data-dir
+  // log is shared by every opencode on the machine, so a failed session open could otherwise
+  // only quote other Agents' lines. Stdout stays the clean ACP channel.
+  args: ["acp", "--print-logs"],
+  // --print-logs makes routine INFO narrative land on stderr every run; only WARN and above —
+  // or anything outside the log format — is worth a process-stderr warning.
+  routineStderrLine: isRoutineOpenCodeStderr,
   capabilityCheck: (response) => {
     if (!openCodeLoadSessionDeclared(response))
       throw new OpenCodeUnsupportedOptionError("loadSession");
@@ -104,7 +111,8 @@ function openCodeSessionProfile(
         },
       });
       transport.process.onClose(() => {
-        if (stderrTail.length > 0) host.stderrHint?.(stderrTail);
+        const diagnostics = stderrTail.filter((line) => !isRoutineOpenCodeStderr(line));
+        if (diagnostics.length > 0) host.stderrHint?.(diagnostics);
       });
       return transport;
     },
