@@ -37,6 +37,7 @@ import { inboxNoticeText } from "./inbox-notice-text";
 import { inboxPreviewLimit } from "./inbox-preview";
 import { buildNoticeRows, PreviewSeen, renderNoticeRows } from "./inbox-preview-rows";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
+import { groupMemoryRecovery } from "./memory-recovery-groups";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
 import {
   logAttentionDecision,
@@ -392,33 +393,21 @@ export class AgentMessageAttentionIndex {
     conversation?: AgentConversationScope,
   ): Promise<void> {
     if (this.#isMemory(agentId) && !conversation) {
-      const scopes = new Map<string, string>();
-      for (const message of messages) scopes.set(message.conversationId, message.target);
-      for (const [target, count] of Object.entries(unreadSummary)) {
-        if (count < 1) continue;
-        const id =
-          unreadConversationIds[target] ??
-          messages.find((message) => message.target === target)?.conversationId ??
-          this.#consumedByAgent.get(agentId)?.targets.get(target)?.conversationId;
-        if (!id) throw new Error("Memory recovery requires a canonical conversation id");
-        scopes.set(id, target);
-      }
-      for (const [conversationId, target] of scopes) {
-        await this.recover(
-          agentId,
-          messages.filter((message) => message.conversationId === conversationId),
-          Object.fromEntries(
-            Object.entries(unreadSummary).filter(
-              ([name]) =>
-                (unreadConversationIds[name] ??
-                  messages.find((message) => message.target === name)?.conversationId ??
-                  this.#consumedByAgent.get(agentId)?.targets.get(name)?.conversationId) ===
-                conversationId,
-            ),
-          ),
-          unreadConversationIds,
-          { conversationId, target },
-        );
+      const consumedConversations = new Map(
+        [...(this.#consumedByAgent.get(agentId)?.targets ?? [])].flatMap(([target, entry]) =>
+          entry.conversationId ? [[target, entry.conversationId] as const] : [],
+        ),
+      );
+      for (const group of groupMemoryRecovery(
+        messages,
+        unreadSummary,
+        unreadConversationIds,
+        consumedConversations,
+      )) {
+        await this.recover(agentId, group.messages, group.unreadSummary, unreadConversationIds, {
+          conversationId: group.conversationId,
+          target: group.target,
+        });
       }
       return;
     }
