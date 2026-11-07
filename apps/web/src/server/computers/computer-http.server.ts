@@ -1,4 +1,8 @@
-import { COMPUTER_REGISTER_METHOD, WORKSPACE_GET_METHOD } from "@lrm/coforge-sdk/internal";
+import {
+  COMPUTER_LIST_METHOD,
+  COMPUTER_REGISTER_METHOD,
+  WORKSPACE_GET_METHOD,
+} from "@lrm/coforge-sdk/internal";
 
 import { authenticateComputerAttach } from "#src/server/computers/computer-attach.server";
 import {
@@ -6,7 +10,10 @@ import {
   CentrifugoRpcHandler,
   createWorkspaceGetMethod,
 } from "#src/server/centrifugo/rpc-handler.server";
-import { createComputerRegistrationMethod } from "#src/server/centrifugo/computer-registration-method.server";
+import {
+  createComputerRegistrationMethod,
+  createComputerRosterMethod,
+} from "#src/server/centrifugo/computer-registration-method.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import {
   PrismaComputerRegistrationRepository,
@@ -14,6 +21,7 @@ import {
 } from "#src/server/db/repositories/setup.repositories.server";
 import { WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
 import { ComputerRegistrar } from "./registration.server";
+import { ComputerRoster, PrismaComputerRosterRepository } from "./roster.server";
 
 type Dependencies = {
   authenticate(
@@ -21,6 +29,7 @@ type Dependencies = {
   ): Promise<{ userId: string; workspaceId?: string; attachSessionId?: string } | null>;
   workspaceQuery: WorkspaceQueryUseCase;
   registration: Pick<ComputerRegistrar, "register">;
+  roster?: Pick<ComputerRoster, "list">;
 };
 
 /** Owns the User-authenticated Computer setup/attach HTTPS boundary. */
@@ -31,6 +40,9 @@ export function createComputerHttpHandler(dependencies?: Dependencies) {
     methods: {
       [WORKSPACE_GET_METHOD]: createWorkspaceGetMethod(resolved.workspaceQuery),
       [COMPUTER_REGISTER_METHOD]: createComputerRegistrationMethod(resolved.registration),
+      ...(resolved.roster
+        ? { [COMPUTER_LIST_METHOD]: createComputerRosterMethod(resolved.roster) }
+        : {}),
     },
     authenticateEnvelope: async (_envelope, request) => {
       const principal = await resolved.authenticate(request);
@@ -60,5 +72,6 @@ function productionDependencies(): Dependencies | undefined {
       workspaceAccess,
       registrations: new PrismaComputerRegistrationRepository(db),
     }),
+    roster: new ComputerRoster(new PrismaComputerRosterRepository(db)),
   };
 }

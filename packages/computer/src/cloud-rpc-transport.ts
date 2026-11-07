@@ -1,9 +1,21 @@
 import type {
+  ComputerListRequest,
+  ComputerListResponse,
+  ComputerListTransport,
   ComputerRegisterRequest,
   ComputerRegisterResponse,
   ComputerRegisterTransport,
 } from "@lrm/coforge-sdk/internal";
-import { WORKSPACE_GET_METHOD, WORKSPACE_PROTOCOL_MAJOR } from "@lrm/coforge-sdk/internal";
+import {
+  COMPUTER_LIST_METHOD,
+  COMPUTER_LIST_PROTOCOL_MAJOR,
+  WORKSPACE_GET_METHOD,
+  WORKSPACE_PROTOCOL_MAJOR,
+} from "@lrm/coforge-sdk/internal";
+import {
+  decodeComputerListResponse,
+  encodeComputerListRequest,
+} from "@lrm/coforge-sdk/internal/computer-roster-codec";
 import {
   decodeComputerRegisterResponse,
   decodeWorkspaceGetResponse,
@@ -119,6 +131,45 @@ export class HttpComputerRegisterTransport implements ComputerRegisterTransport 
         {
           cause: error,
         },
+      );
+    }
+  }
+}
+
+export class HttpComputerListTransport implements ComputerListTransport {
+  constructor(
+    private readonly serverUrl: string,
+    private readonly token: string,
+    private readonly fetchImplementation: Fetch = fetch,
+  ) {}
+
+  async request(
+    method: typeof COMPUTER_LIST_METHOD,
+    payload: ComputerListRequest,
+  ): Promise<ComputerListResponse> {
+    const bytes = await callHttpRpc(this.fetchImplementation, {
+      serverUrl: this.serverUrl,
+      path: "/api/computer/roster",
+      token: this.token,
+      method,
+      requestId: payload.requestId,
+      payload: encodeComputerListRequest(payload),
+    });
+    try {
+      const response = decodeComputerListResponse(bytes);
+      if (
+        response.protocolMajor !== COMPUTER_LIST_PROTOCOL_MAJOR ||
+        response.requestId !== payload.requestId
+      )
+        throw new Error("response correlation mismatch");
+      return response;
+    } catch (error) {
+      throw new RemoteRpcError(
+        method,
+        undefined,
+        payload.requestId,
+        "Invalid Computer roster response.",
+        { cause: error },
       );
     }
   }

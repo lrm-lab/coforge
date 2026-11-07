@@ -5,16 +5,7 @@ import {
   WorkspaceListRequestSchema,
   WorkspaceListResponseSchema,
 } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
-import {
-  ComputerRegisterRequestSchema,
-  ComputerRegisterResponseSchema,
-} from "#src/internal/gen/coforge/rpc/v1/computer_pb";
-import type {
-  ComputerRegisterRequest,
-  ComputerRegisterResponse,
-  Workspace,
-  WorkspaceQueryRequest,
-} from "./index";
+import type { Workspace, WorkspaceQueryRequest } from "./index";
 
 const workspaceRequest = (value: WorkspaceQueryRequest) => ({
   protocolMajor: value.protocolMajor,
@@ -79,46 +70,13 @@ export function encodeWorkspaceGetResponse(value: {
   return toBinary(WorkspaceGetResponseSchema, create(WorkspaceGetResponseSchema, value));
 }
 
-// This adapter is intentionally limited to the domain boundary: generated
-// messages already use camelCase, while the domain narrows provider values and
-// maps legacy/unknown enum zero values to the historical external meaning.
-export function encodeComputerRegisterRequest(value: ComputerRegisterRequest): Uint8Array {
-  return toBinary(
-    ComputerRegisterRequestSchema,
-    create(ComputerRegisterRequestSchema, {
-      ...value,
-    }),
-  );
-}
-
-export function decodeComputerRegisterRequest(bytes: Uint8Array): ComputerRegisterRequest {
-  const value = fromBinary(ComputerRegisterRequestSchema, bytes);
-  return {
-    protocolMajor: value.protocolMajor,
-    requestId: value.requestId,
-    workspaceSlug: value.workspaceSlug,
-    name: value.name,
-    displayName: value.displayName,
-    machineId: value.machineId,
-    platform: value.platform,
-    osVersion: value.osVersion,
-    computerVersion: value.computerVersion,
-    registrationIdempotencyKey: value.registrationIdempotencyKey,
-  };
-}
-
-export function decodeComputerRegisterResponse(bytes: Uint8Array): ComputerRegisterResponse {
-  const value = fromBinary(ComputerRegisterResponseSchema, bytes);
-  return {
-    protocolMajor: value.protocolMajor,
-    requestId: value.requestId,
-    computerId: value.computerId,
-    workspaceId: value.workspaceId,
-    daemonApiKey: value.daemonApiKey,
-    workspaceSlug: value.workspaceSlug || undefined,
-  };
-}
-
-export function encodeComputerRegisterResponse(value: ComputerRegisterResponse): Uint8Array {
-  return toBinary(ComputerRegisterResponseSchema, create(ComputerRegisterResponseSchema, value));
-}
+export {
+  encodeComputerListRequest,
+  decodeComputerListRequest,
+  decodeComputerListResponse,
+  encodeComputerListResponse,
+  encodeComputerRegisterRequest,
+  decodeComputerRegisterRequest,
+  decodeComputerRegisterResponse,
+  encodeComputerRegisterResponse,
+} from "./computer-roster-codec";

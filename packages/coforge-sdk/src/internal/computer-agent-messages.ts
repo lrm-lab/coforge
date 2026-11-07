@@ -60,6 +60,8 @@ export type ComputerRegisterRequest = {
   osVersion: string;
   computerVersion: string;
   registrationIdempotencyKey: string;
+  adoptComputerId?: string;
+  fresh?: boolean;
 };
 export type ComputerRegisterResponse = {
   protocolMajor: number;
@@ -69,6 +71,26 @@ export type ComputerRegisterResponse = {
   daemonApiKey: string;
   /** The attached Workspace's slug, for a one-shot attach that never named one (task #417). */
   workspaceSlug?: string;
+};
+export type ComputerCandidate = {
+  computerId: string;
+  machineId: string;
+  name: string;
+  displayName: string;
+  platform: string;
+  osVersion: string;
+  computerVersion: string;
+  workspaceSlugs: string[];
+  lastSeenAt?: string;
+};
+export type ComputerListRequest = {
+  protocolMajor: number;
+  requestId: string;
+};
+export type ComputerListResponse = {
+  protocolMajor: number;
+  requestId: string;
+  computers: ComputerCandidate[];
 };
 export type DaemonRuntimeReadyRequest = {
   protocolMajor: number;

@@ -72,6 +72,105 @@ test("rejects unauthenticated or inaccessible setup", async () => {
   await expect(registrar.register(request, { userId: "u" })).rejects.toMatchObject({ code: 403 });
 });
 
+test("rejects a registration that asks for adoption and fresh identity together", async () => {
+  let called = false;
+  const registrar = new ComputerRegistrar({
+    workspaceAccess: {
+      findAccessibleBySlug: async () => ({ id: "w", slug: "team" }),
+    },
+    registrations: {
+      register: async () => {
+        called = true;
+        throw new Error("must not persist invalid intent");
+      },
+    },
+  });
+  await expect(
+    registrar.register({ ...request, adoptComputerId: "computer-1", fresh: true }, { userId: "u" }),
+  ).rejects.toMatchObject({ code: 422 });
+  expect(called).toBe(false);
+});
+
+test("adoption requires the owned live Computer and its stable machine id", async () => {
+  const computer = {
+    id: "computer-1",
+    ownerId: "u",
+    machineId: "machine-1",
+    name: "old",
+    displayName: "Old",
+    kind: "local",
+    deletedAt: null,
+  };
+  const transaction = {
+    computer: {
+      findFirst: async () => computer,
+      update: async ({ data }: { data: Partial<typeof computer> }) => {
+        Object.assign(computer, data);
+        return computer;
+      },
+      updateMany: async () => undefined,
+      upsert: async () => computer,
+      findUnique: async () => null,
+      create: async () => computer,
+    },
+    workspaceComputer: { upsert: async () => undefined, findMany: async () => [] },
+    workspaceMemoryAgent: { findUnique: async () => null },
+    agent: { updateMany: async () => undefined },
+    daemonApiKey: {
+      updateMany: async () => undefined,
+      create: async () => undefined,
+    },
+  };
+  const db = {
+    $transaction: async (execute: (tx: typeof transaction) => Promise<unknown>) =>
+      execute(transaction),
+  } as unknown as PrismaClient;
+  const registered = await new PrismaComputerRegistrationRepository(db).register({
+    principal: { userId: "u" },
+    workspace: { id: "w", slug: "team" },
+    request: { ...request, machineId: "machine-1", adoptComputerId: "computer-1" },
+  });
+  expect(registered.computerId).toBe("computer-1");
+  expect(computer.name).toBe(request.name);
+
+  await expect(
+    new PrismaComputerRegistrationRepository(db).register({
+      principal: { userId: "u" },
+      workspace: { id: "w", slug: "team" },
+      request: { ...request, machineId: "wrong-machine", adoptComputerId: "computer-1" },
+    }),
+  ).rejects.toMatchObject({ code: 409 });
+});
+
+test("fresh registration refuses an existing owner and machine identity", async () => {
+  const transaction = {
+    computer: {
+      findUnique: async () => ({ id: "existing" }),
+      findFirst: async () => undefined,
+      update: async () => undefined,
+      updateMany: async () => undefined,
+      upsert: async () => undefined,
+      create: async () => {
+        throw new Error("must not create a duplicate");
+      },
+    },
+    workspaceComputer: { upsert: async () => undefined, findMany: async () => [] },
+    workspaceMemoryAgent: { findUnique: async () => null },
+    daemonApiKey: { updateMany: async () => undefined, create: async () => undefined },
+  };
+  const db = {
+    $transaction: async (execute: (tx: typeof transaction) => Promise<unknown>) =>
+      execute(transaction),
+  } as unknown as PrismaClient;
+  await expect(
+    new PrismaComputerRegistrationRepository(db).register({
+      principal: { userId: "u" },
+      workspace: { id: "w", slug: "team" },
+      request: { ...request, fresh: true },
+    }),
+  ).rejects.toMatchObject({ code: 409 });
+});
+
 async function registerExistingComputer(computer: {
   id: string;
   ownerId: string;

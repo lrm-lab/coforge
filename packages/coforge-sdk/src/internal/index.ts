@@ -1,9 +1,16 @@
 import { RPC_METHODS } from "./rpc-methods";
-import type { ComputerRegisterRequest, ComputerRegisterResponse } from "./computer-agent-messages";
+import type {
+  ComputerListRequest,
+  ComputerListResponse,
+  ComputerRegisterRequest,
+  ComputerRegisterResponse,
+} from "./computer-agent-messages";
 import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "./uuid";
 /** TypeScript boundary; codec/transport remains an adapter concern. */
 export const COMPUTER_REGISTER_METHOD = RPC_METHODS.computerRegister;
+export const COMPUTER_LIST_METHOD = RPC_METHODS.computerList;
 export const COMPUTER_REGISTER_PROTOCOL_MAJOR = 1 as const;
+export const COMPUTER_LIST_PROTOCOL_MAJOR = 1 as const;
 export const WORKSPACE_LIST_METHOD = RPC_METHODS.workspaceList;
 export const WORKSPACE_GET_METHOD = RPC_METHODS.workspaceGet;
 export const DAEMON_RUNTIME_READY_METHOD = RPC_METHODS.daemonRuntimeReady;
@@ -246,6 +253,13 @@ export interface ComputerRegisterTransport {
   ): Promise<ComputerRegisterResponse>;
 }
 
+export interface ComputerListTransport {
+  request(
+    method: typeof COMPUTER_LIST_METHOD,
+    payload: ComputerListRequest,
+  ): Promise<ComputerListResponse>;
+}
+
 export class ComputerRegistrationClient {
   constructor(private readonly transport: ComputerRegisterTransport) {}
   register(request: ComputerRegisterRequest): Promise<ComputerRegisterResponse> {
@@ -253,6 +267,19 @@ export class ComputerRegistrationClient {
       throw new Error("unsupported computer register protocol major");
     return this.transport.request(COMPUTER_REGISTER_METHOD, request).then((response) => {
       if (response.protocolMajor !== COMPUTER_REGISTER_PROTOCOL_MAJOR)
+        throw new Error("unsupported response protocol major");
+      return response;
+    });
+  }
+}
+
+export class ComputerRosterClient {
+  constructor(private readonly transport: ComputerListTransport) {}
+  list(request: ComputerListRequest): Promise<ComputerListResponse> {
+    if (request.protocolMajor !== COMPUTER_LIST_PROTOCOL_MAJOR)
+      throw new Error("unsupported computer list protocol major");
+    return this.transport.request(COMPUTER_LIST_METHOD, request).then((response) => {
+      if (response.protocolMajor !== COMPUTER_LIST_PROTOCOL_MAJOR)
         throw new Error("unsupported response protocol major");
       return response;
     });

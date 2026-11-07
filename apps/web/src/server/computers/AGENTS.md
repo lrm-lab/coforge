@@ -12,10 +12,13 @@ These rules apply to `src/server/computers/`.
 - A Computer-scoped creator avatar download authorizes Workspace membership
   before resolving the original Computer owner and reading the User avatar
   store.
-- `computer-http.server.ts` binds the fixed `/api/computer/workspace` and
-  `/api/computer/attach` routes to `workspace:get` and `computer:register`.
+- `computer-http.server.ts` binds the fixed `/api/computer/workspace`,
+  `/api/computer/attach`, and `/api/computer/roster` routes to `workspace:get`,
+  `computer:register`, and `computer:list`.
   It is composition only; `ComputerRegistrar` owns registration authorization,
   idempotency, and persistence.
+- `roster.server.ts` lists the signed-in User's owned local Computers for
+  explicit setup adoption; it never returns another User's rows.
 - `desktop-proxy-auth.server.ts` answers Caddy before it forwards
   `/desktop/<computer id>/...`. The signed-in user must own that cloud
   computer. A missing session, any other computer, or a path that is not a

@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import {
+  COMPUTER_LIST_METHOD,
+  COMPUTER_LIST_PROTOCOL_MAJOR,
   COMPUTER_REGISTER_METHOD,
   COMPUTER_REGISTER_PROTOCOL_MAJOR,
 } from "@lrm/coforge-sdk/internal";
@@ -10,7 +12,12 @@ import {
   encodeWorkspaceGetResponse,
 } from "@lrm/coforge-sdk/internal/codec";
 import {
+  decodeComputerListRequest,
+  encodeComputerListResponse,
+} from "@lrm/coforge-sdk/internal/computer-roster-codec";
+import {
   HttpComputerRegisterTransport,
+  HttpComputerListTransport,
   HttpWorkspaceRpcTransport,
   centrifugoWebSocketEndpoint,
   daemonConnectionEndpoint,
@@ -62,6 +69,46 @@ test("HTTP registration sends bearer JSON without redirects and decodes protobuf
   );
 
   await expect(transport.request(COMPUTER_REGISTER_METHOD, request)).resolves.toEqual(response);
+});
+
+test("HTTP roster sends the authenticated list request and decodes candidates", async () => {
+  const request = { protocolMajor: COMPUTER_LIST_PROTOCOL_MAJOR, requestId: "roster-1" };
+  const response = {
+    ...request,
+    computers: [
+      {
+        computerId: "computer-1",
+        machineId: "machine-1",
+        name: "host",
+        displayName: "Host",
+        platform: "darwin",
+        osVersion: "15",
+        computerVersion: "1.0.64",
+        workspaceSlugs: ["team"],
+      },
+    ],
+  };
+  const transport = new HttpComputerListTransport(
+    "https://cloud.example/base",
+    "user-secret",
+    async (input, init) => {
+      expect(String(input)).toBe("https://cloud.example/api/computer/roster");
+      expect(init).toMatchObject({
+        method: "POST",
+        redirect: "error",
+        headers: {
+          Authorization: "Bearer user-secret",
+          "Content-Type": "application/json",
+        },
+      });
+      const body = JSON.parse(String(init?.body));
+      expect(decodeComputerListRequest(Uint8Array.fromBase64(body.b64data))).toEqual(request);
+      return Response.json({
+        result: { b64data: encodeComputerListResponse(response).toBase64() },
+      });
+    },
+  );
+  await expect(transport.request(COMPUTER_LIST_METHOD, request)).resolves.toEqual(response);
 });
 
 test("HTTP Workspace lookup sends and correlates its protobuf request", async () => {
