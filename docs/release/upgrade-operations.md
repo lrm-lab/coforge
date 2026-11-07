@@ -178,6 +178,12 @@ never acknowledged; it is republished after the restart. No new Agent process is
 launched. The hold is in memory only, so a restarted daemon is never born held.
 
 `coforge-computer stop` deliberately does not hold: an explicit stop is immediate.
+Without `--workspace` it stops the whole Computer — the supervisor process through
+the platform's manager and every Workspace runtime under it — so nothing brings it
+back until `coforge-computer start`. `--workspace` stops one runtime and leaves the
+supervisor up. A Computer the platform manager does not run (a `foreground` process
+under someone else's supervisor) is refused with its own error rather than reported
+as stopped.
 
 `coforge-computer restart --supervisor` restarts the Computer supervisor process
 itself, through the platform's process manager (`launchctl kickstart -k` on macOS;

@@ -64,7 +64,9 @@ export interface UpdateCommand {
 
 export interface DaemonCommand {
   start(workspace?: string): Promise<void>;
-  stop(workspace?: string): Promise<void>;
+  /** Unscoped, stops the whole Computer through the platform manager; `--workspace` stops one
+   * runtime and leaves the Coordinator up. */
+  stop(workspace?: string, options?: { json?: boolean }): Promise<void>;
   /** `daemon:detach` (task #417): removes this Workspace's registration once the server
    * confirms the detach; an unconfirmed server answer keeps it and reports so. */
   detach(workspace?: string): Promise<DetachOutcome>;

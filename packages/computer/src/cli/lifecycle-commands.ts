@@ -26,11 +26,16 @@ export function registerLifecycleCommands(
     );
   program
     .command("stop")
-    .description("Stop the Daemon and all Daemon Runtimes.")
-    .option("--workspace <slug-or-id>", "Affect only this local Workspace binding")
-    .action((options: { workspace?: string }) =>
-      requireDaemon(dependencies).stop(options.workspace),
-    );
+    .description("Stop the Computer: its Daemon and every Workspace runtime under it.")
+    .option(
+      "--workspace <slug-or-id>",
+      "Stop only this local Workspace runtime, leaving the Daemon up",
+    )
+    .option("--json", "write one stable JSON result to stdout")
+    .action((options: { workspace?: string; json?: boolean }) => {
+      setJson(options.json ?? false);
+      return requireDaemon(dependencies).stop(options.workspace, { json: options.json ?? false });
+    });
   program
     .command("detach")
     .description("Detach this Computer from a Workspace: stop its Daemon and remove its key.")

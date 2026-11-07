@@ -135,7 +135,7 @@ protocol、SDK runner 或 ACP 的转换、错误和能力差异；这些细节�
 保持为空，重启后的 ready handshake 会重新投递。这正是"accepted 不等于 Agent 执行完成"、
 "`AgentSession` 接受前不得 ACK"两条约束的自然结果，不需要额外的 ACK 抑制逻辑。
 hold 只存在于内存中，重启后必然失效；`coforge-computer stop`
-是显式立即停止，不走 hold。`coforge-computer restart`（以及 Web 触发的同一个
+是显式立即停止，不走 hold（不带 `--workspace` 时整个 Computer 一起停，由平台进程管理器执行，`coforge-computer start` 再带回来）。`coforge-computer restart`（以及 Web 触发的同一个
 `daemon:restart`）会先 hold 目标 Workspace 并最多等待 30 秒；等待超时或 hold 失败都照常重启。
 
 当前不引入本地 durable spool、数据库 command mailbox、claim/lease 或完整 per-Agent

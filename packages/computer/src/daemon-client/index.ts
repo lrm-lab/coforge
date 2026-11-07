@@ -36,7 +36,10 @@ export function createCommand(input: {
   logindRisk?: () => Promise<LogindSessionRisk | null>;
 }): {
   start(workspace?: string): Promise<void>;
-  stop(workspace?: string): Promise<void>;
+  /** Stops one Workspace runtime through the Coordinator. Stopping the whole Computer is the
+   * Computer command's own job (`cli/stop-computer.ts`), which goes through the platform manager
+   * that runs the Coordinator rather than a request to it (task #696). */
+  stop(workspace: string): Promise<void>;
   /** `daemon:detach` (task #417): the Workspace's registration goes only on the server's
    * definite answer; `detach_unconfirmed` keeps it and reports so. */
   detach(workspace?: string): Promise<DetachOutcome>;
@@ -145,6 +148,7 @@ export function createCommand(input: {
       );
     },
     async stop(workspace) {
+      // Always scoped: `target` is the one Workspace this stop may report on.
       input.logger?.info("Computer stop requested", { event: "computer:stopping" });
       await input.daemon.ensureRunning();
       const { runtimes, target } = await run("stop", workspace);

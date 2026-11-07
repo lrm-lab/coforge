@@ -9,6 +9,7 @@ import {
   reportSkippedRestarts,
   restartSupervisor,
 } from "./restart-supervisor";
+import { stopComputer } from "./stop-computer";
 import { createCommand as createClientCommand } from "#src/daemon-client/index";
 import { followComputerLogs } from "#src/logging/computer-logs";
 import type { DaemonCommand, LogsCommand } from "#src/cli";
@@ -49,7 +50,23 @@ export function createCommand(
       await loadBuildProfile(config, serverUrl, "daemon");
       await command.start(workspace);
     },
-    stop: (workspace) => command.stop(workspace),
+    async stop(workspace, options) {
+      // A scoped stop is one Workspace runtime and goes through the Coordinator; an unscoped one
+      // is the whole Computer, which only the manager that runs it can stop (task #696).
+      if (workspace) return command.stop(workspace);
+      logger?.info("Computer stop requested", { event: "computer:stopping" });
+      await stopComputer(
+        {
+          assertRestartable: () => launcher.assertRestartable(),
+          isRunning: () => launcher.isRunning(),
+          stop: () => launcher.stop(),
+          stopRuntimes: () => launcher.command("stop"),
+        },
+        io,
+        { json: options?.json ?? false },
+      );
+      logger?.info("Computer stop completed", { event: "computer:stopped" });
+    },
     detach: (workspace) => command.detach(workspace),
     async restart(workspace) {
       await launcher.preflight?.();

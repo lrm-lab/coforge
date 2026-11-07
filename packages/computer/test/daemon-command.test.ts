@@ -44,7 +44,7 @@ test("Computer commands delegate machine-wide lifecycle to the resident supervis
   const command = createCommand({ daemon });
 
   await command.start();
-  await command.stop();
+  await command.stop("ws-a");
   await command.restart();
 
   expect(calls).toEqual([
@@ -114,7 +114,7 @@ test("stop stays silent like before; lifecycle output is opt-in through the writ
     },
     write: progress.write,
   });
-  await command.stop();
+  await command.stop("ws-a");
   expect(progress.lines).toEqual([]);
 });
 
@@ -365,7 +365,7 @@ test("a restart naming several Workspaces that did not connect gives the command
   });
 });
 
-test("a stop that answers before a Workspace has stopped names it with the command to follow it", async () => {
+test("a stop that answers before its Workspace has stopped names it with the command to follow it", async () => {
   const progress = output();
   const command = createCommand({
     daemon: {
@@ -380,7 +380,7 @@ test("a stop that answers before a Workspace has stopped names it with the comma
     write: progress.write,
   });
 
-  await command.stop();
+  await command.stop("ws-b");
 
   expect(progress.lines).toEqual([
     "CoForge Computer stop requested, but not every Workspace has stopped yet:",
