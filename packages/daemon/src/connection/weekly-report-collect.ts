@@ -23,6 +23,10 @@ export type WeeklyReportCollectResult = {
   allTerminal: boolean;
   canSynthesize: boolean;
   slotCount?: number;
+  /** False when the slot was already settled or this is a requestId replay. */
+  newlyAccepted?: boolean;
+  /** The slot's status after this call (accepted outcome or the settled one). */
+  slotStatus?: string;
   waveExhausted?: boolean;
 };
 

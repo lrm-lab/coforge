@@ -265,6 +265,8 @@ export type AcceptCollectSlotReportResult = {
   run: CollectRunView;
   /** False on requestId replay or when the slot was already terminal. */
   newlyAccepted: boolean;
+  /** The slot's status after this call: the accepted outcome, or the status it already had. */
+  slotStatus: string;
   /** True once when this accept moves the run from collecting into synthesizing. */
   synthesisStarted: boolean;
   /** True once when every slot is terminal with no ready pack and the run leaves collecting. */
@@ -304,6 +306,7 @@ export async function acceptCollectSlotReport(
         slots: existingByRequest.run.slots,
       }),
       newlyAccepted: false,
+      slotStatus: existingByRequest.status,
       synthesisStarted: false,
       waveExhausted: false,
     };
@@ -320,6 +323,7 @@ export async function acceptCollectSlotReport(
     return {
       run: toRunView(run),
       newlyAccepted: false,
+      slotStatus: slot.status,
       synthesisStarted: false,
       waveExhausted: false,
     };
@@ -371,6 +375,7 @@ export async function acceptCollectSlotReport(
   return {
     run: toRunView(refreshed),
     newlyAccepted: true,
+    slotStatus: input.outcome,
     synthesisStarted,
     waveExhausted,
   };

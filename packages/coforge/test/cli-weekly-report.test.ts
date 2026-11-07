@@ -54,9 +54,11 @@ test("weekly-report-collect CLI parses submit-pack and dispatches the transport"
           return {
             idempotencyKey: command.idempotencyKey,
             runId: command.runId,
-            status: "collecting",
+            status: "cancelled",
             allTerminal: true,
             canSynthesize: false,
+            newlyAccepted: calls.length === 1,
+            slotStatus: calls.length === 1 ? "empty" : "ready",
           };
         },
       },
@@ -68,7 +70,49 @@ test("weekly-report-collect CLI parses submit-pack and dispatches the transport"
         outcome: "empty",
       },
     ]);
-    expect(output).toContain("Collect slot collecting");
+    // An accepted submit-empty that exhausts the wave cancels the run in the same call; the
+    // message must say the slot report landed, not that the slot was cancelled (#695).
+    expect(output).toContain("accepted");
+    expect(output).toContain("empty");
+    expect(output).not.toContain("not accepted");
+
+    const rejected = await run(
+      [
+        "weekly-report-collect",
+        "submit-pack",
+        "--run-id",
+        "22222222-2222-4222-8222-222222222222",
+        "--idempotency-key",
+        "99999999-9999-4999-8999-999999999999",
+        "--markdown",
+        packPath,
+      ],
+      {
+        check: async () => {
+          throw new Error("message check called");
+        },
+        read: async () => {
+          throw new Error("message read called");
+        },
+        send: async () => {
+          throw new Error("message send called");
+        },
+        view: async () => {
+          throw new Error("attachment view called");
+        },
+        weeklyReportCollect: async (command) => ({
+          idempotencyKey: command.idempotencyKey,
+          runId: command.runId,
+          status: "cancelled",
+          allTerminal: true,
+          canSynthesize: false,
+          newlyAccepted: false,
+          slotStatus: "ready",
+        }),
+      },
+    );
+    expect(rejected).toContain("not accepted");
+    expect(rejected).toContain("ready");
   } finally {
     await rm(packPath, { force: true });
   }

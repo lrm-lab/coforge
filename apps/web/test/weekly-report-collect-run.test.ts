@@ -510,6 +510,7 @@ test("acceptCollectSlotReport advances collecting→synthesizing when every slot
     packMarkdown: "# pack from ubuntu",
   });
   expect(first.newlyAccepted).toBe(true);
+  expect(first.slotStatus).toBe("ready");
   expect(first.synthesisStarted).toBe(true);
   expect(first.run.status).toBe(COLLECT_RUN_STATUS.synthesizing);
   expect(first.run.canSynthesize).toBe(true);
@@ -524,6 +525,7 @@ test("acceptCollectSlotReport advances collecting→synthesizing when every slot
     packMarkdown: "# pack from ubuntu",
   });
   expect(replay.newlyAccepted).toBe(false);
+  expect(replay.slotStatus).toBe("ready");
   expect(replay.synthesisStarted).toBe(false);
   expect(replay.run.status).toBe(COLLECT_RUN_STATUS.synthesizing);
 });
@@ -612,6 +614,7 @@ test("acceptCollectSlotReport leaves collecting when every slot failed with no r
   });
 
   expect(result.newlyAccepted).toBe(true);
+  expect(result.slotStatus).toBe(COLLECT_SLOT_STATUS.failed);
   expect(result.synthesisStarted).toBe(false);
   expect(result.waveExhausted).toBe(true);
   expect(result.run.status).toBe(COLLECT_RUN_STATUS.cancelled);

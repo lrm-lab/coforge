@@ -46,7 +46,13 @@ test("the collect route echoes the request's idempotencyKey when it accepts a sl
     {
       reportCollectSlotOutcome: async (input) => {
         received = input;
-        return { run: runView, newlyAccepted: true, synthesisStarted: true, waveExhausted: false };
+        return {
+          run: runView,
+          newlyAccepted: true,
+          slotStatus: "empty",
+          synthesisStarted: true,
+          waveExhausted: false,
+        };
       },
       reportCollectorRuntimeFailure: async () => {
         throw new Error("not a turn-fail request");
@@ -63,6 +69,7 @@ test("the collect route echoes the request's idempotencyKey when it accepts a sl
     allTerminal: true,
     canSynthesize: true,
     newlyAccepted: true,
+    slotStatus: "empty",
     synthesisStarted: true,
     waveExhausted: false,
   });
