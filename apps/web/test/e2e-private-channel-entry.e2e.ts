@@ -135,7 +135,7 @@ test("a channel started private shows its lock, and its settings switch it publi
     await browser("screenshot", join(artifacts, "3-settings-private.png"));
     await confirmSwitch(
       "Change to Public Channel",
-      `Change ${name} to a public channel?`,
+      `Change #${name} to a public channel?`,
       "Change to Public",
       "4-confirm-public.png",
     );
