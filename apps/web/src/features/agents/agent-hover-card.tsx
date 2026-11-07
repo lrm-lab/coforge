@@ -11,9 +11,10 @@ import { HoverPopover, useClosePreview } from "#src/components/ui/hover-popover"
 import { ClockTime } from "#src/components/ui/relative-time";
 import { Badge } from "#src/components/base/badges/badges";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { StatusDot } from "#src/components/ui/status-dot";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { agentDisplay, presentActivityRows } from "./agent-activity-presentation";
+import { AgentStatusMarker } from "./agent-status-marker";
 import { ActivityMarker } from "./activity-marker";
 import { RECENT_ACTIVITY_LIMIT } from "./agent-activity";
 import {
@@ -153,8 +154,13 @@ function AgentCard({
               </Badge>
             )}
             {display && (
-              <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
-                <StatusDot tone={view.tone} pulse={view.pulse} className="size-1.5 shrink-0" />
+              <span
+                className={cn(
+                  "flex min-w-0 items-center gap-1 text-xs",
+                  view.alert ? "text-error-primary" : "text-tertiary",
+                )}
+              >
+                <AgentStatusMarker status={view} className="size-1.5 shrink-0" />
                 <span className="truncate">{view.label}</span>
               </span>
             )}

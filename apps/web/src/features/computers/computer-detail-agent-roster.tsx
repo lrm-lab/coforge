@@ -14,8 +14,8 @@ import {
   useAgentRuntimeControls,
   type AgentControlExecute,
 } from "#src/features/agents/agent-runtime-controls";
-import { StatusDot } from "#src/components/ui/status-dot";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { AgentStatusMarker } from "#src/features/agents/agent-status-marker";
 import { cn } from "#src/lib/utils";
 import { DetailGroup } from "./computer-detail-rows";
 import type { ComputerDetailView } from "./computer-detail-view";
@@ -338,7 +338,7 @@ function AgentRosterIdentity({
           <span className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary @2xl:hidden">
             {runtime}
           </span>
-          {status.kind === "error" && (
+          {(status.kind === "error" || status.alert) && (
             <span
               aria-hidden="true"
               className="text-xs break-words whitespace-normal text-error-primary @2xl:hidden"
@@ -351,9 +351,14 @@ function AgentRosterIdentity({
       <span className="hidden min-w-0 items-center gap-1.5 text-sm text-secondary @2xl:flex">
         {runtime}
       </span>
-      <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-sm text-secondary @2xl:items-start">
+      <span
+        className={cn(
+          "flex min-w-0 shrink-0 items-center gap-1.5 text-sm",
+          status.alert ? "text-error-primary" : "text-secondary @2xl:items-start",
+        )}
+      >
         {/* On a wrapped error the dot stays on its first line (text-sm is 20px tall). */}
-        <StatusDot tone={status.tone} pulse={status.pulse} className="size-2 @2xl:mt-1.5" />
+        <AgentStatusMarker status={status} className="size-2 @2xl:mt-1.5" />
         <span
           className={cn(
             "@max-2xl:sr-only",

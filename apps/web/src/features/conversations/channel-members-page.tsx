@@ -13,6 +13,7 @@ import { Input } from "#src/components/base/input/input";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { AgentStatusLine } from "#src/features/agents/agent-status-marker";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -339,9 +340,7 @@ const MemberRow = memo(function MemberRow({
       >
         {member.displayName}
       </span>
-      {member.kind === "agent" && (
-        <span className="block truncate text-xs text-tertiary">{agentDisplay(display).label}</span>
-      )}
+      {member.kind === "agent" && <AgentStatusLine status={agentDisplay(display)} />}
     </span>
   );
   return (

@@ -2,13 +2,14 @@ import { Button as AriaButton } from "react-aria-components";
 import { useMemo } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
-import { StatusDot } from "#src/components/ui/status-dot";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { AgentStatusMarker } from "#src/features/agents/agent-status-marker";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { useWatchAgentDisplay } from "#src/features/agents/watched-agent-displays";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { DirectSettingsButton } from "./direct-settings-panel";
@@ -87,7 +88,13 @@ export function DirectConversationHeader({
             avatar
           )}
           {/* One line: name, then the live status as a dot and a label. */}
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div
+            className={cn(
+              "flex min-w-0 flex-1",
+              // A warning takes a line of its own: the name keeps its width, and neither is cut.
+              status.alert ? "flex-col items-start [&_h1]:leading-5" : "items-center gap-2",
+            )}
+          >
             {openProfile ? (
               <AriaButton
                 onPress={openProfile}
@@ -106,12 +113,19 @@ export function DirectConversationHeader({
             {deleted ? (
               <DeletedAgentBadge />
             ) : (
-              <>
-                <StatusDot tone={status.tone} pulse={status.pulse} className="size-2" />
-                <p role="status" className="min-w-0 flex-1 truncate text-sm text-tertiary">
+              <div className={status.alert ? "flex max-w-full items-center gap-1" : "contents"}>
+                <AgentStatusMarker status={status} className="size-2" />
+                <p
+                  role="status"
+                  className={cn(
+                    status.alert
+                      ? "text-xs break-words text-error-primary"
+                      : "min-w-0 flex-1 truncate text-sm text-tertiary",
+                  )}
+                >
                   {status.label}
                 </p>
-              </>
+              </div>
             )}
           </div>
         </>

@@ -438,6 +438,9 @@ export function presentActivityRows(activity: readonly ActivityEntry[]): Present
   return merged;
 }
 
+/** Shapes both of `agentDisplay`'s branches alike: most displays carry neither field. */
+const NO_CAPTION: { statusDetail?: string; alert?: boolean } = {};
+
 /**
  * Format a cloud decision. No clocks, process facts or history reduction here.
  *
@@ -457,8 +460,7 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
       isOnline: undefined,
       tone: "unknown" as const,
       pulse: false,
-      // Never present; only shapes the inferred type to match the other branch's optional field.
-      ...((false as boolean) ? { statusDetail: "" } : {}),
+      ...NO_CAPTION,
     };
   const kind = display.activityKind;
   const row = presentActivity({ ...display, level: kind === "error" ? "error" : "info" }).at(-1);
@@ -486,10 +488,11 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
     isOnline: kind !== "offline",
     tone: kind === "online" ? ("idle" as const) : kind,
     pulse: isBusyTone(kind),
+    // `alert`: someone has to act, so the word reads red, with a warning sign (`AgentStatusMarker`).
     ...(quotaExhausted
-      ? { statusDetail: m.agent_status_quota_exhausted_detail() }
+      ? { statusDetail: m.agent_status_quota_exhausted_detail(), alert: true }
       : options?.stopped === true && kind === "offline"
         ? { statusDetail: STOPPED_STATUS_DETAIL }
-        : {}),
+        : NO_CAPTION),
   };
 }

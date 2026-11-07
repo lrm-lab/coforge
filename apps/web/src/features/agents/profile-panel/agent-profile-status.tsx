@@ -9,6 +9,7 @@ import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { interruptAgentTurn } from "#src/features/agents/agent-turn-interrupt.functions";
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { m } from "#src/paraglide/messages";
+import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
 import { AgentErrorBanner } from "./agent-error-banner";
 
 type Outcome = Awaited<ReturnType<typeof interruptAgentTurn>>;
@@ -38,10 +39,11 @@ export function AgentProfileStatus({
 }) {
   const stalled = display?.detailKind === "runtime_stalled" && display.activityKind !== "offline";
   if (stalled) return <StalledTurnStatus agentId={agent.id} />;
-  return display?.activityKind === "error" ? (
+  // A quota gone stops the Agent, so it is offline, yet someone still has to act on it.
+  return display?.activityKind === "error" || agentDisplay(display).alert ? (
     <AgentErrorBanner
       agent={agent}
-      display={display}
+      display={display!}
       onActivityTab={onActivityTab}
       onViewLogs={onViewLogs}
     />
