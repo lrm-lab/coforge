@@ -321,11 +321,19 @@ export class SystemCleaner {
 
   async #presentDue(ownerAgentId: string, state: OwnerState, due: DueHints): Promise<void> {
     const minted: AgentAppItem[] = [];
+    const presentedFiles: { file: string; bytes: number; thresholdBytes: number }[] = [];
     for (const kind of FILE_KINDS) {
       if (due[kind] === undefined) continue;
-      const item = await this.#presentFileHint(ownerAgentId, state, kind);
+      const result = await this.#presentFileHint(ownerAgentId, state, kind);
       if (!this.#isCurrent(ownerAgentId, state)) return;
-      if (item) minted.push(item);
+      if (result) {
+        minted.push(result.item);
+        presentedFiles.push({
+          file: FILE_HINTS[kind].path,
+          bytes: result.bytes,
+          thresholdBytes: result.thresholdBytes,
+        });
+      }
     }
     const nowMs = this.#clock.now();
     const lastTipAtMs = this.#cleanupTipAtMs.get(ownerAgentId);
@@ -358,6 +366,11 @@ export class SystemCleaner {
       event: "system_cleaner:presented",
       agent_id: ownerAgentId,
       item_ids: minted.map((item) => item.itemId),
+      files: presentedFiles.map((file) => ({
+        file: file.file,
+        bytes: file.bytes,
+        threshold_bytes: file.thresholdBytes,
+      })),
       memory_wake_reason: due.memory,
       active_context_wake_reason: due.activeContext,
       disk_low: due.disk !== undefined,
@@ -370,7 +383,7 @@ export class SystemCleaner {
     ownerAgentId: string,
     state: OwnerState,
     kind: FileKind,
-  ): Promise<AgentAppItem | undefined> {
+  ): Promise<{ item: AgentAppItem; bytes: number; thresholdBytes: number } | undefined> {
     const hint = FILE_HINTS[kind];
     const measurement = await this.#measureFile(ownerAgentId, hint.path);
     if (!this.#isCurrent(ownerAgentId, state)) return undefined;
@@ -387,12 +400,12 @@ export class SystemCleaner {
       title: `${hint.label} has grown to ${formatBytes(measurement.bytes)} (limit ${formatBytes(thresholdBytes)}); next check in ${formatInterval(intervalMs)}`,
       summary: `${hint.guidance} ${raiseLimitAction(hint, thresholdBytes)}`,
     });
-    if (item)
-      this.#fileHintPresented[kind].set(ownerAgentId, {
-        atMs: this.#clock.now(),
-        bytes: measurement.bytes,
-      });
-    return item;
+    if (!item) return undefined;
+    this.#fileHintPresented[kind].set(ownerAgentId, {
+      atMs: this.#clock.now(),
+      bytes: measurement.bytes,
+    });
+    return { item, bytes: measurement.bytes, thresholdBytes };
   }
 
   async #mint(ownerAgentId: string, item: MintAppItem): Promise<AgentAppItem | undefined> {

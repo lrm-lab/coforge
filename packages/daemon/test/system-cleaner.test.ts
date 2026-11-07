@@ -3,6 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SystemCleaner, type MemoryMeasurement } from "#src/system-cleaner/system-cleaner";
+import { captureDaemonLogs } from "./log-capture";
 import {
   ACTIVE_CONTEXT_ITEM,
   cleanupHarnesses,
@@ -156,7 +157,7 @@ describe("SystemCleaner MEMORY.md hint", () => {
         action: { kind: "run_command", commandId: "app.config" },
         title: "MEMORY.md has grown to 70.0 KiB (limit 64.0 KiB); next check in 1h",
         summary:
-          "Merge duplicate facts, drop stale ones, and move long material to notes/<topic>.md behind a pointer. To allow more, double the limit (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=131072",
+          "Merge duplicates; move long text to notes. Write facts from their source, not context; stale needs evidence; a person's decision changes only when they change it. To allow more, double the limit (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=131072",
       }),
     ]);
     expect(wakes).toEqual([{ agentId: OWNER, itemId: MEMORY_ITEM }]);
@@ -173,7 +174,7 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await period();
     await idle();
     expect((await items()).find((item) => item.itemId === MEMORY_ITEM)?.summary).toBe(
-      "Merge duplicate facts, drop stale ones, and move long material to notes/<topic>.md behind a pointer. To allow more, raise the limit to its maximum (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=1073741824",
+      "Merge duplicates; move long text to notes. Write facts from their source, not context; stale needs evidence; a person's decision changes only when they change it. To allow more, raise the limit to its maximum (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=1073741824",
     );
 
     cleaner.applyConfig(config({ revision: 2, thresholdBytes: GIB }));
@@ -181,7 +182,7 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await period();
     await idle();
     expect((await items()).find((item) => item.itemId === MEMORY_ITEM)?.summary).toBe(
-      "Merge duplicate facts, drop stale ones, and move long material to notes/<topic>.md behind a pointer. The limit is at its maximum; view or lower it with coforge app config --app system.cleaner",
+      "Merge duplicates; move long text to notes. Write facts from their source, not context; stale needs evidence; a person's decision changes only when they change it. The limit is at its maximum; view or lower it with coforge app config --app system.cleaner",
     );
   });
 
@@ -243,6 +244,29 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await period();
     await idle();
     expect(wakes).toHaveLength(3);
+  });
+});
+
+describe("SystemCleaner presented log", () => {
+  test("names each hinted file with its measured size and threshold", async () => {
+    const { cleaner, measured, period, idle } = await harness();
+    const { records } = await captureDaemonLogs(async () => {
+      cleaner.applyConfig(config());
+      measured.memory = 70 * KIB;
+      measured.activeContext = 5 * KIB;
+      await period();
+      await idle();
+    });
+    const presented = records.find(
+      (record) => record.properties.event === "system_cleaner:presented",
+    );
+    expect(presented?.properties).toMatchObject({
+      agent_id: OWNER,
+      files: [
+        { file: "MEMORY.md", bytes: 70 * KIB, threshold_bytes: 64 * KIB },
+        { file: "notes/active-context.md", bytes: 5 * KIB, threshold_bytes: 4 * KIB },
+      ],
+    });
   });
 });
 

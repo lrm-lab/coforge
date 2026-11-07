@@ -33,7 +33,7 @@ export const FILE_HINTS: Readonly<Record<FileKind, FileHint>> = {
     label: AGENT_MEMORY_FILE,
     thresholdKey: "threshold_bytes",
     guidance:
-      "Merge duplicate facts, drop stale ones, and move long material to notes/<topic>.md behind a pointer.",
+      "Merge duplicates; move long text to notes. Write facts from their source, not context; stale needs evidence; a person's decision changes only when they change it.",
     notificationClass: MEMORY_HINT.notificationClass,
     sourceKind: MEMORY_HINT.sourceKind,
     maximumBytes: CLEANER_CONFIG_BOUNDS.thresholdBytes.max,
