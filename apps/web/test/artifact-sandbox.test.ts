@@ -393,6 +393,7 @@ describe("the sandbox's answer", () => {
     );
     expect(await page.text()).toContain("&lt;script&gt;");
     expect(page.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(page.headers.get("content-security-policy")).toContain(`frame-ancestors ${SANDBOX}`);
     live = false;
     expect((await service.serve(new Request(`${SANDBOX}/p/${token}`))).status).toBe(404);
   });

@@ -175,8 +175,8 @@ export class ArtifactSandbox {
       const served = publicMarkdownPage(page.title, text);
       const headers = new Headers({
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Security-Policy":
-          "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+        // Framed by its wrapper, on this origin; 'none' here leaves a broken frame.
+        "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; frame-ancestors ${origins.sandboxOrigin}`,
         "X-Content-Type-Options": "nosniff",
         "X-Robots-Tag": "noindex, nofollow",
         "Referrer-Policy": "no-referrer",
