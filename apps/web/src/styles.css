@@ -130,6 +130,13 @@ body {
        component doesn't set its own text-* color explicitly. */
     @apply bg-primary text-primary;
   }
+
+  /* The browser's "bolder" is 700 on regular text; emphasis tops out at 600, wherever it renders
+     (docs/design/ui-principles.md). */
+  b,
+  strong {
+    font-weight: 600;
+  }
 }
 
 /* Hide the default expand arrow on Safari.  */
