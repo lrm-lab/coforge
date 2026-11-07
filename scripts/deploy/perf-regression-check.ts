@@ -271,7 +271,11 @@ function fetchIndexMjs(opts: Options, image: string): string | null {
     `  else echo __NOIMAGE__; exit 0; fi`,
     `fi`,
     `docker cp "$cid:/app/.output/server/index.mjs" - 2>/dev/null`,
-    `[ -n "$tmp" ] && docker rm "$cid" >/dev/null 2>&1`,
+    `if [ -n "$tmp" ]; then docker rm "$cid" >/dev/null 2>&1; fi`,
+    // The remote shell's exit status becomes ssh's: without an explicit
+    // success the trailing `[ -n "$tmp" ]` test returned 1 whenever a
+    // container already existed and the check died on a good copy.
+    `exit 0`,
   ].join("\n");
   const out = ssh(opts, remote);
   if (out.includes("__NOIMAGE__") || out.length < 1000) return null;
