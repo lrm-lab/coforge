@@ -231,8 +231,11 @@ Element.prototype.scrollTo = function (...args) {
               gateTimer = setTimeout(() => {
                 void (async () => {
                   const page = await evaluate(
-                    `{hydrated:${pageHydrated},coarse:matchMedia('(hover: none), (any-pointer: coarse)').matches,vw:innerWidth,rows:document.querySelectorAll('li[data-message-id]').length,tasks:document.querySelectorAll('[data-message-task]').length}`,
+                    `{hydrated:${pageHydrated},coarse:matchMedia('(hover: none), (any-pointer: coarse)').matches,vw:innerWidth,rows:document.querySelectorAll('li[data-message-id]').length,tasks:document.querySelectorAll('[data-message-task]').length,url:location.pathname+location.search,vis:document.visibilityState,ready:document.readyState,history:!!document.querySelector('[aria-label="Message history" i]'),title:document.title,body:(document.body?.innerText??'').slice(0,300),rowsFilled:window.__rowsFilledIn===true}`,
                   ).catch((error: unknown) => String(error));
+                  await browser("screenshot", join(artifacts, `${name}-gate-timeout.png`)).catch(
+                    () => undefined,
+                  );
                   reject(
                     new Error(
                       `The public Task read never reached the gate; serverFn calls: ${serverFnCalls.slice(-30).join(" | ") || "none"}; page: ${JSON.stringify(page)}`,
