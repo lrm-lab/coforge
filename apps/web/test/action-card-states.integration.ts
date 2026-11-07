@@ -181,10 +181,16 @@ test("a recommended option leads the card's text, and its answer reads as recomm
     );
     const stored = await ctx.db.actionCard.findUniqueOrThrow({
       where: { messageId: prepared.messageId },
-      select: { state: true, kind: true, result: true },
+      select: {
+        state: true,
+        kind: true,
+        result: true,
+        committedByUser: { select: { username: true } },
+      },
     });
+    // The Agent-facing read names who answered (task #691).
     expect(actionCardBodySuffix(stored)).toBe(
-      "[action card: executed; choice=green (recommended)]",
+      `[action card: executed; choice=green (recommended) by @${ctx.alice.username}]`,
     );
     expect(
       actionCardBodySuffix({ state: "executed", kind: "choice", result: { optionId: "red" } }),

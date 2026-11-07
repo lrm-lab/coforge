@@ -82,6 +82,51 @@ test("other cards keep the plain state suffix", () => {
   ).toBe("[action card: executed]");
 });
 
+test("a settled card names who settled it (task #691)", () => {
+  expect(
+    actionCardBodySuffix({ state: "cancelled", committedByUser: { username: "frankan" } }),
+  ).toBe("[action card: cancelled by @frankan]");
+  expect(
+    actionCardBodySuffix({
+      state: "executed",
+      kind: "choice",
+      result: { optionId: "a", label: "A" },
+      committedByUser: { username: "andong3" },
+    }),
+  ).toBe("[action card: executed; choice=a by @andong3]");
+  // A recommended pick keeps its marker ahead of the actor.
+  expect(
+    actionCardBodySuffix({
+      state: "executed",
+      kind: "choice",
+      result: { optionId: "green", label: "Green", recommended: true },
+      committedByUser: { username: "andong3" },
+    }),
+  ).toBe("[action card: executed; choice=green (recommended) by @andong3]");
+  // Answered in their own words: the actor rides the state line, the words stay fenced.
+  expect(
+    actionCardBodySuffix({
+      state: "executed",
+      kind: "choice",
+      result: { optionId: "_other", label: "Other", text: "ask Dana" },
+      committedByUser: { username: "andong3" },
+    }),
+  ).toBe("[action card: executed; choice=_other by @andong3]\n  │ ask Dana");
+  expect(
+    actionCardBodySuffix({
+      state: "executed",
+      kind: "questions",
+      result: {
+        answers: [{ questionId: "q", selection: [{ optionId: "a", label: "A" }] }],
+      },
+      committedByUser: { username: "andong3" },
+    }),
+  ).toBe("[action card: executed; q=a by @andong3]");
+  // No settled-by user — pending, expired, or a row read without the relation — is unchanged.
+  expect(actionCardBodySuffix({ state: "cancelled" })).toBe("[action card: cancelled]");
+  expect(actionCardBodySuffix({ state: "expired" })).toBe("[action card: expired]");
+});
+
 test("questions executed names each question's picks, a skipped one as skipped (task #515)", () => {
   expect(
     actionCardBodySuffix({

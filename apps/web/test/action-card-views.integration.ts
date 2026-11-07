@@ -123,7 +123,10 @@ test("Agent-facing message reads show the card's current state suffix", async ()
       ctx.agent.id,
       prepared.messageId,
     );
-    expect(executedRead.body.endsWith("[action card: executed]")).toBe(true);
+    // The Agent-facing read names who committed it (task #691).
+    expect(executedRead.body.endsWith(`[action card: executed by @${ctx.alice.username}]`)).toBe(
+      true,
+    );
   } finally {
     await ctx.cleanup();
   }

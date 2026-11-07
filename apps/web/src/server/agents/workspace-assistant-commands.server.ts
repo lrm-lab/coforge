@@ -43,7 +43,9 @@ export type AssistantReadWindow = {
 const assistantMessageInclude = {
   sender: MESSAGE_SENDER_SELECT,
   mentions: MESSAGE_MENTIONS_SELECT,
-  actionCard: { select: { state: true } },
+  actionCard: {
+    select: { state: true, committedByUser: { select: { username: true } } },
+  },
   forwards: AGENT_FORWARD_SELECT,
   attachments: { orderBy: { position: "asc" } },
 } satisfies Prisma.MessageInclude;

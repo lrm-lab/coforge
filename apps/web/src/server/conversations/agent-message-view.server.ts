@@ -45,7 +45,12 @@ export type StoredAgentForward = {
 type StoredAgentMessage = {
   body: string;
   mentions: readonly MessageMentionRef[];
-  actionCard?: { state: string; kind?: string; result?: unknown } | null;
+  actionCard?: {
+    state: string;
+    kind?: string | null;
+    result?: unknown;
+    committedByUser?: { username: string } | null;
+  } | null;
   forwards?: readonly StoredAgentForward[];
   /** With which original of a forward of several each is a copy of. */
   attachments?: readonly ForwardCopy[];
@@ -69,9 +74,12 @@ function ownWords(text: unknown, question?: string): string {
  * person wrote when they answered in their own words: a reader never sees the delivery's copy. */
 export function actionCardBodySuffix(card: {
   state: string;
-  kind?: string;
+  kind?: string | null;
   result?: unknown;
+  committedByUser?: { username: string } | null;
 }): string {
+  // Who settled the card, as its commit recorded it; a deleted user's row reads as no name.
+  const by = card.committedByUser?.username ? ` by @${card.committedByUser.username}` : "";
   if (card.state === "executed" && card.kind === "choice") {
     const optionId =
       card.result &&
@@ -83,7 +91,7 @@ export function actionCardBodySuffix(card: {
     if (optionId === CHOICE_OTHER_OPTION_ID || /^[a-z][a-z0-9_]{0,31}$/.test(optionId)) {
       // The answer is the option the Agent recommended, as its delivery says too.
       const recommended = (card.result as { recommended?: unknown }).recommended === true;
-      const state = `[action card: executed; choice=${optionId}${recommended ? " (recommended)" : ""}]`;
+      const state = `[action card: executed; choice=${optionId}${recommended ? " (recommended)" : ""}${by}]`;
       return optionId === CHOICE_OTHER_OPTION_ID
         ? state + ownWords((card.result as { text?: unknown }).text)
         : state;
@@ -121,10 +129,10 @@ export function actionCardBodySuffix(card: {
           .join(",");
         return picked ? [`${questionId}=${picked}`] : [];
       });
-      if (parts.length) return `[action card: executed; ${parts.join("; ")}]${words}`;
+      if (parts.length) return `[action card: executed; ${parts.join("; ")}${by}]${words}`;
     }
   }
-  return `[action card: ${card.state}]`;
+  return `[action card: ${card.state}${by}]`;
 }
 
 /** The choice result an offline Agent missed: who answered, which card, where, and what they chose. */

@@ -43,10 +43,12 @@ CLI command for it.
 To check whether a card has been committed, read the card message again, for example
 `coforge message read --target <target> --around <message-id>`. Its body ends with
 `[action card: pending]`, `[action card: executed]`, or `[action card: cancelled]`. A committed
-`choice` card ends with `[action card: executed; choice=<id>]`. Only `executed` means the
-channel, Agent, membership, fill, desktop step, or choice now stands; `pending` means still
-waiting on a human, and `cancelled` means it was dismissed. Do not claim the resource exists on
-the strength of having posted the card alone.
+`choice` card ends with `[action card: executed; choice=<id>]`. A settled card names who settled
+it, as ` by @<handle>` before the closing bracket — `[action card: cancelled by @alice]`,
+`[action card: executed; choice=password by @alice]` — unless that person's account is gone. Only
+`executed` means the channel, Agent, membership, fill, desktop step, or choice now stands;
+`pending` means still waiting on a human, and `cancelled` means it was dismissed. Do not claim the
+resource exists on the strength of having posted the card alone.
 
 ## Filling a page
 
@@ -102,12 +104,12 @@ COFORGEACTION
 Mark the option you would choose with `"recommended": true` (at most one per question). It is
 shown first (prepare prints a `Warning:` line saying so) and labelled "Recommended", and when it is
 chosen the delivery to you and a read of the card add `(recommended)`, for example
-`[action card: executed; choice=green (recommended)]`. Do not write
+`[action card: executed; choice=green (recommended) by @alice]`. Do not write
 "（推荐）" into the label: the label is the option's text, the recommendation is the flag.
 
-Read the card again: `[action card: executed; choice=password]` means they clicked that option. The
-choice delivery also names who answered, for example `@alice answered your choice "How should we
-sign in?" in #general: password · Password`.
+Read the card again: `[action card: executed; choice=password by @alice]` means @alice clicked
+that option. The choice delivery also names who answered, for example
+`@alice answered your choice "How should we sign in?" in #general: password · Password`.
 If they type in chat instead, interpret their reply and continue without waiting for the card. The
 card numbers the options 1, 2, 3… in their order, so a typed "2" means the second option.
 
@@ -138,6 +140,6 @@ lists every question's prompt with its picks, a skipped one as `(skipped)`, for 
 `@alice answered your questions in #general: Deploy where? → staging · Staging; Run which checks? →
 (skipped)`. Ask a skipped question again if you still need it. The card's `result.answers` records
 the same per question, a skipped one with `"skipped": true` and no picks. Reading the message
-again, it ends with each question's picks by id, `[action card: executed; deploy=staging;
-checks=(skipped)]`. A typed chat reply stays a chat reply: interpret it and continue, as with a
-choice.
+again, it ends with each question's picks by id and who answered,
+`[action card: executed; deploy=staging; checks=(skipped) by @alice]`. A typed chat reply stays a
+chat reply: interpret it and continue, as with a choice.

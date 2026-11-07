@@ -33,9 +33,14 @@ const TASK_METADATA_SELECT = {
   },
 } satisfies NonNullable<Prisma.MessageInclude["task"]>;
 
-/** State plus choice result so an Agent can read which option was picked. */
+/** State plus choice result so an Agent can read which option was picked, and who settled it. */
 const ACTION_CARD_STATE_SELECT = {
-  select: { state: true, kind: true, result: true },
+  select: {
+    state: true,
+    kind: true,
+    result: true,
+    committedByUser: { select: { username: true } },
+  },
 } satisfies NonNullable<Prisma.MessageInclude["actionCard"]>;
 
 /** The snapshots an Agent reads of a forwarded message's originals, in order (`agentForwards`). */
@@ -166,7 +171,12 @@ export function toAgentMessage(
       anchorType: string | null;
       anchorData: unknown;
     } | null;
-    actionCard?: { state: string } | null;
+    actionCard?: {
+      state: string;
+      kind?: string | null;
+      result?: unknown;
+      committedByUser?: { username: string } | null;
+    } | null;
     forwards?: StoredAgentForward[];
     memoryHint?: { id: string; targetAgentId: string; deliveredAt: Date | null } | null;
     mentions?: MessageMentionRef[];
