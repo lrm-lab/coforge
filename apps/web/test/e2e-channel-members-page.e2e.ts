@@ -71,7 +71,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   }
   async function openChannel(path: string) {
-    await browser("open", `${origin}${path}`, "--init-script", pointerInit);
+    await browser("open", `${origin}${path}`);
     await waitFor(
       `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
@@ -167,7 +167,10 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     });
     await mkdir(artifacts, { recursive: true });
 
-    await browser("set", "viewport", "1440", "900");
+    // `open url --init-script file` leaves the tab on about:blank under the Linux runner's
+    // Chrome; the flag has to precede the command, the way e2e-notification-settings does. The
+    // registration is per session, so every open below — desktop and phone — gets it.
+    await browser("--init-script", pointerInit, "set", "viewport", "1440", "900");
 
     // One avatar, its dot by where it is (task #510): the faces that list the channel's people,
     // in the header and the settings' strip, carry their status dot, a person's and an Agent's
@@ -183,7 +186,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     // Members link is labelled the same).
     const headerFaces = `[...document.querySelectorAll('[aria-label="Members"]')].find((el) => !${panel}?.contains(el) && el.textContent.includes(${JSON.stringify(DEV_BROWSER_USER.name)}))`;
     const chat = `${origin}${workspacePath}/channel/${channel.id}`;
-    await browser("open", chat, "--init-script", pointerInit);
+    await browser("open", chat);
     await waitFor(`${headerFaces}?.querySelector("${dot}") != null`, 60_000);
     await waitFor(messagesWithDots);
     await shootBoth("chat-dots");
@@ -323,7 +326,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     // A phone has no hover to reveal the actions: each row keeps them behind one menu button, so
     // the name keeps its width, and the menu makes the member a channel admin.
     await browser("set", "viewport", "390", "844");
-    await browser("open", chat, "--init-script", pointerInit);
+    await browser("open", chat);
     await waitFor(messagesWithDots, 60_000);
     await shootBoth("phone-chat-dots");
     await openChannel(`${workspacePath}/channel/${channel.id}`);
