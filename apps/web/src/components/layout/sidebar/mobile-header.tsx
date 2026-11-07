@@ -11,6 +11,7 @@ import {
   ModalOverlay as AriaModalOverlay,
 } from "react-aria-components";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useSystemNotifications } from "#src/features/usage-limits/system-notifications-provider";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -75,15 +76,24 @@ export const MobileNavigationHeader = ({ children }: PropsWithChildren) => {
 /** Opens the mobile drawer; renders nothing on lg+ and outside the drawer host. */
 export function MobileNavigationButton({ className }: { className?: string }) {
   const drawer = useContext(MobileDrawerContext);
+  const unseen = useSystemNotifications()?.unseen ?? 0;
   if (!drawer) return null;
   return (
-    <ButtonUtility
-      icon={Menu02}
-      size="sm"
-      color="tertiary"
-      aria-label={m.navigation_open_menu()}
-      onClick={() => drawer.setOpen(true)}
-      className={cx("-ml-2 shrink-0 lg:hidden", className)}
-    />
+    <span className={cx("relative -ml-2 inline-flex shrink-0 lg:hidden", className)}>
+      <ButtonUtility
+        icon={Menu02}
+        size="sm"
+        color="tertiary"
+        aria-label={m.navigation_open_menu()}
+        onClick={() => drawer.setOpen(true)}
+      />
+      {/* The bell is inside the drawer, so what waits there shows on the button that opens it. */}
+      {unseen > 0 && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0.5 right-0.5 size-2 rounded-full bg-error-solid"
+        />
+      )}
+    </span>
   );
 }

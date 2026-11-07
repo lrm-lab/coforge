@@ -1,0 +1,33 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "system_notifications_title": "通知",
+  "system_notifications_empty": "没有通知",
+  "system_notifications_bell": "通知",
+  "system_notifications_bell_unread": "通知，{count} 条未读",
+  "system_notification_view": "查看",
+  "system_notification_dismiss": "忽略",
+  "usage_limit_title": "{provider} 已达到用量限制",
+  "usage_limit_body": [
+    {
+      "declarations": ["input count", "input computer", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{computer} 上的 {count} 个 Agent 可能会暂停，直到用量恢复。"
+      }
+    }
+  ],
+  "usage_limit_body_reset": [
+    {
+      "declarations": [
+        "input count",
+        "input computer",
+        "input resetsAt",
+        "local countPlural = count: plural"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{computer} 上的 {count} 个 Agent 可能会暂停。预计 {resetsAt} 重置用量。"
+      }
+    }
+  ]
+}

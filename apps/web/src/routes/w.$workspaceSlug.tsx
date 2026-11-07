@@ -154,6 +154,7 @@ function AppLayout() {
     timeFormat,
     tabOrders,
     onboarding,
+    canSeeUsageLimits,
   } = Route.useLoaderData();
   const { queryClient } = Route.useRouteContext();
   const recordsPreview =
@@ -238,6 +239,7 @@ function AppLayout() {
                       workspaces={workspaces}
                       currentWorkspace={currentWorkspace}
                       recordsPreview={recordsPreview}
+                      canSeeUsageLimits={canSeeUsageLimits}
                       onSelectWorkspace={async (slug) => {
                         await navigate({
                           to: "/w/$workspaceSlug",

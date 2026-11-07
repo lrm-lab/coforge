@@ -6,6 +6,7 @@
   "plugin.inlang.messageFormat": {
     "pathPattern": [
       "./messages/{locale}/common.json",
+      "./messages/{locale}/usage-limits.json",
       "./messages/{locale}/system-notices.json",
       "./messages/{locale}/agents.json",
       "./messages/{locale}/agent-workspace.json",

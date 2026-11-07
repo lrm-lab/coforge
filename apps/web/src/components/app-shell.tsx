@@ -30,6 +30,8 @@ import {
   activityNavAttentionRealtime,
 } from "#src/features/inbox/activity-inbox-queries";
 import { useActivityInboxRealtime } from "#src/features/inbox/use-activity-inbox-realtime";
+import { NotificationBell } from "#src/features/usage-limits/notification-bell";
+import { SystemNotificationsProvider } from "#src/features/usage-limits/system-notifications-provider";
 import { WhatsNewRailButton, WhatsNewRow } from "#src/features/whats-new/whats-new-entry";
 import {
   WorkspaceSwitcher,
@@ -156,7 +158,10 @@ export function AppShell({
   onSignOut,
   children,
   recordsPreview = false,
+  canSeeUsageLimits = false,
 }: {
+  /** An owner or admin, who sees the Workspace's system notifications. */
+  canSeeUsageLimits?: boolean;
   user: AppUser;
   workspaces: WorkspaceOption[];
   /** The Workspace the page URL names. */
@@ -212,60 +217,68 @@ export function AppShell({
   const expandedFooter = (
     <>
       <WhatsNewRow />
-      <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
+      <div className="flex min-w-0 items-center gap-1">
+        <div className="min-w-0 flex-1">
+          <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
+        </div>
+        <NotificationBell workspaceSlug={currentWorkspace.slug} />
+      </div>
     </>
   );
 
   return (
-    <MobileDrawerProvider>
-      {/* Clears the notch and the home indicator on a phone. */}
-      <div className="flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:flex-row lg:bg-(image:--sidebar-gradient)">
-        {/* Each sidebar is `fixed` + a spacer div reserving its width in flow;
+    <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>
+      <MobileDrawerProvider>
+        {/* Clears the notch and the home indicator on a phone. */}
+        <div className="flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:flex-row lg:bg-(image:--sidebar-gradient)">
+          {/* Each sidebar is `fixed` + a spacer div reserving its width in flow;
           `contents` keeps that pair as direct flex items of this `lg:flex` shell. The drawer is
           mobile only; on desktop `sidebar-collapsed` on <html> picks the expanded one or the rail. */}
-        <div onClickCapture={onSidebarClickCapture} className="contents">
-          <SidebarMobileDrawer
-            activeUrl={activeUrl}
-            items={navItems}
-            subheader={workspaceSwitcher}
-            footer={expandedFooter}
-          />
-          <SidebarExpanded
-            activeUrl={activeUrl}
-            items={navItems}
-            subheader={workspaceSwitcher}
-            footer={expandedFooter}
-          />
-          <SidebarRail
-            activeUrl={activeUrl}
-            items={navItems}
-            subheader={
-              <WorkspaceSwitcher
-                compact
-                workspaces={workspaces}
-                current={currentWorkspace}
-                onSelect={onSelectWorkspace}
-                onCreate={onCreateWorkspace}
-              />
-            }
-            footer={
-              <div className="flex w-full flex-col items-center gap-2">
-                <WhatsNewRailButton />
-                <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
-              </div>
-            }
-          />
-        </div>
+          <div onClickCapture={onSidebarClickCapture} className="contents">
+            <SidebarMobileDrawer
+              activeUrl={activeUrl}
+              items={navItems}
+              subheader={workspaceSwitcher}
+              footer={expandedFooter}
+            />
+            <SidebarExpanded
+              activeUrl={activeUrl}
+              items={navItems}
+              subheader={workspaceSwitcher}
+              footer={expandedFooter}
+            />
+            <SidebarRail
+              activeUrl={activeUrl}
+              items={navItems}
+              subheader={
+                <WorkspaceSwitcher
+                  compact
+                  workspaces={workspaces}
+                  current={currentWorkspace}
+                  onSelect={onSelectWorkspace}
+                  onCreate={onCreateWorkspace}
+                />
+              }
+              footer={
+                <div className="flex w-full flex-col items-center gap-2">
+                  <WhatsNewRailButton />
+                  <NotificationBell rail workspaceSlug={currentWorkspace.slug} />
+                  <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
+                </div>
+              }
+            />
+          </div>
 
-        {/* On desktop the content is one white card inset 8px from the sidebar's background; a page
+          {/* On desktop the content is one white card inset 8px from the sidebar's background; a page
             made of several panels (Chat) marks itself `data-panel-cards` and draws a card per panel. */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
-            {children}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
+              {children}
+            </div>
           </div>
         </div>
-      </div>
-    </MobileDrawerProvider>
+      </MobileDrawerProvider>
+    </SystemNotificationsProvider>
   );
 }
 

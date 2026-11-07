@@ -1,0 +1,35 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "system_notifications_title": "Notifications",
+  "system_notifications_empty": "No notifications",
+  "system_notifications_bell": "Notifications",
+  "system_notifications_bell_unread": "Notifications, {count} unread",
+  "system_notification_view": "View",
+  "system_notification_dismiss": "Dismiss",
+  "usage_limit_title": "{provider} reached its usage limit",
+  "usage_limit_body": [
+    {
+      "declarations": ["input count", "input computer", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} Agent on {computer} may pause until usage recovers.",
+        "countPlural=other": "{count} Agents on {computer} may pause until usage recovers."
+      }
+    }
+  ],
+  "usage_limit_body_reset": [
+    {
+      "declarations": [
+        "input count",
+        "input computer",
+        "input resetsAt",
+        "local countPlural = count: plural"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} Agent on {computer} may pause. Usage should reset {resetsAt}.",
+        "countPlural=other": "{count} Agents on {computer} may pause. Usage should reset {resetsAt}."
+      }
+    }
+  ]
+}
