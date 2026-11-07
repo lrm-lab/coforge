@@ -16,6 +16,8 @@ import {
 import { CliError } from "#src/errors";
 import { terminalText } from "#src/terminal-output";
 import { unsettledWorkspaceLine } from "./workspace-report-line";
+import { formatLogindSessionRisk } from "#src/logind-session-risk";
+import type { LogindSessionRisk } from "#src/logind-session-risk";
 
 /** A locally registered Workspace a `--workspace <slug-or-id>` selector names. */
 export type LocalWorkspace = { id: string; slug: string };
@@ -30,6 +32,7 @@ export function createCommand(input: {
   /** Progress lines for the user's terminal, mirroring what `upgrade` already prints. Omit to
    * run silently (tests, internal callers); structured logging below is unaffected. */
   write?: (line: string) => void;
+  logindRisk?: () => Promise<LogindSessionRisk | null>;
 }): {
   start(workspace?: string): Promise<void>;
   stop(workspace?: string): Promise<void>;
@@ -44,6 +47,13 @@ export function createCommand(input: {
   const resolve = async (workspace?: string) =>
     workspace && input.resolveWorkspace ? input.resolveWorkspace(workspace) : undefined;
   const write = input.write ?? (() => {});
+  let logindRiskChecked = false;
+  const warnLogindRisk = async () => {
+    if (logindRiskChecked) return;
+    logindRiskChecked = true;
+    const risk = await input.logindRisk?.();
+    if (risk) for (const line of formatLogindSessionRisk(risk)) write(line);
+  };
   /** Runs one lifecycle command; a refusal for a parked Workspace becomes its stable CLI error.
    * `target` is the Workspace id a `--workspace` selector named, or undefined for the machine. */
   const run = async (
@@ -120,6 +130,7 @@ export function createCommand(input: {
   return {
     async start(workspace) {
       input.logger?.info("Computer start requested", { event: "computer:starting" });
+      await warnLogindRisk();
       write("Starting CoForge...");
       await input.daemon.ensureRunning();
       const { runtimes, target } = await run("start", workspace);
@@ -148,6 +159,7 @@ export function createCommand(input: {
     },
     async restart(workspace) {
       input.logger?.info("Computer restart requested", { event: "computer:restarting" });
+      await warnLogindRisk();
       write(workspace ? `Restarting Workspace ${workspace}...` : "Restarting CoForge...");
       await input.daemon.ensureRunning();
       const { runtimes, target } = await run("restart", workspace);

@@ -12,6 +12,7 @@ import {
 import { createCommand as createClientCommand } from "#src/daemon-client/index";
 import { followComputerLogs } from "#src/logging/computer-logs";
 import type { DaemonCommand, LogsCommand } from "#src/cli";
+import { detectLogindSessionRisk } from "#src/logind-session-risk";
 
 export function createCommand(
   platform: "darwin" | "linux" | "win32",
@@ -40,6 +41,7 @@ export function createCommand(
       return { id: binding.id, slug: binding.slug };
     },
     write: io.stdout,
+    logindRisk: () => detectLogindSessionRisk({ platform }),
   });
   return {
     async start(workspace) {

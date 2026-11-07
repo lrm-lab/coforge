@@ -409,3 +409,20 @@ test("a scoped start reports only its own Workspace, not another one's restart u
 
   expect(progress.lines).toEqual(["Starting CoForge...", "CoForge Computer is online."]);
 });
+
+test("Linux start warns about logind session cleanup once", async () => {
+  const progress = output();
+  let detections = 0;
+  const command = createCommand({
+    daemon: { ensureRunning: async () => {}, command: async () => [] },
+    write: progress.write,
+    logindRisk: async () => {
+      detections++;
+      return { sessionScope: "session-7.scope", user: "alice", linger: false };
+    },
+  });
+  await command.start();
+  await command.start();
+  expect(detections).toBe(1);
+  expect(progress.lines.filter((line) => line.startsWith("Warning:"))).toHaveLength(1);
+});

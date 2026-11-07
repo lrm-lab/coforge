@@ -36,6 +36,7 @@ relative to `src/`.
 | `cli/`                                     | Command wiring and output: login, setup, update, daemon, restart; upgrade wording                   |
 | `errors.ts`                                | Stable user-facing CLI error stages                                                                 |
 | `terminal-output.ts`                       | Terminal-safe text                                                                                  |
+| `logind-session-risk.ts`                   | Read-only Linux logind session-risk detection and startup guidance                                  |
 | `setup/`                                   | Computer setup business flow                                                                        |
 | `workspace/`                               | Direct Workspace lookup and slug validation for setup intent                                        |
 | `registration/`                            | Computer registration idempotency                                                                   |
