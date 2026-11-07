@@ -58,7 +58,9 @@ export function parseComputerUpgradeRecord(raw: string): ComputerUpgradeRecord |
       return (value.reason === "timeout" ||
         value.reason === "publication" ||
         value.reason === "evidence" ||
-        value.reason === "reported") &&
+        value.reason === "reported" ||
+        value.reason === "version-mismatch") &&
+        (value.actualVersion === undefined || typeof value.actualVersion === "string") &&
         (value.error === undefined || typeof value.error === "string") &&
         (value.errorCode === undefined || typeof value.errorCode === "string")
         ? value

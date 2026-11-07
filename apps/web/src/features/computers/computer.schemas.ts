@@ -40,7 +40,9 @@ export type ComputerUpgradeStatus =
       requestId: string;
       status: "failed";
       /** "reported" is the Computer's own terminal receipt; the others are server inferences. */
-      reason: "timeout" | "publication" | "evidence" | "reported";
+      reason: "timeout" | "publication" | "evidence" | "reported" | "version-mismatch";
+      /** The version the Computer actually runs; only set for "version-mismatch". */
+      actualVersion?: string;
       error?: string;
       /** See `UPGRADE_ERROR_CODE`; only ever set alongside `reason: "reported"`. */
       errorCode?: string;

@@ -10,7 +10,9 @@ import { upgradeRunning } from "./computer-upgrade-status";
 
 /** Why an upgrade request ended without a verified new Computer version. */
 export type ComputerUpgradeFailure = {
-  reason: "timeout" | "publication" | "evidence" | "reported";
+  reason: "timeout" | "publication" | "evidence" | "reported" | "version-mismatch";
+  /** The version the Computer actually runs; only set for "version-mismatch". */
+  actualVersion?: string;
   error?: string;
   /** See `UPGRADE_ERROR_CODE`. Only ever meaningful alongside `reason: "reported"` - it is the
    * Daemon's own account of why, carried from wherever it actually happened, never a code this
@@ -57,6 +59,15 @@ const REASON_COPY: Record<ComputerUpgradeFailure["reason"], () => UpgradeFailure
     ],
   }),
   evidence: () => ({
+    headline: m.computer_upgrade_failed_evidence(),
+    steps: [
+      { text: m.computer_upgrade_step_check_status(), command: COMMAND.status },
+      { text: m.computer_upgrade_step_upgrade_by_hand(), command: COMMAND.upgrade },
+    ],
+  }),
+  // The versioned headline is composed in describeComputerUpgradeFailure; this entry is the
+  // fallback for a record that lost its actualVersion, and owns the shared next steps.
+  "version-mismatch": () => ({
     headline: m.computer_upgrade_failed_evidence(),
     steps: [
       { text: m.computer_upgrade_step_check_status(), command: COMMAND.status },
@@ -215,7 +226,12 @@ export function describeComputerUpgradeFailure(
   )();
   return {
     ...generic,
-    headline: failure.error ? `${generic.headline}: ${failure.error}` : `${generic.headline}.`,
+    headline:
+      failure.reason === "version-mismatch" && failure.actualVersion
+        ? `${m.computer_upgrade_failed_version_mismatch({ version: failure.actualVersion })}.`
+        : failure.error
+          ? `${generic.headline}: ${failure.error}`
+          : `${generic.headline}.`,
   };
 }
 

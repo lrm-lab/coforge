@@ -209,9 +209,12 @@ export class RedisComputerUpgradeStore {
    * still accepted - the daemon's recovered ids unioned with the inflight set - completes once
    * the new identity proves the version, so a request whose terminal report was lost across
    * the upgrade restart cannot leave the page waiting out its deadline. A recovered request
-   * the identity cannot prove fails closed as before; one the daemon never recovered stays
-   * accepted - its report or a later proving ready still settles it. Cloud image and runtime
-   * replaces (`completeOnIdentity`) are left to their own status-read completion.
+   * the identity cannot prove fails closed as before. One the daemon never recovered fails
+   * once the new identity proves the Computer moved to a different instance running another
+   * version - its installer died with the old instance and can never report - while an
+   * unclaimed request whose version still matches stays accepted for its own report or a
+   * later proving ready. Cloud image and runtime replaces (`completeOnIdentity`) are left to
+   * their own status-read completion.
    */
   async ready(
     scope: ComputerUpgradeScope,
@@ -255,6 +258,22 @@ export class RedisComputerUpgradeStore {
               requestId: current.requestId,
               status: "failed",
               reason: "evidence",
+            }),
+          )
+        )
+          settled.push(id);
+      } else if (
+        current.previousWorkerInstanceId !== identity.workerInstanceId &&
+        identity.computerVersion !== current.expectedVersion
+      ) {
+        if (
+          await this.replace(
+            key,
+            this.withUpgradeTarget(current, {
+              requestId: current.requestId,
+              status: "failed",
+              reason: "version-mismatch",
+              actualVersion: identity.computerVersion,
             }),
           )
         )

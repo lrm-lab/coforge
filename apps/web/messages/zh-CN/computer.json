@@ -205,6 +205,7 @@
   "computer_upgrade_failed_timeout": "电脑未能及时报告新版本",
   "computer_upgrade_failed_publication": "升级请求无法下发到电脑",
   "computer_upgrade_failed_evidence": "电脑重新上线，但没有新版本的证据",
+  "computer_upgrade_failed_version_mismatch": "电脑已是 {version}",
   "computer_upgrade_failed_unknown": "升级未完成",
   "computer_new_version": "新版本 {version}",
   "computer_cloud_image_update_dialog_title": "将 {name} 更新到 {version}？",
