@@ -106,4 +106,71 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
     await subject.observeStatus(status(3, "inactive"));
     expect((await subject.snapshot(scope)).stopReason).toBeNull();
   });
+
+  test("a transient runtime error clears once the Agent's Activity moves on", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeActivity(
+      activity(2, "runtime_error", {
+        level: "error",
+        runtimeError: {
+          errorClass: "RateLimitError",
+          errorReason: "rate_limited",
+          fingerprint: "fp-2",
+        },
+      }),
+      fence,
+    );
+    // The Agent kept working past the error, so it did not stop for it.
+    await subject.observeActivity(activity(3, "model_response_started"), fence);
+    await subject.observeStatus(status(4, "inactive"));
+    expect((await subject.snapshot(scope)).stopReason).toBeNull();
+  });
+
+  test("frames after inactive cannot reach the reducer, so the reason survives", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeActivity(
+      activity(2, "runtime_error", {
+        level: "error",
+        runtimeError: {
+          errorClass: "ProviderQuotaError",
+          errorReason: "billing_exhausted",
+          fingerprint: "fp-4",
+        },
+      }),
+      fence,
+    );
+    await subject.observeStatus(status(3, "inactive"));
+    // A late heartbeat or probe reply lands after the process went inactive: the reducer
+    // rejects it before it can touch stopReason.
+    const late = await subject.observeActivity(
+      activity(4, "runtime_progress", { isHeartbeat: true }),
+      fence,
+    );
+    expect(late).toBeUndefined();
+    expect((await subject.snapshot(scope)).stopReason).toBe("billing_exhausted");
+  });
+
+  test("an error-kind Activity without a reason keeps the last stop reason", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeActivity(
+      activity(2, "runtime_error", {
+        level: "error",
+        runtimeError: {
+          errorClass: "ProviderQuotaError",
+          errorReason: "billing_exhausted",
+          fingerprint: "fp-3",
+        },
+      }),
+      fence,
+    );
+    await subject.observeActivity(activity(3, "runtime_crashed", { level: "error" }), fence);
+    await subject.observeStatus(status(4, "inactive"));
+    expect((await subject.snapshot(scope)).stopReason).toBe("billing_exhausted");
+  });
 });

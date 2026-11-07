@@ -128,7 +128,13 @@ state.activity = {
 state.activityVisible = true
 -- A runtime error's reason outlives the Activity itself: the "inactive" status that follows
 -- hides the Activity, and the snapshot keeps reporting this until the next active process.
-if ARGV[16] ~= "" then state.stopReason = ARGV[16] end
+-- A later non-error observation proves the Agent kept running past the error, so the reason
+-- no longer describes a stop; an error-kind frame without a reason keeps the last one.
+if ARGV[16] ~= "" then
+  state.stopReason = ARGV[16]
+elseif ARGV[5] ~= "error" then
+  state.stopReason = nil
+end
 -- Any accepted observation is real evidence from the daemon (a probe reply
 -- included), so it cancels a pending liveness probe outright.
 state.probe = nil
