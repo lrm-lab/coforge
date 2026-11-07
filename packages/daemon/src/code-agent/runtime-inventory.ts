@@ -10,7 +10,6 @@ import {
   type CodeAgentModelCatalog,
   type RuntimeMetadata,
   type RuntimeProvider,
-  type RuntimeUnavailableCode,
 } from "@lrm/coforge-sdk/internal";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { PI_SDK_VERSION } from "@coforge/agent";
@@ -52,6 +51,9 @@ import { droidAcpRuntimeHost } from "./droid/acp-host";
 import { agentEnvironment } from "./environment";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
+import type { CatalogDiscoveryFailure } from "./catalog-discovery-results";
+
+export type { CatalogDiscoveryFailure } from "./catalog-discovery-results";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
@@ -203,12 +205,6 @@ export async function loadCachedCodeAgentCatalogs(
  * the probe cache in a single pass once every discovery has settled, avoiding concurrent
  * read-modify-write races between providers.
  */
-export type CatalogDiscoveryFailure = {
-  provider: RuntimeProvider;
-  code: RuntimeUnavailableCode;
-  diagnostic?: string;
-};
-
 export async function discoverCodeAgentCatalogs(
   runtimes: RuntimeMetadata[],
   options: CodeAgentDiscoveryOptions,
@@ -490,13 +486,7 @@ export async function discoverCodeAgentCatalogs(
   };
 }
 
-export async function discoverCodeAgentInventory(
-  options: CodeAgentDiscoveryOptions,
-): Promise<CodeAgentInventory> {
-  const runtimes = await discoverCodeAgentRuntimes(options);
-  const { catalogs } = await discoverCodeAgentCatalogs(runtimes, options);
-  return { runtimes, catalogs };
-}
+export { discoverCodeAgentInventory } from "./runtime-inventory-facade";
 
 function installedClaudeCodeVersion(runtimes: readonly RuntimeMetadata[]): string | undefined {
   return runtimes.find(

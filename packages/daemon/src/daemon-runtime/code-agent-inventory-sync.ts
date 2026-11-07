@@ -8,7 +8,6 @@ import {
   type RuntimeMetadata,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
-import type { CatalogDiscoveryFailure } from "#src/code-agent/runtime-inventory";
 import { readHostDevinEfforts, type DevinCatalogEfforts } from "#src/code-agent/devin/effort-read";
 import {
   readHostOpenCodeEfforts,
@@ -27,34 +26,12 @@ import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { CommandCodeEffortReads } from "./command-code-effort-reads";
 import { CatalogFreshness, reportedWithCatalogFailures } from "./catalog-freshness";
+import type { CodeAgentDiscovery, CodeAgentRuntimesReport } from "./catalog-inventory-types";
+
+export type { CodeAgentDiscovery, CodeAgentRuntimesReport } from "./catalog-inventory-types";
 
 // Deliberately the runtime's category: these records predate this module and keep their routing.
 const logger = getLogger(["coforge", "daemon", "runtime"]);
-
-/**
- * The injectable half of Code Agent discovery. `runtimes` is the fast, always-awaited probe;
- * `cachedCatalogs` is a disk-only read (no spawning) used for the same report; `catalogs` is the
- * live, possibly-spawning discovery. Explicit refreshes forbid cached fallback.
- */
-export type CodeAgentDiscovery = {
-  runtimes(): Promise<RuntimeMetadata[]>;
-  /** `changedProviders` names the catalogs whose on-disk key moved; a discovery that cannot tell
-   * leaves it out. */
-  cachedCatalogs(runtimes: RuntimeMetadata[]): Promise<{
-    catalogs: CodeAgentModelCatalog[];
-    needsRefresh: boolean;
-    changedProviders?: RuntimeProvider[];
-  }>;
-  catalogs(
-    runtimes: RuntimeMetadata[],
-    options?: { force: boolean; provider?: RuntimeProvider },
-  ): Promise<{
-    catalogs: CodeAgentModelCatalog[];
-    failures: CatalogDiscoveryFailure[];
-  }>;
-  /** This Computer's probe-cache directory. Absent only for test discoveries. */
-  stateDirectory?: string;
-};
 
 export function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDiscovery {
   const host = {
@@ -69,9 +46,6 @@ export function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDisc
     stateDirectory,
   };
 }
-
-/** What `reportRuntimes` reported, and whether its cached catalogs need a live refresh. */
-export type CodeAgentRuntimesReport = { runtimes: RuntimeMetadata[]; needsCatalogRefresh: boolean };
 
 /** Providers whose per-model `thought_level` list only exists after a model applies — each gets
  * an effort sweep after the model list reports. */

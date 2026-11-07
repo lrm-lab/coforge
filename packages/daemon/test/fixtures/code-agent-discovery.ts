@@ -1,4 +1,4 @@
-import type { CodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventory-sync";
+import type { CodeAgentDiscovery } from "#src/daemon-runtime/catalog-inventory-types";
 
 /** Discovers no Code Agent runtimes or catalogs, so a test's `DaemonRuntime` never probes the
  * provider CLIs installed on the machine running it. */
