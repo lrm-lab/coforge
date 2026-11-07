@@ -71,6 +71,11 @@ import {
   type MachineFailureContext,
 } from "./machine-supervisor-failures";
 import {
+  persistStopIntent,
+  releaseStopIntent,
+  type MachineStopIntentContext,
+} from "./machine-supervisor-stop-intents";
+import {
   type LifecycleFailure,
   type PendingUpgradeSettler,
   type RestartResult,
@@ -273,27 +278,13 @@ export class MachineSupervisor {
   }
 
   /** Persists these Workspaces as stopped now, ahead of the stop's turn in the queue. */
-  async #persistStopIntent(workspaceIds: readonly string[], sequence: number): Promise<void> {
-    for (const id of workspaceIds) this.#stopIntents.set(id, sequence);
-    try {
-      await this.#exclusive(async () => {
-        await this.#reloadIfRequired();
-        const next = this.#bindings.map((binding) =>
-          this.#stopIntents.has(binding.workspaceId) ? stopped(binding) : binding,
-        );
-        await this.#store(next);
-      });
-    } catch (error) {
-      // The stop fails as a whole (its queued turn sees the same error), so nothing stays forced.
-      this.#releaseStopIntents(workspaceIds, sequence);
-      throw error;
-    }
+  #persistStopIntent(workspaceIds: readonly string[], sequence: number): Promise<void> {
+    return persistStopIntent(this.#stopIntentOps, workspaceIds, sequence);
   }
 
   /** Ends this stop's hold over its Workspaces, unless a later stop took them over since. */
   #releaseStopIntents(workspaceIds: readonly string[], sequence: number): void {
-    for (const id of workspaceIds)
-      if (this.#stopIntents.get(id) === sequence) this.#stopIntents.delete(id);
+    releaseStopIntent(this.#stopIntentOps, workspaceIds, sequence);
   }
 
   #failedAfterAnswer(
@@ -728,6 +719,17 @@ export class MachineSupervisor {
       saveBinding: (binding) => this.#saveBinding(binding),
       settlePendingUpgrade: this.settlePendingUpgrade,
       now: this.now,
+    };
+  }
+
+  /** The stop intents' view of this Coordinator's store-write path. */
+  get #stopIntentOps(): MachineStopIntentContext {
+    return {
+      stopIntents: this.#stopIntents,
+      bindings: () => this.#bindings,
+      reloadIfRequired: () => this.#reloadIfRequired(),
+      exclusive: (write) => this.#exclusive(write),
+      store: (next) => this.#store(next),
     };
   }
 
