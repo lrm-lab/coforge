@@ -311,3 +311,17 @@ test("a DSH key it has but the provider rejects is reported as rejected, not mis
   expect(activity.detail).toContain("was rejected");
   expect(activity.detail).not.toContain("has no DeepSeek API key");
 });
+
+test("an action-required failure carries the provider's scrubbed message as providerMessage", () => {
+  const activity = buildRuntimeActionRequiredActivity(
+    { type: "error", message: "Kiro CLI is not logged in on this Computer" },
+    classifyRuntimeErrorText("Kiro CLI is not logged in on this Computer"),
+    {
+      provider: "kiro",
+      model: "kiro-model",
+      providerLabel: "Kiro CLI",
+      agentProviderKey: false,
+    },
+  );
+  expect(activity.runtimeError?.providerMessage).toBe("Kiro CLI is not logged in on this Computer");
+});

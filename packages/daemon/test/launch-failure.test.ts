@@ -164,3 +164,40 @@ test("each refined runtime refusal keeps its own reason and says what to fix", (
     expect(activity.detail).toContain(text);
   }
 });
+
+test("a launch failure carries the runtime's scrubbed message as providerMessage", () => {
+  const activity = launchFailureActivity(
+    new RuntimeLoginRequiredError("Kiro CLI is not logged in on this Computer"),
+    "Kiro CLI",
+  );
+  expect(activity.runtimeError.providerMessage).toBe("Kiro CLI is not logged in on this Computer");
+});
+
+test("a not-installed launch failure carries the refusal text as providerMessage", () => {
+  const activity = launchFailureActivity(
+    new AgentAuthorizationError(
+      new AgentConfigRequestError("refused", 403, "RUNTIME_NOT_INSTALLED", "runtime_not_installed"),
+    ),
+    "Kiro",
+  );
+  expect(activity.runtimeError.errorReason).toBe("runtime_not_installed");
+  expect(activity.runtimeError.providerMessage).toContain("could not be obtained");
+});
+
+test("providerMessage redacts credentials before it leaves the Computer", () => {
+  const activity = launchFailureActivity(
+    new RuntimeLoginRequiredError("login failed with token=sk-live-secret-123"),
+    "Kiro CLI",
+  );
+  expect(activity.runtimeError.providerMessage).not.toContain("sk-live-secret-123");
+  expect(activity.runtimeError.providerMessage).toContain("[REDACTED]");
+});
+
+test("an unclassified launch failure carries no providerMessage", () => {
+  const activity = launchFailureActivity(
+    new RuntimeStartFailedError("spawn failed: /internal/path leaked detail"),
+    "Kiro CLI",
+  );
+  expect(activity.runtimeError.errorReason).toBe("runtime_start_failed");
+  expect(activity.runtimeError.providerMessage).toBeUndefined();
+});

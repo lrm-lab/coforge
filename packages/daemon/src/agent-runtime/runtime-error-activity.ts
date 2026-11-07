@@ -190,6 +190,7 @@ export function buildRuntimeActionRequiredActivity(
 ): AgentActivity {
   const detail = runtimeActionRequiredMessage(classified.requiredAction, event.message, context);
   const subtype = runtimeActionRequiredSubtype(event.message, context);
+  const providerMessage = scrubRuntimeErrorText(event.message);
   const diagnosticLabel =
     subtype === "provider_plan_access_error"
       ? "Runtime model-access diagnostic"
@@ -199,7 +200,7 @@ export function buildRuntimeActionRequiredActivity(
     { kind: "text" as const, text: `${diagnosticLabel}: ${subtype}` },
     {
       kind: "text" as const,
-      text: `Raw error excerpt (redacted): ${scrubRuntimeErrorText(event.message)}`,
+      text: `Raw error excerpt (redacted): ${providerMessage}`,
     },
   ];
   return {
@@ -211,6 +212,7 @@ export function buildRuntimeActionRequiredActivity(
     runtimeError: {
       ...reportedClassification(event, () => classified),
       fingerprint: fingerprintRuntimeError(event.message),
+      providerMessage,
       ...(classified.requiredAction !== "none"
         ? { requiredAction: classified.requiredAction }
         : {}),

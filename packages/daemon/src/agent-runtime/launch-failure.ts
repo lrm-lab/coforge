@@ -331,14 +331,35 @@ function launchFailureDetail(
   }
 }
 
-/** The error Activity content for a launch that did not start: the sentence that explains it
- * and the typed reason beside it. */
+/** Launch failure reasons whose `runtimeError` carries `providerMessage`: the classified
+ * refusals a person must act on, whose runtime wording is written for the user (#686,
+ * #682). Anything else — an untyped spawn failure above all — keeps its text in the Computer
+ * log only, because the redactor recognizes credential shapes, not arbitrary internals. */
+const PROVIDER_MESSAGE_REASONS: readonly LaunchFailureReason[] = [
+  LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED,
+  LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED,
+  LAUNCH_FAILURE_REASON.RUNTIME_VERSION_TOO_OLD,
+  LAUNCH_FAILURE_REASON.RUNTIME_UNUSABLE,
+  LAUNCH_FAILURE_REASON.RUNTIME_PRIVATE,
+  LAUNCH_FAILURE_REASON.MODEL_NOT_FOUND,
+  LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
+  LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
+];
+
+/** The error Activity content for a launch that did not start: the sentence that explains it,
+ * the typed reason beside it, and — for a classified refusal only — the runtime's own message
+ * redacted for `providerMessage`. */
 export function launchFailureActivity(
   error: unknown,
   runtimeName: string,
 ): {
   detail: string;
-  runtimeError: { errorClass: string; errorReason: LaunchFailureReason; fingerprint: string };
+  runtimeError: {
+    errorClass: string;
+    errorReason: LaunchFailureReason;
+    fingerprint: string;
+    providerMessage?: string;
+  };
 } {
   const reason = launchFailureReason(error);
   const detail = launchFailureDetail(reason, error, runtimeName);
@@ -348,12 +369,15 @@ export function launchFailureActivity(
       errorClass: RUNTIME_ERROR_CLASS.LAUNCHER,
       errorReason: reason,
       fingerprint: fingerprintRuntimeError(detail),
+      ...(PROVIDER_MESSAGE_REASONS.includes(reason)
+        ? { providerMessage: scrubRuntimeErrorText(refusalText(error)) }
+        : {}),
     },
   };
 }
 
-/** The structured log fields for a failed launch: its reason, its redacted message (the cause the
- * Activity sends people to the Computer log for), and any SDK trace evidence. */
+/** The structured log fields for a failed launch: its reason, its redacted message (the text
+ * `providerMessage` carries for a classified refusal), and any SDK trace evidence. */
 export function launchFailureLogFields(error: unknown) {
   return {
     failure_reason: launchFailureReason(error),
