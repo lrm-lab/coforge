@@ -1,5 +1,5 @@
 import { isMemoryAgentRuntime } from "@coforge/agent";
-import { AgentAuthorizationError, launchFailureLogFields } from "#src/agent-runtime/launch-failure";
+import { AgentAuthorizationError } from "#src/agent-runtime/launch-failure";
 import { AgentStartup } from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
@@ -14,7 +14,7 @@ import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
 import { ResumedEarlyCrashWatch, type ResumedEarlyCrashStreak } from "./resumed-early-crash";
 import { isBusyActivityDetailKind } from "./agent-activity-publisher";
-import { runtimeDisplayName } from "./session-invalidate-activity";
+import { reportLaunchFailure } from "./agent-startup-failure";
 import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
 import { requestAgentLaunchConfig } from "./agent-launch-config";
 import { agentLaunchTag } from "#src/platform/agent-launch-tag";
@@ -371,47 +371,7 @@ export async function launchAgentProcess(
         logAgentApiKeyRevokeFailed(agentId, revokeError);
       }
     }
-    if (!ports.isStopping() && !ports.stops.stopping(agentId)) {
-      // The Activity sends people to the Computer log for the cause; this is that line.
-      logger.warning("Agent launch failed", {
-        event: "agent_runtime:launch_failed",
-        agent_id: agentId,
-        provider: config.provider,
-        launch_id: launch.launchId,
-        ...launchFailureLogFields(error),
-        outcome: "failed",
-      });
-      // A thrown open whose text names a recovery time records a wait (`hasLaunchWait`) and
-      // must not report inactive. An offline classification keeps that failure's Activity
-      // instead of the generic launcher wording. The log above stays the typed launch reason.
-      const offlineLaunchError =
-        launch.offlineError ??
-        ports.offlineResidency.thrownLaunchActivity(
-          agentId,
-          launch,
-          runtimeDisplayName(config.provider),
-          config,
-          error,
-        );
-      if (!ports.offlineResidency.hasLaunchWait(agentId))
-        ports.sendAgentStatus(agentId, "inactive");
-      ports.activityPublisher.publish(
-        agentId,
-        launch,
-        offlineLaunchError
-          ? ports.activity(
-              agentId,
-              offlineLaunchError.detailKind,
-              offlineLaunchError.level,
-              offlineLaunchError.detail,
-              {
-                entries: offlineLaunchError.entries,
-                runtimeError: offlineLaunchError.runtimeError,
-              },
-            )
-          : ports.launchFailureActivity(agentId, config.provider, error),
-      );
-    }
+    reportLaunchFailure(ports, agentId, launch, config, error);
     if (ports.currentActivityLaunches.get(agentId) === launch) {
       ports.activityPublisher.forgetBusy(agentId);
       ports.disposeLaunchObservations(agentId);

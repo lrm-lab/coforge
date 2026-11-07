@@ -1,12 +1,16 @@
 import { AGENT_STARTUP_TIMEOUT_MS } from "#src/agent-runtime/agent-startup";
+import { launchFailureLogFields } from "#src/agent-runtime/launch-failure";
+import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { AgentControl } from "#src/agent-runtime/agent-control";
 import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentStopCoordinator } from "./agent-stop-coordinator";
 import type { AgentActivityPublisher } from "./agent-activity-publisher";
-import type { AgentOfflineResidency } from "./agent-offline-residency";
+import type { AgentOfflineResidency, OfflineResidencyLaunch } from "./agent-offline-residency";
 import type { ActivityLaunch } from "./activity-launch";
+import type { AgentLaunchCoordinatorPorts } from "./agent-launch-coordinator";
 import { agentActivityDrafts } from "./agent-activity-drafts";
+import { runtimeDisplayName } from "./session-invalidate-activity";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 
@@ -78,6 +82,57 @@ export async function failAgentStartup(
   const outcome = await abandonLaunch(ports, agentId, error);
   if (outcome !== error) throw outcome;
   await ports.agentControl.stopped(agentId, launch.launchId);
+}
+
+/** What a launch that threw owes the Agent: the failure log, the offline record or quota wait
+ * a thrown open classifies to, `inactive` unless a recovery time stands, and the Activity —
+ * the failure's own wording when it wrote an offline record, the launcher wording otherwise. */
+export function reportLaunchFailure(
+  ports: AgentLaunchCoordinatorPorts,
+  agentId: string,
+  launch: OfflineResidencyLaunch,
+  config: Pick<AgentRuntimeConfig, "provider" | "model" | "providerConfig">,
+  error: unknown,
+): void {
+  if (ports.isStopping() || ports.stops.stopping(agentId)) return;
+  // The Activity sends people to the Computer log for the cause; this is that line.
+  logger.warning("Agent launch failed", {
+    event: "agent_runtime:launch_failed",
+    agent_id: agentId,
+    provider: config.provider,
+    launch_id: launch.launchId,
+    ...launchFailureLogFields(error),
+    outcome: "failed",
+  });
+  // A thrown open whose text names a recovery time records a wait (`hasLaunchWait`) and
+  // must not report inactive. An offline classification keeps that failure's Activity
+  // instead of the generic launcher wording. The log above stays the typed launch reason.
+  const offlineLaunchError =
+    launch.offlineError ??
+    ports.offlineResidency.thrownLaunchActivity(
+      agentId,
+      launch,
+      runtimeDisplayName(config.provider),
+      config,
+      error,
+    );
+  if (!ports.offlineResidency.hasLaunchWait(agentId)) ports.sendAgentStatus(agentId, "inactive");
+  ports.activityPublisher.publish(
+    agentId,
+    launch,
+    offlineLaunchError
+      ? ports.activity(
+          agentId,
+          offlineLaunchError.detailKind,
+          offlineLaunchError.level,
+          offlineLaunchError.detail,
+          {
+            entries: offlineLaunchError.entries,
+            runtimeError: offlineLaunchError.runtimeError,
+          },
+        )
+      : ports.launchFailureActivity(agentId, config.provider, error),
+  );
 }
 
 export function scheduleStartupFailure(
