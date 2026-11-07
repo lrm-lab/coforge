@@ -20,7 +20,9 @@ import {
   type AgentControlRecoveryReader,
   type AgentControlAction,
   carriesRecovery,
+  controlOperationState,
   current,
+  isEligibleForTransientRetry,
   terminal,
   type AgentControlState,
   type AgentControlAgent,
@@ -92,16 +94,24 @@ export class AgentControl {
   /**
    * Ready recovery republishes the current fence; it never waits for buffered daemon ACKs.
    *
-   * A non-terminal state is deliberately republished here, never superseded: `recover` only
-   * runs for an Agent the Daemon just reported as NOT running, so there is no risk of a
-   * duplicate live process, and the Daemon's own control record repair now answers a
-   * request it previously rejected outright instead of leaving it unanswered forever. Minting a
-   * fresh epoch on every reconnect would instead churn the request — and republish a brand new
-   * Start — on every single `ready()` for an Agent whose Daemon keeps reconnecting without ever
-   * answering, without the Daemon ever getting a chance to answer the one it already has.
-   * `begin` supersedes on any *owner-initiated* retry through
+   * A non-terminal state for the CURRENT scope is deliberately republished here, never
+   * superseded: `recover` only runs for an Agent the Daemon just reported as NOT running, so
+   * there is no risk of a duplicate live process, and the Daemon's own control record repair
+   * now answers a request it previously rejected outright instead of leaving it unanswered
+   * forever. Minting a fresh epoch on every reconnect would instead churn the request — and
+   * republish a brand new Start — on every single `ready()` for an Agent whose Daemon keeps
+   * reconnecting without ever answering, without the Daemon ever getting a chance to answer
+   * the one it already has. `begin` supersedes on any *owner-initiated* retry through
    * `execute`/`publishStart`/`publishStop`, unconditionally — `recover` is the one path that
-   * still only republishes.
+   * still only republishes a live-scope operation.
+   *
+   * Two cases fall through to a fresh Start instead. A non-terminal operation whose scope went
+   * stale (the Agent moved Computer or its configuration changed since it began) can never be
+   * answered — every result is fenced on `current` — so republishing it would leave the Agent
+   * pending forever; `begin` supersedes it like any newer command. And a failed latest
+   * operation is retried only inside the bounded transient window the delivery wake shares
+   * (`isEligibleForTransientRetry`): a non-retryable failure, or one outside the window,
+   * waits for a person's Start or `clearLaunchFailure`.
    *
    * `loaded` is the Agent the caller already read under this Agent's runtime lock; it is
    * authorized in memory instead of being read again. Nothing can move the control fence between
@@ -123,10 +133,15 @@ export class AgentControl {
     // Nobody asked for this Start (a Daemon coming ready, a message's wake): while the owner's
     // setup wizard is pending it would also stop the assistant being re-bound.
     if (await this.introductions?.holdsStart(agent)) return;
-    if (agent.state && !terminal(agent.state)) {
+    if (agent.state && !terminal(agent.state) && current(agent, agent.state)) {
       await this.#driver.advance(agent.id, agent.state.requestId, intent);
       return;
     }
+    if (
+      controlOperationState(agent) === "failed" &&
+      !isEligibleForTransientRetry(agent, this.clock())
+    )
+      return;
     const state = await this.#operations.begin(agent, "start", intent.requestId);
     // `begin` built `state` from `agent` (a retry only after checking the Computer and
     // configuration it publishes did not change), so it is published without reading it back.

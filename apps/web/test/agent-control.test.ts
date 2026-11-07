@@ -894,34 +894,6 @@ test("a failed operation never latches: start, stop, restart, reset-session, and
     ).toBe("pending");
     expect(decodeAgentStopIntent(sent[0]!)).toMatchObject({ requestId: "retry", controlEpoch: 2 });
   }
-  {
-    // recover() is the ready-recovery auto-start path; it used to reject outright after a
-    // terminal failed full-reset. It now proceeds exactly like every other entry point above.
-    const { store, sent } = failedFullResetAgent();
-    const control = new AgentControl(
-      store,
-      { publish: async (_channel, bytes) => void sent.push(bytes) },
-      { run: async (_id, work) => work() },
-    );
-    await control.recover(
-      {
-        protocolMajor: 1,
-        requestId: "ready-recovery",
-        workspaceId: "w",
-        computerId: "c",
-        agentId: "a",
-        provider: "pi",
-        model: "",
-        reasoning: "",
-      },
-      "owner",
-    );
-    expect(sent).toHaveLength(1);
-    expect(decodeAgentStartIntent(sent[0]!)).toMatchObject({
-      requestId: "ready-recovery",
-      controlEpoch: 2,
-    });
-  }
 });
 
 test("Full Reset completes when the workspace clear could not finish, and the Agent starts with a fresh session", async () => {

@@ -31,10 +31,11 @@ export class AgentDeliveryRejectionScopeError extends Error {
  * progress, and nothing the Daemon can relaunch it from. The delivery stays unread, so the server
  * decides whether to start the Agent, with the same recovery Start a Daemon `ready` sends.
  *
- * Unlike `ready` recovery it never starts an Agent whose latest Start ended failed, whatever the
- * failure: a launch that keeps failing would otherwise be retried for every message. That Agent
- * waits for a person's Start or the Daemon's next `ready`. It never starts a stopped Agent, and
- * leaves an operation already in flight alone instead of republishing it.
+ * The start decision is the one `AgentControl.recover` applies: never a stopped or deleted
+ * Agent, and a failed latest operation retried only inside the bounded transient window
+ * (`isEligibleForTransientRetry`), so a launch that keeps failing is not retried for every
+ * message. Unlike `ready` recovery it never republishes an operation already in flight — that
+ * Start is left to finish or fail on its own.
  */
 export class AgentDeliveryRejections {
   constructor(

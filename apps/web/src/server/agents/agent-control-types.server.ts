@@ -230,12 +230,11 @@ export const TRANSIENT_FAILURE_RETRY_INTERVAL_MS = 10 * 60 * 1_000;
 export const TRANSIENT_FAILURE_MAX_WINDOW_MS = 24 * 60 * 60 * 1_000;
 
 /**
- * Whether an automatic Start may retry the Agent's latest failed operation. Only a transient
- * failure inside the bounded window is retried: a non-retryable error code, a missing failure
- * time, or an elapsed time outside the window waits for a person's Start or
- * `clearLaunchFailure` instead of another automatic attempt. Lives beside
- * `controlOperationState`, the classification it completes, so every automatic Start path —
- * a Daemon `ready` recovery or a delivery wake — applies the one rule.
+ * Whether an automatic Start — a Daemon `ready` recovery or a delivery wake — may retry the
+ * Agent's latest failed operation. Only a transient failure inside the bounded window is
+ * retried: a non-retryable error code, a missing failure time, or an elapsed time outside the
+ * window waits for a person's Start or `clearLaunchFailure` instead of another automatic
+ * attempt. `agent-delivery-rejection.server.ts` and `AgentControl.recover` share this one rule.
  */
 export function isEligibleForTransientRetry(agent: AgentControlAgent, now: number): boolean {
   const state = agent.state;

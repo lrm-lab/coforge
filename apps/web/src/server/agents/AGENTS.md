@@ -127,12 +127,11 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   delivery rejection. It never starts a stopped or deleted Agent, one with an
   operation in flight (for any configuration), or one whose latest operation
   for its current configuration ended failed after it began a Start or a chain
-  ending in one, whatever step failed, a Restart or Reset failing at its stop
-  step included. That Agent waits for a person's Start or the next Daemon
-  `ready`. Otherwise it sends the same recovery Start as ready recovery.
-  `controlOperationState` (`agent-control.server.ts`) reads the control state; the guard stays
-  in the receiver, never in `recover()` or `WorkspaceAgentRecovery`, so ready
-  recovery still restarts a failed Agent.
+  ending in one, whatever step failed — except a transient failure inside the
+  bounded retry window. Otherwise it sends the same recovery Start as ready
+  recovery. `controlOperationState` (`agent-control.server.ts`) and
+  `isEligibleForTransientRetry` (`agent-control-types.server.ts`) are the one
+  rule both apply; `recover` also supersedes a stale-scope pending operation.
 - `ManageAgents.update`, `ChangeAgentRuntimeCredential`, and
   `AgentEnvironment.save` skip the stop → persist → start restart for a stopped
   Agent and return `"deferred"`.

@@ -190,10 +190,7 @@ test("a person's Start after a failed Start still starts the Agent", async () =>
   expect(agent.starts[1]).toMatchObject({ requestId: "user-start" });
 });
 
-test("a Daemon reconnect still starts an Agent whose last Start failed", async () => {
-  const agent = fixture();
-  await agent.reject();
-  await agent.failLatestStart("launch_failed");
+function readyRecovery(agent: ReturnType<typeof fixture>) {
   const record = () => ({
     id: agent.current().id,
     workspaceId: "w",
@@ -205,7 +202,7 @@ test("a Daemon reconnect still starts an Agent whose last Start failed", async (
     displayName: "A",
     createdAt: new Date(),
   });
-  const recovery = new WorkspaceAgentRecovery(
+  return new WorkspaceAgentRecovery(
     {
       getById: async () => record(),
       listOwnedInWorkspace: async () => [],
@@ -226,11 +223,34 @@ test("a Daemon reconnect still starts an Agent whose last Start failed", async (
     undefined,
     agent.control,
   );
+}
 
-  await recovery.recoverWorkspace("w", "c", []);
+test("a Daemon reconnect retries a transient Start failure inside the retry window", async () => {
+  const agent = fixture();
+  await agent.reject();
+  await agent.failLatestStart("runtime_start_failed");
+  agent.current().state!.failedAtMs = Date.now() - 15 * 60 * 1_000;
+
+  await readyRecovery(agent).recoverWorkspace("w", "c", []);
 
   expect(agent.starts).toHaveLength(2);
   expect(agent.current().state).toMatchObject({ action: "start", phase: "starting" });
+});
+
+test("a Daemon reconnect does not restart an Agent whose last Start failed non-retryably", async () => {
+  const agent = fixture();
+  await agent.reject();
+  await agent.failLatestStart("runtime_login_required");
+  agent.current().state!.failedAtMs = Date.now() - 15 * 60 * 1_000;
+
+  await readyRecovery(agent).recoverWorkspace("w", "c", []);
+
+  expect(agent.starts).toHaveLength(1);
+  expect(agent.current().state).toMatchObject({
+    action: "start",
+    phase: "failed",
+    errorCode: "runtime_login_required",
+  });
 });
 
 test("a failed Start recorded for an earlier configuration does not stop a rejection starting the Agent", async () => {
