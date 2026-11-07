@@ -80,7 +80,8 @@ export async function desktopPointerInitScript(directory: string) {
   return file;
 }
 
-/** One agent-browser session: its commands, and a page expression read back as JSON. */
+/** One agent-browser session: its commands, a page expression read back as JSON, and the DOM
+ * wait/click helpers the e2e files share. */
 export function browserSession(browserPath: string, session: string) {
   async function browser(...args: string[]) {
     const child = Bun.spawn([browserPath, "--session", session, ...args], {
@@ -98,7 +99,29 @@ export function browserSession(browserPath: string, session: string) {
   async function evaluate<T>(expression: string): Promise<T> {
     return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
   }
-  return { browser, evaluate };
+  /** Waits for `condition`, failing with its text rather than at the test timeout; a first page
+   * load compiles on the dev server, so callers pass a longer budget. agent-browser's own wait
+   * caps at 25 s, so the budget goes through `--timeout` or a longer wait dies at 25. */
+  const waitFor = (condition: string, ms = 20_000) =>
+    Promise.race([
+      browser("wait", "--fn", condition, "--timeout", String(ms)),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
+      ),
+    ]);
+  /** A page expression resolving to the last element whose trimmed text is exactly `text`. */
+  const byText = (selector: string, text: string) =>
+    `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((element) => element.textContent.trim() === ${JSON.stringify(text)}).at(-1)`;
+  /** Clicks the element `byText` finds, failing if it went away between the wait and the click. */
+  async function clickText(selector: string, text: string) {
+    await waitFor(`${byText(selector, text)} !== undefined`);
+    const clicked = await browser(
+      "eval",
+      `(() => { const target = ${byText(selector, text)}; target?.click(); return Boolean(target); })()`,
+    );
+    if (!clicked.includes("true")) throw new Error(`"${text}" disappeared before it was clicked`);
+  }
+  return { browser, evaluate, waitFor, byText, clickText };
 }
 
 /**
