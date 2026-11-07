@@ -173,8 +173,19 @@ export class DetachedDaemonHost implements DaemonLauncher {
     await rm(join(this.#stateDirectory, DETACHED_PID_FILE), { force: true });
   }
 
-  /** A detached process can always be restarted: there is no manager that could refuse. */
-  async assertRestartable(): Promise<void> {}
+  /** A detached process can be restarted: there is no manager that could refuse. It only counts
+   * when it is this Computer's own process, though — one a person started with
+   * `coforge-computer foreground` has no pid file here, and its own supervisor is the only thing
+   * that can stop or restart it (task #696). Stopping it from here would be the silent no-op the
+   * #417 acceptance found, and restarting it would report a new process that never ran. Nothing
+   * answering at all is restartable: there is nothing to take over, and `restart` starts it. */
+  async assertRestartable(): Promise<void> {
+    if (await this.#pid()) return;
+    if (!(await this.#local.isRunning())) return;
+    throw new Error(
+      "The CoForge Daemon answering on this Computer was not started by this Computer: a `coforge-computer foreground` process runs under the supervisor that started it, so stop or restart that one instead.",
+    );
+  }
 
   async restart(): Promise<void> {
     await this.stop();

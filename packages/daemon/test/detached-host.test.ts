@@ -3,6 +3,14 @@ import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  decodeDaemonHandshakeRequest,
+  decodeLocalRpcRequest,
+  encodeDaemonHandshakeResponse,
+  encodeLocalRpcResponse,
+  LOCAL_RPC_METHODS,
+  readLocalRpcFrame,
+} from "@lrm/coforge-sdk/internal";
+import {
   createDaemonHost,
   DetachedDaemonHost,
   SystemdUserDaemonHost,
@@ -23,6 +31,32 @@ const registrar = () => {
 async function fixture() {
   const state = await mkdtemp(join(tmpdir(), "detached-host-"));
   return state;
+}
+
+/** A Coordinator that was not started from here answers the local handshake: the detached host
+ * must recognise its own absence rather than take that process over. */
+const serverUrl = "https://coforge.test";
+
+const refused = (code: string) => Object.assign(new Error(code), { code });
+
+function answeringWithin(url: string) {
+  return async () => ({
+    async request(frame: Uint8Array) {
+      const request = decodeLocalRpcRequest(readLocalRpcFrame(frame)!);
+      const handshake = decodeDaemonHandshakeRequest(request.payload);
+      return encodeLocalRpcResponse({
+        method: LOCAL_RPC_METHODS.HANDSHAKE,
+        payload: encodeDaemonHandshakeResponse({
+          protocolMajor: 1,
+          requestId: handshake.requestId,
+          accepted: true,
+          daemonId: "someone-elses-daemon",
+          serverUrl: url,
+        }),
+      });
+    },
+    close() {},
+  });
 }
 
 test("systemd is present only with a running manager and a systemctl on PATH", async () => {
@@ -119,6 +153,36 @@ test("stopping something that is not running only clears the pid file", async ()
   const { host: h } = host(state);
   await h.stop();
   expect(await Bun.file(join(state, "detached.pid")).exists()).toBe(false);
+});
+
+test("the detached process this Computer started is restartable", async () => {
+  const state = await fixture();
+  await writeFile(join(state, "detached.pid"), "4000 900");
+  await host(state).host.assertRestartable();
+});
+
+test("a detached Computer that is not running is restartable, so restart can start it", async () => {
+  // Nothing answers and there is no pid file: no other process to take over, and `restart` boots
+  // one. Refusing here would leave a stopped Computer unable to start.
+  const state = await fixture();
+  await host(state, {
+    connect: async () => Promise.reject(refused("ECONNREFUSED")),
+  }).host.assertRestartable();
+});
+
+test("a Coordinator this Computer did not start is not restartable or stoppable", async () => {
+  // Task #696: `restart --supervisor` reported success with the pid unchanged and `stop` exited 0
+  // while the process kept running, because the detached host's gate was empty and its stop only
+  // knows this pid file. A `foreground` process under someone's own supervisor has no pid file
+  // here, and only that supervisor can restart or stop it.
+  const state = await fixture();
+  const error = await host(state, { serverUrl, connect: answeringWithin(serverUrl) })
+    .host.assertRestartable()
+    .then(() => null)
+    .catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain("supervisor");
+  expect((error as Error).message).toContain("foreground");
 });
 
 test("linux picks the host by systemd; darwin and win32 never get the detached one", () => {
