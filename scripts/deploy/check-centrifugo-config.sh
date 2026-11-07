@@ -83,6 +83,9 @@ for config in "${configs[@]}"; do
 	# mktemp creates the copy 0600, but the image runs checkconfig as its own
 	# user: an unreadable mount surfaces as Centrifugo's "config file not found".
 	chmod 644 "$check_config"
+	# OrbStack on the shared Mac can hang forever mounting /Volumes or the home directory, while
+	# the temporary directory mounts: stay on the copy there, at its physical path.
+	check_config="$(cd "$(dirname "$check_config")" && pwd -P)/$(basename "$check_config")"
 	if ! docker run --rm \
 		-v "$check_config:/config.yaml:ro" \
 		-e CENTRIFUGO_VAR_RPC_PROXY_SECRET=ci-placeholder \

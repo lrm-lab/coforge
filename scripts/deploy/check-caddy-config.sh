@@ -55,9 +55,17 @@ fi
 
 # `caddy validate` loads and provisions every module without starting servers
 # or obtaining certificates.
+# OrbStack on the shared Mac can hang forever mounting /Volumes or the home directory, while the
+# temporary directory mounts: the directory is mounted from a copy there, at its physical path.
+check_dir="$(mktemp -d "${TMPDIR:-/tmp}/caddy-config.XXXXXX")"
+trap 'rm -rf "$check_dir"' EXIT
+cp -R "$(dirname "$caddyfile")/." "$check_dir"
+chmod -R a+rX "$check_dir"
+check_dir="$(cd "$check_dir" && pwd -P)"
+
 if ! docker run --rm \
 	-e "COFORGE_DESKTOP_UPSTREAM=$upstream" \
-	-v "$(dirname "$caddyfile"):/etc/caddy:ro" \
+	-v "$check_dir:/etc/caddy:ro" \
 	"$image" \
 	caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then
 	printf 'check-caddy-config: %s failed Caddy configuration validation\n' "$caddyfile" >&2
