@@ -1,5 +1,14 @@
 import type { AgentControlAgent, AgentControlStore } from "#src/server/agents/agent-control.server";
 
+/** The runtime config the pending-operation fixtures share. */
+export const pendingRuntimeConfig = {
+  runtime: "pi" as const,
+  provider: { kind: "default" as const },
+  model: "",
+  modelProvider: "",
+  reasoning: "",
+};
+
 /** A CAS-fenced `AgentControlStore` over one Agent, for tests that start from a hand-built
  * `AgentControlState`. */
 export function pendingOpStore(initial: AgentControlAgent) {
