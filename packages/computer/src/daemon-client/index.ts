@@ -203,15 +203,22 @@ export function createCommand(input: {
  * Daemon admits the request into the one machine-wide pending slot a web upgrade also uses and
  * launches the detached installer job itself. Resolving `true` means the Daemon launched it —
  * the caller must not launch a second job; `false` means this Daemon cannot take the request
- * (no `computerUpgrade` method, or one that predates `daemon:computer_upgrade`) and the caller
- * launches the job directly, exactly as before. A pending-operation refusal becomes a plain
- * message naming the way out; every other rejection propagates unchanged.
+ * (no `computerUpgrade` method, one that predates `daemon:computer_upgrade`, or none running at
+ * all — a first `install`) and the caller launches the job directly, exactly as before. A
+ * pending-operation refusal becomes a plain message naming the way out; every other rejection
+ * propagates unchanged.
  */
 export function createComputerUpgradeAdmission(daemon: DaemonCommandRunner) {
   return async (requestId: string, expectedVersion: string): Promise<boolean> => {
     if (!daemon.computerUpgrade) return false;
     try {
+      // A first `install` has no Daemon to ask — and none that could be holding an upgrade —
+      // so an unreachable one means launch directly, exactly as before admission existed.
       await daemon.ensureRunning();
+    } catch {
+      return false;
+    }
+    try {
       await daemon.computerUpgrade(requestId, expectedVersion);
       return true;
     } catch (error) {

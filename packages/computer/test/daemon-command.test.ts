@@ -484,6 +484,17 @@ test("a Daemon without computer upgrade support falls back to launching directly
   expect(await admit("req-4", "0.1.19")).toBe(false);
 });
 
+test("a Daemon that cannot start falls back to launching directly", async () => {
+  const admit = createComputerUpgradeAdmission({
+    ensureRunning: async () => {
+      throw new Error("no daemon service is registered");
+    },
+    command: async () => [],
+    computerUpgrade: async () => [],
+  });
+  expect(await admit("req-6", "0.1.19")).toBe(false);
+});
+
 test("an unexpected computer upgrade refusal propagates unchanged", async () => {
   const admit = createComputerUpgradeAdmission({
     ensureRunning: async () => {},
