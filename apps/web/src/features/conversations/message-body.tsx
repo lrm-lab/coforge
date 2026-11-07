@@ -269,6 +269,7 @@ function chipSpan(
           number={taskNumber}
           kind={taskKind}
           onOpenTask={onOpenTask}
+          prose={data["data-task-reference-prose"] === "true"}
         >
           {children}
         </CrossTaskReference>

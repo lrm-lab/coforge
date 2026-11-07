@@ -280,12 +280,15 @@ function referenceKinds(options: ReferenceChipOptions): ReferenceKind[] {
         // A channel the reader's Workspace list does not hold (a private one they are not in)
         // stays as written.
         if (id === undefined || place !== "prose") return undefined;
-        return taskReference({
-          kind: "channel",
-          conversationId: id,
-          channelName: name!.toLowerCase(),
-          number: Number(number),
-        });
+        return taskReference(
+          {
+            kind: "channel",
+            conversationId: id,
+            channelName: name!.toLowerCase(),
+            number: Number(number),
+          },
+          { prose: true },
+        );
       },
     },
     {

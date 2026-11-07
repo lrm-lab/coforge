@@ -179,9 +179,18 @@ test("a typed #channel:#N names a listed channel's Task, an unlisted one stays a
       "data-task-reference-number": 7,
       "data-task-reference-conversation-id": CHANNEL_ID,
       "data-task-reference-kind": "channel",
+      // Parsed back out of the written form, not a stored token: an unresolved one reads as
+      // the sender's words, never the locked chip (task #437).
+      "data-task-reference-prose": "true",
     },
   });
   expect(after).toEqual(text(" and #secret:#2 now"));
+});
+
+test("a stored cross-conversation task token is not marked as written prose", () => {
+  const tree = taskPass([paragraph([text(`see <@task:c:${TASK_CONVERSATION}:design:7> now`)])]);
+  const reference = tree.children[0]!.children[1]!;
+  expect(reference.properties).not.toHaveProperty("data-task-reference-prose");
 });
 
 test("a typed dm:@peer:#N is one reference: its @peer is no mention of its own", () => {
@@ -197,6 +206,7 @@ test("a typed dm:@peer:#N is one reference: its @peer is no mention of its own",
       "data-task-reference-number": 3,
       "data-task-reference-kind": "dm",
       "data-task-reference-peer": "ada",
+      "data-task-reference-prose": "true",
     },
     children: [text("dm:@ada:#3")],
   });

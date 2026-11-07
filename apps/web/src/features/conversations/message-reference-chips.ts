@@ -69,8 +69,11 @@ export function mentionChip(mention: ChipMention, viewerId: string | undefined):
 
 /** A task reference, written as the words it stands for until the renderer resolves it (for
  * another conversation's, the names the sender saw, all a reader who cannot see it reads); another
- * conversation's also carries that conversation. */
-export function taskReference(reference: TaskReference): Element {
+ * conversation's also carries that conversation. `prose` marks a reference parsed back out of the
+ * written `#channel:#N` form rather than a stored token: the sender may never have been able to
+ * resolve it, so a reader who cannot is shown the words, never the locked chip a stored token's
+ * reader gets. */
+export function taskReference(reference: TaskReference, options?: { prose?: boolean }): Element {
   return {
     type: "element",
     tagName: "span",
@@ -80,6 +83,7 @@ export function taskReference(reference: TaskReference): Element {
         "data-task-reference-conversation-id": reference.conversationId,
         "data-task-reference-kind": reference.kind,
       }),
+      ...(options?.prose && { "data-task-reference-prose": "true" }),
     },
     children: [{ type: "text", value: canonicalTaskReference(reference) }],
   };
@@ -95,6 +99,7 @@ export function directTaskReferenceByPeer(peer: string, number: number): Element
       "data-task-reference-number": number,
       "data-task-reference-kind": "dm",
       "data-task-reference-peer": peer,
+      "data-task-reference-prose": "true",
     },
     children: [{ type: "text", value: `dm:@${peer}:#${number}` }],
   };

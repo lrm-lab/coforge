@@ -25,13 +25,19 @@ type CrossTaskReferenceProps = {
   children: ReactNode;
   /** Opens a Task of the open conversation, for a reference that names it. */
   onOpenTask?: (number: number) => void;
+  /** Parsed back out of the written `#channel:#N` / `dm:@peer:#N` form rather than a stored
+   * token: the sender may never have been able to resolve it, so a reader who cannot sees the
+   * words, never the locked chip a stored token's reader gets. */
+  prose?: boolean;
 };
 
 /**
  * Another conversation's Task in a message body (task #437): the Task's badge under its
  * conversation's current name, its title as the tooltip, a press that opens its popup over the
  * page. A reader who cannot see that Task — a private channel they are not in, a direct message of
- * others' — reads the words the sender wrote, with no title or status and nothing to open.
+ * others' — reads the locked chip when the sender's stored token asserts one may be there, or the
+ * sender's written words when the body only holds the typed form; either way no title, status or
+ * press.
  */
 export function CrossTaskReference(props: CrossTaskReferenceProps) {
   const openConversationId = useConversationId();
@@ -51,12 +57,31 @@ export function CrossTaskReference(props: CrossTaskReferenceProps) {
   );
 }
 
-function ChannelTaskReference({ conversationId, number, children }: CrossTaskReferenceProps) {
+/** What an unresolved cross-conversation reference shows: a stored token's reader who cannot
+ * see the Task gets the locked chip (the sender could, so a Task may really be there); a
+ * written reference's reader gets the sender's words back — nothing proves a Task exists. */
+export function UnresolvedTaskReference({
+  prose,
+  children,
+}: {
+  prose?: boolean;
+  children: ReactNode;
+}) {
+  return prose ? <>{children}</> : <HiddenTaskChip />;
+}
+
+function ChannelTaskReference({
+  conversationId,
+  number,
+  children,
+  prose,
+}: CrossTaskReferenceProps) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const { data: task } = useQuery(overviewTaskQuery(workspaceId, { conversationId, number }));
   const { open } = useOpenOtherTask();
   if (task === undefined) return <>{children}</>;
-  if (task === null || task.source.channelName === null) return <HiddenTaskChip />;
+  if (task === null || task.source.channelName === null)
+    return <UnresolvedTaskReference prose={prose}>{children}</UnresolvedTaskReference>;
   return (
     <TaskChip
       task={task}
@@ -66,7 +91,7 @@ function ChannelTaskReference({ conversationId, number, children }: CrossTaskRef
   );
 }
 
-function DirectTaskReference({ conversationId, number, children }: CrossTaskReferenceProps) {
+function DirectTaskReference({ conversationId, number, children, prose }: CrossTaskReferenceProps) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const peer = useDirectPeerHandle(conversationId);
   // A direct message the viewer is not in has no Task of theirs to read.
@@ -76,7 +101,8 @@ function DirectTaskReference({ conversationId, number, children }: CrossTaskRefe
   });
   const { open } = useOpenOtherTask();
   if (peer !== undefined && isPending) return <>{children}</>;
-  if (!task || !peer) return <HiddenTaskChip />;
+  if (!task || !peer)
+    return <UnresolvedTaskReference prose={prose}>{children}</UnresolvedTaskReference>;
   return (
     <TaskChip
       task={task}
@@ -111,6 +137,7 @@ export function DirectTaskReferenceByPeer({
       number={number}
       kind="dm"
       onOpenTask={onOpenTask}
+      prose
     >
       {children}
     </CrossTaskReference>
