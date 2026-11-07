@@ -167,8 +167,10 @@ beforeAll(async () => {
     },
   });
   await mkdir(artifacts, { recursive: true });
-  for (const one of [here, elsewhere]) await one.run("set", "viewport", "1440", "900");
-});
+  // Each `set` launches its session's browser (~2s); two sequential launches plus the setup
+  // above pass bun's 5s default hook timeout, so they go together under an explicit one.
+  await Promise.all([here, elsewhere].map((one) => one.run("set", "viewport", "1440", "900")));
+}, 60_000);
 
 afterAll(async () => {
   for (const one of [here, elsewhere]) await one.run("close").catch(() => undefined);
