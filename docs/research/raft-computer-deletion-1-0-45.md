@@ -1,6 +1,6 @@
 # Raft Computer 删除/解绑 Computer：1.0.45 对 CoForge 的参考
 
-> 本稿记录 1.0.45 证据和当时的 CoForge 实现快照。当前 Raft 版本及 CoForge 对照请先读 [1.0.52 对齐研究](raft-computer-1-0-52-alignment.md)；下面的“CoForge 当前实现”不是今天的状态。
+> 本稿只记录 1.0.45 证据和当时的 CoForge 实现快照；下面的“CoForge 当前实现”不是今天的状态。
 
 ## 证据范围
 
