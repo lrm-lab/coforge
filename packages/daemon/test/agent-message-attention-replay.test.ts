@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { captureDaemonLogs } from "./log-capture";
 import { delivery, session } from "./fixtures/attention-delivery";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -108,4 +109,54 @@ test("an expired card notifies its author too, though the card is already read",
   index.recordModelSeen(card.agentId, card.target, card.sequence);
   await index.receive(card);
   expect(notices).toHaveLength(1);
+});
+
+/** Recovery decides per message too — adopted into the wakeup notice, or discarded as consumed
+ * or already seen — and each decision lands in the same log a live delivery's does. */
+test("recover logs each message's adopt or discard decision", async () => {
+  const notices: string[] = [];
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session((notice) => notices.push(notice)) },
+    async () => {},
+  );
+  const recovered = (id: string, sequence: number) => ({
+    messageId: `message-${id}`,
+    deliveryId: `delivery-${id}`,
+    conversationId: "conversation-1",
+    sequence,
+    target: "#team",
+    latestSenderKind: "human" as const,
+    latestSenderHandle: "ada",
+    latestSenderDescription: "",
+    body: "body",
+  });
+  index.recordModelSeen("agent-1", "#team", 5);
+  const decisions = async (run: () => Promise<void>) =>
+    (await captureDaemonLogs(run)).records
+      .filter((record) => record.properties.event === "agent.message.attention_decision")
+      .map((record) => record.properties);
+
+  expect(await decisions(() => index.recover("agent-1", [recovered("fresh", 6)], {}))).toEqual([
+    expect.objectContaining({
+      delivery_id: "delivery-fresh",
+      target: "#team",
+      sequence: 6,
+      outcome: "notified",
+      model_seen_seq: 5,
+    }),
+  ]);
+  expect(
+    await decisions(() =>
+      index.recover(
+        "agent-1",
+        [recovered("consumed", 3), recovered("fresh", 6), recovered("newer", 7)],
+        {},
+      ),
+    ),
+  ).toEqual([
+    expect.objectContaining({ delivery_id: "delivery-consumed", outcome: "consumed" }),
+    expect.objectContaining({ delivery_id: "delivery-fresh", outcome: "already_notified" }),
+    expect.objectContaining({ delivery_id: "delivery-newer", outcome: "notified" }),
+  ]);
 });
