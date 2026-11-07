@@ -274,10 +274,12 @@ Element.prototype.scrollTo = function (...args) {
         }
         const before = await evaluate(position);
         release();
+        // The Task read's answer lands as the four messages' chips (data-message-task); the
+        // chip shows its status as an icon now, so no status text ever reaches the DOM.
         await browser(
           "wait",
           "--fn",
-          `${history}?.textContent.toLowerCase().includes('in progress')`,
+          `${history}?.querySelectorAll("[data-message-task]").length === 4`,
         );
         if (!unread && !reading)
           await browser("wait", "--fn", `${position}?.distance <= 1 && !${position}?.back`);
@@ -290,8 +292,10 @@ Element.prototype.scrollTo = function (...args) {
           JSON.stringify({ before, after }, null, 2),
         );
         if (unread) {
+          // Consecutive system notices fold into one group row, so the boundary may only
+          // exist as a member of it.
           const offset = await evaluate<number>(
-            `(() => { const h=${history}; const row=h.querySelector('li[data-message-id="${boundary.id}"]'); return row.getBoundingClientRect().top-h.getBoundingClientRect().top; })()`,
+            `(() => { const h=${history}; const row=h.querySelector('li[data-message-id="${boundary.id}"], li[data-system-group-members~="${boundary.id}"]'); return row.getBoundingClientRect().top-h.getBoundingClientRect().top; })()`,
           );
           expect(offset).toBeGreaterThanOrEqual(0);
           if (mode === "system-unread") expect(offset).toBeLessThan(after.viewport);
