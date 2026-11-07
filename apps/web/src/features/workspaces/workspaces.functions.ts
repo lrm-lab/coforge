@@ -1,5 +1,5 @@
 import { recoverWorkspaceResourcesOnOpen } from "#src/server/workspaces/resource-recovery.server";
-import { canCreateAgents } from "#src/server/workspaces/member-role.server";
+import { canCreateAgents, canSeeUsageLimits } from "#src/server/workspaces/member-role.server";
 import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
@@ -74,6 +74,7 @@ export const loadWorkspaceSwitcher = createServerFn({ method: "GET" })
       workspaces,
       current,
       canCreateAgents: canCreateAgents(current.role),
+      canSeeUsageLimits: canSeeUsageLimits(current.role),
     };
   });
 

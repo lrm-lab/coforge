@@ -123,6 +123,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       workspaces: switcher.workspaces,
       currentWorkspace: switcher.current,
       canCreateAgents: switcher.canCreateAgents,
+      canSeeUsageLimits: switcher.canSeeUsageLimits,
       onboarding,
       notifications,
       agents: workspaceAgents.agents,

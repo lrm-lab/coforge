@@ -11,6 +11,7 @@ import {
 } from "#src/server/usage-limits/usage-limit-events.server";
 import { sweepUsageLimitEvents } from "#src/server/usage-limits/usage-limit-sweep.server";
 import type { UsageLimitChangedEvent } from "#src/features/usage-limits/usage-limit-events";
+import { m } from "#src/paraglide/messages";
 import { AppError } from "#src/lib/app-error";
 
 /**
@@ -525,3 +526,30 @@ test.skipIf(!connectionString)("seen, dismiss and the read stay owner/admin-only
     await cleanup();
   }
 });
+
+test.skipIf(!connectionString)(
+  "the read carries the Computer's list label as computerName",
+  async () => {
+    const { db, owner, workspace, computer, scope, repo, cleanup } = await setup();
+    try {
+      await db.computer.update({
+        where: { id: computer.id },
+        data: { name: "studio.local", displayName: "Studio" },
+      });
+      await repo.openOrMerge({ ...scope, provider: "claude-code", resetsAt: null });
+      const events = new UsageLimitEvents(db);
+      const [named] = await events.listForViewer(workspace.id, owner.id, "owner");
+      expect(named!.computerName).toBe("Studio");
+
+      // No display name or hostname: the same fallback the Computers list shows.
+      await db.computer.update({
+        where: { id: computer.id },
+        data: { name: "", displayName: "" },
+      });
+      const [fallback] = await events.listForViewer(workspace.id, owner.id, "owner");
+      expect(fallback!.computerName).toBe(m.computer_platform_unknown());
+    } finally {
+      await cleanup();
+    }
+  },
+);

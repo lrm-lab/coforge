@@ -48,6 +48,11 @@ export function canCreateAgents(actorRole: string | undefined): boolean {
   return roleCan(actorRole, "createAgents");
 }
 
+/** Seeing provider usage-limit reminders requires the `seeUsageLimits` capability. */
+export function canSeeUsageLimits(actorRole: string | undefined): boolean {
+  return roleCan(actorRole, "seeUsageLimits");
+}
+
 export function assertCanCreateAgents(actorRole: WorkspaceMemberRole): void {
   if (!canCreateAgents(actorRole)) throw new AppError("ACCESS_DENIED");
 }

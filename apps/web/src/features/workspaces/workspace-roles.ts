@@ -37,6 +37,8 @@ export const WORKSPACE_CAPABILITY_ROLES = {
   /** Granting, revoking, approving and denying an Agent's app access; an Agent's creator may too
    * (`canManageAgentAppAccess`). */
   manageAgentAppAccess: WORKSPACE_ADMIN_ROLES,
+  /** Reading provider usage-limit events and their reminders (task #611). */
+  seeUsageLimits: WORKSPACE_ADMIN_ROLES,
   changeWorkspaceSlug: OWNER_ONLY,
   deleteWorkspace: OWNER_ONLY,
   recoverWorkspaceResources: OWNER_ONLY,

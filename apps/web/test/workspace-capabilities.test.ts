@@ -22,6 +22,7 @@ import {
   assertCanManageApps,
   assertHasAgentControlCapability,
   canCreateAgents,
+  canSeeUsageLimits,
 } from "#src/server/workspaces/member-role.server";
 
 const ROLES = ["owner", "admin", "member"] as const;
@@ -54,6 +55,7 @@ describe("the Workspace capability table", () => {
       "manageWorkspaceSettings",
       "manageApps",
       "manageAgentAppAccess",
+      "seeUsageLimits",
     ] as const)
       expect([capability, holders(capability)]).toEqual([capability, ["owner", "admin"]]);
     expect(holders("changeWorkspaceSlug")).toEqual(["owner"]);
@@ -72,6 +74,7 @@ describe("the Workspace capability table", () => {
     for (const role of ROLES) {
       const can = (capability: WorkspaceCapability) => roleCan(role, capability);
       expect(canCreateAgents(role)).toBe(can("createAgents"));
+      expect(canSeeUsageLimits(role)).toBe(can("seeUsageLimits"));
       expect(passes(() => assertCanDeleteAgents(role))).toBe(can("deleteAgents"));
       expect(passes(() => assertHasAgentControlCapability(role, "controlAgentRuntime"))).toBe(
         can("controlAgentRuntime"),

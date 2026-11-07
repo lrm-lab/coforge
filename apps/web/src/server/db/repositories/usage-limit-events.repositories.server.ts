@@ -344,6 +344,7 @@ export class PrismaUsageLimitEventRepository {
       where: { workspaceId, status: "open" },
       orderBy: { openedAt: "desc" },
       include: {
+        computer: { select: { kind: true, name: true, displayName: true } },
         agents: {
           select: {
             agent: { select: { id: true, name: true, displayName: true } },

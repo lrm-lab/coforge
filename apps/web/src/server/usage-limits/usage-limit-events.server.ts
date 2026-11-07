@@ -2,8 +2,9 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import type { TrustedAgentActivity } from "#src/server/db/repositories/agent-activity.repositories.server";
 import { PrismaUsageLimitEventRepository } from "#src/server/db/repositories/usage-limit-events.repositories.server";
 import type { UsageLimitChangedEvent } from "#src/features/usage-limits/usage-limit-events";
+import { computerLabel } from "#src/features/computers/computer-identity";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
-import { isElevatedServerRole } from "#src/server/workspaces/member-role.server";
+import { canSeeUsageLimits } from "#src/server/workspaces/member-role.server";
 import { AppError } from "#src/lib/app-error";
 
 /** `runtimeError.errorReason` values that mean a provider's usage limit ran out. */
@@ -86,7 +87,11 @@ export class UsageLimitEvents {
   /** The Workspace's open events with the viewer's own seen/dismiss marks. */
   async listForViewer(workspaceId: string, userId: string, role: string | undefined) {
     this.assertElevated(role);
-    return this.repo.listOpenForViewer(workspaceId, userId);
+    const events = await this.repo.listOpenForViewer(workspaceId, userId);
+    return events.map(({ computer, ...event }) => ({
+      ...event,
+      computerName: computerLabel(computer),
+    }));
   }
 
   /** Marks the event seen for this owner/admin; false when it is not the Workspace's. */
@@ -112,6 +117,6 @@ export class UsageLimitEvents {
   }
 
   private assertElevated(role: string | undefined): void {
-    if (!isElevatedServerRole(role)) throw new AppError("ACCESS_DENIED");
+    if (!canSeeUsageLimits(role)) throw new AppError("ACCESS_DENIED");
   }
 }
