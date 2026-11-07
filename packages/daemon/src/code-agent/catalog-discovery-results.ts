@@ -17,10 +17,10 @@ export type CatalogDiscoveryResult = {
 };
 
 export function selectCatalogDiscoveries<T>(
-  discoveries: readonly (readonly [RuntimeProvider, Promise<T>])[],
+  discoveries: readonly (readonly [RuntimeProvider, () => Promise<T>])[],
   provider?: RuntimeProvider,
   providers?: readonly RuntimeProvider[],
-): readonly (readonly [RuntimeProvider, Promise<T>])[] {
+): readonly (readonly [RuntimeProvider, () => Promise<T>])[] {
   const selected = provider
     ? [provider]
     : providers && providers.length > 0

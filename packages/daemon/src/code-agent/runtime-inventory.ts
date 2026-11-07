@@ -184,12 +184,10 @@ export async function discoverCodeAgentCatalogs(
   const searchPath = codeAgentExecutableSearchPath(environment, options.platform);
   const settled = await settleCatalogDiscoveries(
     selectCatalogDiscoveries(
-      (await planCatalogDiscoveries(runtimes, options, dshCatalogs)).map(
-        ([provider, start]) => [provider, start()] as const,
-      ),
+      await planCatalogDiscoveries(runtimes, options, dshCatalogs),
       options.provider,
       options.providers,
-    ),
+    ).map(([provider, start]) => [provider, start()] as const),
   );
   const { results, failures } = collectCatalogDiscoveryResults(settled);
   if (options.cacheDirectory) {
