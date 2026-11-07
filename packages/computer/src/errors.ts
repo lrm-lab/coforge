@@ -168,6 +168,27 @@ export const SETUP_HINTS = {
 
 export type SetupErrorCode = keyof typeof SETUP_HINTS;
 
+/**
+ * What a person can do about each way `attach --one-shot` fails. These are the codes the attach
+ * itself decides — a refusal on the approval page is not an expired code and neither is a
+ * timeout — and the setup flow passes them through instead of naming every one of them
+ * `SETUP_ATTACH_FAILED` (task #696, from the #417 acceptance).
+ */
+export const ATTACH_HINTS = {
+  ATTACH_DENIED:
+    "You refused this attach on the approval page, so nothing was attached. Run `coforge-computer setup` again when you want this Computer attached.",
+  ATTACH_EXPIRED:
+    "The approval page's code expired before it was confirmed. Run `coforge-computer setup --one-shot` again for a fresh code and link.",
+  ATTACH_NETWORK:
+    "Check this Computer's network and its server URL, then run `coforge-computer setup --one-shot` again.",
+  ATTACH_START_FAILED:
+    "The server could not start an attach session. Check its version and this Computer's server URL, then run `coforge-computer setup --one-shot` again.",
+  ATTACH_SESSION_FALLBACK:
+    "The server asked for the login flow instead: run `coforge-computer setup`.",
+} as const;
+
+export type AttachErrorCode = keyof typeof ATTACH_HINTS;
+
 export function setupError(
   code: SetupErrorCode,
   message: string,

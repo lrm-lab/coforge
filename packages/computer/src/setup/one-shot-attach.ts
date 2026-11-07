@@ -1,4 +1,4 @@
-import { setupError } from "#src/errors";
+import { ATTACH_HINTS, CliError, type AttachErrorCode } from "#src/errors";
 
 /**
  * The one-shot attach (task #417 step 3): `attach --one-shot` reports this machine, prints the
@@ -16,14 +16,17 @@ export type AttachStart = {
   expiresInSeconds: number;
 };
 
-export class OneShotAttachFailedError extends Error {
+/** A failed attach with its own stable code and the next step for it. It is a `CliError` so the
+ * code reaches the person: a plain `Error` was rewritten into `SETUP_ATTACH_FAILED` by the setup
+ * step around it, so a click on "deny" read as a network problem (task #696). */
+export class OneShotAttachFailedError extends CliError {
   constructor(
-    readonly code: string,
+    code: AttachErrorCode,
     message: string,
     /** `true` only where the server named `attach.session-fallback`. */
     readonly sessionFallback = false,
   ) {
-    super(message);
+    super(code, message, ATTACH_HINTS[code]);
     this.name = "OneShotAttachFailedError";
   }
 }

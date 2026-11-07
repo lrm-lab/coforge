@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 
+import { CliError } from "#src/errors";
 import { oneShotAttach, OneShotAttachFailedError } from "#src/setup/one-shot-attach";
 
 /** `attach --one-shot` (task #417 step 3): the code and link print once, the poll honors the
@@ -58,6 +59,23 @@ test("a refused approve stops with ATTACH_DENIED, an expired one ATTACH_EXPIRED"
       fetchFor([startResponse(), Response.json({ error: "expired_token" }, { status: 400 })]),
     ),
   ).rejects.toMatchObject({ code: "ATTACH_EXPIRED" });
+});
+
+test("a refusal says the person refused it, and names the command that starts a new one", async () => {
+  // Task #696: the refusal used to arrive under SETUP_ATTACH_FAILED, whose hint sends the person
+  // to check their network and retry — advice that cannot fix a click on "deny".
+  const error = await oneShotAttach(
+    machine,
+    fetchFor([startResponse(), Response.json({ error: "access_denied" }, { status: 400 })]),
+  )
+    .then(() => null)
+    .catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(CliError);
+  const refusal = error as CliError;
+  expect(refusal.code).toBe("ATTACH_DENIED");
+  expect(refusal.hint).toContain("refused");
+  expect(refusal.hint).toContain("`coforge-computer setup");
 });
 
 test("only an explicit attach.session-fallback is a fallback; a 404 start is one, a 500 is not", async () => {
