@@ -1,36 +1,6 @@
 import { expect, test } from "bun:test";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "#src/generated/prisma/client";
 import { listAgentInbox } from "#src/server/agents/agent-inbox-list.server";
-
-const connection = () => {
-  const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
-  if (!connectionString)
-    throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-};
-
-async function workspaceWithAgent(db: PrismaClient, suffix: string) {
-  const owner = await db.user.create({
-    data: { username: `inb-${suffix}`, displayName: "Owner" },
-  });
-  const workspace = await db.workspace.create({
-    data: { slug: `inb-${suffix}`, name: "Inbox" },
-  });
-  await db.workspaceMembership.create({
-    data: { workspaceId: workspace.id, userId: owner.id, role: "owner" },
-  });
-  const agent = await db.agent.create({
-    data: {
-      workspaceId: workspace.id,
-      ownerId: owner.id,
-      name: `inb-${suffix.slice(0, 8)}`,
-      displayName: "Inbox",
-      runtimeConfig: {},
-    },
-  });
-  return { owner, workspace, agent };
-}
+import { connection, workspaceWithAgent } from "./support/agent-inbox-fixture";
 
 /**
  * What counts as unread: other people's top-level messages after the Agent's read position, in
