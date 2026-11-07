@@ -6,6 +6,12 @@ import { sameImageLayer } from "#src/features/computers/cloud-image-update";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
 import type { ComputerUpgradeStatus } from "#src/features/computers/computer.schemas";
 import { getCloudImageInventory } from "#src/server/hosts/cloud-image-inventory.server";
+import {
+  COMMIT_READY,
+  REPLACE,
+  REPLACE_IF_ACCEPTED,
+  STORE_NEWER_IDENTITY,
+} from "./computer-upgrade-lua";
 
 type Scope = { workspaceId: string; computerId: string };
 /** One Computer upgrade operation's terminal receipt, as the Daemon reported it. */
@@ -38,41 +44,6 @@ const REQUEST_TTL = 10 * 60;
 const REQUEST_GRACE = 60;
 /** How long a new request's record and the Computer's latest pointer live. */
 const REQUEST_KEY_TTL = String(REQUEST_TTL + REQUEST_GRACE);
-const REPLACE = `if redis.call("GET", KEYS[1]) == ARGV[1] then redis.call("SET", KEYS[1], ARGV[2], "EX", ARGV[3]); return 1 end return 0`;
-/**
- * Identity is a durable snapshot, not a liveness signal - it is overwritten monotonically on
- * every `ready`, never expired. (Precedent: `computer-restart-store.server.ts` stores its own
- * process identity the same way.) Liveness for "can this Computer be upgraded right now" comes
- * from Computer presence (`computer-status.server.ts`), which is re-leased on every periodic
- * Daemon status and therefore self-heals independently of this key.
- */
-const STORE_NEWER_IDENTITY = `
-local current = redis.call("GET", KEYS[1])
-local candidate = cjson.decode(ARGV[1])
-if current then
-  local previous = cjson.decode(current)
-  if previous.startedAt > candidate.startedAt or
-     (previous.startedAt == candidate.startedAt and previous.workerInstanceId ~= candidate.workerInstanceId) then
-    return 0
-  end
-end
-redis.call("SET", KEYS[1], ARGV[1])
-return 1`;
-const COMMIT_READY = `
-local current = redis.call("GET", KEYS[1])
-local identity = redis.call("GET", KEYS[2])
-local candidate = cjson.decode(ARGV[2])
-if identity then
-  local previous = cjson.decode(identity)
-  if previous.startedAt > candidate.startedAt or
-     (previous.startedAt == candidate.startedAt and previous.workerInstanceId ~= candidate.workerInstanceId) then
-    return 0
-  end
-end
-if current ~= ARGV[1] or cjson.decode(current).status ~= "accepted" then return 0 end
-redis.call("SET", KEYS[2], ARGV[2])
-redis.call("SET", KEYS[1], ARGV[3], "EX", ARGV[4])
-return 1`;
 
 export class RedisComputerUpgradeStore {
   constructor(
@@ -343,7 +314,7 @@ export class RedisComputerUpgradeStore {
     if (!current || this.parse(current)?.status !== "accepted") return false;
     return (
       (await this.redis.send("EVAL", [
-        `if redis.call("GET", KEYS[1]) == ARGV[1] and cjson.decode(ARGV[1]).status == "accepted" then redis.call("SET", KEYS[1], ARGV[2], "EX", ARGV[3]); return 1 end return 0`,
+        REPLACE_IF_ACCEPTED,
         "1",
         this.requestKey(scope, requestId),
         current,
