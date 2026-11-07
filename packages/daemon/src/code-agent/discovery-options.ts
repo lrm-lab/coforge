@@ -22,6 +22,8 @@ export type CodeAgentDiscoveryOptions = {
   force?: boolean;
   /** A user-requested refresh covers only this provider's discovery. */
   provider?: RuntimeProvider;
+  /** A background refresh may cover a selected set of stale providers. */
+  providers?: readonly RuntimeProvider[];
   /** How external Code Agent CLIs are found and versioned; production passes `hostCodeAgentProbe`. */
   probe: ExternalCodeAgentProbe;
   commands?: CatalogCommands;

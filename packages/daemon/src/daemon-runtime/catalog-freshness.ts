@@ -70,6 +70,12 @@ export class CatalogFreshness {
     this.#retries.settle(failures, catalogs, now);
   }
 
+  /** Filters stale providers that are not waiting for their retry backoff. */
+  refreshable(providers: readonly RuntimeProvider[], now = Date.now()): RuntimeProvider[] {
+    const due = new Set(this.#retries.due(now));
+    return providers.filter((provider) => !this.#retries.has(provider) || due.has(provider));
+  }
+
   /** Re-discovers what moved on disk, then retries the providers whose wait has elapsed. */
   async recheck(
     transport: DaemonConnectionClient,
@@ -78,23 +84,29 @@ export class CatalogFreshness {
   ): Promise<void> {
     if (!runtimes || !this.#ports.isLive(transport)) return;
     const { changedProviders = [] } = await this.#ports.discovery.cachedCatalogs(runtimes);
-    if (!changedProviders.length && !this.#retries.due(now).length) return;
-    if (changedProviders.length)
+    const refreshableChanged = this.refreshable(changedProviders, now);
+    const dueRetries = this.#retries.due(now);
+    const changedSet = new Set(refreshableChanged);
+    const retryProviders = dueRetries.filter((provider) => !changedSet.has(provider));
+    if (!refreshableChanged.length && !retryProviders.length) return;
+    if (refreshableChanged.length)
       logger.info("Code Agent catalog changed on disk; refreshing", {
         event: "code_agent_catalog:changed",
         request_id: crypto.randomUUID(),
         ...this.#scope(),
-        providers: changedProviders,
+        providers: refreshableChanged,
         outcome: "started",
       });
-    if (!changedProviders.length || !this.#ports.isLive(transport)) {
-      for (const provider of this.#retries.due(now))
-        await this.#retry(provider, runtimes, transport);
+    if (!refreshableChanged.length || !this.#ports.isLive(transport)) {
+      for (const provider of retryProviders) await this.#retry(provider, runtimes, transport);
       return;
     }
     // A moved key re-discovers every provider in one pass, as a refresh does; a provider that
     // failed then is retried alone below, never holding another provider's catalog up.
-    const { catalogs, failures } = await this.#ports.discovery.catalogs(runtimes);
+    const { catalogs, failures } = await this.#ports.discovery.catalogs(runtimes, {
+      force: false,
+      providers: refreshableChanged,
+    });
     this.settle(failures, catalogs);
     if (!this.#ports.isLive(transport)) return;
     await this.#ports.report(
@@ -103,7 +115,7 @@ export class CatalogFreshness {
       reportedWithCatalogFailures(runtimes, failures),
       catalogs,
     );
-    for (const provider of this.#retries.due(now)) await this.#retry(provider, runtimes, transport);
+    for (const provider of retryProviders) await this.#retry(provider, runtimes, transport);
   }
 
   /** One failed provider's catalog, re-discovered on its own after its wait elapsed. */

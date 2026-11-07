@@ -186,6 +186,107 @@ test("a provider whose catalog probe failed is retried alone after its backoff",
   expect(scoped).toHaveLength(2);
 });
 
+test("a missing catalog is refreshed only for the stale provider and respects its backoff", async () => {
+  const calls: Array<{
+    force?: boolean;
+    provider?: RuntimeProvider;
+    providers?: readonly RuntimeProvider[];
+  }> = [];
+  let failures = true;
+  const sync = new CodeAgentInventorySync(
+    {
+      runtimes: async () => [
+        { provider: "antigravity", version: "1.4.11", displayName: "agy" },
+        { provider: "codex", version: "0.151.0", displayName: "Codex" },
+      ],
+      cachedCatalogs: async () => ({
+        catalogs: [],
+        needsRefresh: true,
+        refreshProviders: ["antigravity" as const],
+        changedProviders: [],
+      }),
+      catalogs: async (_runtimes, options) => {
+        calls.push(options ?? {});
+        if (failures) {
+          failures = false;
+          return {
+            catalogs: [],
+            failures: [{ provider: "antigravity", code: "unknown" as const }],
+          };
+        }
+        return { catalogs: [{ provider: "antigravity", models: [signedInModel] }], failures: [] };
+      },
+    },
+    { workspaceId: "workspace-a", computerId: "computer-a" },
+    () => true,
+  );
+  const live = {
+    async updateCodeAgents() {},
+  } as unknown as DaemonConnectionClient;
+
+  const first = await sync.reportRuntimes(live);
+  await sync.refreshStaleCatalogs(first, live);
+  expect(calls).toEqual([{ force: false, providers: ["antigravity"] }]);
+
+  const reconnect = await sync.reportRuntimes(live);
+  await sync.refreshStaleCatalogs(reconnect, live);
+  expect(calls).toHaveLength(1);
+
+  await sync.recheckCatalogs(live, Date.now() + CATALOG_RETRY_BASE_MS + 1);
+  expect(calls).toEqual([
+    { force: false, providers: ["antigravity"] },
+    { force: true, provider: "antigravity" },
+  ]);
+});
+
+test("a changed provider in retry backoff is not refreshed early", async () => {
+  const calls: Array<{
+    force?: boolean;
+    provider?: RuntimeProvider;
+    providers?: readonly RuntimeProvider[];
+  }> = [];
+  let cacheReads = 0;
+  const sync = new CodeAgentInventorySync(
+    {
+      runtimes: async () => [{ provider: "antigravity", version: "1.4.11", displayName: "agy" }],
+      cachedCatalogs: async () => ({
+        catalogs: [],
+        needsRefresh: false,
+        changedProviders: cacheReads++ === 0 ? [] : ["antigravity" as const],
+      }),
+      catalogs: async (_runtimes, options) => {
+        calls.push(options ?? {});
+        return { catalogs: [], failures: [{ provider: "antigravity", code: "unknown" as const }] };
+      },
+    },
+    { workspaceId: "workspace-a", computerId: "computer-a" },
+    () => true,
+  );
+  const live = {
+    async updateCodeAgents() {},
+    async sendProviderModelRefreshResult() {},
+  } as unknown as DaemonConnectionClient;
+
+  await sync.reportRuntimes(live);
+  await sync.refreshModels(
+    {
+      protocolMajor: 1,
+      requestId: "refresh-backoff",
+      workspaceId: "workspace-a",
+      computerId: "computer-a",
+      provider: "antigravity",
+    },
+    live,
+  );
+  expect(calls).toEqual([{ force: true, provider: "antigravity" }]);
+
+  await sync.recheckCatalogs(live, Date.now() + CATALOG_RETRY_BASE_MS - 1);
+  expect(calls).toHaveLength(1);
+
+  await sync.recheckCatalogs(live, Date.now() + CATALOG_RETRY_BASE_MS + 1);
+  expect(calls).toHaveLength(2);
+});
+
 test("a repeated failure waits twice as long, up to an hour", () => {
   const schedule = new CatalogRetrySchedule();
   const failure = { provider: "antigravity" as const };

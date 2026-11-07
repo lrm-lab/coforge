@@ -137,7 +137,8 @@ export class CodeAgentInventorySync {
       this.#runtimeVersions = new Map(
         runtimes.map((runtime) => [runtime.provider, runtime.version]),
       );
-      const { catalogs, needsRefresh } = await this.#discovery.cachedCatalogs(runtimes);
+      const { catalogs, needsRefresh, refreshProviders } =
+        await this.#discovery.cachedCatalogs(runtimes);
       if (!this.#isLive(transport)) return { runtimes, needsCatalogRefresh: false };
       await this.#sendInventory(transport, requestId, runtimes, catalogs);
       this.#reportedRuntimes = runtimes;
@@ -149,7 +150,11 @@ export class CodeAgentInventorySync {
         outcome: "ok",
       });
       void this.#runtimeAuth?.inventoryReported(runtimes);
-      return { runtimes, needsCatalogRefresh: needsRefresh };
+      return {
+        runtimes,
+        needsCatalogRefresh: needsRefresh,
+        catalogRefreshProviders: refreshProviders,
+      };
     } catch (error) {
       logger.warning("Code Agent inventory report failed", {
         event: "code_agent_inventory:report_failed",
@@ -162,13 +167,26 @@ export class CodeAgentInventorySync {
   }
 
   /** Starts a background live catalog discovery when `report`'s cached catalogs were stale. */
-  refreshStaleCatalogs(report: CodeAgentRuntimesReport, transport: DaemonConnectionClient): void {
+  refreshStaleCatalogs(
+    report: CodeAgentRuntimesReport,
+    transport: DaemonConnectionClient,
+  ): Promise<void> {
     // The same chain `refreshModels` uses: one CLI-spawning report at a time, so a queued
     // refresh cannot be overwritten by an older report's later phases on the same transport.
-    if (report.needsCatalogRefresh && this.#isLive(transport))
+    const providers = report.catalogRefreshProviders
+      ? this.#freshness.refreshable(report.catalogRefreshProviders)
+      : undefined;
+    if (
+      report.needsCatalogRefresh &&
+      (providers === undefined || providers.length > 0) &&
+      this.#isLive(transport)
+    ) {
       this.#modelRefreshChain = this.#modelRefreshChain
         .catch(() => {})
-        .then(() => this.#reportCatalogs(report.runtimes, transport));
+        .then(() => this.#reportCatalogs(report.runtimes, transport, providers));
+      return this.#modelRefreshChain;
+    }
+    return Promise.resolve();
   }
 
   /** Re-discovers catalogs that moved on disk, then retries the providers whose wait elapsed. */
@@ -302,6 +320,7 @@ export class CodeAgentInventorySync {
   async #reportCatalogs(
     runtimes: RuntimeMetadata[],
     transport: DaemonConnectionClient,
+    providers?: readonly RuntimeProvider[],
   ): Promise<void> {
     const requestId = crypto.randomUUID();
     const scope = this.#scope(requestId);
@@ -312,7 +331,10 @@ export class CodeAgentInventorySync {
       outcome: "started",
     });
     try {
-      const { catalogs, failures } = await this.#discovery.catalogs(runtimes);
+      const { catalogs, failures } = await this.#discovery.catalogs(
+        runtimes,
+        providers ? { force: false, providers } : undefined,
+      );
       this.#freshness.settle(failures, catalogs);
       if (!this.#isLive(transport)) return;
       const reported = reportedWithCatalogFailures(runtimes, failures);

@@ -51,7 +51,11 @@ import { droidAcpRuntimeHost } from "./droid/acp-host";
 import { agentEnvironment } from "./environment";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
-import type { CatalogDiscoveryFailure } from "./catalog-discovery-results";
+import {
+  collectCatalogDiscoveryResults,
+  selectCatalogDiscoveries,
+  type CatalogDiscoveryFailure,
+} from "./catalog-discovery-results";
 
 export type { CatalogDiscoveryFailure } from "./catalog-discovery-results";
 
@@ -133,6 +137,8 @@ export async function loadCachedCodeAgentCatalogs(
 ): Promise<{
   catalogs: CodeAgentModelCatalog[];
   needsRefresh: boolean;
+  /** Providers without a fresh catalog; background discovery should select only these. */
+  refreshProviders: RuntimeProvider[];
   /** Providers whose cached catalog no longer matches its on-disk key, or outlived the TTL: a
    * provider update, a sign-in or a sign-out happened since that catalog was scanned. */
   changedProviders: RuntimeProvider[];
@@ -149,6 +155,7 @@ export async function loadCachedCodeAgentCatalogs(
     ? await readInventoryCache(options.cacheDirectory)
     : undefined;
   let needsRefresh = false;
+  const refreshProviders: RuntimeProvider[] = [];
   const changedProviders: RuntimeProvider[] = [];
   const providers = CACHEABLE_CATALOG_PROVIDERS.filter(
     (provider) => provider === RUNTIME_PROVIDER.PI || usable(provider),
@@ -172,7 +179,10 @@ export async function loadCachedCodeAgentCatalogs(
     // not this: re-spawning a broken CLI on every freshness check helps nobody.
     if (cached?.catalog !== undefined && key !== undefined && (!fresh || expired))
       changedProviders.push(provider);
-    if (!fresh || expired) needsRefresh = true;
+    if (!fresh || expired) {
+      needsRefresh = true;
+      refreshProviders.push(provider);
+    }
   }
   // A replayed catalog carries the efforts its sweep knew at publish time; overlay the effort
   // cache so a restart does not hide them, and refresh while a model still lacks a read.
@@ -188,15 +198,21 @@ export async function loadCachedCodeAgentCatalogs(
       runtimes.find((runtime) => runtime.provider === provider)?.version,
     );
     catalogs[index] = filled.catalog;
-    if (!filled.complete) needsRefresh = true;
+    if (!filled.complete) {
+      needsRefresh = true;
+      refreshProviders.push(provider);
+    }
   }
   if (usable(RUNTIME_PROVIDER.DSH)) {
     const dshOptions = await dshCatalogOptions(options);
     const cached = dshOptions ? await dshCatalogs.cached(dshOptions) : undefined;
     if (cached) catalogs.push(cached);
-    else needsRefresh = true;
+    else {
+      needsRefresh = true;
+      refreshProviders.push(RUNTIME_PROVIDER.DSH);
+    }
   }
-  return { catalogs, needsRefresh, changedProviders };
+  return { catalogs, needsRefresh, refreshProviders, changedProviders };
 }
 
 /**
@@ -442,16 +458,9 @@ export async function discoverCodeAgentCatalogs(
       ]);
   }
   const settled = await settleCatalogDiscoveries(
-    options.provider
-      ? discoveries.filter(([provider]) => provider === options.provider)
-      : discoveries,
+    selectCatalogDiscoveries(discoveries, options.provider, options.providers),
   );
-  const results = settled.flatMap(({ provider, result }) =>
-    result ? [{ provider, ...result }] : [],
-  );
-  const failures = settled.flatMap(({ provider, failure }) =>
-    failure ? [{ provider, ...failure }] : [],
-  );
+  const { results, failures } = collectCatalogDiscoveryResults(settled);
   if (options.cacheDirectory) {
     const cacheDirectory = options.cacheDirectory;
     const probedAt = Date.now();

@@ -17,11 +17,18 @@ export type CodeAgentDiscovery = {
   cachedCatalogs(runtimes: RuntimeMetadata[]): Promise<{
     catalogs: CodeAgentModelCatalog[];
     needsRefresh: boolean;
+    /** Providers without a fresh catalog for background discovery. */
+    refreshProviders?: RuntimeProvider[];
     changedProviders?: RuntimeProvider[];
   }>;
   catalogs(
     runtimes: RuntimeMetadata[],
-    options?: { force: boolean; provider?: RuntimeProvider },
+    options?: {
+      force: boolean;
+      provider?: RuntimeProvider;
+      /** A background refresh may cover a selected set of stale providers. */
+      providers?: readonly RuntimeProvider[];
+    },
   ): Promise<{
     catalogs: CodeAgentModelCatalog[];
     failures: CatalogDiscoveryFailure[];
@@ -31,4 +38,9 @@ export type CodeAgentDiscovery = {
 };
 
 /** What `reportRuntimes` reported, and whether its cached catalogs need a live refresh. */
-export type CodeAgentRuntimesReport = { runtimes: RuntimeMetadata[]; needsCatalogRefresh: boolean };
+export type CodeAgentRuntimesReport = {
+  runtimes: RuntimeMetadata[];
+  needsCatalogRefresh: boolean;
+  /** Providers selected for this report's background catalog refresh. */
+  catalogRefreshProviders?: RuntimeProvider[];
+};

@@ -39,4 +39,8 @@ export class CatalogRetrySchedule {
       .filter(([, state]) => state.nextAttemptAt <= now)
       .map(([provider]) => provider);
   }
+
+  has(provider: RuntimeProvider): boolean {
+    return this.#states.has(provider);
+  }
 }
