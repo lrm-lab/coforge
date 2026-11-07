@@ -11,7 +11,7 @@ export type CatalogDiscoveryFailure = {
   diagnostic?: string;
 };
 
-type CatalogDiscoveryResult = {
+export type CatalogDiscoveryResult = {
   keyPaths?: string[];
   catalog?: CodeAgentModelCatalog;
 };
