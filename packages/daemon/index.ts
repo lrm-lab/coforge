@@ -74,7 +74,7 @@ export type {
   RunnerHoldOutcome,
   RunnerHoldSnapshot,
 } from "#src/supervisor/runner-hold";
-export { runLaunchdAgent } from "#src/platform/launchd-process";
+export { runLaunchdAgent } from "#src/platform/launchd-agent-runner";
 
 export type { AgentRuntimeConfig, AgentSession, AgentSessionOptions } from "@coforge/agent";
 export type {

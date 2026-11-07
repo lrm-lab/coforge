@@ -22,9 +22,12 @@ Rules for OS primitives in `src/platform/`. They extend
 - Terminal descendants reparented before the first terminate/waitForExit observation cannot be identified by that snapshot, including a setsid child whose main process already exited. Pipe `terminate()` has the same limit: a descendant already adopted by init before its snapshot is unreachable, matching Raft's own process-group kill.
 
 - `launchd-job.ts` owns launchd user-job registration and native observations.
-- `launchd-process.ts` runs external Agent stdio and cleanup in a separate
-  launchd job behind the process-tree interface. Its internal runner is
-  embedded in Computer, never another installed product.
+- `launchd-process.ts` owns the owner side of external Agent stdio and
+  cleanup behind the process-tree interface: the launchd job, its relay
+  socket and directory sweep, and the bounded exit/force-stop checks.
+- `launchd-agent-runner.ts` is the internal runner embedded inside each Agent
+  job in Computer, never another installed product; it spawns the Agent child,
+  relays its stdio and runs terminal cleanup on the owner's signals.
 - An Agent relay lives in `/private/tmp/cf-agent-<identity>-XXXXXX/stdio.sock` (the
   Workspace's launchd identity). `stopLaunchdAgents` sweeps it with the prefix's Agent jobs;
   it never touches legacy random names, and keeps directories younger than the startup timeout.
