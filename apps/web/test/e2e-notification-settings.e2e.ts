@@ -93,14 +93,15 @@ test("notification settings: this device, a pause of one's own, and settings tha
       true,
     );
     expect(await evaluate<boolean>(`${text}.includes("连不上它的推送服务")`)).toBe(true);
-    // With message notifications off the page says these do nothing, and the test waits for them;
-    // the quiet hours' time zone opens "Language and region".
+    // With message notifications off the page says these do nothing, and offers no test: there is
+    // nothing here for it to reach (task #688); the quiet hours' time zone opens "Language and
+    // region".
     expect(await evaluate<boolean>(`${text}.includes("消息通知已关闭")`)).toBe(true);
     expect(
       await evaluate<boolean>(
-        `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "发送测试通知")?.disabled === true`,
+        `[...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "发送测试通知")`,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       await evaluate<boolean>(
         `[...document.querySelectorAll("a")].some((a) => a.href.includes("section=language-region"))`,

@@ -210,23 +210,27 @@ export function NotificationSettingsPanel({
               here ? deliveryLine(here) : unreachable ? undefined : m.notif_this_device_none_hint()
             }
           >
-            <Button
-              size="sm"
-              color="secondary"
-              isDisabled={testing || !enabled || !here}
-              onPress={async () => {
-                setTesting(true);
-                setTested(null);
-                try {
-                  setTested(await onTest());
-                  await queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
-                } finally {
-                  setTesting(false);
-                }
-              }}
-            >
-              {testing ? m.notif_test_sending() : m.notif_test_send()}
-            </Button>
+            {/* Only where a test can reach: a greyed button beside "this browser can't get
+                notifications yet" read as one that did nothing when pressed (task #688). */}
+            {enabled && here && (
+              <Button
+                size="sm"
+                color="secondary"
+                isDisabled={testing}
+                onPress={async () => {
+                  setTesting(true);
+                  setTested(null);
+                  try {
+                    setTested(await onTest());
+                    await queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
+                  } finally {
+                    setTesting(false);
+                  }
+                }}
+              >
+                {testing ? m.notif_test_sending() : m.notif_test_send()}
+              </Button>
+            )}
           </SettingsField>
           {unreachable && <p className="-mt-3 text-sm text-warning-primary">{unreachable}</p>}
           {tested && (
