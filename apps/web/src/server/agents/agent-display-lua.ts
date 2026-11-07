@@ -154,6 +154,38 @@ save(state)
 return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
 `;
 
+// ARGV: [1] now, [2] workspaceId, [3] computerId, [4] agentId, [5] stop reason,
+// [6] provider words ("" when the settling path carries none).
+// A control operation that settles failed is the one place every managed launch failure
+// passes through, including paths whose runtime_error Activity never reached the display
+// (a reused launchId the Activity fence already claimed, an older Daemon). The reason it
+// carries is the same LAUNCH_FAILURE_REASON vocabulary the Activity's errorReason uses.
+// The write only lands while the display sees the Agent as not running: a live process
+// must never keep a failure reason for its next clean exit to surface. A bare re-record
+// of the same reason keeps provider words an Activity already wrote; a different reason
+// replaces both, since the old words described the old failure.
+export const RECORD_STOP_REASON = `${LUA_COMMON}
+local state = decode_state(redis.call("GET", KEYS[1]))
+local now = tonumber(ARGV[1])
+local projected = project(state, now)
+local reason = ARGV[5]
+if reason == "" then return reject_projection(projected, state) end
+local process = state.process
+local offline = not process or process.status ~= "active" or now >= process.leaseUntil
+if not offline then return reject_projection(projected, state) end
+local detail = ARGV[6] ~= "" and ARGV[6] or nil
+local stop_detail = detail
+if state.stopReason == reason and detail == nil then stop_detail = state.stopDetail end
+if state.stopReason == reason and state.stopDetail == stop_detail then
+  return reject_projection(projected, state)
+end
+state.stopReason = reason
+state.stopDetail = stop_detail
+revision(state)
+save(state)
+return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
+`;
+
 // ARGV: [1] now, [2] workspaceId, [3] computerId, [4] agentId, [5] launchId,
 // [6] daemonInstanceId, [7] clientSeq, [8] observedAtMs, [9] usedTokens, [10] windowTokens
 export const PUT_CONTEXT_USAGE = `${LUA_COMMON}

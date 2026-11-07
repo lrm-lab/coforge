@@ -309,6 +309,69 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
     expect((await subject.snapshot(scope)).stopReason).toBe("runtime_login_required");
   });
 
+  test("a settled control failure records its reason on the offline display", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1, "inactive"));
+    const recorded = await subject.recordStopReason(scope, "runtime_login_required");
+    expect(recorded?.stopReason).toBe("runtime_login_required");
+    expect(recorded?.stopDetail).toBeNull();
+    expect((await subject.snapshot(scope)).stopReason).toBe("runtime_login_required");
+  });
+
+  test("a control-recorded reason keeps the provider words an Activity already wrote", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeActivity(
+      activity(2, "runtime_error", {
+        level: "error",
+        runtimeError: {
+          errorClass: "RuntimeUnavailableError",
+          errorReason: "runtime_login_required",
+          fingerprint: "fp-login",
+          providerMessage: "Cursor CLI is not signed in on this Computer",
+        },
+      }),
+      fence,
+    );
+    await subject.observeStatus(status(3, "inactive"));
+    // The control result settles after the Activity: same reason, no words of its own.
+    await subject.recordStopReason(scope, "runtime_login_required");
+    const offline = await subject.snapshot(scope);
+    expect(offline.stopReason).toBe("runtime_login_required");
+    expect(offline.stopDetail).toBe("Cursor CLI is not signed in on this Computer");
+  });
+
+  test("a different settled reason replaces the recorded one and its words", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1, "inactive"));
+    await subject.recordStopReason(scope, "runtime_login_required", "Cursor CLI is not signed in");
+    await subject.recordStopReason(scope, "billing_exhausted");
+    const offline = await subject.snapshot(scope);
+    expect(offline.stopReason).toBe("billing_exhausted");
+    expect(offline.stopDetail).toBeNull();
+  });
+
+  test("re-recording the same reason changes nothing", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1, "inactive"));
+    await subject.recordStopReason(scope, "runtime_login_required");
+    const again = await subject.recordStopReason(scope, "runtime_login_required");
+    expect(again).toBeUndefined();
+  });
+
+  test("a control failure never writes a reason onto a live process", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    const recorded = await subject.recordStopReason(scope, "runtime_login_required");
+    expect(recorded).toBeUndefined();
+    expect((await subject.snapshot(scope)).stopReason).toBeNull();
+  });
+
   test("an error-kind Activity without a reason keeps the last stop reason", async () => {
     await redis.send("FLUSHDB", []);
     const subject = display();

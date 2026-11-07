@@ -6,6 +6,7 @@ import {
   current,
   requireCurrentAgentScope,
   terminal,
+  type AgentControlAgent,
   type AgentControlMentions,
   type AgentControlState,
   type AgentControlStore,
@@ -20,6 +21,14 @@ export type AgentLaunchClaim = {
   launchId?: string;
 };
 
+/** Records why a settled control operation failed onto the Agent's display state, so every
+ * managed path that lands in a terminal failure explains it — including launches whose
+ * runtime_error Activity never reached the display. */
+export type AgentStopReasonRecorder = (
+  agent: Pick<AgentControlAgent, "id" | "workspaceId" | "computerId" | "visibility">,
+  reason: string,
+) => Promise<void>;
+
 /** What the Daemon sends back about a control operation: launch checks and command results. */
 export class AgentControlReceiver {
   constructor(
@@ -28,6 +37,7 @@ export class AgentControlReceiver {
     private readonly driver: AgentControlDriver,
     /** Issues the tracked mentions again for a launch that started with its session. */
     private readonly mentions?: AgentControlMentions,
+    private readonly stopReasons?: AgentStopReasonRecorder,
   ) {}
 
   /**
@@ -114,6 +124,13 @@ export class AgentControlReceiver {
         : {}),
     };
     if (!(await this.store.replace(agent, next))) throw new Error("Control result lost its fence");
+    // A terminal failure is the one settlement every managed launch path shares; the display's
+    // stop reason must not depend on a runtime_error Activity that some paths never send.
+    // Retried attempts never reach "failed" — they keep the operation in "starting" — so this
+    // fires exactly when the Agent has landed in a failure nothing automatic will retry.
+    // A failed Stop is not a runtime failure and records nothing.
+    if (next.phase === "failed" && next.errorCode && next.action !== "stop")
+      void this.stopReasons?.(agent, next.errorCode).catch(() => {});
     console.info(
       JSON.stringify({
         event: "agent_control:result_received",

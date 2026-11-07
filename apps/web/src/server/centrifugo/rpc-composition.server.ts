@@ -120,6 +120,7 @@ import { fromCentrifugoProxy } from "./proxy-secret.server";
 import { daemonControlChannel } from "./server-api.server";
 import { encodeReminderSync } from "@lrm/coforge-sdk/internal";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
+import { createAgentStopReasonRecorder } from "#src/server/agents/agent-stop-reason.server";
 import { registerBackgroundSweeps } from "#src/server/sweeps/background-sweeps.server";
 import { reminderCallbackMethods } from "./reminder-callback-methods.server";
 
@@ -238,6 +239,10 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       directConversations,
       mentionReports,
       createAgentIntroduction(db),
+      createAgentStopReasonRecorder({
+        display: getAgentDisplay(),
+        publishJson: (channel, data) => centrifugo.publishJson(channel, data),
+      }),
     );
     const sessionReceiver = new AgentSessionReceiver(
       controlStore,

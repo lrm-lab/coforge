@@ -13,6 +13,7 @@ import {
   OBSERVE_STATUS,
   PUT_CONTEXT_USAGE,
   PUT_SERVICE_TIER,
+  RECORD_STOP_REASON,
   SNAPSHOT_MANY,
   SWEEP_STALE,
 } from "./agent-display-lua";
@@ -71,6 +72,14 @@ export interface AgentDisplay {
   /** Sets the Agent's current service-tier reading (whether the launch got the Fast tier it
    * asked for), guarded by the same ordering rule `putContextUsage` uses. */
   putServiceTier(message: AgentServiceTier): Promise<AgentDisplaySnapshot | undefined>;
+  /** Records why a settled control operation failed, for every managed path that never
+   * produced a runtime_error Activity. Lands only while the display sees the Agent as not
+   * running; `detail` is the provider's own words when the settling path has them. */
+  recordStopReason(
+    scope: Scope,
+    reason: string,
+    detail?: string,
+  ): Promise<AgentDisplaySnapshot | undefined>;
   snapshot(scope: Scope): Promise<AgentDisplaySnapshot>;
   /** Many snapshots in one round trip (a Workspace's Agent list); same value per scope as
    * `snapshot`, in the scopes' order. */
@@ -148,6 +157,10 @@ export class RedisAgentDisplay implements AgentDisplay {
       message.requested ? "1" : "0",
       message.observed,
     ]);
+  }
+
+  async recordStopReason(scope: Scope, reason: string, detail?: string) {
+    return this.execute(RECORD_STOP_REASON, scope, [reason, detail ?? ""]);
   }
 
   async snapshot(scope: Scope) {

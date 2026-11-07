@@ -11,7 +11,11 @@ import { AgentControlDriver } from "./agent-control-driver.server";
 import { AgentControlBatch } from "./agent-control-batch.server";
 import { AgentControlOperations } from "./agent-control-operations.server";
 import { AgentControlPublisher } from "./agent-control-publisher.server";
-import { AgentControlReceiver, type AgentLaunchClaim } from "./agent-control-receiver.server";
+import {
+  AgentControlReceiver,
+  type AgentLaunchClaim,
+  type AgentStopReasonRecorder,
+} from "./agent-control-receiver.server";
 import { errorType } from "#src/server/errors/error-type.server";
 
 export * from "./agent-control-types.server";
@@ -64,6 +68,9 @@ export class AgentControl {
     /** The introduction prompt a Start carries while the Agent owes its creator one, and whether
      * the Agent's Start is held until its owner's setup wizard is done. */
     private readonly introductions?: Pick<AgentIntroduction, "promptFor" | "holdsStart">,
+    /** Writes a settled failure's reason onto the Agent's display state; only the composition
+     * that receives Daemon control results wires it. */
+    stopReasons?: AgentStopReasonRecorder,
   ) {
     const clock = () => this.clock();
     this.#access = new AgentControlAccess(store);
@@ -77,7 +84,13 @@ export class AgentControl {
       introductions,
     );
     this.#driver = new AgentControlDriver(store, this.#publisher, signal, timing);
-    this.#receiver = new AgentControlReceiver(store, signal, this.#driver, mentions);
+    this.#receiver = new AgentControlReceiver(
+      store,
+      signal,
+      this.#driver,
+      mentions,
+      stopReasons,
+    );
     this.#batch = new AgentControlBatch(
       runtimeLock,
       this.#access,
