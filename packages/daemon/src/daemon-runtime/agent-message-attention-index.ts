@@ -18,7 +18,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
-import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
+
 import {
   attentionFlags,
   hasDeliveryScope,
@@ -43,6 +43,7 @@ import {
   logAttentionDecision,
   type AttentionDecisionOutcome,
 } from "./agent-message-attention-decision-log";
+import { recoveryWakeupText } from "./agent-recovery-notice";
 import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
@@ -473,30 +474,12 @@ export class AgentMessageAttentionIndex {
       ([target, count]) => !suppliedTargets.has(target) && isDeliveryTarget(target) && count > 0,
     );
     if (!recoveredTargets.size && !summaryOnly.length) return;
-    // Recovery is a wakeup, not a second copy of the bodies: the same messages will come back
-    // through `coforge message check`. DM and channel share `#localViewRows` (one target per
-    // line, no body). `recordModelSeen` is not advanced here — the server cursor has not moved,
-    // and `check` is what advances it (and records what it showed as exact sequences).
-    const rows = [
-      ...renderNoticeRows(
-        buildNoticeRows({
-          announced: recoveredMessages,
-          queued: [],
-          agentId,
-          previewLimit: 0,
-          previewedInFull: () => false,
-        }).rows,
-      ),
-      ...summaryOnly.map(
-        ([target, count]) => `${target} ${count} new message${count === 1 ? "" : "s"}`,
-      ),
-    ];
-    const notice = recoveredMessages.length
-      ? inboxNoticeText(rows)
-      : agentStartupCatchupInput(
-          rows,
-          Boolean(this.#runtimes.runtime?.(agentId)?.config.toolProfile),
-        );
+    const notice = recoveryWakeupText({
+      agentId,
+      announced: recoveredMessages,
+      summaryOnly,
+      hasToolProfile: Boolean(this.#runtimes.runtime?.(agentId)?.config.toolProfile),
+    });
     // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
     this.hold.busy(agentId);
     try {
