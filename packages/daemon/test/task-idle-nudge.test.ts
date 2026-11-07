@@ -77,6 +77,18 @@ test("a busy Agent is never asked", async () => {
   expect(h.delivered).toEqual([]);
 });
 
+test("a busy Agent is skipped without a recheck; the next trigger asks", async () => {
+  const h = harness();
+  h.setIdle(false);
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+  expect(h.asks).toEqual([]);
+  h.setIdle(true);
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+  expect(h.asks).toHaveLength(1);
+});
+
 test("another idle event while the ask is in flight does not ask again", async () => {
   let release!: (value: { send: boolean }) => void;
   const h = harness({
@@ -233,6 +245,17 @@ test("a declined nudge logs the cloud's reason", async () => {
   });
   const record = records.find((entry) => entry.properties.event === "task_idle_nudge:skipped");
   expect(record?.properties.reason).toBe("stale");
+});
+
+test("a gate skip logs why the Agent was not asked", async () => {
+  const { records } = await captureDaemonLogs(async (records) => {
+    const h = harness();
+    h.setIdle(false);
+    h.nudge.maybeAsk("agent-a");
+    await waitForEvent(records, "task_idle_nudge:skipped");
+  });
+  const record = records.find((entry) => entry.properties.event === "task_idle_nudge:skipped");
+  expect(record?.properties.reason).toBe("not_idle");
 });
 
 test("a repeated decline for the same agent and reason is throttled to one line per ten minutes", async () => {
