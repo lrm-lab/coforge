@@ -17,6 +17,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { isAppError } from "#src/lib/app-error";
 import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
+import { captureInfo } from "./helpers/agent-control-info-capture";
 import { pendingOpStore } from "./helpers/agent-control-store";
 
 function observationRace() {
@@ -1378,19 +1379,6 @@ const pendingRuntimeConfig = {
   modelProvider: "",
   reasoning: "",
 };
-
-/** `agent_control:operation_superseded` is normal behaviour, logged at info. */
-function captureInfo() {
-  const events: unknown[] = [];
-  const original = console.info;
-  console.info = (...args: unknown[]) => events.push(JSON.parse(args[0] as string));
-  return {
-    events,
-    restore: () => {
-      console.info = original;
-    },
-  };
-}
 
 test("a fresh pending operation is superseded immediately by a different requestId, regardless of age", async () => {
   const { store, current } = pendingOpStore({
