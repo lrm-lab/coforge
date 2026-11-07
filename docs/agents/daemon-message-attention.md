@@ -63,13 +63,21 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   when its notice is accepted, or when it is held for a later notice or launch
   (`AgentDeliveryQueue`, a failed launch's input queue). A delivery queued
   behind the runner hold of a `coforge-computer restart` is not ACKed.
-- An Agent with no process, no launch in progress, and no restart config takes
-  no custody (`agent-exited-delivery.ts`): its untracked delivery, and any a
-  lifted runner hold left queued for it, is rejected as `no_process` over
-  `agent:v1:message:reject` — the server decides whether to start it — unless
-  a runtime error took it offline (`agent-offline-residency.ts`), which keeps
-  custody: ACKed, queued in `AgentDeliveryQueue`, `inactive` and its Activity
-  restated. A failed server Start leaves no restart config or failure record.
+- An Agent with no process and no launch in progress takes no custody
+  (`agent-exited-delivery.ts`): its untracked delivery, and any a lifted
+  runner hold left queued for it, is rejected as `no_process` over
+  `agent:v1:message:reject` — the server decides whether to start it —
+  unless a runtime error took it offline (`agent-offline-residency.ts`),
+  which keeps custody even while a restart config still stands: ACKed,
+  queued in `AgentDeliveryQueue`, `inactive` and its Activity restated.
+  A failed server Start leaves no restart config or failure record.
+- A failure that takes an Agent offline also drops its restart config
+  (`AgentProcessManager.forgetRestart` in `reportLaunchFailure`), so no
+  delivery or App Inbox notice can wake it again — there is no
+  auto-recovery: fixing the login does not restart the Agent by itself.
+  Only a person's Start launches it; the new `active` session clears the
+  record and the next launch delivers what waited. A quota wait keeps the
+  restart config — its cooldown, not custody, governs the next launch.
 - A tracked @mention delivery (it carries a `mentionDelivery` envelope) is
   settled by `mention-delivery-tracker.ts`, in memory only. It is ACKed, with
   its envelope echoed, only once drained: already consumed (whatever launch the
