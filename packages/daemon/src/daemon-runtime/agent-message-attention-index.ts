@@ -48,6 +48,7 @@ import type {
   AgentConsumedSeqPort,
 } from "#src/persistence/agent-consumed-seq-store";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
+import { PendingAttentionReads } from "./agent-message-attention-pending";
 import {
   PENDING_WINDOW_LIMIT,
   REMEMBERED_DELIVERIES,
@@ -109,6 +110,15 @@ export class AgentMessageAttentionIndex {
   readonly #runtimes: Pick<AgentProcessManager, "session"> &
     Partial<Pick<AgentProcessManager, "runtime">>;
   readonly #memoryUpdates: MemoryChannelUpdates;
+  /** The pending-attention reads (`agent-message-attention-pending.ts`), over the same maps this
+   * index writes. */
+  readonly #pendingReads = new PendingAttentionReads({
+    attention: this.#attention,
+    pendingSequences: this.#pendingSequences,
+    observedSequences: this.#observedSequences,
+    pendingWindow: this.#pendingWindow,
+    previewSeen: this.#previewSeen,
+  });
 
   constructor(
     workspaceId: string,
@@ -1027,39 +1037,20 @@ export class AgentMessageAttentionIndex {
     return this.#consumedState(agentId).targets.get(target)?.seq ?? 0;
   }
 
-  /** How many messages delivered to the Agent wait unread, per target: pending attention without a
-   * Memory Agent's observed channel updates, which wait for its own batched read, not for it. */
   unreadDeliveries(agentId: string): { target: string; count: number }[] {
-    const observed = this.#observedSequences.get(agentId);
-    const unread: { target: string; count: number }[] = [];
-    for (const [target, pending] of this.#pendingSequences.get(agentId) ?? []) {
-      let count = 0;
-      for (const sequence of pending) if (!observed?.get(target)?.has(sequence)) count++;
-      if (count) unread.push({ target, count });
-    }
-    return unread;
+    return this.#pendingReads.unreadDeliveries(agentId);
   }
 
-  /** Messages the Agent has not been shown yet for this exact target. A target with no attention
-   * entry has none: entries are created by a delivery and cleared once the boundary catches up. */
   pendingMessageCount(agentId: string, target: string): number {
-    return this.#attention.get(agentId)?.get(target)?.pendingCount ?? 0;
+    return this.#pendingReads.pendingMessageCount(agentId, target);
   }
 
-  /** The newest message the Agent has not been shown for this exact target, or 0: what a locally
-   * held send presents as its `seenUpToSeq` (the held boundary is the unconsumed maximum). */
   pendingMaxSequence(agentId: string, target: string): number {
-    let max = 0;
-    for (const sequence of this.#pendingSequences.get(agentId)?.get(target) ?? [])
-      if (sequence > max) max = sequence;
-    return max;
+    return this.#pendingReads.pendingMaxSequence(agentId, target);
   }
 
-  /** The newest unreviewed deliveries for `target`, oldest first, at most `limit` of them: the
-   * window a locally decided hold presents. */
   pendingWindow(agentId: string, target: string, limit: number): readonly PendingWindowEntry[] {
-    const entries = this.#pendingWindow.get(agentId)?.get(target) ?? [];
-    return entries.slice(-limit);
+    return this.#pendingReads.pendingWindow(agentId, target, limit);
   }
 
   #recordPendingWindow(agentId: string, target: string, delivery: AgentMessageDelivery): void {
