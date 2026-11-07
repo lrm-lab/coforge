@@ -391,7 +391,10 @@ describe("the sandbox's answer", () => {
         headers: { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin" },
       }),
     );
-    expect(await page.text()).toContain("&lt;script&gt;");
+    const html = await page.text();
+    expect(html).toContain("<h1>hi");
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).not.toContain("<script>");
     expect(page.headers.get("x-robots-tag")).toBe("noindex, nofollow");
     expect(page.headers.get("content-security-policy")).toContain(`frame-ancestors ${SANDBOX}`);
     live = false;

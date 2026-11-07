@@ -11,7 +11,8 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 /**
  * A public link from an artifact's Share (task #646): the switch beside the two levels, the link
  * it gives opening with no session, the level untouched, and off killing that link, for a
- * document and a web page; a kind with no public link shows no switch.
+ * document and a web page. What the page shows inside its frame is on another origin, so only
+ * its screenshot checks it.
  *
  * Opt-in like `e2e-artifact-page`: real local Web with `COFORGE_ARTIFACT_SANDBOX_ORIGIN` on
  * another host of the same server and a `COFORGE_SESSION_SECRET`. Screenshots go under
@@ -126,7 +127,14 @@ test("an artifact's Share: a public link on and off", async () => {
     const doc = await documents.create(viewer, {
       conversationId: channel.id,
       title: "Launch plan",
-      text: `Launch plan body ${tail}.`,
+      text: [
+        `We open signups on Monday (run ${tail}).`,
+        "## What ships",
+        "- The invite flow, with **two seats** free\n- A public changelog",
+        "## Dates",
+        "| Step | Owner | When |\n| --- | --- | --- |\n| Freeze | Noor | Friday |\n| Open | Amir | Monday |",
+        "> Roll back if signups fail for ten minutes.",
+      ].join("\n\n"),
     });
     const web = await documents.create(
       { workspaceId, actor: { agentId: agent.id } },

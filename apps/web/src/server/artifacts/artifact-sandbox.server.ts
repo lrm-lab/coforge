@@ -13,6 +13,7 @@ import {
   withWebRtcOff,
 } from "./artifact-sandbox-response.server";
 import { readSandboxTicket, signSandboxTicket } from "./artifact-sandbox-ticket.server";
+import { publicMarkdownPage } from "./artifact-public-markdown.server";
 
 /** A web page's one file in the first step (task #490): everything else is inlined into it. */
 export const ARTIFACT_HTML_ENTRY = "index.html";
@@ -219,14 +220,6 @@ export class ArtifactSandbox {
     if (!entry || entry.sizeBytes > ARTIFACT_HTML_LIMIT) return null;
     return { version: version.number, sha256: entry.sha256 };
   }
-}
-
-function publicMarkdownPage(title: string, text: string): Uint8Array<ArrayBuffer> {
-  const escape = (value: string) =>
-    value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  return new TextEncoder().encode(
-    `<!doctype html><meta name="robots" content="noindex"><meta charset="utf-8"><title>${escape(title)}</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 24px;color:#222}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h1>${escape(title)}</h1><pre>${escape(text)}</pre>`,
-  );
 }
 
 /** An http(s) origin and nothing else, so it goes into `frame-ancestors` as it is. */
