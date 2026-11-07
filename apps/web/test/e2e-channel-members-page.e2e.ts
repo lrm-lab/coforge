@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -20,40 +21,17 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * Agent in it and another outside it, and removes them afterwards. Screenshots are written under
  * `.amp/e2e/channel-members-page/`.
  */
-const webOrigin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!webOrigin || !["localhost", "127.0.0.1"].includes(new URL(webOrigin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
+const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 // Who is online reaches the page over Centrifugo, so it is reached through the page's own origin.
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/channel-members-page");
 
 test("the settings panel shows a channel's members as a page, adds and removes one", async () => {
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const session = `channel-members-page-${process.pid}`;
-  async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
-  }
+  const { browser, evaluate } = browserSession(browserPath, `channel-members-page-${process.pid}`);
   /** Waits for `condition`, failing with its text rather than at the test timeout; a first page
    * load compiles on the dev server, so it gets longer. */
   const waitFor = (condition: string, ms = 20_000) =>
