@@ -9,7 +9,6 @@ import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
 import { answeredWithin, holdRunnersUntilQuiescent, type RunnerHoldSnapshot } from "./runner-hold";
-import { UpgradeOperationPendingError } from "./upgrade-error";
 import { WorkspaceParkedError } from "./workspace-health-journal";
 import { WorkspaceLifecycleSupersededError } from "./lifecycle-superseded-error";
 import { SerialQueue } from "./serial-queue";
@@ -61,8 +60,13 @@ export type {
   UpgradeOperationTerminal,
 } from "./machine-supervisor-operations";
 import {
+  acknowledgeWorkspaceUpgrade,
+  completeWorkspaceUpgrade,
+  recordWorkspaceUpgrade,
+  type MachineUpgradeContext,
+} from "./machine-supervisor-upgrades";
+import {
   type LifecycleFailure,
-  UPGRADE_OPERATION_HISTORY,
   type PendingUpgradeSettler,
   type RestartResult,
   type UpgradeOperation,
@@ -540,61 +544,9 @@ export class MachineSupervisor {
    * left to collide over the installation lock.
    */
   recordUpgrade(workspaceId: string, requestId: string, expectedVersion: string) {
-    return this.#serialize(async () => {
-      await this.#refresh();
-      const binding = this.#bindings.find((entry) => entry.workspaceId === workspaceId);
-      if (!binding) throw new Error("Workspace is not registered locally");
-      if (!expectedVersion) throw new Error("upgrade expected version is required");
-      let operations = binding.upgradeOperations ?? [];
-      const existing = operations.find((entry) => entry.requestId === requestId);
-      if (existing) {
-        if (existing.expectedVersion !== expectedVersion)
-          throw new Error("upgrade request already has a different expected version");
-        return false;
-      }
-      const pending = operations.find((entry) => entry.state === "pending");
-      if (pending) {
-        // A settle-able pending slot (its job left a receipt, or it aged past the TTL) must not
-        // refuse a new request forever; only an in-flight operation blocks. `settlePendingUpgrade`
-        // only reads; this applies it in the same mutation, not via `completeUpgrade`.
-        const settlement = await this.settlePendingUpgrade?.(
-          workspaceId,
-          pending.requestId,
-          pending.requestedAt,
-        ).catch((error) => {
-          logger.warn("Settling a pending Computer upgrade operation failed; still refusing", {
-            event: "upgrade:pending_settle_check_failed",
-            request_id: pending.requestId,
-            workspace_id: workspaceId,
-            error_message: thrownMessage(error),
-          });
-          return undefined;
-        });
-        if (!settlement)
-          throw new UpgradeOperationPendingError(
-            `Computer upgrade operation ${pending.requestId} is still pending; wait for it to finish before starting another`,
-          );
-        const { status, ...terminal } = settlement;
-        operations = operations.map((entry) =>
-          entry.requestId === pending.requestId ? { ...entry, state: status, terminal } : entry,
-        );
-        logger.info("Computer upgrade operation reached its terminal state", {
-          event: "upgrade:operation_settled",
-          request_id: pending.requestId,
-          workspace_id: workspaceId,
-          status,
-          ...(terminal.errorCode ? { error_code: terminal.errorCode } : {}),
-        });
-      }
-      await this.#saveBinding({
-        ...binding,
-        upgradeOperations: [
-          ...operations,
-          { requestId, expectedVersion, state: "pending" as const, requestedAt: this.now() },
-        ].slice(-UPGRADE_OPERATION_HISTORY),
-      });
-      return true;
-    });
+    return this.#serialize(() =>
+      recordWorkspaceUpgrade(this.#upgradeOps, workspaceId, requestId, expectedVersion),
+    );
   }
 
   /** Records the durable receipt an operation's external job left behind. */
@@ -603,40 +555,16 @@ export class MachineSupervisor {
     requestId: string,
     terminal: { status: "succeeded" | "failed" } & UpgradeOperationTerminal,
   ) {
-    return this.#serialize(async () => {
-      await this.#refresh();
-      const binding = this.#bindings.find((entry) => entry.workspaceId === workspaceId);
-      const operation = binding?.upgradeOperations?.find((entry) => entry.requestId === requestId);
-      if (!binding || !operation || operation.state !== "pending") return false;
-      const { status, ...receipt } = terminal;
-      await this.#saveBinding({
-        ...binding,
-        upgradeOperations: binding.upgradeOperations!.map((entry) =>
-          entry.requestId === requestId ? { ...entry, state: status, terminal: receipt } : entry,
-        ),
-      });
-      return true;
-    });
+    return this.#serialize(() =>
+      completeWorkspaceUpgrade(this.#upgradeOps, workspaceId, requestId, terminal),
+    );
   }
 
   /** The server accepted the reported result; the record becomes audit-only history. */
   acknowledgeUpgrade(workspaceId: string, requestId: string) {
-    return this.#serialize(async () => {
-      await this.#refresh();
-      const binding = this.#bindings.find((entry) => entry.workspaceId === workspaceId);
-      const operation = binding?.upgradeOperations?.find((entry) => entry.requestId === requestId);
-      if (!binding || !operation) return false;
-      if (operation.state === "acknowledged") return true;
-      if (operation.state === "pending")
-        throw new Error("a pending Computer upgrade operation cannot be acknowledged");
-      await this.#saveBinding({
-        ...binding,
-        upgradeOperations: binding.upgradeOperations!.map((entry) =>
-          entry.requestId === requestId ? { ...entry, state: "acknowledged" as const } : entry,
-        ),
-      });
-      return true;
-    });
+    return this.#serialize(() =>
+      acknowledgeWorkspaceUpgrade(this.#upgradeOps, workspaceId, requestId),
+    );
   }
 
   snapshot() {
@@ -818,6 +746,17 @@ export class MachineSupervisor {
         target: deps.target,
       }),
     );
+  }
+
+  /** The upgrade operations' view of this Coordinator's serialized mutation context. */
+  get #upgradeOps(): MachineUpgradeContext {
+    return {
+      refresh: () => this.#refresh(),
+      bindings: () => this.#bindings,
+      saveBinding: (binding) => this.#saveBinding(binding),
+      settlePendingUpgrade: this.settlePendingUpgrade,
+      now: this.now,
+    };
   }
 
   #serialize<T>(operation: () => Promise<T>): Promise<T> {
