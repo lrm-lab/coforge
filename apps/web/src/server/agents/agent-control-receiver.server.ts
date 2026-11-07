@@ -114,6 +114,19 @@ export class AgentControlReceiver {
         : {}),
     };
     if (!(await this.store.replace(agent, next))) throw new Error("Control result lost its fence");
+    console.info(
+      JSON.stringify({
+        event: "agent_control:result_received",
+        action: state.action,
+        phase: result.phase,
+        request_id: result.requestId,
+        agent_id: result.agentId,
+        workspace_id: result.workspaceId,
+        computer_id: claim.computerId,
+        epoch: result.epoch,
+        sequence: result.sequence,
+      }),
+    );
     // A launch that started with its session binds the Agent's current identity, as an accepted
     // session report does. The result's reply does not wait for the re-send, which logs its own
     // failures (`MentionDeliveryReports`).

@@ -96,13 +96,28 @@ export class AgentControlPublisher {
   ) {
     const agentId = agent.id;
     const { requestId } = state;
+    const logPublished = () =>
+      console.info(
+        JSON.stringify({
+          event: "agent_control:command_published",
+          action: state.action,
+          phase: state.phase,
+          request_id: state.requestId,
+          agent_id: agent.id,
+          workspace_id: state.workspaceId,
+          computer_id: state.computerId,
+          epoch: state.epoch,
+        }),
+      );
     if (state.phase === "stopping") {
       await this.sendStop(state);
+      logPublished();
     } else if (state.phase === "clearing") {
       await this.api.publish(
         daemonControlChannel(state.workspaceId, state.computerId),
         encodeAgentWorkspaceResetRequest(state),
       );
+      logPublished();
     } else if (state.phase === "starting" || (state.phase === "completed" && recovery)) {
       // A Restart or Reset ends with a Start after its stop step, which dropped what the daemon
       // held (already acknowledged). That Start carries the unread messages from the read
@@ -125,6 +140,7 @@ export class AgentControlPublisher {
         }
       }
       await this.sendStart(agent, state, launchId, { recovery });
+      logPublished();
     }
   }
   /** Sends `state`'s Start for `agent`, carrying either message recovery or a resume prompt. */

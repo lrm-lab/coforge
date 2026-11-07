@@ -12,6 +12,7 @@ import { AgentControlBatch } from "./agent-control-batch.server";
 import { AgentControlOperations } from "./agent-control-operations.server";
 import { AgentControlPublisher } from "./agent-control-publisher.server";
 import { AgentControlReceiver, type AgentLaunchClaim } from "./agent-control-receiver.server";
+import { errorType } from "#src/server/errors/error-type.server";
 
 export * from "./agent-control-types.server";
 
@@ -154,47 +155,87 @@ export class AgentControl {
     action: AgentControlAction;
     confirmed?: boolean;
   }): Promise<AgentControlView> {
-    if (input.action === "full-reset" && input.confirmed !== true)
-      throw new Error("Full reset confirmation is required");
+    const startedAt = performance.now();
+    console.info(
+      JSON.stringify({
+        event: "agent_control:request_started",
+        action: input.action,
+        request_id: input.requestId,
+        agent_id: input.agentId,
+        workspace_id: input.workspaceId,
+      }),
+    );
+    const finish = (
+      fields: Record<string, unknown>,
+      operation: { action: AgentControlAction; requestId: string } = {
+        action: input.action,
+        requestId: input.requestId,
+      },
+    ) =>
+      console.info(
+        JSON.stringify({
+          event: "agent_control:request_finished",
+          action: input.action,
+          request_id: input.requestId,
+          agent_id: input.agentId,
+          workspace_id: input.workspaceId,
+          operation_action: operation.action,
+          operation_request_id: operation.requestId,
+          duration_ms: Math.round(performance.now() - startedAt),
+          ...fields,
+        }),
+      );
     // `stop` persists the user's stop intent before the chain runs at all, so it
     // survives even if the Computer never answers; every other action clears it first. Messages
     // that arrived while stopped are surfaced for the explicit "start" action here, and for the
     // Start that ends a Restart or Reset in `publishCurrent`: the same recovery context a
     // Daemon-ready recovery start carries.
-    const stoppedAt = input.action === "stop" ? new Date(this.clock()) : null;
-    const recovery =
-      input.action === "start"
-        ? await this.#publisher.readRecovery(input.workspaceId, input.agentId)
-        : undefined;
-    let drivenRequestId = input.requestId;
-    await this.runtimeLock.run(input.agentId, async () => {
-      const agent = await this.#access.authorizedForExecute(
-        input.userId,
-        input.workspaceId,
-        input.agentId,
-        input.action,
+    try {
+      if (input.action === "full-reset" && input.confirmed !== true)
+        throw new Error("Full reset confirmation is required");
+      const stoppedAt = input.action === "stop" ? new Date(this.clock()) : null;
+      const recovery =
+        input.action === "start"
+          ? await this.#publisher.readRecovery(input.workspaceId, input.agentId)
+          : undefined;
+      let drivenRequestId = input.requestId;
+      await this.runtimeLock.run(input.agentId, async () => {
+        const agent = await this.#access.authorizedForExecute(
+          input.userId,
+          input.workspaceId,
+          input.agentId,
+          input.action,
+        );
+        if (input.action !== "stop" && agent.migrating)
+          throw new AppError("CONFLICT", { errorId: "agent-migrating" });
+        // A Start that meets an Agent already starting joins that launch, it never issues
+        // a second one. Superseding here would publish Start at epoch + 1 while the Daemon is
+        // still launching the previous epoch; the Daemon answers that with `agent_already_running`
+        // and no result, and the running launch's own `started` result and Session snapshots are
+        // then stale, so the server would never learn the new Session.
+        const inFlight = agent.state;
+        if (
+          input.action === "start" &&
+          inFlight &&
+          inFlight.phase === "starting" &&
+          current(agent, inFlight) &&
+          !agent.stoppedAt
+        ) {
+          drivenRequestId = inFlight.requestId;
+          return;
+        }
+        await this.#operations.begin(agent, input.action, input.requestId, 1, stoppedAt);
+      });
+      const result = await this.#driver.drive(input.agentId, drivenRequestId, recovery);
+      finish(
+        { phase: result.phase, outcome: result.phase },
+        { action: result.action, requestId: result.requestId },
       );
-      if (input.action !== "stop" && agent.migrating)
-        throw new AppError("CONFLICT", { errorId: "agent-migrating" });
-      // A Start that meets an Agent already starting joins that launch, it never issues
-      // a second one. Superseding here would publish Start at epoch + 1 while the Daemon is
-      // still launching the previous epoch; the Daemon answers that with `agent_already_running`
-      // and no result, and the running launch's own `started` result and Session snapshots are
-      // then stale, so the server would never learn the new Session.
-      const inFlight = agent.state;
-      if (
-        input.action === "start" &&
-        inFlight &&
-        inFlight.phase === "starting" &&
-        current(agent, inFlight) &&
-        !agent.stoppedAt
-      ) {
-        drivenRequestId = inFlight.requestId;
-        return;
-      }
-      await this.#operations.begin(agent, input.action, input.requestId, 1, stoppedAt);
-    });
-    return this.#driver.drive(input.agentId, drivenRequestId, recovery);
+      return result;
+    } catch (error) {
+      finish({ outcome: "error", error_type: errorType(error) });
+      throw error;
+    }
   }
   stopMany(input: Parameters<AgentControlBatch["stopMany"]>[0]) {
     return this.#batch.stopMany(input);
