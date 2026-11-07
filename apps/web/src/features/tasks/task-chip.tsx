@@ -8,7 +8,7 @@ import { m } from "#src/paraglide/messages";
 import { priorityLabel } from "./task-history-more";
 import { TaskPriorityIcon } from "./task-priority-icon";
 import { TaskLabelChip } from "./task-label-chip";
-import { TaskPerson } from "./task-owner";
+import { TaskOwnerAvatar, TaskPerson } from "./task-owner";
 import { TaskStatusIcon, statusLabel } from "./task-status-icon";
 
 type ChipTask = Pick<TaskView, "number" | "title" | "status" | "owner"> &
@@ -20,20 +20,25 @@ export function taskMetaLabel(task: { number: number; channel?: string | null })
 }
 
 /**
- * A Task named in a message, or the Task a message became: its status icon and title, as often
- * as people read it, and no more. The title is cut short, so a sentence with several Tasks in it
- * stays a sentence: about 20 characters of Chinese in a message, about 10 on a phone. Its number,
- * where it lives, who holds it, what it waits on and how far its sub-tasks are, are rarer needs
- * and live in the peek, with the whole title (task #449, Frank 11-04); a press opens it.
+ * A Task named in a message: its status icon and title, as often as people read it, and no more.
+ * Under the message it became, the title gives way to its number and holder (`underMessage`).
+ * The title is cut short, so a sentence with several Tasks in it stays a sentence: about 20
+ * characters of Chinese in a message, about 10 on a phone. Its number, where it lives, who holds
+ * it, what it waits on and how far its sub-tasks are, are rarer needs and live in the peek, with
+ * the whole title (task #449, Frank 11-04); a press opens it.
  */
 export function TaskChip({
   task,
   place,
+  underMessage = false,
   onPress,
 }: {
   task: ChipTask;
   /** Where the Task lives, for another conversation's (`#design`, `DM with @ada`). */
   place?: string;
+  /** Under its own message, whose words the title only repeats: its number and its holder's
+   * avatar, the shape of Raft's (v1.21.56, Frank 11-07). */
+  underMessage?: boolean;
   onPress?: () => void;
 }) {
   const meta = place ? `#${task.number} · ${place}` : `#${task.number}`;
@@ -51,8 +56,9 @@ export function TaskChip({
             data-task-status={task.status}
             className="max-w-[20em] min-w-0 truncate font-medium text-primary max-sm:max-w-[10em]"
           >
-            {task.title}
+            {underMessage ? `#${task.number}` : task.title}
           </span>
+          {underMessage && task.owner && <TaskOwnerAvatar owner={task.owner} />}
         </>
       }
     >

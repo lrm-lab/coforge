@@ -117,12 +117,11 @@ test("a message's Task shows as the chip its words name Tasks with, its details 
       await browser("set", "viewport", width, height);
       await browser("open", page);
       await browser("wait", "--fn", `${pageHydrated} && ${pill} !== null`);
-      // The same chip a message's words name a Task with (Frank, 11-04): its status icon and its
-      // title, and nothing else on the line.
-      await browser("wait", "--fn", `${text}.includes("Ship the home page")`);
+      // Its number and holder's avatar (task #13): the title would repeat the message above it.
+      await browser("wait", "--fn", `${text}.includes("#${task}")`);
       const shown = await evaluate<string>(text);
-      expect(shown).not.toContain(DEV_BROWSER_USER.name);
-      expect(shown).not.toContain(`#${task}`);
+      expect(shown).not.toContain("Ship the home page");
+      expect(await evaluate<boolean>(`${pill}?.querySelector("img") != null`)).toBe(true);
       expect(
         await evaluate<string | null>(
           `${pill}?.querySelector("[data-task-status]")?.getAttribute("data-task-status") ?? null`,

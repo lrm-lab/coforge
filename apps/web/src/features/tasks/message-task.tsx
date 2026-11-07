@@ -9,9 +9,9 @@ type MessageTaskProps = {
 };
 
 /**
- * The Task a message became, or (task conversations) was made from, under the message: the same
- * chip a message's words name a Task with, its status icon and title, with who holds it, what it
- * waits on and its sub-tasks in its peek (task #449, Frank 11-04). Inside a conversation it reads
+ * The Task a message became, or (task conversations) was made from, under the message: the chip a
+ * message's words name a Task with, showing its status, number and holder (task #13, Frank 11-07,
+ * as Raft's), with its title and the rest in its peek. Inside a conversation it reads
  * that one Task, so a Task's change repaints its own message's chip and no other row; outside one
  * it shows nothing.
  */
@@ -40,7 +40,7 @@ function ConversationMessageTask({
       data-message-task={task.number}
       className="message-text mt-1 inline-flex max-w-full text-md"
     >
-      <TaskChip task={task} onPress={onOpenTask && (() => onOpenTask(task.number))} />
+      <TaskChip task={task} underMessage onPress={onOpenTask && (() => onOpenTask(task.number))} />
     </span>
   );
 }
