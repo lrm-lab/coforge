@@ -25,8 +25,12 @@ export type WeeklyReportCollectResult = {
   slotCount?: number;
   /** False when the slot was already settled or this is a requestId replay. */
   newlyAccepted?: boolean;
+  /** True only for a genuine requestId replay of the same outcome — "already accepted",
+   * not a rejection. */
+  replayed?: boolean;
   /** The slot's status after this call (accepted outcome or the settled one). */
   slotStatus?: string;
+  synthesisStarted?: boolean;
   waveExhausted?: boolean;
 };
 

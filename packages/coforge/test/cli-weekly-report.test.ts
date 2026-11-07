@@ -58,7 +58,9 @@ test("weekly-report-collect CLI parses submit-pack and dispatches the transport"
             allTerminal: true,
             canSynthesize: false,
             newlyAccepted: calls.length === 1,
+            replayed: calls.length > 1,
             slotStatus: calls.length === 1 ? "empty" : "ready",
+            waveExhausted: calls.length === 1,
           };
         },
       },
@@ -70,11 +72,15 @@ test("weekly-report-collect CLI parses submit-pack and dispatches the transport"
         outcome: "empty",
       },
     ]);
-    // An accepted submit-empty that exhausts the wave cancels the run in the same call; the
-    // message must say the slot report landed, not that the slot was cancelled (#695).
-    expect(output).toContain("accepted");
-    expect(output).toContain("empty");
-    expect(output).not.toContain("not accepted");
+    // An accepted submit-empty that exhausts the wave closes the run in the same call; the
+    // message says the slot report landed and what the run does next — never the run's
+    // "cancelled" status or internal field names an Agent would misread as a rejection (#695).
+    expect(output).toBe(
+      "Collect empty accepted. This collect run is closed: no usable pack was collected. Nothing else to do.",
+    );
+    expect(output).not.toContain("cancelled");
+    expect(output).not.toContain("allTerminal");
+    expect(output).not.toContain("canSynthesize");
 
     const rejected = await run(
       [
@@ -103,16 +109,103 @@ test("weekly-report-collect CLI parses submit-pack and dispatches the transport"
         weeklyReportCollect: async (command) => ({
           idempotencyKey: command.idempotencyKey,
           runId: command.runId,
-          status: "cancelled",
-          allTerminal: true,
+          status: "collecting",
+          allTerminal: false,
           canSynthesize: false,
           newlyAccepted: false,
           slotStatus: "ready",
         }),
       },
     );
-    expect(rejected).toContain("not accepted");
-    expect(rejected).toContain("ready");
+    expect(rejected).toBe("Collect submit not accepted: the slot already settled as ready.");
+
+    // A requestId replay of the same outcome is not a rejection: the earlier submit already
+    // landed, so the Agent reads "already accepted", not "not accepted".
+    const replayed = await run(
+      [
+        "weekly-report-collect",
+        "submit-empty",
+        "--run-id",
+        "22222222-2222-4222-8222-222222222222",
+        "--idempotency-key",
+        "11111111-1111-4111-8111-111111111111",
+      ],
+      {
+        check: async () => {
+          throw new Error("message check called");
+        },
+        read: async () => {
+          throw new Error("message read called");
+        },
+        send: async () => {
+          throw new Error("message send called");
+        },
+        view: async () => {
+          throw new Error("attachment view called");
+        },
+        weeklyReportCollect: async (command) => ({
+          idempotencyKey: command.idempotencyKey,
+          runId: command.runId,
+          status: "cancelled",
+          allTerminal: true,
+          canSynthesize: false,
+          newlyAccepted: false,
+          replayed: true,
+          slotStatus: "empty",
+        }),
+      },
+    );
+    expect(replayed).toBe("Collect submit already accepted earlier; the slot is empty.");
+    expect(replayed).not.toContain("not accepted");
+    expect(replayed).not.toContain("cancelled");
+  } finally {
+    await rm(packPath, { force: true });
+  }
+});
+
+test("weekly-report-collect CLI says what a ready pack sets in motion", async () => {
+  const packPath = `${tmpdir()}/coforge-collect-pack-inline-${crypto.randomUUID()}.md`;
+  await Bun.write(packPath, "# pack\n");
+  try {
+    const output = await run(
+      [
+        "weekly-report-collect",
+        "submit-pack",
+        "--run-id",
+        "22222222-2222-4222-8222-222222222222",
+        "--idempotency-key",
+        "11111111-1111-4111-8111-111111111111",
+        "--markdown",
+        packPath,
+      ],
+      {
+        check: async () => {
+          throw new Error("message check called");
+        },
+        read: async () => {
+          throw new Error("message read called");
+        },
+        send: async () => {
+          throw new Error("message send called");
+        },
+        view: async () => {
+          throw new Error("attachment view called");
+        },
+        weeklyReportCollect: async (command) => ({
+          idempotencyKey: command.idempotencyKey,
+          runId: command.runId,
+          status: "synthesizing",
+          allTerminal: true,
+          canSynthesize: true,
+          newlyAccepted: true,
+          replayed: false,
+          slotStatus: "ready",
+          synthesisStarted: true,
+          waveExhausted: false,
+        }),
+      },
+    );
+    expect(output).toBe("Collect ready accepted. The weekly report is now being written.");
   } finally {
     await rm(packPath, { force: true });
   }

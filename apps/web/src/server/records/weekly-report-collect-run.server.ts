@@ -265,6 +265,9 @@ export type AcceptCollectSlotReportResult = {
   run: CollectRunView;
   /** False on requestId replay or when the slot was already terminal. */
   newlyAccepted: boolean;
+  /** True only when this requestId was already accepted with this same outcome — a genuine
+   * replay the caller may report as "already accepted", not a rejection. */
+  replayed: boolean;
   /** The slot's status after this call: the accepted outcome, or the status it already had. */
   slotStatus: string;
   /** True once when this accept moves the run from collecting into synthesizing. */
@@ -306,6 +309,10 @@ export async function acceptCollectSlotReport(
         slots: existingByRequest.run.slots,
       }),
       newlyAccepted: false,
+      // The stored status is what this requestId originally submitted; it only counts as a
+      // replay of *this* submission when the outcomes agree — a reused requestId carrying a
+      // different outcome settled nothing new and reads as not accepted.
+      replayed: existingByRequest.status === input.outcome,
       slotStatus: existingByRequest.status,
       synthesisStarted: false,
       waveExhausted: false,
@@ -323,6 +330,7 @@ export async function acceptCollectSlotReport(
     return {
       run: toRunView(run),
       newlyAccepted: false,
+      replayed: false,
       slotStatus: slot.status,
       synthesisStarted: false,
       waveExhausted: false,
@@ -375,6 +383,7 @@ export async function acceptCollectSlotReport(
   return {
     run: toRunView(refreshed),
     newlyAccepted: true,
+    replayed: false,
     slotStatus: input.outcome,
     synthesisStarted,
     waveExhausted,

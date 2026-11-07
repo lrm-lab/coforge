@@ -49,6 +49,7 @@ test("the collect route echoes the request's idempotencyKey when it accepts a sl
         return {
           run: runView,
           newlyAccepted: true,
+          replayed: false,
           slotStatus: "empty",
           synthesisStarted: true,
           waveExhausted: false,
@@ -69,6 +70,7 @@ test("the collect route echoes the request's idempotencyKey when it accepts a sl
     allTerminal: true,
     canSynthesize: true,
     newlyAccepted: true,
+    replayed: false,
     slotStatus: "empty",
     synthesisStarted: true,
     waveExhausted: false,

@@ -99,6 +99,7 @@ export async function handleWeeklyReportCollectPost(
       allTerminal: view.allTerminal,
       canSynthesize: view.canSynthesize,
       newlyAccepted: accepted.newlyAccepted,
+      replayed: accepted.replayed,
       slotStatus: accepted.slotStatus,
       synthesisStarted: accepted.synthesisStarted,
       waveExhausted: accepted.waveExhausted,

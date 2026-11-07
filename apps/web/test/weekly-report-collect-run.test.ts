@@ -510,6 +510,7 @@ test("acceptCollectSlotReport advances collecting→synthesizing when every slot
     packMarkdown: "# pack from ubuntu",
   });
   expect(first.newlyAccepted).toBe(true);
+  expect(first.replayed).toBe(false);
   expect(first.slotStatus).toBe("ready");
   expect(first.synthesisStarted).toBe(true);
   expect(first.run.status).toBe(COLLECT_RUN_STATUS.synthesizing);
@@ -525,6 +526,7 @@ test("acceptCollectSlotReport advances collecting→synthesizing when every slot
     packMarkdown: "# pack from ubuntu",
   });
   expect(replay.newlyAccepted).toBe(false);
+  expect(replay.replayed).toBe(true);
   expect(replay.slotStatus).toBe("ready");
   expect(replay.synthesisStarted).toBe(false);
   expect(replay.run.status).toBe(COLLECT_RUN_STATUS.synthesizing);
