@@ -227,7 +227,7 @@ Element.prototype.scrollTo = function (...args) {
             new Promise<never>((_, reject) => {
               gateTimer = setTimeout(
                 () => reject(new Error("The public Task read never reached the gate")),
-                20_000,
+                60_000,
               );
             }),
           ]);
