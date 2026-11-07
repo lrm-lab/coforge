@@ -354,6 +354,11 @@ configs:
             "state": "ENABLED",
             "variants": { "on": true, "off": false },
             "defaultVariant": "on"
+          },
+          "task-ref-tokens": {
+            "state": "ENABLED",
+            "variants": { "on": true, "off": false },
+            "defaultVariant": "on"
           }
         }
       }

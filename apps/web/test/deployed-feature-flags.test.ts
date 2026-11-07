@@ -44,7 +44,7 @@ async function installDeployed(environment: "staging" | "production"): Promise<v
 
 test("staging's flag file passes boot validation", async () => {
   await installDeployed("staging");
-  expect(await isFeatureEnabled("task-ref-tokens", OTHER)).toBe(false);
+  expect(await isFeatureEnabled("task-ref-tokens", OTHER)).toBe(true);
 });
 
 test("production's flag file passes boot validation", async () => {
