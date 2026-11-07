@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
+import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -87,10 +87,13 @@ for (const width of [1440, 390]) {
       const seen = new Promise<void>((resolve) => {
         taskSeen = resolve;
       });
+      const serverFnCalls: string[] = [];
       // Delay the actual public Task read, not a timer or a fabricated UI result. The DOM first
       // lays out the messages/notices, then the real response adds their Task badges.
       const proxy = sameOriginProxy(origin, centrifugoOrigin, {
         async afterUpstream(url) {
+          if (url.pathname.includes("_serverFn"))
+            serverFnCalls.push(`${url.pathname}${url.search}`.slice(0, 400));
           const query = decodeURIComponent(url.search);
           if (
             url.pathname.includes("_serverFn") &&
@@ -225,10 +228,18 @@ Element.prototype.scrollTo = function (...args) {
           await Promise.race([
             seen,
             new Promise<never>((_, reject) => {
-              gateTimer = setTimeout(
-                () => reject(new Error("The public Task read never reached the gate")),
-                60_000,
-              );
+              gateTimer = setTimeout(() => {
+                void (async () => {
+                  const page = await evaluate(
+                    `{hydrated:${pageHydrated},coarse:matchMedia('(hover: none), (any-pointer: coarse)').matches,vw:innerWidth,rows:document.querySelectorAll('li[data-message-id]').length,tasks:document.querySelectorAll('[data-message-task]').length}`,
+                  ).catch((error: unknown) => String(error));
+                  reject(
+                    new Error(
+                      `The public Task read never reached the gate; serverFn calls: ${serverFnCalls.slice(-30).join(" | ") || "none"}; page: ${JSON.stringify(page)}`,
+                    ),
+                  );
+                })();
+              }, 60_000);
             }),
           ]);
         } finally {
