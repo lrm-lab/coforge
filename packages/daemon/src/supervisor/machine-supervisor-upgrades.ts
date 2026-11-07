@@ -79,19 +79,17 @@ async function recordUpgradeOperation(
     // A settle-able pending slot (its job left a receipt, or it aged past the TTL) must not
     // refuse a new request forever; only an in-flight operation blocks. `settlePendingUpgrade`
     // only reads; this applies it in the same mutation, not via `completeUpgrade`.
-    const settlement = await context.settlePendingUpgrade?.(
-      carrier.workspaceId,
-      pendingRequestId,
-      carrier.requestedAt,
-    ).catch((error) => {
-      logger.warn("Settling a pending Computer upgrade operation failed; still refusing", {
-        event: "upgrade:pending_settle_check_failed",
-        request_id: pendingRequestId,
-        workspace_id: carrier.workspaceId,
-        error_message: thrownMessage(error),
+    const settlement = await context
+      .settlePendingUpgrade?.(carrier.workspaceId, pendingRequestId, carrier.requestedAt)
+      .catch((error) => {
+        logger.warn("Settling a pending Computer upgrade operation failed; still refusing", {
+          event: "upgrade:pending_settle_check_failed",
+          request_id: pendingRequestId,
+          workspace_id: carrier.workspaceId,
+          error_message: thrownMessage(error),
+        });
+        return undefined;
       });
-      return undefined;
-    });
     if (!settlement)
       throw new UpgradeOperationPendingError(
         `Computer upgrade operation ${pendingRequestId} is still pending; wait for it to finish before starting another`,

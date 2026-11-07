@@ -1,8 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  MachineSupervisor,
-  type ManagedBinding,
-} from "#src/supervisor/machine-supervisor";
+import { MachineSupervisor, type ManagedBinding } from "#src/supervisor/machine-supervisor";
 import { WorkspaceParkedError } from "#src/supervisor/workspace-health-journal";
 
 test("reconcile restarts an enabled Workspace whose OS instance went inactive", async () => {
@@ -38,7 +35,6 @@ test("reconcile restarts an enabled Workspace whose OS instance went inactive", 
   expect(starts).toEqual(["initial", "respawn"]);
   expect(live!).toBe("instance-2");
 });
-
 
 test("a restart interrupted before OS stop cannot acknowledge replay while the original instance survives", async () => {
   let saved: ManagedBinding[] = [

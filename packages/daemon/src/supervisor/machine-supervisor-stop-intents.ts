@@ -25,9 +25,11 @@ export async function persistStopIntent(
   try {
     await context.exclusive(async () => {
       await context.reloadIfRequired();
-      const next = context.bindings().map((binding) =>
-        context.stopIntents.has(binding.workspaceId) ? stopped(binding) : binding,
-      );
+      const next = context
+        .bindings()
+        .map((binding) =>
+          context.stopIntents.has(binding.workspaceId) ? stopped(binding) : binding,
+        );
       await context.store(next);
     });
   } catch (error) {

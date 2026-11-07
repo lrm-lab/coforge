@@ -2,11 +2,7 @@ import { getLogger } from "@logtape/logtape";
 import { RUNNER_HOLD_REASONS } from "@lrm/coforge-sdk/internal";
 import { holdRunnersUntilQuiescent } from "./runner-hold";
 import { appendRestartResult } from "./machine-supervisor-bindings";
-import type {
-  ManagedBinding,
-  RestartHoldTuning,
-  WorkspaceProcesses,
-} from "./machine-supervisor";
+import type { ManagedBinding, RestartHoldTuning, WorkspaceProcesses } from "./machine-supervisor";
 
 const logger = getLogger(["coforge", "daemon", "supervisor"]);
 

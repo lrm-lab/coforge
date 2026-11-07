@@ -74,10 +74,7 @@ import {
   releaseStopIntent,
   type MachineStopIntentContext,
 } from "./machine-supervisor-stop-intents";
-import {
-  advanceWorkspaceRestart,
-  type MachineRestartContext,
-} from "./machine-supervisor-restart";
+import { advanceWorkspaceRestart, type MachineRestartContext } from "./machine-supervisor-restart";
 import {
   commandTargets,
   markWorkspacesUnderWay,

@@ -16,10 +16,11 @@ async function pendingMachineUpgradeCopies(
 ): Promise<{ workspaceId: string; requestedAt: number }[]> {
   return (await supervisor.snapshot()).flatMap((binding) =>
     (binding.upgradeOperations ?? [])
-      .filter(
-        (operation) => operation.requestId === requestId && operation.state === "pending",
-      )
-      .map((operation) => ({ workspaceId: binding.workspaceId, requestedAt: operation.requestedAt })),
+      .filter((operation) => operation.requestId === requestId && operation.state === "pending")
+      .map((operation) => ({
+        workspaceId: binding.workspaceId,
+        requestedAt: operation.requestedAt,
+      })),
   );
 }
 

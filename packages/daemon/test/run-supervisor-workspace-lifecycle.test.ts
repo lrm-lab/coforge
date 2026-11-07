@@ -127,7 +127,12 @@ test("daemon:detach passes the request's target to the supervisor only on this s
 });
 
 test("daemon:computer_upgrade admits machine-wide, refreshes every child, launches and watches each copy", async () => {
-  const pending = { requestId: "req", expectedVersion: "2", state: "pending" as const, requestedAt: 7 };
+  const pending = {
+    requestId: "req",
+    expectedVersion: "2",
+    state: "pending" as const,
+    requestedAt: 7,
+  };
   const supervisor = {
     snapshot: mock(async () => [
       { workspaceId: "a", upgradeOperations: [pending] },
@@ -199,7 +204,12 @@ test("daemon:computer_upgrade with no bindings launches unrecorded; a launch fai
     stateDirectory: "/state",
   });
 
-  const pending = { requestId: "req", expectedVersion: "2", state: "pending" as const, requestedAt: 7 };
+  const pending = {
+    requestId: "req",
+    expectedVersion: "2",
+    state: "pending" as const,
+    requestedAt: 7,
+  };
   const failed = deps({
     method: "daemon:computer_upgrade",
     request: { requestId: "req", expectedVersion: "2" } as DaemonCommandRequest,

@@ -67,9 +67,11 @@ export function commandTargets(
   operation: "start" | "stop" | "restart",
   workspaceId?: string,
 ): ManagedBinding[] {
-  return context.bindings().filter(
-    (binding) =>
-      (!workspaceId || binding.workspaceId === workspaceId) &&
-      !(operation === "restart" && !workspaceId && !binding.enabled),
-  );
+  return context
+    .bindings()
+    .filter(
+      (binding) =>
+        (!workspaceId || binding.workspaceId === workspaceId) &&
+        !(operation === "restart" && !workspaceId && !binding.enabled),
+    );
 }

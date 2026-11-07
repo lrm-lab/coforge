@@ -228,14 +228,12 @@ function machineUpgradeFixture(
   settlePendingUpgrade?: PendingUpgradeSettler,
 ) {
   const state = {
-    saved: workspaceIds.map(
-      (workspaceId): ManagedBinding => ({
-        workspaceId,
-        computerId: "c",
-        workspaceRoot: `/${workspaceId}`,
-        enabled: true,
-      }),
-    ),
+    saved: workspaceIds.map((workspaceId): ManagedBinding => ({
+      workspaceId,
+      computerId: "c",
+      workspaceRoot: `/${workspaceId}`,
+      enabled: true,
+    })),
   };
   const supervisor = new MachineSupervisor(
     {
