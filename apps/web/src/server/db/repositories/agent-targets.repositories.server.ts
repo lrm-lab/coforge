@@ -1,4 +1,5 @@
 import { findAgentScopedMessage } from "./agent-message-lookup.repositories.server";
+import { isAttachmentMessageTarget } from "@lrm/coforge-sdk/internal";
 import { appEventConversation } from "#src/server/app-agent-events/app-event-target.server";
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
 import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
@@ -125,7 +126,7 @@ export async function drainScope(
   // the Agent must still be an active member of the file's source conversation, the recheck a
   // comment read applies. Before comment migration the discussion is its own conversation;
   // after it, the comments are ordinary messages in the source conversation itself.
-  if (target.startsWith("attachment:")) {
+  if (isAttachmentMessageTarget(target)) {
     const parsed = /^attachment:([0-9a-f-]{36})(?::([0-9a-f-]{6,36}))?$/i.exec(target);
     const attachment =
       parsed &&

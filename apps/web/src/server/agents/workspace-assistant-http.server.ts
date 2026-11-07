@@ -4,6 +4,7 @@ import type { AgentSendDecisionResponse } from "@lrm/coforge-sdk/agent";
 import {
   CREDENTIAL_SOLICITATION_CODE,
   CREDENTIAL_SOLICITATION_MESSAGE,
+  isAttachmentMessageTarget,
   solicitsCredentialsInChat,
 } from "@lrm/coforge-sdk/internal";
 import { toggleUserMessageReaction } from "#src/server/conversations/user-message-reactions.server";
@@ -96,6 +97,9 @@ export async function handleWorkspaceAssistantCommand(
     }
     if (request.method === "POST" && url.pathname === "/api/agent/v1/messages") {
       const body = sendSchema.parse(await request.clone().json());
+      // Attachment comment targets have their own handlers, which apply the member
+      // delegation themselves; this command surface only knows channel and peer targets.
+      if (isAttachmentMessageTarget(body.target)) return undefined;
       if (body.target.split(":")[0] === `@${user.username}`) return undefined;
       if (body.reconcileOnly) {
         const record = await getMessageRequestIdempotency().find({
@@ -154,6 +158,9 @@ export async function handleWorkspaceAssistantCommand(
     }
     if (request.method !== "GET") return undefined;
     const target = url.searchParams.get("target");
+    // Reads, checks and searches on an attachment's comment target belong to the
+    // dedicated attachment handlers, which delegate to the member themselves.
+    if (target !== null && isAttachmentMessageTarget(target)) return undefined;
     if (target?.split(":")[0] === `@${user.username}`) return undefined;
     if (!target && url.pathname !== "/api/agent/v1/messages/search") return undefined;
     const idempotencyKey = agentIdempotencyKeyFromQuery(request);

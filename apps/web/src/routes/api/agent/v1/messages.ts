@@ -10,6 +10,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import type { AgentHistoryResponse, AgentMessage, AgentSendResponse } from "@lrm/coforge-sdk/agent";
 import {
   UUID_LIKE_PATTERN,
+  isAttachmentMessageTarget,
   isChannelMessageTarget,
   isValidMentionSelectorArray,
   isSeenExactSeqs,
@@ -114,7 +115,7 @@ export async function handleAgentMessagesGet(
       ...(unread ? { unread } : {}),
     };
     const result =
-      target.startsWith("attachment:") && attachmentMessages
+      isAttachmentMessageTarget(target) && attachmentMessages
         ? await attachmentMessages.read(scope, target, page)
         : await readAgentMessages(repository, scope, target, page);
     const messages = result.messages as AgentMessage[];
@@ -135,7 +136,7 @@ export async function handleAgentMessagesGet(
   } catch (error) {
     const target = new URL(request.url).searchParams.get("target") ?? "";
     return (
-      (target.startsWith("attachment:") ? attachmentMessageRefusal(error) : undefined) ??
+      (isAttachmentMessageTarget(target) ? attachmentMessageRefusal(error) : undefined) ??
       ambiguousTargetResponse(error, target) ??
       Response.json({ error: "invalid message query" }, { status: 400 })
     );
@@ -270,7 +271,7 @@ export async function handleAgentMessagesPost(
     if (offerRequired) return textResponse(MEMORY_OFFER_REQUIRED_MESSAGE, { status: 400 });
   }
   try {
-    const attachment = body.target.startsWith("attachment:")
+    const attachment = isAttachmentMessageTarget(body.target)
       ? dependencies.attachmentMessages
       : undefined;
     // Attachment comments have no ordinary delivery/freshness stream. Their authorized
@@ -312,7 +313,7 @@ export async function handleAgentMessagesPost(
     }
     return Response.json(mapSendResult(idempotencyKey, result));
   } catch (error) {
-    if (body.target.startsWith("attachment:")) {
+    if (isAttachmentMessageTarget(body.target)) {
       const refusal = attachmentMessageRefusal(error);
       if (refusal) return refusal;
     }
