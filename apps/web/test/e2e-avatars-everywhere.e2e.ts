@@ -155,7 +155,30 @@ test("names carry their faces", async () => {
         body: `Can @${agent.name} pair with @${DEV_BROWSER_USER.username} on this?`,
       },
     });
-    await db.conversation.update({ where: { id: notices.id }, data: { lastSequence: 2 } });
+    // An Agent renamed since its notice (task #coforge-ui:#19): found by its member row, not
+    // the old handle; and someone no longer here: their initial on a coloured tile.
+    const renamed = await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: notices.id,
+        sequence: 3,
+        senderMemberId: null,
+        body: "old-agent-name moved #1 to Done",
+      },
+    });
+    await db.systemMessage.create({
+      data: {
+        messageId: renamed.id,
+        conversationId: notices.id,
+        workspaceId,
+        kind: "channel.member_added",
+        params: {
+          actor: { memberId: agentIn.id, handle: `old-${agent.name}`, displayName: "Old name" },
+          members: [{ memberId: null, handle: "gone-person", displayName: "Gone Person" }],
+        },
+      },
+    });
+    await db.conversation.update({ where: { id: notices.id }, data: { lastSequence: 3 } });
     for (const [member, kind, actorId, handle] of [
       [agentIn.id, "agent", agent.id, agent.name],
       [meIn.id, "user", DEV_BROWSER_USER.id, DEV_BROWSER_USER.username],
@@ -193,6 +216,14 @@ test("names carry their faces", async () => {
         ),
       ).toBe(true);
       expect(await evaluate<number>(`${chips}.length`)).toBe(2);
+      const renamedRow = `document.querySelector('[data-message-id="${renamed.id}"] [data-message="system"]')`;
+      expect(await evaluate<number>(`${renamedRow}.querySelectorAll("img").length`)).toBe(1);
+      // The initial's tile is painted, not transparent.
+      expect(
+        await evaluate<string>(
+          `getComputedStyle(${renamedRow}.querySelector("[data-avatar] > div:not(:has(img))")).backgroundColor`,
+        ),
+      ).not.toBe("rgba(0, 0, 0, 0)");
       await shoot(name);
     }
   } finally {

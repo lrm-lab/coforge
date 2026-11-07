@@ -7,7 +7,16 @@
  * store one.
  */
 
-const TONE_COUNT = 6;
+/** Written out whole: Tailwind generates only the class names it finds in the source, so a name
+ * assembled at run time (`bg-avatar-${n}`) had no CSS and every initial sat on no tile. */
+const TONES = [
+  "bg-avatar-1",
+  "bg-avatar-2",
+  "bg-avatar-3",
+  "bg-avatar-4",
+  "bg-avatar-5",
+  "bg-avatar-6",
+] as const;
 
 export function avatarInitial(name: string): string {
   // Sender names arrive as "@handle"; the glyph is the first letter, not the "@".
@@ -19,7 +28,6 @@ export function avatarToneClassName(name: string): string {
   for (const character of name) {
     hash = (hash * 31 + character.codePointAt(0)!) % 4093;
   }
-  const tone = (hash % TONE_COUNT) + 1;
   // The official Avatar colours its initials `text-quaternary`; on a tone tile they are white.
-  return `bg-avatar-${tone} text-white *:text-white`;
+  return `${TONES[hash % TONES.length]} text-white *:text-white`;
 }

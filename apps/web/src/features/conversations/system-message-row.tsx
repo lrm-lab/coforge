@@ -114,10 +114,13 @@ function noticeActor(
   { person, text }: NoticePerson,
   members: readonly Mentionable[] | undefined,
 ): NamedActor {
-  const member = members?.find(
-    (candidate) =>
-      candidate.handle === person.handle && (!person.kind || candidate.kind === person.kind),
-  );
+  // By the member row first: a handle renamed since the notice was posted no longer matches.
+  const member =
+    (person.memberId && members?.find((candidate) => candidate.memberId === person.memberId)) ||
+    members?.find(
+      (candidate) =>
+        candidate.handle === person.handle && (!person.kind || candidate.kind === person.kind),
+    );
   return member
     ? { kind: member.kind, id: member.id, name: text, avatarUrl: member.avatarUrl }
     : { kind: person.kind === "agent" ? "agent" : "user", name: text };

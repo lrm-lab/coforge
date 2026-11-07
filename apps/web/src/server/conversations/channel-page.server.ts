@@ -90,7 +90,6 @@ export async function openChannel(
     db.conversationMember.findMany({
       where: { conversationId: channelId, ...ACTIVE_MEMBER_WHERE },
       select: {
-        id: true,
         readThroughSequence: true,
         agentReadThroughSequence: true,
         ...MENTIONABLE_MEMBER_SELECT,

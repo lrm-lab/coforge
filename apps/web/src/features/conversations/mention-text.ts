@@ -72,6 +72,9 @@ export type Mentionable = {
    * conversation (see `mentionAffinityScores` on the server); 0 when the viewer never has.
    * Higher ranks first within a match tier. */
   mentionScore: number;
+  /** The member row: what a system notice names a person by (`SystemPerson.memberId`), which
+   * outlives a change of handle. Absent for an outsider. */
+  memberId?: string;
   /** Not a member of the channel: offered in its own group, and a mention of them notifies no one
    * until the sender acts on it. */
   outsider?: true;

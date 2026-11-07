@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import type { Mentionable } from "#src/features/conversations/mention-text";
 import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
@@ -13,6 +14,7 @@ import { mentionAffinityScores, type RecentMentionRow } from "./mentions.server"
 
 /** The public profile of a member row that a mention completion shows. */
 export const MENTIONABLE_MEMBER_SELECT = {
+  id: true,
   user: {
     select: {
       id: true,
@@ -42,13 +44,16 @@ export function mentionables(
   workspaceId: string,
   rows: readonly MentionableMemberRow[],
   mentionScores: ReturnType<typeof mentionAffinityScores>,
-) {
+): Mentionable[] {
+  // Typed as the client reads it: `memberId` is optional there, so a cached page from before it
+  // still reads (no stored-shape bump).
   return rows
     .map((row) =>
       row.user
         ? {
             kind: "user" as const,
             id: row.user.id,
+            memberId: row.id,
             handle: row.user.username,
             label: humanLabel(row.user),
             description: row.user.description.trim(),
@@ -58,6 +63,7 @@ export function mentionables(
         : {
             kind: "agent" as const,
             id: row.agent!.id,
+            memberId: row.id,
             handle: row.agent!.name,
             label: row.agent!.displayName?.trim() || row.agent!.name,
             description: row.agent!.description.trim(),
