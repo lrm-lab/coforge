@@ -6,5 +6,8 @@ const environment =
   provider === "claude-code" ? { ...Bun.env, PATH: Bun.env.AUTH_FIXTURE_DISCOVERY_PATH } : Bun.env;
 const status = await createRuntimeAuthAdapter(provider, {
   environment,
+  // The fixture owns every executable it tests; avoid adding the host machine's platform search
+  // directories, which could select a real provider installed outside the fixture HOME.
+  platform: "linux",
 }).readStatus({ workingDirectory: process.cwd() });
 console.log(JSON.stringify(status));
