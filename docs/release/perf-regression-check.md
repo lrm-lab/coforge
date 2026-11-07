@@ -30,6 +30,13 @@ a 30+ minute observation window must not occupy the deploy workflows'
 `environment:` so the deploy SSH identity resolves exactly as it does inside
 the deploy jobs. The report annotates that run, not the deploy run.
 
+The same workflow accepts `workflow_dispatch` with an `environment` choice
+(staging or production) and an optional `wait_minutes` (default `0`): run it
+by hand to re-check a deploy whose automatic run failed, or to re-judge
+thresholds against windows that already elapsed. A manual run reads
+`state.env`'s current digests, so it describes the latest deploy — dispatch
+it before the next one lands.
+
 ## Thresholds
 
 A function is judged only with ≥30 calls in **both** windows. It regresses when

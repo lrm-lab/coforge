@@ -5,6 +5,9 @@ name: Post-deploy performance check
 # 5xx rates across the image boundary (docs/release/perf-regression-check.md).
 # A workflow_run trigger keeps the check out of the deploy run's concurrency
 # group: a 30+ minute observation window must not queue the next deploy.
+# workflow_dispatch re-runs the same check by hand — for a deploy whose
+# automatic run failed or for re-checking thresholds; wait_minutes defaults
+# to 0 because a manual run normally inspects an already-elapsed window.
 # Regressions annotate this run and land in the job summary; rollback stays a
 # printed command for a human.
 
@@ -12,32 +15,68 @@ on:
   workflow_run:
     workflows: ["Deploy Web (staging)", "Deploy Web (production)"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment to check
+        type: choice
+        options: [staging, production]
+        required: true
+      wait_minutes:
+        description: Minutes to wait before reading the new window (0 = already elapsed)
+        type: string
+        default: "0"
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: perf-check-${{ github.event.workflow_run.name }}
+  group: perf-check-${{ github.event_name }}-${{ inputs.environment || github.event.workflow_run.name }}
   cancel-in-progress: false
 
 jobs:
   check:
     name: Post-deploy performance check
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    environment: ${{ github.event.workflow_run.name == 'Deploy Web (staging)' && 'staging' || 'production' }}
+    environment: ${{ inputs.environment || (github.event.workflow_run.name == 'Deploy Web (staging)' && 'staging' || 'production') }}
     timeout-minutes: 60
     env:
       DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
       DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
-      PERF_ENV: ${{ github.event.workflow_run.name == 'Deploy Web (staging)' && 'staging' || 'production' }}
-      REMOTE_ROOT: ${{ github.event.workflow_run.name == 'Deploy Web (staging)' && '/home/deploy/coforge-staging' || '/home/deploy/coforge-production' }}
-      PROJECT: ${{ github.event.workflow_run.name == 'Deploy Web (staging)' && 'coforge-staging' || 'coforge-production' }}
     steps:
+      - name: Resolve the deployment under check
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_WAIT_MINUTES: ${{ inputs.wait_minutes }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+        run: |
+          set -euo pipefail
+          env_name="${INPUT_ENVIRONMENT:-}"
+          if [ -z "$env_name" ]; then
+            case "$RUN_NAME" in
+              "Deploy Web (staging)") env_name=staging ;;
+              "Deploy Web (production)") env_name=production ;;
+              *) echo "unhandled deploy workflow: $RUN_NAME" >&2; exit 1 ;;
+            esac
+          fi
+          case "$env_name" in
+            staging) remote_root=/home/deploy/coforge-staging; project=coforge-staging ;;
+            production) remote_root=/home/deploy/coforge-production; project=coforge-production ;;
+            *) echo "bad environment: $env_name" >&2; exit 1 ;;
+          esac
+          {
+            echo "PERF_ENV=$env_name"
+            echo "REMOTE_ROOT=$remote_root"
+            echo "PROJECT=$project"
+            echo "WAIT_MINUTES=${INPUT_WAIT_MINUTES:-30}"
+          } >> "$GITHUB_ENV"
+
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up mise
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
@@ -71,6 +110,7 @@ jobs:
             --known-hosts "$SSH_DIR/known_hosts" \
             --remote-root "$REMOTE_ROOT" \
             --project "$PROJECT" \
+            --wait-minutes "$WAIT_MINUTES" \
             --report-file "$RUNNER_TEMP/perf-report.md"
 
       - name: Append the report to the job summary

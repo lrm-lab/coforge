@@ -204,23 +204,33 @@ test("a push to main starts no deployment or publication", async () => {
     const scheduled = ["cdn-certificates.yml", "web-integration.yml", "web-e2e.yml"].includes(file);
     // release-installer-build.yml is callable only: it has no trigger of its own.
     const callableOnly = file === "release-installer-build.yml";
-    // perf-check.yml observes deploy completions; it deploys and publishes nothing itself.
+    // perf-check.yml observes deploy completions and can be re-run by hand;
+    // it deploys and publishes nothing itself.
     const postDeployCheck = file === "perf-check.yml";
     const expected = callableOnly
       ? []
       : scheduled
         ? ["schedule", "workflow_dispatch"]
         : postDeployCheck
-          ? ["workflow_run"]
+          ? ["workflow_run", "workflow_dispatch"]
           : ["workflow_dispatch"];
     expect(triggers, file).toEqual(expected);
     if (postDeployCheck) {
-      const run = workflow.on.workflow_run;
+      const on = workflow.on;
+      const run = on.workflow_run;
       expect([...(run.workflows ?? [])].sort(), file).toEqual([
         "Deploy Web (production)",
         "Deploy Web (staging)",
       ]);
       expect(run.types, file).toEqual(["completed"]);
+      // A manual run names the environment and may skip the settle wait.
+      const dispatch = on.workflow_dispatch.inputs;
+      expect(dispatch.environment.type, file).toBe("choice");
+      expect([...(dispatch.environment.options ?? [])].sort(), file).toEqual([
+        "production",
+        "staging",
+      ]);
+      expect(dispatch.wait_minutes.type, file).toBe("string");
     }
   }
 });
