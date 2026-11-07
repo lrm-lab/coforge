@@ -194,30 +194,36 @@ for (const width of [1440, 390]) {
         // the resize does (the order Frank's phone left the last reply row cut off in). Emulated in
         // one task, after the open's scrolls: grow the last preview (a style, not DOM React owns)
         // and move the position by part of the growth.
+        // `open url --init-script file` leaves the tab on about:blank under the Linux runner's
+        // Chrome; the flag has to precede the command, the way e2e-notification-settings does.
         const lateRows = join(artifacts, "late-thread-rows.js");
-        if (thread)
+        if (thread) {
           await Bun.write(
             lateRows,
-            `const scrollTo = Element.prototype.scrollTo;
-let armed = false;
-Element.prototype.scrollTo = function (...args) {
-  scrollTo.apply(this, args);
-  if (armed || !this.matches('[aria-label="Message history" i]')) return;
-  armed = true;
-  setTimeout(() => {
-    const preview = [...this.querySelectorAll("[data-thread-preview]")].at(-1);
-    if (!preview) return;
-    preview.style.paddingBottom = "136px";
-    this.scrollTop += 60;
-    window.__rowsFilledIn = true;
-  }, 400);
-};`,
+            // Registrations persist for the session, so a later thread test re-runs this on a
+            // page the first one already patched; the flag keeps one wrapper per document.
+            `if (!Element.prototype.scrollTo.__entryLateRows) {
+  const scrollTo = Element.prototype.scrollTo;
+  let armed = false;
+  const wrapper = function (...args) {
+    scrollTo.apply(this, args);
+    if (armed || !this.matches('[aria-label="Message history" i]')) return;
+    armed = true;
+    setTimeout(() => {
+      const preview = [...this.querySelectorAll("[data-thread-preview]")].at(-1);
+      if (!preview) return;
+      preview.style.paddingBottom = "136px";
+      this.scrollTop += 60;
+      window.__rowsFilledIn = true;
+    }, 400);
+  };
+  wrapper.__entryLateRows = true;
+  Element.prototype.scrollTo = wrapper;
+}`,
           );
-        await browser(
-          "open",
-          `${proxy.origin}/en/w/${workspaceSlug}/channel/${channel.id}`,
-          ...(thread ? ["--init-script", lateRows] : []),
-        );
+          await browser("--init-script", lateRows, "eval", "true");
+        }
+        await browser("open", `${proxy.origin}/en/w/${workspaceSlug}/channel/${channel.id}`);
         await browser(
           "wait",
           "--fn",
