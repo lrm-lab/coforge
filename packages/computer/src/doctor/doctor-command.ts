@@ -105,10 +105,27 @@ function checkSupervisor(status: ComputerStatusReport): DoctorCheck {
       detail: `local RPC is unreachable: ${status.supervisor.rpc.error}`,
     };
   }
-  if (!status.supervisor.loaded) {
-    return { name: "supervisor", ok: false, detail: "supervisor job is not loaded" };
+  // A Coordinator nobody registered with the platform manager is a way to run this Computer, not
+  // a fault: the detached process a Linux machine without systemd starts, a container's
+  // `foreground`, or someone's own supervisor (task #696, from the #417 acceptance). The detached
+  // process reports itself loaded — it is, from its own pid file's point of view — so it is named
+  // first, and saying what it will not survive is more use than "local RPC is reachable".
+  if (status.supervisor.detached) {
+    return {
+      name: "supervisor",
+      ok: true,
+      detail:
+        "running as the Computer's own detached process; no systemd on this machine, so it does not come back after a reboot",
+    };
   }
-  return { name: "supervisor", ok: true, detail: "local RPC is reachable" };
+  if (status.supervisor.loaded) {
+    return { name: "supervisor", ok: true, detail: "local RPC is reachable" };
+  }
+  return {
+    name: "supervisor",
+    ok: true,
+    detail: "running outside the platform service manager (an external supervisor or foreground)",
+  };
 }
 
 function checkLocks(status: ComputerStatusReport): DoctorCheck {
@@ -127,11 +144,16 @@ function checkLocks(status: ComputerStatusReport): DoctorCheck {
       detail: "machine mutation lock could not be inspected",
     };
   }
-  if (!status.supervisor.loaded && status.locks.supervisorLock.present) {
+  // A lock nobody holds is the state worth reporting: the platform manager does not run a
+  // Coordinator and none answers either, so the lock belongs to a process that is gone. A
+  // Coordinator that does answer owns its lock whatever started it (task #696).
+  const coordinatorRuns =
+    status.supervisor.loaded || status.supervisor.rpc.reachable || status.supervisor.detached;
+  if (!coordinatorRuns && status.locks.supervisorLock.present) {
     return {
       name: "locks",
       ok: false,
-      detail: `supervisor lock is held by pid ${status.locks.supervisorLock.ownerPid ?? "unknown"}, but the supervisor job is not loaded`,
+      detail: `supervisor lock is held by pid ${status.locks.supervisorLock.ownerPid ?? "unknown"}, but no CoForge Daemon is running`,
     };
   }
   return {

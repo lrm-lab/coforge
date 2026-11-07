@@ -173,6 +173,63 @@ test("doctor fails when the active install is not discoverable on PATH", () => {
   });
 });
 
+test("doctor accepts the detached Coordinator a machine without systemd runs", () => {
+  // Task #696, from the #417 acceptance: a Linux machine with no systemd runs the Coordinator as
+  // this Computer's own process. It is up and answering, which is what the check is for; its pid
+  // file makes the status report call it loaded, as production does.
+  const report = createDoctorReport({
+    ...HEALTHY_REPORT,
+    platform: "linux",
+    supervisor: { ...HEALTHY_REPORT.supervisor, loaded: true, pid: 4821, detached: true },
+  });
+
+  expect(report.ok).toBe(true);
+  expect(report.checks[1]).toEqual({
+    name: "supervisor",
+    ok: true,
+    detail:
+      "running as the Computer's own detached process; no systemd on this machine, so it does not come back after a reboot",
+  });
+  expect(report.checks[2]).toEqual({
+    name: "locks",
+    ok: true,
+    detail: "machine mutation lock free; supervisor lock held by pid 4821",
+  });
+});
+
+test("doctor accepts a Coordinator an external supervisor runs", () => {
+  // A container's `foreground` process, or a person's own supervisor: RPC answers, no service of
+  // ours is loaded, and nothing about that is a fault to fix.
+  const report = createDoctorReport({
+    ...HEALTHY_REPORT,
+    platform: "linux",
+    supervisor: { ...HEALTHY_REPORT.supervisor, loaded: false, pid: 4821 },
+  });
+
+  expect(report.ok).toBe(true);
+  expect(report.checks[1]).toEqual({
+    name: "supervisor",
+    ok: true,
+    detail: "running outside the platform service manager (an external supervisor or foreground)",
+  });
+});
+
+test("doctor still reports a loaded service whose RPC does not answer", () => {
+  const report = createDoctorReport({
+    ...HEALTHY_REPORT,
+    supervisor: {
+      ...HEALTHY_REPORT.supervisor,
+      rpc: { reachable: false, error: "connect ENOENT daemon.sock" },
+    },
+  });
+
+  expect(report.checks[1]).toEqual({
+    name: "supervisor",
+    ok: false,
+    detail: "local RPC is unreachable: connect ENOENT daemon.sock",
+  });
+});
+
 test("doctor renders stable JSON and concise human output", async () => {
   const stdout: string[] = [];
   const command = createDoctorCommand(
