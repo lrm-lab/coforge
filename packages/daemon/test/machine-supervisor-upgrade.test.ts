@@ -222,3 +222,146 @@ test("operation history stays capped at the audit tail", async () => {
   expect(operations()?.at(-1)?.requestId).toBe("newest");
   expect(operations()?.some((entry) => entry.requestId === "old-0")).toBe(false);
 });
+
+function machineUpgradeFixture(
+  workspaceIds: string[],
+  settlePendingUpgrade?: PendingUpgradeSettler,
+) {
+  const state = {
+    saved: workspaceIds.map(
+      (workspaceId): ManagedBinding => ({
+        workspaceId,
+        computerId: "c",
+        workspaceRoot: `/${workspaceId}`,
+        enabled: true,
+      }),
+    ),
+  };
+  const supervisor = new MachineSupervisor(
+    {
+      load: async () => structuredClone(state.saved),
+      save: async (next) => {
+        state.saved = structuredClone(next);
+      },
+    },
+    { start: async () => "a", stop: async () => {}, instance: async () => "a" },
+    () => NOW,
+    {},
+    settlePendingUpgrade,
+  );
+  return {
+    state,
+    supervisor,
+    operationsOf: (workspaceId: string) =>
+      state.saved.find((entry) => entry.workspaceId === workspaceId)?.upgradeOperations,
+  };
+}
+
+test("an upgrade records on every binding and a pending one on any binding refuses the next request", async () => {
+  const { supervisor, operationsOf } = machineUpgradeFixture(["a", "b"]);
+  await supervisor.recover();
+
+  // Admission is machine-wide: any binding's requestId opens the one pending slot and the
+  // record fans out onto every binding (the CLI's daemon:computer_upgrade admits through the
+  // same recordUpgrade entry point).
+  expect(await supervisor.recordUpgrade("a", "request-a", "1.2.3")).toBe(true);
+  for (const workspaceId of ["a", "b"])
+    expect(operationsOf(workspaceId)).toEqual([
+      {
+        requestId: "request-a",
+        expectedVersion: "1.2.3",
+        state: "pending",
+        requestedAt: NOW,
+      },
+    ]);
+
+  // The same request replayed through either binding is not a second launch.
+  expect(await supervisor.recordUpgrade("a", "request-a", "1.2.3")).toBe(false);
+  expect(await supervisor.recordUpgrade("b", "request-a", "1.2.3")).toBe(false);
+  await expect(supervisor.recordUpgrade("a", "request-a", "9.9.9")).rejects.toThrow(
+    "different expected version",
+  );
+  // A pending operation on binding "a"'s copy blocks a request scoped to "b" too: the upgrade
+  // mutates the whole machine, so the pending slot is machine-wide.
+  await expect(supervisor.recordUpgrade("b", "request-b", "1.2.4")).rejects.toThrow(
+    "request-a is still pending",
+  );
+});
+
+test("a settle-able pending operation settles on every binding before the next request is admitted", async () => {
+  const settleCalls: [string, string, number][] = [];
+  const { supervisor, operationsOf } = machineUpgradeFixture(["a", "b"], async (w, r, at) => {
+    settleCalls.push([w, r, at]);
+    return { status: "succeeded", version: "1.2.3", at: NOW };
+  });
+  await supervisor.recover();
+  await supervisor.recordUpgrade("a", "request-a", "1.2.3");
+
+  expect(await supervisor.recordUpgrade("b", "request-b", "1.2.4")).toBe(true);
+  // The settle check runs once per pending operation, not once per binding copy.
+  expect(settleCalls).toEqual([["a", "request-a", NOW]]);
+  for (const workspaceId of ["a", "b"]) {
+    const settled = operationsOf(workspaceId)?.find((entry) => entry.requestId === "request-a");
+    expect(settled).toMatchObject({
+      state: "succeeded",
+      terminal: { version: "1.2.3", at: NOW },
+    });
+    expect(
+      operationsOf(workspaceId)?.find((entry) => entry.requestId === "request-b"),
+    ).toMatchObject({ state: "pending" });
+  }
+});
+
+test("completing a request on every binding settles each copy once and a second pass is a no-op", async () => {
+  const { supervisor, operationsOf } = machineUpgradeFixture(["a", "b", "c"]);
+  await supervisor.recover();
+  await supervisor.recordUpgrade("a", "request-a", "1.2.3");
+
+  const terminal = {
+    status: "failed" as const,
+    at: NOW + 1,
+    error: "installer refused",
+    errorCode: "UPGRADE_LAUNCH_FAILED",
+  };
+  // The receipt is request-keyed: one delivery resolves every copy (the Coordinator's machine
+  // completion calls completeUpgrade once per carrier binding).
+  for (const workspaceId of ["a", "b", "c"])
+    expect(await supervisor.completeUpgrade(workspaceId, "request-a", terminal)).toBe(true);
+  for (const workspaceId of ["a", "b", "c"])
+    expect(operationsOf(workspaceId)?.[0]).toMatchObject({
+      requestId: "request-a",
+      state: "failed",
+      terminal: { error: "installer refused", errorCode: "UPGRADE_LAUNCH_FAILED", at: NOW + 1 },
+    });
+  // A second settle of the same request is a no-op on every copy.
+  for (const workspaceId of ["a", "b", "c"])
+    expect(
+      await supervisor.completeUpgrade(workspaceId, "request-a", {
+        status: "succeeded",
+        at: 2,
+      }),
+    ).toBe(false);
+  expect(await supervisor.recordUpgrade("a", "request-b", "1.2.4")).toBe(true);
+});
+
+test("a binding added while an upgrade is pending is still protected by the machine-wide scan", async () => {
+  const { state, supervisor, operationsOf } = machineUpgradeFixture(["a"]);
+  await supervisor.recover();
+  await supervisor.recordUpgrade("a", "request-a", "1.2.3");
+
+  // A configure adds binding "b" mid-upgrade: its own recordUpgrade must see "a"'s pending copy.
+  state.saved.push({
+    workspaceId: "b",
+    computerId: "c",
+    workspaceRoot: "/b",
+    enabled: true,
+  });
+  await supervisor.recover();
+
+  await expect(supervisor.recordUpgrade("b", "request-b", "1.2.4")).rejects.toThrow(
+    "request-a is still pending",
+  );
+  // The pending record was never written to "b" (it did not exist at admission), and the
+  // refusal did not fan a copy out either.
+  expect(operationsOf("b")).toBeUndefined();
+});
