@@ -1,6 +1,5 @@
 import { getLogger } from "@logtape/logtape";
 import {
-  RUNNER_HOLD_REASONS,
   type DaemonConnectRejectionReason,
   type RunnerHoldReason,
   thrownMessage,
@@ -8,7 +7,7 @@ import {
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
-import { answeredWithin, holdRunnersUntilQuiescent, type RunnerHoldSnapshot } from "./runner-hold";
+import { answeredWithin, type RunnerHoldSnapshot } from "./runner-hold";
 import { WorkspaceParkedError } from "./workspace-health-journal";
 import { WorkspaceLifecycleSupersededError } from "./lifecycle-superseded-error";
 import { SerialQueue } from "./serial-queue";
@@ -75,6 +74,10 @@ import {
   releaseStopIntent,
   type MachineStopIntentContext,
 } from "./machine-supervisor-stop-intents";
+import {
+  advanceWorkspaceRestart,
+  type MachineRestartContext,
+} from "./machine-supervisor-restart";
 import {
   type LifecycleFailure,
   type PendingUpgradeSettler,
@@ -564,78 +567,7 @@ export class MachineSupervisor {
   }
 
   async #advanceRestart(binding: ManagedBinding, signal?: AbortSignal): Promise<void> {
-    const restart = binding.restart!;
-    if (restart.phase === "stopping") {
-      const current = await this.processes.instance(binding);
-      // The same stable OS unit may already have replaced its failed invocation.
-      // start below still validates the replacement through its scoped handshake.
-      if (current === null || current === restart.previousInstanceId) {
-        // Only a live instance is worth holding; a dead one has no Agents left to drain.
-        if (current !== null) await this.#holdRunners(binding, signal);
-        // A stop or configure took over while the Agents drained: it stops the daemon itself.
-        signal?.throwIfAborted();
-        try {
-          await this.#stop(binding);
-        } catch (error) {
-          // The daemon we meant to kill is still up and still held: lift the hold before
-          // surfacing the failure, or its Agents would queue turns until someone retries.
-          if (current !== null)
-            await this.processes
-              .release?.(binding, RUNNER_HOLD_REASONS.WORKSPACE_RESTART)
-              .catch(() => {});
-          throw error;
-        }
-      }
-      binding = await this.#saveBinding({ ...binding, restart: { ...restart, phase: "starting" } });
-    }
-    const instanceId = await this.#start(binding, signal);
-    if (instanceId === restart.previousInstanceId)
-      throw new Error("Workspace restart did not replace the old instance");
-    await this.#saveBinding({
-      ...binding,
-      restart: undefined,
-      restartResults: appendRestartResult(binding, {
-        requestId: restart.requestId,
-        status: "completed",
-        instanceId,
-      }),
-    });
-  }
-  /**
-   * Bounded runner hold before a restart stops a live Workspace daemon. Without it
-   * `#stop` hands the Agents the ~2s SIGTERM/SIGKILL ladder in `DaemonRuntime.stop()`, which is
-   * not enough for a tool call. Only `restart` holds: `stop` is an operator saying "now".
-   *
-   * Nothing releases the hold afterwards, and nothing needs to. It is in-memory in the Workspace
-   * daemon and `#stop` kills that process; the replacement is born without a hold
-   * (the hold is never persisted). The one exception is a stop that fails: the daemon survives
-   * held, so `#advanceRestart` releases it before rethrowing; a later retry re-asks, which is
-   * idempotent.
-   *
-   * The wait runs inside the serialized mutation, so other lifecycle commands queue behind it for
-   * up to `RUNNER_HOLD_MS`. That is accepted: a restart that raced ahead of the drain would defeat the point. An
-   * operator restart keeps the full bound too: its answer is bounded by its deadline
-   * (`#answerBy`), not by cutting the drain short for Agents mid tool call.
-   *
-   * Every failure resolves towards proceeding: `holdRunnersUntilQuiescent` reports quiescent when
-   * the hold cannot be asked at all, and a Workspace that answers `accepted: false` or times out
-   * is counted as idle. A restart is never failed because of the hold.
-   */
-  async #holdRunners(binding: ManagedBinding, signal?: AbortSignal): Promise<void> {
-    if (!this.processes.hold) return;
-    const outcome = await holdRunnersUntilQuiescent({
-      hold: () => this.processes.hold!(binding, RUNNER_HOLD_REASONS.WORKSPACE_RESTART),
-      ...this.restartHold,
-      ...(signal ? { signal } : {}),
-    });
-    logger.info("Runner hold completed before a Workspace restart", {
-      event: outcome.quiescent ? "restart:runner_hold_quiescent" : "restart:runner_hold_expired",
-      workspace_id: binding.workspaceId,
-      quiescent: outcome.quiescent,
-      elapsed_ms: outcome.elapsedMs,
-      busy_agent_count: outcome.busyAgents.length,
-      unreachable_workspace_ids: outcome.unreachableWorkspaceIds,
-    });
+    return advanceWorkspaceRestart(this.#restartOps, binding, signal);
   }
   async #saveBinding(binding: ManagedBinding): Promise<ManagedBinding> {
     // A Workspace a stop already persisted stays stopped, whatever older work saves meanwhile.
@@ -719,6 +651,17 @@ export class MachineSupervisor {
       saveBinding: (binding) => this.#saveBinding(binding),
       settlePendingUpgrade: this.settlePendingUpgrade,
       now: this.now,
+    };
+  }
+
+  /** The restart progression's view of this Coordinator's process and store-write path. */
+  get #restartOps(): MachineRestartContext {
+    return {
+      processes: this.processes,
+      restartHold: this.restartHold,
+      stop: (binding) => this.#stop(binding),
+      start: (binding, signal) => this.#start(binding, signal),
+      saveBinding: (binding) => this.#saveBinding(binding),
     };
   }
 
