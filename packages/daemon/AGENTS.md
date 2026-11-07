@@ -122,6 +122,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/credentials/`                       | Daemon credential store and Agent API keys                                                                                                                 |
 | `src/persistence/`                       | Durable local daemon state and configuration validation                                                                                                    |
 | `src/platform/`                          | OS primitives: process trees, launchd jobs, Job Objects, locks, log files, OS release                                                                      |
+| `src/platform/oom-score.ts`              | Best-effort Linux OOM score adjustment for Agent runtime children                                                                                          |
 | `src/local-rpc.ts`                       | Computer↔Daemon local socket server, framing, validation, and dispatch                                                                                     |
 | `src/agent-proxy.ts`                     | Local Agent capability boundary and approved HTTPS forwarding                                                                                              |
 | `src/agent-proxy-domain-failures.ts`     | The domain errors the Agent proxy answers                                                                                                                  |

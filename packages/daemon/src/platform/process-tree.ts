@@ -16,6 +16,7 @@ export {
   type ProcessTable,
 } from "./process-table";
 import { spawnRuntime } from "./runtime-executable-not-found";
+import { raiseRuntimeOomScore, type OomScoreDependencies } from "./oom-score";
 import {
   createWindowsJobObject,
   windowsJobObjectsAvailable,
@@ -28,6 +29,8 @@ export type ProcessTreeOwnerOptions = {
   createJobObject?: WindowsJobObjectFactory;
   /** Test seam for the process table used by turn-scoped cleanup. */
   processTable?: ProcessTable;
+  /** Test seam for the Linux OOM score adjustment; production uses /proc. */
+  oomScore?: Omit<OomScoreDependencies, "platform">;
 };
 
 const emptyKillReport = (): OwnedProcessTreeKillReport => ({ killed: [], leftAlone: [] });
@@ -58,22 +61,27 @@ export class ProcessTreeOwner implements ProcessTreeSpawner {
     environment: Readonly<Record<string, string>>,
     options?: ProcessTreeSpawnOptions,
   ): OwnedProcessTree {
-    if (this.platform === "win32") return this.#spawnWindows(command, cwd, environment, options);
-    if (this.platform === "darwin" && Bun.env.COFORGE_WORKSPACE_AGENT_PREFIX) {
+    let tree: OwnedProcessTree;
+    if (this.platform === "win32") tree = this.#spawnWindows(command, cwd, environment, options);
+    else if (this.platform === "darwin" && Bun.env.COFORGE_WORKSPACE_AGENT_PREFIX) {
       const directory = Bun.env.COFORGE_WORKSPACE_JOB_DIRECTORY;
       if (!directory) throw new Error("Workspace Agent job directory is missing");
-      return new LaunchdProcessOwner({
+      tree = new LaunchdProcessOwner({
         directory,
         prefix: Bun.env.COFORGE_WORKSPACE_AGENT_PREFIX,
         runner: [process.execPath, "__managed-agent"],
       }).spawn(command, cwd, environment, options);
+    } else {
+      tree = new PosixProcessOwner(this.platform, this.options).spawn(
+        command,
+        cwd,
+        environment,
+        options,
+      );
     }
-    return new PosixProcessOwner(this.platform, this.options).spawn(
-      command,
-      cwd,
-      environment,
-      options,
-    );
+    // Linux may not expose /proc (or may reject writes); this is best effort and never blocks launch.
+    raiseRuntimeOomScore(tree.child.pid, { platform: this.platform, ...this.options.oomScore });
+    return tree;
   }
 
   #spawnWindows(

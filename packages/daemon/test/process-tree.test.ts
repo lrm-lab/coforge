@@ -65,6 +65,23 @@ test("a missing working directory stays a plain ENOENT, not a missing runtime", 
   expect(thrown).not.toBeInstanceOf(RuntimeExecutableNotFoundError);
 });
 
+test("a Linux OOM score write failure never prevents Agent spawn", async () => {
+  const owner = new ProcessTreeOwner("linux", undefined, {
+    oomScore: {
+      read: () => {
+        throw new Error("proc unavailable");
+      },
+      write: () => {
+        throw new Error("proc read-only");
+      },
+    },
+  });
+  const tree = owner.spawn([process.execPath, "-e", "process.exit(0)"], tmpdir(), {
+    PATH: process.env.PATH ?? "",
+  });
+  expect(await tree.child.exited).toBe(0);
+});
+
 test("Windows launch fails closed when Job Object creation is unavailable", () => {
   const owner = new ProcessTreeOwner("win32", undefined, {
     createJobObject: () => {
