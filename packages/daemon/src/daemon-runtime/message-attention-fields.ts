@@ -4,6 +4,7 @@ import {
   isTaskConversationTarget,
   threadParentTarget,
   type AgentMessageDelivery,
+  type AgentRecoveryMessage,
 } from "@lrm/coforge-sdk/internal";
 import type { MessageAttention } from "./agent-message-attention-index";
 
@@ -67,4 +68,26 @@ export function latestCreatedAtField(
 ): Pick<MessageAttention, "latestCreatedAtMs"> {
   const latest = Math.max(previous?.latestCreatedAtMs ?? 0, createdAtMs ?? 0);
   return latest > 0 ? { latestCreatedAtMs: latest } : {};
+}
+
+/** Folds one adopted recovery message into its target's pending attention: the count, the
+ * sequence bounds, the newest sender and the target flags all advance together. */
+export function foldMessageAttention(
+  byTarget: Map<string, MessageAttention>,
+  message: AgentRecoveryMessage,
+): void {
+  const previous = byTarget.get(message.target);
+  byTarget.set(message.target, {
+    target: message.target,
+    pendingCount: (previous?.pendingCount ?? 0) + 1,
+    firstPendingSequence: Math.min(
+      previous?.firstPendingSequence ?? message.sequence,
+      message.sequence,
+    ),
+    latestSequence: Math.max(previous?.latestSequence ?? 0, message.sequence),
+    ...latestCreatedAtField(previous, message.createdAtMs),
+    latestSenderKind: message.latestSenderKind,
+    latestSenderHandle: message.latestSenderHandle,
+    flags: attentionFlags(message.target, message.nonMemberMention, previous),
+  });
 }

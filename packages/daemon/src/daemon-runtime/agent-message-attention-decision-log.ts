@@ -1,12 +1,23 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { isTrackedMention } from "./mention-delivery-tracker";
 import { containsSorted } from "./agent-message-attention-index-helpers";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 
 /** What the daemon decided for one delivery (`agent.message.attention_decision`). */
 export type AttentionDecisionOutcome = "notified" | "held" | "consumed" | "already_notified";
+
+/** The identity fields one decision needs: a live delivery carries them all, a recovery
+ * message gains `workspaceId`/`agentId` from its caller. */
+export type AttentionDecisionMessage = {
+  workspaceId: string;
+  agentId: string;
+  deliveryId: string;
+  messageId: string;
+  target?: string;
+  sequence: number;
+  mentionDelivery?: AgentMessageDelivery["mentionDelivery"];
+};
 
 /**
  * Logs what the daemon decided for one delivery: whether it notified the Agent's session now,
@@ -15,7 +26,7 @@ export type AttentionDecisionOutcome = "notified" | "held" | "consumed" | "alrea
  * because `agent.message.delivery_indexed` is written after the decision either way.
  */
 export function logAttentionDecision(
-  message: AgentMessageDelivery,
+  message: AttentionDecisionMessage,
   outcome: AttentionDecisionOutcome,
   modelSeenSeq: number,
   exactSeqs: readonly number[] | undefined,
@@ -28,7 +39,7 @@ export function logAttentionDecision(
     message_id: message.messageId,
     target: message.target ?? "",
     sequence: message.sequence,
-    tracked_mention: isTrackedMention(message),
+    tracked_mention: message.mentionDelivery !== undefined,
     outcome,
     model_seen_seq: modelSeenSeq,
     exact_seen: containsSorted(exactSeqs, message.sequence),

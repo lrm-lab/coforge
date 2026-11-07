@@ -21,6 +21,7 @@ import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manag
 
 import {
   attentionFlags,
+  foldMessageAttention,
   hasDeliveryScope,
   isDeliveryTarget,
   latestCreatedAtField,
@@ -41,6 +42,7 @@ import { groupMemoryRecovery } from "./memory-recovery-groups";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
 import {
   logAttentionDecision,
+  type AttentionDecisionMessage,
   type AttentionDecisionOutcome,
 } from "./agent-message-attention-decision-log";
 import { recoveryWakeupText } from "./agent-recovery-notice";
@@ -278,8 +280,8 @@ export class AgentMessageAttentionIndex {
     return this.#generations.get(message.agentId) === generation ? "told" : "gone";
   }
 
-  /** What the daemon decided for one delivery: `agent-message-attention-decision-log.ts`. */
-  logDecision(message: AgentMessageDelivery, outcome: AttentionDecisionOutcome): void {
+  /** What the daemon decided for one message: `agent-message-attention-decision-log.ts`. */
+  logDecision(message: AttentionDecisionMessage, outcome: AttentionDecisionOutcome): void {
     const target = message.target ?? "";
     logAttentionDecision(
       message,
@@ -430,6 +432,8 @@ export class AgentMessageAttentionIndex {
     const recoveredTargets = new Set<string>();
     const suppliedTargets = new Set<string>();
     const recoveredMessages: AgentRecoveryMessage[] = [];
+    const decide = (message: AgentRecoveryMessage, outcome: AttentionDecisionOutcome) =>
+      this.logDecision({ ...message, workspaceId: this.#workspaceId, agentId }, outcome);
     for (const message of [...messages].sort(
       (left, right) =>
         left.conversationId.localeCompare(right.conversationId) || left.sequence - right.sequence,
@@ -446,29 +450,20 @@ export class AgentMessageAttentionIndex {
         throw new Error("invalid Agent recovery message");
       suppliedTargets.add(message.target);
       if (this.#alreadyRead(agentId, message)) {
+        decide(message, "consumed");
         continue;
       }
       if (
         generation.seenDeliveryIds.has(message.deliveryId) ||
         generation.seenMessageIds.has(message.messageId)
-      )
+      ) {
+        decide(message, "already_notified");
         continue;
+      }
       recoveredMessages.push(message);
       recoveredTargets.add(message.target);
-      const previous = byTarget.get(message.target);
-      byTarget.set(message.target, {
-        target: message.target,
-        pendingCount: (previous?.pendingCount ?? 0) + 1,
-        firstPendingSequence: Math.min(
-          previous?.firstPendingSequence ?? message.sequence,
-          message.sequence,
-        ),
-        latestSequence: Math.max(previous?.latestSequence ?? 0, message.sequence),
-        ...latestCreatedAtField(previous, message.createdAtMs),
-        latestSenderKind: message.latestSenderKind,
-        latestSenderHandle: message.latestSenderHandle,
-        flags: attentionFlags(message.target, message.nonMemberMention, previous),
-      });
+      decide(message, "notified");
+      foldMessageAttention(byTarget, message);
     }
     const summaryOnly = Object.entries(unreadSummary).filter(
       ([target, count]) => !suppliedTargets.has(target) && isDeliveryTarget(target) && count > 0,
