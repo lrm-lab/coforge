@@ -1,6 +1,7 @@
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
-import { activitySentenceLabel, agentDisplay, isBusyTone } from "./agent-activity-presentation";
+import { activitySentenceLabel, isBusyTone } from "./agent-activity-presentation";
+import { agentDisplay } from "./agent-status-display";
 import { agentMascot, type AgentMascot } from "./agent-mascot";
 import { mascotActivity } from "./mascot-activity";
 import type { MascotActivity } from "./mascot-rive-contract";

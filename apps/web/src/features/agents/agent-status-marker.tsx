@@ -1,7 +1,7 @@
 import { AlertTriangle } from "@untitledui/icons";
 
 import { StatusDot } from "#src/components/ui/status-dot";
-import type { agentDisplay } from "./agent-activity-presentation";
+import type { agentDisplay } from "./agent-status-display";
 
 /**
  * What sits before an Agent's status word (task #667): its dot, or, for a state someone has to

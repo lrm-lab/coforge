@@ -3,7 +3,7 @@ import { StatusDot } from "#src/components/ui/status-dot";
 import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
-import { agentDisplay } from "./agent-activity-presentation";
+import { agentDisplay } from "./agent-status-display";
 import type { AgentMascot } from "./agent-mascot";
 import { AgentMascotView } from "./agent-mascot-view";
 import { AvatarSticker } from "#src/features/avatars/avatar-sticker";

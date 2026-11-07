@@ -10,7 +10,7 @@ import type {
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
-import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { getAgentDisplay } from "./agent-display.server";
 import { parseAgentRuntimeConfig } from "./agent-runtime-config.server";
 import {

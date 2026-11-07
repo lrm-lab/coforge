@@ -12,7 +12,7 @@ import {
   useLiveAgent,
   usePrefetchAgentActivityFeed,
 } from "#src/features/agents/workspace-agents-realtime";
-import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentReminders } from "#src/features/agents/agent-reminders";
 import { useAgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";

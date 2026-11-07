@@ -1,4 +1,4 @@
-import type { agentDisplay } from "./agent-activity-presentation";
+import type { agentDisplay } from "./agent-status-display";
 import type { MascotActivity } from "./mascot-rive-contract";
 
 /** What `agentDisplay` calls an Agent's state: the cloud's activity kinds, or `unknown` before any

@@ -3,7 +3,7 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { m } from "#src/paraglide/messages";
-import { agentDisplay } from "./agent-activity-presentation";
+import { agentDisplay } from "./agent-status-display";
 import { agentAvatarUrl } from "./agent-mascot";
 
 export type AvatarSize = NonNullable<AvatarProps["size"]>;

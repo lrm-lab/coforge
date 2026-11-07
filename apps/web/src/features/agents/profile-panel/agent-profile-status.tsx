@@ -9,7 +9,7 @@ import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { interruptAgentTurn } from "#src/features/agents/agent-turn-interrupt.functions";
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { m } from "#src/paraglide/messages";
-import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentErrorBanner } from "./agent-error-banner";
 
 type Outcome = Awaited<ReturnType<typeof interruptAgentTurn>>;

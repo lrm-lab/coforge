@@ -14,7 +14,7 @@ import {
   useAgentRuntimeControls,
   type AgentControlExecute,
 } from "#src/features/agents/agent-runtime-controls";
-import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentStatusMarker } from "#src/features/agents/agent-status-marker";
 import { cn } from "#src/lib/utils";
 import { DetailGroup } from "./computer-detail-rows";

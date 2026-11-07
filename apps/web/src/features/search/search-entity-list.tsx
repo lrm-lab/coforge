@@ -6,7 +6,7 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
-import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";

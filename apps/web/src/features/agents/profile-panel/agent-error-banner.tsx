@@ -4,7 +4,7 @@ import { Button } from "#src/components/base/buttons/button";
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { ACTIVITY_MARKER_CLASS, ActivityMarker } from "#src/features/agents/activity-marker";
 import { AgentStatusMarker } from "#src/features/agents/agent-status-marker";
-import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";

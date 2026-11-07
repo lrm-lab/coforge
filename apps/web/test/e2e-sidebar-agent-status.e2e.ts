@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
-import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { agentStatusChannel } from "#src/features/agents/agent-status-channel";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { PrismaClient } from "#src/generated/prisma/client";

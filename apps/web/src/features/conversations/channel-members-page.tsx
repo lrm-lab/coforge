@@ -12,7 +12,7 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
-import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentStatusLine } from "#src/features/agents/agent-status-marker";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";

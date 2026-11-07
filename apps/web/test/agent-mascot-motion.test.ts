@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { mascotActivity } from "#src/features/agents/mascot-activity";
-import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import {
   MASCOT_ACTIVITIES,
   MASCOT_RIVE,
