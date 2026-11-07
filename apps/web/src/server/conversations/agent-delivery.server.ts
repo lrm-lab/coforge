@@ -63,6 +63,19 @@ type PushEntry =
   | { publication?: never; refused: PromiseRejectedResult };
 
 /**
+ * The payload every committed `agentMessageDelivery` row is pushed with. `reason` is required —
+ * nullable, never optional — so the row's reason can never be dropped on the way to the wire: a
+ * card answer or expiry sent without it reads to the daemon as an ordinary already-seen message
+ * and is consumed with no notice (task #569).
+ */
+export function agentDeliveryPush(
+  input: Omit<AgentDeliveryPush, "reason"> & { reason: string | null },
+): AgentDeliveryPush {
+  const { reason, ...rest } = input;
+  return reason ? { ...rest, reason } : rest;
+}
+
+/**
  * Pushes committed deliveries to their Agents' daemons. The deliveries that personally mention
  * their Agent are issued as tracked mentions first, and a push to a running Agent carries its
  * envelope; a mention that could not be issued goes out untracked (`MentionDeliveryIssuer` logs

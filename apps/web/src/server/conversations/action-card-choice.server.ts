@@ -14,7 +14,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { fenceUserText } from "./agent-message-view.server";
 import { publishActionCardUpdate } from "./action-card-message.server";
-import { AgentDeliveryPublisher } from "./agent-delivery.server";
+import { AgentDeliveryPublisher, agentDeliveryPush } from "./agent-delivery.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
@@ -233,7 +233,7 @@ async function wakeAskingAgent(
       sequence: message.sequence,
       reason: "choice",
     },
-    select: { deliveryId: true, createdAt: true },
+    select: { deliveryId: true, createdAt: true, reason: true },
   });
   const targetOf = await directTargets(db, input.workspaceId, input.agentId, [
     message.conversation,
@@ -251,7 +251,7 @@ async function wakeAskingAgent(
   await new AgentDeliveryPublisher(publisher ?? createCentrifugoServerApi()).publish(
     input.workspaceId,
     [
-      {
+      agentDeliveryPush({
         computerId: agent?.computerId ?? null,
         requestId: input.messageId,
         conversationId: input.conversationId,
@@ -259,6 +259,7 @@ async function wakeAskingAgent(
         messageId: input.messageId,
         deliveryId: delivery.deliveryId,
         sequence: message.sequence,
+        reason: delivery.reason,
         createdAtMs: delivery.createdAt.getTime(),
         body: `${who} answered your choice "${input.prompt}" in ${target}: ${answered}`,
         mentions: [],
@@ -266,7 +267,7 @@ async function wakeAskingAgent(
         latestSenderKind: "system",
         latestSenderHandle: "",
         latestSenderDescription: "",
-      },
+      }),
     ],
   );
 }

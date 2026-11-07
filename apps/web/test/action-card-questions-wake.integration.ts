@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { commitQuestionsCard } from "#src/server/conversations/action-card-questions.server";
@@ -163,6 +164,11 @@ test("one submit answers every question, locks the card, and the Agent hears eac
   expect(decoded).toContain(`@quest-${suffix} answered your questions in #quest-${suffix}`);
   expect(decoded).toContain("Deploy where? → staging · Staging (recommended)");
   expect(decoded).toContain("Run which checks? → test · test, build · build");
+  // The wire carries the delivery row's reason: without it the daemon reads the answer as an
+  // ordinary already-seen message and never wakes the asking Agent (task #569).
+  expect(decodeAgentMessageDelivery((published[0] as { data: Uint8Array }).data).reason).toBe(
+    "choice",
+  );
 });
 
 test("the person's own answer on a question carries its text", async () => {

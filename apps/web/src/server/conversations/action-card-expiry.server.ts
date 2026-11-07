@@ -8,7 +8,7 @@ import {
   deliveryTarget,
 } from "#src/server/db/repositories/direct-conversation-agent-message.server";
 import { directTargets } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
-import { AgentDeliveryPublisher } from "./agent-delivery.server";
+import { AgentDeliveryPublisher, agentDeliveryPush } from "./agent-delivery.server";
 import { publishActionCardUpdate } from "./action-card-message.server";
 import { CentrifugoConversationRealtime } from "./conversation-realtime.server";
 
@@ -27,7 +27,11 @@ type ExpiredCard = {
  * only the one whose statement changed the row gets it back, so a card is announced exactly once.
  * A card read before the sweep still reads as expired (`effectiveActionCardState`).
  */
-export async function expireActionCards(db: PrismaClient, now: Date = new Date()): Promise<number> {
+export async function expireActionCards(
+  db: PrismaClient,
+  now: Date = new Date(),
+  ports?: { publisher?: AgentDeliveryPublisher },
+): Promise<number> {
   const expired = await db.$queryRaw<ExpiredCard[]>`
     UPDATE "action_cards"
     SET "state" = 'expired', "updatedAt" = now()
@@ -37,13 +41,12 @@ export async function expireActionCards(db: PrismaClient, now: Date = new Date()
   if (!expired.length) return 0;
   // A process without Centrifugo (a test, a maintenance run) still expires the rows.
   let realtime: CentrifugoConversationRealtime | undefined;
-  let publisher: AgentDeliveryPublisher | undefined;
+  let publisher = ports?.publisher;
   try {
     realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
-    publisher = new AgentDeliveryPublisher(createCentrifugoServerApi());
+    publisher ??= new AgentDeliveryPublisher(createCentrifugoServerApi());
   } catch {
     realtime = undefined;
-    publisher = undefined;
   }
   for (const card of expired) {
     if (realtime)
@@ -93,7 +96,7 @@ async function deliverExpired(
       sequence: message.sequence,
       reason: "expired",
     },
-    select: { deliveryId: true, createdAt: true },
+    select: { deliveryId: true, createdAt: true, reason: true },
   });
   const targetOf = await directTargets(db, card.workspaceId, card.preparedByAgentId, [
     message.conversation,
@@ -104,7 +107,7 @@ async function deliverExpired(
   );
   if (!publisher) return;
   await publisher.publish(card.workspaceId, [
-    {
+    agentDeliveryPush({
       computerId: agent?.computerId ?? null,
       requestId: card.messageId,
       conversationId: card.conversationId,
@@ -112,6 +115,7 @@ async function deliverExpired(
       messageId: card.messageId,
       deliveryId: delivery.deliveryId,
       sequence: message.sequence,
+      reason: delivery.reason,
       createdAtMs: delivery.createdAt.getTime(),
       body: `Your action card "${payload?.prompt ?? "a card"}" expired in ${target}: nobody answered it.`,
       mentions: [],
@@ -119,7 +123,7 @@ async function deliverExpired(
       latestSenderKind: "system",
       latestSenderHandle: "",
       latestSenderDescription: "",
-    },
+    }),
   ]);
 }
 

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import {
@@ -137,6 +138,11 @@ test("choosing an option wakes the asking Agent with the choice, and posts no me
   const decoded = new TextDecoder().decode(Uint8Array.from(Object.values(encoded)));
   const answer = `@choice-${suffix} answered your choice "Which color?" in #choice-${suffix}: a · Red`;
   expect(decoded).toContain(answer);
+  // The wire carries the delivery row's reason: without it the daemon reads the answer as an
+  // ordinary already-seen message and never wakes the asking Agent (task #569).
+  expect(decodeAgentMessageDelivery((published[0] as { data: Uint8Array }).data).reason).toBe(
+    "choice",
+  );
   const messages = await db.message.count({ where: { conversationId } });
   expect(messages).toBe(1);
   // The Agent was offline: the recovery replay carries the answer, not its own question, and

@@ -1,5 +1,8 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { AgentDeliveryPublisher } from "#src/server/conversations/agent-delivery.server";
+import {
+  AgentDeliveryPublisher,
+  agentDeliveryPush,
+} from "#src/server/conversations/agent-delivery.server";
 import { announceNotifiedPeople } from "#src/server/conversations/pending-mention-actions.server";
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import { agentMessageSender } from "#src/server/conversations/sender-display.server";
@@ -65,7 +68,7 @@ export function attachmentCommentNotices(
             const sender = agentMessageSender(row.message.sender);
             const mentioned = row.reason === "mentioned";
             return [
-              {
+              agentDeliveryPush({
                 computerId: row.agent.computerId,
                 requestId: row.deliveryId,
                 conversationId: row.message.conversationId,
@@ -73,6 +76,7 @@ export function attachmentCommentNotices(
                 messageId: row.message.id,
                 deliveryId: row.deliveryId,
                 sequence: row.sequence,
+                reason: row.reason,
                 createdAtMs: row.message.createdAt.getTime(),
                 body: row.message.body,
                 mentions: row.message.mentions,
@@ -81,8 +85,7 @@ export function attachmentCommentNotices(
                 latestSenderHandle: sender.handle,
                 latestSenderDescription: sender.description,
                 mentionsAgent: mentioned,
-                ...(row.reason ? { reason: row.reason } : {}),
-              },
+              }),
             ];
           }),
         );

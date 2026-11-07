@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { AgentDeliveryPublisher } from "#src/server/conversations/agent-delivery.server";
 import { setupActionCards } from "./helpers/action-cards-fixture";
 import { actionCardViews } from "#src/server/conversations/action-card-views.server";
 import { waitingChoiceCards } from "#src/server/conversations/waiting-choice-cards.server";
@@ -79,6 +82,42 @@ test("the expiry sweep hands each card to only one instance", async () => {
         where: { agentId: ctx.agent.id, reason: "expired" },
       }),
     ).toBe(2);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+// Task #569: the expiry wake is a delivery like a choice answer — the wire must carry the row's
+// reason, or the daemon consumes it as an ordinary already-seen message and never notifies.
+test("the expiry wake carries the delivery's reason on the wire", async () => {
+  const ctx = await setupActionCards();
+  try {
+    const prepared = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: choice(ctx.alice.username),
+    });
+    await ctx.db.actionCard.update({
+      where: { messageId: prepared.messageId },
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+    });
+    // The wake only pushes to a Computer the preparing Agent is on.
+    await ctx.db.agent.update({
+      where: { id: ctx.agent.id },
+      data: { computerId: ctx.computer.id },
+    });
+    const batches: { channel: string; data: Uint8Array }[][] = [];
+    const api: Pick<CentrifugoServerApi, "publishBatch"> = {
+      publishBatch: async (publications) => {
+        batches.push([...publications]);
+        return publications.map(() => ({ status: "fulfilled" as const, value: undefined }));
+      },
+    };
+    await expireActionCards(ctx.db, new Date(), {
+      publisher: new AgentDeliveryPublisher(api),
+    });
+    const pushes = batches.flat();
+    expect(pushes).toHaveLength(1);
+    expect(decodeAgentMessageDelivery(pushes[0]!.data).reason).toBe("expired");
   } finally {
     await ctx.cleanup();
   }
