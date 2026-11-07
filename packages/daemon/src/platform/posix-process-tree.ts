@@ -13,6 +13,9 @@ import {
   killTurnDescendantsInWindow,
   type ProcessTable,
 } from "./process-table";
+import { getLogger } from "@logtape/logtape";
+
+const logger = getLogger(["coforge", "daemon", "posix-process-tree"]);
 
 const emptyKillReport = (): OwnedProcessTreeKillReport => ({ killed: [], leftAlone: [] });
 
@@ -92,6 +95,11 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
         const pid = child.pid;
         if (pid === undefined) return;
         const live = options?.terminal ? await observeTerminal() : undefined;
+        // A descendant that left the child's process group (setsid/setpgid) is invisible to the
+        // group broadcast below; snapshot the tree while the ppid chain is intact so each
+        // escaped member can be signaled by pid afterwards. A failed observation degrades to
+        // the broadcast alone rather than skipping it.
+        const descendants = child.exitCode === null ? await this.#ownedDescendants(pid) : [];
         if (child.exitCode === null) {
           // The pid is still this process (running, or a zombie Bun has not reaped), so its
           // process group can only hold this tree's members and a broadcast is safe.
@@ -101,6 +109,7 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
             if (!this.#groupIsGone(error)) throw error;
           }
         } else if (!options?.terminal) await this.#killOrphanedGroupMembers(pid, force);
+        await this.#signalEscapedDescendants(pid, descendants, force);
         if (live)
           for (const member of terminalMembers.values()) {
             if (!sameOwnedProcess(member, live.get(member.pid)) || member.pgid === pid) continue;
@@ -281,6 +290,65 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
     } catch (error) {
       if (this.#processGone(error)) return false;
       throw error;
+    }
+  }
+
+  /** The owned child's current descendants while its ppid chain is intact, or none when the
+   * table cannot prove the child is still this process's. A descendant already reparented to
+   * init is unreachable here by design — the same documented limit as the turn-scoped paths. */
+  async #ownedDescendants(pid: number): Promise<OwnedProcessIdentity[]> {
+    try {
+      const table = await (this.options.processTable ?? hostProcessTable).list();
+      const main = table.find((entry) => entry.pid === pid);
+      if (!main || main.ppid !== globalThis.process.pid) return [];
+      return descendantsOf(main, table);
+    } catch (error) {
+      logger.warn("Process table unavailable; descendant snapshot skipped", {
+        event: "process_tree:descendant_snapshot_unavailable",
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
+  /** Signals the snapshot members the group broadcast cannot reach: a descendant whose process
+   * group is not the child's own (setsid/setpgid). Each is re-verified against a fresh table
+   * before signaling, so a pid recycled in between is never hit; a failed observation skips the
+   * pass rather than signaling unverified identities. */
+  async #signalEscapedDescendants(
+    pid: number,
+    descendants: readonly OwnedProcessIdentity[],
+    force: boolean,
+  ): Promise<void> {
+    const escaped = descendants.filter((entry) => entry.pgid !== pid);
+    if (!escaped.length) return;
+    let byPid: Map<number, OwnedProcessIdentity>;
+    try {
+      byPid = new Map(
+        (await (this.options.processTable ?? hostProcessTable).list()).map((entry) => [
+          entry.pid,
+          entry,
+        ]),
+      );
+    } catch (error) {
+      logger.warn("Process table unavailable; escaped descendants not signaled", {
+        event: "process_tree:escaped_descendants_unsignaled",
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    for (const entry of escaped) {
+      if (!sameOwnedProcess(entry, byPid.get(entry.pid))) continue;
+      try {
+        // A descendant leading its own group takes it with it; any other escaped member is
+        // signaled alone so a foreign group it merely joined is never touched.
+        globalThis.process.kill(
+          entry.pgid === entry.pid ? -entry.pid : entry.pid,
+          force ? "SIGKILL" : "SIGTERM",
+        );
+      } catch (error) {
+        if (!this.#processGone(error)) throw error;
+      }
     }
   }
 }
