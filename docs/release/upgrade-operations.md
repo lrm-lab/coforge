@@ -131,7 +131,15 @@ for nothing installed, a Computer that cannot report its service definition (run
 The Daemon settles the operation from the receipt, exactly as for any upgrade:
 
 - the Daemon records each operation in `~/.coforge/daemon/bindings.json` as
-  `upgradeOperations`, and only one operation may be pending per binding;
+  `upgradeOperations`, and the pending slot is machine-wide: admission scans
+  every binding for a pending operation and fans a new pending record onto all
+  of them, so only one upgrade — from the web or the CLI — may be pending on
+  the machine at all. `coforge-computer upgrade` and `install` ask the running
+  Daemon for `daemon:computer_upgrade` admission before launching the detached
+  job and let it launch the job itself; a Daemon that cannot take the request
+  (none running, or one predating the method) falls back to launching it
+  directly, and an explicit `--allow-downgrade` always uses the in-place
+  runner;
 - a terminal result is reported to the server as `computer:upgrade_result`
   (`ComputerUpgradeResult`, additive, `protocol_major` unchanged) after the
   Workspace daemon's ready handshake. A Workspace daemon re-reads its config every
