@@ -6,6 +6,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import { AgentControl } from "#src/agent-runtime/agent-control";
+import { AgentControlOpTiming } from "#src/agent-runtime/agent-control-timing";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
@@ -84,6 +85,7 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
       sequence: snapshot.sequence,
     });
   });
+  const opTiming = new AgentControlOpTiming(runtimeInstanceId);
   const agentControl = new AgentControl(runtimeInstanceId, state, agentSessions, {
     running: (agentId) => ports.running(agentId),
     stop: async (agentId) => {
@@ -140,7 +142,28 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
         }),
       );
     },
-    result: (result) => ports.sendControlResult(result),
+    result: async (result) => {
+      try {
+        await ports.sendControlResult(result);
+      } finally {
+        opTiming.resultSent(result);
+      }
+    },
   });
+  // Time each fenced operation from its AgentControl entry to its result send (task #584).
+  // The wrapped methods keep `this` bound to the real instance, so its private state is intact.
+  const { start, stop, resetWorkspace } = agentControl;
+  agentControl.start = (intent) => {
+    opTiming.received("start", intent.agentId, intent.requestId);
+    return start.call(agentControl, intent);
+  };
+  agentControl.stop = (scope) => {
+    opTiming.received("stop", scope.agentId, scope.requestId);
+    return stop.call(agentControl, scope);
+  };
+  agentControl.resetWorkspace = (request) => {
+    opTiming.received("reset-workspace", request.agentId, request.requestId);
+    return resetWorkspace.call(agentControl, request);
+  };
   return { agentSessions, agentControl };
 }
