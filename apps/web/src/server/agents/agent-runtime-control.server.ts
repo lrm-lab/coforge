@@ -136,17 +136,14 @@ export class WorkspaceAgentRecovery {
     // Each Agent recovers under its own lock, so all of them recover at once — and one Agent's
     // failure (an unreadable runtime config, an unreadable control record) is logged and skipped
     // rather than failing the Daemon's whole `ready`, which would hold every Agent's control
-    // publications on the Daemon until a later reconnect.
-    let failures = 0;
-    let firstFailure: unknown;
+    // publications on the Daemon until a later reconnect. Even every Agent failing is skipped
+    // the same way: the Daemon's `ready` must never be held hostage by Agent records.
     await Promise.all(
       agents.map((listedAgent) =>
         this.runtimeLock.run(listedAgent.id, async () => {
           try {
             await this.#recoverListedAgent(listedAgent, workspaceId, computerId, runningAgents);
           } catch (error) {
-            failures += 1;
-            firstFailure ??= error;
             console.warn(
               JSON.stringify({
                 event: "agent_recovery:agent_failed",
@@ -160,9 +157,6 @@ export class WorkspaceAgentRecovery {
         }),
       ),
     );
-    // Every Agent failing points at the Computer or Workspace, not at the Agents: fail the ready
-    // so the Daemon retries, rather than reporting a recovery that recovered nothing.
-    if (agents.length > 0 && failures === agents.length) throw firstFailure;
   }
 
   async #recoverListedAgent(

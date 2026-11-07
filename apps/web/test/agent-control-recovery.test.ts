@@ -383,3 +383,52 @@ test("one Agent's unreadable config does not stop ready recovery for the Compute
     launchId: "5f7d4eee-3a5b-4563-9887-21168f4269d5",
   });
 });
+
+test("a Computer whose only Agent fails recovery still completes the Daemon's ready", async () => {
+  const store: AgentControlStore = {
+    memberRole: async () => "owner",
+    get: async () => undefined,
+    replace: async () => false,
+  };
+  const sent: Uint8Array[] = [];
+  const control = new AgentControl(
+    store,
+    { publish: async (_channel, bytes) => void sent.push(bytes) },
+    { run: async (_id, work) => work() },
+    { timeoutMs: 0, fallbackMs: 0 },
+  );
+  const records = new Map<string, AgentRecord>([
+    [
+      unreadableAgentId,
+      agentRecord({ id: unreadableAgentId, name: "qa457priv", runtimeConfig: undefined }),
+    ],
+  ]);
+  const recovery = new WorkspaceAgentRecovery(
+    {
+      getById: async (id) => records.get(id),
+      listOwnedInWorkspace: async () => [],
+      listInWorkspace: async () => [],
+      listForComputer: async () => [...records.values()],
+      listDeletedForComputer: async () => [],
+      create: async () => {
+        throw new Error("not used");
+      },
+      update: async () => {
+        throw new Error("not used");
+      },
+    },
+    { readAgentRecoveryContext: async () => ({ resumeMessages: [], unreadSummary: {} }) },
+    { publish: async () => {} },
+    { run: async (_id, work) => work() },
+    { resendPending: async () => {} },
+    undefined,
+    control,
+    store,
+  );
+
+  // One bad Agent record must not fail `ready`: the Daemon would otherwise hold every later
+  // control publication on this Computer forever.
+  await recovery.recoverWorkspace(dorothyWorkspaceId, dorothyComputerId, []);
+
+  expect(sent).toHaveLength(0);
+});
