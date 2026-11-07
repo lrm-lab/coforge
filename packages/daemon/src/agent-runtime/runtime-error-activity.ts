@@ -226,6 +226,7 @@ function offlineLimitActivity(
   classified: RuntimeErrorClassification,
   detail: string,
 ): AgentActivity {
+  const providerMessage = scrubRuntimeErrorText(event.message);
   return {
     detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
     level: "error",
@@ -235,12 +236,13 @@ function offlineLimitActivity(
       { kind: "text", text: `Error: ${detail}` },
       {
         kind: "text",
-        text: `Raw error excerpt (redacted): ${scrubRuntimeErrorText(event.message)}`,
+        text: `Raw error excerpt (redacted): ${providerMessage}`,
       },
     ],
     runtimeError: {
       ...reportedClassification(event, () => classified),
       fingerprint: fingerprintRuntimeError(event.message),
+      providerMessage,
     },
   };
 }

@@ -1,3 +1,5 @@
+import { truncateCodePoints } from "./truncate";
+
 /** The action only a person can take before an Agent works again, reported on a runtime_error
  * Activity's `runtimeError.requiredAction`; absent when the failure needs no human step. */
 export const RUNTIME_ERROR_ACTION = {
@@ -10,6 +12,10 @@ export function isRuntimeErrorAction(value: string): value is RuntimeErrorAction
     value === RUNTIME_ERROR_ACTION.USER_REAUTH || value === RUNTIME_ERROR_ACTION.USER_MODEL_ACCESS
   );
 }
+
+/** The cap on provider error text anyone reads: applied where a Daemon writes it and again where
+ * a frame is decoded, since a Daemon on someone's machine can send any length. */
+export const MAX_VISIBLE_ERROR_CHARS = 512;
 
 /** The classification on the `runtime_stalled` Activity a daemon sends when a turn stalls again
  * past its unattended restarts (task #404). The process still runs, so this, not a launch error
@@ -27,6 +33,9 @@ export type AgentActivityRuntimeError = Readonly<{
   requiredAction?: RuntimeErrorAction;
   /** The ISO time a retryable failure named as its next attempt; absent when it named none. */
   retryNotBefore?: string;
+  /** What the provider itself said, redacted, on a quota or billing failure that took the Agent
+   * offline; absent otherwise and from older daemons. */
+  providerMessage?: string;
 }>;
 
 /** The wire shape it encodes into and decodes from: empty strings for absent fields. */
@@ -36,6 +45,7 @@ export type RuntimeErrorWire = Readonly<{
   runtimeErrorFingerprint: string;
   runtimeErrorAction: string;
   runtimeErrorRetryNotBefore: string;
+  runtimeErrorProviderMessage: string;
 }>;
 
 export function encodeRuntimeError(
@@ -47,6 +57,7 @@ export function encodeRuntimeError(
     runtimeErrorFingerprint: runtimeError?.fingerprint ?? "",
     runtimeErrorAction: runtimeError?.requiredAction ?? "",
     runtimeErrorRetryNotBefore: runtimeError?.retryNotBefore ?? "",
+    runtimeErrorProviderMessage: runtimeError?.providerMessage ?? "",
   };
 }
 
@@ -58,5 +69,13 @@ export function decodeRuntimeError(v: RuntimeErrorWire): AgentActivityRuntimeErr
     fingerprint: v.runtimeErrorFingerprint,
     ...(isRuntimeErrorAction(v.runtimeErrorAction) ? { requiredAction: v.runtimeErrorAction } : {}),
     ...(v.runtimeErrorRetryNotBefore ? { retryNotBefore: v.runtimeErrorRetryNotBefore } : {}),
+    ...(v.runtimeErrorProviderMessage
+      ? {
+          providerMessage: truncateCodePoints(
+            v.runtimeErrorProviderMessage,
+            MAX_VISIBLE_ERROR_CHARS,
+          ),
+        }
+      : {}),
   };
 }

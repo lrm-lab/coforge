@@ -446,6 +446,10 @@ message AgentActivity {
   // RuntimeProvider value such as "claude-code"); empty from older daemons and whenever the
   // daemon cannot name one. Additive: protocol_major stays 1.
   string runtime_provider = 26;
+  // What the provider itself said when a quota or billing failure took the Agent offline, redacted
+  // and bounded by the daemon; empty from older daemons and for every other failure. Additive:
+  // protocol_major stays 1.
+  string runtime_error_provider_message = 27;
 }
 
 // An Agent is about to post (`phase` "start") or no longer is ("end") for one tool call, `call_id`.

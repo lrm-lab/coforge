@@ -24,6 +24,8 @@ export type AgentActivity = Readonly<{
     errorReason: string;
     fingerprint: string;
     requiredAction?: RuntimeErrorAction;
+    /** What the provider itself said, redacted, on a failure that took the Agent offline. */
+    providerMessage?: string;
   }>;
 }>;
 

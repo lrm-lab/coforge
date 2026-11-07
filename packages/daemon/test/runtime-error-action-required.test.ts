@@ -360,6 +360,9 @@ test("a billing-exhausted failure takes the Agent offline with balance wording a
     const texts = entryTexts(activity);
     expect(texts[0]).toBe(`Error: ${activity.detail}`);
     expect(texts.some((t) => t.startsWith("Raw error excerpt (redacted):"))).toBe(true);
+    const { providerMessage } = activity.runtimeError ?? {};
+    expect(providerMessage).toBeTruthy();
+    expect(texts).toContain(`Raw error excerpt (redacted): ${providerMessage}`);
   } finally {
     await h.runtime.stop();
   }
