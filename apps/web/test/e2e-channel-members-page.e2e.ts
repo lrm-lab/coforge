@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession } from "./helpers/browser-e2e";
+import { browserSession, desktopPointerInitScript, localBrowserE2e } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -21,29 +21,23 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * Agent in it and another outside it, and removes them afterwards. Screenshots are written under
  * `.amp/e2e/channel-members-page/`.
  */
-const webOrigin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!webOrigin || !["localhost", "127.0.0.1"].includes(new URL(webOrigin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
+const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 // Who is online reaches the page over Centrifugo, so it is reached through the page's own origin.
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/channel-members-page");
 
 test("the settings panel shows a channel's members as a page, adds and removes one", async () => {
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser, evaluate } = browserSession(browserPath!, `channel-members-page-${process.pid}`);
+  const { browser, evaluate } = browserSession(browserPath, `channel-members-page-${process.pid}`);
   /** Waits for `condition`, failing with its text rather than at the test timeout; a first page
    * load compiles on the dev server, so it gets longer. */
   const waitFor = (condition: string, ms = 20_000) =>
     Promise.race([
-      browser("wait", "--fn", condition),
+      // agent-browser's own wait caps at 25 s; pass the budget through or a 60 s wait dies at 25.
+      browser("wait", "--fn", condition, "--timeout", String(ms)),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
       ),
@@ -138,6 +132,8 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     });
   const [inside, outside] = await Promise.all([agent("inside"), agent("outside")]);
   const agentIds = [inside.id, outside.id];
+  // The desktop sections assume a mouse: a headless Linux Chrome reports a coarse pointer.
+  const pointerInit = await desktopPointerInitScript(artifacts);
   try {
     await db.conversationMember.createMany({
       data: [
@@ -178,7 +174,10 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     });
     await mkdir(artifacts, { recursive: true });
 
-    await browser("set", "viewport", "1440", "900");
+    // `open url --init-script file` leaves the tab on about:blank under the Linux runner's
+    // Chrome; the flag has to precede the command, the way e2e-notification-settings does. The
+    // registration is per session, so every open below — desktop and phone — gets it.
+    await browser("--init-script", pointerInit, "set", "viewport", "1440", "900");
 
     // One avatar, its dot by where it is (task #510): the faces that list the channel's people,
     // in the header and the settings' strip, carry their status dot, a person's and an Agent's
@@ -246,7 +245,11 @@ test("the settings panel shows a channel's members as a page, adds and removes o
       }),
     ).not.toBeNull();
 
-    // A channel admin makes the new member a channel admin.
+    // A channel admin makes the new member a channel admin. The row's name can paint before its
+    // action buttons do, so the button itself is what is waited for.
+    await waitFor(
+      `document.querySelector(${JSON.stringify(`[aria-label="Make ${outside.displayName} a channel admin"]`)}) !== null`,
+    );
     await browser(
       "eval",
       `document.querySelector(${JSON.stringify(`[aria-label="Make ${outside.displayName} a channel admin"]`)}).click()`,
