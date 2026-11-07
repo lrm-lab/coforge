@@ -120,13 +120,11 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
         if (live)
           for (const member of terminalMembers.values()) {
             if (!sameOwnedProcess(member, live.get(member.pid)) || member.pgid === pid) continue;
+            const groupKill = member.pgid === member.pid;
             try {
-              process.kill(
-                member.pgid === member.pid ? -member.pid : member.pid,
-                force ? "SIGKILL" : "SIGTERM",
-              );
+              process.kill(groupKill ? -member.pid : member.pid, force ? "SIGKILL" : "SIGTERM");
             } catch (error) {
-              if (!this.#processGone(error)) throw error;
+              if (!(groupKill ? this.#groupIsGone(error) : this.#processGone(error))) throw error;
             }
           }
       },
@@ -169,12 +167,13 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
             leftAlone.push(entry.pid);
             continue;
           }
+          const groupKill = entry.pgid === entry.pid;
           try {
             // A descendant that leads its own process group takes the group it started with it.
-            globalThis.process.kill(entry.pgid === entry.pid ? -entry.pid : entry.pid, "SIGKILL");
+            globalThis.process.kill(groupKill ? -entry.pid : entry.pid, "SIGKILL");
             killed.push(entry.pid);
           } catch (error) {
-            if (!this.#processGone(error)) throw error;
+            if (!(groupKill ? this.#groupIsGone(error) : this.#processGone(error))) throw error;
           }
         }
         // The pid is the child's only while Bun still owns it; once reaped it may name a
@@ -346,15 +345,13 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
     }
     for (const entry of escaped) {
       if (!sameOwnedProcess(entry, byPid.get(entry.pid))) continue;
+      const groupKill = entry.pgid === entry.pid;
       try {
         // A descendant leading its own group takes it with it; any other escaped member is
         // signaled alone so a foreign group it merely joined is never touched.
-        globalThis.process.kill(
-          entry.pgid === entry.pid ? -entry.pid : entry.pid,
-          force ? "SIGKILL" : "SIGTERM",
-        );
+        globalThis.process.kill(groupKill ? -entry.pid : entry.pid, force ? "SIGKILL" : "SIGTERM");
       } catch (error) {
-        if (!this.#processGone(error)) throw error;
+        if (!(groupKill ? this.#groupIsGone(error) : this.#processGone(error))) throw error;
       }
     }
   }

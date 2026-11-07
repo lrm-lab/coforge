@@ -95,11 +95,17 @@ export async function killTurnDescendantsInWindow(
       leftAlone.push(entry.pid);
       continue;
     }
+    const groupKill = entry.pgid === entry.pid;
     try {
-      globalThis.process.kill(entry.pgid === entry.pid ? -entry.pid : entry.pid, "SIGKILL");
+      globalThis.process.kill(groupKill ? -entry.pid : entry.pid, "SIGKILL");
       killed.push(entry.pid);
     } catch (error) {
-      if ((error as { code?: string }).code !== "ESRCH") throw error;
+      const code = (error as { code?: string }).code;
+      // A group signal that finds only zombies answers EPERM on macOS, the same "gone"
+      // condition ESRCH reports; a single-pid signal has no such ambiguity.
+      const gone =
+        code === "ESRCH" || (groupKill && process.platform === "darwin" && code === "EPERM");
+      if (!gone) throw error;
     }
   }
   return { killed, leftAlone };
