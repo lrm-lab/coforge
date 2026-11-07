@@ -104,3 +104,14 @@ test("a stopped Agent keeps its real display kind and label, adding only a statu
   expect(view.isOnline).toBe(true);
   expect(view.statusDetail).toBeUndefined();
 });
+
+test("a stopped Agent reads in the provider's words, and ours where none were kept", () => {
+  const stopped = { activityKind: "offline", stopReason: "billing_exhausted" } as const;
+  const said = "Your credit balance is too low.";
+  expect(agentDisplay(display({ ...stopped, stopDetail: said })).label).toBe(said);
+  for (const stopDetail of [null, undefined]) {
+    expect(agentDisplay(display({ ...stopped, stopDetail })).label).toBe(
+      m.agent_status_quota_exhausted(),
+    );
+  }
+});

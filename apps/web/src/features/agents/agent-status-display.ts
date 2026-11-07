@@ -38,7 +38,8 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
   // on the offline display; the status word names it and the caption says what to do.
   const quotaExhausted = display.stopReason === "billing_exhausted";
   const label = quotaExhausted
-    ? m.agent_status_quota_exhausted()
+    ? // The provider's own words (Frank, 11-07); our word only where none was kept.
+      display.stopDetail || m.agent_status_quota_exhausted()
     : kind === "online"
       ? m.agent_status_online()
       : kind === "offline"

@@ -353,8 +353,8 @@ function AgentRosterIdentity({
       </span>
       <span
         className={cn(
-          "flex min-w-0 shrink-0 items-center gap-1.5 text-sm",
-          status.alert ? "text-error-primary" : "text-secondary @2xl:items-start",
+          "flex min-w-0 items-center gap-1.5 text-sm",
+          status.alert ? "text-error-primary" : "shrink-0 text-secondary @2xl:items-start",
         )}
       >
         {/* On a wrapped error the dot stays on its first line (text-sm is 20px tall). */}

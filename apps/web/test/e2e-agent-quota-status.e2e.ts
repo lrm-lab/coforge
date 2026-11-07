@@ -9,9 +9,10 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * An Agent stopped with its quota gone (task #667): the status word is red with a warning sign,
+ * An Agent stopped with its quota gone (task #667): the provider's own words, cut where they
+ * must, are red with a warning sign,
  * not a dot, in the DM header, a channel's member list and the Computer's roster, in English and
- * Chinese; the Agent's profile says what to do. Seeds a Computer, an Agent and the display the Daemon would report, and removes them
+ * Chinese; the Agent's profile shows them whole. Seeds a Computer, an Agent and the display the Daemon would report, and removes them
  * after the run. Screenshots, light, dark and phone, are under `.amp/e2e/agent-quota-status/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
@@ -77,18 +78,20 @@ test("a quota-exhausted Agent's status reads as a warning", async () => {
   });
   const display = getAgentDisplay();
   const launchId = `launch-${suffix}`;
+  const said = "Your credit balance is too low to access the API. Please go to Plans & Billing.";
   await display.observeStatus({ ...frame(1), status: "active" } as never);
   await display.observeActivity(
     {
       ...frame(2),
       detailKind: "runtime_error",
       level: "error",
-      detail: "runtime_error",
+      detail: "CoForge stopped retrying.",
       launchId,
       runtimeError: {
         errorClass: "ProviderQuotaError",
         errorReason: "billing_exhausted",
         fingerprint: `fp-${suffix}`,
+        providerMessage: said,
       },
     } as never,
     { daemonInstanceId: `e2e-${suffix}`, launchId },
@@ -154,10 +157,8 @@ test("a quota-exhausted Agent's status reads as a warning", async () => {
       ["390", "844", "phone"],
     ] as const) {
       await browser("set", "viewport", width, height);
-      for (const [locale, word] of [
-        ["en", "Quota exhausted"],
-        ["zh-CN", "额度已用完"],
-      ] as const) {
+      for (const locale of ["en", "zh-CN"]) {
+        const word = said;
         await browser("open", page(locale, `/dm/${direct.id}`));
         await until(`${pageHydrated} && ${warning(word)}`);
         await shots(`dm-${locale}-${device}`);
@@ -171,7 +172,7 @@ test("a quota-exhausted Agent's status reads as a warning", async () => {
       data: { displayName: "额度用完的长名字测试助手" },
     });
     await browser("open", page("zh-CN", `/dm/${direct.id}`));
-    await until(`${pageHydrated} && ${warning("额度已用完")}`);
+    await until(`${pageHydrated} && ${warning(said)}`);
     const nameFits = `(() => { const h = document.querySelector("h1"); return h.scrollWidth <= h.clientWidth; })()`;
     expect(await evaluate<boolean>(nameFits)).toBe(true);
     await shots("dm-zh-CN-phone-long-name");
@@ -187,19 +188,21 @@ test("a quota-exhausted Agent's status reads as a warning", async () => {
     await browser("mouse", "down");
     await browser("mouse", "up");
     await browser("hover", "[data-hover]");
-    await until(warning("Quota exhausted"));
+    await until(warning(said));
     await shots("hover-en-desktop");
 
     await browser("open", page("en", `/dm/${direct.id}`));
     const profile = `[...document.querySelectorAll("button")].find((b) => b.querySelector("h1"))`;
     await until(`${pageHydrated} && ${profile} != null`);
     await press(profile);
-    await until(`document.body.textContent.includes("Switch the model")`);
+    await until(
+      `document.querySelector(".bg-error-primary")?.textContent.includes(${JSON.stringify(said)})`,
+    );
     await shots("profile-en-desktop");
     await browser("open", page("en", `/computer/${computer.id}`));
-    await until(`${pageHydrated} && ${warning("Quota exhausted")}`);
+    await until(`${pageHydrated} && ${warning(said)}`);
     await shots("computer-en-desktop");
-    expect(await evaluate<boolean>(warning("Quota exhausted"))).toBe(true);
+    expect(await evaluate<boolean>(warning(said))).toBe(true);
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation

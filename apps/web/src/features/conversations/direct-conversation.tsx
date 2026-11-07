@@ -91,7 +91,7 @@ export function DirectConversationHeader({
           <div
             className={cn(
               "flex min-w-0 flex-1",
-              // A warning takes a line of its own: the name keeps its width, and neither is cut.
+              // A warning takes a line of its own: the name keeps its width.
               status.alert ? "flex-col items-start [&_h1]:leading-5" : "items-center gap-2",
             )}
           >
@@ -113,13 +113,13 @@ export function DirectConversationHeader({
             {deleted ? (
               <DeletedAgentBadge />
             ) : (
-              <div className={status.alert ? "flex max-w-full items-center gap-1" : "contents"}>
+              <div className={status.alert ? "flex w-full min-w-0 items-center gap-1" : "contents"}>
                 <AgentStatusMarker status={status} className="size-2" />
                 <p
                   role="status"
                   className={cn(
                     status.alert
-                      ? "text-xs break-words text-error-primary"
+                      ? "min-w-0 truncate text-xs text-error-primary"
                       : "min-w-0 flex-1 truncate text-sm text-tertiary",
                   )}
                 >
