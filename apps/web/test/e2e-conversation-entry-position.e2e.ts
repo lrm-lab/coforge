@@ -202,20 +202,29 @@ for (const width of [1440, 390]) {
             `if (!Element.prototype.scrollTo.__entryLateRows) {
   const scrollTo = Element.prototype.scrollTo;
   let armed = false;
+  let tries = 0;
   const wrapper = function (...args) {
     scrollTo.apply(this, args);
     if (armed || !this.matches('[aria-label="Message history" i]')) return;
     armed = true;
-    setTimeout(() => {
+    window.__lateRowsArmed = true;
+    const fill = () => {
       const preview = [...this.querySelectorAll("[data-thread-preview]")].at(-1);
-      if (!preview) return;
+      window.__lateRowsFired = (window.__lateRowsFired || 0) + 1;
+      window.__lateRowsPreview = !!preview;
+      if (!preview) {
+        if (tries++ < 40) setTimeout(fill, 250);
+        return;
+      }
       preview.style.paddingBottom = "136px";
       this.scrollTop += 60;
       window.__rowsFilledIn = true;
-    }, 400);
+    };
+    setTimeout(fill, 400);
   };
   wrapper.__entryLateRows = true;
   Element.prototype.scrollTo = wrapper;
+  window.__lateRowsWrapped = true;
 }`,
           );
         // `open url --init-script file` leaves the tab on about:blank under the Linux runner's
@@ -285,7 +294,20 @@ for (const width of [1440, 390]) {
         // a read between a layout change and its resize callback sees a frame that never paints,
         // and a wait would pass a pane that recovers only by chance a second later.
         if (thread) {
-          await browser("wait", "--fn", "window.__rowsFilledIn === true");
+          await browser(
+            "wait",
+            "--fn",
+            "window.__rowsFilledIn === true",
+            "--timeout",
+            "30000",
+          ).catch(async (error: unknown) => {
+            const state = await evaluate<Record<string, unknown>>(
+              `{wrapped:window.__lateRowsWrapped===true,armed:window.__lateRowsArmed===true,fired:window.__lateRowsFired||0,preview:window.__lateRowsPreview===true,patched:!!Element.prototype.scrollTo.__entryLateRows}`,
+            )
+              .then((value) => JSON.stringify(value))
+              .catch((inner: unknown) => String(inner));
+            throw new Error(`${String(error)}; lateRows: ${state}`);
+          });
           await browser(
             "eval",
             `requestAnimationFrame(() => requestAnimationFrame(() => { window.__entryPosition = ${position}; }))`,
