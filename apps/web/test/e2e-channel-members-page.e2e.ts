@@ -193,7 +193,11 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     // alike, and so do the faces beside the messages, the viewer's and the Agent's (Frank, 11-04).
     const dot = ".bg-fg-success-secondary";
     const agentDot = ".avatar-status-dot";
-    const messagesWithDots = `document.querySelectorAll("[data-message-id]").length === 2 && [...document.querySelectorAll("[data-message-id]")].every((row) => row.querySelector("${dot}, ${agentDot}") !== null)`;
+    // System notices are message rows too — a folded group carries data-system-group, a lone
+    // one a data-message="system" child — and the member writes below add some; the dot check
+    // is about the two real messages only.
+    const messageRows = `[...document.querySelectorAll("[data-message-id]")].filter((row) => row.dataset.systemGroup === undefined && row.querySelector('[data-message="system"]') === null)`;
+    const messagesWithDots = `${messageRows}.length === 2 && ${messageRows}.every((row) => row.querySelector("${dot}, ${agentDot}") !== null)`;
     // The header's faces: the "Members" group that holds the viewer's face (the sidebar's
     // Members link is labelled the same).
     const headerFaces = `[...document.querySelectorAll('[aria-label="Members"]')].find((el) => !${panel}?.contains(el) && el.textContent.includes(${JSON.stringify(DEV_BROWSER_USER.name)}))`;
