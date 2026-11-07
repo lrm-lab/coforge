@@ -81,9 +81,10 @@ export class AgentExitedDelivery {
     if (!restart && this.#ports.startPending(message.agentId))
       return this.#holdForPendingStart(message);
     // A runtime error took this Agent offline: the daemon keeps custody of its deliveries
-    // (queued for the next launch, acknowledged now) — it never launches on its own.
-    if (!restart && this.#ports.offline.has(message.agentId))
-      return this.#keepDeliveryForOfflineAgent(message);
+    // (queued for the next launch, acknowledged now) — it never launches on its own, and a
+    // wake launch would fail the same way the last one did. The record outlives the restart
+    // config: only a person's Start (which reports `active`) or an explicit Stop clears it.
+    if (this.#ports.offline.has(message.agentId)) return this.#keepDeliveryForOfflineAgent(message);
     if (!restart) return this.#rejectDeliveriesWithoutProcess(message);
     // A wake launch failed moments ago, so launching again now would most likely fail the same
     // way. The delivery waits, acknowledged as the daemon keeps it, for the first launch after
