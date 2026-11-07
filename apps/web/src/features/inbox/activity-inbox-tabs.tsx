@@ -23,10 +23,12 @@ const FILTER_TABS: ReadonlyArray<{
 export function ActivityInboxTabs({
   filter,
   onFilterChange,
+  onFilterIntent,
   counts,
 }: {
   filter: ActivityInboxFilter;
   onFilterChange: (filter: ActivityInboxFilter) => void;
+  onFilterIntent?: (filter: ActivityInboxFilter) => void;
   counts: Partial<Record<ActivityInboxFilter, number>>;
 }) {
   return (
@@ -47,7 +49,13 @@ export function ActivityInboxTabs({
         className="@max-[22rem]/tabbed-header:gap-2 @max-[22rem]/tabbed-header:**:data-icon:hidden @max-[22rem]/tabbed-header:*:text-sm"
       >
         {FILTER_TABS.map((tab) => (
-          <Tab key={tab.id} id={tab.id} icon={tab.icon}>
+          <Tab
+            key={tab.id}
+            id={tab.id}
+            icon={tab.icon}
+            onPointerEnter={() => onFilterIntent?.(tab.id)}
+            onFocus={() => onFilterIntent?.(tab.id)}
+          >
             {/* The official `badge` prop hides below `md`; the count must show on phones too. */}
             {({ isSelected, isHovered }) => {
               const count = counts[tab.id] ?? 0;

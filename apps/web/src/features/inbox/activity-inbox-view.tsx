@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { getRouteApi } from "@tanstack/react-router";
+import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   keepPreviousData,
@@ -16,6 +16,7 @@ import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-li
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { useRefreshSidebarLists } from "#src/features/conversations/sidebar-lists";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { useEndOfList } from "#src/lib/use-end-of-list";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
@@ -70,6 +71,8 @@ export function ActivityInboxView({
 }) {
   const { user, currentWorkspace } = appRoute.useLoaderData();
   const workspaceId = currentWorkspace?.id ?? "";
+  const workspaceSlug = useWorkspaceSlug();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const markAllRead = useServerFn(markActivityInboxRead);
   const {
@@ -88,6 +91,20 @@ export function ActivityInboxView({
     ...activityInboxQuery(workspaceId, filter),
     placeholderData: keepPreviousData,
   });
+  const prefetchFilter = useCallback(
+    (next: ActivityInboxFilter) => {
+      if (next === filter) return;
+      void router.preloadRoute({
+        to: "/w/$workspaceSlug/activity",
+        params: { workspaceSlug },
+        search: (previous) => ({
+          ...previous,
+          filter: next === "all" ? undefined : next,
+        }),
+      });
+    },
+    [filter, router, workspaceSlug],
+  );
   // Re-project pending Done rows after placeholder selection, which may reuse selected data.
   const projectedData = useMemo(
     () => (query.data ? projectDone(query.data) : undefined),
@@ -296,13 +313,17 @@ export function ActivityInboxView({
           <ActivityInboxTabs
             filter={filter}
             onFilterChange={onFilterChange}
+            onFilterIntent={prefetchFilter}
             counts={{
-              unread: firstPage?.unreadItemCount,
-              mentions: firstPage?.unreadMentionItemCount,
+              // The previous filter remains as placeholder data while the next filter loads;
+              // its counts must not be shown as if they belonged to the selected view.
+              unread: query.isPlaceholderData ? undefined : firstPage?.unreadItemCount,
+              mentions: query.isPlaceholderData ? undefined : firstPage?.unreadMentionItemCount,
             }}
           />
         }
         actions={
+          !query.isPlaceholderData &&
           firstPage &&
           firstPage.unreadItemCount > 0 && (
             // A list column dragged narrow keeps the button as its icon, named in a tooltip, so
