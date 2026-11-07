@@ -14,6 +14,7 @@ test("scoped stop and restart dispatch to supervisor without stopping the machin
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async (operation, workspaceId) => {
         calls.push(`${operation}:${workspaceId}`);
         return [];
@@ -31,6 +32,7 @@ test("Computer commands delegate machine-wide lifecycle to the resident supervis
     ensureRunning: async () => {
       calls.push("ensure-running");
     },
+    isRunning: async () => true,
     command: async (operation) => {
       calls.push(operation);
       return [];
@@ -60,6 +62,7 @@ test("start and restart announce their progress so the terminal is not silent", 
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [],
     },
     write: progress.write,
@@ -79,6 +82,7 @@ test("scoped restart reports which Workspace runtime the command acted on", asyn
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [
         {
           workspaceId: "ws-a",
@@ -105,6 +109,7 @@ test("stop stays silent like before; lifecycle output is opt-in through the writ
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [],
     },
     write: progress.write,
@@ -118,6 +123,7 @@ test("commands still work without a writer wired (tests, internal callers)", asy
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async (operation) => {
         calls.push(operation);
         return [];
@@ -151,6 +157,7 @@ test("restart resolves with the daemon's post-command runtime snapshot", async (
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => runtimes,
     },
   });
@@ -164,6 +171,7 @@ test("restart waits for the supervisor's completed replacement response", async 
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async (operation) => {
         stopCalled.resolve();
         await stopping.promise;
@@ -188,6 +196,7 @@ test("starting a Workspace the cloud removed this Computer from names the setup 
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => {
         throw new DaemonCommandRejectedError(
           "start",
@@ -215,6 +224,7 @@ test("an unscoped restart refused for a deleted Workspace names that Workspace a
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => {
         throw new DaemonCommandRejectedError(
           "restart",
@@ -257,6 +267,7 @@ test("start names each Workspace still under way, and fails naming the restart f
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [
         runtime("ws-a", { cloudConnection: "connected" }),
         runtime("ws-b", { lifecycleUnderWay: true }),
@@ -292,6 +303,7 @@ test("a restart still under way at its deadline says so and succeeds", async () 
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [runtime("ws-a", { lifecycleUnderWay: true })],
     },
     resolveWorkspace: async (selector) => ({ id: selector, slug: `slug-${selector}` }),
@@ -312,6 +324,7 @@ test("a Workspace still connecting says why its latest attempt failed", async ()
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [
         runtime("ws-a", {
           cloudConnection: "connecting",
@@ -336,6 +349,7 @@ test("a restart naming several Workspaces that did not connect gives the command
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [
         runtime("ws-a", { cloudConnection: "not_connected", cloudConnectionError: "x" }),
         runtime("ws-b", { cloudConnection: "not_connected", cloudConnectionError: "y" }),
@@ -356,6 +370,7 @@ test("a stop that answers before a Workspace has stopped names it with the comma
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [
         runtime("ws-a", { enabled: false, processId: 0 }),
         runtime("ws-b", { enabled: true, processId: 9 }),
@@ -378,6 +393,7 @@ test("a scoped stop only reports its own Workspace", async () => {
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [
         runtime("ws-a", { enabled: false, processId: 0 }),
         runtime("ws-b", { enabled: true, processId: 9 }),
@@ -397,6 +413,7 @@ test("a scoped start reports only its own Workspace, not another one's restart u
   const command = createCommand({
     daemon: {
       ensureRunning: async () => {},
+      isRunning: async () => true,
       command: async () => [
         runtime("ws-a", { cloudConnection: "connected" }),
         runtime("ws-b", { lifecycleUnderWay: true }),
@@ -415,7 +432,11 @@ test("Linux start warns about logind session cleanup once", async () => {
   const progress = output();
   let detections = 0;
   const command = createCommand({
-    daemon: { ensureRunning: async () => {}, command: async () => [] },
+    daemon: {
+      ensureRunning: async () => {},
+      isRunning: async () => true,
+      command: async () => [],
+    },
     write: progress.write,
     logindRisk: async () => {
       detections++;
@@ -428,11 +449,15 @@ test("Linux start warns about logind session cleanup once", async () => {
   expect(progress.lines.filter((line) => line.startsWith("Warning:"))).toHaveLength(1);
 });
 
-test("computer upgrade admission asks the Daemon first and reports true when it launched", async () => {
+test("computer upgrade admission asks a running Daemon and reports true when it launched", async () => {
   const calls: string[] = [];
   const admit = createComputerUpgradeAdmission({
     ensureRunning: async () => {
       calls.push("ensure-running");
+    },
+    isRunning: async () => {
+      calls.push("is-running");
+      return true;
     },
     command: async () => [],
     computerUpgrade: async (requestId, expectedVersion) => {
@@ -441,12 +466,39 @@ test("computer upgrade admission asks the Daemon first and reports true when it 
     },
   });
   expect(await admit("req-1", "0.1.19")).toBe(true);
-  expect(calls).toEqual(["ensure-running", "computer-upgrade:req-1:0.1.19"]);
+  expect(calls).toEqual(["is-running", "computer-upgrade:req-1:0.1.19"]);
+});
+
+test("a deliberately stopped Daemon is never started to ask it; the job launches directly", async () => {
+  const admit = createComputerUpgradeAdmission({
+    ensureRunning: async () => {
+      throw new Error("admission must not start the Daemon");
+    },
+    isRunning: async () => false,
+    command: async () => [],
+    computerUpgrade: async () => {
+      throw new Error("a stopped Daemon cannot be asked");
+    },
+  });
+  expect(await admit("req-stopped", "0.1.19")).toBe(false);
+});
+
+test("an unanswered isRunning probe falls back to launching directly", async () => {
+  const admit = createComputerUpgradeAdmission({
+    ensureRunning: async () => {},
+    isRunning: async () => {
+      throw new Error("socket probe failed");
+    },
+    command: async () => [],
+    computerUpgrade: async () => [],
+  });
+  expect(await admit("req-probe", "0.1.19")).toBe(false);
 });
 
 test("computer upgrade admission names the pending operation instead of a raw code", async () => {
   const admit = createComputerUpgradeAdmission({
     ensureRunning: async () => {},
+    isRunning: async () => true,
     command: async () => [],
     computerUpgrade: async () => {
       throw new DaemonCommandRejectedError(
@@ -463,8 +515,12 @@ test("computer upgrade admission names the pending operation instead of a raw co
 });
 
 test("a Daemon that predates daemon:computer_upgrade falls back to launching directly", async () => {
+  // The wire shape every pre-#685 Daemon produces for an unknown lifecycle method: accepted
+  // false, the refusal text, and no reason code — the protocol has no capability field, so a
+  // codeless refusal is the only signal this Daemon cannot admit the request.
   const admit = createComputerUpgradeAdmission({
     ensureRunning: async () => {},
+    isRunning: async () => true,
     command: async () => [],
     computerUpgrade: async () => {
       throw new DaemonCommandRejectedError(
@@ -479,25 +535,16 @@ test("a Daemon that predates daemon:computer_upgrade falls back to launching dir
 test("a Daemon without computer upgrade support falls back to launching directly", async () => {
   const admit = createComputerUpgradeAdmission({
     ensureRunning: async () => {},
+    isRunning: async () => true,
     command: async () => [],
   });
   expect(await admit("req-4", "0.1.19")).toBe(false);
 });
 
-test("a Daemon that cannot start falls back to launching directly", async () => {
-  const admit = createComputerUpgradeAdmission({
-    ensureRunning: async () => {
-      throw new Error("no daemon service is registered");
-    },
-    command: async () => [],
-    computerUpgrade: async () => [],
-  });
-  expect(await admit("req-6", "0.1.19")).toBe(false);
-});
-
 test("an unexpected computer upgrade refusal propagates unchanged", async () => {
   const admit = createComputerUpgradeAdmission({
     ensureRunning: async () => {},
+    isRunning: async () => true,
     command: async () => [],
     computerUpgrade: async () => {
       throw new DaemonCommandRejectedError(

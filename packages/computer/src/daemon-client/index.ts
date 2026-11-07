@@ -203,21 +203,19 @@ export function createCommand(input: {
  * Daemon admits the request into the one machine-wide pending slot a web upgrade also uses and
  * launches the detached installer job itself. Resolving `true` means the Daemon launched it —
  * the caller must not launch a second job; `false` means this Daemon cannot take the request
- * (no `computerUpgrade` method, one that predates `daemon:computer_upgrade`, or none running at
- * all — a first `install`) and the caller launches the job directly, exactly as before. A
- * pending-operation refusal becomes a plain message naming the way out; every other rejection
- * propagates unchanged.
+ * (no `computerUpgrade` method, none running — a first `install` or a deliberately stopped
+ * Daemon, whose upgrade launches directly under the installer's machine lock — or one that
+ * predates `daemon:computer_upgrade`) and the caller launches the job directly, exactly as
+ * before. A pending-operation refusal becomes a plain message naming the way out; every other
+ * rejection propagates unchanged.
  */
 export function createComputerUpgradeAdmission(daemon: DaemonCommandRunner) {
   return async (requestId: string, expectedVersion: string): Promise<boolean> => {
     if (!daemon.computerUpgrade) return false;
-    try {
-      // A first `install` has no Daemon to ask — and none that could be holding an upgrade —
-      // so an unreachable one means launch directly, exactly as before admission existed.
-      await daemon.ensureRunning();
-    } catch {
-      return false;
-    }
+    // Only a running Daemon can hold the pending slot, and asking must never start one:
+    // `ensureRunning` would boot a deliberately stopped Daemon (or register its service)
+    // just to ask it a question the answer to which is already "no".
+    if (!(await daemon.isRunning().catch(() => false))) return false;
     try {
       await daemon.computerUpgrade(requestId, expectedVersion);
       return true;
@@ -227,9 +225,14 @@ export function createComputerUpgradeAdmission(daemon: DaemonCommandRunner) {
           throw new Error(
             "A Computer upgrade is already in progress on this machine; wait for it to finish ('coforge-computer status' shows its result), then run the command again.",
           );
-        // A Daemon that predates `daemon:computer_upgrade` refuses it as an unknown operation —
-        // launch the detached job directly, exactly as before admission existed.
-        if (error.message.includes("unknown lifecycle operation")) return false;
+        // The local lifecycle protocol carries no capability field, so a Daemon that predates
+        // `daemon:computer_upgrade` can only refuse it as an unknown operation — a refusal
+        // that names no reason code at all. The refusals a real request can earn here
+        // (pending, launch failure) all carry one; the only codeless ones left are request
+        // validation errors this caller cannot produce. So "no code" is the wire-level
+        // "cannot admit" signal: launch the detached job directly, as before admission
+        // existed.
+        if (error.code === undefined) return false;
       }
       throw error;
     }

@@ -66,6 +66,10 @@ export interface DaemonLauncher {
 }
 export interface DaemonCommandRunner {
   ensureRunning(): Promise<void>;
+  /** Whether a Daemon answers the local handshake now. A probe only: it never registers or
+   * starts one, so a caller deciding whether the Daemon can take a request must not use
+   * `ensureRunning` — that would boot a deliberately stopped Daemon (task #685). */
+  isRunning(): Promise<boolean>;
   /** Returns the post-command snapshot of every locally registered binding, so a caller can tell
    * which ones the command actually touched (e.g. an unscoped restart skips disabled bindings). */
   command(

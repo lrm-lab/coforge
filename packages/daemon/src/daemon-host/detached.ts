@@ -143,6 +143,10 @@ export class DetachedDaemonHost implements DaemonLauncher {
     await this.#local.ensureRunning();
   }
 
+  isRunning(): Promise<boolean> {
+    return this.#local.isRunning();
+  }
+
   command(
     operation: "start" | "stop" | "restart" | "detach",
     workspaceId?: string,
