@@ -16,10 +16,17 @@ describe("feature flags in the deployed Compose files", () => {
     const definitions = JSON.parse(content as string) as FlagDefinitions;
     // Task #491 stopped pinning experiments to a Workspace in flagd: task-conversations and
     // artifacts now show for every Workspace, switched on per Workspace in Settings > Experiments.
-    // The one rule left is artifact-web-pages, on for every Workspace in staging so QA can make
-    // web pages, which an artifact's page previews (task #514); production stays without it.
+    // artifact-web-pages is on for every staging Workspace so QA can make web pages, which an
+    // artifact's page previews (task #514); task-ref-tokens writes `#channel:#N` /
+    // `dm:@peer:#N` message references as task-ref tokens for QA's write-path check (task #437).
+    // Production stays without both.
     expect(definitions.flags).toEqual({
       "artifact-web-pages": {
+        state: "ENABLED",
+        variants: { on: true, off: false },
+        defaultVariant: "on",
+      },
+      "task-ref-tokens": {
         state: "ENABLED",
         variants: { on: true, off: false },
         defaultVariant: "on",
