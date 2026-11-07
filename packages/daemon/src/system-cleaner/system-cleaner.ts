@@ -420,6 +420,14 @@ export class SystemCleaner {
     const thresholdBytes = this.#fileThreshold(state, kind);
     if (measurement.kind === "not_established" || measurement.bytes <= thresholdBytes) {
       this.#dropItems(ownerAgentId, hint.notificationClass);
+      logger.info("System Cleaner due hint not presented", {
+        event: "system_cleaner:present_skipped",
+        agent_id: ownerAgentId,
+        file: hint.path,
+        ...(measurement.kind === "not_established"
+          ? { not_established: measurement.reason }
+          : { bytes: measurement.bytes, threshold_bytes: thresholdBytes }),
+      });
       return undefined;
     }
     const item = await this.#mint(ownerAgentId, {

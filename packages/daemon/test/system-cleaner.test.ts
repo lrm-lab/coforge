@@ -296,6 +296,41 @@ describe("SystemCleaner period log", () => {
   });
 });
 
+describe("SystemCleaner present log", () => {
+  test("records when a due hint's remeasure finds the file trimmed or unmeasurable", async () => {
+    const { cleaner, measured, period, idle } = await harness();
+    const { records } = await captureDaemonLogs(async () => {
+      cleaner.applyConfig(config());
+      measured.memory = 70 * KIB;
+      await period();
+      measured.memory = 10 * KIB;
+      await idle();
+      measured.memory = 70 * KIB;
+      await period();
+      measured.memory = undefined;
+      await idle();
+    });
+    const skipped = records.filter(
+      (record) => record.properties.event === "system_cleaner:present_skipped",
+    );
+    expect(skipped.map((record) => record.properties)).toEqual([
+      {
+        event: "system_cleaner:present_skipped",
+        agent_id: OWNER,
+        file: "MEMORY.md",
+        bytes: 10 * KIB,
+        threshold_bytes: 64 * KIB,
+      },
+      {
+        event: "system_cleaner:present_skipped",
+        agent_id: OWNER,
+        file: "MEMORY.md",
+        not_established: "missing",
+      },
+    ]);
+  });
+});
+
 describe("SystemCleaner presented log", () => {
   test("names each hinted file with its measured size and threshold", async () => {
     const { cleaner, measured, period, idle } = await harness();
