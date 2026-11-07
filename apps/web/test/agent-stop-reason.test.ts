@@ -52,7 +52,10 @@ test("a private Agent's snapshot goes to its own channel plus the status floor o
   await record({ ...agent, visibility: "private" }, "runtime_login_required");
   expect(published.map((entry) => entry.channel)).toEqual(["agentstatus:w:a", "agentstatus:w"]);
   expect(published[0]!.data.detail).toBe("");
-  expect(published[1]!.data).toMatchObject({ statusOnly: true, stopReason: "runtime_login_required" });
+  expect(published[1]!.data).toMatchObject({
+    statusOnly: true,
+    stopReason: "runtime_login_required",
+  });
 });
 
 test("a rejected or unchanged display write publishes nothing", async () => {

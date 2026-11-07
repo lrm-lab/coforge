@@ -1,9 +1,6 @@
 import type { AgentDisplay } from "./agent-display.server";
 import type { AgentStopReasonRecorder } from "./agent-control-receiver.server";
-import {
-  AGENT_VISIBILITY,
-  normalizeAgentVisibility,
-} from "#src/features/agents/agent-visibility";
+import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import {
   agentStatusChannelFor,
   publishAgentDisplay,

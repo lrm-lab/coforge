@@ -84,13 +84,7 @@ export class AgentControl {
       introductions,
     );
     this.#driver = new AgentControlDriver(store, this.#publisher, signal, timing);
-    this.#receiver = new AgentControlReceiver(
-      store,
-      signal,
-      this.#driver,
-      mentions,
-      stopReasons,
-    );
+    this.#receiver = new AgentControlReceiver(store, signal, this.#driver, mentions, stopReasons);
     this.#batch = new AgentControlBatch(
       runtimeLock,
       this.#access,
