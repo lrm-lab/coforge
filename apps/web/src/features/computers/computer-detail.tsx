@@ -204,6 +204,7 @@ export function ComputerDetail({
               runtimeSlot={runtimeSlot}
               imageSlot={imageSlot}
               canUpgrade={canUpgrade}
+              upgradeInFlight={upgrading}
               onRuntimeUpgrade={() => setUpgradeConfirmOpen(true)}
               onImageUpgrade={() => setImageUpdateOpen(true)}
             />

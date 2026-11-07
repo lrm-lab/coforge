@@ -17,13 +17,27 @@ export async function submitComputerDetailUpgrade(input: {
   const requestId = crypto.randomUUID();
   setUpgradeRequest({ state: "requesting", version, target });
   try {
-    const outcome = upgradeOutcome(await onUpgrade(requestId, target));
+    const status = await onUpgrade(requestId, target);
+    const outcome = upgradeOutcome(status);
     if (outcome.state === "failed") {
       setUpgradeRequest({ state: "refused", version, target, ...outcome.failure });
       return;
     }
-    followComputerUpgrade(queryClient, { computerId, requestId, startedHere: true });
-    setUpgradeRequest({ state: "accepted", requestId, version, target });
+    // The server answers with the upgrade it actually holds: a request that lost the race to
+    // one already in flight comes back under that request's id and row, so follow those.
+    const acceptedVersion = "expectedVersion" in status ? status.expectedVersion : version;
+    const acceptedTarget = "target" in status ? (status.target ?? target) : target;
+    followComputerUpgrade(queryClient, {
+      computerId,
+      requestId: status.requestId,
+      startedHere: true,
+    });
+    setUpgradeRequest({
+      state: "accepted",
+      requestId: status.requestId,
+      version: acceptedVersion,
+      target: acceptedTarget,
+    });
   } catch (error) {
     setUpgradeRequest({
       state: "refused",

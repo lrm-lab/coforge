@@ -32,6 +32,7 @@ export function ComputerDetailStats({
   runtimeSlot,
   imageSlot,
   canUpgrade,
+  upgradeInFlight,
   onRuntimeUpgrade,
   onImageUpgrade,
 }: {
@@ -45,6 +46,7 @@ export function ComputerDetailStats({
   runtimeSlot: ComputerUpgradeSlotState | null;
   imageSlot: ComputerUpgradeSlotState | null;
   canUpgrade: boolean;
+  upgradeInFlight: boolean;
   onRuntimeUpgrade: () => void;
   onImageUpgrade: () => void;
 }) {
@@ -88,6 +90,7 @@ export function ComputerDetailStats({
           computerName={label}
           cloud={false}
           online={computer.online}
+          upgradeInFlight={upgradeInFlight}
           onUpgrade={onRuntimeUpgrade}
         />
       )}
@@ -98,6 +101,7 @@ export function ComputerDetailStats({
           computerName={label}
           cloud
           online={computer.online}
+          upgradeInFlight={upgradeInFlight}
           onUpgrade={onImageUpgrade}
         />
       )}

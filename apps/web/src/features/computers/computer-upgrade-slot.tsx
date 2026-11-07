@@ -47,6 +47,7 @@ export function ComputerUpgradeSlot({
   computerName,
   cloud,
   online,
+  upgradeInFlight = false,
   onUpgrade,
 }: {
   slot: ComputerUpgradeSlotState;
@@ -54,6 +55,8 @@ export function ComputerUpgradeSlot({
   computerName: string;
   cloud: boolean;
   online: boolean;
+  /** Any upgrade already running on this Computer, on either row: one runs at a time. */
+  upgradeInFlight?: boolean;
   onUpgrade: () => void;
 }) {
   const release = useComputerRelease(slotRelease(slot));
@@ -143,7 +146,7 @@ export function ComputerUpgradeSlot({
                   size="sm"
                   color="secondary"
                   iconLeading={RotateCw}
-                  isDisabled={!online}
+                  isDisabled={!online || upgradeInFlight}
                   onPress={onUpgrade}
                 >
                   {m.computer_upgrade_retry()}
@@ -203,7 +206,13 @@ export function ComputerUpgradeSlot({
       actions={
         <>
           {whatsNew}
-          <Button type="button" size="sm" color="primary" isDisabled={!online} onPress={onUpgrade}>
+          <Button
+            type="button"
+            size="sm"
+            color="primary"
+            isDisabled={!online || upgradeInFlight}
+            onPress={onUpgrade}
+          >
             {cloud ? m.computer_cloud_image_update_action() : m.computer_upgrade()}
           </Button>
         </>
