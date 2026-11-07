@@ -74,6 +74,20 @@ type DueHints = {
   activeContext?: MemoryWakeReason;
   disk?: { availableBytes: number };
 };
+type PeriodFileRow = Readonly<{
+  file: string;
+  threshold_bytes: number;
+  bytes?: number;
+  not_established?: string;
+  due?: MemoryWakeReason;
+}>;
+type PeriodDiskRow = Readonly<{
+  available_bytes?: number;
+  total_bytes?: number;
+  low?: boolean;
+  due?: boolean;
+  not_established?: string;
+}>;
 
 /**
  * The System Cleaner: per owner Agent, every configured interval it measures MEMORY.md,
@@ -239,10 +253,18 @@ export class SystemCleaner {
     const { ownerAgentId } = state.config;
     if (this.#states.get(ownerAgentId) !== state) return;
     this.#arm(state);
-    await Promise.all([
-      ...FILE_KINDS.map((kind) => this.#checkFile(ownerAgentId, state, kind)),
+    const [files, disk] = await Promise.all([
+      Promise.all(FILE_KINDS.map((kind) => this.#checkFile(ownerAgentId, state, kind))),
       this.#checkDisk(ownerAgentId, state),
     ]);
+    if (!this.#isCurrent(ownerAgentId, state)) return;
+    logger.info("System Cleaner period measured", {
+      event: "system_cleaner:period",
+      agent_id: ownerAgentId,
+      revision: state.config.revision,
+      files: files.filter((row): row is PeriodFileRow => row !== undefined),
+      disk: disk ?? { not_established: "stale" },
+    });
   }
 
   #isCurrent(ownerAgentId: string, state: OwnerState): boolean {
@@ -261,19 +283,26 @@ export class SystemCleaner {
       : state.config.activeContextThresholdBytes;
   }
 
-  async #checkFile(ownerAgentId: string, state: OwnerState, kind: FileKind): Promise<void> {
-    const measurement = await this.#measureFile(ownerAgentId, FILE_HINTS[kind].path);
-    if (!this.#isCurrent(ownerAgentId, state)) return;
-    if (
-      measurement.kind === "not_established" ||
-      measurement.bytes <= this.#fileThreshold(state, kind)
-    ) {
+  async #checkFile(
+    ownerAgentId: string,
+    state: OwnerState,
+    kind: FileKind,
+  ): Promise<PeriodFileRow | undefined> {
+    const hint = FILE_HINTS[kind];
+    const thresholdBytes = this.#fileThreshold(state, kind);
+    const row: PeriodFileRow = { file: hint.path, threshold_bytes: thresholdBytes };
+    const measurement = await this.#measureFile(ownerAgentId, hint.path);
+    if (!this.#isCurrent(ownerAgentId, state)) return undefined;
+    if (measurement.kind === "not_established" || measurement.bytes <= thresholdBytes) {
       this.#clearDue(ownerAgentId, kind);
-      this.#dropItems(ownerAgentId, FILE_HINTS[kind].notificationClass);
-      return;
+      this.#dropItems(ownerAgentId, hint.notificationClass);
+      return measurement.kind === "not_established"
+        ? { ...row, not_established: measurement.reason }
+        : { ...row, bytes: measurement.bytes };
     }
     const reason = this.#fileWakeReason(kind, ownerAgentId, measurement.bytes);
     if (reason) this.#markDue(ownerAgentId, { [kind]: reason });
+    return { ...row, bytes: measurement.bytes, due: reason };
   }
 
   #fileWakeReason(
@@ -288,11 +317,12 @@ export class SystemCleaner {
     return undefined;
   }
 
-  async #checkDisk(ownerAgentId: string, state: OwnerState): Promise<void> {
+  async #checkDisk(ownerAgentId: string, state: OwnerState): Promise<PeriodDiskRow | undefined> {
     const measurement = await this.#withTimeout(() =>
       this.#measureDiskSpace(this.options.agentsDirectory),
     );
-    if (this.#states.get(ownerAgentId) !== state || measurement.kind === "not_established") return;
+    if (this.#states.get(ownerAgentId) !== state) return undefined;
+    if (measurement.kind === "not_established") return { not_established: measurement.reason };
     const { availableBytes, totalBytes } = measurement;
     if (
       !Number.isFinite(availableBytes) ||
@@ -301,20 +331,21 @@ export class SystemCleaner {
       totalBytes <= 0 ||
       availableBytes > totalBytes
     )
-      return;
+      return { not_established: "invalid_measurement" };
     if (!isDiskLow(availableBytes, totalBytes)) {
       this.#diskLowTipped.delete(ownerAgentId);
       this.#clearDue(ownerAgentId, "disk");
-      return;
+      return { available_bytes: availableBytes, total_bytes: totalBytes, low: false };
     }
     const lastDiskTipAtMs = this.#diskTipAtMs.get(ownerAgentId);
-    if (
+    const due =
       !this.#diskLowTipped.has(ownerAgentId) &&
-      (lastDiskTipAtMs === undefined || this.#clock.now() - lastDiskTipAtMs >= WEEK_MS)
-    ) {
+      (lastDiskTipAtMs === undefined || this.#clock.now() - lastDiskTipAtMs >= WEEK_MS);
+    if (due) {
       this.#diskLowTipped.add(ownerAgentId);
       this.#markDue(ownerAgentId, { disk: { availableBytes } });
     }
+    return { available_bytes: availableBytes, total_bytes: totalBytes, low: true, due };
   }
 
   async #presentDue(ownerAgentId: string, state: OwnerState, due: DueHints): Promise<void> {

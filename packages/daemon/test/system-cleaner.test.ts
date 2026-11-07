@@ -14,6 +14,7 @@ import {
   harness,
   HOUR_MS,
   KIB,
+  LOW_DISK,
   ManualClock,
   MEMORY_ITEM,
   OWNER,
@@ -244,6 +245,54 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await period();
     await idle();
     expect(wakes).toHaveLength(3);
+  });
+});
+
+describe("SystemCleaner period log", () => {
+  test("records one line per period with each measurement, threshold and due mark", async () => {
+    const { cleaner, measured, period } = await harness();
+    const { records } = await captureDaemonLogs(async () => {
+      cleaner.applyConfig(config());
+      measured.memory = 70 * KIB;
+      measured.activeContext = undefined;
+      await period();
+    });
+    const periods = records.filter((record) => record.properties.event === "system_cleaner:period");
+    expect(periods).toHaveLength(1);
+    expect(periods[0]?.properties).toMatchObject({
+      agent_id: OWNER,
+      revision: 1,
+      files: [
+        { file: "MEMORY.md", bytes: 70 * KIB, threshold_bytes: 64 * KIB, due: "first" },
+        {
+          file: "notes/active-context.md",
+          not_established: "missing",
+          threshold_bytes: 4 * KIB,
+        },
+      ],
+      disk: { available_bytes: 200 * GIB, total_bytes: 500 * GIB, low: false },
+    });
+  });
+
+  test("leaves due off an under-threshold file and marks a low disk", async () => {
+    const { cleaner, measured, period } = await harness();
+    const { records } = await captureDaemonLogs(async () => {
+      cleaner.applyConfig(config());
+      measured.memory = 10 * KIB;
+      measured.activeContext = 5 * KIB;
+      measured.disk = LOW_DISK;
+      await period();
+    });
+    const periodRecord = records.find(
+      (record) => record.properties.event === "system_cleaner:period",
+    );
+    expect(periodRecord?.properties).toMatchObject({
+      files: [
+        { file: "MEMORY.md", bytes: 10 * KIB, threshold_bytes: 64 * KIB },
+        { file: "notes/active-context.md", bytes: 5 * KIB, threshold_bytes: 4 * KIB, due: "first" },
+      ],
+      disk: { available_bytes: 10 * GIB, total_bytes: 500 * GIB, low: true, due: true },
+    });
   });
 });
 

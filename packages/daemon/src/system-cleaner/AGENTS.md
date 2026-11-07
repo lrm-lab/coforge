@@ -17,7 +17,9 @@ Rules for `src/system-cleaner/`. They extend `packages/daemon/AGENTS.md`.
   (`thresholdBytes` for MEMORY.md, `activeContextThresholdBytes` for the Active Context) and
   each with its own hint item, class and wording: what to trim differs between an index and a
   current state. Never share one limit or one item between them.
-- A period only measures and marks a hint due. Present it only from
+- A period only measures and marks a hint due, then logs one `system_cleaner:period` record with
+  each file's bytes or `not_established` reason, its threshold and due mark, and the disk
+  reading. Present it only from
   `onAgentWorkingToIdle`, which `DaemonRuntime` calls when a turn ends and when a process exits
   without a crash. Remeasure each due file before minting.
 - An Agent whose workspace is deleted here or moved to another Computer is forgotten
