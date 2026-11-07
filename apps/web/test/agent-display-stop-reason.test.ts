@@ -203,6 +203,112 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
     expect((await subject.snapshot(scope)).stopReason).toBe("billing_exhausted");
   });
 
+  test("an offline Agent records a new launch's failure reason", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeStatus(status(2, "inactive"));
+    // A relaunch fails: the daemon reports inactive, then the error Activity under the
+    // failed launch's own id. The offline gate must let this one reason through.
+    await subject.observeActivity(
+      activity(3, "runtime_error", {
+        launchId: "launch-b",
+        level: "error",
+        runtimeError: {
+          errorClass: "RuntimeUnavailableError",
+          errorReason: "runtime_login_required",
+          fingerprint: "fp-login",
+          providerMessage: "Cursor CLI is not signed in on this Computer",
+        },
+      }),
+      { daemonInstanceId: "daemon-a", launchId: "launch-b" },
+    );
+    const offline = await subject.snapshot(scope);
+    expect(offline.activityKind).toBe("offline");
+    expect(offline.stopReason).toBe("runtime_login_required");
+    expect(offline.stopDetail).toBe("Cursor CLI is not signed in on this Computer");
+  });
+
+  test("a never-launched Agent records its first launch's failure reason", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1, "inactive"));
+    await subject.observeActivity(
+      activity(2, "runtime_error", {
+        launchId: "launch-b",
+        level: "error",
+        runtimeError: {
+          errorClass: "RuntimeUnavailableError",
+          errorReason: "runtime_login_required",
+          fingerprint: "fp-login",
+        },
+      }),
+      { daemonInstanceId: "daemon-a", launchId: "launch-b" },
+    );
+    const offline = await subject.snapshot(scope);
+    expect(offline.stopReason).toBe("runtime_login_required");
+    expect(offline.stopDetail).toBeNull();
+  });
+
+  test("a successful relaunch clears the recorded launch-failure reason", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeStatus(status(2, "inactive"));
+    await subject.observeActivity(
+      activity(3, "runtime_error", {
+        launchId: "launch-b",
+        level: "error",
+        runtimeError: {
+          errorClass: "RuntimeUnavailableError",
+          errorReason: "runtime_login_required",
+          fingerprint: "fp-login",
+          providerMessage: "Cursor CLI is not signed in on this Computer",
+        },
+      }),
+      { daemonInstanceId: "daemon-a", launchId: "launch-b" },
+    );
+    await subject.observeStatus(status(4));
+    const back = await subject.snapshot(scope);
+    expect(back.activityKind).toBe("online");
+    expect(back.stopReason).toBeNull();
+    expect(back.stopDetail).toBeNull();
+  });
+
+  test("a stale launch's late error frame does not overwrite the recorded reason", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1, "inactive"));
+    await subject.observeActivity(
+      activity(2, "runtime_error", {
+        launchId: "launch-b",
+        level: "error",
+        observedAtMs: 200,
+        runtimeError: {
+          errorClass: "RuntimeUnavailableError",
+          errorReason: "runtime_login_required",
+          fingerprint: "fp-login",
+        },
+      }),
+      { daemonInstanceId: "daemon-a", launchId: "launch-b" },
+    );
+    // An older launch's error frame lands late: older observedAt, so it must not win.
+    await subject.observeActivity(
+      activity(3, "runtime_error", {
+        launchId: "launch-a",
+        level: "error",
+        observedAtMs: 50,
+        runtimeError: {
+          errorClass: "ProviderQuotaError",
+          errorReason: "billing_exhausted",
+          fingerprint: "fp-old",
+        },
+      }),
+      { daemonInstanceId: "daemon-a", launchId: "launch-a" },
+    );
+    expect((await subject.snapshot(scope)).stopReason).toBe("runtime_login_required");
+  });
+
   test("an error-kind Activity without a reason keeps the last stop reason", async () => {
     await redis.send("FLUSHDB", []);
     const subject = display();

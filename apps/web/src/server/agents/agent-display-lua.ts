@@ -192,9 +192,36 @@ local state = decode_state(redis.call("GET", KEYS[1]))
 local now = tonumber(ARGV[1])
 local projected = project(state, now)
 if ARGV[7] ~= ARGV[9] then return reject_projection(projected, state) end
+-- A launch that fails before its process ever reports active still explains why the Agent is
+-- offline: the daemon reports "inactive" first, then the failed launch's error Activity. Let
+-- exactly that frame through to record the stop reason; every other offline Activity drops as
+-- before. "New launch" means a launchId no recorded Activity or retired launch has claimed,
+-- newer than the last recorded Activity and the last recorded failure — the same bounded
+-- best-effort ordering the cross-launch fence already is.
+-- Trade-off: recording the failure overwrites retiredLaunchId, and only one retired launchId
+-- is kept, so the launch retired before it loses its dedicated fence. Accepted: that launch
+-- predates the recorded failure, so its late frames already lose on observedAt ordering.
+local record_reason = false
+if state.process and state.process.daemonInstanceId == ARGV[8] and ARGV[16] ~= "" and
+    (state.process.status ~= "active" or now >= state.process.leaseUntil) then
+  local unseen = not state.activity or
+    (state.activity.launchId ~= ARGV[7] and tonumber(ARGV[11]) > tonumber(state.activity.observedAt))
+  local newer = not state.stopLaunch or tonumber(ARGV[11]) > tonumber(state.stopLaunch.observedAt)
+  record_reason = unseen and newer and state.retiredLaunchId ~= ARGV[7]
+end
 if state.process then
-  if state.process.daemonInstanceId ~= ARGV[8] or state.process.status ~= "active" or
-      now >= state.process.leaseUntil then return reject_projection(projected, state) end
+  local offline = state.process.status ~= "active" or now >= state.process.leaseUntil
+  if state.process.daemonInstanceId ~= ARGV[8] or (offline and not record_reason) then
+    return reject_projection(projected, state) end
+end
+if record_reason then
+  state.stopReason = ARGV[16]
+  state.stopDetail = ARGV[17] ~= "" and ARGV[17] or nil
+  state.stopLaunch = { launchId = ARGV[7], observedAt = tonumber(ARGV[11]) }
+  state.retiredLaunchId = ARGV[7]
+  revision(state)
+  save(state)
+  return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
 end
 local previous = state.activity
 local was_visible = state.activityVisible
