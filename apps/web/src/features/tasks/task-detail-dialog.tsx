@@ -1,4 +1,5 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
+import { MemberDirectory } from "#src/features/conversations/member-directory";
 import {
   ArrowLeft,
   ChevronRight,
@@ -339,7 +340,11 @@ export function TaskDetailDialog({
                 }
                 sidebar={sidebar ? section : undefined}
                 pages={{
-                  discussion: () => thread?.(),
+                  // The popup is not inside the channel stream's directory: its notices and
+                  // seen-by lists name people by the board's members (task #coforge-ui:#20).
+                  discussion: () => (
+                    <MemberDirectory members={members}>{thread?.()}</MemberDirectory>
+                  ),
                   subtasks: () => (
                     <TaskSubtasksPage
                       task={task}

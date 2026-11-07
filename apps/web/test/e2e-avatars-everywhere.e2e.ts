@@ -103,6 +103,27 @@ test("names carry their faces", async () => {
     await openHistory();
     await shoot("history-phone");
 
+    // The Task's discussion: its notices name people by face too, though the popup sits outside
+    // the channel stream (task #coforge-ui:#20).
+    await browser("set", "viewport", "1280", "900");
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`);
+    const discussionNotice = `${dialog}?.querySelector('[data-message="system"]')`;
+    const fold = `[...(${dialog}?.querySelectorAll("button") ?? [])].find((b) => /task updates?$/.test(b.textContent.trim()))`;
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && (${discussionNotice} != null || ${fold} != null)`,
+    );
+    if (await evaluate<boolean>(`${discussionNotice} == null`)) {
+      await evaluate(`(${fold}.setAttribute("data-e2e-fold", ""), true)`);
+      await browser("click", "[data-e2e-fold]");
+      await browser("wait", "--fn", `${discussionNotice} != null`);
+    }
+    await browser("wait", "500");
+    const assigned = `[...${dialog}.querySelectorAll('[data-message="system"]')].find((row) => row.textContent.includes(${JSON.stringify(agent.name)}))`;
+    expect(await evaluate<number>(`${assigned}.querySelectorAll("img").length`)).toBe(2);
+    await shoot("task-discussion");
+
     // A system notice: who added whom, each by face, in the one muted line.
     const notices = await db.conversation.create({
       data: {
