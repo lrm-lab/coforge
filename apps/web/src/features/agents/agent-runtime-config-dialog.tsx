@@ -124,7 +124,7 @@ export function AgentRuntimeConfigForm({
       <DialogHeader title={m.agent_profile_edit_runtime_config()} onClose={onClose} />
       {/* One column: the runtime fields stack (provider, then the model it belongs to, then
           reasoning) instead of splitting into two columns on a wide screen. */}
-      <div className="grid gap-4 px-6 py-6">
+      <div className="grid gap-4 px-6 pt-6 pb-2">
         {showComputerPicker ? (
           <Select
             name="computerId"
@@ -192,70 +192,74 @@ export function AgentRuntimeConfigForm({
             >
               {m.agent_env_more()}
             </Button>
-            <DisclosurePanel className="grid gap-3 pt-3">
-              {envPending ? (
-                <p className="text-sm text-tertiary">{m.agent_env_loading()}</p>
-              ) : (
-                <>
-                  <div className="grid gap-1">
-                    <p className="text-xs font-medium text-tertiary">{m.agent_env_title()}</p>
-                    <p className="text-sm text-tertiary">{m.agent_env_description()}</p>
-                  </div>
-                  {envRows.map((row, index) => (
-                    <div key={index} className="flex min-w-0 items-start gap-2">
-                      <Input
-                        name="envKey"
-                        size={controlSize}
-                        className="min-w-0 flex-1"
-                        placeholder={m.agent_env_key_placeholder()}
-                        isInvalid={Boolean(envKeyErrors[index])}
-                        hint={envKeyErrors[index]}
-                        value={row.key}
-                        onChange={(value) =>
-                          setEnvRows(
-                            envRows.map((r, i) => (i === index ? { ...r, key: value } : r)),
-                          )
-                        }
-                      />
-                      {/* Top-aligned so a name's error line grows the row downward; `h-9` is the sm
-                          input's height, keeping "=" and the remove button level with the inputs. */}
-                      <span aria-hidden="true" className="flex h-9 items-center text-tertiary">
-                        =
-                      </span>
-                      <Input
-                        name="envValue"
-                        size={controlSize}
-                        className="min-w-0 flex-1"
-                        placeholder={m.agent_env_value_placeholder()}
-                        value={row.value}
-                        onChange={(value) =>
-                          setEnvRows(envRows.map((r, i) => (i === index ? { ...r, value } : r)))
-                        }
-                      />
-                      <div className="flex h-9 items-center">
-                        <ButtonUtility
-                          type="button"
-                          size="xs"
-                          color="tertiary"
-                          icon={Trash01}
-                          aria-label={m.agent_env_remove_label({ index: index + 1 })}
-                          onClick={() => setEnvRows(envRows.filter((_, i) => i !== index))}
-                        />
-                      </div>
+            {/* The spacing sits on a wrapper: on the panel, its top padding stayed when the panel
+                was closed, a gap under "More" nobody asked for (task #coforge-ui:#21). */}
+            <DisclosurePanel>
+              <div className="grid gap-3 pt-3">
+                {envPending ? (
+                  <p className="text-sm text-tertiary">{m.agent_env_loading()}</p>
+                ) : (
+                  <>
+                    <div className="grid gap-1">
+                      <p className="text-xs font-medium text-tertiary">{m.agent_env_title()}</p>
+                      <p className="text-sm text-tertiary">{m.agent_env_description()}</p>
                     </div>
-                  ))}
-                  <Button
-                    type="button"
-                    color="secondary"
-                    size="sm"
-                    className="justify-self-start"
-                    isDisabled={envRows.length >= MAX_ENV_ROWS}
-                    onPress={() => setEnvRows([...envRows, { key: "", value: "" }])}
-                  >
-                    {m.agent_env_add()}
-                  </Button>
-                </>
-              )}
+                    {envRows.map((row, index) => (
+                      <div key={index} className="flex min-w-0 items-start gap-2">
+                        <Input
+                          name="envKey"
+                          size={controlSize}
+                          className="min-w-0 flex-1"
+                          placeholder={m.agent_env_key_placeholder()}
+                          isInvalid={Boolean(envKeyErrors[index])}
+                          hint={envKeyErrors[index]}
+                          value={row.key}
+                          onChange={(value) =>
+                            setEnvRows(
+                              envRows.map((r, i) => (i === index ? { ...r, key: value } : r)),
+                            )
+                          }
+                        />
+                        {/* Top-aligned so a name's error line grows the row downward; `h-9` is the sm
+                          input's height, keeping "=" and the remove button level with the inputs. */}
+                        <span aria-hidden="true" className="flex h-9 items-center text-tertiary">
+                          =
+                        </span>
+                        <Input
+                          name="envValue"
+                          size={controlSize}
+                          className="min-w-0 flex-1"
+                          placeholder={m.agent_env_value_placeholder()}
+                          value={row.value}
+                          onChange={(value) =>
+                            setEnvRows(envRows.map((r, i) => (i === index ? { ...r, value } : r)))
+                          }
+                        />
+                        <div className="flex h-9 items-center">
+                          <ButtonUtility
+                            type="button"
+                            size="xs"
+                            color="tertiary"
+                            icon={Trash01}
+                            aria-label={m.agent_env_remove_label({ index: index + 1 })}
+                            onClick={() => setEnvRows(envRows.filter((_, i) => i !== index))}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      color="secondary"
+                      size="sm"
+                      className="justify-self-start"
+                      isDisabled={envRows.length >= MAX_ENV_ROWS}
+                      onPress={() => setEnvRows([...envRows, { key: "", value: "" }])}
+                    >
+                      {m.agent_env_add()}
+                    </Button>
+                  </>
+                )}
+              </div>
             </DisclosurePanel>
           </Disclosure>
         )}
