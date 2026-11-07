@@ -189,4 +189,39 @@ describe.skipIf(!db)("PrismaAgentApiKeyRepository", () => {
       "invalid Agent API key",
     );
   });
+
+  test("a Stop's revokeAll that lands after a newer mint kills only its own epoch", async () => {
+    const f = await fixture();
+    const stoppedKey = await f.mint(f.computerA.id);
+    const stoppedRow = await db!.agentApiKey.findUniqueOrThrow({
+      where: { apiKeyHash: hashAgentApiKey(stoppedKey) },
+    });
+    // The racing Start commits its mint before the Stop's revokeAll executes.
+    const startedKey = await f.mint(f.computerA.id);
+
+    await f.repository.revokeAll(stoppedRow);
+
+    await expect(authenticateAgentApiKey(stoppedKey, f.repository)).rejects.toThrow(
+      "invalid Agent API key",
+    );
+    await expect(authenticateAgentApiKey(startedKey, f.repository)).resolves.toMatchObject({
+      agentId: f.agent.id,
+    });
+  });
+
+  test("a Stop and a Start racing leave exactly the minted key alive", async () => {
+    const f = await fixture();
+    const stoppedKey = await f.mint(f.computerA.id);
+    const stoppedRow = await db!.agentApiKey.findUniqueOrThrow({
+      where: { apiKeyHash: hashAgentApiKey(stoppedKey) },
+    });
+
+    const [, startedKey] = await Promise.all([
+      f.repository.revokeAll(stoppedRow),
+      f.mint(f.computerA.id),
+    ]);
+
+    expect((await f.activeHashes()).length).toBe(1);
+    await expect(authenticateAgentApiKey(startedKey, f.repository)).resolves.toBeTruthy();
+  });
 });

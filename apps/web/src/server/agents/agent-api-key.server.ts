@@ -43,7 +43,8 @@ export interface AgentApiKeyRepository {
   revokeOlderKeys(record: AgentApiKeyRecord): Promise<void>;
   /** Revokes exactly the key `id` names — a failed launch drops only its own mint. */
   revoke(id: string): Promise<void>;
-  /** Revokes every active key of `record`'s Agent — a Stop ends the whole overlap window. */
+  /** Revokes the Agent's active keys minted at or before `record`'s epoch — a Stop ends the
+   * whole overlap window of its own launch while a racing newer mint survives. */
   revokeAll(record: AgentApiKeyRecord): Promise<void>;
 }
 

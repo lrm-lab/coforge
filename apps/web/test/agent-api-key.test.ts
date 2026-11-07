@@ -75,12 +75,14 @@ class MemoryAgentApiKeys implements AgentApiKeyRepository {
   }
 
   async revokeAll(record: AgentApiKeyRecord) {
+    const mine = this.#order.get(record.id)!;
     for (const current of this.records.values())
       if (
         current.agentId === record.agentId &&
         current.workspaceId === record.workspaceId &&
         current.ownerId === record.ownerId &&
-        this.#active(current)
+        this.#active(current) &&
+        this.#order.get(current.id)! <= mine
       )
         current.revokedAt = new Date();
   }
@@ -267,4 +269,27 @@ test("a Stop scope ends every active key of the Agent at once", async () => {
   await expect(authenticateAgentApiKey(second, repository)).rejects.toThrow(
     "invalid Agent API key",
   );
+});
+
+test("a Stop's revokeAll leaves a key minted after its epoch alive", async () => {
+  const repository = new MemoryAgentApiKeys();
+  const input = {
+    agentId: "agent-a",
+    workspaceId: "workspace-a",
+    ownerId: "owner-a",
+    computerId: "computer-a",
+    repository,
+  };
+  const stopped = await createAgentApiKey(input);
+  const started = await createAgentApiKey(input);
+
+  // The Stop's request still names its own launch's key when a racing Start's mint commits.
+  await repository.revokeAll(await findAgentApiKey(stopped, repository));
+
+  await expect(authenticateAgentApiKey(stopped, repository)).rejects.toThrow(
+    "invalid Agent API key",
+  );
+  await expect(authenticateAgentApiKey(started, repository)).resolves.toMatchObject({
+    agentId: "agent-a",
+  });
 });
