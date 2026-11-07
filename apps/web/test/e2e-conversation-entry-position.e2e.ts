@@ -187,17 +187,14 @@ for (const width of [1440, 390]) {
         const boundary = await db.message.findFirstOrThrow({
           where: { conversationId: channel.id, sequence: mode === "system-unread" ? 86 : 73 },
         });
-        await browser("set", "viewport", String(width), "900");
         // The thread preview's rows fill in after the pane has opened on it, as a preview that
         // arrives with the network read after the cached stream does. Chromium's scroll anchoring
         // then moves the position part of the way, and its scroll event reaches the pane before
         // the resize does (the order Frank's phone left the last reply row cut off in). Emulated in
         // one task, after the open's scrolls: grow the last preview (a style, not DOM React owns)
         // and move the position by part of the growth.
-        // `open url --init-script file` leaves the tab on about:blank under the Linux runner's
-        // Chrome; the flag has to precede the command, the way e2e-notification-settings does.
         const lateRows = join(artifacts, "late-thread-rows.js");
-        if (thread) {
+        if (thread)
           await Bun.write(
             lateRows,
             // Registrations persist for the session, so a later thread test re-runs this on a
@@ -221,8 +218,15 @@ for (const width of [1440, 390]) {
   Element.prototype.scrollTo = wrapper;
 }`,
           );
-          await browser("--init-script", lateRows, "eval", "true");
-        }
+        // `open url --init-script file` leaves the tab on about:blank under the Linux runner's
+        // Chrome; the flag has to precede the command, the way e2e-notification-settings does.
+        await browser(
+          ...(thread ? ["--init-script", lateRows] : []),
+          "set",
+          "viewport",
+          String(width),
+          "900",
+        );
         await browser("open", `${proxy.origin}/en/w/${workspaceSlug}/channel/${channel.id}`);
         await browser(
           "wait",
