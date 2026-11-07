@@ -69,6 +69,9 @@ function typedLaunchError(error: unknown, configuredModel: string | undefined): 
   return error;
 }
 
+type SdkSession = Awaited<ReturnType<typeof createSession>>["session"];
+type PromptOptions = Parameters<SdkSession["prompt"]>[1];
+
 class AgentSessionImpl implements AgentSession {
   /** Busy input steers the live stream (`streamingBehavior: "steer"`). */
   readonly steersBusyTurn = true;
@@ -76,6 +79,10 @@ class AgentSessionImpl implements AgentSession {
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   readonly #exit = new SessionExit();
   readonly #pendingPrompts = new Set<Promise<void>>();
+  /** The tracked prompt() that started the live run; agent_settled retires only it —
+   * prompts still in preflight keep the turn live and interrupt()/dispose() waiting
+   * for work about to start (task #651). */
+  #runPrompt: Promise<void> | undefined;
   #interrupting = false;
   #failure: string | undefined;
   /** The current model's context window, read at the stream seam for the compaction log. */
@@ -137,6 +144,14 @@ class AgentSessionImpl implements AgentSession {
             : undefined;
       }
       if (event.type === "agent_settled") {
+        // The SDK resolves the settled run's prompt() promise only after _startRun returns,
+        // a microtask after this event — so its bookkeeping must end here, before "completed"
+        // reaches listeners that read hasLiveTurn (the invariant Kiro documents on #turn).
+        // Only that run's prompt is retired: a prompt still inside preflight has no run yet
+        // and must keep the turn live (task #651).
+        const settled = this.#runPrompt;
+        this.#runPrompt = undefined;
+        if (settled !== undefined) this.#pendingPrompts.delete(settled);
         const interrupted = event.aborted || this.#interrupting;
         const failure = this.#failure;
         if (failure !== undefined && !interrupted) this.#emit({ type: "error", message: failure });
@@ -154,9 +169,13 @@ class AgentSessionImpl implements AgentSession {
     }
     this.#runtime.resetMemoryBudget?.();
     this.#setIdentity("unknown");
+    const tracked = this.#prompt(message);
     try {
-      await this.#trackPrompt(this.#runtime.session.prompt(message));
+      await tracked;
     } catch (error) {
+      // A rejected admission settles its bookkeeping before "completed", same as agent_settled.
+      this.#pendingPrompts.delete(tracked);
+      if (this.#runPrompt === tracked) this.#runPrompt = undefined;
       this.#emit({
         type: "error",
         message: error instanceof Error ? error.message : "Agent failed",
@@ -182,14 +201,12 @@ class AgentSessionImpl implements AgentSession {
     // SDK prompt completion waits for the whole run; preflight is the public
     // acceptance boundary used by Pi's RPC implementation as well.
     await new Promise<void>((resolve, reject) => {
-      void this.#trackPrompt(
-        this.#runtime.session.prompt(notice, {
-          streamingBehavior: "steer",
-          // Any disposition (`started`, `queued`, `handled`) means the SDK accepted the input; a
-          // rejected prompt settles through the returned promise instead.
-          preflightResult: () => resolve(),
-        }),
-      ).catch(reject);
+      void this.#prompt(notice, {
+        streamingBehavior: "steer",
+        // Any disposition (`started`, `queued`, `handled`) means the SDK accepted the input; a
+        // rejected prompt settles through the returned promise instead.
+        preflightResult: () => resolve(),
+      }).catch(reject);
     });
   }
   subscribe(listener: (event: AgentRuntimeEvent) => void) {
@@ -229,6 +246,18 @@ class AgentSessionImpl implements AgentSession {
       this.#exit.finish();
     })();
     return this.#disposal;
+  }
+  /** session.prompt() with run ownership tracked: `preflightResult("started")` names the
+   * one prompt that owns the run agent_settled will retire. */
+  #prompt(text: string, options?: PromptOptions): Promise<void> {
+    const prompt = this.#runtime.session.prompt(text, {
+      ...options,
+      preflightResult: (disposition) => {
+        options?.preflightResult?.(disposition);
+        if (disposition === "started") this.#runPrompt = prompt;
+      },
+    });
+    return this.#trackPrompt(prompt);
   }
   #trackPrompt(promise: Promise<void>) {
     this.#pendingPrompts.add(promise);
