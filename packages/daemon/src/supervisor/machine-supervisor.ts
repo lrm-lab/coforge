@@ -79,6 +79,13 @@ import {
   type MachineRestartContext,
 } from "./machine-supervisor-restart";
 import {
+  commandTargets,
+  markWorkspacesUnderWay,
+  supersedeWorkspaceWork,
+  trackWorkspaceWork,
+  type MachineInFlightContext,
+} from "./machine-supervisor-inflight";
+import {
   type LifecycleFailure,
   type PendingUpgradeSettler,
   type RestartResult,
@@ -324,45 +331,22 @@ export class MachineSupervisor {
   /** Takes over the start/restart work of these Workspaces requested so far; returns this
    * request's sequence. */
   #supersede(workspaceIds: readonly string[], by: "stop" | "configure"): number {
-    const sequence = ++this.#sequence;
-    for (const id of workspaceIds) {
-      this.#supersededAt.set(id, { sequence, by });
-      this.#inFlight.get(id)?.abort(new WorkspaceLifecycleSupersededError(id, by));
-    }
-    return sequence;
+    return supersedeWorkspaceWork(this.#inFlightOps, workspaceIds, by);
   }
 
   /** Marks these Workspaces under way until each is settled (or all are, once the work ends). */
   #markUnderWay(workspaceIds: readonly string[]) {
-    const marked = new Set(workspaceIds);
-    for (const id of marked) this.#underWay.set(id, (this.#underWay.get(id) ?? 0) + 1);
-    const one = (id: string) => {
-      if (!marked.delete(id)) return;
-      const count = (this.#underWay.get(id) ?? 1) - 1;
-      if (count > 0) this.#underWay.set(id, count);
-      else this.#underWay.delete(id);
-    };
-    return { one, all: () => [...marked].forEach(one) };
+    return markWorkspacesUnderWay(this.#inFlightOps, workspaceIds);
   }
 
   /** Runs one Workspace's start/restart work where a stop or configure can abort it. */
-  async #track<T>(workspaceId: string, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
-    const controller = new AbortController();
-    this.#inFlight.set(workspaceId, controller);
-    try {
-      return await run(controller.signal);
-    } finally {
-      if (this.#inFlight.get(workspaceId) === controller) this.#inFlight.delete(workspaceId);
-    }
+  #track<T>(workspaceId: string, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    return trackWorkspaceWork(this.#inFlightOps, workspaceId, run);
   }
 
   /** The Workspaces a command acts on: an unscoped restart leaves disabled bindings alone. */
   #targets(operation: "start" | "stop" | "restart", workspaceId?: string): ManagedBinding[] {
-    return this.#bindings.filter(
-      (binding) =>
-        (!workspaceId || binding.workspaceId === workspaceId) &&
-        !(operation === "restart" && !workspaceId && !binding.enabled),
-    );
+    return commandTargets(this.#inFlightOps, operation, workspaceId);
   }
 
   async #command(
@@ -651,6 +635,18 @@ export class MachineSupervisor {
       saveBinding: (binding) => this.#saveBinding(binding),
       settlePendingUpgrade: this.settlePendingUpgrade,
       now: this.now,
+    };
+  }
+
+  /** The in-flight bookkeeping's view; the maps are shared by reference so `view()` and
+   * `#command` keep reading them directly. */
+  get #inFlightOps(): MachineInFlightContext {
+    return {
+      bindings: () => this.#bindings,
+      inFlight: this.#inFlight,
+      underWay: this.#underWay,
+      supersededAt: this.#supersededAt,
+      nextSequence: () => ++this.#sequence,
     };
   }
 
