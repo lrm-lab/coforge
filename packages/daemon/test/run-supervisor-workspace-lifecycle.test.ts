@@ -1,7 +1,12 @@
 import { test, expect, mock } from "bun:test";
-import type { DaemonCommandRequest, ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
+import {
+  UPGRADE_ERROR_CODE,
+  type DaemonCommandRequest,
+  type ManagedRuntimeIdentity,
+} from "@lrm/coforge-sdk/internal";
 
 import { runWorkspaceLifecycleCommand } from "#src/supervisor/run-supervisor-workspace-lifecycle";
+import { UpgradeOperationPendingError } from "#src/supervisor/upgrade-error";
 
 /** `command()`'s workspace-scoped lifecycle (task #417 step 3): upgrade records and launches,
  * upgrade_ack acknowledges, detach detaches and answers the view — start/stop/restart are not
@@ -119,6 +124,112 @@ test("daemon:detach passes the request's target to the supervisor only on this s
     "ws",
     expect.objectContaining({ target: undefined }),
   );
+});
+
+test("daemon:computer_upgrade admits machine-wide, refreshes every child, launches and watches each copy", async () => {
+  const pending = { requestId: "req", expectedVersion: "2", state: "pending" as const, requestedAt: 7 };
+  const supervisor = {
+    snapshot: mock(async () => [
+      { workspaceId: "a", upgradeOperations: [pending] },
+      { workspaceId: "b", upgradeOperations: [pending] },
+    ]),
+    recordUpgrade: mock(async () => true),
+  };
+  const d = deps({
+    method: "daemon:computer_upgrade",
+    request: { requestId: "req", expectedVersion: "2" } as DaemonCommandRequest,
+    supervisor: supervisor as never,
+  });
+  expect(await runWorkspaceLifecycleCommand(d)).toBeUndefined();
+  // Admission names no Workspace: any current binding satisfies recordUpgrade's local check,
+  // and the record it writes fans out onto every binding.
+  expect(supervisor.recordUpgrade).toHaveBeenCalledWith("a", "req", "2");
+  expect(d.refreshChildUpgradeConfig).toHaveBeenCalledTimes(2);
+  expect(d.refreshChildUpgradeConfig).toHaveBeenCalledWith("a");
+  expect(d.refreshChildUpgradeConfig).toHaveBeenCalledWith("b");
+  expect(d.launchComputerUpgrade).toHaveBeenCalledWith("req", "2", { stateDirectory: "/state" });
+  expect(d.watchPendingUpgrade).toHaveBeenCalledWith("a", "req", 7);
+  expect(d.watchPendingUpgrade).toHaveBeenCalledWith("b", "req", 7);
+});
+
+test("daemon:computer_upgrade replay and pending refusal never launch a second job", async () => {
+  const replay = deps({
+    method: "daemon:computer_upgrade",
+    request: { requestId: "req", expectedVersion: "2" } as DaemonCommandRequest,
+    supervisor: {
+      snapshot: mock(async () => [{ workspaceId: "a", upgradeOperations: [] }]),
+      recordUpgrade: mock(async () => false),
+    } as never,
+  });
+  expect(await runWorkspaceLifecycleCommand(replay)).toBeUndefined();
+  expect(replay.launchComputerUpgrade).not.toHaveBeenCalled();
+  expect(replay.watchPendingUpgrade).not.toHaveBeenCalled();
+  expect(replay.refreshChildUpgradeConfig).not.toHaveBeenCalled();
+
+  const refused = deps({
+    method: "daemon:computer_upgrade",
+    request: { requestId: "req", expectedVersion: "2" } as DaemonCommandRequest,
+    supervisor: {
+      snapshot: mock(async () => [{ workspaceId: "a", upgradeOperations: [] }]),
+      recordUpgrade: mock(async () => {
+        throw new UpgradeOperationPendingError("still pending");
+      }),
+    } as never,
+  });
+  await expect(runWorkspaceLifecycleCommand(refused)).rejects.toBeInstanceOf(
+    UpgradeOperationPendingError,
+  );
+  expect(refused.launchComputerUpgrade).not.toHaveBeenCalled();
+});
+
+test("daemon:computer_upgrade with no bindings launches unrecorded; a launch failure settles every copy", async () => {
+  const recordUpgrade = mock(async () => true);
+  const empty = deps({
+    method: "daemon:computer_upgrade",
+    request: { requestId: "req", expectedVersion: "2" } as DaemonCommandRequest,
+    supervisor: {
+      snapshot: mock(async () => []),
+      recordUpgrade,
+    } as never,
+  });
+  expect(await runWorkspaceLifecycleCommand(empty)).toBeUndefined();
+  // No binding means no recordUpgrade call at all — the installer lock is the only guard.
+  expect(recordUpgrade).not.toHaveBeenCalled();
+  expect(empty.launchComputerUpgrade).toHaveBeenCalledWith("req", "2", {
+    stateDirectory: "/state",
+  });
+
+  const pending = { requestId: "req", expectedVersion: "2", state: "pending" as const, requestedAt: 7 };
+  const failed = deps({
+    method: "daemon:computer_upgrade",
+    request: { requestId: "req", expectedVersion: "2" } as DaemonCommandRequest,
+    supervisor: {
+      snapshot: mock(async () => [
+        { workspaceId: "a", upgradeOperations: [pending] },
+        { workspaceId: "b", upgradeOperations: [pending] },
+      ]),
+      recordUpgrade: mock(async () => true),
+    } as never,
+    launchComputerUpgrade: mock(async () => {
+      throw new Error("spawn refused");
+    }),
+    completeUpgrade: mock(async () => true),
+  });
+  await expect(runWorkspaceLifecycleCommand(failed)).rejects.toMatchObject({
+    name: "UpgradeLaunchFailedError",
+    code: UPGRADE_ERROR_CODE.LAUNCH_FAILED,
+  });
+  // The launch failure settles the pending copy on every binding that carries it.
+  expect(failed.completeUpgrade).toHaveBeenCalledTimes(2);
+  expect(failed.completeUpgrade).toHaveBeenCalledWith("a", "req", {
+    requestId: "req",
+    status: "failed",
+    at: expect.any(Number),
+    error: "spawn refused",
+    errorCode: UPGRADE_ERROR_CODE.LAUNCH_FAILED,
+  });
+  expect(failed.completeUpgrade).toHaveBeenCalledWith("b", "req", expect.anything());
+  expect(failed.watchPendingUpgrade).not.toHaveBeenCalled();
 });
 
 test("daemon:detach answers detach_not_bound when the supervisor holds no such binding", async () => {

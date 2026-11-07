@@ -70,10 +70,15 @@ export async function runWorkspaceCommand({
     view,
   });
   if (handled !== undefined) return handled;
-  // upgrade, upgrade_ack and detach ran inside `runWorkspaceLifecycleCommand` (each returns
-  // undefined — the detach's keyed marker came back through `handled`); the view is their
-  // answer.
-  if (method === "daemon:upgrade" || method === "daemon:upgrade_ack" || method === "daemon:detach")
+  // upgrade, computer_upgrade, upgrade_ack and detach ran inside
+  // `runWorkspaceLifecycleCommand` (each returns undefined — the detach's keyed marker came
+  // back through `handled`); the view is their answer.
+  if (
+    method === "daemon:upgrade" ||
+    method === "daemon:computer_upgrade" ||
+    method === "daemon:upgrade_ack" ||
+    method === "daemon:detach"
+  )
     return view();
   if (method !== "daemon:snapshot") {
     const operation = method.slice("daemon:".length);

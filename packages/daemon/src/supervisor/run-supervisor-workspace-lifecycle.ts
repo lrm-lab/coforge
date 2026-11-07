@@ -9,6 +9,37 @@ import type { MachineSupervisor } from "./machine-supervisor";
 import type { ComputerUpgradeReceipt } from "#src/platform/computer-upgrade-receipts";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
 
+/** The bindings still carrying this request's pending copy, with its recorded requestedAt. */
+async function pendingMachineUpgradeCopies(
+  supervisor: MachineSupervisor,
+  requestId: string,
+): Promise<{ workspaceId: string; requestedAt: number }[]> {
+  return (await supervisor.snapshot()).flatMap((binding) =>
+    (binding.upgradeOperations ?? [])
+      .filter(
+        (operation) => operation.requestId === requestId && operation.state === "pending",
+      )
+      .map((operation) => ({ workspaceId: binding.workspaceId, requestedAt: operation.requestedAt })),
+  );
+}
+
+/** Settles every binding's pending copy of a machine-level request; returns the settled ids. */
+async function settleMachineUpgradeCopies(
+  supervisor: MachineSupervisor,
+  completeUpgrade: (
+    workspaceId: string,
+    requestId: string,
+    receipt: ComputerUpgradeReceipt,
+  ) => Promise<unknown>,
+  requestId: string,
+  receipt: ComputerUpgradeReceipt,
+): Promise<string[]> {
+  const settled: string[] = [];
+  for (const { workspaceId } of await pendingMachineUpgradeCopies(supervisor, requestId))
+    if (await completeUpgrade(workspaceId, requestId, receipt)) settled.push(workspaceId);
+  return settled;
+}
+
 /**
  * The workspace-scoped lifecycle operations one `command` frame carries beyond start, stop and
  * restart (task #417 step 3's `daemon:detach`, the upgrade record/acknowledgement the upgrade
@@ -56,6 +87,47 @@ export async function runWorkspaceLifecycleCommand({
   | { runtimes: ManagedRuntimeIdentity[]; detachKeyRevoked: boolean }
   | undefined
 > {
+  if (method === "daemon:computer_upgrade") {
+    if (!request.expectedVersion) throw new Error("computer upgrade requires expected version");
+    // Machine-wide admission shares recordUpgrade's single pending slot: the request names no
+    // Workspace, so any current binding satisfies its local-registration check and the record
+    // fans out onto every binding. With no bindings there is nothing to record — the
+    // installer's own machine-mutation lock stays the guard, as before this method existed.
+    const carriers = (await supervisor.snapshot()).map((binding) => binding.workspaceId);
+    const [carrier] = carriers;
+    const created =
+      carrier === undefined
+        ? true
+        : await supervisor.recordUpgrade(carrier, request.requestId, request.expectedVersion);
+    if (created) {
+      // Every binding carries a copy of the pending record, so every child's upgrade config
+      // learns it — the same settlement push `daemon:upgrade` gives its one Workspace.
+      await Promise.all(carriers.map((workspaceId) => refreshChildUpgradeConfig(workspaceId)));
+      try {
+        await launchComputerUpgrade(request.requestId, request.expectedVersion, {
+          stateDirectory,
+        });
+      } catch (error) {
+        // Same contract as `daemon:upgrade`: a job that never started must not leave the
+        // pending record sitting there for the full TTL, refusing every later upgrade.
+        const message = thrownMessage(error);
+        await settleMachineUpgradeCopies(supervisor, completeUpgrade, request.requestId, {
+          requestId: request.requestId,
+          status: "failed",
+          at: Date.now(),
+          error: message,
+          errorCode: UPGRADE_ERROR_CODE.LAUNCH_FAILED,
+        });
+        throw new UpgradeLaunchFailedError(message, { cause: error });
+      }
+      for (const { workspaceId, requestedAt } of await pendingMachineUpgradeCopies(
+        supervisor,
+        request.requestId,
+      ))
+        watchPendingUpgrade(workspaceId, request.requestId, requestedAt);
+    }
+    return undefined;
+  }
   if (method === "daemon:upgrade") {
     if (!request.workspaceId || !request.expectedVersion)
       throw new Error("upgrade requires workspace and expected version");

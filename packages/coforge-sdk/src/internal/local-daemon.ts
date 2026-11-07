@@ -31,6 +31,9 @@ export const LOCAL_RPC_METHODS = {
   RESTART: "daemon:restart",
   SNAPSHOT: "daemon:snapshot",
   UPGRADE: "daemon:upgrade",
+  /** `daemon:computer_upgrade` (task #685): the Computer CLI's own upgrade — machine-wide
+   * admission with no Workspace in the request. */
+  COMPUTER_UPGRADE: "daemon:computer_upgrade",
   UPGRADE_ACKNOWLEDGE: "daemon:upgrade_ack",
   HOLD: "daemon:hold",
   RELEASE: "daemon:release",
