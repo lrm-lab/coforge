@@ -31,10 +31,13 @@ test("a wake launch that fails login-required keeps later deliveries from relaun
   const statuses: AgentStatus[] = [];
   const rejections: { reason: string }[] = [];
   const acknowledgements: string[] = [];
+  const notices: string[] = [];
   let launches = 0;
   const session = {
     async sendMessage() {},
-    async notify() {},
+    async notify(notice: string) {
+      notices.push(notice);
+    },
     subscribe() {
       return () => {};
     },
@@ -55,7 +58,8 @@ test("a wake launch that fails login-required keeps later deliveries from relaun
       provider: "claude-code",
       createAgentSession: async () => {
         launches++;
-        if (launches > 1) throw new Error("Claude Code is not logged in on this Computer");
+        // Only the wake launch fails: a person's later Start succeeds, as after re-login.
+        if (launches === 2) throw new Error("Claude Code is not logged in on this Computer");
         return session;
       },
     }),
@@ -101,6 +105,13 @@ test("a wake launch that fails login-required keeps later deliveries from relaun
       method: "agent:v1:message:deliver",
       target: "@ada",
     });
+  const appItem = {
+    appId: "system.reminder",
+    notificationClass: "due",
+    sourceRef: { kind: "reminder", id: "123e4567-e89b-42d3-a456-426614174000", revision: "1" },
+    title: "Due",
+    summary: "Now",
+  };
   try {
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
@@ -120,6 +131,18 @@ test("a wake launch that fails login-required keeps later deliveries from relaun
     expect(launches).toBe(2);
     expect(rejections).toEqual([]);
     expect(acknowledgements).toEqual(["delivery-1", "delivery-2", "delivery-3"]);
+    // An App Inbox notice reaches the same dead end: no wake config survives the offline
+    // record, so minting and draining it launches nothing and the item waits.
+    await runtime.mintAppItem("agent-a", appItem);
+    await runtime.drainAppInboxNotices("agent-a");
+    expect(launches).toBe(2);
+    expect(notices).toEqual([]);
+    // A person's Start clears the offline record on `active`; the held notice is then
+    // delivered to the new session.
+    await runtime.startAgent("agent-a", config);
+    await Bun.sleep(10);
+    expect(launches).toBe(3);
+    expect(notices).toContain("New app item available. Run coforge inbox check.");
   } finally {
     await runtime.stop();
   }

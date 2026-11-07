@@ -86,7 +86,10 @@ export async function failAgentStartup(
 
 /** What a launch that threw owes the Agent: the failure log, the offline record or quota wait
  * a thrown open classifies to, `inactive` unless a recovery time stands, and the Activity —
- * the failure's own wording when it wrote an offline record, the launcher wording otherwise. */
+ * the failure's own wording when it wrote an offline record, the launcher wording otherwise.
+ * An offline record also drops the Agent's wake config, so no delivery or App Inbox notice
+ * can launch it again until a person's Start succeeds; a quota wait keeps the config — its
+ * cooldown, not custody, governs the next launch. */
 export function reportLaunchFailure(
   ports: AgentLaunchCoordinatorPorts,
   agentId: string,
@@ -116,6 +119,8 @@ export function reportLaunchFailure(
       config,
       error,
     );
+  if (offlineLaunchError && ports.offlineResidency.has(agentId))
+    ports.agentProcessManager.forgetRestart(agentId);
   if (!ports.offlineResidency.hasLaunchWait(agentId)) ports.sendAgentStatus(agentId, "inactive");
   ports.activityPublisher.publish(
     agentId,

@@ -382,6 +382,14 @@ export class AgentProcessManager {
     return this.#restartConfigs.get(agentId)?.serverLaunch;
   }
 
+  /** Drops the wake config a terminal launch failure must not keep: with it gone, deliveries
+   * and App Inbox notices find no restart to wake and wait for the offline record's custody
+   * and a person's Start, matching the reference Computer's terminal-failure residency. */
+  forgetRestart(agentId: string): void {
+    this.#restartConfigs.delete(agentId);
+    this.#launchClientSeq.delete(agentId);
+  }
+
   /** Drops the remembered resume pointer once its Session was invalidated, so the next wake
    * cannot ask the provider for a Session that no longer exists. The config and server launch
    * identity stay: only the native Session reference is gone. */
