@@ -213,6 +213,41 @@ export function controlOperationState(
   return "settled";
 }
 
+const NON_RETRYABLE_ERROR_CODES = new Set([
+  "runtime_private",
+  "runtime_not_installed",
+  "runtime_unusable",
+  "runtime_unavailable",
+  "runtime_login_required",
+  "agent_environment_invalid",
+  "model_provider_not_configured",
+  "runtime_memory_unsupported",
+]);
+
+/** Minimum wait before a transient launch failure is allowed to retry automatically (10 min). */
+export const TRANSIENT_FAILURE_RETRY_INTERVAL_MS = 10 * 60 * 1_000;
+/** Maximum window for automatic low-frequency retry before giving up permanently (24 hours). */
+export const TRANSIENT_FAILURE_MAX_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
+/**
+ * Whether an automatic Start may retry the Agent's latest failed operation. Only a transient
+ * failure inside the bounded window is retried: a non-retryable error code, a missing failure
+ * time, or an elapsed time outside the window waits for a person's Start or
+ * `clearLaunchFailure` instead of another automatic attempt. Lives beside
+ * `controlOperationState`, the classification it completes, so every automatic Start path —
+ * a Daemon `ready` recovery or a delivery wake — applies the one rule.
+ */
+export function isEligibleForTransientRetry(agent: AgentControlAgent, now: number): boolean {
+  const state = agent.state;
+  if (!state || state.phase !== "failed") return false;
+  if (state.errorCode && NON_RETRYABLE_ERROR_CODES.has(state.errorCode)) return false;
+  if (!state.failedAtMs) return false;
+  const elapsed = now - state.failedAtMs;
+  return (
+    elapsed >= TRANSIENT_FAILURE_RETRY_INTERVAL_MS && elapsed <= TRANSIENT_FAILURE_MAX_WINDOW_MS
+  );
+}
+
 export function sameScope(a: AgentControlScope, b: AgentControlScope) {
   return (
     a.workspaceId === b.workspaceId &&
