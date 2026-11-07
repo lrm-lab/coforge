@@ -32,7 +32,8 @@ import {
   type ArtifactHome,
   type ArtifactPaneControls,
 } from "./artifact-page-header";
-import { ACCESS_ICON, ArtifactShareDialog } from "./artifact-share-dialog";
+import { useArtifactLinkSharing } from "./artifact-link-sharing";
+import { ArtifactShareDialog, shareIcon } from "./artifact-share-dialog";
 import { ArtifactPaneConfirms, type ArtifactConfirming } from "./artifact-pane-confirms";
 import { isWebPage, PaneFrame } from "./artifact-parts";
 import { artifactHomeConversation, refreshArtifact } from "./artifact-queries";
@@ -100,6 +101,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     else await router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } });
     toast.success(m.doc_share_locked_out({ title }));
   });
+  const link = useArtifactLinkSharing(artifactId, current !== undefined);
   useRealtimeSubscription({
     channel:
       homeId === undefined || !workspaceId
@@ -166,8 +168,14 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         status={webPage ? "page" : editor.status}
         home={home}
         canDelete={current?.canDelete === true}
-        shareIcon={ACCESS_ICON[access.access]}
-        onShare={current && (() => setSharing(true))}
+        shareIcon={shareIcon(access.access, link)}
+        onShare={
+          current &&
+          (() => {
+            link.refresh();
+            setSharing(true);
+          })
+        }
         onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
         onOpenInTab={
           webPage
@@ -236,13 +244,18 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         open={sharing}
         onOpenChange={(open) => {
           setSharing(open);
-          if (!open) access.dismiss();
+          if (!open) {
+            access.dismiss();
+            link.dismiss();
+          }
         }}
         title={title}
         homeKind={home?.kind ?? "channel"}
         homeName={homeName}
         state={access}
+        link={link}
         onCopyLink={() => void copy(pageHref(), m.doc_link_copied())}
+        onCopyPublicLink={(url) => void copy(url, m.doc_public_link_copied())}
       />
       <ArtifactPaneConfirms
         confirming={confirming}

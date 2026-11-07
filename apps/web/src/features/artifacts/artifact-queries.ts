@@ -2,7 +2,12 @@ import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query"
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
-import { listArtifacts, loadArtifactCards, loadArtifactDocument } from "./artifacts.functions";
+import {
+  listArtifacts,
+  loadArtifactCards,
+  loadArtifactDocument,
+  loadArtifactLinkSharing,
+} from "./artifacts.functions";
 import { loadArtifactsOn } from "./artifacts-on.functions";
 
 /** A document as a list row and a card show it (`listArtifacts`, `loadArtifactCards`). */
@@ -49,6 +54,13 @@ export const artifactDocumentQuery = (artifactId: string, version?: number) =>
     queryKey: [...ARTIFACTS_KEY, "document", artifactId, version ?? "current"],
     queryFn: () => loadArtifactDocument({ data: { artifactId, version } }),
     staleTime: version === undefined ? 0 : Infinity,
+  });
+
+/** Whether an artifact can have a public link, and the one it has. */
+export const artifactLinkSharingQuery = (artifactId: string) =>
+  queryOptions({
+    queryKey: [...ARTIFACTS_KEY, "link-sharing", artifactId],
+    queryFn: () => loadArtifactLinkSharing({ data: { artifactId } }),
   });
 
 /** After a document changed: its current read, its history, its cards and its home's list. A

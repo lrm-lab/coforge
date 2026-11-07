@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { Heading, Radio, RadioGroup } from "react-aria-components";
-import { Building02, Check, Copy01, Lock01, XClose } from "@untitledui/icons";
+import { Building02, Check, Copy01, Globe02, Lock01, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Toggle } from "#src/components/base/toggle/toggle";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ArtifactAccess, ArtifactAccessState } from "./artifact-access";
+import type { ArtifactLinkSharing } from "./artifact-link-sharing";
 
 /** Each level's icon, as the dialog and the page's Share button show it. */
 export const ACCESS_ICON: Record<ArtifactAccess, typeof Lock01> = {
@@ -16,15 +18,22 @@ export const ACCESS_ICON: Record<ArtifactAccess, typeof Lock01> = {
   workspace: Building02,
 };
 
+/** What the page's Share button shows: a live public link outranks the level beneath it. */
+export const shareIcon = (access: ArtifactAccess, link: ArtifactLinkSharing) =>
+  link.url ? Globe02 : ACCESS_ICON[access];
+
 const NOTE_ID = "artifact-share-note";
 const WARNING_ID = "artifact-share-lock-out";
+const LINK_LABEL_ID = "artifact-share-link";
+const LINK_DETAIL_ID = "artifact-share-link-detail";
 
 /**
  * Who can see an artifact (task #514; as Google Docs' "General access" and Notion's Share): one
  * of two levels, the narrower first, and its link; an artifact of the Workspace itself has only
  * the wider. Only those `canChange` names change the level (task #529); anyone else sees it
  * greyed, and who can. One who reads it only through the Workspace level confirms a change to
- * the narrower, which shuts them out.
+ * the narrower, which shuts them out. Beneath the levels, for the artifacts that can have one, a
+ * switch for a public link anyone can open without signing in (task #646).
  */
 export function ArtifactShareDialog({
   open,
@@ -33,7 +42,9 @@ export function ArtifactShareDialog({
   homeKind,
   homeName,
   state,
+  link,
   onCopyLink,
+  onCopyPublicLink,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -42,7 +53,9 @@ export function ArtifactShareDialog({
   /** A channel's name as the first level says it ("#launch"). */
   homeName: string | undefined;
   state: ArtifactAccessState;
+  link: ArtifactLinkSharing;
   onCopyLink: () => void;
+  onCopyPublicLink: (url: string) => void;
 }) {
   const levels: { id: ArtifactAccess; label: string; detail: string }[] = [
     ...(homeKind === "workspace"
@@ -71,7 +84,9 @@ export function ArtifactShareDialog({
               title={title}
               levels={levels}
               state={state}
+              link={link}
               onCopyLink={onCopyLink}
+              onCopyPublicLink={onCopyPublicLink}
               close={close}
             />
           )}
@@ -86,13 +101,17 @@ function ShareBody({
   title,
   levels,
   state,
+  link,
   onCopyLink,
+  onCopyPublicLink,
   close,
 }: {
   title: string;
   levels: { id: ArtifactAccess; label: string; detail: string }[];
   state: ArtifactAccessState;
+  link: ArtifactLinkSharing;
   onCopyLink: () => void;
+  onCopyPublicLink: (url: string) => void;
   close: () => void;
 }) {
   const { access, canChange, locksOut, pending, error } = state;
@@ -167,6 +186,14 @@ function ShareBody({
           );
         })}
       </RadioGroup>
+      {link.available && (
+        <PublicLink
+          link={link}
+          canChange={canChange === true}
+          controlSize={controlSize}
+          onCopy={onCopyPublicLink}
+        />
+      )}
       {note && (
         <p id={NOTE_ID} className="mt-3 text-sm text-tertiary">
           {note}
@@ -194,9 +221,9 @@ function ShareBody({
           </div>
         </div>
       )}
-      {error && (
+      {(error ?? link.error) && (
         <p role="alert" className="mt-3 text-sm text-error-primary">
-          {error}
+          {error ?? link.error}
         </p>
       )}
       <div className="mt-5 flex items-center gap-2">
@@ -207,6 +234,60 @@ function ShareBody({
           {m.doc_share_done()}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** The public link's switch, and the link while it is on. */
+function PublicLink({
+  link,
+  canChange,
+  controlSize,
+  onCopy,
+}: {
+  link: ArtifactLinkSharing;
+  canChange: boolean;
+  controlSize: "sm" | "md";
+  onCopy: (url: string) => void;
+}) {
+  const on = link.pending ?? link.url !== null;
+  return (
+    <div className="mt-1.5 rounded-xl p-3 ring-1 ring-secondary ring-inset">
+      <div className="flex items-start gap-3">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary ring-1 ring-secondary">
+          <Globe02 aria-hidden="true" className="size-4 text-fg-secondary" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span id={LINK_LABEL_ID} className="block text-sm font-medium text-primary">
+            {m.doc_share_link()}
+          </span>
+          <span id={LINK_DETAIL_ID} className="mt-0.5 block text-sm text-tertiary">
+            {m.doc_share_link_detail()}
+          </span>
+        </span>
+        <Toggle
+          aria-labelledby={LINK_LABEL_ID}
+          aria-describedby={LINK_DETAIL_ID}
+          className="mt-1 shrink-0"
+          isSelected={on}
+          isDisabled={!canChange || link.pending !== undefined}
+          onChange={link.change}
+        />
+      </div>
+      {link.url && link.pending !== false && (
+        <div className="mt-3 flex flex-col gap-2 pl-11">
+          <p className="text-sm break-all text-secondary">{link.url}</p>
+          <Button
+            size={controlSize}
+            color="secondary"
+            iconLeading={Copy01}
+            className="self-start"
+            onClick={() => link.url && onCopy(link.url)}
+          >
+            {m.doc_copy_public_link()}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

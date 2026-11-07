@@ -6,8 +6,8 @@ import { changeArtifactAccess } from "./artifacts.functions";
 import { refreshArtifact } from "./artifact-queries";
 
 /**
- * Who can see an artifact (task #514, Frank: two levels, no public link): the people who can read
- * the conversation it lives in, or every member of the Workspace. An artifact of the Workspace
+ * Who can see an artifact (task #514): the people who can read the conversation it lives in, or
+ * every member of the Workspace. A public link sits beside these levels (`artifact-link-sharing`). An artifact of the Workspace
  * itself (no conversation) has only the second.
  */
 export type ArtifactAccess = "conversation" | "workspace";
