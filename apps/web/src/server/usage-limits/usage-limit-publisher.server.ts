@@ -23,11 +23,13 @@ export function createUsageLimitAnnouncer(
       events.push(change);
       byWorkspace.set(change.workspaceId, events);
     }
-    for (const [workspaceId, events] of byWorkspace) {
-      const userIds = await repo.elevatedUserIds(workspaceId);
-      if (userIds.length === 0) continue;
-      const channels = userIds.map((userId) => userConversationChannel(userId));
-      for (const event of events) await centrifugo.broadcast(channels, event);
-    }
+    await Promise.all(
+      [...byWorkspace].map(async ([workspaceId, events]) => {
+        const userIds = await repo.elevatedUserIds(workspaceId);
+        if (userIds.length === 0) return;
+        const channels = userIds.map((userId) => userConversationChannel(userId));
+        for (const event of events) await centrifugo.broadcast(channels, event);
+      }),
+    );
   };
 }
