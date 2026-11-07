@@ -80,35 +80,73 @@ export class PrismaComputerRegistrationRepository implements ComputerRegistratio
         const consumed = await consumeAttachToken(tx, principal.attachSessionId);
         if (!consumed) throw new ComputerRegistrationError(401, "attach token spent");
       }
-      await tx.computer.updateMany({
-        where: {
-          ownerId: principal.userId,
-          machineId: request.machineId,
-          name: "",
-          displayName: "",
-        },
-        data: {
-          name: request.name.trim(),
-          displayName: request.displayName.trim(),
-        },
-      });
-      const computer = await tx.computer.upsert({
-        where: {
-          ownerId_machineId: {
+      let computer;
+      if (request.adoptComputerId) {
+        computer = await tx.computer.findFirst({
+          where: {
+            id: request.adoptComputerId,
+            ownerId: principal.userId,
+            kind: "local",
+            deletedAt: null,
+          },
+        });
+        if (!computer || computer.machineId !== request.machineId)
+          throw new ComputerRegistrationError(409, "computer adoption target is no longer valid");
+        computer = await tx.computer.update({
+          where: { id: computer.id },
+          data: { name: request.name.trim() },
+        });
+      } else if (request.fresh) {
+        const collision = await tx.computer.findUnique({
+          where: {
+            ownerId_machineId: {
+              ownerId: principal.userId,
+              machineId: request.machineId,
+            },
+          },
+          select: { id: true },
+        });
+        if (collision)
+          throw new ComputerRegistrationError(409, "fresh computer identity already exists");
+        computer = await tx.computer.create({
+          data: {
             ownerId: principal.userId,
             machineId: request.machineId,
+            name: request.name.trim(),
+            displayName: request.displayName.trim(),
           },
-        },
-        create: {
-          ownerId: principal.userId,
-          machineId: request.machineId,
-          name: request.name.trim(),
-          displayName: request.displayName.trim(),
-        },
-        update: {
-          name: request.name.trim(),
-        },
-      });
+        });
+      } else {
+        await tx.computer.updateMany({
+          where: {
+            ownerId: principal.userId,
+            machineId: request.machineId,
+            name: "",
+            displayName: "",
+          },
+          data: {
+            name: request.name.trim(),
+            displayName: request.displayName.trim(),
+          },
+        });
+        computer = await tx.computer.upsert({
+          where: {
+            ownerId_machineId: {
+              ownerId: principal.userId,
+              machineId: request.machineId,
+            },
+          },
+          create: {
+            ownerId: principal.userId,
+            machineId: request.machineId,
+            name: request.name.trim(),
+            displayName: request.displayName.trim(),
+          },
+          update: {
+            name: request.name.trim(),
+          },
+        });
+      }
       const daemonApiKey = prepareDaemonApiKey({
         principal,
         workspaceId: workspace.id,

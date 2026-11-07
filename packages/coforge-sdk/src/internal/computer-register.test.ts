@@ -5,6 +5,7 @@ import { DaemonRuntimeCodeAgentsUpdateRequestSchema } from "#src/internal/gen/co
 import {
   AGENT_START_MESSAGE_TYPE,
   ComputerRegistrationClient,
+  ComputerRosterClient,
   RUNTIME_PROVIDER,
   type AgentStartIntent,
 } from "./index";
@@ -16,6 +17,11 @@ import {
   encodeComputerRegisterRequest,
   encodeDaemonRuntimeCodeAgentsUpdateRequest,
 } from "./codec";
+import {
+  decodeComputerListResponse,
+  encodeComputerListRequest,
+  encodeComputerListResponse,
+} from "./computer-roster-codec";
 
 test("computer registration sends the stable method and rejects incompatible majors", async () => {
   const calls: unknown[] = [];
@@ -65,6 +71,62 @@ test("registration codec preserves machine registration fields", () => {
     registrationIdempotencyKey: "i",
   } satisfies Parameters<ComputerRegistrationClient["register"]>[0];
   expect(decodeComputerRegisterRequest(encodeComputerRegisterRequest(request))).toEqual(request);
+});
+
+test("registration codec preserves explicit adoption and fresh intent", () => {
+  const adoption = {
+    protocolMajor: 1,
+    requestId: "adopt",
+    workspaceSlug: "team",
+    name: "host",
+    displayName: "Host",
+    machineId: "machine-1",
+    platform: "darwin",
+    osVersion: "15",
+    computerVersion: "1.0.64",
+    registrationIdempotencyKey: "team:machine-1",
+    adoptComputerId: "computer-1",
+  };
+  const fresh = { ...adoption, requestId: "fresh", adoptComputerId: undefined, fresh: true };
+  expect(decodeComputerRegisterRequest(encodeComputerRegisterRequest(adoption))).toEqual(adoption);
+  expect(decodeComputerRegisterRequest(encodeComputerRegisterRequest(fresh))).toEqual({
+    ...fresh,
+    adoptComputerId: undefined,
+  });
+});
+
+test("Computer roster request and candidates round trip and correlate through the client", async () => {
+  const request = { protocolMajor: 1, requestId: "roster-1" };
+  const computers = [
+    {
+      computerId: "computer-1",
+      machineId: "machine-1",
+      name: "host",
+      displayName: "Host",
+      platform: "darwin",
+      osVersion: "15",
+      computerVersion: "1.0.64",
+      workspaceSlugs: ["team"],
+      lastSeenAt: "2026-11-07T00:00:00.000Z",
+    },
+  ];
+  expect(decodeComputerListResponse(encodeComputerListResponse({ ...request, computers }))).toEqual(
+    {
+      ...request,
+      computers,
+    },
+  );
+  const calls: unknown[] = [];
+  const client = new ComputerRosterClient({
+    async request(method, payload) {
+      calls.push([method, payload]);
+      return { ...request, computers };
+    },
+  });
+  await expect(client.list(request)).resolves.toEqual({ ...request, computers });
+  expect(calls).toEqual([["computer:v1:list", request]]);
+  expect(() => client.list({ ...request, protocolMajor: 2 })).toThrow("unsupported");
+  expect(encodeComputerListRequest(request)).toBeInstanceOf(Uint8Array);
 });
 
 test("daemon runtime code-agent inventory round trips as a complete external snapshot", () => {

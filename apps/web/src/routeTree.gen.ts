@@ -46,6 +46,7 @@ import { Route as ApiComputerAttachRouteImport } from './routes/api/computer/att
 import { Route as ApiComputerConfirmKeyRouteImport } from './routes/api/computer/confirm-key'
 import { Route as ApiComputerDetachRouteImport } from './routes/api/computer/detach'
 import { Route as ApiComputerRetireSessionRouteImport } from './routes/api/computer/retire-session'
+import { Route as ApiComputerRosterRouteImport } from './routes/api/computer/roster'
 import { Route as ApiComputerSelfRouteImport } from './routes/api/computer/self'
 import { Route as ApiComputerSwapKeyRouteImport } from './routes/api/computer/swap-key'
 import { Route as ApiComputerWorkspaceRouteImport } from './routes/api/computer/workspace'
@@ -377,6 +378,11 @@ const ApiComputerRetireSessionRoute =
     path: '/api/computer/retire-session',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiComputerRosterRoute = ApiComputerRosterRouteImport.update({
+  id: '/api/computer/roster',
+  path: '/api/computer/roster',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiComputerSelfRoute = ApiComputerSelfRouteImport.update({
   id: '/api/computer/self',
   path: '/api/computer/self',
@@ -1201,6 +1207,7 @@ export interface FileRoutesByFullPath {
   '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
   '/api/computer/detach': typeof ApiComputerDetachRoute
   '/api/computer/retire-session': typeof ApiComputerRetireSessionRoute
+  '/api/computer/roster': typeof ApiComputerRosterRoute
   '/api/computer/self': typeof ApiComputerSelfRoute
   '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -1377,6 +1384,7 @@ export interface FileRoutesByTo {
   '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
   '/api/computer/detach': typeof ApiComputerDetachRoute
   '/api/computer/retire-session': typeof ApiComputerRetireSessionRoute
+  '/api/computer/roster': typeof ApiComputerRosterRoute
   '/api/computer/self': typeof ApiComputerSelfRoute
   '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -1552,6 +1560,7 @@ export interface FileRoutesById {
   '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
   '/api/computer/detach': typeof ApiComputerDetachRoute
   '/api/computer/retire-session': typeof ApiComputerRetireSessionRoute
+  '/api/computer/roster': typeof ApiComputerRosterRoute
   '/api/computer/self': typeof ApiComputerSelfRoute
   '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -1732,6 +1741,7 @@ export interface FileRouteTypes {
     | '/api/computer/confirm-key'
     | '/api/computer/detach'
     | '/api/computer/retire-session'
+    | '/api/computer/roster'
     | '/api/computer/self'
     | '/api/computer/swap-key'
     | '/api/computer/workspace'
@@ -1908,6 +1918,7 @@ export interface FileRouteTypes {
     | '/api/computer/confirm-key'
     | '/api/computer/detach'
     | '/api/computer/retire-session'
+    | '/api/computer/roster'
     | '/api/computer/self'
     | '/api/computer/swap-key'
     | '/api/computer/workspace'
@@ -2082,6 +2093,7 @@ export interface FileRouteTypes {
     | '/api/computer/confirm-key'
     | '/api/computer/detach'
     | '/api/computer/retire-session'
+    | '/api/computer/roster'
     | '/api/computer/self'
     | '/api/computer/swap-key'
     | '/api/computer/workspace'
@@ -2259,6 +2271,7 @@ export interface RootRouteChildren {
   ApiComputerConfirmKeyRoute: typeof ApiComputerConfirmKeyRoute
   ApiComputerDetachRoute: typeof ApiComputerDetachRoute
   ApiComputerRetireSessionRoute: typeof ApiComputerRetireSessionRoute
+  ApiComputerRosterRoute: typeof ApiComputerRosterRoute
   ApiComputerSelfRoute: typeof ApiComputerSelfRoute
   ApiComputerSwapKeyRoute: typeof ApiComputerSwapKeyRoute
   ApiComputerWorkspaceRoute: typeof ApiComputerWorkspaceRoute
@@ -2617,6 +2630,13 @@ declare module '@tanstack/react-router' {
       path: '/api/computer/retire-session'
       fullPath: '/api/computer/retire-session'
       preLoaderRoute: typeof ApiComputerRetireSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/computer/roster': {
+      id: '/api/computer/roster'
+      path: '/api/computer/roster'
+      fullPath: '/api/computer/roster'
+      preLoaderRoute: typeof ApiComputerRosterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/computer/self': {
@@ -3858,6 +3878,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiComputerConfirmKeyRoute: ApiComputerConfirmKeyRoute,
   ApiComputerDetachRoute: ApiComputerDetachRoute,
   ApiComputerRetireSessionRoute: ApiComputerRetireSessionRoute,
+  ApiComputerRosterRoute: ApiComputerRosterRoute,
   ApiComputerSelfRoute: ApiComputerSelfRoute,
   ApiComputerSwapKeyRoute: ApiComputerSwapKeyRoute,
   ApiComputerWorkspaceRoute: ApiComputerWorkspaceRoute,

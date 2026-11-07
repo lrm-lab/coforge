@@ -164,6 +164,17 @@ export const SETUP_HINTS = {
   SETUP_WORKSPACE_INVALID:
     "Use a Workspace slug of lowercase letters, digits, and hyphens (matching the slug shown on the Workspace page).",
   SETUP_WORKSPACE_NOT_FOUND: "Check the Workspace slug and your account access, then rerun setup.",
+  SETUP_MACHINE_INVALID: "Pass a non-empty server Computer id to `--machine`.",
+  SETUP_MACHINE_NOT_FOUND:
+    "Open the Computers page, copy an owned Computer id, and rerun setup with `--machine <id>`.",
+  SETUP_ROSTER_UNAVAILABLE:
+    "Update the CoForge server and Computer together before using server-side Computer adoption.",
+  SETUP_ROSTER_FAILED:
+    "Check the server connection and account access, then rerun setup without changing local state.",
+  SETUP_ADOPTION_CONFLICT:
+    "Detach the existing local Workspace binding first, then rerun setup with the intended Computer id.",
+  SETUP_CONFIRMATION_REQUIRED:
+    "Review the setup plan and rerun with `--yes` to apply it, or run setup interactively.",
 } as const;
 
 export type SetupErrorCode = keyof typeof SETUP_HINTS;

@@ -14,6 +14,10 @@ message ComputerRegisterRequest {
   string registration_idempotency_key = 9;
   string name = 10;
   string display_name = 11;
+  // Exact server-side adoption target selected by an authenticated User.
+  optional string adopt_computer_id = 12;
+  // Create a new logical Computer identity even when this machine id existed before.
+  bool fresh = 13;
   reserved 8;
 }
 
@@ -35,4 +39,27 @@ message ComputerRegisterResponse {
   string daemon_api_key = 6;
   // The attached Workspace's slug, for a one-shot attach that never named one (task #417).
   string workspace_slug = 7;
+}
+
+message ComputerListRequest {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+}
+
+message ComputerCandidate {
+  string computer_id = 1;
+  string machine_id = 2;
+  string name = 3;
+  string display_name = 4;
+  string platform = 5;
+  string os_version = 6;
+  string computer_version = 7;
+  repeated string workspace_slugs = 8;
+  optional string last_seen_at = 9;
+}
+
+message ComputerListResponse {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  repeated ComputerCandidate computers = 3;
 }

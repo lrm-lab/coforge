@@ -7,6 +7,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonLauncher } from "@lrm/coforge-daemon";
 import type { WorkspaceLookup } from "#src/workspace/lookup";
+import { planComputerIdentity } from "./computer-identity-plan";
 
 export type ComputerPlatformName = "darwin" | "linux" | "win32";
 
@@ -14,6 +15,9 @@ export type SetupResult = {
   workspace: AccessibleWorkspace;
   configPath: string;
   serverUrl?: string;
+  computerId?: string;
+  machineId?: string;
+  mode?: "resumed" | "adopted" | "fresh" | "registered";
   /** The machine was already attached and its stored key still worked: nothing was registered. */
   resumed?: true;
   /** The Daemon took the configuration, but the Workspace was still starting when it answered. */
@@ -47,6 +51,25 @@ export interface SetupAuthenticator {
   authenticate(serverUrl: string, json: boolean): Promise<Credential>;
 }
 
+export interface SetupRosterPort {
+  list(
+    serverUrl: string,
+    credential: Credential,
+  ): Promise<
+    Array<{
+      computerId: string;
+      machineId: string;
+      name: string;
+      displayName: string;
+      platform: string;
+      osVersion: string;
+      computerVersion: string;
+      workspaceSlugs: string[];
+      lastSeenAt?: string;
+    }>
+  >;
+}
+
 /** What a re-run of setup/attach on an already-attached Workspace needs: the Daemon's stored
  * key and a live check of it (task #417; Raft's `resumeExistingAttachment`). */
 export interface SetupResumePort {
@@ -67,6 +90,7 @@ export type ComputerSetupOptions = {
   credentials: SetupCredentialStore;
   authenticate?: SetupAuthenticator;
   workspaceLookup: WorkspaceLookup;
+  roster?: SetupRosterPort;
   /** `attach --one-shot`: the attach-session credential (the `attach_token` `computer:register`
    * consumes) instead of the OAuth login (task #417). */
   oneShotAttach?: (
@@ -92,6 +116,9 @@ export class ComputerSetup {
     /** `attach --one-shot`: report the machine, poll the approval page, and register with the
      * one-shot token it hands back rather than a stored OAuth login (task #417). */
     oneShot?: boolean;
+    machineId?: string;
+    fresh?: boolean;
+    yes?: boolean;
     /** `--json` stage evidence (task #417): `started`/`polling`/`approved` reach `oneShotAttach`;
      * `registered`/`saved` are emitted here with their paths. Undefined outside `--json`. */
     onStage?: (stage: string, detail?: Record<string, string>) => void;
@@ -109,7 +136,7 @@ export class ComputerSetup {
     );
     // Re-running setup on an attached Workspace resumes it; it never creates a second
     // attachment. Replacing one takes `detach` first (task #417).
-    if (input.workspaceSlug) {
+    if (input.workspaceSlug && !input.machineId && !input.fresh) {
       const resumed = await this.resumeAttached(input.workspaceSlug, serverUrl, launcher, input);
       if (resumed) return resumed;
     }
@@ -207,11 +234,29 @@ export class ComputerSetup {
 
     let configPath: string;
     let daemonStillStarting = false;
+    let registeredComputerId: string | undefined;
+    let registeredMachineId: string | undefined;
+    let setupMode: SetupResult["mode"] = "registered";
     let registeredRegistration:
       | Parameters<NonNullable<ComputerConfig["discardRegistration"]>>[0]
       | undefined;
     try {
       const metadata = await this.options.metadataProvider.get();
+      const identity = await planComputerIdentity({
+        ...input,
+        serverUrl,
+        credential,
+        metadata,
+        config: this.options.config,
+        roster: this.options.roster,
+      });
+      const { machineId, adoptComputerId } = identity;
+      setupMode = identity.mode;
+      input.onStage?.("plan", {
+        mode: setupMode,
+        machineId,
+        ...(adoptComputerId ? { computerId: adoptComputerId } : {}),
+      });
       const registered = credential;
       const response = await setupStep(
         "SETUP_COMPUTER_REGISTER_FAILED",
@@ -226,7 +271,7 @@ export class ComputerSetup {
             workspaceSlug: workspace?.slug ?? "",
             name: metadata.name,
             displayName: metadata.displayName,
-            machineId: metadata.machineId,
+            machineId,
             platform: metadata.platform,
             osVersion: metadata.osVersion,
             computerVersion: metadata.computerVersion,
@@ -235,8 +280,10 @@ export class ComputerSetup {
             // machine identity only; it must not snapshot provider installs.
             registrationIdempotencyKey: this.options.idempotencyKeyProvider.create(
               serverUrl,
-              `${input.workspaceSlug ?? workspace?.slug ?? ""}:${metadata.machineId}`,
+              `${input.workspaceSlug ?? workspace?.slug ?? ""}:${machineId}`,
             ),
+            ...(adoptComputerId ? { adoptComputerId } : {}),
+            ...(input.fresh ? { fresh: true } : {}),
           }),
       );
       // The one-shot path resolves no workspace of its own — the token's bound one, which the
@@ -251,6 +298,8 @@ export class ComputerSetup {
         slug: workspace.slug,
         computerId: response.computerId,
       };
+      registeredComputerId = response.computerId;
+      registeredMachineId = machineId;
       // Start first: the Daemon must accept its credential before local
       // configuration advertises this registration as usable.
       // The Coordinator answers by its deadline: the configuration is taken even when the
@@ -296,6 +345,9 @@ export class ComputerSetup {
       workspace,
       configPath,
       serverUrl,
+      computerId: registeredComputerId,
+      machineId: registeredMachineId,
+      mode: setupMode,
       ...(daemonStillStarting ? { daemonStillStarting: true } : {}),
     };
   }
@@ -380,6 +432,8 @@ export class ComputerSetup {
       },
       configPath,
       serverUrl,
+      computerId: registration.computerId,
+      mode: "resumed",
       resumed: true,
       ...(started?.lifecycleUnderWay === true ? { daemonStillStarting: true as const } : {}),
     };

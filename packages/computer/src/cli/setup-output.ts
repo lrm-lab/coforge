@@ -27,6 +27,9 @@ export function writeSetupResult(
         ...(result.serverUrl ? { server_url: result.serverUrl } : {}),
         ...(workspaceUrl ? { workspace_url: workspaceUrl } : {}),
         server_registration_created: !result.resumed,
+        ...(result.mode ? { computer_mode: result.mode } : {}),
+        ...(result.computerId ? { computer_id: result.computerId } : {}),
+        ...(result.machineId ? { machine_id: result.machineId } : {}),
         ...(result.resumed ? { resumed: true } : {}),
         daemon_started: !result.daemonStillStarting,
         ...(result.daemonStillStarting ? { daemon_still_starting: true } : {}),
@@ -39,7 +42,10 @@ export function writeSetupResult(
     `Workspace:             ${terminalText(result.workspace.name)} (${terminalText(result.workspace.slug)})`,
   );
   writeLine(`Configuration saved:   ${terminalText(result.configPath)}`);
-  writeLine("Computer:              registered");
+  writeLine(
+    `Computer:              ${result.mode === "adopted" ? "adopted" : result.mode === "fresh" ? "created fresh" : result.resumed ? "resumed" : "registered"}`,
+  );
+  if (result.computerId) writeLine(`Computer id:           ${terminalText(result.computerId)}`);
   writeLine(
     result.daemonStillStarting
       ? "Daemon:                still starting; run 'coforge-computer status' to follow it"

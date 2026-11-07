@@ -166,17 +166,69 @@ test("attach joins the selected Workspace through the existing setup use case", 
 });
 
 test("setup forwards an explicit --workspace slug", async () => {
-  const calls: Array<{ workspaceSlug: string | undefined }> = [];
+  const calls: Array<{ workspaceSlug: string | undefined; machineId: string | undefined }> = [];
   const setup: SetupCommand = {
-    async run(workspaceSlug) {
-      calls.push({ workspaceSlug });
+    async run(workspaceSlug, options) {
+      calls.push({ workspaceSlug, machineId: options.machineId });
     },
   };
   const dependencies = { login: { async run() {} }, setup };
 
-  await expect(runCli(["setup", "--workspace", "acme-inc"], dependencies)).resolves.toBe(0);
+  await expect(
+    runCli(
+      ["setup", "--workspace", "acme-inc", "--machine", "computer-machine-1", "--yes"],
+      dependencies,
+    ),
+  ).resolves.toBe(0);
 
-  expect(calls).toEqual([{ workspaceSlug: "acme-inc" }]);
+  expect(calls).toEqual([{ workspaceSlug: "acme-inc", machineId: "computer-machine-1" }]);
+});
+
+test("setup prompts before changing Computer identity and forwards --yes", async () => {
+  const calls: Array<{ machineId?: string; fresh?: boolean; yes?: boolean }> = [];
+  const setup: SetupCommand = {
+    async run(_workspaceSlug, options) {
+      calls.push({ machineId: options.machineId, fresh: options.fresh, yes: options.yes });
+    },
+  };
+  const dependencies = { login: { async run() {} }, setup };
+  const stdout: string[] = [];
+  await expect(
+    runCli(["setup", "--machine", "computer-1"], dependencies, {
+      stdout: (line) => stdout.push(line),
+      stderr: () => undefined,
+      prompt: () => "n",
+    }),
+  ).resolves.toBe(0);
+  expect(calls).toEqual([]);
+  expect(stdout).toEqual(["Setup cancelled."]);
+
+  await expect(
+    runCli(["setup", "--fresh", "--yes"], dependencies, {
+      stdout: () => undefined,
+      stderr: () => undefined,
+      prompt: () => "n",
+    }),
+  ).resolves.toBe(0);
+  expect(calls).toEqual([{ machineId: undefined, fresh: true, yes: true }]);
+});
+
+test("JSON setup requires --yes for explicit identity changes", async () => {
+  const stdout: string[] = [];
+  const dependencies = {
+    login: { async run() {} },
+    setup: {
+      async run() {
+        throw new Error("must not run");
+      },
+    },
+  };
+  const exitCode = await runCli(["setup", "--json", "--machine", "computer-1"], dependencies, {
+    stdout: (line) => stdout.push(line),
+    stderr: () => undefined,
+  });
+  expect(exitCode).toBe(1);
+  expect(JSON.parse(stdout[0]!).error.code).toBe("SETUP_CONFIRMATION_REQUIRED");
 });
 
 test("setup falls back to COFORGE_SETUP_INTENT when --workspace is omitted", async () => {

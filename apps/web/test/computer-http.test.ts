@@ -1,16 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { COMPUTER_REGISTER_METHOD, WORKSPACE_GET_METHOD } from "@lrm/coforge-sdk/internal";
 import {
+  COMPUTER_LIST_METHOD,
+  COMPUTER_REGISTER_METHOD,
+  WORKSPACE_GET_METHOD,
+} from "@lrm/coforge-sdk/internal";
+import {
+  decodeComputerListResponse,
   decodeComputerRegisterResponse,
   decodeWorkspaceGetResponse,
   encodeComputerRegisterRequest,
+  encodeComputerListRequest,
   encodeWorkspaceGetRequest,
 } from "@lrm/coforge-sdk/internal";
 
 import { createComputerHttpHandler } from "#src/server/computers/computer-http.server";
 import { WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
 
-const request = (path: "attach" | "workspace", payload: Uint8Array, token = "user-token") =>
+const request = (
+  path: "attach" | "workspace" | "roster",
+  payload: Uint8Array,
+  token = "user-token",
+) =>
   new Request(`https://server.example/api/computer/${path}`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -36,6 +46,43 @@ const handler = () =>
         workspaceId: "workspace-1",
         workspaceSlug: request.workspaceSlug,
         daemonApiKey: principal?.userId === "user-1" ? "daemon-key" : "",
+      }),
+    },
+  });
+
+const rosterHandler = () =>
+  createComputerHttpHandler({
+    authenticate: async (request) =>
+      request.headers.get("authorization") === "Bearer user-token" ? { userId: "user-1" } : null,
+    workspaceQuery: new WorkspaceQueryUseCase({
+      listAccessible: async () => [],
+      getAccessibleBySlug: async () => undefined,
+    }),
+    registration: {
+      register: async () => ({
+        protocolMajor: 1,
+        requestId: "register",
+        computerId: "computer-1",
+        workspaceId: "workspace-1",
+        daemonApiKey: "daemon-key",
+      }),
+    },
+    roster: {
+      list: async (payload) => ({
+        protocolMajor: 1,
+        requestId: payload.requestId,
+        computers: [
+          {
+            computerId: "computer-1",
+            machineId: "machine-1",
+            name: "host",
+            displayName: "Host",
+            platform: "darwin",
+            osVersion: "15",
+            computerVersion: "1.0.64",
+            workspaceSlugs: ["alpha"],
+          },
+        ],
       }),
     },
   });
@@ -128,6 +175,32 @@ describe("Computer HTTPS route contract", () => {
       computerId: "computer-1",
       workspaceId: "workspace-1",
       daemonApiKey: "daemon-key",
+    });
+  });
+
+  test("lists only the authenticated user's adoption candidates", async () => {
+    const response = await rosterHandler().handleRequest(
+      request("roster", encodeComputerListRequest({ protocolMajor: 1, requestId: "roster-1" })),
+      COMPUTER_LIST_METHOD,
+    );
+    const body = (await response.json()) as { result: { b64data: string } };
+    expect(
+      decodeComputerListResponse(Uint8Array.from(Buffer.from(body.result.b64data, "base64"))),
+    ).toEqual({
+      protocolMajor: 1,
+      requestId: "roster-1",
+      computers: [
+        {
+          computerId: "computer-1",
+          machineId: "machine-1",
+          name: "host",
+          displayName: "Host",
+          platform: "darwin",
+          osVersion: "15",
+          computerVersion: "1.0.64",
+          workspaceSlugs: ["alpha"],
+        },
+      ],
     });
   });
 

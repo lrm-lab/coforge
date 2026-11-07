@@ -35,6 +35,8 @@ import {
 import { recordExternalSupervisor } from "#src/cli/foreground-supervisor";
 import { prepareContainerBinding } from "#src/host/container-binding";
 import { runHostProcess } from "#src/host/run-host";
+import { confirmSetupIdentityChange } from "#src/cli/setup-identity-confirmation";
+import { resolveSetupWorkspace } from "#src/cli/setup-workspace";
 
 export interface LoginCommand {
   run(serverUrl: string, options: { json: boolean }): Promise<void>;
@@ -43,7 +45,14 @@ export interface LoginCommand {
 export interface SetupCommand {
   run(
     workspaceSlug: string | undefined,
-    options: { json: boolean; oneShot?: boolean },
+    options: {
+      json: boolean;
+      oneShot?: boolean;
+      machineId?: string;
+      fresh?: boolean;
+      verbose?: boolean;
+      yes?: boolean;
+    },
   ): Promise<void>;
 }
 
@@ -181,19 +190,41 @@ export async function runCli(
       "--one-shot",
       "Attach without a login on this machine: open the printed link and confirm the code",
     )
-    .action((options: { json?: boolean; workspace?: string; oneShot?: boolean }) => {
-      setupSelected = true;
-      json = options.json ?? false;
-      const workspaceSlug = resolveSetupWorkspace(options.workspace);
-      if (workspaceSlug !== undefined && !isValidComputerWorkspaceSlug(workspaceSlug)) {
-        throw setupError(
-          "SETUP_WORKSPACE_INVALID",
-          `Workspace slug '${workspaceSlug}' is not valid.`,
-          "workspace-lookup",
-        );
-      }
-      return dependencies.setup.run(workspaceSlug, { json, oneShot: options.oneShot });
-    });
+    .option("--machine <id>", "Adopt an existing owned Computer by its server id or machine id")
+    .option("--fresh", "Create a new Computer identity instead of adopting existing evidence")
+    .option("--verbose", "Print the adoption plan and migration evidence")
+    .option("-y, --yes", "Apply the adoption or fresh setup plan without prompting")
+    .action(
+      (options: {
+        json?: boolean;
+        workspace?: string;
+        oneShot?: boolean;
+        machine?: string;
+        fresh?: boolean;
+        verbose?: boolean;
+        yes?: boolean;
+      }) => {
+        setupSelected = true;
+        json = options.json ?? false;
+        const workspaceSlug = resolveSetupWorkspace(options.workspace);
+        if (workspaceSlug !== undefined && !isValidComputerWorkspaceSlug(workspaceSlug)) {
+          throw setupError(
+            "SETUP_WORKSPACE_INVALID",
+            `Workspace slug '${workspaceSlug}' is not valid.`,
+            "workspace-lookup",
+          );
+        }
+        if (!confirmSetupIdentityChange(options, json, io)) return;
+        return dependencies.setup.run(workspaceSlug, {
+          json,
+          oneShot: options.oneShot,
+          machineId: options.machine,
+          fresh: options.fresh,
+          verbose: options.verbose,
+          yes: options.yes,
+        });
+      },
+    );
   program
     .command("install")
     .description("Install one verified Computer version for the current user.")
@@ -314,30 +345,6 @@ export async function runCli(
     return 1;
   }
   return exitCode;
-}
-
-/** `--workspace` wins when the user supplies it explicitly; the setup-intent environment
- * variable is a fallback source, not a second required input. A blank `--workspace ""`
- * counts as supplied (and is later rejected as invalid) rather than falling through. */
-function resolveSetupWorkspace(cliWorkspace: string | undefined): string | undefined {
-  return cliWorkspace !== undefined ? cliWorkspace : readSetupIntentWorkspace();
-}
-
-/** e2e/automation bootstrap bypass: production install flows never set this env var, so the
- * normal path is the explicit `--workspace <slug>` flag above. */
-function readSetupIntentWorkspace(): string | undefined {
-  const raw = process.env.COFORGE_SETUP_INTENT;
-  if (!raw) return undefined;
-  try {
-    const intent: unknown = JSON.parse(raw);
-    if (typeof intent === "object" && intent !== null && "workspaceSlug" in intent) {
-      const slug = (intent as { workspaceSlug?: unknown }).workspaceSlug;
-      return typeof slug === "string" && slug.length > 0 ? slug : undefined;
-    }
-    return undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function requireUpdater(dependencies: CliDependencies): UpdateCommand {

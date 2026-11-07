@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 
-import { ComputerSetup, type ComputerSetupOptions } from "#src/setup/computer-setup";
 import { writeSetupResult } from "#src/cli/setup-output";
-import type { AccessibleWorkspace, Credential } from "#src/login";
+import type { Credential } from "#src/login";
 import { CliError } from "#src/errors";
 import { createWorkspaceLookup } from "#src/workspace/lookup";
+import type { ComputerRegisterRequest } from "@lrm/coforge-sdk/internal";
 import { createSetup, credential, workspaces } from "./setup-fixture";
 
 test("setup reauthorizes an expired login once and registers with the replacement credential", async () => {
@@ -533,6 +533,48 @@ test("setup registers the Computer's name and display name independently of mach
     name: "franks-macbook-pro",
     displayName: "Frank’s MacBook Pro",
     machineId: "macos:opaque-machine-id",
+  });
+});
+
+test("setup uses an explicit machine id for adoption and its idempotency key", async () => {
+  let registration: ComputerRegisterRequest | undefined;
+  const setup = createSetup({
+    roster: {
+      async list() {
+        return [
+          {
+            computerId: "computer-id",
+            machineId: "existing-machine-id",
+            name: "existing",
+            displayName: "Existing",
+            platform: "linux",
+            osVersion: "1",
+            computerVersion: "1",
+            workspaceSlugs: [],
+          },
+        ];
+      },
+    },
+    registrationFactory: (_serverUrl, _credential) => ({
+      async register(request) {
+        registration = request;
+        return {
+          protocolMajor: request.protocolMajor,
+          requestId: request.requestId,
+          computerId: "computer-id",
+          workspaceId: "workspace-id-a",
+          daemonApiKey: "daemon-secret",
+        };
+      },
+    }),
+  });
+
+  await setup.run({ workspaceSlug: "workspace-a", machineId: "existing-machine-id" });
+
+  expect(registration).toMatchObject({
+    machineId: "existing-machine-id",
+    adoptComputerId: "computer-id",
+    registrationIdempotencyKey: "key:workspace-a:existing-machine-id",
   });
 });
 

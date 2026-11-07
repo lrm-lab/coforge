@@ -99,7 +99,8 @@ function validate(request: ComputerRegisterRequest, principal: { workspaceId?: s
     !request.displayName.trim() ||
     request.displayName.length > 200 ||
     !request.machineId ||
-    !request.registrationIdempotencyKey
+    !request.registrationIdempotencyKey ||
+    (request.adoptComputerId && request.fresh)
   )
     throw new ComputerRegistrationError(422, "invalid registration request");
 }

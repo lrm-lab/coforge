@@ -1,9 +1,12 @@
 import {
+  decodeComputerListRequest,
+  encodeComputerListResponse,
   decodeComputerRegisterRequest,
   encodeComputerRegisterResponse,
 } from "@lrm/coforge-sdk/internal";
 
 import { ComputerRegistrationError } from "#src/server/computers/registration.server";
+import { ComputerRosterError } from "#src/server/computers/roster.server";
 import type { CentrifugoRpcMethod, CentrifugoRpcMetadata } from "./rpc-types.server";
 
 function userPrincipal({ principal }: CentrifugoRpcMetadata) {
@@ -37,6 +40,26 @@ export function createComputerRegistrationMethod(useCase: {
     } catch (error) {
       if (error instanceof ComputerRegistrationError)
         return { code: error.code, message: error.message };
+      throw error;
+    }
+  };
+}
+
+export function createComputerRosterMethod(useCase: {
+  list: (
+    request: import("@lrm/coforge-sdk/internal").ComputerListRequest,
+    principal: { userId: string } | undefined,
+  ) => Promise<import("@lrm/coforge-sdk/internal").ComputerListResponse>;
+}): CentrifugoRpcMethod {
+  return async (payload, metadata) => {
+    try {
+      const result = await useCase.list(
+        decodeComputerListRequest(payload),
+        userPrincipal(metadata),
+      );
+      return encodeComputerListResponse(result);
+    } catch (error) {
+      if (error instanceof ComputerRosterError) return { code: error.code, message: error.message };
       throw error;
     }
   };

@@ -25,6 +25,7 @@
  */
 export const RPC_METHODS = {
   computerRegister: "computer:v1:register",
+  computerList: "computer:v1:list",
   workspaceList: "workspace:v1:list",
   workspaceGet: "workspace:v1:get",
   daemonRuntimeReady: "daemon:v1:runtime:ready",

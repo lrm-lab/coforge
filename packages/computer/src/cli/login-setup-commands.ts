@@ -20,8 +20,12 @@ import { oneShotAttach } from "#src/setup/one-shot-attach";
 import { hostname } from "node:os";
 import { currentComputerNames, currentComputerPlatform } from "#src/platform";
 import { FileMachineIdFallback, resolveMachineId } from "#src/machine-id";
-import { HttpComputerRegisterTransport, HttpWorkspaceRpcTransport } from "#src/cloud-rpc-transport";
-import { ComputerRegistrationClient } from "@lrm/coforge-sdk/internal";
+import {
+  HttpComputerListTransport,
+  HttpComputerRegisterTransport,
+  HttpWorkspaceRpcTransport,
+} from "#src/cloud-rpc-transport";
+import { ComputerRegistrationClient, ComputerRosterClient } from "@lrm/coforge-sdk/internal";
 import { createDaemonLauncher } from "#src/daemon-service/daemon-host";
 import { createWorkspaceLookup } from "#src/workspace/lookup";
 import { registrationIdempotencyKey } from "#src/registration/idempotency-key";
@@ -165,6 +169,15 @@ export function createSetupCommand(
       },
     },
     workspaceLookup: createWorkspaceLookup(new HttpWorkspaceRpcTransport()),
+    roster: {
+      async list(serverUrl, credential) {
+        return new ComputerRosterClient(
+          new HttpComputerListTransport(serverUrl, credential.accessToken),
+        )
+          .list({ protocolMajor: 1, requestId: crypto.randomUUID() })
+          .then((response) => response.computers);
+      },
+    },
     registrationFactory: (serverUrl, credential) => ({
       register: (request) =>
         new ComputerRegistrationClient(
@@ -189,11 +202,25 @@ export function createSetupCommand(
   });
   return {
     async run(workspaceSlug, options) {
+      const stage = options.verbose
+        ? (stageName: string, detail?: Record<string, string>) => {
+            io.stderr(
+              detail
+                ? `${stageName}: ${Object.entries(detail)
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(" ")}`
+                : stageName,
+            );
+          }
+        : attachStageEmitter(io, options.json);
       const result = await setup.run({
         workspaceSlug,
         json: options.json,
         oneShot: options.oneShot,
-        onStage: attachStageEmitter(io, options.json),
+        machineId: options.machineId,
+        fresh: options.fresh,
+        yes: options.yes,
+        onStage: stage,
       });
       writeSetupResult(io.stdout, result, options.json);
     },
