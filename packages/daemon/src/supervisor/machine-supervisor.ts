@@ -1,8 +1,6 @@
-import { getLogger } from "@logtape/logtape";
 import {
   type DaemonConnectRejectionReason,
   type RunnerHoldReason,
-  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
@@ -149,8 +147,6 @@ export type RestartHoldTuning = {
   now?: () => number;
   sleep?: (milliseconds: number) => Promise<void>;
 };
-
-const logger = getLogger(["coforge", "daemon", "supervisor"]);
 
 /** Serial machine mutations; a stopped binding remains registered and recoverable. */
 export class MachineSupervisor {
