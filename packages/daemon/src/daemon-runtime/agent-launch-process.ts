@@ -29,7 +29,6 @@ import { restoreSupersededAgentApiKey } from "./agent-api-key-revoke";
 import { restoreSupersededProxyToken } from "./agent-launch-revocation";
 import { wakeReusedAgent } from "./agent-wake-control";
 import { logAgentApiKeyRevokeFailed } from "./agent-failure-logs";
-import { getLogger } from "@logtape/logtape";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { ActivityLaunch } from "./activity-launch";
@@ -37,8 +36,6 @@ import type { LaunchRequest } from "./runtime-launch-types";
 import type { SessionReference } from "./launch-identity";
 import type { AgentLaunchCoordinatorPorts } from "./agent-launch-coordinator";
 import type { TaskIdleNudge } from "./task-idle-nudge";
-
-const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 export async function launchAgentProcess(
   ports: AgentLaunchCoordinatorPorts & {
