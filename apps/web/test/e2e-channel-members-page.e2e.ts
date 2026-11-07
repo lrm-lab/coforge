@@ -232,7 +232,11 @@ test("the settings panel shows a channel's members as a page, adds and removes o
       }),
     ).not.toBeNull();
 
-    // A channel admin makes the new member a channel admin.
+    // A channel admin makes the new member a channel admin. The row's name can paint before its
+    // action buttons do, so the button itself is what is waited for.
+    await waitFor(
+      `document.querySelector(${JSON.stringify(`[aria-label="Make ${outside.displayName} a channel admin"]`)}) !== null`,
+    );
     await browser(
       "eval",
       `document.querySelector(${JSON.stringify(`[aria-label="Make ${outside.displayName} a channel admin"]`)}).click()`,
