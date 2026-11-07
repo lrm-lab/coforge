@@ -102,6 +102,12 @@ import { parseMessageSendArgs } from "#src/send-args";
 import { formatSearchResults } from "#src/search-format";
 import { formatWorkspaceInfo } from "#src/workspace-info-format";
 import {
+  runWeeklyReportCollect,
+  type WeeklyReportCollectCommand,
+  type WeeklyReportCollectInvocation,
+  type WeeklyReportCollectResult,
+} from "#src/weekly-report-collect";
+import {
   parseWorkspaceInfoArgs,
   type WorkspaceInfoInvocation,
   type WorkspaceInfoOptions,
@@ -206,26 +212,11 @@ export type WeeklyReportInvocation =
       weeklyReport: WeeklyReportCommand;
     }
   | { command: "weekly-report"; inputPath: string };
-export type WeeklyReportCollectCommand = {
-  idempotencyKey: string;
-  runId: string;
-  outcome: "ready" | "empty" | "failed";
-  packMarkdown?: string;
-  failureReason?: string;
-};
-export type WeeklyReportCollectResult = {
-  idempotencyKey: string;
-  runId: string;
-  status: string;
-  allTerminal: boolean;
-  canSynthesize: boolean;
-};
-export type WeeklyReportCollectInvocation = {
-  command: "weekly-report-collect";
-  collect: WeeklyReportCollectCommand;
-  /** When set, `run` loads this file into `collect.packMarkdown` before posting. */
-  markdownPath?: string;
-};
+export type {
+  WeeklyReportCollectCommand,
+  WeeklyReportCollectInvocation,
+  WeeklyReportCollectResult,
+} from "#src/weekly-report-collect";
 export type WeeklyReportKeyPointsCommand = {
   idempotencyKey: string;
   reportId: string;
@@ -893,17 +884,8 @@ export async function run(args: readonly string[], transport: MessageTransport):
     }
     return transport.weeklyReport(invocation.weeklyReport);
   }
-  if (invocation.command === "weekly-report-collect") {
-    if (!transport.weeklyReportCollect)
-      throw new Error("Weekly report collect transport is unavailable");
-    let collect = invocation.collect;
-    if (invocation.markdownPath) {
-      const packMarkdown = await Bun.file(invocation.markdownPath).text();
-      collect = { ...collect, packMarkdown };
-    }
-    const result = await transport.weeklyReportCollect(collect);
-    return `Collect slot ${result.status} (run ${result.runId}; allTerminal=${result.allTerminal}; canSynthesize=${result.canSynthesize}).`;
-  }
+  if (invocation.command === "weekly-report-collect")
+    return runWeeklyReportCollect(invocation, transport);
   if (invocation.command === "weekly-report-key-points") {
     if (!transport.weeklyReportKeyPoints)
       throw new Error("Weekly report key-points transport is unavailable");
