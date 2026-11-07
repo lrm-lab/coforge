@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
+import { browserSession, desktopPointerInitScript, localBrowserE2e } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -70,7 +70,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   }
   async function openChannel(path: string) {
-    await browser("open", `${origin}${path}`);
+    await browser("open", `${origin}${path}`, "--init-script", pointerInit);
     await waitFor(
       `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
       60_000,
@@ -124,6 +124,8 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     });
   const [inside, outside] = await Promise.all([agent("inside"), agent("outside")]);
   const agentIds = [inside.id, outside.id];
+  // The desktop sections assume a mouse: a headless Linux Chrome reports a coarse pointer.
+  const pointerInit = await desktopPointerInitScript(artifacts);
   try {
     await db.conversationMember.createMany({
       data: [
@@ -180,7 +182,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     // Members link is labelled the same).
     const headerFaces = `[...document.querySelectorAll('[aria-label="Members"]')].find((el) => !${panel}?.contains(el) && el.textContent.includes(${JSON.stringify(DEV_BROWSER_USER.name)}))`;
     const chat = `${origin}${workspacePath}/channel/${channel.id}`;
-    await browser("open", chat);
+    await browser("open", chat, "--init-script", pointerInit);
     await waitFor(`${headerFaces}?.querySelector("${dot}") != null`, 60_000);
     await waitFor(messagesWithDots);
     await shootBoth("chat-dots");
@@ -320,7 +322,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     // A phone has no hover to reveal the actions: each row keeps them behind one menu button, so
     // the name keeps its width, and the menu makes the member a channel admin.
     await browser("set", "viewport", "390", "844");
-    await browser("open", chat);
+    await browser("open", chat, "--init-script", pointerInit);
     await waitFor(messagesWithDots, 60_000);
     await shootBoth("phone-chat-dots");
     await openChannel(`${workspacePath}/channel/${channel.id}`);
