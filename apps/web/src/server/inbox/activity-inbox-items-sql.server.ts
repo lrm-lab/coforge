@@ -66,17 +66,23 @@ export const conversationMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
     AND m."sequence" > COALESCE(cm."doneThroughSequence", 0)
 ) mention`;
 
+/**
+ * A followed thread's mention lateral: the conversation lateral's aggregate scoped to one thread.
+ * Driven by the thread's messages past Done — a handful per thread — each checked against the
+ * mention primary key `(messageId, memberId)`; driving from the member's mentions instead would
+ * probe `messages` once per mention in the whole conversation for every thread item.
+ */
 const threadMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
   SELECT COALESCE(BOOL_OR(${unreadReplySql}), FALSE) AS "unread",
     (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
   FROM "messages" m
-  JOIN "message_mentions" mm
-    ON mm."messageId" = m."id"
-   AND mm."memberId" = threads."memberId"
-   AND mm."conversationId" = m."conversationId"
   WHERE m."conversationId" = threads."conversationId"
     AND m."threadRootId" = threads."rootMessageId"
     AND m."sequence" > COALESCE(tr."doneThroughSequence", 0)
+    AND EXISTS (
+      SELECT 1 FROM "message_mentions" mm
+      WHERE mm."messageId" = m."id" AND mm."memberId" = threads."memberId"
+    )
 ) mention`;
 
 /**
