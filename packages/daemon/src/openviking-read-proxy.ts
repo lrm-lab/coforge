@@ -21,6 +21,7 @@ import {
   type OpenVikingReadCommand,
   type OpenVikingSearchContextCommand,
 } from "@lrm/coforge-sdk/agent";
+import { agentHttpFetch } from "#src/connection/agent-http-wire";
 
 export type OpenVikingAgentReadCommand =
   | OpenVikingExpandCommand
@@ -120,7 +121,7 @@ export async function forwardOpenVikingRead(input: {
   fetch?: OpenVikingReadFetch;
   timeoutMs?: number;
 }): Promise<unknown> {
-  const fetcher = input.fetch ?? globalThis.fetch;
+  const fetcher = input.fetch ?? agentHttpFetch;
   let response: Response;
   try {
     response = await fetcher(input.url, {
@@ -203,7 +204,7 @@ export async function forwardOpenVikingControl(input: {
   fetch?: OpenVikingReadFetch;
   timeoutMs?: number;
 }): Promise<unknown> {
-  const fetcher = input.fetch ?? globalThis.fetch;
+  const fetcher = input.fetch ?? agentHttpFetch;
   let response: Response;
   try {
     response = await fetcher(input.url, {

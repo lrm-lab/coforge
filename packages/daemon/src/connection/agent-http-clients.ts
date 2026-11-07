@@ -41,6 +41,7 @@ import { AgentUpstreamRefusalError } from "./agent-upstream-refusal-error";
 import {
   AGENT_RPC_TIMEOUT_MS,
   agentHeaders,
+  agentHttpFetch,
   assertAgentResponseOk,
   fetchAgentResponse,
   getAgentJson,
@@ -112,7 +113,7 @@ export interface AgentActionPrepareHttpClient {
   execute(input: AgentHttpInput<AgentActionPrepareRequest>): Promise<AgentActionPrepareResponse>;
 }
 export const createAgentMessageHttpClient = (
-  httpClient: HttpFetch = globalThis.fetch,
+  httpClient: HttpFetch = agentHttpFetch,
 ): AgentMessageHttpClient => ({
   requestRead: ({ request, ...keys }) =>
     getAgentJson(httpClient, {
@@ -291,13 +292,12 @@ export const createAgentMessageHttpClient = (
 
 export const defaultAgentMessageHttpClient = createAgentMessageHttpClient();
 
-
 /** `timeoutMs` bounds each request; production's client uses `AGENT_RPC_TIMEOUT_MS`. */
 export const createAgentTaskHttpClient = (timeoutMs: number): AgentTaskHttpClient => ({
   async execute({ url, request, ...keys }) {
     // `TaskRequest` already names the key `idempotencyKey` (the one HTTP name), so the body goes up
     // as-is; the response echoes it for correlation.
-    const response = await fetch(url, {
+    const response = await agentHttpFetch(url, {
       method: "POST",
       signal: AbortSignal.timeout(timeoutMs),
       headers: agentHeaders(keys, true),
@@ -325,13 +325,13 @@ export const defaultAgentChannelHttpClient: AgentChannelHttpClient = {
       if (method === "GET") {
         const endpoint = new URL(url);
         endpoint.searchParams.set("idempotencyKey", request.idempotencyKey);
-        response = await fetch(endpoint, {
+        response = await agentHttpFetch(endpoint, {
           method: "GET",
           headers: agentHeaders(keys),
           signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
         });
       } else {
-        response = await fetch(url, {
+        response = await agentHttpFetch(url, {
           method: method as "POST" | "PATCH" | "DELETE",
           signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
           headers: agentHeaders(keys, true),

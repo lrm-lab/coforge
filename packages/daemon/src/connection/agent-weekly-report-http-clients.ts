@@ -4,6 +4,7 @@ import { AgentWeeklyReportRequestError } from "./agent-weekly-report-request-err
 import {
   AGENT_RPC_TIMEOUT_MS,
   agentHeaders,
+  agentHttpFetch,
   type AgentHttpInput,
 } from "./agent-http-wire";
 
@@ -31,7 +32,7 @@ export interface AgentWeeklyReportMemoryHttpClient {
 
 export const defaultAgentWeeklyReportHttpClient: AgentWeeklyReportHttpClient = {
   async request({ url, request, ...keys }) {
-    const response = await fetch(url, {
+    const response = await agentHttpFetch(url, {
       method: "POST",
       signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
       headers: agentHeaders(keys, true),
@@ -59,7 +60,7 @@ export const defaultAgentWeeklyReportCollectHttpClient: AgentWeeklyReportCollect
   async execute({ url, request, ...keys }) {
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await agentHttpFetch(url, {
         method: "POST",
         signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
         headers: agentHeaders(keys, true),
@@ -85,7 +86,7 @@ export const defaultAgentWeeklyReportKeyPointsHttpClient: AgentWeeklyReportKeyPo
   async execute({ url, request, ...keys }) {
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await agentHttpFetch(url, {
         method: "POST",
         signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
         headers: agentHeaders(keys, true),
@@ -111,7 +112,7 @@ export const defaultAgentWeeklyReportMemoryHttpClient: AgentWeeklyReportMemoryHt
   async execute({ url, request, ...keys }) {
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await agentHttpFetch(url, {
         method: "POST",
         signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
         headers: agentHeaders(keys, true),

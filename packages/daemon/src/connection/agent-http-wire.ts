@@ -17,7 +17,56 @@ export type AgentHttpInput<Request> = {
   daemonApiKey: string;
   request: Request;
 };
-export type HttpFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+export type HttpFetch = (
+  input: string | URL | Request,
+  init?: BunFetchRequestInit,
+) => Promise<Response>;
+
+/** Answers a key the cloud rejected with a fresh one, or `undefined` when none may be minted.
+ * The runtime that owns the Agent key registry installs it once; the wire layer only ever sees
+ * the rejected key string, never an Agent id. */
+export type AgentApiKeyHealer = (rejectedKey: string) => Promise<string | undefined>;
+
+let agentApiKeyHealer: AgentApiKeyHealer | undefined;
+
+/** Installs (or with `undefined` removes) the Agent API key healer every Agent HTTPS call shares. */
+export function setAgentApiKeyHealer(healer: AgentApiKeyHealer | undefined): void {
+  agentApiKeyHealer = healer;
+}
+
+/** A request body the heal retry can send again; a stream is already consumed. */
+function replayableAgentBody(body: RequestInit["body"]): boolean {
+  return body === undefined || body === null || !(body instanceof ReadableStream);
+}
+
+/**
+ * `fetcher` plus one Agent API key heal: a bare 401 is the credential boundary's opaque answer —
+ * it cannot say `key_revoked` from `scope_mismatch`, and either way a key another launch's Stop
+ * revoked looks identical. When the request carried an Agent key and a healer is installed, the
+ * healer gets one chance to mint a replacement and the call retries exactly once with it. A body
+ * that cannot be replayed, a `Request` input, or no fresh key leaves the 401 untouched.
+ */
+export function withAgentApiKeyHeal(fetcher: HttpFetch): HttpFetch {
+  return async (input, init) => {
+    const response = await fetcher(input, init);
+    if (response.status !== 401 || agentApiKeyHealer === undefined) return response;
+    if (typeof input !== "string" && !(input instanceof URL)) return response;
+    if (!replayableAgentBody(init?.body)) return response;
+    const rejected = new Headers(init?.headers).get("x-coforge-agent-api-key");
+    const rejectedKey = rejected?.startsWith("Bearer ") ? rejected.slice(7) : undefined;
+    if (!rejectedKey) return response;
+    const fresh = await agentApiKeyHealer(rejectedKey).catch(() => undefined);
+    if (!fresh || fresh === rejectedKey) return response;
+    // Release the rejected response's connection before the retry reuses the pool.
+    void response.body?.cancel().catch(() => undefined);
+    const headers = new Headers(init?.headers);
+    headers.set("x-coforge-agent-api-key", `Bearer ${fresh}`);
+    return fetcher(input, { ...init, headers });
+  };
+}
+
+/** `fetch` with the Agent API key heal — the default transport for every Agent HTTPS call. */
+export const agentHttpFetch: HttpFetch = withAgentApiKeyHeal((input, init) => fetch(input, init));
 
 /** Maps a channel operation onto its cloud HTTP method and path, given the local target
  * (`create` carries no target: the channel does not exist yet). */
@@ -61,7 +110,9 @@ export function agentHeaders(keys: { agentApiKey: string; daemonApiKey: string }
   };
 }
 
-/** Invokes the HTTP fetcher, turning any thrown error into a typed pre-response transport failure. */
+/** Invokes the HTTP fetcher, turning any thrown error into a typed pre-response transport failure.
+ * Every caller here speaks for an Agent, so the shared key heal applies even when the caller
+ * injected a bare `fetch`. */
 export async function fetchAgentResponse(
   fetcher: HttpFetch,
   url: string | URL,
@@ -69,7 +120,7 @@ export async function fetchAgentResponse(
   what: string,
 ): Promise<Response> {
   try {
-    return await fetcher(url, init);
+    return await withAgentApiKeyHeal(fetcher)(url, init);
   } catch (cause) {
     throw AgentTransportError.preResponseTransport(what, cause);
   }

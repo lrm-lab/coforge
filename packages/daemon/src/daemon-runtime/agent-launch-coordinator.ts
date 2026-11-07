@@ -32,6 +32,7 @@ import { getLogger } from "@logtape/logtape";
 import type { AgentSessionReport } from "@lrm/coforge-sdk/internal";
 import { SystemCleaner } from "#src/system-cleaner/system-cleaner";
 import { TaskIdleNudge } from "./task-idle-nudge";
+import { installAgentApiKeyHealer } from "./agent-api-key-heal";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -165,6 +166,18 @@ export class AgentLaunchCoordinator {
         await session.notify(text);
         return true;
       },
+    });
+    // A key another launch's Stop revoked answers every Agent API call with a bare 401;
+    // the shared wire transport asks this healer for a replacement and retries once.
+    installAgentApiKeyHealer({
+      agentApiKeys: ports.agentApiKeys,
+      workspaceId: () => ports.connection.workspaceId,
+      transport: () => (ports.isStopping() ? undefined : ports.transport()),
+      managedScope: (agentId) => ports.agentProcessManager.serverLaunch(agentId),
+      launchAlive: (agentId) =>
+        ports.agentProcessManager.runningAgentIds().includes(agentId) &&
+        !ports.stops.stopping(agentId) &&
+        !ports.agentProcessManager.isStopping(agentId),
     });
   }
 

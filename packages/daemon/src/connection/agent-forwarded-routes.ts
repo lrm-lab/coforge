@@ -7,7 +7,7 @@ import type {
   AgentTaskConversationRequest,
 } from "@lrm/coforge-sdk/agent";
 import { agentAppCloudRequest } from "./agent-app-cloud-request";
-import { agentHeaders } from "./agent-http-wire";
+import { agentHeaders, agentHttpFetch } from "./agent-http-wire";
 
 /** What the connection supplies to one Agent request it forwards as it is. */
 export type ForwardPorts = {
@@ -24,7 +24,7 @@ export function forwardAgentRequest(
   agentApiKey: string,
 ): Promise<Response> {
   ports.assertConnected();
-  return fetch(ports.endpoint(what, path), {
+  return agentHttpFetch(ports.endpoint(what, path), {
     decompress: false,
     method,
     headers: agentHeaders(ports.keys(agentApiKey), body !== undefined),
@@ -62,7 +62,7 @@ export async function agentAttachmentUpload(
   const contentType = request.headers.get("content-type");
   if (!contentType) throw new Error("multipart content-type is missing");
   const body = await request.blob();
-  return fetch(
+  return agentHttpFetch(
     ports.endpoint("Agent attachment upload", agentApiRoutes.cloud.attachments.upload.path),
     {
       decompress: false,

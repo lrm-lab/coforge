@@ -6,6 +6,7 @@ import {
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import {
   agentHeaders,
+  agentHttpFetch,
   fetchAgentResponse,
   type AgentHttpInput,
   type HttpFetch,
@@ -22,7 +23,7 @@ export interface AgentTaskIdleNudgeHttpClient {
 /** `timeoutMs` bounds each request; production's client uses `AGENT_RPC_TIMEOUT_MS`. */
 export const createAgentTaskIdleNudgeHttpClient = (
   timeoutMs: number,
-  fetcher: HttpFetch = fetch,
+  fetcher: HttpFetch = agentHttpFetch,
 ): AgentTaskIdleNudgeHttpClient => ({
   async execute({ url, request, ...keys }) {
     const response = await fetchAgentResponse(
