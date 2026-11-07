@@ -19,11 +19,14 @@ e2e-code-sign-in.e2e.ts 26
 e2e-questions-card.e2e.ts 26
 e2e-first-sign-in-invite.e2e.ts 26
 e2e-task-add-existing-subtask.e2e.ts 23
+e2e-conversation-entry-position.e2e.ts 24
 e2e-agent-replying-group.e2e.ts 21
+e2e-channel-members-page.e2e.ts 21
 e2e-github-sign-in.e2e.ts 21
 e2e-task-relation-pickers.e2e.ts 21
 e2e-whats-new.e2e.ts 21
 e2e-artifact-documents.e2e.ts 18
+e2e-private-channel-entry.e2e.ts 18
 e2e-task-delete-undo.e2e.ts 18
 e2e-activity-open-unread.e2e.ts 18
 e2e-query-cache-persistence.e2e.ts 16
@@ -45,6 +48,7 @@ e2e-activity-inbox.e2e.ts 12
 e2e-channel-notify-menu.e2e.ts 12
 e2e-conversation-task-board.e2e.ts 12
 e2e-message-task-pill.e2e.ts 12
+e2e-read-cursor-elsewhere.e2e.ts 11
 e2e-mention-picker.e2e.ts 11
 e2e-create-task-draft.e2e.ts 11
 e2e-search-entities.e2e.ts 11
@@ -83,6 +87,7 @@ e2e-stop-channel-agents.e2e.ts 7
 e2e-delete-channel.e2e.ts 7
 e2e-workspace-join-link.e2e.ts 7
 e2e-activity-inbox-dm.e2e.ts 6
+e2e-agent-runtime-refusal-banner.e2e.ts 6
 e2e-activity-waiting.e2e.ts 6
 e2e-modal-keyboard-viewport.e2e.ts 6
 e2e-public-agent-direct-message.e2e.ts 6
