@@ -85,17 +85,36 @@ test("the add view creates an Agent named by the search, and it joins the channe
   async function chooseClaudeCode() {
     // The picker opens on the Computer's preferred runtime (Pi on the seeded Computer), so its
     // trigger is found by the "Runtime" label it is named for, not by the runtime it
-    // happens to show.
-    const providerButton = `[...${agentForm}.querySelectorAll('button[aria-haspopup="listbox"]')].find((button) => (button.getAttribute("aria-labelledby") ?? "").split(" ").some((id) => document.getElementById(id)?.textContent.includes("Runtime")))`;
-    await waitFor(`${providerButton} != null`);
-    await browser("eval", `(${providerButton}).click()`);
+    // happens to show. The catalog the form loads on open re-renders the picker, and a command
+    // sent in between can land on a rebuilt option list; the catalog-loaded wait keeps that
+    // re-render ahead of the picker, and one eval polls and picks inside the page, so the
+    // option is clicked in the same tick it exists.
     await waitFor(
-      `[...document.querySelectorAll('[role="option"]')].some((option) => option.textContent.includes("Claude Code"))`,
+      `${agentForm}.querySelector('button[aria-label="Refresh Model Catalog"]:not([disabled])') != null`,
     );
-    await browser(
-      "eval",
-      `[...document.querySelectorAll('[role="option"]')].find((option) => option.textContent.includes("Claude Code")).click()`,
-    );
+    const picked = JSON.parse(
+      await browser(
+        "eval",
+        `(async () => {
+        const dialog = ${agentForm};
+        if (!dialog) return "no-dialog";
+        const trigger = [...dialog.querySelectorAll('button[aria-haspopup="listbox"]')].find((button) => (button.getAttribute("aria-labelledby") ?? "").split(" ").some((id) => document.getElementById(id)?.textContent.includes("Runtime")));
+        if (!trigger) return "no-trigger";
+        trigger.click();
+        const deadline = Date.now() + 15_000;
+        while (Date.now() < deadline) {
+          const option = [...document.querySelectorAll('[role="option"]')].find((item) => item.textContent.includes("Claude Code"));
+          if (option) {
+            option.click();
+            return "clicked";
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return "no-option";
+      })()`,
+      ),
+    ) as string;
+    if (picked !== "clicked") throw new Error(`runtime picker: ${picked}`);
     await waitFor(
       `[...${agentForm}.querySelectorAll("button")].some((button) => button.textContent.trim() === "Claude Code")`,
     );
@@ -184,10 +203,11 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await browser("screenshot", join(artifacts, "joined.png"));
 
     // The name is taken now, so the search offers no create-by-name entry for it
-    // (3633f7701); the plain entry's form still says so and the page stays up.
+    // (3633f7701); the plain entry's form still says so and the page stays up. The live Agent
+    // directory hears about the create asynchronously, so the entry can linger until it lands.
     await browser("fill", 'input[placeholder="Name"]', agentName);
     await waitFor(panelHas(`No members match “${agentName}”`));
-    expect(await evaluate<boolean>(panelHas(`Create Agent “`))).toBe(false);
+    await waitFor(`!${panelHas(`Create Agent “`)}`);
     await clickText(`[role="dialog"] button`, "Create Agent");
     await waitFor(`${agentForm} !== undefined`);
     await browser("fill", '[role="dialog"]:has(input[name="name"]) input[name="name"]', agentName);
