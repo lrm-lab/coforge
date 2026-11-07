@@ -167,6 +167,10 @@ export class WindowsUserDaemonHost implements DaemonLauncher {
     return this.#local.command(operation, workspaceId, detachTarget);
   }
 
+  computerUpgrade(requestId: string, expectedVersion: string): Promise<ManagedRuntimeIdentity[]> {
+    return this.#local.control("computer_upgrade", undefined, requestId, expectedVersion);
+  }
+
   async stop(): Promise<void> {
     const result = await this.#run(["schtasks.exe", "/End", "/TN", this.#taskName]);
     if (result !== 0) throw new Error("could not stop the CoForge Daemon user task");

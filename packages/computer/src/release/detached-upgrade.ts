@@ -29,6 +29,13 @@ export type DetachedUpgradeOptions = {
   onNote?: (line: string) => void;
   /** Tests inject these; production uses the Daemon's platform layer. */
   launch?: typeof launchComputerUpgrade;
+  /** `daemon:computer_upgrade` admission (task #685): asks the running Daemon to admit this
+   * request into the one machine-wide pending slot and launch the job itself. Resolving `true`
+   * means the Daemon launched it — the direct `launch` below is skipped; `false` (no Daemon
+   * method, or a Daemon that predates it) falls back to launching here. A rejection — a pending
+   * operation, a different expected version — propagates: this process must not launch a second
+   * job beside one the Daemon already admitted. */
+  admit?: (requestId: string, version: string) => Promise<boolean>;
   readReceipt?: typeof readUpgradeReceipt;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -66,10 +73,12 @@ export async function runDetachedUpgrade(
   // systemd, where this job runs through `systemd-run` in a transient unit outside the supervised
   // unit's cgroup, so stopping that unit cannot end it. Raft has no `systemd-run` and must check.
   note(`Upgrade ${requestId} starts outside this process; its result is kept on this Computer.`);
-  await launch(requestId, options.version, {
-    stateDirectory: options.stateDirectory,
-    homeDirectory: home,
-  });
+  const admitted = options.admit ? await options.admit(requestId, options.version) : false;
+  if (!admitted)
+    await launch(requestId, options.version, {
+      stateDirectory: options.stateDirectory,
+      homeDirectory: home,
+    });
 
   const deadline = now() + (options.timeoutMs ?? DETACHED_UPGRADE_TIMEOUT_MS);
   const pollMs = options.pollMs ?? DETACHED_UPGRADE_POLL_MS;

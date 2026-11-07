@@ -10,6 +10,7 @@ import type { ComputerConfig } from "#src/local-config";
 import { detachWorkspace, type DetachOutcome } from "#src/detach/detach";
 import {
   isDaemonConnectRejectionReason,
+  UPGRADE_ERROR_CODE,
   type DaemonConnectRejectionReason,
   type ManagedRuntimeIdentity,
 } from "@lrm/coforge-sdk/internal";
@@ -194,6 +195,37 @@ export function createCommand(input: {
         });
       return outcome;
     },
+  };
+}
+
+/**
+ * `daemon:computer_upgrade` admission for `coforge-computer update`/`install` (task #685): the
+ * Daemon admits the request into the one machine-wide pending slot a web upgrade also uses and
+ * launches the detached installer job itself. Resolving `true` means the Daemon launched it —
+ * the caller must not launch a second job; `false` means this Daemon cannot take the request
+ * (no `computerUpgrade` method, or one that predates `daemon:computer_upgrade`) and the caller
+ * launches the job directly, exactly as before. A pending-operation refusal becomes a plain
+ * message naming the way out; every other rejection propagates unchanged.
+ */
+export function createComputerUpgradeAdmission(daemon: DaemonCommandRunner) {
+  return async (requestId: string, expectedVersion: string): Promise<boolean> => {
+    if (!daemon.computerUpgrade) return false;
+    try {
+      await daemon.ensureRunning();
+      await daemon.computerUpgrade(requestId, expectedVersion);
+      return true;
+    } catch (error) {
+      if (error instanceof DaemonCommandRejectedError) {
+        if (error.code === UPGRADE_ERROR_CODE.OPERATION_PENDING)
+          throw new Error(
+            "A Computer upgrade is already in progress on this machine; wait for it to finish ('coforge-computer status' shows its result), then run the command again.",
+          );
+        // A Daemon that predates `daemon:computer_upgrade` refuses it as an unknown operation —
+        // launch the detached job directly, exactly as before admission existed.
+        if (error.message.includes("unknown lifecycle operation")) return false;
+      }
+      throw error;
+    }
   };
 }
 

@@ -15,6 +15,8 @@ import { isValidComputerWorkspaceSlug } from "#src/workspace/workspace-slug";
 import { writeCliFailure } from "#src/cli/failure-output";
 import { createLoginCommand, createSetupCommand } from "#src/cli/login-setup-commands";
 import { createCommand, createLogsCommand } from "#src/cli/daemon-commands";
+import { createDaemonLauncher } from "#src/daemon-service/daemon-host";
+import { createComputerUpgradeAdmission } from "#src/daemon-client/index";
 import type { DetachOutcome } from "#src/detach/detach";
 import { createUpdateCommand } from "#src/cli/update-command";
 import { describeUpgradePlan, planUpgrade } from "#src/cli/upgrade-plan";
@@ -456,7 +458,11 @@ export async function runComputer(): Promise<void> {
         login: createLoginCommand(io, config),
         logout: createLogoutCommand(io),
         setup: createSetupCommand(io, config),
-        updater: createUpdateCommand(io),
+        updater: createUpdateCommand(io, {
+          admitComputerUpgrade: createComputerUpgradeAdmission(
+            createDaemonLauncher(platform.os, installDirectory, stateDirectory, COFORGE_SERVER_URL),
+          ),
+        }),
         daemon: createCommand(
           platform.os,
           installDirectory,

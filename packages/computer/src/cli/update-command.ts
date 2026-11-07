@@ -24,6 +24,9 @@ export function createUpdateCommand(
   dependencies: {
     detachedUpgrade?: typeof runDetachedUpgrade;
     inPlaceUpgrade?: typeof runUpgradeOperation;
+    /** `daemon:computer_upgrade` admission (task #685): the Daemon admits the request into the
+     * machine-wide pending slot and launches the job; `false` falls back to launching here. */
+    admitComputerUpgrade?: (requestId: string, version: string) => Promise<boolean>;
   } = {},
 ): UpdateCommand {
   const { installRoot, target } = resolveUpgradeRunnerPaths();
@@ -43,6 +46,7 @@ export function createUpdateCommand(
     const outcome = await (dependencies.detachedUpgrade ?? runDetachedUpgrade)({
       version,
       installRoot,
+      admit: dependencies.admitComputerUpgrade,
       // The job's own progress lines are diagnostics: they belong on stderr, never on the
       // command's stdout, which a `--json` caller reads.
       onLine: (line) => io.stderr(`${line}\n`),

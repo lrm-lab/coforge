@@ -75,6 +75,10 @@ export interface DaemonCommandRunner {
      * the supervisor does not know. */
     detachTarget?: { computerId: string; serverHttpUrl: string },
   ): Promise<ManagedRuntimeIdentity[]>;
+  /** `daemon:computer_upgrade` (task #685): admits the Computer CLI's own upgrade into the one
+   * machine-wide pending slot and launches it; `false`-returning hosts fall back to launching
+   * the detached job directly. */
+  computerUpgrade?(requestId: string, expectedVersion: string): Promise<ManagedRuntimeIdentity[]>;
 }
 export type DaemonWorkspaceConfig = {
   /** `daemon:configure` from a login-style setup (task #417): only it retires the login the
@@ -214,7 +218,15 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
   }
 
   async control(
-    operation: "start" | "stop" | "restart" | "snapshot" | "upgrade" | "upgrade_ack" | "detach",
+    operation:
+      | "start"
+      | "stop"
+      | "restart"
+      | "snapshot"
+      | "upgrade"
+      | "computer_upgrade"
+      | "upgrade_ack"
+      | "detach",
     workspaceId?: string,
     requestId: string = crypto.randomUUID(),
     expectedVersion?: string,

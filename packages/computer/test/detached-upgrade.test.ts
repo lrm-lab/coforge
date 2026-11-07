@@ -188,4 +188,83 @@ describe("running an upgrade outside this process", () => {
       }),
     ).rejects.toThrow(`${REQUEST_ID}`);
   });
+
+  test("a Daemon that admits the request launches it; this process only watches the receipt", async () => {
+    const homeDirectory = await home();
+    const launched: [string, string][] = [];
+    const admitted: [string, string][] = [];
+    const outcome = await runDetachedUpgrade({
+      version: "0.1.18-dev.2",
+      requestId: REQUEST_ID,
+      homeDirectory,
+      installRoot: join(homeDirectory, "install"),
+      stateDirectory: join(homeDirectory, "daemon"),
+      launch: async (requestId, version) => {
+        launched.push([requestId, version]);
+      },
+      admit: async (requestId, version) => {
+        admitted.push([requestId, version]);
+        return true;
+      },
+      readReceipt: async () => receipt("succeeded"),
+      sleep: async () => {},
+      onLine: () => {},
+      onNote: () => {},
+    });
+    expect(admitted).toEqual([[REQUEST_ID, "0.1.18-dev.2"]]);
+    // The Daemon launched the job: a second local launch would be a duplicate installer.
+    expect(launched).toEqual([]);
+    expect(outcome).toEqual({
+      kind: "settled",
+      requestId: REQUEST_ID,
+      result: expect.objectContaining({ status: "succeeded" }),
+    });
+  });
+
+  test("a Daemon that cannot take the request falls back to launching here", async () => {
+    const homeDirectory = await home();
+    const launched: [string, string][] = [];
+    const outcome = await runDetachedUpgrade({
+      version: "0.1.18-dev.2",
+      requestId: REQUEST_ID,
+      homeDirectory,
+      installRoot: join(homeDirectory, "install"),
+      stateDirectory: join(homeDirectory, "daemon"),
+      launch: async (requestId, version) => {
+        launched.push([requestId, version]);
+      },
+      admit: async () => false,
+      readReceipt: async () => receipt("succeeded"),
+      sleep: async () => {},
+      onLine: () => {},
+      onNote: () => {},
+    });
+    expect(launched).toEqual([[REQUEST_ID, "0.1.18-dev.2"]]);
+    expect(outcome.kind).toBe("settled");
+  });
+
+  test("an admission refusal propagates and nothing launches", async () => {
+    const homeDirectory = await home();
+    const launched: [string, string][] = [];
+    await expect(
+      runDetachedUpgrade({
+        version: "0.1.18-dev.2",
+        requestId: REQUEST_ID,
+        homeDirectory,
+        installRoot: join(homeDirectory, "install"),
+        stateDirectory: join(homeDirectory, "daemon"),
+        launch: async (requestId, version) => {
+          launched.push([requestId, version]);
+        },
+        admit: async () => {
+          throw new Error("upgrade operation is still pending");
+        },
+        readReceipt: async () => receipt("succeeded"),
+        sleep: async () => {},
+        onLine: () => {},
+        onNote: () => {},
+      }),
+    ).rejects.toThrow("still pending");
+    expect(launched).toEqual([]);
+  });
 });

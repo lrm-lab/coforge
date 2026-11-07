@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { DaemonCommandRejectedError, type DaemonCommandRunner } from "@lrm/coforge-daemon";
-import { createCommand } from "#src/daemon-client/index";
+import { UPGRADE_ERROR_CODE } from "@lrm/coforge-sdk/internal";
+import { createCommand, createComputerUpgradeAdmission } from "#src/daemon-client/index";
 import { CliError } from "#src/errors";
 
 const output = () => {
@@ -425,4 +426,75 @@ test("Linux start warns about logind session cleanup once", async () => {
   await command.start();
   expect(detections).toBe(1);
   expect(progress.lines.filter((line) => line.startsWith("Warning:"))).toHaveLength(1);
+});
+
+test("computer upgrade admission asks the Daemon first and reports true when it launched", async () => {
+  const calls: string[] = [];
+  const admit = createComputerUpgradeAdmission({
+    ensureRunning: async () => {
+      calls.push("ensure-running");
+    },
+    command: async () => [],
+    computerUpgrade: async (requestId, expectedVersion) => {
+      calls.push(`computer-upgrade:${requestId}:${expectedVersion}`);
+      return [];
+    },
+  });
+  expect(await admit("req-1", "0.1.19")).toBe(true);
+  expect(calls).toEqual(["ensure-running", "computer-upgrade:req-1:0.1.19"]);
+});
+
+test("computer upgrade admission names the pending operation instead of a raw code", async () => {
+  const admit = createComputerUpgradeAdmission({
+    ensureRunning: async () => {},
+    command: async () => [],
+    computerUpgrade: async () => {
+      throw new DaemonCommandRejectedError(
+        "daemon:computer_upgrade",
+        "upgrade is still pending",
+        UPGRADE_ERROR_CODE.OPERATION_PENDING,
+        "pending-workspace",
+      );
+    },
+  });
+  await expect(admit("req-2", "0.1.19")).rejects.toThrow(
+    "A Computer upgrade is already in progress on this machine",
+  );
+});
+
+test("a Daemon that predates daemon:computer_upgrade falls back to launching directly", async () => {
+  const admit = createComputerUpgradeAdmission({
+    ensureRunning: async () => {},
+    command: async () => [],
+    computerUpgrade: async () => {
+      throw new DaemonCommandRejectedError(
+        "daemon:computer_upgrade",
+        "unknown lifecycle operation",
+      );
+    },
+  });
+  expect(await admit("req-3", "0.1.19")).toBe(false);
+});
+
+test("a Daemon without computer upgrade support falls back to launching directly", async () => {
+  const admit = createComputerUpgradeAdmission({
+    ensureRunning: async () => {},
+    command: async () => [],
+  });
+  expect(await admit("req-4", "0.1.19")).toBe(false);
+});
+
+test("an unexpected computer upgrade refusal propagates unchanged", async () => {
+  const admit = createComputerUpgradeAdmission({
+    ensureRunning: async () => {},
+    command: async () => [],
+    computerUpgrade: async () => {
+      throw new DaemonCommandRejectedError(
+        "daemon:computer_upgrade",
+        "state directory is gone",
+        UPGRADE_ERROR_CODE.UPDATE_DOWNLOAD_FAILED,
+      );
+    },
+  });
+  await expect(admit("req-5", "0.1.19")).rejects.toThrow("state directory is gone");
 });

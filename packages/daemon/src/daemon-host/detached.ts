@@ -151,6 +151,10 @@ export class DetachedDaemonHost implements DaemonLauncher {
     return this.#local.command(operation, workspaceId, detachTarget);
   }
 
+  computerUpgrade(requestId: string, expectedVersion: string): Promise<ManagedRuntimeIdentity[]> {
+    return this.#local.control("computer_upgrade", undefined, requestId, expectedVersion);
+  }
+
   /** Asks the process to exit and, past the wait, ends it; the pid file goes with it. */
   async stop(): Promise<void> {
     const pid = await this.#pid();
