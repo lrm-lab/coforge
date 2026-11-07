@@ -2,8 +2,12 @@ import { expect, test } from "bun:test";
 import {
   AgentControl,
   agentControlRevision,
+  type AgentControlAgent,
   type AgentControlState,
+  type AgentControlStore,
 } from "#src/server/agents/agent-control.server";
+import { WorkspaceAgentRecovery } from "#src/server/agents/agent-runtime-control.server";
+import type { AgentRecord } from "#src/server/db/repositories/agent.repositories.server";
 import { decodeAgentStartIntent } from "@lrm/coforge-sdk/internal";
 import { pendingOpStore, pendingRuntimeConfig } from "./helpers/agent-control-store";
 
@@ -254,4 +258,128 @@ test("a launchId is minted once per operation and stays stable across a republis
   for (const bytes of sent) expect(decodeAgentStartIntent(bytes).launchId).toBe(mintedLaunchId);
   expect(current().state?.launchId).toBe(mintedLaunchId);
   expect(current().state?.requestId).toBe("start-1");
+});
+
+// Staging incident (task #687): dorothy's pending Start sat at a current scope while a sibling
+// Agent's unreadable runtimeConfig made every Daemon `ready` fail inside `agent_recovery`, so the
+// Daemon held every control publication and no Agent on the Computer ever answered. The values
+// below are dorothy's real staging rows; the sibling is qa457priv, whose stored config
+// `{"runtime":42,"provider":"not-an-object"}` reads back as `undefined`.
+const dorothyRuntimeConfig = {
+  runtime: "cursor" as const,
+  provider: { kind: "default" as const },
+  model: "",
+  modelProvider: "",
+  reasoning: "",
+};
+const dorothyWorkspaceId = "cc5c27ce-346f-4306-8614-db8f12669516";
+const dorothyComputerId = "34c261c8-4611-4fba-8599-38e5bbd18203";
+const dorothyAgentId = "74b2bb72-4435-4d3c-b86a-8965f2704f19";
+const unreadableAgentId = "0544e278-00fa-41fb-911c-d303f9d3c010";
+
+function agentRecord(overrides: Partial<AgentRecord>): AgentRecord {
+  return {
+    id: "agent",
+    workspaceId: dorothyWorkspaceId,
+    name: "agent",
+    displayName: "Agent",
+    createdAt: new Date("2026-11-05T18:12:21Z"),
+    ownerId: "owner",
+    computerId: dorothyComputerId,
+    runtimeConfig: dorothyRuntimeConfig,
+    stoppedAt: null,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+test("one Agent's unreadable config does not stop ready recovery for the Computer's other Agents", async () => {
+  const controlAgents = new Map<string, AgentControlAgent>([
+    [
+      dorothyAgentId,
+      {
+        id: dorothyAgentId,
+        ownerId: "owner",
+        workspaceId: dorothyWorkspaceId,
+        computerId: dorothyComputerId,
+        visibility: "public",
+        runtimeConfig: dorothyRuntimeConfig,
+        state: {
+          version: 1,
+          protocolMajor: 1,
+          requestId: "fa5f8ae8-f467-4515-9b6c-badb42d89c98",
+          workspaceId: dorothyWorkspaceId,
+          computerId: dorothyComputerId,
+          agentId: dorothyAgentId,
+          provider: "cursor",
+          epoch: 18,
+          action: "start",
+          phase: "starting",
+          configRevision: "7169a5ade1aa0cb97b0c9c5a854136f379188c5813187c7d8dfeceb56ccaa65d",
+          launchId: "5f7d4eee-3a5b-4563-9887-21168f4269d5",
+          controlSequence: 0,
+          sessionSequence: 0,
+        },
+      },
+    ],
+  ]);
+  const store: AgentControlStore = {
+    memberRole: async () => "owner",
+    get: async (agentId) => {
+      const agent = controlAgents.get(agentId);
+      return agent ? structuredClone(agent) : undefined;
+    },
+    replace: async (before, state) => {
+      const agent = controlAgents.get(before.id);
+      if (!agent || JSON.stringify(before.state) !== JSON.stringify(agent.state)) return false;
+      agent.state = structuredClone(state);
+      return true;
+    },
+  };
+  const sent: Uint8Array[] = [];
+  const control = new AgentControl(
+    store,
+    { publish: async (_channel, bytes) => void sent.push(bytes) },
+    { run: async (_id, work) => work() },
+    { timeoutMs: 0, fallbackMs: 0 },
+  );
+  const records = new Map<string, AgentRecord>([
+    [dorothyAgentId, agentRecord({ id: dorothyAgentId, name: "dorothy" })],
+    [
+      unreadableAgentId,
+      agentRecord({ id: unreadableAgentId, name: "qa457priv", runtimeConfig: undefined }),
+    ],
+  ]);
+  const recovery = new WorkspaceAgentRecovery(
+    {
+      getById: async (id) => records.get(id),
+      listOwnedInWorkspace: async () => [],
+      listInWorkspace: async () => [],
+      listForComputer: async () => [...records.values()],
+      listDeletedForComputer: async () => [],
+      create: async () => {
+        throw new Error("not used");
+      },
+      update: async () => {
+        throw new Error("not used");
+      },
+    },
+    { readAgentRecoveryContext: async () => ({ resumeMessages: [], unreadSummary: {} }) },
+    { publish: async () => {} },
+    { run: async (_id, work) => work() },
+    { resendPending: async () => {} },
+    undefined,
+    control,
+    store,
+  );
+
+  await recovery.recoverWorkspace(dorothyWorkspaceId, dorothyComputerId, []);
+
+  expect(sent).toHaveLength(1);
+  expect(decodeAgentStartIntent(sent[0]!)).toMatchObject({
+    agentId: dorothyAgentId,
+    requestId: "fa5f8ae8-f467-4515-9b6c-badb42d89c98",
+    controlEpoch: 18,
+    launchId: "5f7d4eee-3a5b-4563-9887-21168f4269d5",
+  });
 });

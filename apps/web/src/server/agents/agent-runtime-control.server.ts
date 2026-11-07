@@ -13,9 +13,13 @@ import {
   daemonControlChannel,
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
+import { errorType } from "#src/server/errors/error-type.server";
 import { agentStartIntent } from "./manage-agents.server";
 import type { AgentSessions } from "./agent-sessions.server";
-import type { AgentRepository } from "#src/server/db/repositories/agent.repositories.server";
+import type {
+  AgentRecord,
+  AgentRepository,
+} from "#src/server/db/repositories/agent.repositories.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
 import type { AgentControl, AgentControlStore } from "./agent-control.server";
 import type { AgentRecoveryContext } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -129,52 +133,81 @@ export class WorkspaceAgentRecovery {
           ),
       );
     }
-    // Each Agent recovers under its own lock, so all of them recover at once.
+    // Each Agent recovers under its own lock, so all of them recover at once — and one Agent's
+    // failure (an unreadable runtime config, an unreadable control record) is logged and skipped
+    // rather than failing the Daemon's whole `ready`, which would hold every Agent's control
+    // publications on the Daemon until a later reconnect.
+    let failures = 0;
+    let firstFailure: unknown;
     await Promise.all(
       agents.map((listedAgent) =>
         this.runtimeLock.run(listedAgent.id, async () => {
-          const agent = await this.agents.getById(listedAgent.id);
-          if (!agent || agent.workspaceId !== workspaceId || agent.computerId !== computerId)
-            return;
-          if (agent.stoppedAt) {
-            // A user stopped this Agent; nothing here may start or wake it. If the
-            // Daemon still reports it running (Stop requested while offline, or its result was
-            // lost), reconcile with a Stop through AgentControl, without blocking the rest of
-            // recovery on its result.
-            if (runningAgents.has(agent.id) && this.control)
-              void this.control
-                .publishStop(
-                  { agentId: agent.id, workspaceId, requestId: crypto.randomUUID() },
-                  agent.ownerId,
-                )
-                .catch(() => {});
-            return;
+          try {
+            await this.#recoverListedAgent(listedAgent, workspaceId, computerId, runningAgents);
+          } catch (error) {
+            failures += 1;
+            firstFailure ??= error;
+            console.warn(
+              JSON.stringify({
+                event: "agent_recovery:agent_failed",
+                agent_id: listedAgent.id,
+                workspace_id: workspaceId,
+                computer_id: computerId,
+                error_type: errorType(error),
+              }),
+            );
           }
-          if (runningAgents.has(agent.id)) {
-            await this.pendingDeliveries.resendPending({
-              workspaceId,
-              computerId,
-              agentId: agent.id,
-            });
-            return;
-          }
-          const recovery = await this.conversations.readAgentRecoveryContext(workspaceId, agent.id);
-          const intent: AgentStartIntent = { ...agentStartIntent(agent, computerId), ...recovery };
-          if (this.control) {
-            // `agent` above is the repository record, which carries no control state; the control
-            // record is read once, under this lock, instead of again inside `recover`.
-            const loaded = await this.controlAgents?.get(agent.id);
-            if (this.controlAgents && !loaded)
-              throw new Error("Agent is not authorized or assigned");
-            await this.control.recover(intent, agent.ownerId, loaded);
-            return;
-          }
-          await this.api.publish(
-            daemonControlChannel(workspaceId, computerId),
-            encodeAgentStartIntent(this.sessions ? await this.sessions.prepare(intent) : intent),
-          );
         }),
       ),
+    );
+    // Every Agent failing points at the Computer or Workspace, not at the Agents: fail the ready
+    // so the Daemon retries, rather than reporting a recovery that recovered nothing.
+    if (agents.length > 0 && failures === agents.length) throw firstFailure;
+  }
+
+  async #recoverListedAgent(
+    listedAgent: AgentRecord,
+    workspaceId: string,
+    computerId: string,
+    runningAgents: ReadonlySet<string>,
+  ) {
+    const agent = await this.agents.getById(listedAgent.id);
+    if (!agent || agent.workspaceId !== workspaceId || agent.computerId !== computerId) return;
+    if (agent.stoppedAt) {
+      // A user stopped this Agent; nothing here may start or wake it. If the
+      // Daemon still reports it running (Stop requested while offline, or its result was
+      // lost), reconcile with a Stop through AgentControl, without blocking the rest of
+      // recovery on its result.
+      if (runningAgents.has(agent.id) && this.control)
+        void this.control
+          .publishStop(
+            { agentId: agent.id, workspaceId, requestId: crypto.randomUUID() },
+            agent.ownerId,
+          )
+          .catch(() => {});
+      return;
+    }
+    if (runningAgents.has(agent.id)) {
+      await this.pendingDeliveries.resendPending({
+        workspaceId,
+        computerId,
+        agentId: agent.id,
+      });
+      return;
+    }
+    const recovery = await this.conversations.readAgentRecoveryContext(workspaceId, agent.id);
+    const intent: AgentStartIntent = { ...agentStartIntent(agent, computerId), ...recovery };
+    if (this.control) {
+      // `agent` above is the repository record, which carries no control state; the control
+      // record is read once, under this lock, instead of again inside `recover`.
+      const loaded = await this.controlAgents?.get(agent.id);
+      if (this.controlAgents && !loaded) throw new Error("Agent is not authorized or assigned");
+      await this.control.recover(intent, agent.ownerId, loaded);
+      return;
+    }
+    await this.api.publish(
+      daemonControlChannel(workspaceId, computerId),
+      encodeAgentStartIntent(this.sessions ? await this.sessions.prepare(intent) : intent),
     );
   }
 }
