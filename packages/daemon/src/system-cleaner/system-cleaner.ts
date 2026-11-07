@@ -1,5 +1,4 @@
 import { getLogger } from "@logtape/logtape";
-import { lstat, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentAppItem, MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import {
@@ -11,6 +10,13 @@ import { AGENT_MIGRATION_IGNORE_FILE } from "#src/agent-migration/selection-rule
 import { defaultClock, type ReminderClock } from "#src/agent-reminder/reminder-scheduler";
 import { isSafePathScope } from "#src/persistence/path-scope";
 import { parseCleanerConfig, sameConfig, type CleanerConfig } from "./system-cleaner-config";
+import {
+  isDiskLow,
+  measureDiskSpace,
+  measureMemoryFile,
+  type DiskMeasurement,
+  type MemoryMeasurement,
+} from "./system-cleaner-measure";
 import {
   FILE_HINTS,
   FILE_KINDS,
@@ -27,8 +33,6 @@ const DEFAULT_MEASUREMENT_TIMEOUT_MS = 10_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 const MEMORY_GROWTH_FACTOR = 1.25;
-const DISK_LOW_MAX_AVAILABLE_BYTES = 20 * 1024 ** 3;
-const DISK_LOW_MAX_AVAILABLE_PERCENT = 10;
 const CLEANUP_TIP_TITLE =
   "When it's quiet, remove workspace files you know are unused; check with your owner or creator on anything uncertain";
 const CLEANUP_TIP_SUMMARY = `Only raise files added since your last question, and update ${AGENT_MIGRATION_IGNORE_FILE} as the workspace changes.`;
@@ -39,13 +43,7 @@ export type CleanerConfigResult =
   | Readonly<{ kind: "removed"; activeSchedules: 0 }>
   | Readonly<{ kind: "invalid"; reason: string }>;
 
-export type MemoryMeasurement =
-  | Readonly<{ kind: "measured"; bytes: number }>
-  | Readonly<{ kind: "not_established"; reason: string }>;
-
-export type DiskMeasurement =
-  | Readonly<{ kind: "measured"; availableBytes: number; totalBytes: number }>
-  | Readonly<{ kind: "not_established"; reason: string }>;
+export type { DiskMeasurement, MemoryMeasurement } from "./system-cleaner-measure";
 
 export type CleanerClock = ReminderClock;
 
@@ -459,41 +457,5 @@ export class SystemCleaner {
         .then(measure)
         .then(finish, () => finish({ kind: "not_established", reason: "read_failed" }));
     });
-  }
-}
-
-function isDiskLow(availableBytes: number, totalBytes: number): boolean {
-  return (
-    availableBytes < DISK_LOW_MAX_AVAILABLE_BYTES &&
-    (availableBytes / totalBytes) * 100 < DISK_LOW_MAX_AVAILABLE_PERCENT
-  );
-}
-
-/** MEMORY.md's size, measurable only when it is a regular file (never a symlink). */
-export async function measureMemoryFile(path: string): Promise<MemoryMeasurement> {
-  try {
-    const info = await lstat(path);
-    if (!info.isFile()) return { kind: "not_established", reason: "not_regular_file" };
-    return { kind: "measured", bytes: info.size };
-  } catch (error) {
-    const code = (error as { code?: string }).code;
-    if (code === "ENOENT") return { kind: "not_established", reason: "missing" };
-    if (code === "EACCES" || code === "EPERM")
-      return { kind: "not_established", reason: "permission_denied" };
-    return { kind: "not_established", reason: "read_failed" };
-  }
-}
-
-/** Free and total space of the filesystem holding `path`. */
-export async function measureDiskSpace(path: string): Promise<DiskMeasurement> {
-  try {
-    const info = await statfs(path);
-    return {
-      kind: "measured",
-      availableBytes: info.bavail * info.bsize,
-      totalBytes: info.blocks * info.bsize,
-    };
-  } catch {
-    return { kind: "not_established", reason: "read_failed" };
   }
 }

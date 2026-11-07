@@ -10,8 +10,9 @@ Rules for `src/system-cleaner/`. They extend `packages/daemon/AGENTS.md`.
 - Apply configs by revision only: a lower one is stale, the same revision with other values is
   a conflict, and a newer one cancels the timer and drops the Agent's items before re-arming.
 - `system-cleaner-config.ts` parses the config envelope; `system-cleaner-hints.ts` holds the
-  per-file wording, limits and formatting. Keep each file's hint data in that table rather than
-  branching on the file name in the class.
+  per-file wording, limits and formatting; `system-cleaner-measure.ts` holds the default
+  file/disk measurers and the disk-low policy. Keep each file's hint data in that table rather
+  than branching on the file name in the class.
 - The cleaner measures the two files a fresh session carries, each against its own limit
   (`thresholdBytes` for MEMORY.md, `activeContextThresholdBytes` for the Active Context) and
   each with its own hint item, class and wording: what to trim differs between an index and a
