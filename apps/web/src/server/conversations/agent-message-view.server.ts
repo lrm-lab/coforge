@@ -59,7 +59,14 @@ export function fenceUserText(text: string): string {
   return text.split(MESSAGE_LINE_SEPARATOR).join("\n  │ ");
 }
 
-/** Appended so an Agent can tell pending from executed, and which `choice` was picked. */
+/** A person's own answer on the lines under a card's state, fenced as its delivery fences it. */
+function ownWords(text: unknown, question?: string): string {
+  if (typeof text !== "string" || !text) return "";
+  return `\n  │ ${fenceUserText(question ? `${question}: ${text}` : text)}`;
+}
+
+/** Appended so an Agent can tell pending from executed, which `choice` was picked, and what the
+ * person wrote when they answered in their own words: a reader never sees the delivery's copy. */
 export function actionCardBodySuffix(card: {
   state: string;
   kind?: string;
@@ -76,7 +83,10 @@ export function actionCardBodySuffix(card: {
     if (optionId === CHOICE_OTHER_OPTION_ID || /^[a-z][a-z0-9_]{0,31}$/.test(optionId)) {
       // The answer is the option the Agent recommended, as its delivery says too.
       const recommended = (card.result as { recommended?: unknown }).recommended === true;
-      return `[action card: executed; choice=${optionId}${recommended ? " (recommended)" : ""}]`;
+      const state = `[action card: executed; choice=${optionId}${recommended ? " (recommended)" : ""}]`;
+      return optionId === CHOICE_OTHER_OPTION_ID
+        ? state + ownWords((card.result as { text?: unknown }).text)
+        : state;
     }
   }
   if (card.state === "executed" && card.kind === "questions") {
@@ -85,6 +95,7 @@ export function actionCardBodySuffix(card: {
         ? (card.result as { answers?: unknown }).answers
         : undefined;
     if (Array.isArray(answers)) {
+      let words = "";
       const parts = answers.flatMap((entry) => {
         if (!entry || typeof entry !== "object") return [];
         const { questionId, selection, skipped } = entry as {
@@ -95,6 +106,11 @@ export function actionCardBodySuffix(card: {
         if (typeof questionId !== "string" || !Array.isArray(selection)) return [];
         // A question left unanswered is said so, as the wake-up does, not dropped from the line.
         if (skipped === true) return [`${questionId}=(skipped)`];
+        for (const option of selection as { optionId?: unknown; text?: unknown }[]) {
+          if (option?.optionId === CHOICE_OTHER_OPTION_ID) {
+            words += ownWords(option.text, questionId);
+          }
+        }
         const picked = selection
           .map((option) =>
             option && typeof option === "object" && "optionId" in option
@@ -105,7 +121,7 @@ export function actionCardBodySuffix(card: {
           .join(",");
         return picked ? [`${questionId}=${picked}`] : [];
       });
-      if (parts.length) return `[action card: executed; ${parts.join("; ")}]`;
+      if (parts.length) return `[action card: executed; ${parts.join("; ")}]${words}`;
     }
   }
   return `[action card: ${card.state}]`;
