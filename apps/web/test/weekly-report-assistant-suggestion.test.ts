@@ -97,12 +97,8 @@ test("body-edit suggestions carry the report version the assistant read", () => 
   expect(
     parseWeeklyReportAssistantSuggestion(envelope({ ...base, baseUpdatedAt: null })),
   ).not.toHaveProperty("baseUpdatedAt");
-  expect(
-    parseWeeklyReportAssistantSuggestion(envelope({ ...base, baseUpdatedAt: 42 })),
-  ).toBeNull();
-  expect(
-    parseWeeklyReportAssistantSuggestion(envelope({ ...base, baseUpdatedAt: "" })),
-  ).toBeNull();
+  expect(parseWeeklyReportAssistantSuggestion(envelope({ ...base, baseUpdatedAt: 42 }))).toBeNull();
+  expect(parseWeeklyReportAssistantSuggestion(envelope({ ...base, baseUpdatedAt: "" }))).toBeNull();
 });
 
 test("send prompts parse from assistant replies; highlight suggestions are ignored", () => {
