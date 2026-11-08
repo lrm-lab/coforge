@@ -199,3 +199,67 @@ test("manual search finds a command through the generated index", () => {
   if (outcome.status !== 200) throw new Error("expected a hit");
   expect(outcome.body.results.some((result) => result.slug === "index")).toBe(true);
 });
+
+test("a Workspace without the artifacts experiment sees no artifact topic, command line or search hit", () => {
+  const experiments = { artifacts: false };
+
+  const index = resolveManualGet({
+    topic: "index",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+    experiments,
+  });
+  expect(index.status).toBe(200);
+  if (index.status !== 200) throw new Error("expected a hit");
+  expect(index.body.content).not.toContain("artifact");
+
+  const topic = resolveManualGet({
+    topic: "artifacts",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+    experiments,
+  });
+  expect(topic.status).toBe(404);
+
+  const search = resolveManualSearch({
+    query: "artifact document web page",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+    experiments,
+  });
+  expect(search.status).toBe(200);
+  if (search.status !== 200) throw new Error("expected a hit");
+  expect(search.body.results.map((result) => result.slug)).not.toContain("artifacts");
+});
+
+test("a Workspace with the artifacts experiment keeps the topic, command line and search hit", () => {
+  const experiments = { artifacts: true };
+
+  const index = resolveManualGet({
+    topic: "index",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+    experiments,
+  });
+  expect(index.status).toBe(200);
+  if (index.status !== 200) throw new Error("expected a hit");
+  expect(index.body.content).toContain("artifact");
+
+  const topic = resolveManualGet({
+    topic: "artifacts",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+    experiments,
+  });
+  expect(topic.status).toBe(200);
+
+  const search = resolveManualSearch({
+    query: "artifact document web page",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+    experiments,
+  });
+  expect(search.status).toBe(200);
+  if (search.status !== 200) throw new Error("expected a hit");
+  expect(search.body.results.map((result) => result.slug)).toContain("artifacts");
+});

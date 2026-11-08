@@ -106,6 +106,23 @@ test("GET /manual/search 404s when nothing matches", async () => {
   expect((await result.json()).errorCode).toBe("knowledge_not_found");
 });
 
+test("GET /manual hides what the Workspace's experiments switch off (task #711)", async () => {
+  const principal = { workspaceId: "workspace-1", agentId: "agent-1" };
+  const off = { artifacts: false };
+  const get = await handleAgentManualGet(getRequest("?topic=artifacts"), principal, undefined, off);
+  expect(get.status).toBe(404);
+  const index = await handleAgentManualGet(getRequest("?topic=index"), principal, undefined, off);
+  expect((await index.json()).content).not.toContain("artifact");
+  const search = await handleAgentManualSearchGet(
+    searchRequest("?query=artifact"),
+    principal,
+    undefined,
+    off,
+  );
+  const body = await search.json();
+  expect(body.results?.map((r: { slug: string }) => r.slug) ?? []).not.toContain("artifacts");
+});
+
 test("Manual get and search work without justification and still record scoped audit events", async () => {
   const events: unknown[] = [];
   const principal = { workspaceId: "workspace-1", agentId: "agent-1" };

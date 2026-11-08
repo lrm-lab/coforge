@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { parseArgs, run } from "../index";
 import type { MessageTransport } from "../index";
-import { CLI_USAGE } from "../src/usage";
+import { CLI_USAGE, cliUsage } from "../src/usage";
 import { commandHelp } from "../src/command-help";
 import { parseAppArgs } from "../src/app-commands";
 
@@ -183,4 +183,36 @@ test("an unknown subcommand in a self-parsing group names that group's commands"
 
   const taskTypo = (await run(["task", "veiw"], transport).catch((e: unknown) => e)) as Shape;
   expect(taskTypo.suggestedNextAction).toContain("Did you mean `coforge task view`?");
+});
+
+test("artifact help hides when the Workspace's features say documents are off", () => {
+  const name = "COFORGE_WORKSPACE_FEATURES";
+  const previous = Bun.env[name];
+  try {
+    Bun.env[name] = JSON.stringify({ taskConversations: false, artifacts: false });
+    // The family leaves the listings, and asking for it directly says documents are off and
+    // points at attachments — the command exists, the server refuses it (task #711).
+    const disabled = commandHelp(["artifact"]);
+    expect(disabled).toContain("not enabled");
+    expect(disabled).toContain("coforge attachment upload");
+    expect(commandHelp(["artifact", "create"])).toBe(disabled);
+    expect(commandHelp([])).not.toContain("artifact");
+    expect(commandHelp(["task"])).toContain("coforge task");
+    expect(cliUsage()).not.toContain("coforge artifact");
+    expect(cliUsage()).toContain("coforge task list");
+
+    Bun.env[name] = JSON.stringify({ taskConversations: true, artifacts: true });
+    expect(commandHelp(["artifact"])).toContain("coforge artifact create|list|read|push");
+    expect(commandHelp([])).toContain("artifact");
+    expect(cliUsage()).toBe(CLI_USAGE);
+
+    // A launch that states no features (an older Daemon) keeps the help as it was.
+    delete Bun.env[name];
+    expect(commandHelp(["artifact"])).toContain("coforge artifact create|list|read|push");
+    expect(commandHelp([])).toContain("artifact");
+    expect(cliUsage()).toBe(CLI_USAGE);
+  } finally {
+    if (previous === undefined) delete Bun.env[name];
+    else Bun.env[name] = previous;
+  }
 });

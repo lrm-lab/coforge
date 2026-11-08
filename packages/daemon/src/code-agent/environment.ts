@@ -41,6 +41,9 @@ export const DAEMON_LAUNCH_ENV_KEYS = [
   "COFORGE_CURRENT_COMPUTER_OS",
   "COFORGE_CURRENT_COMPUTER_VERSION",
   "COFORGE_CURRENT_AGENT_WORKSPACE_PATH",
+  // The Workspace's feature switches (`agentRuntimeContextEnvironment` below): the CLI's help
+  // gating reads them, so an Agent's tools must not spoof or strip them either.
+  "COFORGE_WORKSPACE_FEATURES",
   "COFORGE_GIT_CONFIG_BASE_COUNT",
   // The per-launch process tag the descendant sweep collects by (task #673). Daemon-owned like
   // the identity variables above: an Agent must not forge another launch's tag onto its own
@@ -95,6 +98,11 @@ export function agentRuntimeContextEnvironment(
     COFORGE_CURRENT_COMPUTER_OS: runtimeContext?.computerOs,
     COFORGE_CURRENT_COMPUTER_VERSION: runtimeContext?.computerVersion,
     COFORGE_CURRENT_AGENT_WORKSPACE_PATH: context.agentWorkspaceDirectory,
+    // The same server-stated switches the standing prompt and the feature sync read; the CLI's
+    // `--help` hides what the Workspace has off. Absent features export nothing.
+    COFORGE_WORKSPACE_FEATURES: context.identity?.features
+      ? JSON.stringify(context.identity.features)
+      : undefined,
   };
   const environment: Record<string, string> = {};
   for (const [name, value] of Object.entries(candidates)) {

@@ -318,3 +318,21 @@ test("an Agent's own tools cannot spoof COFORGE_GIT_CONFIG_BASE_COUNT through in
 
   expect(environment.COFORGE_GIT_CONFIG_BASE_COUNT).toBeUndefined();
 });
+
+test("agentRuntimeContextEnvironment exports the Workspace's stated features for the CLI", () => {
+  const withFeatures = agentRuntimeContextEnvironment({
+    agentWorkspaceDirectory: "/tmp/agent",
+    identity: { features: { taskConversations: true, artifacts: false } },
+  });
+  expect(withFeatures.COFORGE_WORKSPACE_FEATURES).toBe(
+    JSON.stringify({ taskConversations: true, artifacts: false }),
+  );
+
+  // A launch that states no features exports nothing: the CLI keeps its full help rather than
+  // guessing at gates it cannot see (task #711).
+  const without = agentRuntimeContextEnvironment({
+    agentWorkspaceDirectory: "/tmp/agent",
+    identity: { name: "scout" },
+  });
+  expect(without).not.toHaveProperty("COFORGE_WORKSPACE_FEATURES");
+});

@@ -9,8 +9,9 @@ import {
   findManualTopic,
   manualDocVersion,
   manualIndexTopic,
+  manualTopicsFor,
   MANUAL_INDEX_TOPIC,
-  MANUAL_TOPICS,
+  type AgentManualExperiments,
 } from "#src/server/agents/manual/manual-registry.server";
 import { searchManualTopics } from "#src/server/agents/manual/manual-search.server";
 import {
@@ -49,6 +50,7 @@ export function resolveManualGet(input: {
   topic: unknown;
   intent?: unknown;
   reason?: unknown;
+  experiments?: AgentManualExperiments;
 }): AgentManualOutcome<AgentManualGetResponse> {
   const topic = typeof input.topic === "string" ? input.topic : "";
   if (!isValidManualTopicSlug(topic))
@@ -65,7 +67,7 @@ export function resolveManualGet(input: {
   const fieldError = validateManualIntentReason(input.intent, input.reason);
   if (fieldError) return { status: 400, body: { ok: false, ...fieldError } };
   if (topic === MANUAL_INDEX_TOPIC) {
-    const content = ensureTrailingNewline(buildManualIndexContent());
+    const content = ensureTrailingNewline(buildManualIndexContent(input.experiments));
     return {
       status: 200,
       recordOutcome: "hit",
@@ -81,7 +83,7 @@ export function resolveManualGet(input: {
       },
     };
   }
-  const found = findManualTopic(topic);
+  const found = findManualTopic(topic, input.experiments);
   if (!found)
     return {
       status: 404,
@@ -114,13 +116,17 @@ export function resolveManualSearch(input: {
   query: unknown;
   intent?: unknown;
   reason?: unknown;
+  experiments?: AgentManualExperiments;
 }): AgentManualOutcome<AgentManualSearchResponse> {
   const queryError = validateManualQuery(input.query);
   if (queryError) return { status: 400, body: { ok: false, ...queryError } };
   const query = (input.query as string).trim();
   const fieldError = validateManualIntentReason(input.intent, input.reason);
   if (fieldError) return { status: 400, body: { ok: false, ...fieldError } };
-  const results = searchManualTopics(query, [...MANUAL_TOPICS, manualIndexTopic()]);
+  const results = searchManualTopics(query, [
+    ...manualTopicsFor(input.experiments),
+    manualIndexTopic(input.experiments),
+  ]);
   if (results.length === 0)
     return {
       status: 404,

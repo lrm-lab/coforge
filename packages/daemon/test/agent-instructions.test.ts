@@ -199,8 +199,8 @@ test("provider-specific rules remain available once when supplied", () => {
   expect(rendered.split("- This runtime uses PowerShell.")).toHaveLength(2);
 });
 
-test("the shared standing guidance stays within a 4352-byte budget", () => {
-  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(4352);
+test("the shared standing guidance stays within a 4480-byte budget", () => {
+  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(4480);
 });
 
 test("CLI instructions include a copyable stdin submission example", () => {

@@ -14,7 +14,7 @@ import { isAppRegistrationInvocation } from "./app-registration-args";
 import { connectAppRegistrationClient } from "./app-registration-client";
 import { runAppRegistrationCommand } from "./app-registration-commands";
 import { COFORGE_CLI_VERSION } from "./version";
-import { CLI_USAGE } from "./usage";
+import { cliUsage } from "./usage";
 import { commandHelp } from "./command-help";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
@@ -29,7 +29,7 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
   // No command at all is a mistake, not a request: the usage goes to stderr and the process
   // fails, so a script that forgot its arguments never reads it as a successful run.
   if (args.length === 0) {
-    console.error(CLI_USAGE);
+    console.error(cliUsage());
     process.exitCode = 1;
     return;
   }

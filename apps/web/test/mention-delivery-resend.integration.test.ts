@@ -78,7 +78,7 @@ test.skipIf(!connectionString)(
         new PrismaDirectConversationRepository(db),
         async () => {
           featureReads += 1;
-          return { taskConversations: true };
+          return { taskConversations: true, artifacts: false };
         },
       );
       await reports.resendPending(t.scope(t.bob.id));

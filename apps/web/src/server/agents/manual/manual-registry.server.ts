@@ -17,13 +17,19 @@ import remindersBody from "#src/server/agents/manual/topics/reminders.md?raw";
 import tasksBody from "#src/server/agents/manual/topics/tasks.md?raw";
 import workspaceCleanupBody from "#src/server/agents/manual/topics/workspace-cleanup.md?raw";
 
+/** The Workspace experiments a Manual read can be gated on; a topic or command line names the
+ * one it needs, and `false` hides it for that Workspace (task #711). */
+export type AgentManualExperiments = { artifacts?: boolean };
+
 /** One Agent Manual topic. `slug`/`title`/`summary` are a small typed registry here
- * rather than markdown frontmatter, to avoid a frontmatter parser for two fields. */
+ * rather than markdown frontmatter, to avoid a frontmatter parser for two fields. `experiment`
+ * names the Workspace experiment the topic documents; unset topics are always listed. */
 export type AgentManualTopic = {
   slug: string;
   title: string;
   summary: string;
   body: string;
+  experiment?: keyof AgentManualExperiments;
 };
 
 export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
@@ -47,6 +53,7 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     summary:
       "coforge artifact: when to make a document (Markdown, written together) or a web page (--kind html, Agents only, no network), writing a self-contained page, and saving each without losing others' changes.",
     body: artifactsBody,
+    experiment: "artifacts",
   },
   {
     slug: "attachments",
@@ -128,19 +135,32 @@ export function manualDocVersion(content: string): string {
   return new Bun.CryptoHasher("sha256").update(content).digest("hex").slice(0, 16);
 }
 
+/** The topics this Workspace's Agents may read: an experiment that is off removes what
+ * documents it, so `manual get`, `manual search` and the index never name it (task #711). An
+ * experiment the caller does not state stays listed. */
+export function manualTopicsFor(experiments?: AgentManualExperiments): readonly AgentManualTopic[] {
+  return MANUAL_TOPICS.filter(
+    (topic) => topic.experiment === undefined || experiments?.[topic.experiment] !== false,
+  );
+}
+
 /** The `index` topic: a generated markdown catalog, never hand-maintained separately from
  * `MANUAL_TOPICS`. */
-export function buildManualIndexContent(): string {
+export function buildManualIndexContent(experiments?: AgentManualExperiments): string {
   const lines = [
     "# CoForge Agent Manual",
     "",
     "Available topics:",
     "",
-    ...MANUAL_TOPICS.map((topic) => `- ${topic.slug} — ${topic.title}: ${topic.summary}`),
+    ...manualTopicsFor(experiments).map(
+      (topic) => `- ${topic.slug} — ${topic.title}: ${topic.summary}`,
+    ),
     "",
     "Commands:",
     "",
-    ...MANUAL_COMMAND_LINES,
+    ...MANUAL_COMMAND_LINES.filter(
+      (entry) => entry.experiment === undefined || experiments?.[entry.experiment] !== false,
+    ).map((entry) => entry.line),
     "",
     "Run `coforge manual get <slug> --intent <text> --reason <text>` to read a topic, or " +
       '`coforge manual search "<keywords>" --intent <text> --reason <text>` to search by keyword.',
@@ -151,36 +171,55 @@ export function buildManualIndexContent(): string {
 /** The `coforge` command surface, one line per group, so the index — and `manual search` through
  * it — names every command, `workspace info --projects` included. Kept with the command registry
  * doc `docs/agent-cli/`. */
-const MANUAL_COMMAND_LINES = [
-  "- message — check|read|search|send|resolve|react|continue",
-  "- inbox — check",
-  "- channel — info|members|join|leave|create|update|archive|unarchive|add-member|remove-member|mute|unmute|lifecycle",
-  "- thread — list|unfollow",
-  "- task — list|show|view|reply|read|follow|unfollow|create|claim|assign|unassign|unclaim|convert|update|amend|history|delete|receipt",
-  "- reminder — schedule|list|cancel|update|snooze|seal|unseal|log|ack|dismiss",
-  "- attachment — view|comments|upload",
-  "- mention — pending|notify|add|delivery",
-  "- artifact — create|list|read|push|history|revert (`create --kind html` makes a web page)",
-  "- workspace — info (`--projects` lists the Workspace's projects)",
-  "- user — info; profile — show|update",
-  "- app — list|config|marketplace|token|invoke|prepare|status|rotate-secret|update|logo|clear-logo|transfer-owner|delete|share-link|share-link-status|revoke-share-link|request-publish|request-unpublish",
-  "- weekly-report — templates|inbox|members|workflow|context|list|read; also weekly-report-collect, weekly-report-key-points, weekly-report-memory",
-  "- action — prepare; manual — get|search; whoami; version",
+const MANUAL_COMMAND_LINES: readonly {
+  line: string;
+  experiment?: keyof AgentManualExperiments;
+}[] = [
+  { line: "- message — check|read|search|send|resolve|react|continue" },
+  { line: "- inbox — check" },
+  {
+    line: "- channel — info|members|join|leave|create|update|archive|unarchive|add-member|remove-member|mute|unmute|lifecycle",
+  },
+  { line: "- thread — list|unfollow" },
+  {
+    line: "- task — list|show|view|reply|read|follow|unfollow|create|claim|assign|unassign|unclaim|convert|update|amend|history|delete|receipt",
+  },
+  {
+    line: "- reminder — schedule|list|cancel|update|snooze|seal|unseal|log|ack|dismiss",
+  },
+  { line: "- attachment — view|comments|upload" },
+  { line: "- mention — pending|notify|add|delivery" },
+  {
+    line: "- artifact — create|list|read|push|history|revert (`create --kind html` makes a web page)",
+    experiment: "artifacts",
+  },
+  { line: "- workspace — info (`--projects` lists the Workspace's projects)" },
+  { line: "- user — info; profile — show|update" },
+  {
+    line: "- app — list|config|marketplace|token|invoke|prepare|status|rotate-secret|update|logo|clear-logo|transfer-owner|delete|share-link|share-link-status|revoke-share-link|request-publish|request-unpublish",
+  },
+  {
+    line: "- weekly-report — templates|inbox|members|workflow|context|list|read; also weekly-report-collect, weekly-report-key-points, weekly-report-memory",
+  },
+  { line: "- action — prepare; manual — get|search; whoami; version" },
 ];
 
 /** The `index` pseudo-topic as a searchable topic, so `manual search` reaches the generated
  * catalog and the command list, not only the hand-written topics. */
-export function manualIndexTopic(): AgentManualTopic {
+export function manualIndexTopic(experiments?: AgentManualExperiments): AgentManualTopic {
   return {
     slug: MANUAL_INDEX_TOPIC,
     title: "CoForge Agent Manual index",
     summary: "Every Manual topic and every coforge command, by group.",
-    body: buildManualIndexContent(),
+    body: buildManualIndexContent(experiments),
   };
 }
 
-export function findManualTopic(slug: string): AgentManualTopic | undefined {
-  return MANUAL_TOPICS.find((topic) => topic.slug === slug);
+export function findManualTopic(
+  slug: string,
+  experiments?: AgentManualExperiments,
+): AgentManualTopic | undefined {
+  return manualTopicsFor(experiments).find((topic) => topic.slug === slug);
 }
 
 function ensureTrailingNewline(content: string): string {

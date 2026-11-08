@@ -102,7 +102,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   and passes them through the required `AgentSessionOptions.instructions`.
 - Keep transport guidance minimal: identity, `Current Runtime Context`,
   communication, on-demand context recovery, safety, and help. The fixed
-  prompt budget is 4352 bytes excluding dynamic identity data: raised from 4096 for the memory
+  prompt budget is 4480 bytes excluding dynamic identity data: raised from 4352 for the
+  say-sent-only-after-success rule (task #711), and before that from 4096 for the memory
   writing rules (facts are edited at the event, the Active Context is overwritten as work moves,
   and MEMORY.md is consulted before asking a human), and before that from 3840 for the
   before-stopping task-board check, and before that from 3712 for the system-notice assignment

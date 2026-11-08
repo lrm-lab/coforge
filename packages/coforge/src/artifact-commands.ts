@@ -244,9 +244,11 @@ async function readArtifactText(file: string): Promise<string> {
   }
 }
 
-/** What the CLI says when the Workspace has not switched documents on. */
+/** What the CLI says when the Workspace has not switched documents on: the refusal names the
+ * switch and the working alternative, so an Agent that tried `artifact` learns to send the file
+ * as an attachment instead of retrying or claiming a send that never happened (task #711). */
 export const ARTIFACTS_DISABLED_MESSAGE =
-  "这个工作区没有开启文档（请工作区 owner/admin 在 设置 → 实验功能 里打开）。This Workspace has not enabled documents: a Workspace owner or admin switches them on in Settings > Experiments.";
+  "这个工作区没有开启文档（artifacts）：`coforge artifact` 命令不能用。要给人发文件，请用附件：先 `coforge attachment upload --path <文件> --target <会话>` 拿到附件 id，再 `coforge message send --target <会话> --attachment-id <id>` 发出（工作区 owner/admin 可在 设置 → 实验功能 打开文档）。This Workspace has not enabled documents (artifacts), so `coforge artifact` commands cannot be used. To send a file to a person, upload it as an attachment (`coforge attachment upload --path <file> --target <target>`), then send its id (`coforge message send --target <target> --attachment-id <id>`); a Workspace owner or admin can enable documents in Settings > Experiments.";
 
 /** `POST /api/agent/v1/artifacts` through the daemon's proxy, as the Agent. */
 export async function artifactRequest(

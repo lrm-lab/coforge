@@ -258,6 +258,10 @@ test("a Workspace without documents is said plainly", async () => {
   expect(error.code).toBe("ARTIFACTS_DISABLED");
   expect(error.message).toBe(ARTIFACTS_DISABLED_MESSAGE);
   expect(error.message).toStartWith("这个工作区没有开启文档");
+  // The refusal must name the working alternative, so an Agent does not retry artifacts or
+  // report a send that never happened (task #711).
+  expect(error.message).toContain("attachment");
+  expect(error.message).toContain("coforge attachment upload");
   expect(proxy.seen).toEqual([{ operation: "read", artifact: ID }]);
 });
 

@@ -49,12 +49,17 @@ function parseIdentityApps(value: unknown): AgentLaunchApp[] | undefined {
   return apps.length > 0 ? apps : undefined;
 }
 
-/** Only an explicit `taskConversations: true` turns the feature on; anything else is off. */
+/** Each switch lands only when the wire stated a boolean: a server that predates a switch never
+ * named it, and reading that silence as `false` would hide help a Workspace has on (task #711).
+ * The Daemon exports what it parsed for the CLI's help gating. */
 function parseIdentityFeatures(value: unknown): AgentLaunchIdentity["features"] | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  return (value as Record<string, unknown>).taskConversations === true
-    ? { taskConversations: true }
-    : undefined;
+  const record = value as Record<string, unknown>;
+  const features: NonNullable<AgentLaunchIdentity["features"]> = {};
+  if (typeof record.taskConversations === "boolean")
+    features.taskConversations = record.taskConversations;
+  if (typeof record.artifacts === "boolean") features.artifacts = record.artifacts;
+  return Object.keys(features).length > 0 ? features : undefined;
 }
 
 /**

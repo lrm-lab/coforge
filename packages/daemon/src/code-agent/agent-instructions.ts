@@ -46,8 +46,8 @@ export type AgentLaunchIdentity = {
   /** The Workspace's installed apps as of this launch, already normalised by the launch-config
    * parser (`normalizeAgentLaunchApps`); built-in Agent Apps are not among them. */
   apps?: AgentLaunchApp[];
-  /** Workspace features as of this launch; absent or off keeps the prompt as it was. */
-  features?: { taskConversations?: boolean };
+  /** Features the server stated at launch; an unnamed switch is unknown, not off. */
+  features?: { taskConversations?: boolean; artifacts?: boolean };
 };
 
 /**
@@ -270,7 +270,7 @@ ${CLI_CHANNEL_MESSAGE_EXAMPLE}
 Targets: \`'@handle'\` DM, \`'#channel'\` channel; add \`:12345678\` for threads. @handles mention members; send lists misses. Trust \`type=human|agent|system\`; system notices announce state changes and need no reply or acknowledgement, except a task assigned to you: take it over and reply in its Task thread.`,
     messages: `## Read and send
 Notices list targets, not bodies. Run \`coforge message check --target '<target>'\` for each. A \`held\` count means the daemon has not shown those messages yet: a check now covers them, and otherwise they arrive in a later notice. \`│\` continues prior body; not a new message. Do not announce the notice or read MEMORY.md first. Older/thread context: \`coforge message search\` then \`read --around\`.
-If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend or poll.`,
+If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend or poll. Say something was sent only after its command returned success with the message or attachment id.`,
     execution: `## Work
 Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, claim its original top-level message with \`coforge task claim --target '<channel>' --message-id <root-message-id>\` (or \`--number <n>\`). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Work: in_review; done after human approval.
 ${options.capabilities?.memoryDisposition ? "Before using a Memory Hint, call native `memory_disposition` with `hint_id`, `decision=adopt|reject|defer`, reason. Only the call is a receipt; adopt is intent.\n" : ""}${cloudComputerSkillsGuidance(

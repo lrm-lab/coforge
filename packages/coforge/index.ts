@@ -1,4 +1,4 @@
-import { CLI_USAGE } from "./src/usage";
+import { cliUsage } from "./src/usage";
 import { commandHelp, invalidArgument, unknownCommandError } from "./src/command-help";
 import { runMessageResolve } from "./src/message-resolve";
 import { formatReaction } from "./src/message-format";
@@ -731,7 +731,7 @@ function parseActionPrepareArgs(args: readonly string[]): ActionPrepareInvocatio
 }
 
 export async function run(args: readonly string[], transport: MessageTransport): Promise<unknown> {
-  if (args.length === 0) return CLI_USAGE;
+  if (args.length === 0) return cliUsage();
   if (args.includes("--help")) {
     const help = commandHelp(args.filter((arg) => arg !== "--help"));
     if (help) return help;

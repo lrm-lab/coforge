@@ -1,5 +1,6 @@
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { taskConversationsEnabled } from "#src/server/tasks/task-conversations-gate.server";
+import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 
 /**
  * The Workspace's features a delivery tells its Agent's daemon, so a session launched with other
@@ -8,11 +9,15 @@ import { taskConversationsEnabled } from "#src/server/tasks/task-conversations-g
  */
 export async function deliveryFeatures(
   workspaceId: string,
-): Promise<{ taskConversations: boolean } | undefined> {
+): Promise<{ taskConversations: boolean; artifacts: boolean } | undefined> {
   const db = getDatabaseClient();
   if (!db) return undefined;
   try {
-    return { taskConversations: await taskConversationsEnabled(db, { workspaceId }) };
+    const [taskConversations, artifacts] = await Promise.all([
+      taskConversationsEnabled(db, { workspaceId }),
+      artifactsEnabled(db, workspaceId),
+    ]);
+    return { taskConversations, artifacts };
   } catch {
     return undefined;
   }

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { taskConversationsEnabled } from "#src/server/tasks/task-conversations-gate.server";
+import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import { z } from "zod";
 import { authenticateDaemon, parseBody } from "#src/server/auth/daemon-request.server";
 import {
@@ -70,7 +71,7 @@ function buildAgentLaunchIdentity(agent: {
   computer: LaunchIdentityComputer;
   apps: AgentLaunchApp[];
   /** The Workspace's features as of this launch; a daemon older than the field ignores it. */
-  features: { taskConversations: boolean };
+  features: { taskConversations: boolean; artifacts: boolean };
 }) {
   const runtimeContext = buildAgentRuntimeContext(agent);
   const identity = {
@@ -178,6 +179,10 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           computerId: principal.computerId,
           repository: new PrismaAgentApiKeyRepository(db),
         });
+        const [taskConversations, artifacts] = await Promise.all([
+          taskConversationsEnabled(db, { workspaceId: agent.workspaceId }),
+          artifactsEnabled(db, agent.workspaceId),
+        ]);
         const identity = buildAgentLaunchIdentity({
           systemKind: agent.systemKind,
           name: agent.name,
@@ -189,11 +194,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           // The lookup above already requires `computerId: principal.computerId`.
           computer: agent.computer,
           apps: await agentLaunchApps(db, agent.workspaceId),
-          features: {
-            taskConversations: await taskConversationsEnabled(db, {
-              workspaceId: agent.workspaceId,
-            }),
-          },
+          features: { taskConversations, artifacts },
         });
         const assignedSkillPacks = agent.weeklyReportAssistant
           ? (["weekly-report"] as const)

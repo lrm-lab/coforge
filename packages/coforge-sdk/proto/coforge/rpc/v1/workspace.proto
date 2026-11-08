@@ -330,6 +330,8 @@ message AgentMessageDelivery {
   // Where a message not written by a person or an Agent came from: "app" for an App event. Unset
   // on ordinary deliveries and from a server that predates it.
   optional string source = 24;
+  // Documents (artifacts) on in the Workspace; unset from a server that predates it.
+  optional bool artifacts = 25;
 }
 
 // The recipient Agent's launch and native session a tracked @mention delivery was issued for.

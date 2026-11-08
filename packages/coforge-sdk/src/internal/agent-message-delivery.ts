@@ -36,8 +36,9 @@ export type AgentMessageDelivery = {
    * it, which differs for a message replayed after a reconnect. Absent from an older server. */
   createdAtMs?: number;
   /** The Workspace's features as of this delivery; absent from an older server. A session
-   * launched with another value restarts before it takes the input. */
-  features?: { taskConversations: boolean };
+   * launched with another value restarts before it takes the input. A feature the server does
+   * not name is unknown, not off. */
+  features?: { taskConversations?: boolean; artifacts?: boolean };
   /** Why this delivery reached the Agent: "mentioned" or "subscribed" on a target it was not
    * subscribed to, and "choice" or "expired" for the Agent's own action card that someone answered
    * or that expired — an event about a message the Agent wrote, not new text to read. A new
@@ -94,6 +95,7 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
       memoryHint: memoryHintMessage(value.memoryHint),
       createdAtMs: value.createdAtMs === undefined ? undefined : BigInt(value.createdAtMs),
       taskConversations: value.features?.taskConversations,
+      artifacts: value.features?.artifacts,
       reason: value.reason,
       attachmentCount: value.attachmentCount,
       source: value.source,
@@ -144,8 +146,15 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
     ...(value.createdAtMs !== undefined
       ? { createdAtMs: safeUint64(value.createdAtMs, "Agent message creation time") }
       : {}),
-    ...(value.taskConversations !== undefined
-      ? { features: { taskConversations: value.taskConversations } }
+    ...(value.taskConversations !== undefined || value.artifacts !== undefined
+      ? {
+          features: {
+            ...(value.taskConversations !== undefined
+              ? { taskConversations: value.taskConversations }
+              : {}),
+            ...(value.artifacts !== undefined ? { artifacts: value.artifacts } : {}),
+          },
+        }
       : {}),
     ...(value.reason ? { reason: value.reason } : {}),
     ...(value.attachmentCount !== undefined ? { attachmentCount: value.attachmentCount } : {}),

@@ -61,9 +61,15 @@ test("a delivery carries the same answer, and none when the Workspace cannot be 
   try {
     const experiments = new PrismaExperimentsRepository(db);
     await experiments.write(workspaceId, "taskConversations", true);
-    expect(await deliveryFeatures(workspaceId)).toEqual({ taskConversations: true });
+    expect(await deliveryFeatures(workspaceId)).toEqual({
+      taskConversations: true,
+      artifacts: false,
+    });
     await experiments.write(workspaceId, "taskConversations", false);
-    expect(await deliveryFeatures(workspaceId)).toEqual({ taskConversations: false });
+    expect(await deliveryFeatures(workspaceId)).toEqual({
+      taskConversations: false,
+      artifacts: false,
+    });
     Bun.env.DATABASE_URL = "";
     expect(await deliveryFeatures(workspaceId)).toBeUndefined();
   } finally {

@@ -4,6 +4,7 @@ import { appHelp } from "./app";
 import { artifactHelp } from "./artifact";
 import { messageHelp } from "./message";
 import { taskHelp } from "./task";
+import { artifactCommandsHidden } from "../workspace-features";
 
 /**
  * Every command `parseArgs` accepts, keyed by the words that name it. The longest matching key
@@ -311,10 +312,29 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
 };
 
-/** The command names directly under `prefix` ("" = top level), derived from the COMMANDS keys. */
-function childrenOf(prefix: string): string[] {
+/** What `coforge artifact --help` answers in a Workspace whose launch features switched documents
+ * off: the command exists and the server refuses it with the actionable error, so the help says
+ * that plainly and points at attachments instead of looking like an unknown command (task #711). */
+const ARTIFACTS_DISABLED_HELP = [
+  "coforge artifact",
+  "",
+  "Documents are not enabled in this Workspace: `coforge artifact` commands cannot be used here.",
+  "To send a file to a person, upload it as an attachment and send its id:",
+  "  coforge attachment upload --path <file> --target <target>",
+  "  coforge message send --target <target> --attachment-id <id>",
+].join("\n");
+
+function isArtifactCommand(name: string): boolean {
+  return name === "artifact" || name.startsWith("artifact ");
+}
+
+/** The command names directly under `prefix` ("" = top level), derived from the COMMANDS keys.
+ * `hiddenArtifacts` drops the whole `artifact` family, as a launch whose features switched
+ * documents off states through `COFORGE_WORKSPACE_FEATURES`. */
+function childrenOf(prefix: string, hiddenArtifacts: boolean): string[] {
   const names = new Set<string>();
   for (const key of Object.keys(COMMANDS)) {
+    if (hiddenArtifacts && isArtifactCommand(key)) continue;
     const rest =
       prefix === "" ? key : key.startsWith(`${prefix} `) ? key.slice(prefix.length + 1) : "";
     if (rest) names.add(rest.split(" ")[0]!);
@@ -322,11 +342,11 @@ function childrenOf(prefix: string): string[] {
   return [...names];
 }
 
-function renderHelp(name: string, entry: HelpEntry): string {
+function renderHelp(name: string, entry: HelpEntry, hiddenArtifacts: boolean): string {
   const lines = [`coforge ${name}`, "", `  ${entry.syntax}`];
   if (entry.flags?.length) lines.push("", ...entry.flags.map((flag) => `  ${flag}`));
   if (entry.guidance) lines.push("", entry.guidance);
-  const children = childrenOf(name);
+  const children = childrenOf(name, hiddenArtifacts);
   if (children.length) lines.push("", "Commands:", ...children.map((c) => `  ${c}`));
   if (entry.example) lines.push("", `Example: ${entry.example}`);
   return lines.join("\n");
@@ -343,17 +363,19 @@ function commandWords(argv: readonly string[]): string[] {
  * `argv` lists the top-level commands (`coforge --help`). */
 export function commandHelp(argv: readonly string[]): string | undefined {
   const words = commandWords(argv);
+  const hiddenArtifacts = artifactCommandsHidden();
+  if (hiddenArtifacts && words[0] === "artifact") return ARTIFACTS_DISABLED_HELP;
   if (words.length === 0)
     return [
       "coforge <command>",
       "",
       "Commands:",
-      ...childrenOf("").map((name) => `  ${name}`),
+      ...childrenOf("", hiddenArtifacts).map((name) => `  ${name}`),
     ].join("\n");
   for (let length = Math.min(words.length, 2); length > 0; length--) {
     const name = words.slice(0, length).join(" ");
     const entry = COMMANDS[name];
-    if (entry) return renderHelp(name, entry);
+    if (entry) return renderHelp(name, entry, hiddenArtifacts);
   }
   return undefined;
 }
@@ -383,11 +405,14 @@ function editDistance(a: string, b: string): number {
  * commands, an alias hit, or a near-miss suggestion, like Raft's unknown-command error. */
 export function unknownCommandError(args: readonly string[]): CliError {
   const words = commandWords(args);
+  const hiddenArtifacts = artifactCommandsHidden();
   const level =
-    words[0] !== undefined && (COMMANDS[words[0]] !== undefined || childrenOf(words[0]).length > 0)
+    words[0] !== undefined &&
+    !(hiddenArtifacts && isArtifactCommand(words[0])) &&
+    (COMMANDS[words[0]] !== undefined || childrenOf(words[0], hiddenArtifacts).length > 0)
       ? words[0]
       : "";
-  const available = childrenOf(level);
+  const available = childrenOf(level, hiddenArtifacts);
   const candidates = level === "" ? [...available, ...Object.keys(COMMAND_ALIASES)] : available;
   const bad = (words[level === "" ? 0 : 1] ?? words[0] ?? "").toLowerCase();
   let suggestion: string | undefined;

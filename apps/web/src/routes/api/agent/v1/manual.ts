@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
+import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import { PrismaAgentManualEventRepository } from "#src/server/db/repositories/agent-manual-event.repositories.server";
 import {
   recordManualEvent,
   resolveManualGet,
   type AgentManualEventRepository,
 } from "#src/server/agents/agent-manual.server";
+import type { AgentManualExperiments } from "#src/server/agents/manual/manual-registry.server";
 
 export type AgentManualGetPrincipal = { workspaceId: string; agentId: string };
 
@@ -16,12 +18,13 @@ export async function handleAgentManualGet(
   request: Request,
   principal: AgentManualGetPrincipal,
   repository: AgentManualEventRepository | undefined,
+  experiments?: AgentManualExperiments,
 ): Promise<Response> {
   const query = new URL(request.url).searchParams;
   const topic = query.get("topic") ?? "";
   const intent = (query.get("intent") ?? "").trim();
   const reason = (query.get("reason") ?? "").trim();
-  const outcome = resolveManualGet({ topic, intent, reason });
+  const outcome = resolveManualGet({ topic, intent, reason, experiments });
   if (outcome.status !== 400)
     await recordManualEvent(
       repository,
@@ -43,8 +46,15 @@ export const Route = createFileRoute("/api/agent/v1/manual")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      GET: ({ request, context: { principal, db } }) =>
-        handleAgentManualGet(request, principal, new PrismaAgentManualEventRepository(db)),
+      GET: async ({ request, context: { principal, db } }) =>
+        handleAgentManualGet(
+          request,
+          principal,
+          new PrismaAgentManualEventRepository(db),
+          // A Workspace whose switch cannot be read keeps the full Manual: the artifact commands
+          // themselves still refuse server-side, so hiding their docs would only mislead.
+          { artifacts: await artifactsEnabled(db, principal.workspaceId).catch(() => undefined) },
+        ),
     },
   },
 });
