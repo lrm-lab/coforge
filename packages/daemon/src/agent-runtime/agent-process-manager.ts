@@ -1,24 +1,16 @@
 import { AgentStateMachine, type AgentStatus } from "./agent-state-machine";
-import {
-  MemoryConversationSessions,
-  type ConversationSessionStore,
-} from "./memory-conversation-sessions";
 import type { AgentRuntimeConfig, AgentSession, AgentSessionOptions } from "@coforge/agent";
 import type { CodeAgentProviderFactory } from "@lrm/coforge-anvil";
 import { AgentProcessCleanupError, withDeadline } from "@lrm/coforge-anvil";
 import {
-  buildCoforgeAgentInstructions,
-  type AgentLaunchIdentity,
-} from "#src/code-agent/agent-instructions";
-import { installAssignedSkills, type AssignedSkillPack } from "#src/code-agent/assigned-skills";
-import { agentEnvironment, usableAgentEnvironment } from "#src/code-agent/environment";
+  createAgentSession,
+  prepareAgentLaunch,
+  type AgentLaunchInput,
+} from "./agent-launch-preparation";
+import type { ConversationSessionStore } from "./memory-conversation-sessions";
+import type { AgentLaunchIdentity } from "#src/code-agent/agent-instructions";
+import type { AssignedSkillPack } from "#src/code-agent/assigned-skills";
 import { resolveGitHookInjectionForLaunch } from "#src/code-agent/git-hooks";
-import { seedAgentMemory } from "./agent-memory-seed";
-import { isMemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { isMemoryAgentRuntime, evalDisablesHostPiInjection } from "@coforge/agent";
-import { prepareCloudComputerAgentSkills } from "@coforge/agent/cloud-computer-skills";
-import { mkdir } from "node:fs/promises";
 import { processClockMs } from "#src/platform/process-tree";
 
 export type { AgentStatus } from "./agent-state-machine";
@@ -111,95 +103,23 @@ export class AgentProcessManager {
     config: AgentRuntimeConfig,
     options: AgentProcessStartOptions,
   ): Promise<AgentRuntime> {
-    const {
-      agentWorkspaceDirectory,
-      sessionId,
-      environment,
-      runtimeId,
-      onSessionId,
-      sessionMode,
-      assignedSkillPacks = [],
-      identity,
-      serverLaunch,
-    } = options;
+    const { sessionId, serverLaunch } = options;
     if (this.#stopping.has(agentId)) {
       throw new Error(`Agent runtime is stopping: ${agentId}`);
     }
     if (this.#runtimes.has(agentId)) {
       throw new Error(`Agent runtime is already active: ${agentId}`);
     }
-    await mkdir(agentWorkspaceDirectory, { recursive: true, mode: 0o700 });
-    const disableHostPiInjection =
-      isMemoryAgentToolProfile(config.toolProfile) ||
-      evalDisablesHostPiInjection(environment) ||
-      evalDisablesHostPiInjection();
-    if (!disableHostPiInjection) {
-      await seedAgentMemory(agentWorkspaceDirectory, {
-        name: identity?.name,
-        displayName: identity?.displayName,
-      });
-      // Cloud-computer only: migrate/bind Agent skills onto /workspace/agent-skills/<id>.
-      // No-op when COFORGE_CLOUD_COMPUTER is unset (non-cloud-computer).
-      await prepareCloudComputerAgentSkills({
-        agentId,
-        agentWorkspaceDirectory,
-        environment: { ...Bun.env, ...environment },
-      });
-      if (assignedSkillPacks.length > 0) {
-        await installAssignedSkills({
-          provider: config.provider,
-          agentWorkspaceDirectory,
-          packs: assignedSkillPacks,
-          agentId,
-          environment: { ...Bun.env, ...environment },
-        });
-      }
-    }
-    // Probed against the same PATH the Agent's own git calls will search.
-    const gitHooks = await this.#resolveGitHooks(
-      agentEnvironment(environment, Bun.env, process.platform, {
-        envVars: config.envVars,
-        provider: config.provider,
-      }).PATH,
-    );
+    const launch: AgentLaunchInput = { config, ...options, agentId };
+    const ports = {
+      createProvider: this.#createProvider,
+      resolveGitHooks: this.#resolveGitHooks,
+      ...(this.conversationStore ? { conversationStore: this.conversationStore } : {}),
+    };
+    const { options: sessionOptions } = await prepareAgentLaunch(launch, ports);
     let session: AgentSession;
     try {
-      const provider = this.#createProvider(config.provider);
-      const options: AgentSessionOptions = {
-        agentId,
-        ...(runtimeId ? { runtimeId } : {}),
-        agentWorkspaceDirectory,
-        ...(isMemoryAgentRuntime(config) ? { memoryControlSession: true } : {}),
-        instructions: buildCoforgeAgentInstructions({
-          agentWorkspaceDirectory,
-          agentId,
-          identity,
-          toolProfile: config.toolProfile,
-          capabilities: {
-            memoryDisposition: config.provider === RUNTIME_PROVIDER.COFORGE,
-            cloudDesktop: Boolean(environment?.DISPLAY),
-          },
-        }),
-        sessionId,
-        sessionMode,
-        onSessionId,
-        // The provider reads this map too (adapter path lookups); it gets the same environment
-        // the process will, without the names the shared rule refuses. An Agent with no stored
-        // environment keeps the configuration it was started with, field for field.
-        runtime: config.envVars
-          ? { ...config, envVars: usableAgentEnvironment(config.envVars, config.provider) }
-          : config,
-        environment,
-        gitHooks,
-      };
-      session = await provider.createAgentSession(options);
-      if (isMemoryAgentRuntime(config))
-        session = new MemoryConversationSessions({
-          primary: session,
-          options,
-          create: (options) => provider.createAgentSession(options),
-          store: this.conversationStore?.(agentId),
-        });
+      session = await createAgentSession(launch, sessionOptions, ports);
     } catch (error) {
       if (error instanceof AgentProcessCleanupError) this.#stopping.add(agentId);
       throw error;
