@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { SystemdUserDaemonHost, WindowsUserDaemonHost } from "@lrm/coforge-daemon";
 import { recordingRegistrar } from "./recording-registrar";
 import { rejection } from "./rejection";
+import { CliError } from "#src/errors";
 import {
   restartSupervisor,
   type RestartSupervisorHost,
@@ -82,7 +83,13 @@ test("restart --supervisor refuses a foreground externally supervised Computer w
   const error = await rejection(restartSupervisor(host, local, { stdout: () => {} }));
   expect(error.message).toContain("foreground externally supervised Computer");
   expect(error.message).toContain("launchctl print failed (113)");
-  expect(error.message).toContain("coforge-computer start");
+  // Its own code, and a hint that names the next command: `restart --supervisor` answering a
+  // missing service is the same situation `stop` calls STOP_OUTSIDE_SERVICE_MANAGER, not an
+  // unexplained COMPUTER_FAILED (task #696).
+  expect((error as CliError).code).toBe("RESTART_OUTSIDE_SERVICE_MANAGER");
+  expect((error as CliError).hint).toContain("coforge-computer start");
+  expect((error as CliError).hint).toContain("coforge-computer foreground");
+  expect(error.cause).toBeInstanceOf(Error);
   expect(restarted).toBe(false);
   expect(local.calls).toEqual([]);
 });

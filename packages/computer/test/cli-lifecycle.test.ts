@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { runCli } from "#src/cli";
+import { restartSupervisor } from "#src/cli/restart-supervisor";
 
 // The lifecycle commands that start, stop, restart and detach this Computer. Split out of
 // `cli.test.ts` to stay under the file-size gate, along the seam the commands themselves have:
@@ -209,4 +210,52 @@ test("detach --json writes one JSON object and no prose", async () => {
     detached: false,
     kind: "not_attached",
   });
+});
+
+test("restart --supervisor reports its foreground refusal under its own code", async () => {
+  // `stop` answers the same situation as STOP_OUTSIDE_SERVICE_MANAGER; a fallback
+  // COMPUTER_FAILED here would read as an unexplained crash of the CLI itself (task #696).
+  const stderr: string[] = [];
+  const dependencies = {
+    login: { async run() {} },
+    setup: { async run() {} },
+    daemon: {
+      async start() {},
+      async stop() {},
+      async restart() {},
+      async detach() {
+        return { kind: "detached" as const, workspaceSlug: "w" };
+      },
+      async restartSupervisor() {
+        return restartSupervisor(
+          {
+            async assertRestartable() {
+              throw new Error(
+                "a `coforge-computer foreground` process runs under another supervisor",
+              );
+            },
+            async restart() {},
+          },
+          {
+            async identity() {
+              return { daemonId: "d" };
+            },
+            async hold() {
+              return { accepted: true, busyAgents: [] };
+            },
+          },
+          { stdout: () => undefined },
+        );
+      },
+    },
+  };
+
+  const exitCode = await runCli(["restart", "--supervisor"], dependencies, {
+    stdout: () => undefined,
+    stderr: (line) => stderr.push(line),
+  });
+
+  expect(exitCode).toBe(1);
+  expect(stderr.join("\n")).toContain("RESTART_OUTSIDE_SERVICE_MANAGER");
+  expect(stderr.join("\n")).not.toContain("COMPUTER_FAILED");
 });

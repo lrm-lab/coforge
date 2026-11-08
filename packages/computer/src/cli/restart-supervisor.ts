@@ -3,6 +3,7 @@
 import { RUNNER_HOLD_REASONS, type HeldBusyAgent, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { holdRunnersUntilQuiescent, LocalDaemonLauncher } from "@lrm/coforge-daemon";
 import { createDaemonLauncher, daemonExecutablePathFor } from "#src/daemon-service/daemon-host";
+import { CliError } from "#src/errors";
 import { resolveDaemonSocketPath } from "#src/paths";
 
 /** Platform and local control seams used by `restartSupervisor`. */
@@ -25,9 +26,14 @@ export async function restartSupervisor(
   local: RestartSupervisorLocal,
   io: { stdout: (line: string) => void },
 ): Promise<void> {
-  const foregroundRefusal = (cause: unknown): Error =>
-    new Error(
-      `Cannot restart the supervisor of a foreground externally supervised Computer while it is running: ${thrownMessage(cause)} Restart it through its external supervisor, or install the supported user service with \`coforge-computer start\`.`,
+  // A Computer no service manager runs answers under its own code, the way `stop` answers
+  // STOP_OUTSIDE_SERVICE_MANAGER for the same situation: an unexplained fallback code reads as
+  // the CLI itself crashing rather than as a refusal with a next step (task #696).
+  const foregroundRefusal = (cause: unknown): CliError =>
+    new CliError(
+      "RESTART_OUTSIDE_SERVICE_MANAGER",
+      `Cannot restart the supervisor of a foreground externally supervised Computer while it is running: ${thrownMessage(cause)}`,
+      "Install the supported user service with `coforge-computer start`, or restart this Computer through the supervisor that started its `coforge-computer foreground` process. Then run `coforge-computer status` to confirm.",
       { cause },
     );
   // Refuse outright rather than let `restart()`'s recovery branch register a second Coordinator
