@@ -3,6 +3,8 @@
   "activity_inbox_filter_all": "All",
   "activity_inbox_filter_unread": "Unread",
   "activity_inbox_filter_mentions": "Mentions",
+  "activity_inbox_today": "Today",
+  "activity_inbox_yesterday": "Yesterday",
   "activity_inbox_all_conversations": "All conversations",
   "activity_inbox_waiting": "Waiting on you",
   "activity_inbox_waiting_more": "{count} more",

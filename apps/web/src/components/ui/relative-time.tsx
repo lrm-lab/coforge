@@ -106,6 +106,7 @@ export function ClockTime({
   timeZone,
   className,
   plain = false,
+  seconds = true,
 }: {
   value: Date | string;
   timeZone?: string | null;
@@ -113,13 +114,15 @@ export function ClockTime({
   /** See `RelativeTime`'s `plain`: skip the interactive Tooltip wrapper when already nested
    * inside another interactive element, and expose the exact time via `aria-label` only. */
   plain?: boolean;
+  /** Without them it reads as a list's time of day ("14:32"). */
+  seconds?: boolean;
 }) {
   const hydrated = useHydrated();
   const instant = new Date(value);
   const locale = getLocale();
   const timeFormat = useTimeFormat();
   const exactTime = hydrated ? formatDateForDisplay(instant, timeZone, locale, timeFormat) : "";
-  const clock = hydrated ? formatClockTime(instant, timeZone, locale, timeFormat) : "";
+  const clock = hydrated ? formatClockTime(instant, timeZone, locale, timeFormat, seconds) : "";
   const timeElement = (
     <time
       dateTime={instant.toISOString()}

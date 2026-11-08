@@ -9,7 +9,7 @@ import { Link as AriaLink } from "react-aria-components";
 import { Badge } from "#src/components/base/badges/badges";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { RelativeTime } from "#src/components/ui/relative-time";
+import { ClockTime, RelativeTime } from "#src/components/ui/relative-time";
 import { collageLayout } from "#src/features/conversations/collage-layout";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
@@ -57,6 +57,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   viewerId,
   current,
   onOpen,
+  clock = false,
 }: {
   item: ActivityInboxItem;
   filter: ActivityInboxFilter;
@@ -66,6 +67,8 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   current: boolean;
   /** Opens the row's conversation on the page. */
   onOpen: (target: HostedConversationTarget) => void;
+  /** The row sits under its day's heading: it shows the time of day, not how long ago. */
+  clock?: boolean;
 }) {
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
@@ -73,6 +76,17 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   const link = activityChatLink(workspaceSlug, target);
   const href = router.buildLocation(link).publicHref;
   const unread = item.unreadCount > 0;
+  // Gives way to the Done check wherever the check shows (hover, focus, the open row); a touch
+  // screen has no check, so the time stays.
+  const timeClass = cn(
+    "ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0",
+    current && "[@media(hover:hover)]:opacity-0",
+  );
+  const time = clock ? (
+    <ClockTime value={item.latest.createdAt} plain seconds={false} className={timeClass} />
+  ) : (
+    <RelativeTime value={item.latest.createdAt} plain className={timeClass} />
+  );
   const { place, thread, task } = item;
   // A channel goes by its name; a DM, and a thread in one, by who is on the other side, whether an
   // Agent or a member.
@@ -182,14 +196,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               <ActivityItemBadges item={item} filter={filter} />
               {/* Gives way to the Done check wherever the check shows (hover, focus, the open
                   row); a touch screen has no check, so the time stays. */}
-              <RelativeTime
-                value={item.latest.createdAt}
-                plain
-                className={cn(
-                  "ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0",
-                  current && "[@media(hover:hover)]:opacity-0",
-                )}
-              />
+              {time}
             </span>
             <span className="truncate text-sm text-tertiary">
               {placeLabel && <>{placeLabel} · </>}

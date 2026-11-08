@@ -164,14 +164,23 @@ export function formatClockTime(
   timeZone: string | null | undefined,
   locale = typeof navigator === "undefined" ? "en-US" : navigator.language,
   timeFormat: TimeFormat | null = null,
+  seconds = true,
 ) {
-  return dateTimeFormat(locale, {
+  const format = dateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
+    ...(seconds ? { second: "2-digit" } : {}),
     hour12: hour12For(timeFormat),
     timeZone: resolveTimeZone(timeZone, browserTimeZone()),
-  }).format(new Date(value));
+  });
+  const instant = new Date(value);
+  if (seconds) return format.format(instant);
+  // A 12-hour clock writes "9:49 AM", not "09:49 AM"; a 24-hour one keeps "09:49".
+  const parts = format.formatToParts(instant);
+  const twelve = parts.some((part) => part.type === "dayPeriod");
+  return parts
+    .map((part) => (twelve && part.type === "hour" ? part.value.replace(/^0/, "") : part.value))
+    .join("");
 }
 
 /** The instant the calendar day containing `now` began in `timeZone` (viewer preference, then

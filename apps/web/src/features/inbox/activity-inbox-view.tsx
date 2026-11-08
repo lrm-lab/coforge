@@ -1,4 +1,12 @@
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -44,6 +52,7 @@ import { openedItemKey } from "./activity-open-target";
 import { ActivityTaskPopup } from "./activity-task-popup";
 import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
+import { useActivityDays } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
 import { WaitingChoiceRow } from "./waiting-choice-row";
 
@@ -229,13 +238,14 @@ export function ActivityInboxView({
     run();
   }, [markAllRead, loadedAt, refresh]);
 
+  const days = useActivityDays(items, (item) => item.latest.createdAt);
   // Not empty while the waiting cards are still being read: they may be all there is.
   const empty =
     items.length === 0 &&
     pinned.length === 0 &&
     waiting.length === 0 &&
     !(filter === "all" && waitingQuery.isPending);
-  const row = (item: ActivityInboxItem) => (
+  const row = (item: ActivityInboxItem, clock = false) => (
     <ActivityInboxRow
       key={item.key}
       item={item}
@@ -244,11 +254,12 @@ export function ActivityInboxView({
       viewerId={user.id}
       current={item.key === currentKey}
       onOpen={onOpen}
+      clock={clock}
     />
   );
   // Waiting on you, Pinned, then the rest: each section that has rows, the rest headed only below
   // another.
-  const sections = [
+  const sections: ActivitySection[] = [
     {
       label: m.activity_inbox_waiting(),
       icon: MessageQuestionCircle,
@@ -274,12 +285,14 @@ export function ActivityInboxView({
         </div>
       ),
     },
-    { label: m.conversation_pinned_section(), icon: Pin01, rows: pinned.map(row) },
-    {
-      label: m.navigation_activity(),
-      heading: m.activity_inbox_all_conversations(),
-      rows: items.map(row),
-    },
+    { label: m.conversation_pinned_section(), icon: Pin01, rows: pinned.map((item) => row(item)) },
+    // The rest, a heading for each day (none before hydration, when no day can be named yet).
+    ...days.map((day) => ({
+      label: day.label ?? m.navigation_activity(),
+      heading: day.label,
+      dated: day.label !== undefined,
+      rows: day.items.map((item) => row(item, day.label !== undefined)),
+    })),
   ].filter((section) => section.rows.length > 0);
 
   const activeCount = firstPage?.activeItemCount;
@@ -377,7 +390,7 @@ export function ActivityInboxView({
         ) : (
           sections.map((section, index) => (
             <Fragment key={section.label}>
-              {(section.icon || index > 0) && (
+              {(section.icon || index > 0 || section.dated) && (
                 <ActivityInboxSectionHeading
                   icon={section.icon}
                   label={section.heading ?? section.label}
@@ -434,6 +447,16 @@ export function ActivityInboxView({
 /** The waiting cards shown before the rest fold behind "N more". */
 const WAITING_SHOWN = 3;
 
+type ActivitySection = {
+  label: string;
+  heading?: string;
+  icon?: typeof Pin01;
+  count?: number;
+  dated?: boolean;
+  rows: ReactNode[];
+  footer?: ReactNode;
+};
+
 /** A list section's label (Pinned, All conversations): a tertiary subheading on the rows' inset,
  * with the section's mark when it has one. */
 function ActivityInboxSectionHeading({
@@ -451,7 +474,7 @@ function ActivityInboxSectionHeading({
   return (
     <h2
       className={cn(
-        "flex items-center gap-1.5 px-page pt-2 pb-1 text-sm font-semibold text-tertiary",
+        "flex items-center gap-1.5 px-page pt-2 pb-1 text-sm font-medium text-tertiary",
         className,
       )}
     >

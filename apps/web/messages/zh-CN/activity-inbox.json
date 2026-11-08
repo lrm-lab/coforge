@@ -3,6 +3,8 @@
   "activity_inbox_filter_all": "全部",
   "activity_inbox_filter_unread": "未读",
   "activity_inbox_filter_mentions": "提及",
+  "activity_inbox_today": "今天",
+  "activity_inbox_yesterday": "昨天",
   "activity_inbox_all_conversations": "全部会话",
   "activity_inbox_waiting": "等你处理",
   "activity_inbox_waiting_more": "还有 {count} 个",
