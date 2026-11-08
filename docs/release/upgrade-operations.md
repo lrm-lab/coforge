@@ -182,12 +182,18 @@ Without `--workspace` it stops the whole Computer — the supervisor process thr
 the platform's manager and every Workspace runtime under it — so nothing brings it
 back until `coforge-computer start`. `--workspace` stops one runtime and leaves the
 supervisor up. A Computer the platform manager does not run (a `foreground` process
-under someone else's supervisor) is refused with its own error rather than reported
-as stopped.
+under someone else's supervisor) is refused with `STOP_OUTSIDE_SERVICE_MANAGER` rather
+than reported as stopped.
 
 `coforge-computer restart --supervisor` restarts the Computer supervisor process
 itself, through the platform's process manager (`launchctl kickstart -k` on macOS;
 `systemctl --user reset-failed` then `restart` on Linux; ending and re-running the
 scheduled task on Windows). It is mutually exclusive with `--workspace`. It engages
 the same hold first, unless the supervisor cannot be reached at all, in which case
-it restarts anyway. It refuses on a `foreground` externally supervised Computer.
+it restarts anyway. It refuses that same `foreground` Computer with
+`RESTART_OUTSIDE_SERVICE_MANAGER`.
+
+`coforge-computer detach --json` writes one object and no prose: `ok`, `detached`, `kind`
+and, except for `not_attached`, `workspaceSlug`. `ok` means the command finished;
+`detached` is true only for `kind: "detached"` — a revoked key, an unconfirmed detach and
+an unbound Workspace all leave something behind.
