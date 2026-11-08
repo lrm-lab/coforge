@@ -186,7 +186,7 @@ test.skipIf(process.platform === "win32")(
   10_000,
 );
 
-test("failed unexpected-exit tree cleanup does not close or permit replacement", async () => {
+test("failed unexpected-exit tree cleanup closes, and still permits no replacement", async () => {
   const exited = Promise.resolve(17);
   let failures = 0;
   let closes = 0;
@@ -221,7 +221,11 @@ test("failed unexpected-exit tree cleanup does not close or permit replacement",
     agentWorkspaceDirectory: workspace,
   });
   await waitUntil(() => failures > 0);
-  expect(closes).toBe(0);
+  // The end is reported even though the tree survived: an Agent whose session ended must not
+  // read as alive forever (task #704)...
+  await waitUntil(() => closes > 0);
+  expect(closes).toBe(1);
+  // ...but the process may still be running under it, so nothing may replace it.
   await expect(
     manager.start("agent-1", runtime, {
       agentWorkspaceDirectory: workspace,

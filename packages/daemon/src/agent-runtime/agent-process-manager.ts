@@ -212,9 +212,11 @@ export class AgentProcessManager {
     });
     this.#stateFor(agentId).transition("runtime_ready");
     this.#runtimes.set(agentId, runtime);
-    session.onExit(() => {
+    session.onExit((exit) => {
       if (this.#runtimes.get(agentId)?.session !== session) return;
-      if (this.#stopping.has(agentId)) return;
+      // A tree that survived its teardown may still be running: the end is reported, but the
+      // runtime stays registered so nothing replaces a process that was never killed (#704).
+      if (this.#stopping.has(agentId) || exit?.cleanupUnconfirmed === true) return;
       this.#runtimes.delete(agentId);
       this.#stateFor(agentId).transition("runtime_released");
     });

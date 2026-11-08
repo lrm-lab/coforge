@@ -76,4 +76,8 @@ export type AgentTurnProcessWindow = {
 export type AgentSessionExit = Readonly<{
   code?: number | null;
   signal?: string | null;
+  /** The session ended, but the process tree could not be confirmed gone, so something may still
+   * be running under it. The end is real; this only tells the daemon not to replace a process it
+   * could not kill (task #704). */
+  cleanupUnconfirmed?: boolean;
 }>;

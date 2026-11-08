@@ -40,6 +40,9 @@ export class JsonlProcess {
   #nextRequestId = 1;
   #state: ProcessState = { type: "open" };
   #cleanupPromise: Promise<void> | undefined;
+  /** Whether a teardown ran and could not confirm the tree was gone. Never cleared: the process
+   * is closed, so this is the only record that something may still be running under it. */
+  #cleanupUnconfirmed = false;
   readonly #stderrPromise: Promise<void>;
 
   constructor(
@@ -148,8 +151,10 @@ export class JsonlProcess {
    */
   exitInfo(): AgentSessionExit {
     const signal = this.#child.exitSignal;
-    if (signal) return { signal };
-    return { code: this.#exitCode ?? null, signal: signal === undefined ? undefined : null };
+    const exit: AgentSessionExit = signal
+      ? { signal }
+      : { code: this.#exitCode ?? null, signal: signal === undefined ? undefined : null };
+    return this.#cleanupUnconfirmed ? { ...exit, cleanupUnconfirmed: true } : exit;
   }
 
   async send(message: JsonRecord): Promise<void> {
@@ -214,7 +219,12 @@ export class JsonlProcess {
   }
 
   async dispose(options?: ProcessTreeCleanupOptions): Promise<void> {
-    if (this.#state.type === "closed") return;
+    if (this.#state.type === "closed") {
+      // A closed process is never torn down twice. A tree an earlier teardown could not remove is
+      // reported on the exit it already sent, not by throwing here: callers dispose from a cancel
+      // handler or a `finally`, where that rejection would escape unhandled (#704).
+      return;
+    }
     if (this.#state.type === "open") {
       this.#state = { type: "disposing" };
       this.#rejectPending("code agent process closed");
@@ -223,11 +233,21 @@ export class JsonlProcess {
       await this.#cleanup(options);
       await this.#stderrPromise;
     } catch (error) {
-      this.#recordFailure(error instanceof Error ? error.message : "code agent cleanup failed");
+      // Close even though the tree would not die: adapters end a session on `onClose`, so this
+      // process would otherwise read as alive forever. The message stays the one consumers
+      // already match on; the cleanup logs the tree it left behind (#704).
+      const state = this.#state;
+      const message = error instanceof Error ? error.message : "code agent cleanup failed";
+      this.#cleanupUnconfirmed = true;
+      try {
+        if (state.type !== "failed") this.#recordFailure(message);
+      } finally {
+        // A failure listener that throws must not skip the close.
+        this.#close();
+      }
       throw error;
     }
-    this.#state = { type: "closed" };
-    this.#notifyClosed();
+    this.#close();
   }
 
   async #readStdout(): Promise<void> {
@@ -311,16 +331,30 @@ export class JsonlProcess {
 
   #fail(message: string): void {
     if (this.#state.type !== "open") return;
-    this.#recordFailure(message);
-    void this.#cleanup()
-      .then(() => {
-        const failureMessage = this.#state.type === "failed" ? this.#state.message : message;
-        this.#state = { type: "closed", failureMessage };
-        this.#notifyClosed();
-      })
-      .catch((error: unknown) => {
-        this.#recordFailure(error instanceof Error ? error.message : "code agent cleanup failed");
-      });
+    try {
+      this.#recordFailure(message);
+    } finally {
+      // A failure listener that throws must not skip the teardown: the process still has to end.
+      void this.#cleanup()
+        .then(() => this.#close())
+        .catch(() => {
+          // The tree would not die, but the process is gone either way. Keep the message consumers
+          // already match on rather than a composite they would no longer recognise (#704).
+          this.#cleanupUnconfirmed = true;
+          this.#close();
+        });
+    }
+  }
+
+  /** The terminal state for a process that is over: closed, remembering why it failed if it did,
+   * reported exactly once. */
+  #close(): void {
+    if (this.#state.type === "closed") return;
+    this.#state =
+      this.#state.type === "failed"
+        ? { type: "closed", failureMessage: this.#state.message }
+        : { type: "closed" };
+    this.#notifyClosed();
   }
 
   #recordFailure(message: string): void {
@@ -330,6 +364,9 @@ export class JsonlProcess {
     for (const listener of this.#failureListeners) listener(new Error(message));
   }
 
+  /** One teardown per process, and the first caller's options decide it — including the lossy
+   * direction: a turn-scoped dispose that runs first keeps the whole-tree escalation from ever
+   * happening, and now that this path ends `closed` nothing can escalate later (#704). */
   #cleanup(options?: ProcessTreeCleanupOptions): Promise<void> {
     this.#cleanupPromise ??= this.#cleanupTree(options);
     return this.#cleanupPromise;

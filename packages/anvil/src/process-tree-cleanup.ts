@@ -46,7 +46,7 @@ export async function cleanupOwnedTree(
   try {
     treeExited = await tree.waitForExit(PROCESS_TREE_EXIT_GRACE_MS);
   } catch {
-    throw new AgentProcessCleanupError();
+    treeExited = false;
   }
   if (!treeExited) {
     try {
@@ -60,10 +60,19 @@ export async function cleanupOwnedTree(
     try {
       treeExited = await tree.waitForExit(PROCESS_TREE_EXIT_GRACE_MS);
     } catch {
-      throw new AgentProcessCleanupError();
+      treeExited = false;
     }
   }
-  if (!treeExited) throw new AgentProcessCleanupError();
+  if (!treeExited) {
+    // The tree survived the whole ladder: say so here, because the caller's own failure message
+    // names what broke the process, not what the kill left behind (task #704).
+    logger.error("Code agent process tree survived cleanup", {
+      event: "code_agent.process.cleanup_failed",
+      pid: child.pid,
+      outcome: "failed",
+    });
+    throw new AgentProcessCleanupError();
+  }
   try {
     child.stdin.end();
   } catch {
