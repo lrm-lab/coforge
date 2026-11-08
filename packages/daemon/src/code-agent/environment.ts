@@ -49,6 +49,9 @@ export const DAEMON_LAUNCH_ENV_KEYS = [
   // the identity variables above: an Agent must not forge another launch's tag onto its own
   // stray processes, nor strip it from them.
   "COFORGE_AGENT_LAUNCH_TAG",
+  // The launch the process belongs to, read back by the provider process's own records so a
+  // code_agent line names the launch that wrote it (task #698). Daemon-owned for the same reason.
+  "COFORGE_AGENT_LAUNCH_ID",
   // A Workspace Daemon's own scope (`supervisor/`, and `daemon-host/` for the connection
   // endpoint). Nothing inside an Agent reads them; an Agent's tools that inherited them would act
   // on that Workspace (a Daemon test run from an Agent's checkout booted out every Agent job of

@@ -179,6 +179,9 @@ export async function launchAgentProcess(
             identity: launchConfig.identity,
           }),
           COFORGE_AGENT_LAUNCH_TAG: agentLaunchTag(agentId, launchTagToken),
+          // This launch's own identity, so a provider process and the records it writes can be
+          // attributed to the launch that spawned them (task #698).
+          COFORGE_AGENT_LAUNCH_ID: launch.launchId,
         },
         runtimeId: launch.launchId,
         onSessionId: sessionIds.onSessionId,

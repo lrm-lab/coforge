@@ -53,6 +53,9 @@ export class StderrCapture {
     private readonly child: OwnedChildProcess,
     routineLine?: (line: string) => boolean,
     onDiagnostic?: (diagnostic: string) => void,
+    /** This process's logger, already stamped with the launch identity it was spawned under, so a
+     * stderr warning is attributable to one Agent and one launch like every other record. */
+    private readonly log: typeof logger = logger,
   ) {
     this.#routineLine = routineLine;
     this.finished = this.#discard(onDiagnostic);
@@ -136,7 +139,7 @@ export class StderrCapture {
       if (tail && onDiagnostic) onDiagnostic((diagnostic + tail).slice(-16_384));
       if (line) report(oversized ? "[oversized stderr diagnostic]" : line);
       if (bytes > 0 && sawDiagnosticStderr)
-        logger.warning("Code agent process wrote diagnostics to stderr", {
+        this.log.warning("Code agent process wrote diagnostics to stderr", {
           event: "code_agent.process.stderr",
           pid: this.child.pid,
           bytes,

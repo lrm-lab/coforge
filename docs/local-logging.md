@@ -68,7 +68,7 @@ CoForge data directory 和 `logs/` 权限必须限制为当前用户，Unix mode
 }
 ```
 
-可选关联字段使用稳定名称：`machine_id`、`workspace_id`、`agent_id`、`runtime_id`、`provider`、`delivery_id`、`request_id`、`attempt`、`duration_ms`、`exit_code` 和 `signal`。缺失值省略，不写 `null` 占位。异常只保存稳定 `error_code`、安全的 `error_message` 和必要 stack；跨进程原始 envelope 不直接展开进 record。
+可选关联字段使用稳定名称：`machine_id`、`workspace_id`、`agent_id`、`launch_id`、`provider`、`delivery_id`、`request_id`、`attempt`、`duration_ms`、`exit_code` 和 `signal`。`launch_id` 是 Daemon 一次 launch 的标识：Agent runtime process 从自己的启动环境（`COFORGE_CURRENT_AGENT_ID`、`COFORGE_AGENT_LAUNCH_ID`）读到它，并带到自己写的每一条 record 上（`packages/anvil/src/jsonl-process.ts`），所以 provider 进程写的 `code_agent.*` 与 daemon 写出的 `launch_id` 是同一个值；早期 provider 专属事件（`codex.*`）仍用 `runtime_id` 承载同一个值。缺失值省略，不写 `null` 占位。异常只保存稳定 `error_code`、安全的 `error_message` 和必要 stack；跨进程原始 envelope 不直接展开进 record。
 
 event 使用低基数、过去式的 `namespace:action` name，例如 `daemon:started`、`daemon_runtime:restarted`、`agent_runtime:skills_loaded`。动态 id、provider error text 和路径不得拼入 event name。
 

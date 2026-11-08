@@ -11,6 +11,7 @@ import { LineBuffer } from "./line-buffer";
 import { cleanupOwnedTree, type ProcessTreeCleanupOptions } from "./process-tree-cleanup";
 import { withDeadline } from "./deadline";
 import { StderrCapture } from "./stderr-capture";
+import { launchLogProperties } from "./launch-log-identity";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "jsonl"]);
 
@@ -30,6 +31,8 @@ type ProcessState =
 export class JsonlProcess {
   readonly #child: OwnedChildProcess;
   readonly #tree: OwnedProcessTree;
+  /** This process's records, stamped with the launch identity it was spawned under. */
+  readonly #logger: typeof logger;
   readonly #pending = new Map<string, PendingRequest>();
   readonly #listeners = new Set<(record: JsonRecord) => void>();
   readonly #stderr: StderrCapture;
@@ -53,16 +56,23 @@ export class JsonlProcess {
     onStderrDiagnostic?: (diagnostic: string) => void,
     routineStderrLine?: (line: string) => boolean,
   ) {
+    const identity = launchLogProperties(environment);
+    this.#logger = Object.keys(identity).length > 0 ? logger.with(identity) : logger;
     this.#tree = processTreeOwner.spawn(command, cwd, environment);
     this.#child = this.#tree.child;
-    logger.info("Started code agent process", {
+    this.#logger.info("Started code agent process", {
       event: "code_agent.process.started",
       pid: this.#child.pid,
       executable: command[0],
       argument_count: Math.max(command.length - 1, 0),
       outcome: "ok",
     });
-    this.#stderr = new StderrCapture(this.#child, routineStderrLine, onStderrDiagnostic);
+    this.#stderr = new StderrCapture(
+      this.#child,
+      routineStderrLine,
+      onStderrDiagnostic,
+      this.#logger,
+    );
     this.#stderrPromise = this.#stderr.finished;
     this.#stdoutFinished = this.#readStdout();
     this.#outputFinished = Promise.all([this.#stdoutFinished, this.#stderrPromise]).then(
@@ -186,7 +196,7 @@ export class JsonlProcess {
     if (!kill) return;
     const report = await kill.call(this.#tree, window.startedAfterMs, window.startedBeforeMs);
     if (report.killed.length > 0)
-      logger.info("Killed code agent turn descendants", {
+      this.#logger.info("Killed code agent turn descendants", {
         event: "code_agent.process.turn_kill",
         pid: this.#child.pid,
         killed: report.killed.length,
@@ -203,7 +213,7 @@ export class JsonlProcess {
     });
     try {
       await this.send({ ...command, id });
-      logger.info("Sent code agent request", {
+      this.#logger.info("Sent code agent request", {
         event: "code_agent.request.sent",
         pid: this.#child.pid,
         request_id: id,
@@ -275,7 +285,7 @@ export class JsonlProcess {
     const pending = id ? this.#pending.get(id) : undefined;
     if (id && pending) {
       this.#pending.delete(id);
-      logger.info("Received code agent response", {
+      this.#logger.info("Received code agent response", {
         event: "code_agent.response.received",
         pid: this.#child.pid,
         request_id: id,
@@ -310,8 +320,8 @@ export class JsonlProcess {
       expected_exit: expectedExit,
       outcome: expectedExit ? "ok" : "error",
     };
-    if (expectedExit) logger.info("Code agent process exited", properties);
-    else logger.error("Code agent process exited", properties);
+    if (expectedExit) this.#logger.info("Code agent process exited", properties);
+    else this.#logger.error("Code agent process exited", properties);
     // Output the process wrote before it exited can still be unread: deliver it before the exit
     // is reported as a failure that rejects pending requests and closes the connection. A
     // descendant that kept the pipe open must not keep the exit unreported, so the wait is bounded.
@@ -376,7 +386,7 @@ export class JsonlProcess {
     await cleanupOwnedTree(this.#tree, this.#child, {
       ...options,
       onKillReport: (report) => {
-        logger.info("Escalated code agent turn cleanup", {
+        this.#logger.info("Escalated code agent turn cleanup", {
           event: "code_agent.process.turn_cleanup",
           pid: this.#child.pid,
           killed: report.killed,
