@@ -43,6 +43,17 @@ export type AgentLaunchTagSweepReport = {
   durationMs: number;
 };
 
+/** The entries of a report a caller must read as "that process is still there": every reason but
+ * the two that mean it was already gone. A signal or scan that failed counts, so a cleanup path
+ * never reads "gone" out of its own failure (#705). */
+export function straySurvivors(
+  report: AgentLaunchTagSweepReport,
+): AgentLaunchTagSweepReport["unkilled"] {
+  return report.unkilled.filter(
+    (entry) => entry.reason !== "exited" && entry.reason !== "start_time_changed",
+  );
+}
+
 const TERM_GRACE_MS = 300;
 const SETTLE_MS = 300;
 
@@ -95,7 +106,9 @@ export async function sweepAgentLaunchTags(
         report.unkilled.push({ pid: candidate.pid, reason: "signal_failed" });
       }
     }
-    await Bun.sleep(TERM_GRACE_MS);
+    // Nothing to wait for when the table held no candidate (the usual case), so a caller that
+    // awaits the sweep — a Start — does not pay the grace period for an empty scan (#705).
+    if (verified.length) await Bun.sleep(TERM_GRACE_MS);
     const killTargets: typeof verified = [];
     for (const candidate of verified) {
       if (!(await table.alive(candidate.pid))) {

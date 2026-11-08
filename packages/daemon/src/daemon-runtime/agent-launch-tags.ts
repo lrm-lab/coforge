@@ -1,4 +1,7 @@
-import { sweepAgentLaunchTags } from "#src/platform/agent-launch-tag-sweep";
+import {
+  sweepAgentLaunchTags,
+  type AgentLaunchTagSweepReport,
+} from "#src/platform/agent-launch-tag-sweep";
 
 /** The per-process-launch tag token each running Agent launch carries in
  * `COFORGE_AGENT_LAUNCH_TAG` (task #673). The launch path registers its token so sweeps can
@@ -15,6 +18,18 @@ export function sweepAgentLaunchTagStrays(agentId: string, trigger: string): voi
     spareToken: () => agentLaunchTagToken(agentId),
     trigger,
   });
+}
+
+/**
+ * Collects what a launch that could not confirm its teardown left behind, sparing nothing, and
+ * reports it: a Start's evidence that no old process is still there (task #705). The registry
+ * token is deliberately left alone — the launch waiting behind this reclaim already registered
+ * its own, and a later sweep must spare the process it is about to spawn.
+ */
+export async function reclaimAgentLaunchTagStrays(
+  agentId: string,
+): Promise<AgentLaunchTagSweepReport> {
+  return sweepAgentLaunchTags({ agentId, trigger: "reclaim" });
 }
 
 /** Agents whose first launch since this Daemon process started already claimed its startup

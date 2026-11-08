@@ -62,7 +62,7 @@ test("startup spawn failure permits the manager to retry", async () => {
   expect(starts).toBe(2);
 });
 
-test("startup cleanup probe failure blocks a replacement", async () => {
+test("a startup cleanup probe failure leaves the Agent retryable, not stuck stopping", async () => {
   const tree = {
     child: {
       pid: 1,
@@ -96,12 +96,18 @@ test("startup cleanup probe failure blocks a replacement", async () => {
       agentWorkspaceDirectory: workspace,
     }),
   ).rejects.toThrow("process tree did not exit");
+  // The launch died in its own teardown, which used to leave the Agent marked stopping and refuse
+  // every later Start. Now the retry is judged by its own re-clear — nothing of that launch is
+  // left, since the provider returned no session and its process carries no launch tag — so it
+  // runs and fails again for the provider's own reason (task #705).
+  expect(manager.isStopping("agent-1")).toBe(false);
+  expect(manager.stopFailed("agent-1")).toBe(true);
   await expect(
     manager.start("agent-1", runtime, {
       agentWorkspaceDirectory: workspace,
     }),
-  ).rejects.toThrow("stopping");
-  expect(starts).toBe(1);
+  ).rejects.toThrow("process tree did not exit");
+  expect(starts).toBe(2);
 });
 
 test.skipIf(process.platform === "win32")(
@@ -186,7 +192,7 @@ test.skipIf(process.platform === "win32")(
   10_000,
 );
 
-test("failed unexpected-exit tree cleanup closes, and still permits no replacement", async () => {
+test("failed unexpected-exit tree cleanup closes, and the next Start is judged by evidence", async () => {
   const exited = Promise.resolve(17);
   let failures = 0;
   let closes = 0;
@@ -225,13 +231,13 @@ test("failed unexpected-exit tree cleanup closes, and still permits no replaceme
   // read as alive forever (task #704)...
   await waitUntil(() => closes > 0);
   expect(closes).toBe(1);
-  // ...but the process may still be running under it, so nothing may replace it.
-  await expect(
-    manager.start("agent-1", runtime, {
-      agentWorkspaceDirectory: workspace,
-    }),
-  ).rejects.toThrow("active");
-  expect(starts).toBe(1);
+  // ...but the process may still be running under it, so a Start first asks the process table:
+  // nothing carries this Agent's launch tag here, so the replacement proceeds (#705). A tree
+  // that is still there is what refuses the Start, and agent-stop-failure.test.ts covers it.
+  await manager.start("agent-1", runtime, {
+    agentWorkspaceDirectory: workspace,
+  });
+  expect(starts).toBe(2);
   expect(manager.status("agent-1")).toBe("active");
 });
 

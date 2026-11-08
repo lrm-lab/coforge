@@ -6178,7 +6178,7 @@ describe("DaemonRuntime", () => {
       await expect(stopping).rejects.toThrow();
       await expect(launching).rejects.toThrow("process tree did not exit");
       expect(activities).toContain("runtime_error");
-      await expect(harness.runtime.startAgent("agent-a", config)).rejects.toThrow("stopping");
+      await expect(harness.runtime.startAgent("agent-a", config)).rejects.toThrow(/did not exit/);
     } finally {
       await harness.runtime.stop().catch(() => {});
     }
@@ -7386,7 +7386,7 @@ describe("DaemonRuntime", () => {
     }
   });
 
-  test("reports a safe launch failure and blocks retry when startup cleanup is unresolved", async () => {
+  test("reports a safe launch failure while startup cleanup stays unresolved", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const lifecycle: string[] = [];
@@ -7435,10 +7435,10 @@ describe("DaemonRuntime", () => {
       detailKind: "runtime_error",
       level: "error",
       clientSeq: 1,
-      detail: "Agent process cleanup could not be confirmed. Replacement launch is blocked.",
+      detail: "Agent runtime did not exit. Start again to clear it; stop to retry.",
     });
-    await expect(runtime.startAgent("agent-a", config)).rejects.toThrow("stopping");
-    expect(credentialRequests).toBe(1);
+    await expect(runtime.startAgent("agent-a", config)).rejects.toThrow();
+    expect(credentialRequests).toBe(2);
     await runtime.stop().catch(() => undefined);
   });
 
@@ -7494,7 +7494,7 @@ describe("DaemonRuntime", () => {
     expect(activities[1]).toMatchObject({
       level: "error",
       clientSeq: 2,
-      detail: "Agent process cleanup could not be confirmed. Replacement launch is blocked.",
+      detail: "Agent runtime did not exit. Start again to clear it; stop to retry.",
     });
     await runtime.stop().catch(() => undefined);
   });

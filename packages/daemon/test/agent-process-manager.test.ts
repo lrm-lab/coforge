@@ -408,7 +408,7 @@ describe("AgentProcessManager", () => {
     expect(manager.size).toBe(0);
   });
 
-  test("blocks replacement when failed startup cannot confirm process-tree cleanup", async () => {
+  test("a failed startup cleanup is retryable", async () => {
     let starts = 0;
     const manager = new AgentProcessManager(() => ({
       provider: "pi",
@@ -428,8 +428,8 @@ describe("AgentProcessManager", () => {
       manager.start("agent-1", config, {
         agentWorkspaceDirectory: workspace,
       }),
-    ).rejects.toThrow("stopping");
-    expect(starts).toBe(1);
+    ).rejects.toThrow("process tree did not exit");
+    expect(starts).toBe(2);
   });
 
   test("concurrent stops wait for the same cleanup instead of rejecting each other", async () => {
@@ -515,7 +515,7 @@ describe("AgentProcessManager", () => {
       manager.start("agent-1", config, {
         agentWorkspaceDirectory: workspace,
       }),
-    ).rejects.toThrow("stopping");
+    ).rejects.toThrow("tree did not exit");
     expect(starts).toBe(1);
     expect(manager.status("agent-1")).toBe("active");
   });

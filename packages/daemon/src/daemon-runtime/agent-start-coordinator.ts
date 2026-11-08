@@ -119,7 +119,13 @@ export function startAgent(
     ports.agentLaunches.set(agentId, extendedLaunch);
     return extendedLaunch;
   }
-  const activeRuntime = ports.agentProcessManager.runtime(agentId);
+  // A teardown that could not confirm exit keeps its runtime registered, but it is not a runtime
+  // anyone may extend: it falls through to the launch, whose first step re-clears that tree and
+  // refuses with the reason while it lasts (task #705). Without this, the Start the failure's own
+  // message recommends would be rejected as "already active" and never reach that cleanup.
+  const activeRuntime = ports.agentProcessManager.stopFailed(agentId)
+    ? undefined
+    : ports.agentProcessManager.runtime(agentId);
   if (activeRuntime) {
     if (!recovery && !carriesPrompt)
       return Promise.reject(new Error(`Agent runtime is already active: ${agentId}`));

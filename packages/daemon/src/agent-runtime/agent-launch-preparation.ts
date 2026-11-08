@@ -39,8 +39,6 @@ export type AgentLaunchPreparationPorts = Readonly<{
   conversationStore?: (agentId: string) => ConversationSessionStore;
 }>;
 
-type GitHooks = Awaited<ReturnType<typeof resolveGitHookInjectionForLaunch>>;
-
 /**
  * Everything a launch must do before its provider is asked for a session: make the workspace,
  * seed the Memory an Agent starts from, install the skills it was assigned, probe the git hooks
@@ -52,7 +50,7 @@ type GitHooks = Awaited<ReturnType<typeof resolveGitHookInjectionForLaunch>>;
 export async function prepareAgentLaunch(
   input: AgentLaunchInput,
   ports: AgentLaunchPreparationPorts,
-): Promise<{ options: AgentSessionOptions; gitHooks: GitHooks }> {
+): Promise<AgentSessionOptions> {
   const {
     agentId,
     config,
@@ -93,12 +91,13 @@ export async function prepareAgentLaunch(
     }
   }
   // Probed against the same PATH the Agent's own git calls will search.
-  const gitHooks = await ports.resolveGitHooks(
-    agentEnvironment(environment, Bun.env, process.platform, {
-      envVars: config.envVars,
-      provider: config.provider,
-    }).PATH,
-  );
+  const gitHooks: Awaited<ReturnType<typeof resolveGitHookInjectionForLaunch>> =
+    await ports.resolveGitHooks(
+      agentEnvironment(environment, Bun.env, process.platform, {
+        envVars: config.envVars,
+        provider: config.provider,
+      }).PATH,
+    );
   const options: AgentSessionOptions = {
     agentId,
     ...(runtimeId ? { runtimeId } : {}),
@@ -126,7 +125,7 @@ export async function prepareAgentLaunch(
     environment,
     gitHooks,
   };
-  return { options, gitHooks };
+  return options;
 }
 
 /** Asks the provider for the session those options describe, wrapping it for Memory Agents. */

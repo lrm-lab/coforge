@@ -212,15 +212,20 @@ export class AgentOperations {
     const stopping = ports.stopCoordinator
       .stopAgent(agentId)
       .catch((error) => {
-        if (activityLaunch)
+        if (activityLaunch) {
+          // The launch is still this Agent's current one and the process may still be running, so
+          // it must keep admitting Activity: a stop that failed is not a stop in progress
+          // (task #705). The error frame below is the last word until the person retries either.
+          activityLaunch.stopping = false;
           ports.activityPublisher.publish(
             agentId,
             activityLaunch,
             ports.drafts.runtimeError(
               agentId,
-              stopFailureMessage(ports.cleanupUnconfirmed(agentId, error)),
+              stopFailureMessage(ports.cleanupUnconfirmed(agentId, error), error),
             ),
           );
+        }
         throw error;
       })
       .finally(() => {

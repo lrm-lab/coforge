@@ -63,10 +63,14 @@ export async function abandonLaunch(
   try {
     await ports.stopCoordinator.releaseAgentRuntime(agentId);
     if (offlineError) ports.offlineResidency.remember(agentId, offlineError);
-    if (!ports.stops.pendingStop(agentId)) ports.stops.forgetStopping(agentId);
     return error;
   } catch (cleanupError) {
     return cleanupError;
+  } finally {
+    // Whether or not the teardown confirmed exit, the launch gate re-opens: the process manager
+    // keeps the failed teardown, and the next Start re-clears that tree itself (task #705).
+    // Leaving this mark would mute the Agent's Activity and refuse every later launch.
+    if (!ports.stops.pendingStop(agentId)) ports.stops.forgetStopping(agentId);
   }
 }
 

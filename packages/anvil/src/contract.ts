@@ -331,7 +331,9 @@ export class AgentEnvironmentError extends Error {
 }
 
 export class AgentProcessCleanupError extends Error {
-  constructor() {
+  /** The runtime's own words about what would not go, when it had any: the daemon shows them
+   * beside its own sentence so a person sees why the old process is still there (task #705). */
+  constructor(readonly detail?: string) {
     super("code agent process tree did not exit");
     this.name = "AgentProcessCleanupError";
   }
