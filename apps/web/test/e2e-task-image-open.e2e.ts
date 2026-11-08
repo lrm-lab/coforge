@@ -42,7 +42,13 @@ test("an image in a Task popup's discussion opens without a load error", async (
       name: `e2e-task-image-${tail}`,
       displayName: `Task Agent ${tail}`,
       ownerId: DEV_BROWSER_USER.id,
-      runtimeConfig: { runtime: "pi", provider: { kind: "default" }, model: "", modelProvider: "", reasoning: "" },
+      runtimeConfig: {
+        runtime: "pi",
+        provider: { kind: "default" },
+        model: "",
+        modelProvider: "",
+        reasoning: "",
+      },
     },
   });
   const channel = await db.conversation.create({
@@ -69,7 +75,10 @@ test("an image in a Task popup's discussion opens without a load error", async (
       {
         db,
         reader: "agent",
-        dependencies: { publisher: centrifugo, realtime: new CentrifugoConversationRealtime(centrifugo) },
+        dependencies: {
+          publisher: centrifugo,
+          realtime: new CentrifugoConversationRealtime(centrifugo),
+        },
       },
       getMessageRequestIdempotency(),
     );
@@ -101,18 +110,28 @@ test("an image in a Task popup's discussion opens without a load error", async (
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`);
     const thumbnail = `[role="dialog"] button[aria-label="${fileName}"]`;
-    await browser("wait", "--fn", `${pageHydrated} && Boolean(document.querySelector('${thumbnail}'))`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && Boolean(document.querySelector('${thumbnail}'))`,
+    );
     await browser("click", thumbnail);
     await browser("wait", "--fn", `new URL(location.href).searchParams.has("file")`);
     await browser("wait", "1500");
     await browser("screenshot", join(artifacts, "phone.png"));
-    expect(await evaluate<boolean>(`document.body.textContent.includes("could not be loaded")`)).toBe(false);
-    expect(await evaluate<string | null>(`new URL(location.href).searchParams.get("message")`)).toBe(null);
+    expect(
+      await evaluate<boolean>(`document.body.textContent.includes("could not be loaded")`),
+    ).toBe(false);
+    expect(
+      await evaluate<string | null>(`new URL(location.href).searchParams.get("message")`),
+    ).toBe(null);
   } finally {
     await experiments.write(workspaceId, "taskConversations", before === true).catch(() => {});
     await browser("close").catch(() => undefined);
     await db.attachment.deleteMany({ where: { objectKey } }).catch(() => undefined);
-    await db.message.deleteMany({ where: { sender: { agentId: agent.id } } }).catch(() => undefined);
+    await db.message
+      .deleteMany({ where: { sender: { agentId: agent.id } } })
+      .catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);
     await db.$disconnect();
