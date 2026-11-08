@@ -221,6 +221,34 @@ describe("running an upgrade outside this process", () => {
     });
   });
 
+  test("an alternate official feed bypasses admission so the detached job keeps that feed", async () => {
+    const homeDirectory = await home();
+    let admissions = 0;
+    let launchedFeed: string | undefined;
+    const outcome = await runDetachedUpgrade({
+      version: "0.1.18-dev.2",
+      requestId: REQUEST_ID,
+      feedUrl: "https://releases-staging.coforge.cn",
+      homeDirectory,
+      installRoot: join(homeDirectory, "install"),
+      launch: async (_requestId, _version, options) => {
+        launchedFeed = options?.feedUrl;
+      },
+      admit: async () => {
+        admissions++;
+        return true;
+      },
+      readReceipt: async () => receipt("succeeded"),
+      sleep: async () => {},
+      onLine: () => {},
+      onNote: () => {},
+    });
+
+    expect(admissions).toBe(0);
+    expect(launchedFeed).toBe("https://releases-staging.coforge.cn");
+    expect(outcome).toMatchObject({ kind: "settled", result: { status: "succeeded" } });
+  });
+
   test("a Daemon that cannot take the request falls back to launching here", async () => {
     const homeDirectory = await home();
     const launched: [string, string][] = [];

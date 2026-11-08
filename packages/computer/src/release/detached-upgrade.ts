@@ -7,6 +7,7 @@ import {
 } from "@lrm/coforge-daemon";
 import type { UpgradeResult } from "@lrm/coforge-sdk/internal/upgrade-receipt";
 import { UpdateError } from "#src/updater";
+import { COFORGE_RELEASE_FEED_URL } from "#src/release-channel";
 
 /** How long a caller waits for the job's receipt before it stops watching. The job itself
  * continues either way: it is outside this process, which is the point. */
@@ -75,7 +76,13 @@ export async function runDetachedUpgrade(
   // systemd, where this job runs through `systemd-run` in a transient unit outside the supervised
   // unit's cgroup, so stopping that unit cannot end it. Raft has no `systemd-run` and must check.
   note(`Upgrade ${requestId} starts outside this process; its result is kept on this Computer.`);
-  const admitted = options.admit ? await options.admit(requestId, options.version) : false;
+  // The admission RPC only carries the version. If this operation targets another official feed,
+  // keep it local so the detached launcher can carry that feed into `__remote-upgrade`.
+  const feedMatchesBuild =
+    options.feedUrl === undefined ||
+    normalizeReleaseFeedUrl(options.feedUrl) === normalizeReleaseFeedUrl(COFORGE_RELEASE_FEED_URL);
+  const admitted =
+    options.admit && feedMatchesBuild ? await options.admit(requestId, options.version) : false;
   if (!admitted)
     await launch(requestId, options.version, {
       feedUrl: options.feedUrl,
@@ -108,6 +115,10 @@ export async function runDetachedUpgrade(
     }
     await sleep(pollMs);
   }
+}
+
+function normalizeReleaseFeedUrl(value: string): string {
+  return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 /** Prints the job's log as it grows: the upgrade's own progress lines, from every platform that

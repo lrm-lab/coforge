@@ -129,4 +129,29 @@ describe("install and upgrade run outside this process", () => {
     expect(inPlace).toHaveLength(1);
     expect(stdout).toEqual(["CoForge Computer 0.1.17 installed successfully."]);
   });
+
+  test("an upgrade on another official feed passes that feed to the detached launcher", async () => {
+    const { command, launched } = subject({
+      kind: "settled",
+      requestId: REQUEST_ID,
+      result: {
+        schema_version: 1,
+        request_id: REQUEST_ID,
+        operation: "upgrade",
+        status: "succeeded",
+        version: "0.1.18-dev.2",
+      },
+    });
+
+    await command.install("0.1.18-dev.2", {
+      allowDowngrade: false,
+      releaseFeedUrl: "https://releases-staging.coforge.cn",
+    });
+
+    expect(launched).toHaveLength(1);
+    expect(launched[0]).toMatchObject({
+      version: "0.1.18-dev.2",
+      feedUrl: "https://releases-staging.coforge.cn",
+    });
+  });
 });
