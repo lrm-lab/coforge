@@ -68,7 +68,7 @@ CoForge data directory 和 `logs/` 权限必须限制为当前用户，Unix mode
 }
 ```
 
-可选关联字段使用稳定名称：`machine_id`、`workspace_id`、`agent_id`、`launch_id`、`provider`、`delivery_id`、`request_id`、`attempt`、`duration_ms`、`exit_code` 和 `signal`。`launch_id` 是 Daemon 一次 launch 的标识：Agent runtime process 从自己的启动环境（`COFORGE_CURRENT_AGENT_ID`、`COFORGE_AGENT_LAUNCH_ID`）读到它，并带到自己写的每一条 record 上（`packages/anvil/src/jsonl-process.ts`），所以 provider 进程写的 `code_agent.*` 与 daemon 写出的 `launch_id` 是同一个值；早期 provider 专属事件（`codex.*`）仍用 `runtime_id` 承载同一个值。缺失值省略，不写 `null` 占位。异常只保存稳定 `error_code`、安全的 `error_message` 和必要 stack；跨进程原始 envelope 不直接展开进 record。
+可选关联字段使用稳定名称：`machine_id`、`workspace_id`、`agent_id`、`launch_id`、`provider`、`delivery_id`、`request_id`、`attempt`、`call_id`、`duration_ms`、`exit_code` 和 `signal`。`launch_id` 是 Daemon 一次 launch 的标识：Agent runtime process 从自己的启动环境（`COFORGE_CURRENT_AGENT_ID`、`COFORGE_AGENT_LAUNCH_ID`）读到它，并带到自己写的每一条 record 上（`packages/anvil/src/jsonl-process.ts`），所以 provider 进程写的 `code_agent.*` 与 daemon 写出的 `launch_id` 是同一个值。早期 provider 专属事件（`codex.*`，见 `codex/session.ts`）仍用 `runtime_id` 承载同一个值，尚未改名，读日志时按同一字段对待。缺失值省略，不写 `null` 占位。异常只保存稳定 `error_code`、安全的 `error_message` 和必要 stack；跨进程原始 envelope 不直接展开进 record。
 
 event 使用低基数、过去式的 `namespace:action` name，例如 `daemon:started`、`daemon_runtime:restarted`、`agent_runtime:skills_loaded`。动态 id、provider error text 和路径不得拼入 event name。
 
@@ -98,6 +98,8 @@ LogTape levels 统一为 `debug`、`info`、`warning`、`error`、`fatal`。默�
 - Agent runtime process 的原始 stdout 或 stderr。
 
 Agent stdout 是 provider control channel，只能解析，不能复制到日志。Agent stderr 可能包含 provider 输出、路径或 secret，因此不保存原文：`code_agent.process.stderr` 只记录 `pid`、字节数、行数，外加一条经脱敏、上限 512 字符的最新诊断摘要（日志里要能区分"额度用尽"和"没登录"，只留字节数做不到）；provider 归类的稳定 `error_code` 随对应的运行错误事件记录，退出状态在 `code_agent.process.exited`。摘要之外的原话只剩两类，且都不是完整 stderr：`stderr_hint`——runtime 进程结束时取最后的 tail 至多 40 行（每行经 `scrubStderrHint` 脱敏并截到 200 字符，opencode 先滤掉 routine 行），catalog discovery 或 effort 探测失败时只取一行；以及用户可见的错误文本（`stderrExcerpt` 附着到错误消息上，由 daemon 脱敏和截断）。完整 stderr 不落日志。
+
+工具调用按“做了什么”记录，不按内容：每次调用的开始和结束各一行 `agent_runtime:tool_started` / `agent_runtime:tool_finished`，只含 `agent_id`、`launch_id`、`call_id`、`tool`（工具名）、`duration_ms`、`exit_code` 和 `ok`；参数与输出永不进入日志。工具调用很频繁（生产量级约 0.7 KB/次、0.1 ms/次，其中大部分是 sink 的每次 fsync），因此每个 launch 最多记录 `TOOL_CALLS_LOGGED_PER_LAUNCH` 次，超出时只再写一条 `agent_runtime:tool_log_truncated`，避免一个失控的 launch 把当天其余诊断挤出滚动文件。每次调用里的两个字段 `call_id`、`tool` 都是稳定名，见上节制。当前实现里 `silent_turn` 之外的原因不会重复声明 `turn_busy`/`resumable`/`has_open_tool_call`：判定函数只在“turn 忙碌、session 可恢复、没有未结束的工具调用”时返回结果，这些值在每一行上都相同。
 
 所有 sink 先经过 `redactByField()` 的默认敏感字段和 CoForge credential 字段，再经过 JWT、authorization header、signed URL 与 provider key 的 pattern redaction。redaction 是最后一道保护，不替代调用点的数据最小化。截断上限和恶意深层对象使用 LogTape 的 traversal limit；相关测试必须证明 secret 在 active/rotated file、fallback stderr 和 error stack 中都不存在。
 

@@ -69,7 +69,9 @@ export function trackAgentLaunch(
   launch.trajectory = trajectory;
   const progress = new ProviderProgress();
   launch.progress = progress;
-  const toolCalls = new ToolCallLedger();
+  const toolCalls = new ToolCallLedger(undefined, undefined, undefined, {
+    identity: { agentId, launchId: launch.launchId },
+  });
   launch.toolCalls = toolCalls;
   launch.stalled = new StalledTurnTracker(
     stalledTurnNotice(launch, {
