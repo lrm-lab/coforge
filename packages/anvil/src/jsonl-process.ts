@@ -1,9 +1,6 @@
 import type { AgentSessionExit } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
-import { redactCredentials } from "@lrm/coforge-sdk/internal";
 import { JsonlProtocolError, JsonlRequestError } from "./jsonl-error";
-import { scrubRuntimeErrorText } from "./runtime-error-text";
-import { newestLinesWithin, STDERR_EXCERPT_MAX_CHARS } from "./stderr-excerpt";
 import {
   PROCESS_TREE_EXIT_GRACE_MS,
   type OwnedChildProcess,
@@ -13,6 +10,7 @@ import {
 import { LineBuffer } from "./line-buffer";
 import { cleanupOwnedTree, type ProcessTreeCleanupOptions } from "./process-tree-cleanup";
 import { withDeadline } from "./deadline";
+import { StderrCapture } from "./stderr-capture";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", "jsonl"]);
 
@@ -34,7 +32,7 @@ export class JsonlProcess {
   readonly #tree: OwnedProcessTree;
   readonly #pending = new Map<string, PendingRequest>();
   readonly #listeners = new Set<(record: JsonRecord) => void>();
-  readonly #stderrListeners = new Set<(line: string) => void>();
+  readonly #stderr: StderrCapture;
   readonly #stdoutFinished: Promise<void>;
   readonly #outputFinished: Promise<void>;
   readonly #failureListeners = new Set<(error: Error) => void>();
@@ -43,12 +41,6 @@ export class JsonlProcess {
   #state: ProcessState = { type: "open" };
   #cleanupPromise: Promise<void> | undefined;
   readonly #stderrPromise: Promise<void>;
-  /** The last few stderr lines, for the failure log and for attaching to a surfaced error. */
-  readonly #stderrTail: string[] = [];
-  /** Lines the runtime writes as routine narrative on every run; stderr holding only those is
-   * not worth a warning. */
-  readonly #routineStderrLine: ((line: string) => boolean) | undefined;
-  static readonly STDERR_TAIL_LINES = 4;
 
   constructor(
     command: readonly string[],
@@ -58,7 +50,6 @@ export class JsonlProcess {
     onStderrDiagnostic?: (diagnostic: string) => void,
     routineStderrLine?: (line: string) => boolean,
   ) {
-    this.#routineStderrLine = routineStderrLine;
     this.#tree = processTreeOwner.spawn(command, cwd, environment);
     this.#child = this.#tree.child;
     logger.info("Started code agent process", {
@@ -68,7 +59,8 @@ export class JsonlProcess {
       argument_count: Math.max(command.length - 1, 0),
       outcome: "ok",
     });
-    this.#stderrPromise = this.#discardStderr(onStderrDiagnostic);
+    this.#stderr = new StderrCapture(this.#child, routineStderrLine, onStderrDiagnostic);
+    this.#stderrPromise = this.#stderr.finished;
     this.#stdoutFinished = this.#readStdout();
     this.#outputFinished = Promise.all([this.#stdoutFinished, this.#stderrPromise]).then(
       () => undefined,
@@ -77,14 +69,12 @@ export class JsonlProcess {
   }
 
   onStderr(listener: (line: string) => void): () => void {
-    this.#stderrListeners.add(listener);
-    return () => this.#stderrListeners.delete(listener);
+    return this.#stderr.onLine(listener);
   }
 
   /** What stderr has said so far, secrets stripped and capped. Empty until a non-empty line arrives. */
   stderrExcerpt(): string {
-    if (this.#stderrTail.length === 0) return "";
-    return newestLinesWithin(this.#stderrTail.map(scrubRuntimeErrorText), STDERR_EXCERPT_MAX_CHARS);
+    return this.#stderr.excerpt();
   }
 
   onRecord(listener: (record: JsonRecord) => void): () => void {
@@ -283,104 +273,6 @@ export class JsonlProcess {
     for (const listener of this.#listeners) listener(record);
   }
 
-  async #discardStderr(onDiagnostic?: (diagnostic: string) => void): Promise<void> {
-    let bytes = 0;
-    let lines = 0;
-    // The process log keeps the head and the tail of a reported flood, counting the middle away,
-    // so a runtime's wall of diagnostics cannot bury why it started or how it ended.
-    const logHead: string[] = [];
-    const logTail: string[] = [];
-    let loggedLines = 0;
-    const keepForLog = (reported: string) => {
-      if (!reported.trim()) return;
-      loggedLines++;
-      if (logHead.length < STDERR_LOG_HEAD_LINES) {
-        logHead.push(reported);
-        return;
-      }
-      logTail.push(reported);
-      if (logTail.length > STDERR_LOG_TAIL_LINES) logTail.shift();
-    };
-    const decoder = new TextDecoder();
-    let line = "";
-    let oversized = false;
-    let diagnostic = "";
-    let sawDiagnosticStderr = false;
-    const noteLine = (reported: string) => {
-      if (reported.trim() && !this.#routineStderrLine?.(reported)) sawDiagnosticStderr = true;
-    };
-    try {
-      for await (const chunk of this.#child.stderr) {
-        bytes += chunk.byteLength;
-        const text = decoder.decode(chunk, { stream: true });
-        if (onDiagnostic) {
-          diagnostic = (diagnostic + text).slice(-16_384);
-          onDiagnostic(diagnostic);
-        }
-        // Take each newline-separated run with one slice rather than one string append per
-        // character: a line keeps whole characters until it reaches the bound, then is oversized.
-        let start = 0;
-        while (start <= text.length) {
-          const newline = text.indexOf("\n", start);
-          const end = newline < 0 ? text.length : newline;
-          if (end > start) {
-            if (line.length >= STDERR_LINE_BOUND) {
-              oversized = true;
-            } else {
-              const take = boundedTake(text, start, end, STDERR_LINE_BOUND - line.length);
-              line += text.slice(start, start + take);
-              if (start + take < end) oversized = true;
-            }
-          }
-          if (newline < 0) break;
-          lines++;
-          const reported = oversized ? "[oversized stderr diagnostic]" : line.replace(/\r$/, "");
-          if (reported.trim()) {
-            this.#stderrTail.push(reported);
-            if (this.#stderrTail.length > JsonlProcess.STDERR_TAIL_LINES) this.#stderrTail.shift();
-          }
-          noteLine(reported);
-          keepForLog(reported);
-          for (const listener of this.#stderrListeners) listener(reported);
-          line = "";
-          oversized = false;
-          start = newline + 1;
-        }
-      }
-      const tail = decoder.decode();
-      if (tail && onDiagnostic) onDiagnostic((diagnostic + tail).slice(-16_384));
-      if (line) {
-        const reported = oversized ? "[oversized stderr diagnostic]" : line;
-        if (reported.trim()) {
-          this.#stderrTail.push(reported);
-          if (this.#stderrTail.length > JsonlProcess.STDERR_TAIL_LINES) this.#stderrTail.shift();
-        }
-        noteLine(reported);
-        keepForLog(reported);
-        for (const listener of this.#stderrListeners) listener(reported);
-      }
-      const omitted = loggedLines - logHead.length - logTail.length;
-      const logged = [
-        ...logHead,
-        ...(omitted > 0 ? [`[${omitted} stderr lines omitted]`] : []),
-        ...logTail,
-      ];
-      const excerpt = this.stderrExcerpt();
-      if (bytes > 0 && sawDiagnosticStderr)
-        logger.warning("Code agent process wrote diagnostics to stderr", {
-          event: "code_agent.process.stderr",
-          pid: this.#child.pid,
-          bytes,
-          lines,
-          ...(excerpt ? { error_message: excerpt } : {}),
-          ...(logged.length > 0 ? { stderr: redactCredentials(logged.join("\n")) } : {}),
-          outcome: "observed",
-        });
-    } catch {
-      // Process exit can close stderr while it is being drained.
-    }
-  }
-
   /** The process's exit code once `#observeExit` has seen it; `undefined` while it runs. */
   #exitCode: number | undefined;
 
@@ -468,34 +360,13 @@ export class JsonlProcess {
     for (const listener of this.#closeListeners) listener(exit);
     this.#closeListeners.clear();
     this.#failureListeners.clear();
-    this.#stderrListeners.clear();
+    this.#stderr.clearListeners();
   }
 
   #rejectPending(message: string): void {
     for (const pending of this.#pending.values()) pending.reject(new Error(message));
     this.#pending.clear();
   }
-}
-
-/** The UTF-16 length past which a stderr line is reported as oversized. */
-const STDERR_LINE_BOUND = 4096;
-
-/** How many leading reported stderr lines the process log keeps when a runtime floods it. */
-const STDERR_LOG_HEAD_LINES = 100;
-
-/** How many trailing reported stderr lines the process log keeps besides the head. */
-const STDERR_LOG_TAIL_LINES = 50;
-
-/**
- * How many UTF-16 units of `text[start, end)` fit in `room`, never splitting a surrogate pair: a
- * character that starts inside the room is kept whole, as appending character by character would.
- */
-function boundedTake(text: string, start: number, end: number, room: number): number {
-  if (end - start <= room) return end - start;
-  const cut = start + room;
-  const high = text.charCodeAt(cut - 1);
-  const low = text.charCodeAt(cut);
-  return high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff ? room + 1 : room;
 }
 
 function parseRecord(line: string): JsonRecord {
