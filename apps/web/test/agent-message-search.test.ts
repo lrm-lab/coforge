@@ -82,7 +82,10 @@ describe("Agent message search", () => {
       where: {
         workspaceId: "workspace-1",
         conversation: { members: { some: { agentId: "agent-1" } } },
-        body: { search: "'release' & 'plan'" },
+        AND: [
+          { body: { contains: "release", mode: "insensitive" } },
+          { body: { contains: "plan", mode: "insensitive" } },
+        ],
         sender: {
           OR: [{ user: { username: "ada" } }, { agent: { name: "ada" } }],
         },
@@ -123,7 +126,53 @@ describe("Agent message search", () => {
       sort: "recent",
     });
     expect(queries[1]).toMatchObject({
+      where: { AND: [{ body: { contains: "release", mode: "insensitive" } }] },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+  });
+
+  test("a stopword-only query still matches as a substring and skips ts_rank", async () => {
+    const queries: object[] = [];
+    const db = {
+      conversation: { findMany: async () => [] },
+      $queryRaw: async () => [{ query: "" }],
+      message: {
+        findMany: async (input: object) => {
+          queries.push(input);
+          return [];
+        },
+      },
+    } as unknown as PrismaClient;
+    const result = await new PrismaDirectConversationRepository(db).searchMessages(
+      "workspace-1",
+      "agent-1",
+      { query: "the", limit: 5 },
+    );
+    expect(queries[0]).toMatchObject({
+      where: { AND: [{ body: { contains: "the", mode: "insensitive" } }] },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    expect(result).toMatchObject({ messages: [], hasMore: false });
+  });
+
+  test("escapes LIKE wildcards so a term matches literally", async () => {
+    const queries: object[] = [];
+    const db = {
+      conversation: { findMany: async () => [] },
+      $queryRaw: async () => [{ query: "'100%'" }],
+      message: {
+        findMany: async (input: object) => {
+          queries.push(input);
+          return [];
+        },
+      },
+    } as unknown as PrismaClient;
+    await new PrismaDirectConversationRepository(db).searchMessages("workspace-1", "agent-1", {
+      query: "100%_done",
+      sort: "recent",
+    });
+    expect(queries[0]).toMatchObject({
+      where: { AND: [{ body: { contains: "100\\%\\_done", mode: "insensitive" } }] },
     });
   });
 

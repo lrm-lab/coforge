@@ -12,3 +12,8 @@ export function searchTerms(query: string): string[] {
     return true;
   });
 }
+
+/** `ILIKE` treats `\`, `%` and `_` as syntax; escape them so a term matches literally. */
+export function escapeLikeTerm(term: string): string {
+  return term.replace(/[\\%_]/g, (character) => `\\${character}`);
+}

@@ -12,6 +12,7 @@ import {
 import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
 import { directTargets } from "./agent-peer-direct.repositories.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
+import { escapeLikeTerm, searchTerms } from "#src/lib/search-terms";
 import {
   decodeAgentMessageSearchCursor,
   encodeAgentMessageSearchCursor,
@@ -62,14 +63,18 @@ export async function searchAgentMessagePage(
   if ((before && Number.isNaN(before.getTime())) || (after && Number.isNaN(after.getTime())))
     throw new Error("search dates must be ISO datetimes");
   const sender = options.sender?.replace(/^@/, "");
-  const searchQuery = options.query
-    ? (
-        await db.$queryRaw<Array<{ query: string }>>(
-          Prisma.sql`SELECT websearch_to_tsquery(${options.query})::text AS query`,
-        )
-      )[0]?.query
-    : undefined;
-  if (options.query && !searchQuery) return { messages: [], hasMore: false, incomplete: false };
+  const terms = options.query ? searchTerms(options.query) : [];
+  if (options.query && terms.length === 0)
+    return { messages: [], hasMore: false, incomplete: false };
+  // `ts_rank` needs a tsquery; stopword-only terms still match as substrings but rank by recency.
+  const searchQuery =
+    options.query && terms.length > 0 && options.sort !== "recent"
+      ? (
+          await db.$queryRaw<Array<{ query: string }>>(
+            Prisma.sql`SELECT websearch_to_tsquery(${options.query})::text AS query`,
+          )
+        )[0]?.query
+      : undefined;
   const keyset =
     options.cursor !== undefined ? decodeAgentMessageSearchCursor(options.cursor) : undefined;
   const orderBy = (
@@ -97,7 +102,17 @@ export async function searchAgentMessagePage(
         ...(scope ? { id: scope.conversationId } : {}),
       },
       ...(scope && options.target?.includes(":") ? { threadRootId: scope.threadRootId } : {}),
-      ...(searchQuery ? { body: { search: searchQuery } } : {}),
+      // Every term must appear as a literal substring: `ILIKE` is served by the trigram GIN
+      // index `messages_body_idx`, while `body: { search }` made PostgreSQL compute a tsvector
+      // for every message in the Workspace on each call. Relevance still ranks with `ts_rank`
+      // over the matched rows only.
+      ...(terms.length
+        ? {
+            AND: terms.map((term) => ({
+              body: { contains: escapeLikeTerm(term), mode: "insensitive" as const },
+            })),
+          }
+        : {}),
       ...(sender
         ? {
             sender: {
@@ -153,7 +168,7 @@ export async function searchAgentMessagePage(
     ),
     hasMore,
     nextCursor:
-      hasMore && last && searchQuery && options.sort === "recent"
+      hasMore && last && options.query && options.sort === "recent"
         ? encodeAgentMessageSearchCursor({ createdAt: last.createdAt, id: last.id })
         : undefined,
     // The query is a single indexed statement with no scan cap or timeout of its own.

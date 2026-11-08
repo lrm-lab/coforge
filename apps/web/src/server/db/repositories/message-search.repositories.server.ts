@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { readableChannelSql } from "#src/server/conversations/channel-read-access.server";
+import { escapeLikeTerm } from "#src/lib/search-terms";
 
 export type MessageSearchSort = "relevance" | "recent";
 
@@ -26,7 +27,7 @@ export type MessageSearchCriteria = {
 
 /** `ILIKE` treats `\`, `%` and `_` as syntax; escape them so every term matches literally. */
 function containsPattern(term: string): string {
-  return `%${term.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+  return `%${escapeLikeTerm(term)}%`;
 }
 
 /**
