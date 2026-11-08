@@ -71,6 +71,9 @@ export const conversationMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
  * Driven by the thread's messages past Done — a handful per thread — each checked against the
  * mention primary key `(messageId, memberId)`; driving from the member's mentions instead would
  * probe `messages` once per mention in the whole conversation for every thread item.
+ * `OFFSET 0` is an optimization fence: without it PostgreSQL pulls the probe up into a join that
+ * scans the member's mentions in the conversation once per thread message (production: ~940k
+ * buffer hits, ~1.2 s for one page; fenced, ~16 ms).
  */
 const threadMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
   SELECT COALESCE(BOOL_OR(${unreadReplySql}), FALSE) AS "unread",
@@ -82,6 +85,7 @@ const threadMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
     AND EXISTS (
       SELECT 1 FROM "message_mentions" mm
       WHERE mm."messageId" = m."id" AND mm."memberId" = threads."memberId"
+      OFFSET 0
     )
 ) mention`;
 
