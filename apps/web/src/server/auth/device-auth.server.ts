@@ -42,9 +42,12 @@ export interface DeviceAuthorizationStore {
   findByDeviceCodeHash(hash: string): Promise<DeviceAuthorizationRecord | null>;
   findByUserCodeHash(hash: string): Promise<DeviceAuthorizationRecord | null>;
   markPolled(id: string, at: Date): Promise<void>;
-  approve(id: string, userId: string, at: Date): Promise<void>;
-  deny(id: string): Promise<void>;
-  consume(id: string): Promise<void>;
+  /** Each conditional write answers whether it actually transitioned the row, so a caller that
+   * lost a race learns it instead of assuming its write landed. `approve`/`deny` also refuse a
+   * grant that has expired by `at`. */
+  approve(id: string, userId: string, at: Date): Promise<boolean>;
+  deny(id: string, at: Date): Promise<boolean>;
+  consume(id: string): Promise<boolean>;
 }
 
 /** Both secrets are looked up by digest, never stored in the clear: the device code is a bearer,
@@ -138,9 +141,11 @@ export async function pollDeviceToken(input: {
   if (record.status !== "approved" || !record.userId)
     return { status: "error", error: "authorization_pending" };
 
-  // Consume before minting: a device code is single-use, and marking it first means a concurrent
-  // second poll cannot also be handed a token.
-  await input.store.consume(record.id);
+  // Consume before minting: a device code is single-use. The conditional write is what enforces
+  // it - two polls can both read `approved`, and only the one whose consume actually transitions
+  // the row may be handed a token. The loser sees the same answer a replayed code gets.
+  const consumed = await input.store.consume(record.id);
+  if (!consumed) return { status: "error", error: "invalid_grant" };
   const { token, expiresInSeconds } = await signComputerAccessToken(
     record.userId,
     input.environment,
@@ -177,7 +182,10 @@ export async function approveUserCode(input: {
 }): Promise<UserCodeLookup> {
   const lookup = await lookupUserCode(input);
   if (!lookup.found) return lookup;
-  await input.store.approve(lookup.id, input.userId, new Date(input.now?.() ?? Date.now()));
+  const at = new Date(input.now?.() ?? Date.now());
+  const approved = await input.store.approve(lookup.id, input.userId, at);
+  // The grant expired or settled between the lookup and the write; report what it is now.
+  if (!approved) return lookupUserCode(input);
   return lookup;
 }
 
@@ -188,6 +196,8 @@ export async function denyUserCode(input: {
 }): Promise<UserCodeLookup> {
   const lookup = await lookupUserCode(input);
   if (!lookup.found) return lookup;
-  await input.store.deny(lookup.id);
+  const at = new Date(input.now?.() ?? Date.now());
+  const denied = await input.store.deny(lookup.id, at);
+  if (!denied) return lookupUserCode(input);
   return lookup;
 }

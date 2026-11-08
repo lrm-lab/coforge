@@ -37,20 +37,23 @@ export class PrismaDeviceAuthorizationStore implements DeviceAuthorizationStore 
     await this.db.deviceAuthorization.update({ where: { id }, data: { lastPolledAt: at } });
   }
 
-  async approve(id: string, userId: string, at: Date): Promise<void> {
-    // Conditional on the row still being pending, so two browser tabs racing on the same code
-    // cannot rebind an already-approved grant to a second user.
-    await this.db.deviceAuthorization.updateMany({
-      where: { id, status: "pending" },
+  async approve(id: string, userId: string, at: Date): Promise<boolean> {
+    // Conditional on the row still being pending and unexpired, so two browser tabs racing on
+    // the same code cannot rebind an already-approved grant to a second user, and a grant that
+    // expired between the lookup and this write is not approved after the fact.
+    const { count } = await this.db.deviceAuthorization.updateMany({
+      where: { id, status: "pending", expiresAt: { gt: at } },
       data: { status: "approved", userId, approvedAt: at },
     });
+    return count === 1;
   }
 
-  async deny(id: string): Promise<void> {
-    await this.db.deviceAuthorization.updateMany({
-      where: { id, status: "pending" },
+  async deny(id: string, at: Date): Promise<boolean> {
+    const { count } = await this.db.deviceAuthorization.updateMany({
+      where: { id, status: "pending", expiresAt: { gt: at } },
       data: { status: "denied" },
     });
+    return count === 1;
   }
 
   /**
@@ -65,10 +68,11 @@ export class PrismaDeviceAuthorizationStore implements DeviceAuthorizationStore 
     return grant !== null;
   }
 
-  async consume(id: string): Promise<void> {
-    await this.db.deviceAuthorization.updateMany({
+  async consume(id: string): Promise<boolean> {
+    const { count } = await this.db.deviceAuthorization.updateMany({
       where: { id, status: "approved" },
       data: { status: "consumed" },
     });
+    return count === 1;
   }
 }

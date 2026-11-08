@@ -35,29 +35,41 @@ function memoryStore() {
       return row;
     },
     async findByDeviceCodeHash(hash) {
-      return [...rows.values()].find((row) => row.deviceHash === hash) ?? null;
+      const row = [...rows.values()].find((entry) => entry.deviceHash === hash);
+      return row ? { ...row } : null;
     },
     async findByUserCodeHash(hash) {
-      return [...rows.values()].find((row) => row.userHash === hash) ?? null;
+      const row = [...rows.values()].find((entry) => entry.userHash === hash);
+      return row ? { ...row } : null;
     },
     async markPolled(id, at) {
       const row = rows.get(id);
       if (row) row.lastPolledAt = at;
     },
-    async approve(id, userId) {
+    async approve(id, userId, at) {
       const row = rows.get(id);
-      if (row?.status === "pending") {
+      if (row?.status === "pending" && row.expiresAt.getTime() > at.getTime()) {
         row.status = "approved";
         row.userId = userId;
+        return true;
       }
+      return false;
     },
-    async deny(id) {
+    async deny(id, at) {
       const row = rows.get(id);
-      if (row?.status === "pending") row.status = "denied";
+      if (row?.status === "pending" && row.expiresAt.getTime() > at.getTime()) {
+        row.status = "denied";
+        return true;
+      }
+      return false;
     },
     async consume(id) {
       const row = rows.get(id);
-      if (row?.status === "approved") row.status = "consumed";
+      if (row?.status === "approved") {
+        row.status = "consumed";
+        return true;
+      }
+      return false;
     },
   };
   return store;
@@ -193,6 +205,61 @@ test("a second approval cannot rebind an approved grant to another user", async 
   if (authorized.status !== "authorized") throw new Error("expected a token");
   const [, payload] = authorized.accessToken.split(".");
   expect(JSON.parse(atob(payload!)).sub).toBe(USER);
+});
+
+test("two polls racing on an approved grant mint exactly one token", async () => {
+  const store = memoryStore();
+  const start = Date.parse("2026-09-08T00:00:00Z");
+  const grant = await authorizeDevice({ store, origin: "https://example.test", now: () => start });
+  await approveUserCode({
+    store,
+    userCode: grant.userCode,
+    userId: USER,
+    now: () => start + 1000,
+  });
+
+  // Both requests read the grant as approved before either consumes it - the interleaving two
+  // concurrent token-endpoint polls actually produce. Only the poll whose conditional consume
+  // wins may be handed a token; the other learns the code is spent.
+  const now = () => start + 30_000;
+  const [first, second] = await Promise.all([
+    pollDeviceToken({ store, deviceCode: grant.deviceCode, now, environment }),
+    pollDeviceToken({ store, deviceCode: grant.deviceCode, now, environment }),
+  ]);
+
+  const outcomes = [first, second];
+  expect(outcomes.filter((outcome) => outcome.status === "authorized")).toHaveLength(1);
+  expect(outcomes.filter((outcome) => outcome.status === "error")).toEqual([
+    { status: "error", error: "invalid_grant" },
+  ]);
+});
+
+test("approving a grant that expires between lookup and write is refused", async () => {
+  const store = memoryStore();
+  const start = Date.parse("2026-09-08T00:00:00Z");
+  const grant = await authorizeDevice({ store, origin: "https://example.test", now: () => start });
+
+  // The lookup sees an unexpired pending grant; by the time the conditional write lands the
+  // grant has expired, so it must not become approved.
+  let calls = 0;
+  const now = () => (calls++ === 0 ? start + 1000 : start + 16 * 60 * 1000);
+  expect(await approveUserCode({ store, userCode: grant.userCode, userId: USER, now })).toEqual({
+    found: false,
+    reason: "expired",
+  });
+});
+
+test("denying a grant that expires between lookup and write is refused", async () => {
+  const store = memoryStore();
+  const start = Date.parse("2026-09-08T00:00:00Z");
+  const grant = await authorizeDevice({ store, origin: "https://example.test", now: () => start });
+
+  let calls = 0;
+  const now = () => (calls++ === 0 ? start + 1000 : start + 16 * 60 * 1000);
+  expect(await denyUserCode({ store, userCode: grant.userCode, now })).toEqual({
+    found: false,
+    reason: "expired",
+  });
 });
 
 test("a code is accepted however it was typed, and an unknown one is merely unknown", async () => {
