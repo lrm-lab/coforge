@@ -375,6 +375,7 @@ export function AgentMigrationSection({
         </Button>
       )}
       <ModalOverlay
+        centered
         isOpen={confirmCancel}
         onOpenChange={(next: boolean) => {
           if (canceling) return;

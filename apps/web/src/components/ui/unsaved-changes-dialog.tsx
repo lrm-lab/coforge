@@ -30,6 +30,7 @@ export function UnsavedChangesDialog({
 }) {
   return (
     <ModalOverlay
+      centered
       isOpen={open}
       isDismissable={!saving}
       onOpenChange={(next) => {

@@ -97,6 +97,7 @@ export function RemoveMemberDialog({
 
   return (
     <ModalOverlay
+      centered
       isOpen
       isDismissable={!busy}
       onOpenChange={(next) => {
