@@ -171,6 +171,12 @@ export const COMPUTER_CLI_COMMANDS = [
 export type ComputerCliCommand = (typeof COMPUTER_CLI_COMMANDS)[number];
 export * from "./computer-agent-messages";
 export {
+  decodeComputerListRequest,
+  decodeComputerListResponse,
+  encodeComputerListRequest,
+  encodeComputerListResponse,
+} from "./computer-roster-codec";
+export {
   decodeDaemonRuntimeCommandCodeEffortReadRequest,
   decodeDaemonRuntimeCommandCodeEffortReadResponse,
   encodeDaemonRuntimeCommandCodeEffortReadRequest,
