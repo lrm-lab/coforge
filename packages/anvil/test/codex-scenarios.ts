@@ -14,11 +14,13 @@ export function scenarioProvider(...args: string[]): CodexProvider {
   });
 }
 
+/** Waits for one event of `type`; `attempts` of 5 ms each, for a scenario that holds a reply. */
 export async function waitForEvent(
-  events: AgentRuntimeEvent[],
+  events: readonly AgentRuntimeEvent[],
   type: AgentRuntimeEvent["type"],
+  attempts = 200,
 ): Promise<void> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (events.some((event) => event.type === type)) return;
     await Bun.sleep(5);
   }

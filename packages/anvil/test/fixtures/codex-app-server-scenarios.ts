@@ -16,10 +16,19 @@ const archived = new Set<string>();
 const seen = new Set<string>();
 
 let turn = 0;
+/** The input of the turn the app-server is running, for interrupt behaviour the turn drives. */
+let turnInput = "";
 
 for await (const line of readLines(Bun.stdin.stream())) {
   const text = line.replace(/\r?\n$/, "");
-  if (text) handle(JSON.parse(text) as Message);
+  // Not awaited: a scenario that holds a reply open must keep reading the next request. A
+  // failure inside `handle` still has to end the run, or the test waits out its budget instead
+  // of reporting what broke.
+  if (text)
+    void handle(JSON.parse(text) as Message).catch((error: unknown) => {
+      console.error(error);
+      process.exit(1);
+    });
 }
 
 interface Message {
@@ -29,7 +38,7 @@ interface Message {
   error?: { code?: number };
 }
 
-function handle(message: Message): void {
+async function handle(message: Message): Promise<void> {
   const { id, method } = message;
   if (logPath && method) appendFileSync(logPath, `${JSON.stringify(message)}\n`);
   if (method === "initialize" && id !== undefined) {
@@ -127,6 +136,12 @@ function handle(message: Message): void {
   if (method === "turn/start" && id !== undefined) {
     turn += 1;
     const turnId = `turn-${turn}`;
+    turnInput = textInput(message.params) ?? "";
+    if (turnInput === "interrupt-while-starting") {
+      // Answer `turn/start` only after a long beat, so the interrupt has arrived while the client
+      // still waits for this reply and does not yet know the turn id (task #703).
+      await Bun.sleep(1_500);
+    }
     write({ id, result: { turn: { id: turnId, status: "inProgress" } } });
     write({
       method: "turn/started",
@@ -147,6 +162,18 @@ function handle(message: Message): void {
       return;
     }
     turnScenario(textInput(message.params), turnId);
+    return;
+  }
+  if (method === "turn/interrupt" && id !== undefined) {
+    if (turnInput === "interrupt-after-completion") {
+      // The turn completed on its own while the interrupt was in flight, so there is nothing to
+      // interrupt: codex answers with an error and sends no further `turn/completed` (task #703).
+      completeTurn(`turn-${turn}`);
+      write({ id, error: { code: -32600, message: "no active turn to interrupt" } });
+      return;
+    }
+    write({ id, result: {} });
+    completeTurn(`turn-${turn}`, "interrupted");
     return;
   }
   if (id === 7 && message.error?.code === -32601) completeTurn(`turn-${turn}`);
@@ -182,6 +209,11 @@ function turnScenario(input: string | undefined, turnId: string): void {
     notify("item/completed", { turnId, item });
   }
   if (input === "text") say("Done");
+  if (input === "interrupt-after-completion" || input === "interrupt-while-starting") {
+    // A turn still running when the interrupt arrives: these scenarios end it themselves.
+    say("Working");
+    return;
+  }
   if (input === "blank-final") say("  \n");
   if (input === "system-error" || input === "system-error-bare") {
     const status =

@@ -21,6 +21,7 @@ import { CodexTurnSignals } from "./turn-signals";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
   RUNTIME_PROVIDER,
+  thrownMessage,
   utf8Encoder,
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
@@ -45,6 +46,8 @@ export class CodexAgentSession implements AgentSession {
   readonly #subagentThreads: CodexSubagentThreads;
   readonly #signals: CodexTurnSignals;
   #state: CodexSessionState = { type: "idle" };
+  /** An interrupt that arrived while `turn/start` was in flight, sent once the turn id is known. */
+  #interruptWhileStarting = false;
   #lastCompletedTurnId: string | undefined;
   #starting: Promise<void> | undefined;
   #identity: AgentSessionIdentity;
@@ -125,19 +128,58 @@ export class CodexAgentSession implements AgentSession {
         },
       });
     } catch (error) {
-      if (!this.#isDisposed()) this.#state = { type: "idle" };
+      if (!this.#isDisposed()) this.#beginIdle();
       throw error;
     }
     const turn = asRecord(asRecord(response.result)?.turn);
-    if (typeof turn?.id !== "string") {
-      if (!this.#isDisposed()) this.#state = { type: "idle" };
+    const turnId = turn?.id;
+    if (typeof turnId !== "string") {
+      if (!this.#isDisposed()) this.#beginIdle();
       throw new Error("Codex did not create a turn");
     }
     this.#setIdentity("resumable");
+    // A disposed session keeps its state, and an interrupt has nothing to act on.
     if (this.#state.type !== "starting") return;
-    this.#state = this.#state.completedTurnIds.has(turn.id)
-      ? { type: "idle" }
-      : { type: "running", turnId: turn.id };
+    // A turn that completed before its `turn/start` reply was read is already over.
+    if (this.#state.completedTurnIds.has(turnId)) {
+      this.#beginIdle();
+      return;
+    }
+    this.#state = { type: "running", turnId };
+    if (this.#interruptWhileStarting) {
+      this.#interruptWhileStarting = false;
+      // The caller of `interrupt()` has already returned, so a failure here has no caller to
+      // reach: say it in the log and leave the turn running for the daemon's stop to retry. A
+      // turn that ended anyway is what the interrupt asked for, so it is not a failure.
+      // Not awaited: `sendMessage` resolves at turn start, and an app-server that never answers
+      // `turn/interrupt` must not hold the send (and every notice queued behind it) open.
+      void this.interrupt().catch((error: unknown) => {
+        if (!this.#isLiveTurn(turnId)) return;
+        logger.warning("Codex could not interrupt the turn it had just started", {
+          event: "codex.interrupt.failed",
+          agent_id: this.#agentId,
+          runtime_id: this.#runtimeId,
+          error_message: scrubError(thrownMessage(error)),
+          outcome: "error",
+        });
+      });
+    }
+  }
+
+  /** Whether this turn is still the one the session is running or interrupting. */
+  #isLiveTurn(turnId: string): boolean {
+    const state = this.#state;
+    return (
+      !this.#isDisposed() &&
+      (state.type === "running" || state.type === "interrupting") &&
+      state.turnId === turnId
+    );
+  }
+
+  /** Back to idle from anywhere but disposal, forgetting an interrupt that had no turn to act on. */
+  #beginIdle(): void {
+    this.#interruptWhileStarting = false;
+    this.#state = { type: "idle" };
   }
 
   async notify(notice: string): Promise<void> {
@@ -216,6 +258,13 @@ export class CodexAgentSession implements AgentSession {
   }
 
   async interrupt(): Promise<void> {
+    if (this.#state.type === "starting") {
+      // The turn id is not known until `turn/start` answers, so the interrupt cannot be sent yet.
+      // Remember it and send it the moment the turn begins; dropping it would let the turn run on
+      // against the user's stop (task #703).
+      this.#interruptWhileStarting = true;
+      return;
+    }
     if (this.#state.type !== "running") return;
     const turnId = this.#state.turnId;
     this.#state = { type: "interrupting", turnId };
@@ -225,7 +274,11 @@ export class CodexAgentSession implements AgentSession {
         params: { threadId: this.#threadId, turnId },
       });
     } catch (error) {
-      if (!this.#isDisposed()) this.#state = { type: "running", turnId };
+      // Roll back only this turn's own interrupting: the turn may have completed while the
+      // request was in flight, and a session that is idle then must stay idle (task #703).
+      const state = this.#state;
+      if (!this.#isDisposed() && state.type === "interrupting" && state.turnId === turnId)
+        this.#state = { type: "running", turnId };
       throw error;
     }
   }
