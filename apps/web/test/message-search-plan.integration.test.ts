@@ -73,21 +73,26 @@ test.skipIf(!connectionString)(
 /**
  * A relevance search scores every candidate with `pg_trgm`, which costs ~0.2ms per row: an
  * unbounded rank over a common term in a large conversation took ~400ms on production. The
- * query therefore ranks only a bounded window of the newest matches, so the plan must read the
- * candidates through a subquery before sorting them.
+ * query therefore ranks only a bounded pool — the newest `MESSAGE_SEARCH_RELEVANCE_WINDOW`
+ * matches plus any whole-phrase hits — so its plan carries a `Limit` for the window bound on
+ * top of the page's own `Limit`, where an unbounded rank has only the page's.
  */
 test.skipIf(!connectionString)(
-  "a relevance message search ranks a bounded window of the newest matches",
+  "a relevance message search ranks a bounded pool of matches",
   async () => {
     const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
     try {
       await db.$transaction(async (tx) => {
         await tx.$executeRaw`SET LOCAL enable_seqscan = off`;
-        let plan: [{ Plan: PlanNode }] | undefined;
+        // Plans each of the search's own queries instead of running them: relevance pages the
+        // ranked pool first, then the match tail, so the first plan is the one that must read
+        // candidates through the bounded subquery.
+        const plans: { Plan: PlanNode }[][] = [];
         const explain = {
           $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
-            [{ "QUERY PLAN": plan }] = await tx.$queryRaw<[{ "QUERY PLAN": [{ Plan: PlanNode }] }]>`
+            const rows = await tx.$queryRaw<{ "QUERY PLAN": { Plan: PlanNode }[] }[]>`
               EXPLAIN (FORMAT JSON) ${Prisma.sql(strings, ...values)}`;
+            plans.push(rows[0]!["QUERY PLAN"]);
             return [];
           },
         } as unknown as PrismaClient;
@@ -100,8 +105,9 @@ test.skipIf(!connectionString)(
           limit: 20,
           offset: 0,
         });
-        const nodes = planNodes(plan![0].Plan);
-        expect(nodes.map((node) => node["Node Type"])).toContain("Subquery Scan");
+        const nodes = planNodes(plans[0]![0].Plan);
+        const limits = nodes.filter((node) => node["Node Type"] === "Limit");
+        expect(limits.length).toBeGreaterThanOrEqual(2);
       });
     } finally {
       await db.$disconnect();
