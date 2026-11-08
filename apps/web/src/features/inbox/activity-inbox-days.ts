@@ -54,8 +54,8 @@ function dayName(date: Temporal.PlainDate, today: Temporal.PlainDate) {
   if (ago <= 0) return m.activity_inbox_today();
   if (ago === 1) return m.activity_inbox_yesterday();
   return dateTimeFormat(getLocale(), {
-    // The year only where it is not this one.
-    ...(date.year === today.year ? {} : { year: "numeric" }),
+    // The weekday within this year, as Slack heads its days; the year only where it is not this one.
+    ...(date.year === today.year ? { weekday: "long" } : { year: "numeric" }),
     month: "short",
     day: "numeric",
     timeZone: "UTC",

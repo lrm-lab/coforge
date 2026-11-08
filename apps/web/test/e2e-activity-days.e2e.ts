@@ -124,8 +124,8 @@ test("the list is split by day", async () => {
       await browser("wait", "--fn", `${headings}.length > 0`);
       const names = await evaluate<string[]>(headings);
       expect(names).toContain("Today");
-      // Three days back is a date, not a word.
-      expect(names.some((text) => /^[A-Z][a-z]{2} \d{1,2}$/.test(text))).toBe(true);
+      // Three days back is its weekday and date, not a word.
+      expect(names.some((text) => /^[A-Z][a-z]+day, [A-Z][a-z]{2} \d{1,2}$/.test(text))).toBe(true);
       // Under a day's heading a row gives the time of day, never "yesterday" or "3d ago".
       const times = await evaluate<string[]>(
         `[...document.querySelectorAll("[data-activity-list] ol time")].map((t) => t.textContent.trim())`,
