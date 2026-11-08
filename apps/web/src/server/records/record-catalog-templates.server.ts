@@ -291,7 +291,7 @@ export function recordTemplates(db: Db) {
     });
     if (!report?.sourceTemplate) throw new AppError("NOT_FOUND");
     if (report.sourceTemplate.authorId !== input.userId) throw new AppError("ACCESS_DENIED");
-    if (report.status !== "submitted" && report.status !== "shared") {
+    if (report.status !== "submitted") {
       throw new AppError("INVALID_INPUT");
     }
     const { startPersonalKeyPointExtraction } = await import("./weekly-report-key-points.server");

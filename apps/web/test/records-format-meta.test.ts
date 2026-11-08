@@ -17,12 +17,13 @@ test("updateFormatReportMeta renames the live format without rebinding its ISO w
         title: "LRM周报",
         settingsId: "settings-1",
         cycleId: "cycle-38",
+        updatedAt: new Date("2026-09-18T04:00:00.000Z"),
         cycle: { id: "cycle-38", year: 2026, week: 38 },
         submissions: [],
       }),
       update: async (query: { data: Record<string, unknown> }) => {
         reportUpdates.push(query.data);
-        return { id: "format-1" };
+        return { id: "format-1", updatedAt: new Date("2026-09-18T05:00:00.000Z") };
       },
     },
     weeklyReportTemplate: {
@@ -45,6 +46,7 @@ test("updateFormatReportMeta renames the live format without rebinding its ISO w
     title: "产品周报",
     year: 2026,
     week: 38,
+    updatedAt: "2026-09-18T05:00:00.000Z",
   });
   expect(reportUpdates[0]).toEqual({ title: "产品周报" });
   expect(settingsUpdates[0]).toMatchObject({ name: "产品周报" });

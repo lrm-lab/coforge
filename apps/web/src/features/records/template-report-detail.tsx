@@ -5,7 +5,7 @@ import { DotsHorizontal, MessageChatCircle as Message, Trash01 as Trash } from "
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { isAppError } from "#src/lib/app-error";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { useAppToast } from "#src/components/ui/toast";
 import { TeamKeyPointSection } from "./team-key-point-section";
@@ -16,6 +16,7 @@ import {
   clearReportDraft,
   waitForReportSave,
   writeReportDraft,
+  writeReportVersion,
 } from "./report-draft-cache";
 import {
   deleteOverviewReport,
@@ -137,6 +138,10 @@ export function TemplateReportDetail({
   }, [report.canSendAssignments, report.id]);
 
   useEffect(() => {
+    writeReportVersion(report.id, report.updatedAt);
+  }, [report.id, report.updatedAt]);
+
+  useEffect(() => {
     if (isOverview) {
       setFormatEditing(false);
       return;
@@ -152,13 +157,11 @@ export function TemplateReportDetail({
 
   async function persist(
     next: ReportContent,
-    status?: "draft" | "submitted" | "shared",
     reportId = reportIdRef.current,
     options?: { askToSend?: boolean },
   ) {
     setSaving(true);
     const { normalized, saved } = saveDraft(reportId, next, {
-      status,
       askToSend: options?.askToSend,
     });
     try {
@@ -178,6 +181,15 @@ export function TemplateReportDetail({
           await refresh.records();
         }
       }
+    } catch (error) {
+      // The row moved under this editor: reload so the next guarded save
+      // carries the fresh version. The draft stays.
+      if (isAppErrorCode(error, "CONFLICT") && reportId === reportIdRef.current) {
+        toast.error(m.records_report_conflict_reloaded());
+        await refresh.record();
+        return;
+      }
+      throw error;
     } finally {
       if (reportId === reportIdRef.current) setSaving(false);
     }
@@ -198,19 +210,20 @@ export function TemplateReportDetail({
       }
       setSaving(true);
       try {
-        await saveFormatMeta({
+        const meta = await saveFormatMeta({
           data: {
             reportId: reportIdRef.current,
             title: nextTitle,
           },
         });
+        writeReportVersion(reportIdRef.current, meta.updatedAt);
         await refresh.records();
       } finally {
         setSaving(false);
       }
     }
     if (dirty) {
-      await persist(contentRef.current, undefined, undefined, { askToSend: true });
+      await persist(contentRef.current, undefined, { askToSend: true });
     }
   }
 

@@ -169,7 +169,8 @@ export const saveWeeklyReportContent = createServerFn({ method: "POST" })
     z.object({
       reportId: z.uuid(),
       content: reportContentSchema,
-      status: z.enum(["draft", "submitted", "shared"]).optional(),
+      status: z.literal("submitted").optional(),
+      baseUpdatedAt: z.iso.datetime(),
       askToSend: z.boolean().optional(),
     }),
   )
@@ -180,6 +181,7 @@ export const saveWeeklyReportContent = createServerFn({ method: "POST" })
       reportId: data.reportId,
       content: normalizeReportContent(data.content),
       status: data.status,
+      baseUpdatedAt: data.baseUpdatedAt,
       askToSend: data.askToSend,
     });
   });

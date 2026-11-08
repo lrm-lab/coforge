@@ -21,7 +21,7 @@ import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-
 export async function updateFormatReportMeta(
   db: PrismaClient,
   input: { workspaceId: string; userId: string; reportId: string; title: string },
-): Promise<{ id: string; title: string; year: number; week: number }> {
+): Promise<{ id: string; title: string; year: number; week: number; updatedAt: string }> {
   // Only the author's live format can be renamed; a sent overview with member submissions is
   // historical and must keep its title.
   await requireMembership(db, input.workspaceId, input.userId);
@@ -35,6 +35,7 @@ export async function updateFormatReportMeta(
       kind: true,
       title: true,
       settingsId: true,
+      updatedAt: true,
       cycle: { select: { year: true, week: true } },
       submissions: { where: { kind: "member" }, select: { id: true }, take: 1 },
     },
@@ -43,8 +44,13 @@ export async function updateFormatReportMeta(
   if (report.authorId !== input.userId || report.submissions.length > 0) {
     throw new AppError("ACCESS_DENIED");
   }
+  let updatedAt = report.updatedAt;
   if (title !== report.title) {
-    await db.weeklyReport.update({ where: { id: report.id }, data: { title } });
+    const updated = await db.weeklyReport.update({
+      where: { id: report.id },
+      data: { title },
+    });
+    updatedAt = updated.updatedAt;
     if (report.settingsId) {
       await db.weeklyReportTemplate.update({
         where: { id: report.settingsId },
@@ -52,7 +58,13 @@ export async function updateFormatReportMeta(
       });
     }
   }
-  return { id: report.id, title, year: report.cycle.year, week: report.cycle.week };
+  return {
+    id: report.id,
+    title,
+    year: report.cycle.year,
+    week: report.cycle.week,
+    updatedAt: updatedAt.toISOString(),
+  };
 }
 
 type Db = PrismaClient | Prisma.TransactionClient;

@@ -83,6 +83,7 @@
   "records_report_confirm_send_title": "Confirm send?",
   "records_report_confirm_send_body": "Send the weekly report template to the recipient list? Members will receive the latest weekly template.",
   "records_report_shared_toast": "Weekly report shared with members",
+  "records_report_conflict_reloaded": "This report changed somewhere else and was reloaded. Your edits are kept.",
   "records_report_resend": "Send Again",
   "records_report_send_succeeded": "Sent",
   "records_report_sent_badge": "Sent",

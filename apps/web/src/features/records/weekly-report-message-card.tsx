@@ -24,6 +24,7 @@ import {
   readAppliedSuggestionIds,
   writeAppliedSuggestionIds,
 } from "./weekly-report-assistant-session";
+import { writeReportVersion } from "./report-draft-cache";
 import { useRecordRefresh } from "./use-record-refresh";
 
 export type WeeklyReportMessageSuggestion = Extract<
@@ -77,6 +78,7 @@ export function WeeklyReportMessageCard(props: {
           sourceMessageId: props.messageId,
         },
       });
+      writeReportVersion(suggestion.reportId, written.updatedAt);
       setRestoreView(written.bodyRestoreView);
       setApplied(true);
       writeAppliedSuggestionIds(cardKey, [props.messageId]);
@@ -94,6 +96,7 @@ export function WeeklyReportMessageCard(props: {
     setError(null);
     try {
       const result = await switchBody({ data: { reportId: suggestion.reportId } });
+      writeReportVersion(suggestion.reportId, result.updatedAt);
       setRestoreView(result.bodyRestoreView);
       await refresh.records();
     } catch {

@@ -30,9 +30,9 @@ model WeeklyReport {
   /// member | template
   kind             String
   title            String
-  /// draft | submitted | shared
+  /// draft | submitted
   status           String                 @default("draft")
-  /// Author removed this row from「我的周报」. Submitted and shared rows stay
+  /// Author removed this row from「我的周报」. Submitted rows stay
   /// so the Leader parent still shows the copy that was already sent.
   hiddenFromAuthor Boolean                @default(false)
   content          Json

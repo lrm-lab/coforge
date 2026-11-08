@@ -4,6 +4,8 @@ import { normalizeReportContent } from "./records-content";
 /** In-session drafts so switching records does not revive stale loader bodies. */
 const drafts = new Map<string, ReportContent>();
 const pendingSaves = new Map<string, Promise<void>>();
+/** The `updatedAt` each report's last known server version, for guarded saves. */
+const versions = new Map<string, string>();
 
 export function readReportDraft(reportId: string): ReportContent | undefined {
   return drafts.get(reportId);
@@ -15,6 +17,14 @@ export function writeReportDraft(reportId: string, content: ReportContent) {
 
 export function clearReportDraft(reportId: string) {
   drafts.delete(reportId);
+}
+
+export function readReportVersion(reportId: string): string | undefined {
+  return versions.get(reportId);
+}
+
+export function writeReportVersion(reportId: string, updatedAt: string) {
+  versions.set(reportId, updatedAt);
 }
 
 export function trackReportSave(reportId: string, save: Promise<unknown>) {

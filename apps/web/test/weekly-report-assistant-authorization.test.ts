@@ -71,7 +71,7 @@ test("assistant visible report lists only query author or template-owner visibil
   expect(where).toMatchObject({
     workspaceId: "workspace-1",
     kind: "member",
-    status: { in: ["submitted", "shared"] },
+    status: "submitted",
     OR: [{ authorId: "user-1" }, { sourceTemplate: { authorId: "user-1" } }],
   });
 });

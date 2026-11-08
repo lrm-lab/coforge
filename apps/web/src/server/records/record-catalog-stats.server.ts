@@ -70,8 +70,7 @@ export function recordStats(db: Db) {
         const byWeek = new Map(
           cycles.map((cycle) => {
             const report = cycle.reports.find((row) => row.authorId === member.userId);
-            const submitted =
-              report?.status === "submitted" || report?.status === "shared" ? true : false;
+            const submitted = report?.status === "submitted";
             return [cycle.week, submitted] as const;
           }),
         );
@@ -114,7 +113,7 @@ export function recordStats(db: Db) {
       take: Math.min(Math.max(input.limit ?? 6, 2), 12),
       include: {
         reports: {
-          where: { kind: "member", status: { in: ["submitted", "shared"] } },
+          where: { kind: "member", status: "submitted" },
           select: {
             id: true,
             authorId: true,
@@ -180,7 +179,7 @@ export function recordStats(db: Db) {
         content: true,
         cycle: { select: { year: true, week: true } },
         submissions: {
-          where: { kind: "member", status: { in: ["submitted", "shared"] } },
+          where: { kind: "member", status: "submitted" },
           orderBy: { createdAt: "asc" },
           select: {
             content: true,

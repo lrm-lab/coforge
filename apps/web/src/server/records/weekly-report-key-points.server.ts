@@ -160,7 +160,7 @@ export async function startPersonalKeyPointExtraction(
   if (!report || !report.sourceTemplate) {
     return { started: false, status: "failed" };
   }
-  if (report.status !== "submitted" && report.status !== "shared") {
+  if (report.status !== "submitted") {
     return { started: false, status: "failed" };
   }
 
@@ -313,7 +313,7 @@ export async function startTeamKeyPointExtraction(
       workspaceId: input.workspaceId,
       sourceTemplateId: overview.id,
       kind: "member",
-      status: { in: ["submitted", "shared"] },
+      status: "submitted",
     },
     orderBy: { createdAt: "asc" },
     select: {
@@ -635,7 +635,7 @@ export async function loadSubmittedTeamKeyPointSources(
       workspaceId: input.workspaceId,
       sourceTemplateId: input.overviewReportId,
       kind: "member",
-      status: { in: ["submitted", "shared"] },
+      status: "submitted",
     },
     orderBy: { createdAt: "asc" },
     select: {

@@ -6,10 +6,9 @@ import {
   type TemplateChild,
 } from "#src/features/records/template-children-table";
 
-test("submitted/shared children are clickable; draft is not", () => {
+test("submitted children are clickable; draft is not", () => {
   expect(isTemplateChildSubmitted("draft")).toBe(false);
   expect(isTemplateChildSubmitted("submitted")).toBe(true);
-  expect(isTemplateChildSubmitted("shared")).toBe(true);
 });
 
 test("maps each template child to name, submitted flag, and submittedAt", () => {

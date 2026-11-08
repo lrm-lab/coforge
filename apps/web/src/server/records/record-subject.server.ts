@@ -24,7 +24,7 @@ function memberReportContentForViewer(
   content: ReportContent,
   input: { viewerIsAuthor: boolean; status: string },
 ): ReportContent {
-  if (input.viewerIsAuthor || (input.status !== "submitted" && input.status !== "shared")) {
+  if (input.viewerIsAuthor || input.status !== "submitted") {
     return reportContentForAuthor(content);
   }
   return reportContentForRecipient(content);

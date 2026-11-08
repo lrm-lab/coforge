@@ -27,7 +27,7 @@ export type TemplateChildRow = {
 };
 
 export function isTemplateChildSubmitted(status: string): boolean {
-  return status === "submitted" || status === "shared";
+  return status === "submitted";
 }
 
 /** Map template children to overview-table rows. Name comes from the child author. */

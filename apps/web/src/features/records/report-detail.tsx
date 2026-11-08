@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 
+import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { useAppToast } from "#src/components/ui/toast";
 import { KEY_POINT_EXTRACTION_TAB, KeyPointExtractionPanel } from "./key-point-extraction-panel";
 import { ReportTabsEditor } from "./report-tabs-editor";
 import {
@@ -10,6 +12,7 @@ import {
   resolveReportEditorContent,
   waitForReportSave,
   writeReportDraft,
+  writeReportVersion,
 } from "./report-draft-cache";
 import {
   deleteMemberWeeklyReport,
@@ -49,6 +52,7 @@ export function ReportDetail({
   returnTo?: string;
 }) {
   const refresh = useRecordRefresh();
+  const toast = useAppToast();
   const workspaceSlug = useWorkspaceSlug();
   const saveDraft = useReportDraftSave();
   const leaveToRecordsList = useLeaveToRecordsList();
@@ -89,11 +93,14 @@ export function ReportDetail({
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [keyPointRestartBusy, setKeyPointRestartBusy] = useState(false);
   const [status, setStatus] = useState(report.status);
+  useEffect(() => {
+    setStatus(report.status);
+  }, [report.status, report.id]);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const submitInFlightRef = useRef(false);
   const sendAckTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [sendAck, setSendAck] = useState(false);
-  const sent = status === "submitted" || status === "shared";
+  const sent = status === "submitted";
   const receivedBaseline = useMemo(() => {
     if (!memberAssignee) return null;
     return normalizeReportContent(report.content).received?.tabs ?? null;
@@ -107,6 +114,10 @@ export function ReportDetail({
   useEffect(() => {
     setFavorited(Boolean(report.favorited));
   }, [report.favorited, report.id]);
+
+  useEffect(() => {
+    writeReportVersion(report.id, report.updatedAt);
+  }, [report.id, report.updatedAt]);
 
   useEffect(() => {
     return () => {
@@ -148,7 +159,7 @@ export function ReportDetail({
 
   async function persist(
     next: ReportContent,
-    nextStatus?: "draft" | "submitted" | "shared",
+    nextStatus?: "submitted",
     reportId = reportIdRef.current,
   ) {
     if (!editable) return;
@@ -160,10 +171,19 @@ export function ReportDetail({
         replaceContent(normalized);
         if (nextStatus) setStatus(nextStatus);
       }
-      if (nextStatus === "submitted" || nextStatus === "shared") {
+      if (nextStatus === "submitted") {
         showSendAck();
         await refresh.records();
       }
+    } catch (error) {
+      // The row moved under this editor (another save landed first): reload so
+      // the next guarded save carries the fresh version. The draft stays.
+      if (isAppErrorCode(error, "CONFLICT") && reportId === reportIdRef.current) {
+        toast.error(m.records_report_conflict_reloaded());
+        await refresh.record();
+        return;
+      }
+      throw error;
     } finally {
       if (reportId === reportIdRef.current) setSaving(false);
     }
@@ -287,6 +307,7 @@ export function ReportDetail({
     setRestoreBusy(true);
     try {
       const result = await switchBody({ data: { reportId: report.id } });
+      writeReportVersion(report.id, result.updatedAt);
       applyAssistantBody(report.id, result.content, result.bodyRestoreView);
       await refresh.record();
     } finally {
@@ -297,8 +318,9 @@ export function ReportDetail({
   useEffect(() => {
     if (!editable || !isAssignment || !report.unread) return;
     let cancelled = false;
-    void markOpened({ data: { reportId: report.id } }).then(() => {
+    void markOpened({ data: { reportId: report.id } }).then((result) => {
       if (cancelled) return;
+      if (result.updatedAt) writeReportVersion(report.id, result.updatedAt);
       const next = withAssignmentUnread(contentRef.current, false);
       replaceContent(next);
       writeReportDraft(report.id, next);

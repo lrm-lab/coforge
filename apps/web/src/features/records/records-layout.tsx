@@ -336,7 +336,7 @@ export function RecordsLayout({
                       <ul className="space-y-0.5">
                         {filteredMyReports.map((item) => {
                           const unread = item.unread;
-                          const sent = item.status === "submitted" || item.status === "shared";
+                          const sent = item.status === "submitted";
                           return (
                             <li key={item.id}>
                               <RecordLink

@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import {
   currentIsoWeek,
@@ -40,10 +41,6 @@ async function memberSubmitMatchesReceived(
   });
 }
 
-function isSentMemberReport(kind: string, status: string) {
-  return kind === "member" && (status === "submitted" || status === "shared");
-}
-
 export function recordReportContent(db: Db) {
   async function writeAssistantComment(input: {
     workspaceId: string;
@@ -69,7 +66,10 @@ export function recordReportContent(db: Db) {
     userId: string;
     reportId: string;
     content: ReportContent;
-    status?: "draft" | "submitted" | "shared";
+    /** The only status a caller may request: member-report submit. */
+    status?: "submitted";
+    /** The `updatedAt` the caller last saw; a moved row answers CONFLICT. */
+    baseUpdatedAt?: string;
     now?: Date;
     /** Explicit「保存」: ask assistant whether to send when still eligible. */
     askToSend?: boolean;
@@ -79,6 +79,18 @@ export function recordReportContent(db: Db) {
      */
     assistantInsertMessageId?: string;
   }) {
+    // Status transitions are server-owned: "submitted" is the only request a
+    // caller may make, and only a member report accepts it. Anything else —
+    // including a type-bypassing "draft" or "shared" — is refused.
+    const requestedStatus = input.status as string | undefined;
+    if (requestedStatus !== undefined && requestedStatus !== "submitted") {
+      throw new AppError("INVALID_INPUT");
+    }
+    const submitting = requestedStatus === "submitted";
+    const baseUpdatedAt = input.baseUpdatedAt ? new Date(input.baseUpdatedAt) : undefined;
+    if (baseUpdatedAt && Number.isNaN(baseUpdatedAt.getTime())) {
+      throw new AppError("INVALID_INPUT");
+    }
     await requireMembership(db, input.workspaceId, input.userId);
     const report = await db.weeklyReport.findFirst({
       where: { id: input.reportId, workspaceId: input.workspaceId },
@@ -97,6 +109,9 @@ export function recordReportContent(db: Db) {
     });
     if (!report) throw new AppError("NOT_FOUND");
     if (report.kind === "member" && report.hiddenFromAuthor) throw new AppError("NOT_FOUND");
+    // Only a member report has a submit transition; templates send through
+    // record-distribution, never through this status field.
+    if (submitting && report.kind !== "member") throw new AppError("INVALID_INPUT");
     if (
       !canEditWeeklyReportContent({
         viewerUserId: input.userId,
@@ -130,7 +145,7 @@ export function recordReportContent(db: Db) {
     }
     if (
       report.kind === "member" &&
-      (input.status === "submitted" || input.status === "shared") &&
+      submitting &&
       (await memberSubmitMatchesReceived(db, {
         workspaceId: input.workspaceId,
         sourceTemplateId: report.sourceTemplateId,
@@ -139,8 +154,8 @@ export function recordReportContent(db: Db) {
     ) {
       throw new AppError("INVALID_INPUT", { errorId: "weekly-report-unmodified" });
     }
-    const publishing = isSentMemberReport(report.kind, input.status ?? "");
-    const alreadySent = isSentMemberReport(report.kind, report.status);
+    const publishing = report.kind === "member" && submitting;
+    const alreadySent = report.kind === "member" && report.status === "submitted";
     if (publishing) {
       content = publishMemberReportDelivery(content);
     } else if (alreadySent) {
@@ -180,19 +195,20 @@ export function recordReportContent(db: Db) {
         autoSendJustCancelled = !wasCancelled;
       }
     }
-    const updated = await db.weeklyReport.update({
-      where: { id: report.id },
-      data: {
-        content: content as unknown as Prisma.InputJsonValue,
-        ...(input.status
-          ? {
-              status: input.status,
-              submittedAt:
-                input.status === "submitted" || input.status === "shared" ? new Date() : null,
-            }
-          : {}),
-      },
-    });
+    let updated;
+    try {
+      updated = await db.weeklyReport.update({
+        where: { id: report.id, ...(baseUpdatedAt ? { updatedAt: baseUpdatedAt } : {}) },
+        data: {
+          content: content as unknown as Prisma.InputJsonValue,
+          ...(submitting ? { status: "submitted", submittedAt: now } : {}),
+        },
+      });
+    } catch (error) {
+      // P2025 with an extended where: the row moved since the caller's base.
+      if (baseUpdatedAt && hasErrorCode(error, "P2025")) throw new AppError("CONFLICT");
+      throw error;
+    }
     if (report.kind === "template" && report.submissions.length === 0 && report.settingsId) {
       await syncSettingsOutlineFromFormat(db, {
         workspaceId: input.workspaceId,
@@ -220,10 +236,8 @@ export function recordReportContent(db: Db) {
       }
     }
 
-    const publishingMember =
-      report.kind === "member" && (input.status === "submitted" || input.status === "shared");
-    const firstMemberPublish =
-      publishingMember && report.status !== "submitted" && report.status !== "shared";
+    const publishingMember = report.kind === "member" && submitting;
+    const firstMemberPublish = publishingMember && report.status !== "submitted";
     // Member first submit/share → Leader personal key-point extraction (LLM).
     if (firstMemberPublish) {
       try {

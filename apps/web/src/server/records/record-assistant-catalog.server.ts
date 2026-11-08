@@ -73,7 +73,7 @@ export function recordAssistantCatalog(db: Db) {
         workspaceId: input.workspaceId,
         ...(input.cycleId ? { cycleId: input.cycleId } : {}),
         kind: "member",
-        status: { in: ["submitted", "shared"] },
+        status: "submitted",
         OR: [{ authorId: input.userId }, { sourceTemplate: { authorId: input.userId } }],
       },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -203,18 +203,22 @@ export function recordAssistantCatalog(db: Db) {
         kind: "member",
         authorId: input.userId,
       },
-      select: { id: true, content: true, sourceTemplateId: true },
+      select: { id: true, content: true, sourceTemplateId: true, updatedAt: true },
     });
     if (!report) throw new AppError("NOT_FOUND");
-    if (!report.sourceTemplateId) return { id: report.id, unread: false as const };
+    if (!report.sourceTemplateId) {
+      return { id: report.id, unread: false as const, updatedAt: report.updatedAt.toISOString() };
+    }
     const content = normalizeReportContent(report.content);
-    if (!isAssignmentUnread(content)) return { id: report.id, unread: false as const };
+    if (!isAssignmentUnread(content)) {
+      return { id: report.id, unread: false as const, updatedAt: report.updatedAt.toISOString() };
+    }
     const next = withAssignmentUnread(content, false);
-    await db.weeklyReport.update({
+    const updated = await db.weeklyReport.update({
       where: { id: report.id },
       data: { content: next as unknown as Prisma.InputJsonValue },
     });
-    return { id: report.id, unread: false as const };
+    return { id: report.id, unread: false as const, updatedAt: updated.updatedAt.toISOString() };
   }
 
   async function loadAssistantContextManifest(input: {

@@ -159,7 +159,7 @@ export class WeeklyReportWorkflow {
           workspaceId: actor.workspaceId,
           sourceTemplateId: report.id,
           kind: "member",
-          ...(action.type === "sources" ? { status: { in: ["submitted", "shared"] } } : {}),
+          ...(action.type === "sources" ? { status: "submitted" } : {}),
           ...(sourceReportId ? { id: sourceReportId } : {}),
         },
         orderBy: { id: "asc" },

@@ -10,6 +10,7 @@ export type ReportSubject = {
     title: string;
     status: string;
     content: ReportContent;
+    updatedAt: string;
     bodyRestoreView?: ReportBodyRestoreView | null;
     submittedAt?: string | null;
     sharedBy?: {

@@ -1299,7 +1299,7 @@ test("member edits after submit stay off the leader copy until resend", async ()
     authorId: "member-a",
     kind: "member" as const,
     title: "Alice 2026 W38 工作周报",
-    status: "submitted" as "draft" | "submitted" | "shared",
+    status: "submitted",
     hiddenFromAuthor: false,
     settingsId: null as string | null,
     content: { tabs: { Summary: { markdown: "已发送" } } } as {

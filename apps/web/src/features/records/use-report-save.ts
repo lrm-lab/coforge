@@ -3,7 +3,13 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { saveWeeklyReportContent } from "./records.functions";
 import { normalizeReportContent, type ReportContent } from "./records-content";
-import { trackReportSave, waitForReportSave, writeReportDraft } from "./report-draft-cache";
+import {
+  readReportVersion,
+  trackReportSave,
+  waitForReportSave,
+  writeReportDraft,
+  writeReportVersion,
+} from "./report-draft-cache";
 import { useRecordRefresh } from "./use-record-refresh";
 
 /**
@@ -18,7 +24,7 @@ export function useReportDraftSave() {
     (
       reportId: string,
       content: ReportContent,
-      options?: { status?: "draft" | "submitted" | "shared"; askToSend?: boolean },
+      options?: { status?: "submitted"; askToSend?: boolean },
     ) => {
       const normalized = normalizeReportContent(content);
       writeReportDraft(reportId, normalized);
@@ -27,8 +33,15 @@ export function useReportDraftSave() {
           reportId,
           content: normalized,
           status: options?.status,
+          // A missing version must not degrade to an unguarded write: epoch can
+          // never match a row's updatedAt, so the server answers CONFLICT and
+          // the editor reloads onto the fresh version.
+          baseUpdatedAt: readReportVersion(reportId) ?? new Date(0).toISOString(),
           askToSend: options?.askToSend,
         },
+      }).then((result) => {
+        writeReportVersion(reportId, result.updatedAt);
+        return result;
       });
       trackReportSave(reportId, saved);
       return { normalized, saved };

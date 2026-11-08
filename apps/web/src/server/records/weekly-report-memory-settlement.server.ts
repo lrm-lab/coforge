@@ -33,7 +33,7 @@ export async function startWeeklyReportMemorySettlement(
       cycle: { select: { year: true, week: true } },
     },
   });
-  if (!report || (report.status !== "submitted" && report.status !== "shared")) {
+  if (!report || report.status !== "submitted") {
     return { started: false };
   }
   const assistant = await db.weeklyReportAssistant.findUnique({

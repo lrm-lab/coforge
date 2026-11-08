@@ -25,7 +25,7 @@ export function recordReportManagement(db: Db) {
       select: { id: true, status: true },
     });
     if (!report) throw new AppError("NOT_FOUND");
-    if (report.status === "submitted" || report.status === "shared") {
+    if (report.status === "submitted") {
       await db.weeklyReport.update({ where: { id: report.id }, data: { hiddenFromAuthor: true } });
       return { ok: true as const };
     }
