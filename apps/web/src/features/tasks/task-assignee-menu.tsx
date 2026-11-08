@@ -1,3 +1,4 @@
+import type { Placement } from "react-aria-components";
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { EntityPicker, memberOption } from "#src/features/pickers/entity-picker";
@@ -12,17 +13,19 @@ export function AssigneeMenu({
   task,
   members,
   disabled,
+  placement,
   onSelect,
 }: {
   task: Pick<TaskView, "owner"> & { status?: TaskView["status"] };
   members?: readonly Mentionable[];
   disabled: boolean;
+  placement?: Placement;
   /** The picked member bound by id (`user:<id>` or `agent:<id>`), or null for no one. */
   onSelect: (assignee: string | null) => void;
 }) {
   const name = task.owner?.name ?? m.tasks_unassigned();
   const value = task.owner ? (
-    <TaskPerson person={task.owner} />
+    <TaskPerson person={task.owner} wrap />
   ) : (
     <span className="text-tertiary">{name}</span>
   );
@@ -33,6 +36,7 @@ export function AssigneeMenu({
   const unassignable = task.status !== "done";
   return (
     <EntityPicker
+      placement={placement}
       trigger={
         <EditableTrigger
           label={`${m.tasks_change_assignee()}: ${name}${task.owner?.deleted ? `, ${m.agent_deleted_badge()}` : ""}`}

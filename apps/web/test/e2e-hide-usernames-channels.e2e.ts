@@ -204,7 +204,7 @@ test(
             `from filter: lists ${name}`,
             options.some((option) => option.includes(name)),
           );
-        // A row is an avatar initial, then the name, then an addon: the Agents' `@handle`.
+        // A row is a face and a name; a handle shows only to tell apart two of one name.
         const personRows = options.filter((option) =>
           /Ada Lovelace|Amazing Grace|Lindy|Me$/.test(option),
         );
@@ -213,10 +213,6 @@ test(
           "from filter: a person's row carries no @handle",
           personRows.length === 4 && personRows.every((option) => !option.includes("@")),
         );
-        check(
-          "from filter: an Agent keeps its @handle",
-          options.some((option) => option.includes(`@${agentHandle}`)),
-        );
         await shoot("search-from-filter");
         const findSender = async (query: string) => {
           await browser("fill", fromField, query);
@@ -224,6 +220,11 @@ test(
           await new Promise((resolve) => setTimeout(resolve, 400));
           return fromOptions();
         };
+        options = await findSender(agentHandle);
+        check(
+          "from filter: an Agent is found by its handle",
+          options.some((option) => option.includes("Hide Bot")),
+        );
         options = await findSender("lovelace");
         check(
           "from filter: a person is found by their name",

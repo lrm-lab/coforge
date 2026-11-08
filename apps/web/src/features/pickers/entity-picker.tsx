@@ -1,12 +1,22 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type RefObject } from "react";
 import { useFilter } from "react-aria";
 import {
   Autocomplete as AriaAutocomplete,
   Button as AriaButton,
   Input as AriaInput,
+  Menu as AriaMenu,
+  MenuItem as AriaMenuItem,
   SearchField as AriaSearchField,
+  type Key,
+  type MenuItemProps,
+  type Placement,
+  type Selection,
 } from "react-aria-components";
-import { ChevronDown, Folder, SearchLg } from "@untitledui/icons";
+import { Check, ChevronDown, Folder } from "@untitledui/icons";
+
+import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
+import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { HintText } from "#src/components/base/input/hint-text";
@@ -22,7 +32,8 @@ import { m } from "#src/paraglide/messages";
  * One picker for every "choose a person, an Agent or a Project" in the app (task #415): a channel's
  * coordinator, a channel's Project, a Task's owner, the search page's From, and the like. A row is
  * a face and a name; an Agent adds its `@handle`, since a person and an Agent may share a name.
- * A list longer than a glance gets a search field, and a search that matches nothing says so.
+ * The search field on top finds a row by its name or handle, and a search that matches nothing
+ * says so.
  * The fixed choices a place offers ("None", "Anyone", "Unassigned") are rows like any other.
  */
 
@@ -55,9 +66,6 @@ export type PickerOption = {
   keywords?: string;
   isDisabled?: boolean;
 };
-
-/** Up to this many rows are read at a glance; past it the list gets a search field. */
-const SEARCH_FROM = 8;
 
 /** A person's or Agent's picture (an Agent's mascot drawn whole, not clipped to a tile), a
  * Project's image or folder, or a channel's `#` (a lock when it is private). */
@@ -108,101 +116,259 @@ type MenuBase = {
   /** What is being chosen, as a screen reader hears the list and as the search field reads. */
   label: string;
   options: readonly PickerOption[];
-  /** What the search field asks for once the list is long enough to have one. */
+  /** What the search field asks for. */
   searchPlaceholder?: string;
 };
 
-/** The popover's content: a search field once the list is long, then the rows. */
+/** Every picker's search field and list, so the label picker and the member picker read alike. */
+export const PICKER_SEARCH_INPUT =
+  "h-10 w-full border-b border-secondary bg-transparent px-3.5 text-sm text-primary outline-hidden placeholder:text-placeholder max-sm:h-12 max-sm:text-md";
+export const PICKER_LIST =
+  "max-h-72 overflow-y-auto p-1 outline-hidden select-none max-sm:max-h-[50dvh]";
+
+/** Up to this many rows are read at a glance: a list inside another menu gets a search field
+ * past it. */
+const SEARCH_FROM = 8;
+
+/** The picker's content: a search field, typed into as it opens, then one row per choice. */
 export function PickerMenu({
   label,
   options,
   searchPlaceholder = m.picker_search(),
+  autoFocus = true,
+  onClose,
   ...choice
-}: MenuBase & (SingleChoice | MultipleChoice)) {
+}: MenuBase &
+  (SingleChoice | MultipleChoice) & {
+    /** Off on a phone, where focus would raise the keyboard over the list. */
+    autoFocus?: boolean;
+    /** Closes the picker that holds this menu: after a single choice, and on Esc from the search
+     * field. A menu that has it is a picker of its own and always gets a search field; one inside
+     * another menu (a filter's submenu) gets one only once its list is longer than a glance. */
+    onClose?: () => void;
+  }) {
   const { contains } = useFilter({ sensitivity: "base" });
   const [search, setSearch] = useState("");
   const multiple = "selectedKeys" in choice;
-  // In a list with faces, a row without one ("None", "Unassigned") keeps the face's room, so every
-  // name starts at one edge and every tick sits at the other.
+  // In a list with faces, a row without one ("None", "Unassigned") gets an empty ring in its place,
+  // so every name starts at one edge.
   const faced = options.some((option) => option.face);
-  const menu = (
-    <Dropdown.Menu
+  // A handle tells apart two members of one name, and is noise otherwise (search still finds it).
+  const named = new Map<string, number>();
+  for (const option of options) named.set(option.label, (named.get(option.label) ?? 0) + 1);
+  const list = (
+    <AriaMenu
       aria-label={label}
-      className="max-h-72"
+      escapeKeyBehavior="none"
+      className={PICKER_LIST}
       disabledKeys={options.filter((option) => option.isDisabled).map((option) => option.id)}
       renderEmptyState={() => (
-        <p className="px-3 py-2 text-sm text-tertiary">{m.picker_no_matches()}</p>
+        <p className="px-2.5 py-2 text-sm text-tertiary">{m.picker_no_matches()}</p>
       )}
       {...(multiple
         ? {
-            selectionMode: "multiple",
+            selectionMode: "multiple" as const,
             selectedKeys: choice.selectedKeys,
             shouldCloseOnSelect: false,
-            onSelectionChange: (keys) => {
+            onSelectionChange: (keys: Selection) => {
               if (keys !== "all") choice.onSelectedKeysChange([...keys].map(String));
             },
           }
         : {
-            selectionMode: "single",
+            selectionMode: "single" as const,
             selectedKeys: choice.selectedKey === null ? [] : [choice.selectedKey],
             // Choosing what is already chosen changes nothing, as a select would not.
-            onAction: (key) => {
+            onAction: (key: Key) => {
               if (key !== choice.selectedKey) choice.onSelect(String(key));
+              onClose?.();
             },
           })}
     >
       {options.map((option) => (
-        <Dropdown.Item
+        <PickerRow
           key={option.id}
           id={option.id}
-          label={option.label}
-          aria-label={option.ariaLabel}
           textValue={option.keywords ? `${option.label} ${option.keywords}` : option.label}
-          leading={option.face ? <Face face={option.face} /> : faced && <span aria-hidden="true" />}
-          addon={option.addon}
-          count={option.count}
-          selectionIndicator={multiple ? "checkbox" : undefined}
-        />
+          aria-label={option.ariaLabel}
+          leading={option.face ? <Face face={option.face} /> : faced && <NoFace />}
+          multiple={multiple}
+        >
+          <span className="truncate">{option.label}</span>
+          {option.addon && (named.get(option.label) ?? 0) > 1 && (
+            <span className="shrink-0 truncate text-quaternary">{option.addon}</span>
+          )}
+          {option.count !== undefined && (
+            <span className="ml-auto shrink-0 text-xs text-quaternary tabular-nums">
+              {option.count}
+            </span>
+          )}
+        </PickerRow>
       ))}
-    </Dropdown.Menu>
+    </AriaMenu>
   );
-  if (options.length < SEARCH_FROM) return menu;
+  if (!onClose && options.length < SEARCH_FROM) return list;
   return (
     <AriaAutocomplete filter={contains} inputValue={search} onInputChange={setSearch}>
-      <div className="border-b border-secondary py-1">
-        <AriaSearchField aria-label={label} value={search} onChange={setSearch} autoFocus>
-          <div className="flex items-center gap-2 px-3 py-2">
-            <SearchLg aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-            <AriaInput
-              placeholder={searchPlaceholder}
-              className="w-full bg-transparent text-sm text-primary outline-hidden placeholder:text-placeholder"
-            />
-          </div>
+      {/* Esc with nothing typed closes the picker (with text, it clears the text first): the
+          search field hands Esc to the list, which keeps it. */}
+      <div
+        onKeyDownCapture={(event) => {
+          if (event.key === "Escape" && !search) onClose?.();
+        }}
+      >
+        <AriaSearchField
+          aria-label={label}
+          value={search}
+          onChange={setSearch}
+          autoFocus={autoFocus}
+        >
+          <AriaInput placeholder={searchPlaceholder} className={PICKER_SEARCH_INPUT} />
         </AriaSearchField>
       </div>
-      {menu}
+      {list}
     </AriaAutocomplete>
+  );
+}
+
+/** "No one" where the other rows have a face: an empty dashed ring of the same size. */
+function NoFace() {
+  return (
+    <span
+      aria-hidden="true"
+      className="size-5 shrink-0 rounded-full border border-dashed border-fg-quaternary"
+    />
+  );
+}
+
+/**
+ * One row of every picker: a face, a name on one line, and a tick at the end on the chosen one
+ * (a checkbox in front where several may be chosen). Every row is the same height; the row under
+ * the pointer or the arrow keys gets a faint fill, never an outline.
+ */
+export function PickerRow({
+  leading,
+  multiple,
+  children,
+  ...props
+}: Omit<MenuItemProps, "children" | "className"> & {
+  leading?: ReactNode;
+  multiple?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <AriaMenuItem
+      {...props}
+      className={({ isFocused, isDisabled }) =>
+        cn(
+          "flex h-8 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm text-primary outline-hidden max-sm:h-11 max-sm:text-md",
+          isFocused && "bg-primary_hover",
+          isDisabled && "cursor-not-allowed opacity-50",
+        )
+      }
+    >
+      {({ isSelected }) => (
+        <>
+          {multiple && <CheckboxBase isSelected={isSelected} size="sm" className="shrink-0" />}
+          {leading}
+          <span className="flex min-w-0 flex-1 items-center gap-1.5">{children}</span>
+          {!multiple && (
+            <Check
+              aria-hidden="true"
+              className={cn("size-4 shrink-0 text-fg-secondary", !isSelected && "invisible")}
+            />
+          )}
+        </>
+      )}
+    </AriaMenuItem>
   );
 }
 
 type MenuProps = MenuBase & SingleChoice;
 
-/** A picker opened from a trigger of the caller's (a chip, a Task field): the trigger, then the
- * menu in a popover under it. */
+/**
+ * Where a picker opens: under its trigger on a wide screen, and on a phone a sheet from the bottom
+ * edge, with rows a thumb can hit and the keyboard down until the search field is tapped.
+ */
+export function PickerSurface({
+  trigger,
+  label,
+  placement = "bottom start",
+  anchorRef,
+  isOpen,
+  onOpenChange,
+  className,
+  children,
+}: {
+  /** A React Aria pressable: it opens the picker. */
+  trigger: ReactNode;
+  /** The sheet's accessible name on a phone. */
+  label: string;
+  placement?: Placement;
+  /** What the popover lines up with when not the trigger itself (a field's whole row). */
+  anchorRef?: RefObject<Element | null>;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** The popover's width on a wide screen. */
+  className?: string;
+  children: (sheet: { phone: boolean; close: () => void }) => ReactNode;
+}) {
+  const wide = useBreakpoint("sm");
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = isOpen ?? ownOpen;
+  const setOpen = (next: boolean) => {
+    setOwnOpen(next);
+    onOpenChange?.(next);
+  };
+  const close = () => setOpen(false);
+  if (wide)
+    return (
+      <Dropdown.Root isOpen={open} onOpenChange={setOpen}>
+        {trigger}
+        <Dropdown.Popover
+          placement={placement}
+          triggerRef={anchorRef}
+          className={cn("w-64", className)}
+        >
+          {children({ phone: false, close })}
+        </Dropdown.Popover>
+      </Dropdown.Root>
+    );
+  return (
+    <DialogTrigger isOpen={open} onOpenChange={setOpen}>
+      {trigger}
+      {/* Edge to edge at the bottom: the official overlay's gutter and bottom room are for a card. */}
+      <ModalOverlay isDismissable className="px-0 [--modal-pb:0px]">
+        <Modal className="w-full rounded-t-2xl rounded-b-none">
+          <Dialog aria-label={label} className="pb-safe-bottom outline-hidden">
+            <div
+              aria-hidden="true"
+              className="mx-auto mt-2 mb-1 h-1 w-9 rounded-full bg-quaternary/40"
+            />
+            {children({ phone: true, close })}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    </DialogTrigger>
+  );
+}
+
+/** A picker opened from a trigger of the caller's (a chip, a Task field). */
 export function EntityPicker({
   trigger,
+  placement,
+  className,
   ...menu
 }: MenuProps & {
-  /** A React Aria pressable: it opens the menu. */
+  /** A React Aria pressable: it opens the picker. */
   trigger: ReactNode;
+  placement?: Placement;
+  /** The popover's width on a wide screen. */
+  className?: string;
 }) {
   return (
-    <Dropdown.Root>
-      {trigger}
-      <Dropdown.Popover placement="bottom start" className="w-72">
-        <PickerMenu {...menu} />
-      </Dropdown.Popover>
-    </Dropdown.Root>
+    <PickerSurface trigger={trigger} label={menu.label} placement={placement} className={className}>
+      {({ phone, close }) => <PickerMenu {...menu} autoFocus={!phone} onClose={close} />}
+    </PickerSurface>
   );
 }
 
@@ -224,39 +390,43 @@ export function EntityPickerField({
   return (
     <div className="flex flex-col gap-1.5">
       {fieldLabel && <Label>{fieldLabel}</Label>}
-      <Dropdown.Root>
-        <AriaButton
-          isDisabled={isDisabled}
-          aria-label={chosen ? `${menu.label}: ${chosen.label}` : menu.label}
-          className={cn(
-            "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 text-left shadow-xs ring-1 ring-primary outline-hidden transition duration-100 ease-linear ring-inset",
-            "focus-visible:ring-2 focus-visible:ring-border-input-focus pressed:ring-2 pressed:ring-border-input-focus",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-          )}
-        >
-          {chosen?.face && <Face face={chosen.face} />}
-          <span
+      <PickerSurface
+        label={menu.label}
+        placement="bottom start"
+        className="w-(--trigger-width)"
+        trigger={
+          <AriaButton
+            isDisabled={isDisabled}
+            aria-label={chosen ? `${menu.label}: ${chosen.label}` : menu.label}
             className={cn(
-              "min-w-0 flex-1 truncate text-md",
-              chosen ? "font-medium text-primary" : "text-placeholder",
+              "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 text-left shadow-xs ring-1 ring-primary outline-hidden transition duration-100 ease-linear ring-inset",
+              "focus-visible:ring-2 focus-visible:ring-border-input-focus pressed:ring-2 pressed:ring-border-input-focus",
+              "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            {chosen?.label ?? placeholder}
-          </span>
-          {chosen?.addon && (
-            <span className="max-w-1/2 shrink-0 truncate text-sm text-quaternary">
-              {chosen.addon}
+            {chosen?.face && <Face face={chosen.face} />}
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-md",
+                chosen ? "font-medium text-primary" : "text-placeholder",
+              )}
+            >
+              {chosen?.label ?? placeholder}
             </span>
-          )}
-          <ChevronDown
-            aria-hidden="true"
-            className="size-4 shrink-0 stroke-[2.25px] text-fg-quaternary"
-          />
-        </AriaButton>
-        <Dropdown.Popover placement="bottom start" className="w-(--trigger-width)">
-          <PickerMenu {...menu} />
-        </Dropdown.Popover>
-      </Dropdown.Root>
+            {chosen?.addon && (
+              <span className="max-w-1/2 shrink-0 truncate text-sm text-quaternary">
+                {chosen.addon}
+              </span>
+            )}
+            <ChevronDown
+              aria-hidden="true"
+              className="size-4 shrink-0 stroke-[2.25px] text-fg-quaternary"
+            />
+          </AriaButton>
+        }
+      >
+        {({ phone, close }) => <PickerMenu {...menu} autoFocus={!phone} onClose={close} />}
+      </PickerSurface>
       {hint && <HintText>{hint}</HintText>}
     </div>
   );

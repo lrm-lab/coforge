@@ -1,3 +1,4 @@
+import type { Placement } from "react-aria-components";
 import type { TaskProjectRef, TaskView } from "@lrm/coforge-sdk/internal";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -18,10 +19,12 @@ const NONE = " none";
 export function TaskProjectMenu({
   task,
   disabled,
+  placement,
   onSelect,
 }: {
   task: Pick<TaskView, "project">;
   disabled: boolean;
+  placement?: Placement;
   /** A Project, or null to file the Task under no Project. */
   onSelect: (project: TaskProjectRef | null) => void;
 }) {
@@ -50,6 +53,7 @@ export function TaskProjectMenu({
       onFocus={() => setWanted(true)}
     >
       <EntityPicker
+        placement={placement}
         trigger={
           <TaskFieldTrigger
             label={`${m.tasks_project_change()}: ${current?.name ?? m.tasks_project_none()}`}

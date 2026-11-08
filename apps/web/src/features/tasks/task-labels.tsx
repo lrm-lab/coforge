@@ -3,16 +3,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Plus } from "@untitledui/icons";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFilter } from "react-aria";
 import {
+  type Placement,
   Autocomplete as AriaAutocomplete,
+  Menu as AriaMenu,
   Input as AriaInput,
   SearchField as AriaSearchField,
 } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
@@ -24,6 +25,12 @@ import { TaskFieldTrigger } from "./task-field-trigger";
 import { useCloseOnBack } from "./use-close-on-back";
 import { useWorkspaceLabels, workspaceLabelsKey } from "./workspace-labels";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import {
+  PICKER_LIST,
+  PICKER_SEARCH_INPUT,
+  PickerRow,
+  PickerSurface,
+} from "#src/features/pickers/entity-picker";
 
 /** A Task carries at most this many labels (the server refuses a sixth). */
 export const TASK_LABELS_MAX = 5;
@@ -66,14 +73,18 @@ export function TaskCardLabels({ labels }: { labels: readonly TaskLabel[] | unde
 export function TaskLabelsField({
   task,
   disabled,
+  placement,
   onChange,
 }: {
   task: Pick<TaskView, "labels">;
   disabled: boolean;
+  placement?: Placement;
   /** Labels to add and to take off, by name. */
   onChange: (change: { add?: string[]; remove?: string[] }) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // The picker lines up with the whole row, so it never covers the labels it edits.
+  const row = useRef<HTMLDivElement>(null);
   const desktop = useBreakpoint("md");
   useCloseOnBack(open && !desktop, () => setOpen(false));
   // The Workspace's labels are read while the picker is open and whenever the Task has a label: a
@@ -123,7 +134,7 @@ export function TaskLabelsField({
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
+    <div ref={row} className="flex min-w-0 flex-wrap items-center gap-1">
       {labels.map((label) =>
         canManage ? (
           <ManageableLabelChip key={label.id} label={label} />
@@ -131,7 +142,8 @@ export function TaskLabelsField({
           <TaskLabelChip key={label.id} label={label} />
         ),
       )}
-      <Dropdown.Root
+      <PickerSurface
+        label={m.tasks_labels()}
         isOpen={open}
         onOpenChange={(next) => {
           setOpen(next);
@@ -140,43 +152,44 @@ export function TaskLabelsField({
             setPicked(null);
           }
         }}
+        placement={placement}
+        anchorRef={row}
+        className="w-72"
+        trigger={
+          <TaskFieldTrigger label={m.tasks_labels_edit()} disabled={disabled}>
+            {labels.length ? (
+              <Plus aria-hidden="true" className="size-4 text-fg-quaternary" />
+            ) : (
+              <span className="text-sm text-tertiary">{m.tasks_labels_add()}</span>
+            )}
+          </TaskFieldTrigger>
+        }
       >
-        <TaskFieldTrigger label={m.tasks_labels_edit()} disabled={disabled}>
-          {labels.length ? (
-            <Plus aria-hidden="true" className="size-4 text-fg-quaternary" />
-          ) : (
-            <span className="text-sm text-tertiary">{m.tasks_labels_add()}</span>
-          )}
-        </TaskFieldTrigger>
-        <Dropdown.Popover placement="bottom start" className="w-72">
+        {({ phone }) => (
           <AriaAutocomplete filter={contains} inputValue={search} onInputChange={setSearch}>
-            <div className="border-b border-secondary py-1">
-              <AriaSearchField
-                aria-label={m.tasks_labels_search()}
-                value={search}
-                onChange={(value) => {
-                  setSearch(value);
-                  setCreateFailed(false);
-                }}
-                onSubmit={() => {
-                  if (wanted && !exists && !full) void createAndAdd(wanted, newColor);
-                }}
-                onKeyDown={(event) => {
-                  // Esc with nothing typed closes the picker (with text, it clears the text first).
-                  // The search box hands Esc to the list, which keeps it, so the picker stayed open.
-                  if (event.key === "Escape" && !search) setOpen(false);
-                }}
-                autoFocus
-              >
-                <AriaInput
-                  placeholder={m.tasks_labels_search()}
-                  className="w-full bg-transparent px-3 py-2 text-sm text-primary outline-hidden placeholder:text-placeholder"
-                />
-              </AriaSearchField>
-            </div>
-            <Dropdown.Menu
+            <AriaSearchField
+              aria-label={m.tasks_labels_search()}
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setCreateFailed(false);
+              }}
+              onSubmit={() => {
+                if (wanted && !exists && !full) void createAndAdd(wanted, newColor);
+              }}
+              onKeyDown={(event) => {
+                // Esc with nothing typed closes the picker (with text, it clears the text first).
+                // The search box hands Esc to the list, which keeps it, so the picker stayed open.
+                if (event.key === "Escape" && !search) setOpen(false);
+              }}
+              autoFocus={!phone}
+            >
+              <AriaInput placeholder={m.tasks_labels_search()} className={PICKER_SEARCH_INPUT} />
+            </AriaSearchField>
+            <AriaMenu
               aria-label={m.tasks_labels()}
-              className="max-h-80"
+              escapeKeyBehavior="none"
+              className={PICKER_LIST}
               selectionMode="multiple"
               selectedKeys={[...on].filter((id) => offeredIds.has(id))}
               disabledKeys={disabledKeys}
@@ -187,19 +200,17 @@ export function TaskLabelsField({
               }}
             >
               {offered.map((label) => (
-                <Dropdown.Item
+                <PickerRow
                   key={label.id}
                   id={label.id}
                   textValue={label.name}
-                  selectionIndicator="checkbox"
+                  multiple
+                  leading={<LabelDot color={label.color} />}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <LabelDot color={label.color} />
-                    <span className="truncate">{label.name}</span>
-                  </span>
-                </Dropdown.Item>
+                  <span className="truncate">{label.name}</span>
+                </PickerRow>
               ))}
-            </Dropdown.Menu>
+            </AriaMenu>
             {wanted && !exists && !full && (
               <div className="border-t border-secondary px-1.5 py-1">
                 <Button
@@ -249,8 +260,8 @@ export function TaskLabelsField({
               )}
             </div>
           </AriaAutocomplete>
-        </Dropdown.Popover>
-      </Dropdown.Root>
+        )}
+      </PickerSurface>
     </div>
   );
 }

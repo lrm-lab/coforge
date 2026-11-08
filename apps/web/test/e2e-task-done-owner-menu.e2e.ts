@@ -78,15 +78,28 @@ test("a Done Task's owner menu has no Unassigned", async () => {
       await browser("wait", "--fn", `${pageHydrated} && ${owner} != null`);
       await browser("eval", `${owner}.click()`);
       await browser("wait", "--fn", `${options}.length > 0`);
+      // The popup and the menu finish opening before the picture, or the page shows through.
+      await browser("wait", "800");
       if (shot) await browser("screenshot", join(artifacts, `${shot}.png`));
       return evaluate<string[]>(options);
     }
     await browser("set", "viewport", "1440", "900");
-    expect(await menuOptions(open)).toContain("Unassigned");
+    // "Unassigned" heads a Task still to do's list, as "No assignee" does in Linear.
+    expect((await menuOptions(open, "desktop-todo"))[0]).toBe("Unassigned");
     const done = await menuOptions(finished, "desktop");
+    await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+    await browser("wait", "300");
+    await browser("screenshot", join(artifacts, "desktop-dark.png"));
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+    // Esc from the empty search field closes the picker.
+    await browser("press", "Escape");
+    await browser("wait", "--fn", `${options}.length === 0`);
     expect(done.length).toBeGreaterThan(0);
     expect(done).not.toContain("Unassigned");
+    await browser("set", "viewport", "820", "1180");
+    expect(await menuOptions(finished, "tablet")).not.toContain("Unassigned");
     await browser("set", "viewport", "390", "844");
+    expect((await menuOptions(open, "phone-todo"))[0]).toBe("Unassigned");
     expect(await menuOptions(finished, "phone")).not.toContain("Unassigned");
   } finally {
     await experiments.write(workspaceId, "taskConversations", before === true).catch(() => {});

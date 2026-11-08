@@ -159,6 +159,7 @@ export function TaskSection({
         </TaskProperty>
         <TaskProperty label={m.tasks_overview_owner()} className="[[data-layout=chips]_&]:order-2">
           <AssigneeMenu
+            placement="left top"
             task={task}
             members={assignableMembers}
             disabled={pending || !currentMemberId || !canEditAssignment}
@@ -187,6 +188,7 @@ export function TaskSection({
         </TaskProperty>
         <TaskProperty label={m.tasks_project()} className="[[data-layout=chips]_&]:order-2">
           <TaskProjectMenu
+            placement="left top"
             task={task}
             disabled={pending}
             onSelect={(project) =>
@@ -201,6 +203,7 @@ export function TaskSection({
           className="[[data-layout=chips]_&]:order-2 [[data-layout=chips]_&]:max-w-none"
         >
           <TaskLabelsField
+            placement="left top"
             task={task}
             disabled={pending}
             onChange={({ add, remove }) =>
