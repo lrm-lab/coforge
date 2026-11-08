@@ -73,22 +73,30 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
       return { overlay: box(overlay), dialog: box(dialog), field: shown, confirm: box(confirm), focused: document.activeElement === field };
     })()`);
 
+  let createdAgent = "";
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id, role: { in: ["owner", "admin"] } },
       include: { workspace: { select: { slug: true, id: true } } },
     });
-    // An Agent the viewer may archive: not a system, weekly-report or Workspace assistant.
-    const agent = await db.agent.findFirstOrThrow({
-      where: {
+    // An Agent of this run's own, so the test needs nothing seeded: the viewer may archive it.
+    const agent = await db.agent.create({
+      data: {
         workspaceId: membership.workspace.id,
-        deletedAt: null,
-        systemKind: null,
-        weeklyReportAssistant: null,
-        workspaceAssistantSession: null,
+        name: `e2e-keyboard-${process.pid}`,
+        displayName: `Keyboard Agent ${process.pid}`,
+        ownerId: DEV_BROWSER_USER.id,
+        runtimeConfig: {
+          runtime: "pi",
+          provider: { kind: "default" },
+          model: "",
+          modelProvider: "",
+          reasoning: "",
+        },
       },
       select: { id: true },
     });
+    createdAgent = agent.id;
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}/en/w/${membership.workspace.slug}/agent/${agent.id}`);
@@ -111,6 +119,8 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
     const before = await boxes();
     expect(before.focused).toBe(true);
     expect(before.overlay).toEqual([0, 844]);
+    // A confirmation sits mid-screen, not on the bottom edge (task #21).
+    expect(Math.abs((before.dialog[0] + before.dialog[1]) / 2 - 422)).toBeLessThan(40);
 
     // Keyboard up: React Aria and the overlay both follow `visualViewport`'s resize and scroll.
     await browser(
@@ -130,6 +140,24 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
       "--fn",
       `(() => { let o = document.querySelector("[data-agent-delete-dialog]"); while (getComputedStyle(o).position !== "fixed") o = o.parentElement; const box = o.getBoundingClientRect(); return Math.round(box.top) === ${top} && Math.round(box.bottom) === ${bottom}; })()`,
     );
+    // The dialog and the field it scrolls into view settle after the viewport moves: wait until
+    // both lie inside what the keyboard leaves and two reads in a row agree.
+    await browser(
+      "wait",
+      "--fn",
+      `(() => {
+        const dialog = document.querySelector("[data-agent-delete-dialog]");
+        const field = dialog.querySelector("input");
+        const middle = field.closest("[data-dialog-body]").getBoundingClientRect();
+        const reading = [dialog, field].flatMap((element) => {
+          const { top, bottom } = element.getBoundingClientRect();
+          return [Math.round(top), Math.round(bottom)];
+        }).concat([Math.round(middle.top), Math.round(middle.bottom)]);
+        const settled = JSON.stringify(reading) === window.__keyboardReading;
+        window.__keyboardReading = JSON.stringify(reading);
+        return settled && reading[0] >= ${top} && reading[1] <= ${bottom} && reading[3] <= ${bottom};
+      })()`,
+    );
     const after = await boxes();
     await browser("screenshot", join(artifacts, "keyboard-up.png"));
     expect(after.overlay).toEqual([top, bottom]);
@@ -144,6 +172,7 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
     expect(after.focused).toBe(true);
   } finally {
     await browser("close").catch(() => {});
+    if (createdAgent) await db.agent.deleteMany({ where: { id: createdAgent } }).catch(() => {});
     await db.$disconnect();
   }
 }, 120_000);
