@@ -86,6 +86,26 @@ test("weekly-report workflow discovers templates without a cycle and validates w
       }),
     ),
   ).toMatchObject({ operation: "workflow", action: { type: "templates" } });
+  expect(
+    decodeWeeklyReportRequest(
+      encodeWeeklyReportRequest({
+        ...identity,
+        operation: "workflow",
+        action: {
+          type: "save",
+          reportId: "11111111-1111-4111-8111-111111111111",
+          tabs: { Summary: { markdown: "draft" } },
+          baseUpdatedAt: "2026-10-12T11:00:00.000Z",
+        },
+      }),
+    ),
+  ).toMatchObject({
+    operation: "workflow",
+    action: {
+      type: "save",
+      baseUpdatedAt: "2026-10-12T11:00:00.000Z",
+    },
+  });
   expect(() =>
     encodeWeeklyReportRequest({
       ...identity,

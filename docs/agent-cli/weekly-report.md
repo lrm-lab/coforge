@@ -34,12 +34,16 @@ of these action objects; IDs come from discovery results, not invented handles.
 | `send` | `templateId` | Current-week overview, assignment count and invitation results |
 | `status` | `reportId` of owned overview; optional `cursor`, `limit` | Submitted and outstanding member reports |
 | `sources` | overview `reportId`; optional `cursor`, `limit`; `sourceReportId` + `section` + optional `offset` to read | Submitted-source metadata or bounded section text |
-| `save` | `reportId`, `tabs` | Updated working draft |
+| `save` | `reportId`, `tabs`, optional `baseUpdatedAt` | Updated working draft |
 | `submit` | `reportId` | Published member report |
 | `summary` | `reportId`, `markdown` | Summary written to existing key points |
 
 A section is `{ "title": "Summary", "children": ["Work Summary", "Next Steps"] }`.
 `tabs` maps existing section names to `{ "markdown": "…" }`.
+Body writes (`save`, and body-edit suggestion envelopes) take `baseUpdatedAt` set
+to the report's `updatedAt`/`contextVersion` from your latest context, inbox, list
+or save result. A report that moved since answers 409 — re-read the latest body
+and redo the write rather than overwriting the newer edit.
 `requestId` is a UUID reused when retrying creation; supply `templateId` to edit
 existing owned settings. Template names accept 1–100 characters. Discovery pages
 have at most 50 results; follow `nextCursor` through workflow actions.

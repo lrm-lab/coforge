@@ -102,6 +102,13 @@ export async function executeAgentWeeklyReport(
         return { error: { code: 400, message: "Weekly report not found" } };
       if (error.code === "ACCESS_DENIED")
         return { error: { code: 403, message: "Weekly report access denied" } };
+      if (error.code === "CONFLICT")
+        return {
+          error: {
+            code: 409,
+            message: "Weekly report changed since it was read; re-read and retry",
+          },
+        };
     }
     return { error: { code: 400, message: "invalid weekly-report request" } };
   }

@@ -44,5 +44,6 @@ export async function applyIncomingWeeklyReportBodyEdit(
     reportId: suggestion.reportId,
     content: suggestion.content,
     sourceMessageId: input.messageId,
+    baseUpdatedAt: suggestion.baseUpdatedAt,
   });
 }

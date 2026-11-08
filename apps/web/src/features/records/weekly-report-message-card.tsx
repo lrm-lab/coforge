@@ -76,6 +76,7 @@ export function WeeklyReportMessageCard(props: {
           reportId: suggestion.reportId,
           content: suggestion.content,
           sourceMessageId: props.messageId,
+          baseUpdatedAt: suggestion.baseUpdatedAt,
         },
       });
       writeReportVersion(suggestion.reportId, written.updatedAt);

@@ -195,10 +195,18 @@ export function recordReportContent(db: Db) {
         autoSendJustCancelled = !wasCancelled;
       }
     }
+    // Re-applying the same assistant insert is a designed no-op
+    // (insertAssistantReportBody keeps the stored body), so it must not
+    // conflict on the version its own first write moved.
+    const versionGuard =
+      input.assistantInsertMessageId !== undefined &&
+      stored.bodyRestore?.sourceMessageId === input.assistantInsertMessageId
+        ? undefined
+        : baseUpdatedAt;
     let updated;
     try {
       updated = await db.weeklyReport.update({
-        where: { id: report.id, ...(baseUpdatedAt ? { updatedAt: baseUpdatedAt } : {}) },
+        where: { id: report.id, ...(versionGuard ? { updatedAt: versionGuard } : {}) },
         data: {
           content: content as unknown as Prisma.InputJsonValue,
           ...(submitting ? { status: "submitted", submittedAt: now } : {}),
@@ -206,7 +214,7 @@ export function recordReportContent(db: Db) {
       });
     } catch (error) {
       // P2025 with an extended where: the row moved since the caller's base.
-      if (baseUpdatedAt && hasErrorCode(error, "P2025")) throw new AppError("CONFLICT");
+      if (versionGuard && hasErrorCode(error, "P2025")) throw new AppError("CONFLICT");
       throw error;
     }
     if (report.kind === "template" && report.submissions.length === 0 && report.settingsId) {
@@ -281,6 +289,7 @@ export function recordReportContent(db: Db) {
     reportId: string;
     content: ReportContent;
     sourceMessageId?: string;
+    baseUpdatedAt?: string;
   }) {
     const content = normalizeReportContent(input.content);
     return saveReportContent({
@@ -295,6 +304,7 @@ export function recordReportContent(db: Db) {
       },
       askToSend: false,
       assistantInsertMessageId: input.sourceMessageId,
+      baseUpdatedAt: input.baseUpdatedAt,
     });
   }
 

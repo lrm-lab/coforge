@@ -42,6 +42,8 @@ export const weeklyReportWorkflowSchema = z.discriminatedUnion("type", [
     tabs: z
       .record(z.string().min(1).max(100), z.object({ markdown: z.string().max(100_000) }))
       .refine((tabs) => Object.keys(tabs).length > 0 && Object.keys(tabs).length <= 30),
+    /** The report `updatedAt` the caller last saw; the write is refused when it moved. */
+    baseUpdatedAt: z.iso.datetime().optional(),
   }),
   z.object({ type: z.literal("submit"), reportId: id }),
   z.object({

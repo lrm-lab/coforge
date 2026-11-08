@@ -100,3 +100,48 @@ test("page context and DM expose the same formats without other owners' delivery
   expect(result.templates[0]).not.toHaveProperty("recipientUserIds");
   expect(result.templates[0]).not.toHaveProperty("sendTime");
 });
+
+test("workflow body writes carry the version they were based on", async () => {
+  const reportId = "22222222-2222-4222-8222-222222222222";
+  const rowVersion = new Date("2026-10-12T12:00:00.000Z");
+  const updates: Array<{ where: Record<string, unknown> }> = [];
+  const report = {
+    id: reportId,
+    authorId: "user-1",
+    kind: "member",
+    status: "draft",
+    hiddenFromAuthor: false,
+    settingsId: null,
+    sourceTemplateId: null,
+    content: { tabs: { Progress: { markdown: "- old\n" } } },
+    updatedAt: rowVersion,
+    cycle: { year: 2026, week: 40 },
+    submissions: [],
+  };
+  const db = {
+    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
+    weeklyReport: {
+      findFirst: async () => report,
+      update: async (query: { where: Record<string, unknown> }) => {
+        updates.push(query);
+        return { id: reportId, status: "draft", updatedAt: rowVersion };
+      },
+    },
+  } as unknown as PrismaClient;
+  const workflow = new WeeklyReportWorkflow(db);
+  const actor = { workspaceId: "workspace", userId: "user-1" };
+
+  await workflow.execute(actor, {
+    type: "save",
+    reportId,
+    tabs: { Progress: { markdown: "- assistant\n" } },
+    baseUpdatedAt: "2026-10-12T11:00:00.000Z",
+  });
+  expect(updates[0]?.where).toMatchObject({
+    updatedAt: new Date("2026-10-12T11:00:00.000Z"),
+  });
+
+  updates.length = 0;
+  await workflow.execute(actor, { type: "submit", reportId });
+  expect(updates[0]?.where.updatedAt).toEqual(rowVersion);
+});

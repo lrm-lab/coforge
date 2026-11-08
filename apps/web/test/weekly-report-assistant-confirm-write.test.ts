@@ -241,3 +241,225 @@ test("only the member's weekly-report assistant writes a body-edit as it arrives
   expect(stored.tabs).toEqual({ Progress: { markdown: "最新版" } });
   expect(stored.bodyRestore?.previous.tabs).toEqual({ Progress: { markdown: "上一版" } });
 });
+
+test("a confirmed assistant body carries the report version it read", async () => {
+  const reportId = "22222222-2222-4222-8222-222222222222";
+  const updates: Array<{ where: Record<string, unknown> }> = [];
+  const db = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "member" }),
+    },
+    weeklyReport: {
+      findFirst: async () => ({
+        id: reportId,
+        authorId: "user-1",
+        kind: "member",
+        status: "draft",
+        hiddenFromAuthor: false,
+        settingsId: null,
+        sourceTemplateId: null,
+        content: { tabs: { Progress: { markdown: "- old\n" } } },
+        cycle: { year: 2026, week: 40 },
+        submissions: [],
+      }),
+      update: async (query: { where: Record<string, unknown> }) => {
+        updates.push(query);
+        return {
+          id: reportId,
+          status: "draft",
+          updatedAt: new Date("2026-10-12T12:00:00.000Z"),
+        };
+      },
+    },
+  } as unknown as PrismaClient;
+
+  await recordReportContent(db).applyConfirmedReportBody({
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    reportId,
+    content: { tabs: { Progress: { markdown: "- assistant\n" } } },
+    baseUpdatedAt: "2026-10-12T11:00:00.000Z",
+  });
+
+  expect(updates[0]?.where).toMatchObject({
+    updatedAt: new Date("2026-10-12T11:00:00.000Z"),
+  });
+});
+
+test("a body-edit written against a moved report answers conflict and writes nothing", async () => {
+  const reportId = "22222222-2222-4222-8222-222222222222";
+  const messageId = "33333333-3333-4333-8333-333333333333";
+  let rowVersion = new Date("2026-10-12T12:00:00.000Z");
+  let stored: ReportContent = { tabs: { Progress: { markdown: "user's newer edit" } } };
+  const db = {
+    user: { findUnique: async () => ({ id: "user-1" }) },
+    weeklyReportAssistant: {
+      findUnique: async () => ({ agentId: "assistant-agent" }),
+    },
+    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
+    weeklyReport: {
+      findFirst: async () => ({
+        id: reportId,
+        authorId: "user-1",
+        kind: "member",
+        status: "draft",
+        hiddenFromAuthor: false,
+        settingsId: null,
+        sourceTemplateId: null,
+        content: stored,
+        updatedAt: rowVersion,
+        cycle: { year: 2026, week: 40 },
+        submissions: [],
+      }),
+      update: async (query: { where: { updatedAt?: Date }; data: { content: ReportContent } }) => {
+        if (query.where.updatedAt && query.where.updatedAt.getTime() !== rowVersion.getTime()) {
+          throw Object.assign(new Error("Record to update not found."), { code: "P2025" });
+        }
+        stored = query.data.content;
+        rowVersion = new Date(rowVersion.getTime() + 60_000);
+        return { id: reportId, status: "draft", updatedAt: rowVersion };
+      },
+    },
+  } as unknown as PrismaClient;
+  const body = buildWeeklyReportAssistantSuggestionBody({
+    displayText: "已整理好草稿。",
+    suggestion: {
+      type: "body-edit",
+      reportId,
+      summary: "本周草稿",
+      baseUpdatedAt: "2026-10-12T11:00:00.000Z",
+      content: { tabs: { Progress: { markdown: "assistant draft" } } },
+    },
+  });
+
+  await expect(
+    applyIncomingWeeklyReportBodyEdit(db, {
+      workspaceId: "workspace-1",
+      agentId: "assistant-agent",
+      target: "@ada",
+      messageId,
+      body,
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(stored.tabs).toEqual({ Progress: { markdown: "user's newer edit" } });
+});
+
+test("a body-edit carrying the version it read writes", async () => {
+  const reportId = "22222222-2222-4222-8222-222222222222";
+  const messageId = "33333333-3333-4333-8333-333333333333";
+  const rowVersion = new Date("2026-10-12T12:00:00.000Z");
+  let stored: ReportContent = { tabs: { Progress: { markdown: "上一版" } } };
+  const db = {
+    user: { findUnique: async () => ({ id: "user-1" }) },
+    weeklyReportAssistant: {
+      findUnique: async () => ({ agentId: "assistant-agent" }),
+    },
+    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
+    weeklyReport: {
+      findFirst: async () => ({
+        id: reportId,
+        authorId: "user-1",
+        kind: "member",
+        status: "draft",
+        hiddenFromAuthor: false,
+        settingsId: null,
+        sourceTemplateId: null,
+        content: stored,
+        updatedAt: rowVersion,
+        cycle: { year: 2026, week: 40 },
+        submissions: [],
+      }),
+      update: async (query: { where: { updatedAt?: Date }; data: { content: ReportContent } }) => {
+        if (query.where.updatedAt && query.where.updatedAt.getTime() !== rowVersion.getTime()) {
+          throw Object.assign(new Error("Record to update not found."), { code: "P2025" });
+        }
+        stored = query.data.content;
+        return { id: reportId, status: "draft", updatedAt: rowVersion };
+      },
+    },
+  } as unknown as PrismaClient;
+  const body = buildWeeklyReportAssistantSuggestionBody({
+    displayText: "已整理好草稿。",
+    suggestion: {
+      type: "body-edit",
+      reportId,
+      summary: "本周草稿",
+      baseUpdatedAt: rowVersion.toISOString(),
+      content: { tabs: { Progress: { markdown: "最新版" } } },
+    },
+  });
+
+  await applyIncomingWeeklyReportBodyEdit(db, {
+    workspaceId: "workspace-1",
+    agentId: "assistant-agent",
+    target: "@ada",
+    messageId,
+    body,
+  });
+  expect(stored.tabs).toEqual({ Progress: { markdown: "最新版" } });
+});
+
+test("re-applying the same assistant insert is not refused by its own version bump", async () => {
+  const reportId = "22222222-2222-4222-8222-222222222222";
+  const messageId = "33333333-3333-4333-8333-333333333333";
+  const rowVersion = new Date("2026-10-12T12:00:00.000Z");
+  const writes: Array<{ where: Record<string, unknown> }> = [];
+  const stored: ReportContent = {
+    tabs: { Progress: { markdown: "assistant draft" } },
+    bodyRestore: {
+      sourceMessageId: messageId,
+      revision: 1,
+      showing: "latest",
+      previous: { tabs: { Progress: { markdown: "上一版" } } },
+      latest: { tabs: { Progress: { markdown: "assistant draft" } } },
+    },
+  };
+  const db = {
+    user: { findUnique: async () => ({ id: "user-1" }) },
+    weeklyReportAssistant: {
+      findUnique: async () => ({ agentId: "assistant-agent" }),
+    },
+    workspaceMembership: { findUnique: async () => ({ role: "member" }) },
+    weeklyReport: {
+      findFirst: async () => ({
+        id: reportId,
+        authorId: "user-1",
+        kind: "member",
+        status: "draft",
+        hiddenFromAuthor: false,
+        settingsId: null,
+        sourceTemplateId: null,
+        content: stored,
+        updatedAt: rowVersion,
+        cycle: { year: 2026, week: 40 },
+        submissions: [],
+      }),
+      update: async (query: {
+        where: Record<string, unknown>;
+        data: { content: ReportContent };
+      }) => {
+        writes.push(query);
+        return { id: reportId, status: "draft", updatedAt: rowVersion };
+      },
+    },
+  } as unknown as PrismaClient;
+  const body = buildWeeklyReportAssistantSuggestionBody({
+    displayText: "已整理好草稿。",
+    suggestion: {
+      type: "body-edit",
+      reportId,
+      summary: "本周草稿",
+      baseUpdatedAt: "2026-10-12T11:00:00.000Z",
+      content: { tabs: { Progress: { markdown: "assistant draft" } } },
+    },
+  });
+
+  await applyIncomingWeeklyReportBodyEdit(db, {
+    workspaceId: "workspace-1",
+    agentId: "assistant-agent",
+    target: "@ada",
+    messageId,
+    body,
+  });
+  expect(writes[0]?.where).not.toHaveProperty("updatedAt");
+});

@@ -27,6 +27,8 @@ export type WeeklyReportBodyEditSuggestion = {
   reportId: string;
   summary: string;
   content: ReportContent;
+  /** The report `updatedAt` the assistant read; the write is refused when it moved. */
+  baseUpdatedAt?: string;
 };
 
 export type WeeklyReportKeyPointEditSuggestion = {
@@ -186,6 +188,13 @@ function normalizeSuggestion(value: unknown): WeeklyReportAssistantSuggestion | 
   if (row.type === "body-edit") {
     if (typeof row.reportId !== "string" || !UUID_RE.test(row.reportId)) return null;
     if (typeof row.summary !== "string" || row.summary.trim().length === 0) return null;
+    // A present-but-malformed version is refused rather than silently unguarded.
+    if (
+      row.baseUpdatedAt !== undefined &&
+      row.baseUpdatedAt !== null &&
+      (typeof row.baseUpdatedAt !== "string" || row.baseUpdatedAt.length === 0)
+    )
+      return null;
     const content = parseStoredReportContent(row.content);
     if (!content) return null;
     return {
@@ -193,6 +202,9 @@ function normalizeSuggestion(value: unknown): WeeklyReportAssistantSuggestion | 
       reportId: row.reportId,
       summary: row.summary.trim(),
       content,
+      ...(typeof row.baseUpdatedAt === "string" && row.baseUpdatedAt.length > 0
+        ? { baseUpdatedAt: row.baseUpdatedAt }
+        : {}),
     };
   }
   return null;

@@ -135,7 +135,13 @@ export class WeeklyReportWorkflow {
         authorId: actor.userId,
         hiddenFromAuthor: false,
       },
-      select: { id: true, kind: true, content: true, settingsId: true },
+      select: {
+        id: true,
+        kind: true,
+        content: true,
+        settingsId: true,
+        updatedAt: true,
+      },
     });
     if (!report) throw new AppError("NOT_FOUND");
     const summaryPrompt =
@@ -215,6 +221,7 @@ export class WeeklyReportWorkflow {
         reportId: report.id,
         content: { ...content, tabs: { ...content.tabs, ...action.tabs } },
         askToSend: false,
+        baseUpdatedAt: action.baseUpdatedAt,
       });
     }
     return recordReportContent(this.db).saveReportContent({
@@ -223,6 +230,9 @@ export class WeeklyReportWorkflow {
       content,
       status: "submitted",
       askToSend: false,
+      // Submit rewrites the body it just read; guard that rewrite so an
+      // interleaved edit answers CONFLICT instead of being silently reverted.
+      baseUpdatedAt: report.updatedAt.toISOString(),
     });
   }
 }

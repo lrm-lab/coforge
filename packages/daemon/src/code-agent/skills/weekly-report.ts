@@ -44,7 +44,7 @@ Available action objects:
 - {"type":"sources","reportId":"team overview UUID","sourceReportId":"submitted member report UUID","section":"Summary","offset":0}
 - {"type":"configure","requestId":"new UUID, reuse on retry","templateId":"existing owned settings UUID; omit to create","name":"requested template name","sections":[{"title":"Summary","children":["Work Summary","Next Steps"]}],"allMembers":false,"recipientUserIds":["member UUID"],"scheduleEnabled":false,"sendWeekday":5,"sendTime":"15:00"}
 - {"type":"send","templateId":"settings UUID"}
-- {"type":"save","reportId":"own member report UUID","tabs":{"Summary":{"markdown":"actual work"}}}
+- {"type":"save","reportId":"own member report UUID","tabs":{"Summary":{"markdown":"actual work"}},"baseUpdatedAt":"<updatedAt>"}
 - {"type":"submit","reportId":"own member report UUID"}
 - {"type":"summary","reportId":"owned team overview UUID","markdown":"summary with source links"}
 
@@ -73,6 +73,10 @@ send reuses the current week's assignments and retries invitations.
 
 For a member's work notes, load the report context and sections, then save only
 requested tab changes. Save is a draft edit; submit only on explicit instruction.
+Body writes carry the version they were based on: set \`baseUpdatedAt\` on \`save\`
+and on body-edit envelopes to the report's \`updatedAt\`/\`contextVersion\` from your
+latest context, inbox, list or save result. A moved report answers CONFLICT —
+re-read the latest body and redo the write; never overwrite a newer edit.
 For a team summary, resolve the current owned overview from inbox, call status,
 list submitted sources with sources, follow its summaryPrompt, then read each source section with sources +
 sourceReportId + section (follow nextOffset until null), summarize with
@@ -209,7 +213,7 @@ missing sources. Return a preview for the existing Insert control:
 
 \`\`\`
 [weekly-report-suggestion]
-{"type":"body-edit","reportId":"<uuid>","summary":"Draft from collected evidence","content":{"tabs":{"Summary":{"markdown":"draft"}}}}
+{"type":"body-edit","reportId":"<uuid>","summary":"Draft from collected evidence","baseUpdatedAt":"<updatedAt>","content":{"tabs":{"Summary":{"markdown":"draft"}}}}
 [/weekly-report-suggestion]
 \`\`\`
 

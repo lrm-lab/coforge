@@ -249,6 +249,7 @@ export const applyConfirmedWeeklyReportBody = createServerFn({ method: "POST" })
       reportId: z.uuid(),
       content: reportContentSchema,
       sourceMessageId: z.uuid().optional(),
+      baseUpdatedAt: z.iso.datetime().optional(),
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
@@ -258,6 +259,7 @@ export const applyConfirmedWeeklyReportBody = createServerFn({ method: "POST" })
       reportId: data.reportId,
       content: normalizeReportContent(data.content),
       sourceMessageId: data.sourceMessageId,
+      baseUpdatedAt: data.baseUpdatedAt,
     });
   });
 

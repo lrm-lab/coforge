@@ -79,6 +79,32 @@ test("body-edit suggestions round-trip through the assistant message envelope", 
   expect(body).not.toContain("apiKey");
 });
 
+test("body-edit suggestions carry the report version the assistant read", () => {
+  const envelope = (value: unknown) =>
+    `[weekly-report-suggestion]\n${JSON.stringify(value)}\n[/weekly-report-suggestion]`;
+  const base = {
+    type: "body-edit",
+    reportId: "11111111-1111-1111-1111-111111111111",
+    summary: "Expand the Progress section.",
+    content: { tabs: { Progress: { markdown: "- item\n" } } },
+  };
+  expect(
+    parseWeeklyReportAssistantSuggestion(
+      envelope({ ...base, baseUpdatedAt: "2026-10-12T11:00:00.000Z" }),
+    ),
+  ).toMatchObject({ baseUpdatedAt: "2026-10-12T11:00:00.000Z" });
+  expect(parseWeeklyReportAssistantSuggestion(envelope(base))).not.toHaveProperty("baseUpdatedAt");
+  expect(
+    parseWeeklyReportAssistantSuggestion(envelope({ ...base, baseUpdatedAt: null })),
+  ).not.toHaveProperty("baseUpdatedAt");
+  expect(
+    parseWeeklyReportAssistantSuggestion(envelope({ ...base, baseUpdatedAt: 42 })),
+  ).toBeNull();
+  expect(
+    parseWeeklyReportAssistantSuggestion(envelope({ ...base, baseUpdatedAt: "" })),
+  ).toBeNull();
+});
+
 test("send prompts parse from assistant replies; highlight suggestions are ignored", () => {
   expect(
     parseWeeklyReportAssistantSuggestion(

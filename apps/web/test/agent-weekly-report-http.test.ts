@@ -156,6 +156,37 @@ test("weekly-report workflow uses the authenticated owner without requiring a pa
   ]);
 });
 
+test("a workflow write on a moved report answers conflict so the agent re-reads", async () => {
+  const outcome = await executeAgentWeeklyReport(
+    {
+      loadAssistantContextManifest: async () => ({}),
+      listAssistantVisibleReports: async () => ({}),
+      readAssistantReportSection: async () => ({}),
+    },
+    {
+      computerIdForAuthorizedAgent: async () => "computer",
+      weeklyReportAssistantOwner: async () => ({ userId: "owner" }),
+    },
+    {
+      ...request,
+      operation: "workflow",
+      action: { type: "save", reportId: REPORT, tabs: { Summary: { markdown: "draft" } } },
+    },
+    { userId: "owner", workspaceId: "workspace", computerId: "computer", agentId: "assistant" },
+    {
+      execute: async () => {
+        throw new AppError("CONFLICT");
+      },
+    },
+  );
+  expect(outcome).toEqual({
+    error: {
+      code: 409,
+      message: "Weekly report changed since it was read; re-read and retry",
+    },
+  });
+});
+
 test("ordinary Agents cannot invoke workflow writes even with matching principal IDs", async () => {
   const outcome = await executeAgentWeeklyReport(
     {

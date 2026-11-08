@@ -70,6 +70,7 @@ export function useSuggestionWrite(
         reportId: suggestion.reportId,
         content: suggestion.content as ReportContent,
         sourceMessageId: messageId,
+        baseUpdatedAt: suggestion.baseUpdatedAt,
       },
     });
     onBodyApplied?.(suggestion.reportId, written.content, written.bodyRestoreView);
