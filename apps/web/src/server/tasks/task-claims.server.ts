@@ -298,7 +298,6 @@ export async function unclaimTask(
   const task = await findTaskByNumber(ports.db, conversationId, command.number!);
   if (!task) throw new AppError("NOT_FOUND");
   if (task.ownerMemberId !== member.id) throw new AppError("ACCESS_DENIED");
-  if (task.status === "done") throw new AppError("CONFLICT");
   const { task: updated } = await ports.db.$transaction((tx) =>
     commitTaskChange(
       tx,

@@ -28,9 +28,14 @@ export function assertExpectedRevision(task: { revision: number }, expectedRevis
 
 /**
  * The columns that take a Task's assignee away. A Task in progress or in review with nobody on it
- * is work nobody is doing, so it is open again; a finished or closed one stays as it is.
+ * is work nobody is doing, so it is open again; a closed one stays as it is. A done one keeps its
+ * owner — only To do and Closed may be nobody's (taskStatusNeedsOwner), so the write is refused.
  */
-export function withoutAssignee(task: { status: string }) {
+export function withoutAssignee(task: { status: string; number: number }) {
+  if (task.status === "done")
+    throw new AppError("CONFLICT", {
+      hint: `task #${task.number} is done; change its status before removing its owner`,
+    });
   const reopened = task.status === "in_progress" || task.status === "in_review";
   return { ownerMemberId: null, claimedAt: null, ...(reopened ? { status: "todo" as const } : {}) };
 }
@@ -88,7 +93,11 @@ export async function commitTaskChange(
       data: { status: "completed", finishedAt: new Date() },
     });
   }
-  if (task.owner?.agentId && task.ownerMemberId !== before.ownerMemberId) {
+  // Entering In Progress with an Agent owner needs a live session: a finished Task's session was
+  // completed, however many hops the reopen took, and a failed one may never have started.
+  // ensureTaskExecutionSession no-ops on a live session, so this only restarts terminal ones.
+  const enteringInProgress = before.status !== "in_progress" && task.status === "in_progress";
+  if (task.owner?.agentId && (task.ownerMemberId !== before.ownerMemberId || enteringInProgress)) {
     await ensureTaskExecutionSession(tx, task, task.owner.agentId);
     // Read the row again so the result names the session every later read of this Task shows
     // (a restarted session keeps its older createdAt, so patching it in could disagree).

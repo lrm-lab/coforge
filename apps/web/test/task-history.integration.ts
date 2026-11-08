@@ -91,6 +91,8 @@ test("Task changes record history events with their before and after state", asy
       title: "Ship task history",
     });
     await run(asAlice, { operation: "update", number: task.number, status: "done" });
+    // A done Task keeps its owner; it reopens before the assignee can be removed.
+    await run(asAlice, { operation: "update", number: task.number, status: "in_review" });
     await run(asAlice, { operation: "unassign", number: task.number });
 
     expect(
@@ -145,9 +147,21 @@ test("Task changes record history events with their before and after state", asy
       },
       {
         seq: 7,
+        eventType: "status_changed",
+        ...byAlice,
+        payload: { from: "done", to: "in_review" },
+      },
+      {
+        seq: 8,
         eventType: "assignee_changed",
         ...byAlice,
         payload: { assigneeId: null, assigneeType: null },
+      },
+      {
+        seq: 9,
+        eventType: "status_changed",
+        ...byAlice,
+        payload: { from: "in_review", to: "todo" },
       },
     ]);
 
@@ -255,7 +269,7 @@ test("Task changes record history events with their before and after state", asy
     await run(asAlice, { ...reassign, idempotencyKey: crypto.randomUUID() });
     expect(await history(claimable.number)).toEqual(afterAssign);
     await run(asAlice, { operation: "unassign", number: task.number });
-    expect(await history(task.number)).toHaveLength(7);
+    expect(await history(task.number)).toHaveLength(9);
     await run(asAgent, { operation: "claim", number: started.number });
     expect(await history(started.number)).toHaveLength(2);
 
