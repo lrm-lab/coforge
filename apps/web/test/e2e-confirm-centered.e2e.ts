@@ -47,8 +47,6 @@ test("a confirmation is centered on a phone", async () => {
         setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
       ),
     ]);
-  // The confirm's button says "Delete Channel" like the panel's; take it from the confirm dialog.
-  const confirmButton = '[role="dialog"]:not([aria-label="Channel Details and Settings"]) button';
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((element) => element.textContent.trim() === ${JSON.stringify(text)}).at(-1)`;
   async function clickText(selector: string, text: string) {
@@ -61,7 +59,6 @@ test("a confirmation is centered on a phone", async () => {
   }
 
   const channelName = `e2e-confirm-mid-${process.pid}`;
-  const sidebarHasChannel = `[...document.querySelectorAll("a")].some((link) => link.getAttribute("aria-label") === ${JSON.stringify(`#${channelName}`)})`;
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
     include: { workspace: { select: { slug: true } } },
