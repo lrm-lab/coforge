@@ -38,6 +38,7 @@ export function decodeDaemonRuntimeReadyRequest(bytes: Uint8Array): DaemonRuntim
     recoveredRestartRequestIds: [...value.recoveredRestartRequestIds],
     recoveredUpgradeRequestIds: [...value.recoveredUpgradeRequestIds],
     ...(value.capabilities.length ? { capabilities: [...value.capabilities] } : {}),
+    ...(value.releaseChannel ? { releaseChannel: value.releaseChannel } : {}),
   };
 }
 

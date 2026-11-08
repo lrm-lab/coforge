@@ -45,6 +45,15 @@ export type DaemonRuntimeReadyPorts = {
   /** The release feed's newest Computer version, attached to the reply so a stale Computer
    * knows without a call of its own; a failed read answers no version. */
   latestComputerVersion?: () => Promise<string | null>;
+  releaseState?: {
+    record(
+      workspaceId: string,
+      computerId: string,
+      channel: string | undefined,
+      capabilities: readonly string[],
+      identity: { workerInstanceId: string; startedAt: number },
+    ): Promise<unknown>;
+  };
 };
 
 export const createDaemonRuntimeReadyMethod =
@@ -58,6 +67,7 @@ export const createDaemonRuntimeReadyMethod =
     upgrades,
     lifecycle,
     latestComputerVersion,
+    releaseState,
   }: DaemonRuntimeReadyPorts = {}): CentrifugoRpcMethod =>
   async (payload, metadata) => {
     const request = decodeDaemonRuntimeReadyRequest(payload);
@@ -101,6 +111,13 @@ export const createDaemonRuntimeReadyMethod =
       await capabilities?.record(
         request.workspaceId,
         request.computerId,
+        request.capabilities ?? [],
+        { workerInstanceId: request.workerInstanceId, startedAt: request.startedAt },
+      );
+      await releaseState?.record(
+        request.workspaceId,
+        request.computerId,
+        request.releaseChannel,
         request.capabilities ?? [],
         { workerInstanceId: request.workerInstanceId, startedAt: request.startedAt },
       );

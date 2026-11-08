@@ -113,7 +113,11 @@ export interface DaemonConnectionConfig {
   serverHttpUrl?: string;
   /** Requests replacement of only this Workspace runtime. The supervisor supplies recovery evidence. */
   requestRestart?(requestId: string): Promise<void>;
-  requestUpgrade?(requestId: string, expectedVersion?: string): Promise<void>;
+  requestUpgrade?(
+    requestId: string,
+    expectedVersion?: string,
+    releaseChannel?: string,
+  ): Promise<void>;
   /** Aborting it gives up a `start` still waiting for its first connection; no effect after. */
   signal?: AbortSignal;
 }

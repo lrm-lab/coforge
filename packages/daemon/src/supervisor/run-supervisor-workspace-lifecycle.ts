@@ -76,7 +76,7 @@ export async function runWorkspaceLifecycleCommand({
   launchComputerUpgrade: (
     requestId: string,
     expectedVersion: string,
-    input: { stateDirectory: string },
+    input: { stateDirectory: string; releaseChannel?: string },
   ) => Promise<void>;
   makeSelfClient: (serverHttpUrl: string) => Pick<ComputerSelfClient, "detach">;
   view: () => Promise<ManagedRuntimeIdentity[]>;
@@ -107,6 +107,7 @@ export async function runWorkspaceLifecycleCommand({
       try {
         await launchComputerUpgrade(request.requestId, request.expectedVersion, {
           stateDirectory,
+          releaseChannel: request.releaseChannel,
         });
       } catch (error) {
         // Same contract as `daemon:upgrade`: a job that never started must not leave the
@@ -144,6 +145,7 @@ export async function runWorkspaceLifecycleCommand({
       try {
         await launchComputerUpgrade(request.requestId, request.expectedVersion, {
           stateDirectory,
+          releaseChannel: request.releaseChannel,
         });
       } catch (error) {
         // `recordUpgrade` already committed a "pending" operation for this request; a job that

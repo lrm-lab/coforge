@@ -68,7 +68,9 @@ function ComputerDetailPage() {
   const { desktopOrigin } = computersRoute.useLoaderData();
   // The release-version check is a third-party request, so it is asked for after the render rather
   // than carried in the loader (see `latest-version.query.ts`).
-  const { data: latestComputerVersion } = useQuery(latestComputerVersionQuery());
+  const { data: latestComputerVersion } = useQuery(
+    latestComputerVersionQuery(computer.releaseChannel),
+  );
   // The owner's last scan of this Computer's Agent workspaces, kept across reloads; only the
   // Scan button scans (see `agent-workspace-scan.query.ts`).
   const workspaceId = workspaceRoute.useLoaderData().currentWorkspace.id;

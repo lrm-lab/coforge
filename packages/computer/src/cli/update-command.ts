@@ -29,7 +29,11 @@ export function createUpdateCommand(
     inPlaceUpgrade?: typeof runUpgradeOperation;
     /** `daemon:computer_upgrade` admission (task #685): the Daemon admits the request into the
      * machine-wide pending slot and launches the job; `false` falls back to launching here. */
-    admitComputerUpgrade?: (requestId: string, version: string) => Promise<boolean>;
+    admitComputerUpgrade?: (
+      requestId: string,
+      version: string,
+      releaseChannel?: string,
+    ) => Promise<boolean>;
     stateDirectory?: string;
   } = {},
 ): UpdateCommand {
@@ -57,6 +61,7 @@ export function createUpdateCommand(
     const outcome = await (dependencies.detachedUpgrade ?? runDetachedUpgrade)({
       version,
       feedUrl: options.releaseFeedUrl,
+      releaseChannel: options.releaseChannel,
       installRoot,
       admit: dependencies.admitComputerUpgrade,
       // The job's own progress lines are diagnostics: they belong on stderr, never on the

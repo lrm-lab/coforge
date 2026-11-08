@@ -20,6 +20,7 @@ import type { PrismaAgentControlStore } from "#src/server/db/repositories/agent-
 import type { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import type { daemonCapabilityLeases } from "./capability-composition.server";
 import type { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
+import { getComputerReleaseState } from "#src/server/computers/computer-release-state-composition.server";
 
 /** The ready method's ports, assembled beside the composition so the file's `createDaemon*
  * table stays a list of names rather than one method's dependency graph. */
@@ -88,5 +89,6 @@ export function daemonRuntimeReadyPorts(input: {
     observe: (scope, observation) => recordComputerObservation(db, scope, observation),
     upgrades: getComputerUpgradeStore(),
     lifecycle: input.computerLifecycle,
+    releaseState: getComputerReleaseState(),
   };
 }

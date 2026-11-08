@@ -269,7 +269,7 @@ import {
   readyFailureStage,
   type ConnectOutage,
 } from "./connection-retry";
-import { REMEMBERED_REQUEST_IDS, sendUpgradeResultOnce } from "#src/connection/upgrade-result-send";
+import { acceptLifecycleRequest, sendUpgradeResultOnce } from "#src/connection/upgrade-result-send";
 
 const AGENT_STATUS_REFRESH_MS = 30_000;
 export const COMPUTER_STATUS_REFRESH_MS = 30_000;
@@ -1370,20 +1370,6 @@ export class DaemonConnection
     }
   }
 
-  /** Runs one Computer lifecycle request at most once per request ID. */
-  #acceptLifecycleRequest(seen: Set<string>, requestId: string, run: () => Promise<void>): void {
-    if (seen.size >= REMEMBERED_REQUEST_IDS) seen.delete(seen.values().next().value!);
-    seen.add(requestId);
-    try {
-      void run().catch(() => {
-        seen.delete(requestId);
-      });
-    } catch (error) {
-      seen.delete(requestId);
-      throw error;
-    }
-  }
-
   #handleAgentPublication(data: Uint8Array, config: DaemonConnectionConfig): void {
     const { workspaceId, computerId } = config;
     const ownsDaemon = (value: { workspaceId: string; computerId?: string }) =>
@@ -1430,8 +1416,8 @@ export class DaemonConnection
           this.#upgradeRequestIds.has(upgrade.requestId)
         )
           return false;
-        this.#acceptLifecycleRequest(this.#upgradeRequestIds, upgrade.requestId, () =>
-          requestUpgrade(upgrade.requestId, upgrade.expectedVersion),
+        acceptLifecycleRequest(this.#upgradeRequestIds, upgrade.requestId, () =>
+          requestUpgrade(upgrade.requestId, upgrade.expectedVersion, upgrade.releaseChannel),
         );
         return true;
       }) ||
@@ -1444,7 +1430,7 @@ export class DaemonConnection
           this.#restartRequestIds.has(restart.requestId)
         )
           return false;
-        this.#acceptLifecycleRequest(this.#restartRequestIds, restart.requestId, () =>
+        acceptLifecycleRequest(this.#restartRequestIds, restart.requestId, () =>
           requestRestart(restart.requestId),
         );
         return true;

@@ -66,6 +66,7 @@ export interface SetupCommand {
 export interface UpdateOptions {
   allowDowngrade: boolean;
   releaseFeedUrl?: string;
+  releaseChannel?: string;
 }
 
 export interface UpdateCommand {

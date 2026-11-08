@@ -41,7 +41,7 @@ export async function runWorkspaceCommand({
   launchComputerUpgrade: (
     requestId: string,
     expectedVersion: string,
-    input: { stateDirectory: string },
+    input: { stateDirectory: string; releaseChannel?: string },
   ) => Promise<void>;
   makeSelfClient: (serverHttpUrl: string) => Pick<ComputerSelfClient, "detach">;
   view: () => Promise<ManagedRuntimeIdentity[]>;

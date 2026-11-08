@@ -274,6 +274,7 @@ export type DaemonCommandRequest = {
   expectedServerUrl: string;
   workspaceId?: string;
   expectedVersion?: string;
+  releaseChannel?: string;
   /** `daemon:detach` (task #417): the Workspace's Computer and server, so a Workspace the
    * supervisor has no binding for can still be told to unlink. */
   computerId?: string;
@@ -396,6 +397,7 @@ export function decodeDaemonCommandRequest(bytes: Uint8Array): DaemonCommandRequ
     expectedServerUrl: value.expectedServerUrl,
     workspaceId: value.workspaceId,
     expectedVersion: value.expectedVersion,
+    releaseChannel: value.releaseChannel,
     computerId: value.computerId,
     serverHttpUrl: value.serverHttpUrl,
   };

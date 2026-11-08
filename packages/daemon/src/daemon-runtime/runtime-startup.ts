@@ -64,6 +64,7 @@ export type RuntimeStartupPorts = {
   runtimeInstanceId: string;
   startedAtMs: number;
   computerVersion?: string;
+  releaseChannel?: string;
   isStopping: () => boolean;
   /** Everything the connection publishes before ready is buffered and replayed by
    * `RuntimePublicationSubscriptions`; these are the operations it replays. */
@@ -90,7 +91,11 @@ export type RuntimeStartupPorts = {
   sendPiChatFrame(frame: PiChatFrame): Promise<void>;
   lifecycle: {
     requestRestart?(requestId: string): Promise<void>;
-    requestUpgrade?(requestId: string, expectedVersion?: string): Promise<void>;
+    requestUpgrade?(
+      requestId: string,
+      expectedVersion?: string,
+      releaseChannel?: string,
+    ): Promise<void>;
     connectionRefused?(reason: DaemonConnectRejectionReason): void;
     recoveredRestartRequestIds?: string[];
     recoveredUpgradeRequestIds?: string[];
@@ -321,6 +326,7 @@ export class RuntimeStartup {
           runningAgentIds: ports.readyRunningAgentIds(),
           daemonVersion: COFORGE_DAEMON_VERSION,
           computerVersion: ports.computerVersion,
+          releaseChannel: ports.releaseChannel,
           ...ports.operatingSystem.current,
           recoveredRestartRequestIds: ports.lifecycle.recoveredRestartRequestIds ?? [],
           recoveredUpgradeRequestIds: ports.lifecycle.recoveredUpgradeRequestIds ?? [],

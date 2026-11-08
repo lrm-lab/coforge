@@ -85,6 +85,9 @@ export const restartComputerInputSchema = z.object({
 export const upgradeComputerInputSchema = restartComputerInputSchema.extend({
   target: z.enum(["runtime", "image"]).optional(),
 });
+export const latestComputerVersionInputSchema = z.object({
+  channel: z.string().trim().min(1).max(80).optional(),
+});
 export const readRestartStatusInputSchema = restartComputerInputSchema;
 export const scanUsageInputSchema = runtimeInput;
 export const readUsageInputSchema = runtimeInput;

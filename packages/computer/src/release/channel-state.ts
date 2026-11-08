@@ -50,8 +50,11 @@ export async function readReleaseChannel(stateDirectory: string): Promise<Releas
   try {
     const parsed = parseReleaseChannel(await readFile(releaseChannelPath(stateDirectory), "utf8"));
     return parsed ?? DEFAULT_RELEASE_CHANNEL;
-  } catch {
-    return DEFAULT_RELEASE_CHANNEL;
+  } catch (error) {
+    // A first run has no selector yet. Other filesystem failures must remain visible: silently
+    // falling back to production would make a permission or disk error look like a user choice.
+    if ((error as { code?: unknown } | null)?.code === "ENOENT") return DEFAULT_RELEASE_CHANNEL;
+    throw error;
   }
 }
 

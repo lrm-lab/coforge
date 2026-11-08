@@ -7,7 +7,7 @@ import {
   useRouter,
   useSearch,
 } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { latestComputerVersionQuery } from "#src/features/computers/latest-version.query";
 import { AddComputerDialog } from "#src/features/computers/add-computer-dialog";
 import { ComputerLayout } from "#src/features/computers/computer-layout";
@@ -62,7 +62,15 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
 function ComputersPage() {
   const { computers, installOrigin } = Route.useLoaderData();
   const router = useRouter();
-  const { data: latestComputerVersion } = useQuery(latestComputerVersionQuery());
+  const releaseChannels = [
+    ...new Set(computers.map((computer) => computer.releaseChannel ?? "latest")),
+  ];
+  const latestComputerVersions = useQueries({
+    queries: releaseChannels.map((channel) => latestComputerVersionQuery(channel)),
+  });
+  const latestByChannel = new Map(
+    releaseChannels.map((channel, index) => [channel, latestComputerVersions[index]?.data ?? null]),
+  );
   const { currentWorkspace } = appRoute.useLoaderData();
   const params = useParams({
     from: "/w/$workspaceSlug/_computers/computer/$computerId",
@@ -125,7 +133,7 @@ function ComputersPage() {
         computers={computers}
         selectedComputerId={params?.computerId}
         onAdd={() => setAddComputerOpen(true)}
-        latestComputerVersion={latestComputerVersion}
+        latestComputerVersions={latestByChannel}
       >
         <Outlet />
       </ComputerLayout>

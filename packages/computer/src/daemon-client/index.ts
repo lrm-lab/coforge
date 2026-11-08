@@ -214,14 +214,18 @@ export function createCommand(input: {
  * rejection propagates unchanged.
  */
 export function createComputerUpgradeAdmission(daemon: DaemonCommandRunner) {
-  return async (requestId: string, expectedVersion: string): Promise<boolean> => {
+  return async (
+    requestId: string,
+    expectedVersion: string,
+    releaseChannel?: string,
+  ): Promise<boolean> => {
     if (!daemon.computerUpgrade) return false;
     // Only a running Daemon can hold the pending slot, and asking must never start one:
     // `ensureRunning` would boot a deliberately stopped Daemon (or register its service)
     // just to ask it a question the answer to which is already "no".
     if (!(await daemon.isRunning().catch(() => false))) return false;
     try {
-      await daemon.computerUpgrade(requestId, expectedVersion);
+      await daemon.computerUpgrade(requestId, expectedVersion, releaseChannel);
       return true;
     } catch (error) {
       if (error instanceof DaemonCommandRejectedError) {

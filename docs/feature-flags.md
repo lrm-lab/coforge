@@ -76,6 +76,19 @@ COFORGE_FEATURE_FLAGS_FILE=./feature-flags.json
 - On for everyone: drop `targeting` and set `"defaultVariant": "on"`.
 - Off again: set `"state": "DISABLED"`, or remove the flag.
 
+### Computer release-channel rollout
+
+`computer-release-channels` is deliberately dark by default. Ship the additive Computer/Daemon
+protocol first, then wait until the upgraded Computers report `release-channel:v1` in their ready
+handshake and have no pending upgrade. Enable the flag only for that verified cohort. The server
+then honors the Computer's persisted `latest`, `alpha`, or `pinned:<version>` selector when it
+reads the release feed and publishes an upgrade intent. Older Computers, missing capability state,
+and stale leases keep the legacy deployment-feed path.
+
+To roll back, disable or remove the flag. New protocol fields, local channel files, and Redis state
+remain harmless; subsequent upgrades immediately use the legacy path. Re-enable the same flag after
+the cohort is healthy without reinstalling or changing the Computer data.
+
 Every flag is boolean, with the variants `on` and `off` and `off` as the default variant.
 
 ## The flag registry

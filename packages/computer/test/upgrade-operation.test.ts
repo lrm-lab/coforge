@@ -80,6 +80,23 @@ test("a channel-selected external upgrade carries only an official release feed"
   ).toThrow(/--release-feed requires a value/);
 });
 
+test("a remote channel selector resolves to the matching official feed", () => {
+  expect(
+    parseRemoteUpgradeOperation([
+      "__remote-upgrade",
+      "--request-id",
+      id,
+      "--version",
+      "1.0.0",
+      "--channel",
+      "alpha",
+    ]),
+  ).toMatchObject({
+    releaseChannel: "alpha",
+    releaseFeedUrl: "https://releases-staging.coforge.cn",
+  });
+});
+
 test.each([
   [["__remote-upgrade", "--version", "1.0.0"], "valid UUID request ID"],
   [["__remote-upgrade", "--request-id", "not-a-uuid", "--version", "1.0.0"], "valid UUID"],

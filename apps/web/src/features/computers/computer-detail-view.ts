@@ -31,6 +31,7 @@ export type ComputerDetailView = ComputerIdentity & {
   runtimeDetecting?: boolean;
   connectedAt: Date | string;
   computerVersion?: string | null;
+  releaseChannel?: string;
   /** The cloud image this computer is running. Absent for a local computer. */
   imageVersion?: string | null;
   imageUpdate?: { version: string } | null;

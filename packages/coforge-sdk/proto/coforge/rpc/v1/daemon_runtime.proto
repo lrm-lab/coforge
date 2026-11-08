@@ -46,6 +46,8 @@ message DaemonRuntimeReadyRequest {
   optional string platform = 12;
   optional string os_version = 13;
   repeated string recovered_upgrade_request_ids = 14;
+  // Additive release selector advertised by Computers that persist channel state locally.
+  optional string release_channel = 15;
 }
 
 // The server's answer to a ready. An older server answers empty bytes, which decode to an
@@ -85,6 +87,8 @@ message ComputerUpgradeIntent {
   string target = 5;
   string message_type = 6;
   optional string expected_version = 7;
+  // Additive release selector. Older peers omit it and keep using their compiled feed.
+  optional string release_channel = 8;
 }
 
 // The Daemon's terminal report for one Computer upgrade operation. The server still requires its

@@ -12,9 +12,12 @@ import { getLatestComputerVersion } from "./computer-release.functions";
  * dedupes and caches the value, so re-renders, route changes and the detail panel do not ask again;
  * the server side keeps its own short TTL cache in front of the feed.
  */
-export const latestComputerVersionQuery = () =>
+export const latestComputerVersionQuery = (channel?: string) =>
   queryOptions({
-    queryKey: ["computers", "latest-version"],
-    queryFn: () => getLatestComputerVersion(),
+    queryKey:
+      channel === undefined
+        ? ["computers", "latest-version"]
+        : ["computers", "latest-version", channel],
+    queryFn: () => getLatestComputerVersion({ data: { channel } }),
     staleTime: 5 * 60_000,
   });

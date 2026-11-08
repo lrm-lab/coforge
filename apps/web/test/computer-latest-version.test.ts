@@ -1,5 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
-import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
+import {
+  clearLatestComputerVersionCache,
+  readLatestComputerVersion,
+} from "#src/server/computers/latest-computer-version.server";
 
 /** The version cache is a module global, so every case drives it through the exported seam with
  * an explicitly injected clock. The clock only ever moves forward (the cache keys on `now - at`),
@@ -19,13 +22,9 @@ function fakeFetch(
   }) as unknown as typeof fetch;
 }
 
-afterEach(async () => {
-  // Jump the shared clock past every TTL and stamp the cache as an expired miss, so every
-  // later test starts from a fetch rather than a previous test's cached answer.
+afterEach(() => {
   nowMs += 10_000_000;
-  await readLatestComputerVersion("https://reset.test", fakeFetch("network-error", []), now);
-  // The reset's read returns the stale value immediately; the refresh it started lands here.
-  await Bun.sleep(0);
+  clearLatestComputerVersionCache();
 });
 
 test("first read fetches the feed, later reads within the TTL reuse the answer", async () => {

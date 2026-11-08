@@ -48,6 +48,7 @@ import { AgentControl } from "#src/server/agents/agent-control.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
+import { getComputerReleaseState } from "#src/server/computers/computer-release-state-composition.server";
 import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.server";
 import { runUpgradeComputerAction } from "#src/server/computers/upgrade-computer-action.server";
 import { readAgentWorkspaceScan } from "#src/server/computers/computer-workspace-scan.server";
@@ -145,24 +146,28 @@ export const listComputers = createServerFn({ method: "GET" })
       .map(({ computer }) => computer.id);
     const runtimeDetection = getComputerRuntimeDetection();
     // Each read needs only the connections, so they run side by side.
-    const [statuses, agentDisplays, detecting, upgrades, images, refusals] = await Promise.all([
-      // One round trip for every Computer's online lease, not one per Computer.
-      computerStatus.getMany(computerScopes),
-      getAgentDisplay().snapshotMany(agentScopes),
-      Promise.all(
-        computerScopes.map((scope) => runtimeDetection.detecting(scope).catch(() => false)),
-      ),
-      // Each Computer's latest upgrade, so a reload resumes one still running, and keeps the
-      // reason one failed, instead of offering Upgrade again.
-      getComputerUpgradeStore()
-        .latestMany(computerScopes)
-        .catch(() => []),
-      readCloudComputerImages(cloudIds),
-      // Why the connect proxy last refused this binding for good, cleared by the next connect.
-      getComputerConnectRefusals()
-        .getMany(computerScopes)
-        .catch(() => computerScopes.map(() => null)),
-    ]);
+    const [statuses, agentDisplays, detecting, upgrades, images, refusals, releaseChannels] =
+      await Promise.all([
+        // One round trip for every Computer's online lease, not one per Computer.
+        computerStatus.getMany(computerScopes),
+        getAgentDisplay().snapshotMany(agentScopes),
+        Promise.all(
+          computerScopes.map((scope) => runtimeDetection.detecting(scope).catch(() => false)),
+        ),
+        // Each Computer's latest upgrade, so a reload resumes one still running, and keeps the
+        // reason one failed, instead of offering Upgrade again.
+        getComputerUpgradeStore()
+          .latestMany(computerScopes)
+          .catch(() => []),
+        readCloudComputerImages(cloudIds),
+        // Why the connect proxy last refused this binding for good, cleared by the next connect.
+        getComputerConnectRefusals()
+          .getMany(computerScopes)
+          .catch(() => computerScopes.map(() => null)),
+        getComputerReleaseState()
+          .getMany(computerScopes)
+          .catch(() => computerScopes.map(() => undefined)),
+      ]);
     const agentDisplayById = new Map(
       agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
     );
@@ -197,6 +202,7 @@ export const listComputers = createServerFn({ method: "GET" })
           }),
           online: statuses[index] ?? false,
           connectRefusal: refusals[index] ?? null,
+          releaseChannel: releaseChannels[index],
           runtimeDetecting: detecting[index] ?? false,
           agents: computer.agents.map((agent) => {
             const config = readableRuntimeConfig(agent.runtimeConfig, agent.id);

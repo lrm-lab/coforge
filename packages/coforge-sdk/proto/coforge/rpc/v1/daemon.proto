@@ -29,6 +29,8 @@ message DaemonCommandRequest {
   string expected_server_url = 3;
   optional string workspace_id = 4;
   optional string expected_version = 5;
+  // Additive release selector forwarded to the Computer's remote upgrade entrypoint.
+  optional string release_channel = 6;
   // `daemon:detach` (task #417): the Workspace's Computer and server, so a Workspace the
   // supervisor has no binding for can still be told to unlink — the computer knows both from
   // its own registration.

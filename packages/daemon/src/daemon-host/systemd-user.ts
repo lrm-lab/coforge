@@ -111,8 +111,18 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
     return this.#local.command(operation, workspaceId, detachTarget);
   }
 
-  computerUpgrade(requestId: string, expectedVersion: string): Promise<ManagedRuntimeIdentity[]> {
-    return this.#local.control("computer_upgrade", undefined, requestId, expectedVersion);
+  computerUpgrade(
+    requestId: string,
+    expectedVersion: string,
+    releaseChannel?: string,
+  ): Promise<ManagedRuntimeIdentity[]> {
+    return this.#local.control(
+      "computer_upgrade",
+      undefined,
+      requestId,
+      expectedVersion,
+      releaseChannel,
+    );
   }
 
   async stop(): Promise<void> {

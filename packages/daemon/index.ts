@@ -41,6 +41,7 @@ import { WorkspaceParking } from "#src/supervisor/workspace-parking";
 import { guardWorkspaceRunnerStart } from "#src/supervisor/workspace-runner-guard";
 import { writeWorkspaceInstanceRecord } from "#src/supervisor/process-workspace-instance";
 import { holdWorkspaceDaemonLock } from "#src/supervisor/workspace-daemon-lock";
+import { requestWorkspaceUpgrade } from "#src/supervisor/request-workspace-upgrade";
 export { launchdJobs } from "#src/platform/launchd-job";
 export { stopWorkspaceAgentProcesses } from "#src/platform/linux-agent-processes";
 export { FileBindingStore } from "#src/supervisor/binding-store";
@@ -183,7 +184,11 @@ export { COFORGE_DAEMON_SERVER_URL, daemonConnectionEndpoint } from "#src/connec
 
 const DAEMON_CATEGORY = ["coforge", "daemon"];
 
-export async function runDaemon(args: string[], computerVersion?: string): Promise<void> {
+export async function runDaemon(
+  args: string[],
+  computerVersion?: string,
+  releaseChannel?: string,
+): Promise<void> {
   const stopRequested = captureStopSignal();
   const { socketPath, stateDirectoryArg, daemonStateDirectory } = daemonStartupOptions(args);
   await configureDaemonLogging(daemonStateDirectory);
@@ -339,13 +344,19 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
               : undefined,
             connectionRefused: (reason) => void parking.park(reason),
             installerJournalExists: () => installerJournalExists(),
-            requestUpgrade: async (requestId: string, expectedVersion?: string) => {
-              if (!config) throw new Error("Workspace is not configured");
-              if (!expectedVersion) throw new Error("upgrade expected version is unavailable");
-              await supervisorControl("upgrade", config.workspaceId, requestId, expectedVersion);
-            },
+            requestUpgrade: (requestId, expectedVersion, releaseChannel) =>
+              requestWorkspaceUpgrade(
+                config,
+                supervisorControl,
+                requestId,
+                expectedVersion,
+                releaseChannel,
+              ),
           },
           computerVersion,
+          undefined,
+          undefined,
+          releaseChannel,
         );
       const daemon = {
         async configure(connection: DaemonConfig) {

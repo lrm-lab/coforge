@@ -53,6 +53,28 @@ test("carries a channel-selected official feed through the external job", () => 
   ]);
 });
 
+test("channel selection is emitted without a conflicting legacy feed flag", () => {
+  expect(
+    computerUpgradeCommand(
+      "darwin",
+      "/coforge-computer",
+      id,
+      "1.2.3",
+      "https://releases-staging.coforge.cn",
+      "alpha",
+    ),
+  ).toEqual([
+    "/coforge-computer",
+    "__remote-upgrade",
+    "--request-id",
+    id,
+    "--version",
+    "1.2.3",
+    "--channel",
+    "alpha",
+  ]);
+});
+
 test("darwin upgrades run the same action inside a one-shot launchd job, never launchctl submit", () => {
   const command = computerUpgradeCommand("darwin", "/coforge-computer", id, "1.2.3");
   expect(command).toEqual([

@@ -10,11 +10,16 @@ import { upgradeComputerInputSchema } from "#src/features/computers/computer.sch
 import type { z } from "zod";
 import { getComputerUpgradeStore } from "./computer-upgrade-store.server";
 import { UpgradeComputer } from "./upgrade-computer.server";
+import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
+import { getComputerReleaseState } from "./computer-release-state-composition.server";
+import { parseServerReleaseChannel, releaseFeedForChannel } from "./release-channel.server";
 
 type UpgradeComputerInput = z.infer<typeof upgradeComputerInputSchema>;
 
-async function fetchExpectedUpgradeVersion(): Promise<string> {
-  const feedUrl = resolveReleaseFeedUrl();
+async function fetchExpectedUpgradeVersion(channel?: string): Promise<string> {
+  const parsed = parseServerReleaseChannel(channel);
+  if (parsed?.startsWith("pinned:")) return parsed.slice("pinned:".length);
+  const feedUrl = parsed ? releaseFeedForChannel(parsed) : resolveReleaseFeedUrl();
   if (!feedUrl) throw new AppError("RELEASE_FEED_UNAVAILABLE");
   const response = await fetch(`${feedUrl}/latest`, { signal: AbortSignal.timeout(3_000) });
   const expectedVersion = response.ok ? (await response.text()).trim() : "";
@@ -39,10 +44,17 @@ export async function runUpgradeComputerAction(
   });
   if (!connection) throw new Error("Computer is not available");
   const placement = computer.kind === "cloud" ? "cloud" : "local";
+  const channelsEnabled = await isFeatureEnabled("computer-release-channels", { workspaceId });
+  const releaseChannel =
+    placement === "local" && channelsEnabled
+      ? await getComputerReleaseState()
+          .get(workspaceId, data.computerId)
+          .catch(() => undefined)
+      : undefined;
   return new UpgradeComputer(
     getComputerUpgradeStore(),
     getComputerStatusCache(),
-    fetchExpectedUpgradeVersion,
+    () => fetchExpectedUpgradeVersion(releaseChannel),
     createCentrifugoServerApi(),
     {
       available: (computerId) => getCloudImageInventory().available(computerId),
@@ -59,5 +71,5 @@ export async function runUpgradeComputerAction(
         });
       },
     },
-  ).execute({ workspaceId, userId: user.id }, { ...data, placement });
+  ).execute({ workspaceId, userId: user.id }, { ...data, placement, releaseChannel });
 }

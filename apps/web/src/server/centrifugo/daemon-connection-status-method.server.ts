@@ -16,6 +16,13 @@ export function createDaemonConnectionStatusMethod(
   /** The release feed's newest Computer version: the heartbeat's answer refreshes it for a
    * daemon that stays connected for days between readies; a failed read answers no version. */
   latestComputerVersion?: () => Promise<string | null>,
+  releaseState?: {
+    refresh(
+      workspaceId: string,
+      computerId: string,
+      identity?: { workerInstanceId: string; startedAt: number },
+    ): Promise<void>;
+  },
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const request = JSON.parse(utf8Decoder.decode(payload)) as {
@@ -51,6 +58,16 @@ export function createDaemonConnectionStatusMethod(
       });
     }
     const version = await latestComputerVersion?.().catch(() => null);
+    if (request.online)
+      await releaseState
+        ?.refresh(
+          request.workspaceId,
+          request.computerId,
+          request.workerInstanceId && typeof request.startedAt === "number"
+            ? { workerInstanceId: request.workerInstanceId, startedAt: request.startedAt }
+            : undefined,
+        )
+        .catch(() => {});
     return utf8Encoder.encode(JSON.stringify(version ? { latestComputerVersion: version } : {}));
   };
 }

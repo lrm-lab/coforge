@@ -41,6 +41,7 @@ export function encodeComputerUpgradeIntent(value: ComputerUpgradeIntent): Uint8
       ...value,
       target: "latest",
       ...(value.expectedVersion ? { expectedVersion: value.expectedVersion } : {}),
+      ...(value.releaseChannel ? { releaseChannel: value.releaseChannel } : {}),
       messageType: COMPUTER_UPGRADE_MESSAGE_TYPE,
     }),
   );
@@ -63,6 +64,7 @@ export function decodeComputerUpgradeIntent(bytes: Uint8Array): ComputerUpgradeI
     computerId: value.computerId,
     target: "latest",
     ...(value.expectedVersion ? { expectedVersion: value.expectedVersion } : {}),
+    ...(value.releaseChannel ? { releaseChannel: value.releaseChannel } : {}),
     messageType: COMPUTER_UPGRADE_MESSAGE_TYPE,
   };
 }

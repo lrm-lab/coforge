@@ -82,7 +82,11 @@ export interface DaemonCommandRunner {
   /** `daemon:computer_upgrade` (task #685): admits the Computer CLI's own upgrade into the one
    * machine-wide pending slot and launches it; `false`-returning hosts fall back to launching
    * the detached job directly. */
-  computerUpgrade?(requestId: string, expectedVersion: string): Promise<ManagedRuntimeIdentity[]>;
+  computerUpgrade?(
+    requestId: string,
+    expectedVersion: string,
+    releaseChannel?: string,
+  ): Promise<ManagedRuntimeIdentity[]>;
 }
 export type DaemonWorkspaceConfig = {
   /** `daemon:configure` from a login-style setup (task #417): only it retires the login the
@@ -218,7 +222,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     detachTarget?: { computerId: string; serverHttpUrl: string },
   ): Promise<ManagedRuntimeIdentity[]> {
     await this.ensureRunning();
-    return this.control(operation, workspaceId, undefined, undefined, detachTarget);
+    return this.control(operation, workspaceId, undefined, undefined, undefined, detachTarget);
   }
 
   async control(
@@ -234,6 +238,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     workspaceId?: string,
     requestId: string = crypto.randomUUID(),
     expectedVersion?: string,
+    releaseChannel?: string,
     /** `daemon:detach` (task #417): the Workspace's Computer and server, so a Workspace the
      * supervisor has no binding for can still be told to unlink. */
     detachTarget?: { computerId: string; serverHttpUrl: string },
@@ -250,6 +255,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
           workspaceId,
           expectedServerUrl: this.#serverUrl,
           expectedVersion,
+          releaseChannel,
           computerId: detachTarget?.computerId,
           serverHttpUrl: detachTarget?.serverHttpUrl,
         }),

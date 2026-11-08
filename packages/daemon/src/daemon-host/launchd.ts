@@ -113,8 +113,18 @@ export class LaunchdDaemonHost implements DaemonLauncher {
     return this.#local.command(operation, workspaceId, detachTarget);
   }
 
-  computerUpgrade(requestId: string, expectedVersion: string): Promise<ManagedRuntimeIdentity[]> {
-    return this.#local.control("computer_upgrade", undefined, requestId, expectedVersion);
+  computerUpgrade(
+    requestId: string,
+    expectedVersion: string,
+    releaseChannel?: string,
+  ): Promise<ManagedRuntimeIdentity[]> {
+    return this.#local.control(
+      "computer_upgrade",
+      undefined,
+      requestId,
+      expectedVersion,
+      releaseChannel,
+    );
   }
 
   /** Boots the user agent out and waits for it to actually leave launchd. `bootout` returns as

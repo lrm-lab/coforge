@@ -43,6 +43,13 @@ test("additively round-trips daemon capabilities", () => {
   );
 });
 
+test("additively round-trips the persisted release channel", () => {
+  const request = { ...ready, capabilities: ["release-channel:v1"], releaseChannel: "alpha" };
+  expect(decodeDaemonRuntimeReadyRequest(encodeDaemonRuntimeReadyRequest(request))).toEqual(
+    request,
+  );
+});
+
 test("round-trips a Workspace-scoped Computer restart intent", async () => {
   const { decodeComputerRestartIntent, encodeComputerRestartIntent } = await import("./codec");
   const intent = {

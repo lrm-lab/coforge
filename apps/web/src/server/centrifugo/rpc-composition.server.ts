@@ -66,6 +66,7 @@ import {
 import { WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
 import { getComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
+import { getComputerReleaseState } from "#src/server/computers/computer-release-state-composition.server";
 import { createComputerUpgradeResultMethod } from "./computer-upgrade-result-method.server";
 import { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
 import { getComputerLifecycleMemory } from "#src/server/computers/computer-lifecycle-memory.server";
@@ -318,6 +319,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
             const feedUrl = resolveReleaseFeedUrl();
             return feedUrl ? readLatestComputerVersion(feedUrl) : Promise.resolve(null);
           },
+          getComputerReleaseState(),
         ),
         ...computerRuntimeMethods(db),
         [DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD]: createDaemonRuntimeUsageScanResultMethod(),

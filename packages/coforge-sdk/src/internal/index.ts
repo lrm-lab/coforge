@@ -28,6 +28,8 @@ export const COMPUTER_UPGRADE_METHOD = RPC_METHODS.computerUpgrade;
 export const COMPUTER_UPGRADE_MESSAGE_TYPE = "coforge.rpc.v1.ComputerUpgradeIntent" as const;
 export const COMPUTER_UPGRADE_RESULT_METHOD = RPC_METHODS.computerUpgradeResult;
 export const COMPUTER_UPGRADE_RESULT_MESSAGE_TYPE = "coforge.rpc.v1.ComputerUpgradeResult" as const;
+/** Daemon capability for the additive local release-channel handshake and upgrade field. */
+export const RELEASE_CHANNEL_CAPABILITY = "release-channel:v1" as const;
 export const AGENT_START_METHOD = RPC_METHODS.agentStart;
 export const AGENT_START_MESSAGE_TYPE = "coforge.rpc.v1.AgentStartIntent" as const;
 export const AGENT_STOP_METHOD = RPC_METHODS.agentStop;

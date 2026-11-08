@@ -1,5 +1,6 @@
 import { RFC_UUID_PATTERN } from "@lrm/coforge-sdk/internal";
-import { assertOfficialReleaseFeedUrl } from "#src/release-channel";
+import { assertOfficialReleaseFeedUrl, resolveReleaseFeedForChannel } from "#src/release-channel";
+import { parseReleaseChannel, type ReleaseChannel } from "#src/release/channel-state";
 
 /** Who asked for the operation. Remote operations owe the server a terminal result. */
 export type UpgradeOperationOrigin = "remote" | "cli";
@@ -22,6 +23,8 @@ export type UpgradeOperation = {
   allowDowngrade?: boolean;
   /** Official feed selected by an interactive channel choice; absent for server-triggered latest. */
   releaseFeedUrl?: string;
+  /** Channel forwarded by the server; the Computer resolves it to its official feed. */
+  releaseChannel?: ReleaseChannel;
 };
 
 export function assertUpgradeRequestId(value: unknown): asserts value is string {
@@ -43,10 +46,26 @@ export function parseRemoteUpgradeOperation(argv: readonly string[]): UpgradeOpe
   const rawReleaseFeedUrl = value("--release-feed");
   if (releaseFeedFlag >= 0 && !rawReleaseFeedUrl)
     throw new Error("remote upgrade --release-feed requires a value");
+  const channelFlag = argv.indexOf("--channel");
+  const rawChannel = value("--channel");
+  if (channelFlag >= 0 && !rawChannel) throw new Error("remote upgrade --channel requires a value");
+  const releaseChannel = rawChannel ? parseReleaseChannel(rawChannel) : null;
+  if (rawChannel && !releaseChannel)
+    throw new Error(`invalid remote upgrade channel "${rawChannel}"`);
+  if (rawReleaseFeedUrl && releaseChannel)
+    throw new Error("remote upgrade cannot combine --release-feed and --channel");
   const releaseFeedUrl = rawReleaseFeedUrl
     ? assertOfficialReleaseFeedUrl(rawReleaseFeedUrl)
-    : undefined;
-  return { requestId, selection, origin: "remote", ...(releaseFeedUrl ? { releaseFeedUrl } : {}) };
+    : releaseChannel
+      ? resolveReleaseFeedForChannel(releaseChannel)
+      : undefined;
+  return {
+    requestId,
+    selection,
+    origin: "remote",
+    ...(releaseFeedUrl ? { releaseFeedUrl } : {}),
+    ...(releaseChannel ? { releaseChannel } : {}),
+  };
 }
 
 /** Builds the operation an interactive `upgrade` or `install` command runs. */

@@ -18,7 +18,11 @@ export function computerUpgradeAction(
   requestId: string,
   expectedVersion: string,
   feedUrl?: string,
+  releaseChannel?: string,
 ): string[] {
+  // A channel is the authoritative selector. The Computer resolves it to an official feed, so
+  // do not also emit a legacy feed flag (which would make the remote parser reject the command).
+  const effectiveFeedUrl = releaseChannel ? undefined : feedUrl;
   return [
     executablePath,
     "__remote-upgrade",
@@ -26,7 +30,8 @@ export function computerUpgradeAction(
     requestId,
     "--version",
     expectedVersion,
-    ...(feedUrl ? ["--release-feed", feedUrl] : []),
+    ...(effectiveFeedUrl ? ["--release-feed", effectiveFeedUrl] : []),
+    ...(releaseChannel ? ["--channel", releaseChannel] : []),
   ];
 }
 
@@ -36,10 +41,17 @@ export function computerUpgradeCommand(
   requestId: string,
   expectedVersion: string,
   feedUrl?: string,
+  releaseChannel?: string,
 ): string[] {
   if (!RFC_UUID_PATTERN.test(requestId)) throw new Error("invalid Computer upgrade request ID");
   if (!expectedVersion) throw new Error("missing expected Computer release version");
-  const action = computerUpgradeAction(executablePath, requestId, expectedVersion, feedUrl);
+  const action = computerUpgradeAction(
+    executablePath,
+    requestId,
+    expectedVersion,
+    feedUrl,
+    releaseChannel,
+  );
   if (platform === "linux")
     return [
       "systemd-run",
@@ -109,6 +121,8 @@ export type WindowsUpgradeTaskRunner = (command: string[]) => Promise<number>;
 export type LaunchComputerUpgradeOptions = ComputerUpgradeJobPathOptions & {
   /** Explicit official feed selected by the local channel command. */
   feedUrl?: string;
+  /** Channel persisted by the Computer; resolved to an official feed by the Computer itself. */
+  releaseChannel?: string;
   /** Injectable native launchd access, for tests only. */
   jobPlatform?: LaunchdJobPlatform;
   /** Injectable Windows `schtasks` runner, for tests only. */
@@ -150,6 +164,7 @@ export async function launchComputerUpgrade(
     requestId,
     expectedVersion,
     options.feedUrl,
+    options.releaseChannel,
   );
   if (platform === "darwin") {
     const paths = computerUpgradeJobPaths(requestId, options);
@@ -172,7 +187,13 @@ export async function launchComputerUpgrade(
   if (platform === "linux" && !(options.hasSystemd ?? systemdPresent())) {
     const { logPath } = computerUpgradeJobPaths(requestId, options);
     (options.spawnDetached ?? spawnDetachedUpgrade)(
-      computerUpgradeAction(process.execPath, requestId, expectedVersion, options.feedUrl),
+      computerUpgradeAction(
+        process.execPath,
+        requestId,
+        expectedVersion,
+        options.feedUrl,
+        options.releaseChannel,
+      ),
       logPath,
     );
     return;

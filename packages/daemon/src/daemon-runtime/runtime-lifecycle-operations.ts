@@ -17,15 +17,18 @@ import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 export async function requestUpgrade(
-  requestUpgrade: ((requestId: string, expectedVersion?: string) => Promise<void>) | undefined,
+  requestUpgrade:
+    | ((requestId: string, expectedVersion?: string, releaseChannel?: string) => Promise<void>)
+    | undefined,
   upgradeResults: UpgradeResultReporter,
   requestId: string,
   expectedVersion: string | undefined,
+  releaseChannel: string | undefined,
   workspaceId: string,
 ): Promise<void> {
   if (!requestUpgrade) throw new Error("upgrade requests are unsupported");
   try {
-    await requestUpgrade(requestId, expectedVersion);
+    await requestUpgrade(requestId, expectedVersion, releaseChannel);
     void upgradeResults.report();
   } catch (error) {
     const message = thrownMessage(error);

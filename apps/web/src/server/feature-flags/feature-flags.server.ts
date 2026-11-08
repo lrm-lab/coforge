@@ -27,6 +27,8 @@ export const FEATURE_FLAGS = {
     "Documents phase 2 (task #490): Agents make web pages (`artifact create --kind html`), which an artifact's page previews (task #514); on in staging, off in production",
   "task-ref-tokens":
     "Store `#channel:#N` and `dm:@peer:#N` in message bodies (written by the server, read by every client)",
+  "computer-release-channels":
+    "Computers phase 1: honor the release channel reported by upgraded Computers; keep off until the upgraded cohort is verified",
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS;

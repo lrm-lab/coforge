@@ -19,6 +19,7 @@ export type DetachedUpgradeOptions = {
   version: string;
   /** Official feed selected for this operation; omitted uses the compiled environment. */
   feedUrl?: string;
+  releaseChannel?: string;
   /** The operation's durable id; a caller that already has one (a retry) passes it. */
   requestId?: string;
   installRoot?: string;
@@ -38,7 +39,7 @@ export type DetachedUpgradeOptions = {
    * method, or a Daemon that predates it) falls back to launching here. A rejection — a pending
    * operation, a different expected version — propagates: this process must not launch a second
    * job beside one the Daemon already admitted. */
-  admit?: (requestId: string, version: string) => Promise<boolean>;
+  admit?: (requestId: string, version: string, releaseChannel?: string) => Promise<boolean>;
   readReceipt?: typeof readUpgradeReceipt;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -82,10 +83,13 @@ export async function runDetachedUpgrade(
     options.feedUrl === undefined ||
     normalizeReleaseFeedUrl(options.feedUrl) === normalizeReleaseFeedUrl(COFORGE_RELEASE_FEED_URL);
   const admitted =
-    options.admit && feedMatchesBuild ? await options.admit(requestId, options.version) : false;
+    options.admit && feedMatchesBuild
+      ? await options.admit(requestId, options.version, options.releaseChannel)
+      : false;
   if (!admitted)
     await launch(requestId, options.version, {
       feedUrl: options.feedUrl,
+      releaseChannel: options.releaseChannel,
       stateDirectory: options.stateDirectory,
       homeDirectory: home,
     });

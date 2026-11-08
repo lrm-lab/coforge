@@ -42,6 +42,8 @@ export class UpgradeComputer {
       requestId: string;
       placement?: "local" | "cloud";
       target?: "runtime" | "image";
+      /** Selected only after the server-side channel rollout flag and capability check. */
+      releaseChannel?: string;
     },
   ) {
     const scope = { workspaceId: principal.workspaceId, computerId: input.computerId };
@@ -107,6 +109,7 @@ export class UpgradeComputer {
           computerId: scope.computerId,
           target: "latest",
           expectedVersion,
+          ...(input.releaseChannel ? { releaseChannel: input.releaseChannel } : {}),
         }),
       );
       return registered.status;

@@ -28,6 +28,7 @@ export function registerUpdateCommands(
       return command.install(version, {
         allowDowngrade: options.allowDowngrade === true,
         releaseFeedUrl: parsedChannel ? command.resolveFeedUrl?.(parsedChannel) : undefined,
+        releaseChannel: parsedChannel ?? undefined,
       });
     });
   program
@@ -78,6 +79,7 @@ export function registerUpdateCommands(
         return command.upgrade(target, {
           allowDowngrade,
           releaseFeedUrl: parsedChannel ? command.resolveFeedUrl?.(parsedChannel) : undefined,
+          releaseChannel: parsedChannel ?? undefined,
         });
       },
     );

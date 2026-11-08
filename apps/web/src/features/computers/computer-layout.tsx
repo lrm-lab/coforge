@@ -31,6 +31,7 @@ export type ComputerListItem = ComputerIdentity &
     connectRefusal?: ComputerConnectRefusal | null;
     ownedByCurrentUser: boolean;
     computerVersion?: string | null;
+    releaseChannel?: string;
     imageVersion?: string | null;
     imageUpdate?: { version: string } | null;
     /** This Computer's latest upgrade while the server keeps its record; `null` when none. */
@@ -52,13 +53,13 @@ export function ComputerLayout({
   computers,
   selectedComputerId,
   onAdd,
-  latestComputerVersion,
+  latestComputerVersions,
   children,
 }: {
   computers: ComputerListItem[];
   selectedComputerId?: string;
   onAdd: () => void;
-  latestComputerVersion?: string | null;
+  latestComputerVersions?: ReadonlyMap<string, string | null>;
   children: ReactNode;
 }) {
   const workspaceSlug = useWorkspaceSlug();
@@ -115,7 +116,7 @@ export function ComputerLayout({
                       online={computer.online}
                       updateAvailableVersion={computerListUpdateVersion(
                         computer,
-                        latestComputerVersion,
+                        latestComputerVersions?.get(computer.releaseChannel ?? "latest"),
                       )}
                       upgrading={upgradeRunning(computer.upgrade)}
                     />

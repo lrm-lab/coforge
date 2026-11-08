@@ -102,7 +102,8 @@ import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import { AgentStopCoordinator } from "./agent-stop-coordinator";
 import { AgentLaunchCoordinator } from "./agent-launch-coordinator";
 import { startAgent } from "./agent-start-coordinator";
-import { deleteWorkspace, requestUpgrade } from "./runtime-lifecycle-operations";
+import { deleteWorkspace } from "./runtime-lifecycle-operations";
+import { upgradeLifecycleRequest } from "./runtime-upgrade-lifecycle";
 import { assertOwnIntent } from "./runtime-intent-validation";
 import { currentObservedUsage } from "./runtime-usage-observation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
@@ -471,7 +472,11 @@ export class DaemonRuntime {
     private readonly stateDirectory = ".coforge-daemon-state",
     private readonly lifecycle: {
       requestRestart?(requestId: string): Promise<void>;
-      requestUpgrade?(requestId: string, expectedVersion?: string): Promise<void>;
+      requestUpgrade?(
+        requestId: string,
+        expectedVersion?: string,
+        releaseChannel?: string,
+      ): Promise<void>;
       recoveredRestartRequestIds?: string[];
       recoveredUpgradeRequestIds?: string[];
       /** Terminal upgrade operations this machine still owes the server a report for, as known
@@ -502,6 +507,7 @@ export class DaemonRuntime {
     private readonly runtimeAuthFactory: (
       provider: RuntimeAuthProvider,
     ) => RuntimeAuthAdapter = createRuntimeAuthAdapter,
+    private readonly releaseChannel?: string,
   ) {
     const runtime = this;
     this.#consumedSeqs = new AgentConsumedSeqStore(this.stateDirectory);
@@ -763,6 +769,7 @@ export class DaemonRuntime {
       runtimeInstanceId: this.#runtimeInstanceId,
       startedAtMs: this.#startedAt,
       computerVersion: this.computerVersion,
+      releaseChannel: this.releaseChannel,
       isStopping: () => this.#stopping,
       publications: {
         startAgent: (intent) => this.handleAgentStart(intent),
@@ -807,9 +814,11 @@ export class DaemonRuntime {
       },
       lifecycle: {
         requestRestart: this.lifecycle.requestRestart,
-        requestUpgrade: this.lifecycle.requestUpgrade
-          ? (requestId, expectedVersion) => this.#requestUpgrade(requestId, expectedVersion)
-          : undefined,
+        requestUpgrade: upgradeLifecycleRequest(
+          this.lifecycle,
+          this.#upgradeResults,
+          this.#connection.workspaceId,
+        ),
         connectionRefused: this.lifecycle.connectionRefused,
         recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds,
         recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds,
@@ -957,21 +966,6 @@ export class DaemonRuntime {
       connection: this.#connection,
     });
   };
-
-  /**
-   * Asks the Coordinator for an upgrade. Accepted: triggers a report. Refused, or the launch
-   * failed: reports that failure with its reason right away, so the server need not wait out its
-   * deadline, and rethrows so `DaemonConnection#acceptLifecycleRequest` clears its dedupe.
-   * `UpgradeResultReporter` owns the reporting rules.
-   */
-  #requestUpgrade = (requestId: string, expectedVersion?: string): Promise<void> =>
-    requestUpgrade(
-      this.lifecycle.requestUpgrade,
-      this.#upgradeResults,
-      requestId,
-      expectedVersion,
-      this.#connection.workspaceId,
-    );
 
   #deleteWorkspace = (
     connection: DaemonConfig,

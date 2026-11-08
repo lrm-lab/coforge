@@ -7,10 +7,16 @@ import { isValidReleaseVersion } from "@lrm/coforge-sdk/internal";
  * instead of one on every page load. Single-instance server, so a module global is the cache. */
 const VERSION_TTL_MS = 60_000;
 const VERSION_FAILURE_TTL_MS = 10_000;
-let versionCache: { value: string | null; at: number } | undefined;
+const versionCaches = new Map<string, { value: string | null; at: number }>();
 /** A miss refresh shares one fetch across every caller; an expired-but-known value answers
  * immediately (stale-while-refresh) so a heartbeat or ready never waits on the feed. */
-let refreshing: Promise<void> | undefined;
+const refreshes = new Map<string, Promise<void>>();
+
+/** Clears all feed entries for isolated tests and process lifecycle hooks. */
+export function clearLatestComputerVersionCache(): void {
+  versionCaches.clear();
+  refreshes.clear();
+}
 
 async function refresh(feedUrl: string, fetchImpl: typeof fetch, now: () => number): Promise<void> {
   try {
@@ -18,11 +24,11 @@ async function refresh(feedUrl: string, fetchImpl: typeof fetch, now: () => numb
     if (!response.ok) throw new Error("release feed unavailable");
     const version = (await response.text()).trim();
     const value = isValidReleaseVersion(version) ? version : null;
-    versionCache = { value, at: now() };
+    versionCaches.set(feedUrl, { value, at: now() });
   } catch {
     // Feed down or unparsable: remember the miss briefly so page loads during an outage
     // skip the stall, but let the next read retry rather than pinning the failure a minute.
-    versionCache = { value: null, at: now() };
+    versionCaches.set(feedUrl, { value: null, at: now() });
   }
 }
 
@@ -34,18 +40,22 @@ export async function readLatestComputerVersion(
   fetchImpl: typeof fetch = fetch,
   now = Date.now,
 ): Promise<string | null> {
+  const versionCache = versionCaches.get(feedUrl);
   if (
     versionCache &&
     now() - versionCache.at <
       (versionCache.value === null ? VERSION_FAILURE_TTL_MS : VERSION_TTL_MS)
   )
     return versionCache.value;
-  refreshing ??= refresh(feedUrl, fetchImpl, now).finally(() => {
-    refreshing = undefined;
-  });
+  const refreshInFlight =
+    refreshes.get(feedUrl) ??
+    refresh(feedUrl, fetchImpl, now).finally(() => {
+      refreshes.delete(feedUrl);
+    });
+  refreshes.set(feedUrl, refreshInFlight);
   // Only a real version is worth serving stale; an expired miss has nothing to answer with,
   // so its caller joins the shared refresh — one bounded stall per window, as before.
   if (versionCache?.value) return versionCache.value;
-  await refreshing;
-  return versionCache?.value ?? null;
+  await refreshInFlight;
+  return versionCaches.get(feedUrl)?.value ?? null;
 }

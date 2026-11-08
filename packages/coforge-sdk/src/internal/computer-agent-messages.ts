@@ -107,6 +107,8 @@ export type DaemonRuntimeReadyRequest = {
   recoveredRestartRequestIds?: string[];
   recoveredUpgradeRequestIds?: string[];
   capabilities?: string[];
+  /** The locally persisted release selector, when this Computer supports channel-aware upgrades. */
+  releaseChannel?: string;
 };
 
 /** The server's answer to a daemon's ready: the release feed's newest Computer version, so a
@@ -128,6 +130,8 @@ export type ComputerUpgradeIntent = {
   computerId: string;
   target: "latest";
   expectedVersion?: string;
+  /** Optional channel selector; absent keeps the legacy compiled-feed behavior. */
+  releaseChannel?: string;
   messageType?: typeof COMPUTER_UPGRADE_MESSAGE_TYPE;
 };
 /** One Computer upgrade operation's terminal report, from the Daemon to the server. */
