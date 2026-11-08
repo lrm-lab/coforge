@@ -3,7 +3,6 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
-import { useAppToast } from "#src/components/ui/toast";
 import { KEY_POINT_EXTRACTION_TAB, KeyPointExtractionPanel } from "./key-point-extraction-panel";
 import { ReportTabsEditor } from "./report-tabs-editor";
 import {
@@ -40,6 +39,7 @@ import { useLeaveToRecordsList, useRecordDeleteDialog } from "./use-record-delet
 import { useReportSidePanelOpen } from "./use-record-side-panel-open";
 import { useReportReadingTurn } from "./use-report-reading-turn";
 import { useReportDraftSave, useSettledReportSave } from "./use-report-save";
+import { ReportSaveFailureBar, reportSaveFailure, useReportSaveState } from "./report-save-state";
 import { useRecordRefresh } from "./use-record-refresh";
 
 export function ReportDetail({
@@ -52,7 +52,6 @@ export function ReportDetail({
   returnTo?: string;
 }) {
   const refresh = useRecordRefresh();
-  const toast = useAppToast();
   const workspaceSlug = useWorkspaceSlug();
   const saveDraft = useReportDraftSave();
   const leaveToRecordsList = useLeaveToRecordsList();
@@ -88,7 +87,7 @@ export function ReportDetail({
       ? ("member-assignee" as const)
       : ("plain" as const);
   const [sideOpen, setSideOpen] = useReportSidePanelOpen(report.id, memberSurface);
-  const [saving, setSaving] = useState(false);
+  const { saving, failure, setFailure, begin, track } = useReportSaveState();
   const [favorited, setFavorited] = useState(Boolean(report.favorited));
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [keyPointRestartBusy, setKeyPointRestartBusy] = useState(false);
@@ -114,6 +113,11 @@ export function ReportDetail({
   useEffect(() => {
     setFavorited(Boolean(report.favorited));
   }, [report.favorited, report.id]);
+
+  // The status the server holds, whenever it changes: it was copied once, at mount.
+  useEffect(() => {
+    setStatus(report.status);
+  }, [report.status, report.id]);
 
   useEffect(() => {
     writeReportVersion(report.id, report.updatedAt);
@@ -162,31 +166,29 @@ export function ReportDetail({
     nextStatus?: "submitted",
     reportId = reportIdRef.current,
   ) {
-    if (!editable) return;
-    setSaving(true);
+    if (!editable) return true;
     const { normalized, saved } = saveDraft(reportId, next, { status: nextStatus });
-    try {
-      await saved;
-      if (reportId === reportIdRef.current) {
-        replaceContent(normalized);
-        if (nextStatus) setStatus(nextStatus);
-      }
-      if (nextStatus === "submitted") {
-        showSendAck();
-        await refresh.records();
-      }
-    } catch (error) {
-      // The row moved under this editor (another save landed first): reload so
-      // the next guarded save carries the fresh version. The draft stays.
-      if (isAppErrorCode(error, "CONFLICT") && reportId === reportIdRef.current) {
-        toast.error(m.records_report_conflict_reloaded());
-        await refresh.record();
-        return;
-      }
-      throw error;
-    } finally {
-      if (reportId === reportIdRef.current) setSaving(false);
+    // The edits stay in the editor and in the browser's draft when the server refuses.
+    const ok = await track(
+      () => saved,
+      () => void persist(contentRef.current, nextStatus),
+      () => reportId === reportIdRef.current,
+      // The row moved under this editor (another save landed first): reload it, so the retry
+      // carries the fresh version. The draft stays.
+      (cause) => {
+        if (isAppErrorCode(cause, "CONFLICT")) void refresh.record();
+      },
+    );
+    if (!ok) return false;
+    if (reportId === reportIdRef.current) {
+      replaceContent(normalized);
+      if (nextStatus) setStatus(nextStatus);
     }
+    if (nextStatus === "submitted") {
+      showSendAck();
+      await refresh.records();
+    }
+    return true;
   }
 
   function clearScheduledPersist() {
@@ -211,8 +213,9 @@ export function ReportDetail({
     try {
       await waitForReportSave(report.id);
       await persist(contentRef.current, "submitted");
-    } catch {
-      // Leave the label on 发送 / 重新发送 when the write fails.
+    } catch (cause) {
+      // An earlier save the send waited for had failed: say so; the label stays 发送 / 重新发送.
+      setFailure(reportSaveFailure(cause, () => void submitReport()));
     } finally {
       submitInFlightRef.current = false;
     }
@@ -233,7 +236,7 @@ export function ReportDetail({
   /** Waits out an autosave in flight, so a delete pressed mid-save still goes through. */
   async function removeCurrentReport() {
     if (!editable) throw new Error("This report cannot be deleted");
-    setSaving(true);
+    const end = begin();
     try {
       clearScheduledPersist();
       await waitForReportSave(report.id);
@@ -242,7 +245,7 @@ export function ReportDetail({
       deleteDialog.close();
       await leaveToRecordsList();
     } finally {
-      setSaving(false);
+      end();
     }
   }
 
@@ -379,6 +382,8 @@ export function ReportDetail({
           onExport={exportReport}
           onRequestDelete={deleteDialog.request}
         />
+
+        {failure && <ReportSaveFailureBar failure={failure} retrying={saving} />}
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           <ReportTabsEditor

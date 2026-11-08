@@ -51,6 +51,7 @@ import { useRecordChangedRefresh } from "./use-record-changed-refresh";
 import { useLeaveToRecordsList, useRecordDeleteDialog } from "./use-record-delete";
 import { useReportSidePanelOpen } from "./use-record-side-panel-open";
 import { useReportDraftSave, useSettledReportSave } from "./use-report-save";
+import { ReportSaveFailureBar, useReportSaveState } from "./report-save-state";
 import { useRecordRefresh } from "./use-record-refresh";
 
 export function TemplateReportDetail({
@@ -95,7 +96,7 @@ export function TemplateReportDetail({
   useEffect(() => {
     setTitleDraft(report.title);
   }, [report.id, report.title]);
-  const [saving, setSaving] = useState(false);
+  const { saving, failure, begin, track } = useReportSaveState();
   const [sending, setSending] = useState(false);
   const [dirty, setDirty] = useState(() => {
     const draft = readReportDraft(report.id);
@@ -155,44 +156,47 @@ export function TemplateReportDetail({
     contentRef.current = next;
   }
 
+  // The row moved under this editor (another save landed first): reload it, so the retry carries
+  // the fresh version. The draft stays.
+  function onConflict(cause: unknown) {
+    if (isAppErrorCode(cause, "CONFLICT")) void refresh.record();
+  }
+
   async function persist(
     next: ReportContent,
     reportId = reportIdRef.current,
     options?: { askToSend?: boolean },
   ) {
-    setSaving(true);
     const { normalized, saved } = saveDraft(reportId, next, {
       askToSend: options?.askToSend,
     });
-    try {
-      const result = await saved;
-      if (reportId === reportIdRef.current) {
-        const nextContent = result.autoSendJustCancelled
-          ? withAutoSendCancelled(normalized, report.cycle.year, report.cycle.week)
-          : normalized;
-        replaceContent(nextContent);
-        writeReportDraft(reportId, nextContent);
-        setDirty(false);
-        if (result.assistantPosted) {
-          setSideOpen(true);
-          setSideRefresh((token) => token + 1);
-        }
-        if (result.autoSendJustCancelled) {
-          await refresh.records();
-        }
+    // The edits stay in the editor and in the browser's draft when the server refuses.
+    let result: Awaited<typeof saved> | undefined;
+    const ok = await track(
+      async () => {
+        result = await saved;
+      },
+      () => void persist(contentRef.current, undefined, options),
+      () => reportId === reportIdRef.current,
+      onConflict,
+    );
+    if (!ok || !result) return false;
+    if (reportId === reportIdRef.current) {
+      const nextContent = result.autoSendJustCancelled
+        ? withAutoSendCancelled(normalized, report.cycle.year, report.cycle.week)
+        : normalized;
+      replaceContent(nextContent);
+      writeReportDraft(reportId, nextContent);
+      setDirty(false);
+      if (result.assistantPosted) {
+        setSideOpen(true);
+        setSideRefresh((token) => token + 1);
       }
-    } catch (error) {
-      // The row moved under this editor: reload so the next guarded save
-      // carries the fresh version. The draft stays.
-      if (isAppErrorCode(error, "CONFLICT") && reportId === reportIdRef.current) {
-        toast.error(m.records_report_conflict_reloaded());
-        await refresh.record();
-        return;
+      if (result.autoSendJustCancelled) {
+        await refresh.records();
       }
-      throw error;
-    } finally {
-      if (reportId === reportIdRef.current) setSaving(false);
     }
+    return true;
   }
 
   function markLocalContent(next: ReportContent) {
@@ -208,19 +212,23 @@ export function TemplateReportDetail({
         toast.error(m.records_format_meta_invalid());
         return;
       }
-      setSaving(true);
-      try {
-        const meta = await saveFormatMeta({
-          data: {
-            reportId: reportIdRef.current,
-            title: nextTitle,
-          },
-        });
-        writeReportVersion(reportIdRef.current, meta.updatedAt);
-        await refresh.records();
-      } finally {
-        setSaving(false);
-      }
+      let meta: Awaited<ReturnType<typeof saveFormatMeta>> | undefined;
+      const saved = await track(
+        async () => {
+          meta = await saveFormatMeta({
+            data: {
+              reportId: reportIdRef.current,
+              title: nextTitle,
+            },
+          });
+        },
+        () => void saveFormatEdits(),
+        undefined,
+        onConflict,
+      );
+      if (!saved || !meta) return;
+      writeReportVersion(reportIdRef.current, meta.updatedAt);
+      await refresh.records();
     }
     if (dirty) {
       await persist(contentRef.current, undefined, { askToSend: true });
@@ -246,9 +254,7 @@ export function TemplateReportDetail({
     setSendError(null);
     try {
       await waitForReportSave(report.id);
-      try {
-        await persist(draft);
-      } catch {
+      if (!(await persist(draft))) {
         setSendError(m.records_report_send_assignments_error());
         setConfirmOpen(false);
         return;
@@ -311,14 +317,14 @@ export function TemplateReportDetail({
   async function removeOverviewNode() {
     // Throwing keeps the confirm open with its refusal; a quiet return would look like a dead button.
     if (!isOverviewLeader || saving || sending) throw new Error("The summary is busy");
-    setSaving(true);
+    const end = begin();
     try {
       await removeOverview({ data: { reportId: report.id } });
       clearReportDraft(report.id);
       deleteDialog.close();
       await leaveToRecordsList();
     } finally {
-      setSaving(false);
+      end();
     }
   }
 
@@ -445,6 +451,7 @@ export function TemplateReportDetail({
             )}
           </div>
         </header>
+        {failure && <ReportSaveFailureBar failure={failure} retrying={saving} />}
         {isOverview || !sendError ? null : (
           <p className="border-b border-secondary px-4 py-2 text-sm text-error-primary sm:px-6">
             {sendError}

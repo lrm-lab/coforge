@@ -305,5 +305,13 @@
   "records_key_points_awaiting_confirm": "草稿已就绪，请在侧栏预览后点击「插入」。",
   "records_key_points_edit_prompt": "编辑提示词",
   "records_key_points_back_to_report": "返回周报",
-  "records_weekly_export_html": "导出网页"
+  "records_weekly_export_html": "导出网页",
+  "records_report_save_failed": "未保存",
+  "records_collect_plan_not_found": "当前周报不存在或已不是你的成员周报，请从周报页面重新发起采集。",
+  "records_collect_plan_access_denied": "当前账号无权采集这份周报或所选 Computer。",
+  "records_collect_plan_invalid": "采集 Agent 配置已失效，请重新打开卡片并配置 Collector。",
+  "records_report_save_not_found": "这份周报已不存在，或已不属于你。",
+  "records_report_save_access_denied": "你已无权编辑这份周报。",
+  "records_report_save_invalid": "服务器不接受这份内容。",
+  "records_report_save_keep_text": "你写的内容还在编辑器里，离开前请先复制下来。"
 }

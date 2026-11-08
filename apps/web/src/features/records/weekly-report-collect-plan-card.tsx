@@ -18,6 +18,7 @@ import { agentProfileQuery } from "#src/features/agents/profile-panel/agent-prof
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { readCollectPlanDraft, writeCollectPlanDraft } from "./weekly-report-assistant-session";
 import { m } from "#src/paraglide/messages";
+import { recordsErrorMessage } from "./records-error-message";
 import {
   collectPathLines,
   defaultCollectScanPath,
@@ -44,16 +45,10 @@ const WINDOW_KINDS: CollectWindowKind[] = ["week", "month", "quarter", "year", "
 
 function collectPlanErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
-  if (message.includes("COFORGE_APP_ERROR:NOT_FOUND"))
-    return "当前周报不存在或已不是你的成员周报，请从周报页面重新发起采集。";
-  if (message.includes("COFORGE_APP_ERROR:ACCESS_DENIED"))
-    return "当前账号无权采集这份周报或所选 Computer。";
   if (message.includes("collector_agent_stopped")) return m.records_collect_plan_agent_stopped();
   if (message.includes("collector_agent_deleted"))
     return m.records_collect_plan_agent_unavailable();
-  if (message.includes("COFORGE_APP_ERROR:INVALID_INPUT"))
-    return "采集 Agent 配置已失效，请重新打开卡片并配置 Collector。";
-  return m.records_collect_plan_submit_failed();
+  return recordsErrorMessage(error, "collect") ?? m.records_collect_plan_submit_failed();
 }
 
 export function WeeklyReportCollectPlanCard(props: {

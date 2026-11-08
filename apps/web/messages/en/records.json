@@ -305,5 +305,13 @@
   "records_key_points_awaiting_confirm": "Draft ready — preview it in the side chat and click Insert.",
   "records_key_points_edit_prompt": "Edit Prompt",
   "records_key_points_back_to_report": "Back to Report",
-  "records_weekly_export_html": "Export HTML"
+  "records_weekly_export_html": "Export HTML",
+  "records_report_save_failed": "Not saved",
+  "records_collect_plan_not_found": "This report no longer exists, or is no longer your member report. Start the collection again from the report page.",
+  "records_collect_plan_access_denied": "This account cannot collect this report or the chosen Computer.",
+  "records_collect_plan_invalid": "The collector Agent's setup is out of date. Reopen the card and set up the Collector again.",
+  "records_report_save_not_found": "This report no longer exists, or is no longer yours.",
+  "records_report_save_access_denied": "You no longer have access to this report.",
+  "records_report_save_invalid": "The server could not accept this content.",
+  "records_report_save_keep_text": "Your text is still in the editor. Copy it before you leave."
 }
