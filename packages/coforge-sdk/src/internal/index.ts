@@ -22,6 +22,20 @@ export const DAEMON_RUNTIME_MODEL_REFRESH_METHOD = RPC_METHODS.daemonModelRefres
 export const DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD = RPC_METHODS.daemonModelRefreshResult;
 export const DAEMON_RUNTIME_EFFORT_READ_METHOD = RPC_METHODS.daemonEffortRead;
 export const DAEMON_RUNTIME_EFFORT_READ_RESULT_METHOD = RPC_METHODS.daemonEffortReadResult;
+export {
+  AGENT_CONTEXT_VIEW_CAPABILITY,
+  AGENT_CONTEXT_VIEW_METHOD,
+  AGENT_CONTEXT_VIEW_RESULT_METHOD,
+  decodeAgentContextViewRequest,
+  decodeAgentContextViewResult,
+  encodeAgentContextViewRequest,
+  encodeAgentContextViewResult,
+} from "./agent-context-view";
+export type {
+  AgentContextViewRequest,
+  AgentContextViewResult,
+  AgentContextViewStatus,
+} from "./agent-context-view";
 export const COMPUTER_RESTART_METHOD = RPC_METHODS.computerRestart;
 export const COMPUTER_RESTART_MESSAGE_TYPE = "coforge.rpc.v1.ComputerRestartIntent" as const;
 export const COMPUTER_UPGRADE_METHOD = RPC_METHODS.computerUpgrade;

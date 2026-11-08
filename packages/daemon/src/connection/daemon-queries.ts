@@ -20,6 +20,9 @@ import {
   decodeLocalSessionExcerptRequest,
   encodeLocalSessionExcerptResult,
   LOCAL_SESSION_EXCERPT_RESULT_METHOD,
+  decodeAgentContextViewRequest,
+  encodeAgentContextViewResult,
+  AGENT_CONTEXT_VIEW_RESULT_METHOD,
   decodeComputerFilePullRequest,
   encodeComputerFilePullResult,
   COMPUTER_FILE_PULL_RESULT_METHOD,
@@ -89,6 +92,7 @@ export class DaemonQueries {
   readonly deletion;
   readonly localSessionSearch;
   readonly localSessionExcerpt;
+  readonly agentContextView;
   readonly computerFilePull;
   readonly piChat;
   constructor(rpc: Rpc) {
@@ -134,6 +138,12 @@ export class DaemonQueries {
       LOCAL_SESSION_EXCERPT_RESULT_METHOD,
       rpc,
     );
+    this.agentContextView = new DaemonQuery(
+      decodeAgentContextViewRequest,
+      encodeAgentContextViewResult,
+      AGENT_CONTEXT_VIEW_RESULT_METHOD,
+      rpc,
+    );
     this.computerFilePull = new DaemonQuery(
       decodeComputerFilePullRequest,
       encodeComputerFilePullResult,
@@ -157,6 +167,7 @@ export class DaemonQueries {
       this.deletion,
       this.localSessionSearch,
       this.localSessionExcerpt,
+      this.agentContextView,
       this.computerFilePull,
     ].some((query) => query.receive(bytes, scope));
   }

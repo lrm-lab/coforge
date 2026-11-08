@@ -40,6 +40,8 @@ import type {
   LocalSessionSearchResult,
   LocalSessionExcerptRequest,
   LocalSessionExcerptResult,
+  AgentContextViewRequest,
+  AgentContextViewResult,
   ComputerFilePullRequest,
   ComputerFilePullResult,
   ComputerUpgradeResult,
@@ -162,6 +164,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
     callback: (request: LocalSessionExcerptRequest) => Promise<void>,
   ): () => void;
   sendLocalSessionExcerptResult?(result: LocalSessionExcerptResult): Promise<void>;
+  onAgentContextView?(callback: (request: AgentContextViewRequest) => Promise<void>): () => void;
+  sendAgentContextViewResult?(result: AgentContextViewResult): Promise<void>;
   onComputerFilePull?(callback: (request: ComputerFilePullRequest) => Promise<void>): () => void;
   sendComputerFilePullResult?(result: ComputerFilePullResult): Promise<void>;
   onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;
