@@ -33,6 +33,8 @@ export type StalledTurnObservation = Readonly<{
 
 export type StalledTurnIndicator = Readonly<{
   silentForMs: number;
+  /** The tracker's own window, so the notice states the window it fired against. */
+  thresholdMs: number;
 }>;
 
 type StalledTurnState = {
@@ -41,9 +43,12 @@ type StalledTurnState = {
   warned: boolean;
 };
 
+/** The launch's provider clock, as both the silence clock and the notice's line read it. */
+type LaunchProgress = Readonly<{ lastEventAtMs: number }>;
+
 /** The slice of a launch the silence clock reads. */
 export type StalledTurnLaunch = Readonly<{
-  progress?: { readonly lastEventAtMs: number };
+  progress?: LaunchProgress;
   toolCalls?: {
     oldestOpenToolStartedAtMs(): number | undefined;
     readonly hasOpenToolCall: boolean;
@@ -144,16 +149,32 @@ export class StalledTurnTracker {
     if (!state || state.startAtMs !== startAtMs || state.warned) return;
     state.watchdog = undefined;
     state.warned = true;
-    this.onStalled(agentId, { silentForMs: Math.max(0, this.now() - startAtMs) });
+    this.onStalled(agentId, {
+      silentForMs: Math.max(0, this.now() - startAtMs),
+      thresholdMs: this.silenceMs,
+    });
   }
 }
 
+/** The slice of a launch a notice's log line reads: the silence's start and the tool still open
+ * when it fired. */
+type NoticingLaunch = Readonly<{
+  launchId: string;
+  stopping?: boolean;
+  progress?: LaunchProgress;
+  toolCalls?: {
+    oldestOpenTool(): { name: string; silentForMs: number } | undefined;
+  };
+}>;
+
 /**
  * The tracker callback for one launch: shows the stalled turn as an error Activity and logs it,
- * unless the launch is no longer the current one or is stopping.
+ * unless the launch is no longer the current one or is stopping. The line names the window it
+ * passed and the tool that was still running, which is what a later reader needs to tell a long
+ * build from a hang (task #698).
  */
 export function stalledTurnNotice(
-  launch: Readonly<{ launchId: string; stopping?: boolean }>,
+  launch: NoticingLaunch,
   host: Readonly<{
     isCurrent(agentId: string): boolean;
     publish(agentId: string, detail: string): void;
@@ -162,12 +183,16 @@ export function stalledTurnNotice(
   return (agentId, indicator) => {
     if (!host.isCurrent(agentId) || launch.stopping) return;
     const minutes = Math.max(1, Math.round(indicator.silentForMs / 60_000));
+    const openTool = launch.toolCalls?.oldestOpenTool();
     host.publish(agentId, `Agent runtime has produced no progress for ${minutes} minutes.`);
     logger.warning("Agent runtime turn has stalled", {
       event: "agent_runtime:turn_stalled",
       agent_id: agentId,
       launch_id: launch.launchId,
       silent_for_ms: indicator.silentForMs,
+      threshold_ms: indicator.thresholdMs,
+      ...(launch.progress ? { last_event_at: launch.progress.lastEventAtMs } : {}),
+      ...(openTool ? { open_tool: openTool.name, open_tool_for_ms: openTool.silentForMs } : {}),
       outcome: "indicator",
     });
   };

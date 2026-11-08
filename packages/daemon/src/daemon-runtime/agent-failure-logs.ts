@@ -9,6 +9,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { controlCodeField } from "./control-error-code";
+import { stalledRecoveryLogFields, type StalledRecoveryBasis } from "./stalled-recovery";
 
 /** `diagnosticErrorCode` keeps the error's name, never its message, so a secret cannot ride out
  * as `error_code`. The message is what makes `message_delivery_failed` diagnosable. It goes
@@ -90,12 +91,26 @@ export function logAgentOperationFailure(
 
 /** Logs the stall being recovered, before the kill: the Agent's owner reads back why a quiet
  * Agent restarted — a silent busy turn, a queued turn that never began, or a notice the process
- * took and never acted on (task #318). */
-export function logStalledRecovery(agentId: string, silentForMs: number): void {
+ * took and never acted on (task #318) — and the facts that judgment read (task #698). */
+export function logStalledRecovery(agentId: string, basis: StalledRecoveryBasis): void {
   logger.warn("Recovering a stalled Agent runtime", {
     event: "turn_stalled",
     agent_id: agentId,
-    silent_for_ms: silentForMs,
+    ...stalledRecoveryLogFields(basis),
     outcome: "recovering",
+  });
+}
+
+/** Logs the restart the repair then performs: the same basis, so the two lines agree. */
+export function logStalledRuntimeRestart(
+  agentId: string,
+  basis: StalledRecoveryBasis,
+  unattended: boolean,
+): void {
+  logger.warn("Agent runtime stalled; restarting it", {
+    event: "agent.runtime.stalled_recovery",
+    agent_id: agentId,
+    ...stalledRecoveryLogFields(basis),
+    unattended,
   });
 }

@@ -28,7 +28,13 @@ const stalledRuntime = (agentId: string): StalledRuntime<Launch> => ({
   launch: { id: agentId, stopping: false },
   session: {} as StalledRuntime<Launch>["session"],
   restart: {} as StalledRuntime<Launch>["restart"],
-  silentForMs: 16 * 60_000,
+  basis: {
+    reason: "silent_turn",
+    silentForMs: 16 * 60_000,
+    thresholdMs: 15 * 60_000,
+    lastEventAtMs: 0,
+    steersBusyTurn: true,
+  },
 });
 
 test("the sweep restarts a stalled Agent that has deliveries waiting", async () => {

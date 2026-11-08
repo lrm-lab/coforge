@@ -114,6 +114,19 @@ export type StalledRecoveryFacts = Readonly<{
   steersBusyTurn: boolean;
 }>;
 
+/** The silence a busy turn of this session must reach before it is judged stalled. */
+export function stalledRecoveryThresholdMs(facts: StalledRecoveryFacts): number {
+  return facts.steersBusyTurn
+    ? STALLED_RECOVERY_SILENCE_MS
+    : STALLED_RECOVERY_SILENCE_QUEUE_ONLY_MS;
+}
+
+/** Which of the judgment's cases fired. */
+export type StalledRecoveryReason =
+  | "silent_turn"
+  | "queued_turn_never_started"
+  | "noticed_but_frozen";
+
 /**
  * Whether a message waiting for this Agent means its provider should be restarted instead of
  * waiting: either the turn it is in has been silent past its fuse — `STALLED_RECOVERY_SILENCE_MS`
@@ -124,10 +137,22 @@ export type StalledRecoveryFacts = Readonly<{
  * that never got a turn (the sweep already requires one to be waiting).
  */
 export function shouldRecoverStalledRuntime(facts: StalledRecoveryFacts): boolean {
-  const silenceLimitMs = facts.steersBusyTurn
-    ? STALLED_RECOVERY_SILENCE_MS
-    : STALLED_RECOVERY_SILENCE_QUEUE_ONLY_MS;
-  const silentTurnStalled = facts.turnBusy && facts.silentForMs >= silenceLimitMs;
+  return stalledRecoveryJudgment(facts) !== undefined;
+}
+
+/** Which case fired, with the fuse it was measured against. Both come from one place: a reason
+ * added later cannot quietly be logged against the wrong threshold. */
+type StalledRecoveryJudgment = Readonly<{
+  reason: StalledRecoveryReason;
+  thresholdMs: number;
+}>;
+
+function stalledRecoveryJudgment(facts: StalledRecoveryFacts): StalledRecoveryJudgment | undefined {
+  // Nothing is judged over a tool still running: a long build is silent until it ends.
+  if (facts.hasOpenToolCall || !facts.resumable) return undefined;
+  const silentTurnThresholdMs = stalledRecoveryThresholdMs(facts);
+  if (facts.turnBusy && facts.silentForMs >= silentTurnThresholdMs)
+    return { reason: "silent_turn", thresholdMs: silentTurnThresholdMs };
   // A retryable failure's backoff is a planned wait, not a stall (Raft's
   // `queueDeliveriesForRuntimeErrorBackoff`): nothing about a restart shortens it.
   const queuedTurnNeverStarted =
@@ -135,6 +160,8 @@ export function shouldRecoverStalledRuntime(facts: StalledRecoveryFacts): boolea
     !facts.turnBusy &&
     !facts.liveTurn &&
     (facts.queuedForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS;
+  if (queuedTurnNeverStarted)
+    return { reason: "queued_turn_never_started", thresholdMs: STALLED_RECOVERY_SILENCE_MS };
   // A notice the process took and then did nothing about for the whole stall window — the
   // accepted-noticed-but-frozen case (task #318). The action must be *older than the notice*: an
   // Agent that acted after taking it has answered, and being idle since is not being frozen.
@@ -145,11 +172,57 @@ export function shouldRecoverStalledRuntime(facts: StalledRecoveryFacts): boolea
     !facts.liveTurn &&
     noticeAcceptedForMs >= STALLED_RECOVERY_SILENCE_MS &&
     (facts.lastAgentActionForMs ?? Number.POSITIVE_INFINITY) > noticeAcceptedForMs;
-  return (
-    (silentTurnStalled || queuedTurnNeverStarted || noticedButFrozen) &&
-    !facts.hasOpenToolCall &&
-    facts.resumable
-  );
+  if (noticedButFrozen)
+    return { reason: "noticed_but_frozen", thresholdMs: STALLED_RECOVERY_SILENCE_MS };
+  return undefined;
+}
+
+/** What the launch showed when the judgment fired, beyond the facts it was judged on. */
+export type StalledRecoveryObservation = Readonly<{
+  /** When the provider last reported anything: where the judged silence starts. */
+  lastEventAtMs: number;
+}>;
+
+/** Why a restart was judged stalled, and the facts it was judged on. `turnBusy`, `resumable` and
+ * `hasOpenToolCall` are not repeated: the judgment fires only on a busy turn with a resumable
+ * session and no tool running, so each would read the same on every line. */
+export type StalledRecoveryBasis = Readonly<{
+  reason: StalledRecoveryReason;
+  silentForMs: number;
+  /** The fuse this reason was measured against. */
+  thresholdMs: number;
+  lastEventAtMs: number;
+  /** Whether this session's input can reach a turn already in progress; a queue-only session's
+   * silent turn is the one judged against the longer fuse. */
+  steersBusyTurn: boolean;
+}>;
+
+/** The judgment and its basis, or `undefined` when this Agent's runtime is not stalled. */
+export function stalledRecoveryBasis(
+  facts: StalledRecoveryFacts,
+  observation: StalledRecoveryObservation,
+): StalledRecoveryBasis | undefined {
+  const judgment = stalledRecoveryJudgment(facts);
+  if (!judgment) return undefined;
+  return {
+    ...judgment,
+    silentForMs: facts.silentForMs,
+    ...observation,
+    steersBusyTurn: facts.steersBusyTurn,
+  };
+}
+
+/** The fields every stall-repair log line carries, so the judgment can be reviewed afterwards. */
+export function stalledRecoveryLogFields(
+  basis: StalledRecoveryBasis,
+): Readonly<Record<string, unknown>> {
+  return {
+    reason: basis.reason,
+    silent_for_ms: basis.silentForMs,
+    threshold_ms: basis.thresholdMs,
+    last_event_at: basis.lastEventAtMs,
+    steers_busy_turn: basis.steersBusyTurn,
+  };
 }
 
 /** How many times in a row a stalled turn is restarted with no message waiting for it (task

@@ -9,7 +9,11 @@ import {
   type RuntimeReleasePorts,
   type WakeRestart,
 } from "#src/daemon-runtime/runtime-release";
-import { ProviderProgress, UNATTENDED_RECOVERY_LIMIT } from "#src/daemon-runtime/stalled-recovery";
+import {
+  ProviderProgress,
+  STALLED_RECOVERY_SILENCE_QUEUE_ONLY_MS,
+  UNATTENDED_RECOVERY_LIMIT,
+} from "#src/daemon-runtime/stalled-recovery";
 
 // A busy turn that went silent is restarted even when no message waits for it (task #404): the
 // relaunch resumes the session and tells the Agent where it stopped. Restarts with nothing
@@ -60,9 +64,42 @@ function release() {
     handBackMentions: async () => {},
     release: async () => {},
   };
-  const stalled = { launch, session, restart, silentForMs: 16 * 60_000 };
+  const stalled = {
+    launch,
+    session,
+    restart,
+    basis: {
+      reason: "silent_turn",
+      silentForMs: 16 * 60_000,
+      thresholdMs: 15 * 60_000,
+      lastEventAtMs: 0,
+      steersBusyTurn: true,
+    } as const,
+  };
   return { runtimeRelease: new RuntimeRelease(ports), stalled, launch, woken, published };
 }
+
+test("the judgment RuntimeRelease makes names its reason and the fuse it used", () => {
+  const START = new Date("2026-10-15T00:00:00.000Z");
+  setSystemTime(START);
+  try {
+    const { runtimeRelease } = release();
+    setSystemTime(new Date(START.getTime() + 16 * 60_000));
+    // The session does not declare `steersBusyTurn`: input only queues behind a live turn, so the
+    // fuse is the longer one and 16 silent minutes are not yet a stall.
+    expect(runtimeRelease.stalled("agent-a")).toBeUndefined();
+    setSystemTime(new Date(START.getTime() + 61 * 60_000));
+    expect(runtimeRelease.stalled("agent-a")?.basis).toMatchObject({
+      reason: "silent_turn",
+      thresholdMs: STALLED_RECOVERY_SILENCE_QUEUE_ONLY_MS,
+      silentForMs: 61 * 60_000,
+      lastEventAtMs: START.getTime(),
+      steersBusyTurn: false,
+    });
+  } finally {
+    setSystemTime();
+  }
+});
 
 test("a stalled turn with no message waiting is resumed with where it stopped", async () => {
   const { runtimeRelease, stalled, woken, published } = release();

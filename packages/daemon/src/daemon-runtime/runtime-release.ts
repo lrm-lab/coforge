@@ -15,16 +15,17 @@ import {
 } from "#src/agent-runtime/wake-session-recycle";
 import { runtimeDisplayName } from "./session-invalidate-activity";
 import { UnattendedRecoveries, reportUnattendedLimit } from "./stalled-recovery-unattended";
-import { logStalledRecovery } from "./agent-failure-logs";
+import { logStalledRecovery, logStalledRuntimeRestart } from "./agent-failure-logs";
 import { idleBlocker, type AgentIdleFacts, type ColdIdleAgent } from "./cold-idle-sweep";
 import type { BusyActivity } from "./agent-activity-publisher";
 import type { DeliveryHoldReason } from "./agent-delivery-queue";
 import type { LaunchRequest } from "./runtime-launch-types";
 import {
   STALLED_RECOVERY_EXIT_TIMEOUT_MS,
-  shouldRecoverStalledRuntime,
+  stalledRecoveryBasis,
   unattendedResumePrompt,
   type ProviderProgress,
+  type StalledRecoveryBasis,
 } from "./stalled-recovery";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -51,7 +52,8 @@ export type StalledRuntime<L extends ReleasableLaunch> = Readonly<{
   launch: L;
   session: AgentSession;
   restart: AgentRestartConfig;
-  silentForMs: number;
+  /** Why it was judged stalled, and on which facts (`stalled-recovery.ts`). */
+  basis: StalledRecoveryBasis;
 }>;
 
 /** Why a live runtime is ended, what is announced, and what is logged on either outcome. */
@@ -169,26 +171,29 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     const restart = this.#ports.restartConfig(agentId);
     const progress = launch?.progress;
     if (!launch || !progress || !session || !restart) return undefined;
-    const stalled = shouldRecoverStalledRuntime({
-      turnBusy: this.#ports.lastBusy(agentId)?.launch === launch && session.hasLiveTurn !== false,
-      // A waiting delivery whose submitted turn never began reports no live turn: that is the
-      // "queued but no new round started" case, not a turn to wait on.
-      liveTurn: session.hasLiveTurn === true,
-      silentForMs: progress.silentForMs(),
-      queuedForMs: this.#ports.queuedForMs(agentId),
-      hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
-      resumable: this.#ports.resumable(agentId),
-      noticeAcceptedForMs: ageOf(this.#ports.noticeAcceptedAt?.(agentId)),
-      recoveryHold: heldForRetry(this.#ports.explicitHold?.(agentId)),
-      // The running session declares whether a notice can steer its live turn; an adapter
-      // that does not declare is read as queue-only (the longer fuse).
-      steersBusyTurn: session.steersBusyTurn === true,
-      lastAgentActionForMs: Math.min(
-        progress.silentForMs(),
-        ageOf(this.#ports.lastAgentActionAt?.(agentId)) ?? Number.POSITIVE_INFINITY,
-      ),
-    });
-    return stalled ? { launch, session, restart, silentForMs: progress.silentForMs() } : undefined;
+    const basis = stalledRecoveryBasis(
+      {
+        turnBusy: this.#ports.lastBusy(agentId)?.launch === launch && session.hasLiveTurn !== false,
+        // A waiting delivery whose submitted turn never began reports no live turn: that is the
+        // "queued but no new round started" case, not a turn to wait on.
+        liveTurn: session.hasLiveTurn === true,
+        silentForMs: progress.silentForMs(),
+        queuedForMs: this.#ports.queuedForMs(agentId),
+        hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
+        resumable: this.#ports.resumable(agentId),
+        noticeAcceptedForMs: ageOf(this.#ports.noticeAcceptedAt?.(agentId)),
+        recoveryHold: heldForRetry(this.#ports.explicitHold?.(agentId)),
+        // The running session declares whether a notice can steer its live turn; an adapter
+        // that does not declare is read as queue-only (the longer fuse).
+        steersBusyTurn: session.steersBusyTurn === true,
+        lastAgentActionForMs: Math.min(
+          progress.silentForMs(),
+          ageOf(this.#ports.lastAgentActionAt?.(agentId)) ?? Number.POSITIVE_INFINITY,
+        ),
+      },
+      { lastEventAtMs: progress.lastEventAtMs },
+    );
+    return basis ? { launch, session, restart, basis } : undefined;
   }
 
   /**
@@ -203,8 +208,8 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     stalled: StalledRuntime<L>,
     options: Readonly<{ unattended?: boolean }> = {},
   ): Promise<void> {
-    const { launch, session, restart, silentForMs } = stalled;
-    logStalledRecovery(agentId, stalled.silentForMs);
+    const { launch, session, restart, basis } = stalled;
+    logStalledRecovery(agentId, basis);
     let resumePrompt: string | undefined;
     if (options.unattended) {
       // No message waits: the restart is the sweep's own, capped per stuck spell (task #404).
@@ -215,7 +220,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       if (admission === "limit")
         return reportUnattendedLimit(this.#ports.publish, agentId, launch, restart);
       resumePrompt = unattendedResumePrompt(
-        silentForMs,
+        basis.silentForMs,
         this.#ports.lastBusy(agentId)?.activity.detail,
       );
     }
@@ -223,7 +228,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       agentId,
       launch,
       session,
-      stalledRuntimePlan(restart, agentId, silentForMs, resumePrompt),
+      stalledRuntimePlan(restart, agentId, basis, resumePrompt),
     );
   }
 
@@ -372,7 +377,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
 function stalledRuntimePlan(
   restart: AgentRestartConfig,
   agentId: string,
-  silentForMs: number,
+  basis: StalledRecoveryBasis,
   resumePrompt?: string,
 ): RuntimeReleasePlan {
   const runtimeName = runtimeDisplayName(restart.config.provider);
@@ -384,13 +389,7 @@ function stalledRuntimePlan(
         ? `Restarting stalled ${runtimeName} runtime; no message was waiting`
         : `Restarting stalled ${runtimeName} runtime for queued message`,
     },
-    log: () =>
-      logger.warn("Agent runtime stalled; restarting it", {
-        event: "agent.runtime.stalled_recovery",
-        agent_id: agentId,
-        silent_for_ms: silentForMs,
-        unattended,
-      }),
+    log: () => logStalledRuntimeRestart(agentId, basis, unattended),
     failure: {
       text: `Restarting the stalled ${runtimeName} runtime failed`,
       message: "Agent stalled-runtime restart failed",

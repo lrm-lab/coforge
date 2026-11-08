@@ -79,3 +79,22 @@ session 如果每次恢复后几秒内就让 runtime 静默崩溃，说明它在
   冷启动新 session；排队中的投递照常带进新 launch。Activity 沿用 `runtime_unavailable`
   cold-start 文案：“Stored <Runtime> session keeps crashing on resume; cold-starting a new
   session…”。连击状态只在内存里，daemon 重启后重新计。
+
+## 卡住判定的诊断日志
+
+一次卡住修复要能在事后从日志复原它当时的输入（字段约定见
+[local-logging](../../local-logging.md) §4/§6）：
+
+- 判定行（`turn_stalled`）与重启行（`agent.runtime.stalled_recovery`）带 `reason`
+  （`silent_turn` / `queued_turn_never_started` / `noticed_but_frozen`）、`threshold_ms`（本次用的
+  阈值：15 或 60 分钟）、`silent_for_ms`、`last_event_at`（最近一个 provider 事件的时刻）、
+  `steers_busy_turn`。
+- 10 分钟的可见 notice（`agent_runtime:turn_stalled`）走的是另一条规则——它只在有工具正在运行时
+  才计时，所以没有 `reason`，`threshold_ms` 是它自己的窗口（默认 10 分钟，可用
+  `COFORGE_STALLED_TURN_SILENCE_MS` 改）；它带 `open_tool` 与 `open_tool_for_ms`，这正是“沉默
+  半小时里在跑构建”和“挂住了”的分界。
+- 工具调用的开始和结束各一行 `agent_runtime:tool_started` / `agent_runtime:tool_finished`
+  （`agent_id`、`launch_id`、`call_id`、`tool`、`duration_ms`、`exit_code`、`ok`），不记参数和
+  输出；每个 launch 有记录上限，超出时只写一条 `agent_runtime:tool_log_truncated`。
+- provider 进程写的 `code_agent.*` 记录从自己的启动环境读 `agent_id` 与 `launch_id`
+  （`packages/anvil/src/jsonl-process.ts`），所以它们能和上面两类按同一个 launch 关联。

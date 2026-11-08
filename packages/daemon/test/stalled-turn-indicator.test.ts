@@ -41,7 +41,7 @@ test("a stalled tool emits once per silent segment", () => {
   jest.useFakeTimers();
   try {
     jest.setSystemTime(0);
-    const notices: Array<{ agentId: string; silentForMs: number }> = [];
+    const notices: Array<{ agentId: string; silentForMs: number; thresholdMs: number }> = [];
     const tracker = new StalledTurnTracker(
       (agentId, indicator) => notices.push({ agentId, ...indicator }),
       1_000,
@@ -50,7 +50,7 @@ test("a stalled tool emits once per silent segment", () => {
     jest.advanceTimersByTime(999);
     expect(notices).toEqual([]);
     jest.advanceTimersByTime(1);
-    expect(notices).toEqual([{ agentId: "agent-a", silentForMs: 1_000 }]);
+    expect(notices).toEqual([{ agentId: "agent-a", silentForMs: 1_000, thresholdMs: 1_000 }]);
     tracker.observe("agent-a", { turnBusy: true, lastEventAtMs: 1_000, hasOpenToolCall: true });
     jest.advanceTimersByTime(5_000);
     expect(notices).toHaveLength(2);
