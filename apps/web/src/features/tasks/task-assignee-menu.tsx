@@ -14,7 +14,7 @@ export function AssigneeMenu({
   disabled,
   onSelect,
 }: {
-  task: Pick<TaskView, "owner">;
+  task: Pick<TaskView, "owner"> & { status?: TaskView["status"] };
   members?: readonly Mentionable[];
   disabled: boolean;
   /** The picked member bound by id (`user:<id>` or `agent:<id>`), or null for no one. */
@@ -28,6 +28,9 @@ export function AssigneeMenu({
   );
   if (!members) return value;
   const ownerKey = task.owner ? memberKey(task.owner) : UNASSIGNED;
+  // A finished Task keeps its owner: the server refuses to leave it with no one, so the option
+  // would only fail. Change its status first.
+  const unassignable = task.status !== "done";
   return (
     <EntityPicker
       trigger={
@@ -41,7 +44,10 @@ export function AssigneeMenu({
       label={m.tasks_change_assignee()}
       searchPlaceholder={m.picker_find_member()}
       selectedKey={ownerKey}
-      options={[{ id: UNASSIGNED, label: m.tasks_unassigned() }, ...members.map(memberOption)]}
+      options={[
+        ...(unassignable ? [{ id: UNASSIGNED, label: m.tasks_unassigned() }] : []),
+        ...members.map(memberOption),
+      ]}
       // By id, never by handle: a person and an Agent may share a name.
       onSelect={(key) => onSelect(key === UNASSIGNED ? null : key)}
     />
