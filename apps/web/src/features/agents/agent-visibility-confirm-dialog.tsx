@@ -92,6 +92,7 @@ export function AgentVisibilityConfirmDialog({
 
   return (
     <ModalOverlay
+      centered
       isOpen={open}
       onOpenChange={(nextOpen: boolean) => {
         if (submitting) return;

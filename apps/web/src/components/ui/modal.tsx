@@ -23,8 +23,13 @@ import { cx } from "#src/utils/cx";
  */
 export function ModalOverlay({
   className,
+  centered,
   ...props
-}: Omit<ComponentProps<typeof OfficialModalOverlay>, "style">) {
+}: Omit<ComponentProps<typeof OfficialModalOverlay>, "style"> & {
+  /** A short question that interrupts (a confirmation) sits mid-screen on a phone too, where the
+   * rest rise from the bottom edge. */
+  centered?: boolean;
+}) {
   // A dialog inside a `DialogTrigger` gets its open state from the trigger, not from `isOpen`.
   const trigger = useContext(OverlayTriggerStateContext);
   // Only an open dialog follows the viewport; a closed one renders nothing that needs it.
@@ -54,6 +59,7 @@ export function ModalOverlay({
           // so the dialogs inside (their `max-h`, a lightbox's height) read the same.
           !keyboardMayBeUp &&
             "max-sm:[--visual-viewport-height:100dvh]! max-sm:[--visual-viewport-top:0px]!",
+          centered && "items-center",
           typeof className === "function" ? className(state) : className,
         )
       }

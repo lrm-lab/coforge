@@ -148,6 +148,7 @@ export function ChannelActionConfirmDialog({
 
   return (
     <ModalOverlay
+      centered
       isOpen={kind !== null}
       isDismissable={!busy}
       onOpenChange={(next) => {

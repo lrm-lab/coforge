@@ -48,6 +48,7 @@ export function ConfirmDialog({
   }
   return (
     <ModalOverlay
+      centered
       isOpen={open}
       onOpenChange={(nextOpen: boolean) => {
         if (pending) return;

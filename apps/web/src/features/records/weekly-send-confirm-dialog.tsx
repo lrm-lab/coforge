@@ -23,6 +23,7 @@ export function WeeklySendConfirmDialog({
 }) {
   return (
     <ModalOverlay
+      centered
       isOpen={open}
       onOpenChange={(value) => {
         if (busy) return;
