@@ -69,3 +69,42 @@ test.skipIf(!connectionString)(
     }
   },
 );
+
+/**
+ * A relevance search scores every candidate with `pg_trgm`, which costs ~0.2ms per row: an
+ * unbounded rank over a common term in a large conversation took ~400ms on production. The
+ * query therefore ranks only a bounded window of the newest matches, so the plan must read the
+ * candidates through a subquery before sorting them.
+ */
+test.skipIf(!connectionString)(
+  "a relevance message search ranks a bounded window of the newest matches",
+  async () => {
+    const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
+    try {
+      await db.$transaction(async (tx) => {
+        await tx.$executeRaw`SET LOCAL enable_seqscan = off`;
+        let plan: [{ Plan: PlanNode }] | undefined;
+        const explain = {
+          $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+            [{ "QUERY PLAN": plan }] = await tx.$queryRaw<[{ "QUERY PLAN": [{ Plan: PlanNode }] }]>`
+              EXPLAIN (FORMAT JSON) ${Prisma.sql(strings, ...values)}`;
+            return [];
+          },
+        } as unknown as PrismaClient;
+        await findMessageSearchIds(explain, {
+          workspaceId: crypto.randomUUID(),
+          viewerUserId: crypto.randomUUID(),
+          terms: ["needle"],
+          query: "needle",
+          sort: "relevance",
+          limit: 20,
+          offset: 0,
+        });
+        const nodes = planNodes(plan![0].Plan);
+        expect(nodes.map((node) => node["Node Type"])).toContain("Subquery Scan");
+      });
+    } finally {
+      await db.$disconnect();
+    }
+  },
+);
