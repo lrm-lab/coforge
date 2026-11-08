@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 
 import type { DaemonCommand, ForegroundCommand, LogsCommand } from "#src/cli";
+import type { DetachOutcome } from "#src/detach/detach";
 import { CliError } from "#src/errors";
 
 /** The commands that start, stop and restart the Computer or one of its Workspace runtimes.
@@ -44,6 +45,10 @@ export function registerLifecycleCommands(
     .action(async (options: { workspace?: string; json?: boolean }) => {
       setJson(options.json ?? false);
       const outcome = await requireDaemon(dependencies).detach(options.workspace);
+      if (options.json) {
+        writeDetachedOutcomeJson(outcome, io);
+        return;
+      }
       if (outcome.kind === "unconfirmed")
         io.stdout(
           `The server could not confirm detaching '${outcome.workspaceSlug}'; the local registration was kept.`,
@@ -91,6 +96,29 @@ export function registerLifecycleCommands(
     .command("logs")
     .description("Follow the Computer log, including rotated log files.")
     .action(() => requireLogs(dependencies).follow());
+}
+
+/**
+ * `detach --json`: one object, no prose. `ok` says the command finished rather than that the
+ * machine left — `stop --json` answers `{ok:true,stopped:false}` for the same distinction — and
+ * `detached`/`kind` carry what actually happened, so a caller that wanted a detach is not
+ * misled by `not_attached`, a server that never confirmed, a supervisor that never bound it, or
+ * a key the server had already revoked. That last one leaves only the local half behind, so a
+ * re-attach under a newer key may still be live: `DetachOutcome` calls it `key_revoked` rather
+ * than `detached`, and `detached` follows that (task #696).
+ */
+function writeDetachedOutcomeJson(
+  outcome: DetachOutcome,
+  io: { stdout: (line: string) => void },
+): void {
+  io.stdout(
+    JSON.stringify({
+      ok: true,
+      detached: outcome.kind === "detached",
+      kind: outcome.kind,
+      ...(outcome.kind === "not_attached" ? {} : { workspaceSlug: outcome.workspaceSlug }),
+    }),
+  );
 }
 
 function requireDaemon(dependencies: LifecycleCommandDependencies): DaemonCommand {
