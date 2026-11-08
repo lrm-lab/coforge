@@ -295,7 +295,7 @@ export async function insertConversationTask(
   await followTask(tx, scope, task.id, memberId(member), "created");
   if (assignee && assignee.id !== member.id)
     await followTask(tx, scope, task.id, assignee.id, "assigned");
-  if (assignee?.agentId) await ensureTaskExecutionSession(tx, task, assignee.agentId);
+  if (assignee?.agentId && started) await ensureTaskExecutionSession(tx, task, assignee.agentId);
   // The assignee's notice makes the task's conversation, so the task is read again to carry it.
   const assigned = assignee && assignee.id !== member.id;
   if (assigned)

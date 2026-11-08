@@ -93,11 +93,17 @@ export async function commitTaskChange(
       data: { status: "completed", finishedAt: new Date() },
     });
   }
-  // Entering In Progress with an Agent owner needs a live session: a finished Task's session was
-  // completed, however many hops the reopen took, and a failed one may never have started.
+  // In Progress with an Agent owner needs a live session: a finished Task's session was completed,
+  // however many hops the reopen took, and a failed one may never have started. An ownership change
+  // opens one only while the Task is being worked — assigning an Agent to a Task that is not In
+  // Progress reserves it without starting it (task #709).
   // ensureTaskExecutionSession no-ops on a live session, so this only restarts terminal ones.
   const enteringInProgress = before.status !== "in_progress" && task.status === "in_progress";
-  if (task.owner?.agentId && (task.ownerMemberId !== before.ownerMemberId || enteringInProgress)) {
+  if (
+    task.owner?.agentId &&
+    task.status === "in_progress" &&
+    (task.ownerMemberId !== before.ownerMemberId || enteringInProgress)
+  ) {
     await ensureTaskExecutionSession(tx, task, task.owner.agentId);
     // Read the row again so the result names the session every later read of this Task shows
     // (a restarted session keeps its older createdAt, so patching it in could disagree).

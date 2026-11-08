@@ -331,7 +331,7 @@ export async function createTasks(
         });
       await writeMessageReferences(tx, message, scope, stored.references);
 
-      if (assignee?.agentId) {
+      if (assignee?.agentId && started) {
         await ensureTaskExecutionSession(tx, message.task!, assignee.agentId);
         tasks.push(
           await tx.task.findUniqueOrThrow({

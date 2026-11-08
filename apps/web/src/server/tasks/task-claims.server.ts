@@ -188,7 +188,7 @@ export async function convertOrClaim(
       existing.claimedAt !== null &&
       (existing.status === "in_progress" || existing.status === "in_review")
     ) {
-      if (member.agentId && !existing.executionSessions[0]) {
+      if (member.agentId && existing.status === "in_progress" && !existing.executionSessions[0]) {
         await ensureTaskExecutionSession(tx, existing, member.agentId);
         return tx.task.findUniqueOrThrow({
           where: { id: existing.id },
