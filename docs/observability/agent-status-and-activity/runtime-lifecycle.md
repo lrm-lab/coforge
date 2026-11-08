@@ -93,8 +93,11 @@ session 如果每次恢复后几秒内就让 runtime 静默崩溃，说明它在
   才计时，所以没有 `reason`，`threshold_ms` 是它自己的窗口（默认 10 分钟，可用
   `COFORGE_STALLED_TURN_SILENCE_MS` 改）；它带 `open_tool` 与 `open_tool_for_ms`，这正是“沉默
   半小时里在跑构建”和“挂住了”的分界。
-- 工具调用的开始和结束各一行 `agent_runtime:tool_started` / `agent_runtime:tool_finished`
-  （`agent_id`、`launch_id`、`call_id`、`tool`、`duration_ms`、`exit_code`、`ok`），不记参数和
-  输出；每个 launch 有记录上限，超出时只写一条 `agent_runtime:tool_log_truncated`。
+- 工具调用只写一行，且只写 ledger 自己计时满 `TOOL_CALL_LOG_MIN_MS`（5 秒）的调用：
+  `agent_runtime:tool_finished`（调用正常结束）或 `agent_runtime:tool_unfinished`（turn 结束时仍
+  未报告结束，或进程随 launch 一起结束）。字段为 `agent_id`、`launch_id`、`call_id`、`tool`、
+  `duration_ms`，正常结束时另加 `exit_code`、`ok`；不记参数和输出。`duration_ms` 是从 start 事件
+  到结束的窗口，所以该行时间戳减 `duration_ms` 就是调用开始时刻。每个 launch 有记录上限，超出时
+  只写一条 `agent_runtime:tool_log_truncated`。
 - provider 进程写的 `code_agent.*` 记录从自己的启动环境读 `agent_id` 与 `launch_id`
   （`packages/anvil/src/jsonl-process.ts`），所以它们能和上面两类按同一个 launch 关联。

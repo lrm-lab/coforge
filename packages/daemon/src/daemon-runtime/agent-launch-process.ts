@@ -257,6 +257,8 @@ export async function launchAgentProcess(
       ports.desktops.end(agentId);
       launch.startup?.dispose();
       trajectory.dispose();
+      // Any call still open died with the process: nothing else will report its end.
+      toolCalls.logAbandoned();
       replyIntents.dispose();
       if (ports.currentActivityLaunches.get(agentId) !== launch) return;
       // No leaked watchdog timer, and a later launch for this Agent starts clean.
