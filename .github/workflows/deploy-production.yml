@@ -4,8 +4,10 @@ name: Deploy Web (production)
 # `production` GitHub Environment only restricts the deploy to `main`; it has
 # no required reviewer, so a human's approval of this exact digest is the
 # manual dispatch itself (docs/release/staging-to-production.md). Runtime
-# secrets live on the host under infra/production/secrets; this workflow ships
-# only the Compose assets.
+# Most runtime secrets live on the host under infra/production/secrets. This
+# workflow ships the Compose assets and refreshes only the cloud-computer
+# secrets (COFORGE_CLOUD_CLUSTER_TOKEN / COFORGE_CLOUD_SERVICE_PASSWORD) from
+# the production GitHub Environment.
 
 on:
   workflow_dispatch:
@@ -153,6 +155,43 @@ jobs:
             -o ServerAliveCountMax=8 \
             "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
             "mkdir -p $REMOTE_ROOT && tar -xzf - -C $REMOTE_ROOT" < "$REMOTE_ASSETS"
+
+      # Other runtime secrets stay on the host. Cloud-computer secrets are also
+      # kept as production Environment secrets so a deploy can refresh them
+      # without replacing the rest of the secrets directory.
+      - name: Sync cloud-computer secrets
+        env:
+          COFORGE_CLOUD_CLUSTER_TOKEN: ${{ secrets.COFORGE_CLOUD_CLUSTER_TOKEN }}
+          COFORGE_CLOUD_SERVICE_PASSWORD: ${{ secrets.COFORGE_CLOUD_SERVICE_PASSWORD }}
+        run: |
+          if [ -z "$COFORGE_CLOUD_CLUSTER_TOKEN" ]; then
+            echo "COFORGE_CLOUD_CLUSTER_TOKEN is empty; cloud computers stay disabled" >&2
+          fi
+          umask 077
+          tar_dir="$(mktemp -d)"
+          payload="$(mktemp)"
+          trap 'rm -rf -- "$tar_dir" "$payload"' EXIT
+          printf '%s' "$COFORGE_CLOUD_CLUSTER_TOKEN" > "$tar_dir/coforge_cloud_cluster_token"
+          printf '%s' "$COFORGE_CLOUD_SERVICE_PASSWORD" > "$tar_dir/coforge_cloud_service_password"
+          tar -czf "$payload" -C "$tar_dir" .
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=8 \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "set -eu; \
+             secrets_dir='$REMOTE_ROOT/infra/production/secrets'; \
+             mkdir -p \"\$secrets_dir\"; \
+             chmod 700 \"\$secrets_dir\"; \
+             incoming=\$(mktemp -d \"\${secrets_dir}.incoming.XXXXXX\"); \
+             trap 'rm -rf -- \"\$incoming\"' EXIT; \
+             tar -xzf - -C \"\$incoming\"; \
+             for name in coforge_cloud_cluster_token coforge_cloud_service_password; do \
+               chmod 600 \"\$incoming/\$name\"; \
+               mv -f \"\$incoming/\$name\" \"\$secrets_dir/\$name\"; \
+             done" \
+            < "$payload"
 
       - name: Deploy image and check health
         run: |
