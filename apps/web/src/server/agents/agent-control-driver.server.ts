@@ -94,6 +94,15 @@ export class AgentControlDriver {
       if (state.requestId !== requestId) return supersededView(state);
       if (terminal(state)) return view(state);
       if (options?.untilAccepted && acceptedSeen) return view(state);
+      // An acknowledgement that fired while no waiter was registered left only its remembered
+      // marker; honour it here so the wait still ends on receipt rather than at the deadline.
+      if (
+        options?.untilAccepted &&
+        (await this.signal.remembered(agentControlAcceptedKey(requestId)).catch(() => false))
+      ) {
+        acceptedSeen = true;
+        continue;
+      }
       if (state.phase === "stopped" || state.phase === "workspace-reset") {
         await this.advance(agentId, requestId);
         continue;

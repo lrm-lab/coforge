@@ -102,8 +102,12 @@ export class AgentControlReceiver {
       phase: "accepted",
     });
     // The request-scoped key is what an `execute()` waiter races against the Agent's own key;
-    // the Agent key still wakes every ordinary waiter, exactly like a result does.
-    await this.signal.notify(agentControlAcceptedKey(result.requestId)).catch(() => {});
+    // the Agent key still wakes every ordinary waiter, exactly like a result does. The marker
+    // is written first so an acknowledgement that lands while no waiter is registered — the
+    // notify below would be dropped — is still seen by the waiter's next state read.
+    const acceptedKey = agentControlAcceptedKey(result.requestId);
+    await this.signal.remember(acceptedKey).catch(() => {});
+    await this.signal.notify(acceptedKey).catch(() => {});
     await this.signal.notify(agent.id).catch(() => {});
   }
 

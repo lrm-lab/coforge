@@ -33,6 +33,15 @@ describe("LocalAgentControlSignal", () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(15);
     await signal.wait("a", 0);
   });
+
+  test("remember leaves a marker remembered() still sees, scoped to its key", async () => {
+    const signal = new LocalAgentControlSignal();
+    expect(await signal.remembered("accepted:req-1")).toBe(false);
+    await signal.remember("accepted:req-1");
+    expect(await signal.remembered("accepted:req-1")).toBe(true);
+    expect(await signal.remembered("accepted:req-2")).toBe(false);
+    expect(await signal.remembered("agent-a")).toBe(false);
+  });
 });
 
 const redisServer = Bun.which("redis-server");
@@ -81,6 +90,14 @@ describe.skipIf(!redisServer)("RedisAgentControlSignal", () => {
     await notifierSide.notify("agent-a");
     await woken;
     expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  test("a remember on one instance is seen by remembered() on another", async () => {
+    const writer = new RedisAgentControlSignal(client(), client);
+    const reader = new RedisAgentControlSignal(client(), client);
+    await writer.remember("accepted:req-x");
+    expect(await reader.remembered("accepted:req-x")).toBe(true);
+    expect(await reader.remembered("accepted:req-y")).toBe(false);
   });
 
   test("notify survives a publisher outage and the waiter falls back to its timeout", async () => {
