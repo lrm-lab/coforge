@@ -19,7 +19,6 @@ import { LabelSettings } from "#src/features/tasks/label-settings";
 import { ServerConnectionSettings } from "#src/features/settings/server-connection-settings";
 import {
   ExperimentsSettings,
-  hasExperiments,
   useWorkspaceExperiments,
 } from "#src/features/settings/experiments-settings";
 import { SettingsNavigationGroup } from "#src/features/settings/settings-navigation-group";
@@ -104,13 +103,8 @@ export interface SettingsContentProps {
 
 export function SettingsContent(props: SettingsContentProps) {
   const [internalSection, setInternalSection] = useState<SettingsSection>("account");
-  const canAdminister = canManageWorkspaceSettings(props.members.actorRole);
-  const experiments = useWorkspaceExperiments(canAdminister);
-  // Experiments appears once there is something to manage; asking for it otherwise, or as
-  // anyone but an owner or admin, gets the account.
-  const experimentsShown = canAdminister && hasExperiments(experiments);
-  const requested = props.section ?? internalSection;
-  const section = requested === "experiments" && experimentsShown === false ? "account" : requested;
+  const experiments = useWorkspaceExperiments();
+  const section = props.section ?? internalSection;
   const [showList, setShowList] = useState(props.section !== "integrations");
   const current = settingsSection(section);
   const sectionLabel = current.label();
@@ -134,17 +128,15 @@ export function SettingsContent(props: SettingsContentProps) {
         <div className="space-y-5 overflow-y-auto p-3">
           {SETTINGS_SECTION_GROUPS.map((group) => (
             <SettingsNavigationGroup key={group.label()} label={group.label()}>
-              {group.sections
-                .filter((item) => item.id !== "experiments" || experimentsShown === true)
-                .map((item) => (
-                  <SettingsNavigationButton
-                    key={item.id}
-                    active={section === item.id}
-                    icon={item.icon}
-                    label={item.label()}
-                    onClick={() => selectSection(item.id)}
-                  />
-                ))}
+              {group.sections.map((item) => (
+                <SettingsNavigationButton
+                  key={item.id}
+                  active={section === item.id}
+                  icon={item.icon}
+                  label={item.label()}
+                  onClick={() => selectSection(item.id)}
+                />
+              ))}
             </SettingsNavigationGroup>
           ))}
         </div>

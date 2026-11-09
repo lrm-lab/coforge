@@ -11,6 +11,7 @@ export type StoredUserPreferences = {
   timeZone: string | null;
   timeFormat: string | null;
   language: string | null;
+  aiWorkbenchEnabled: boolean | null;
 };
 
 /** The interface languages the server renders outbound text in. */
@@ -24,6 +25,7 @@ export type UserPreferencesRepository = {
   setBrowserNotificationsEnabled(userId: string, enabled: boolean): Promise<boolean>;
   setTimeFormat(userId: string, timeFormat: string | null): Promise<string | null>;
   setLanguage(userId: string, language: UserLanguage | null): Promise<string | null>;
+  setAiWorkbenchEnabled(userId: string, enabled: boolean): Promise<boolean>;
   setRole(userId: string, role: PersonRole | null): Promise<string | null>;
 };
 
@@ -47,6 +49,7 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
       timeZone: row?.timeZone ?? null,
       timeFormat: row?.timeFormat ?? null,
       language: row?.language ?? null,
+      aiWorkbenchEnabled: row?.aiWorkbenchEnabled ?? null,
     };
   }
 
@@ -81,6 +84,10 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
     return (await this.write(userId, { language })).language;
   }
 
+  async setAiWorkbenchEnabled(userId: string, enabled: boolean) {
+    return (await this.write(userId, { aiWorkbenchEnabled: enabled })).aiWorkbenchEnabled === true;
+  }
+
   async setRole(userId: string, role: PersonRole | null) {
     return (await this.write(userId, { role })).role;
   }
@@ -96,6 +103,8 @@ export class UserPreferences {
       timeZone: stored.timeZone,
       timeFormat: isTimeFormat(stored.timeFormat) ? stored.timeFormat : null,
       language: isUserLanguage(stored.language) ? stored.language : null,
+      // NULL is off: only a person who turned it on has stored true.
+      aiWorkbenchEnabled: stored.aiWorkbenchEnabled === true,
     };
   }
 
@@ -122,6 +131,10 @@ export class UserPreferences {
   async setLanguage(userId: string, language: UserLanguage | null) {
     if (language !== null && !isUserLanguage(language)) throw new AppError("INVALID_INPUT");
     return this.repository.setLanguage(userId, language);
+  }
+
+  setAiWorkbenchEnabled(userId: string, enabled: boolean) {
+    return this.repository.setAiWorkbenchEnabled(userId, enabled);
   }
 
   async setRole(userId: string, role: string | null) {

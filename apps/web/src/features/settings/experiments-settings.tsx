@@ -4,13 +4,21 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
-import { SettingsCard, SettingsField, SettingsPage } from "#src/components/settings-layout";
+import { Building07, UserCircle } from "@untitledui/icons";
+import {
+  SettingsCard,
+  SettingsField,
+  SettingsGroup,
+  SettingsPage,
+} from "#src/components/settings-layout";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { decodeWorkspaceFeaturesChangedEvent } from "#src/features/workspaces/workspace-realtime";
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { AI_WORKBENCH_QUERY_KEY, useAiWorkbenchEnabled } from "./ai-workbench";
+import { saveAiWorkbenchPreference } from "./settings.functions";
 import { getExperiments, setExperiment } from "./experiments.functions";
 
 type Experiment = Awaited<ReturnType<typeof getExperiments>>["experiments"][number];
@@ -50,15 +58,15 @@ function saveErrorText(error: unknown) {
 type ExperimentsData = Awaited<ReturnType<typeof getExperiments>>;
 
 /**
- * The experiments this Workspace may try, read only for an owner or admin (`enabled`). A switch
+ * The experiments this Workspace offers, read for every member. A switch
  * made elsewhere arrives as `workspace.features.changed.v1` and the list is read again.
  */
-export function useWorkspaceExperiments(enabled: boolean) {
+export function useWorkspaceExperiments() {
   const load = useServerFn(getExperiments);
   const workspaceId = useCurrentWorkspaceId();
   const queryClient = useQueryClient();
   useRealtimeSubscription({
-    channel: enabled && workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
+    channel: workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
     onPublication: useCallback(
       (publication: { data: unknown }) => {
         if (decodeWorkspaceFeaturesChangedEvent(publication.data)?.workspaceId === workspaceId)
@@ -67,17 +75,12 @@ export function useWorkspaceExperiments(enabled: boolean) {
       [queryClient, workspaceId],
     ),
   });
-  return useQuery({ queryKey: EXPERIMENTS_QUERY_KEY, queryFn: () => load(), enabled });
-}
-
-/** Whether there is an experiment to manage; `undefined` until the list has been read. */
-export function hasExperiments({ data }: UseQueryResult<ExperimentsData>) {
-  return data && data.canManage && data.experiments.length > 0;
+  return useQuery({ queryKey: EXPERIMENTS_QUERY_KEY, queryFn: () => load() });
 }
 
 /**
- * Settings → Experiments: the features this Workspace may try, one switch each,
- * for the whole Workspace. Settings shows it only while `hasExperiments` holds.
+ * Settings → Experiments, for every member: this account's own switches first (AI Workbench), then
+ * the Workspace's, which only an owner or admin can change.
  */
 export function ExperimentsSettings({
   experiments,
@@ -105,56 +108,97 @@ export function ExperimentsSettings({
     onError: () => queryClient.invalidateQueries({ queryKey: EXPERIMENTS_QUERY_KEY }),
   });
 
+  const workspaceBlock = experiments.isPending ? (
+    <p className="text-sm text-tertiary">{m.experiments_loading()}</p>
+  ) : !experiments.data ? (
+    <div className="flex flex-col items-start gap-3">
+      <p role="alert" className="text-sm text-error-primary">
+        {m.experiments_load_error()}
+      </p>
+      <Button color="secondary" size="sm" onPress={() => void experiments.refetch()}>
+        {m.controls_retry()}
+      </Button>
+    </div>
+  ) : (
+    experiments.data.experiments.length > 0 && (
+      <SettingsCard>
+        {experiments.data.experiments.map((experiment) => {
+          const text = EXPERIMENT_TEXT[experiment.key];
+          const failed = toggle.isError && toggle.variables.key === experiment.key;
+          return (
+            <div key={experiment.key} className="flex flex-col gap-2">
+              <SettingsField inline label={text.name()} description={text.description()}>
+                <div className="flex shrink-0 items-center gap-3">
+                  {experiment.reload && changed.has(experiment.key) && (
+                    <Button color="link-color" size="sm" onPress={() => window.location.reload()}>
+                      {m.experiments_reload()}
+                    </Button>
+                  )}
+                  <Toggle
+                    size="md"
+                    aria-label={text.name()}
+                    isSelected={
+                      toggle.isPending && toggle.variables.key === experiment.key
+                        ? toggle.variables.enabled
+                        : experiment.enabled
+                    }
+                    isDisabled={toggle.isPending || !experiments.data.canManage}
+                    onChange={(enabled) => toggle.mutate({ key: experiment.key, enabled })}
+                  />
+                </div>
+              </SettingsField>
+              {failed && (
+                <p role="alert" className="text-sm text-error-primary">
+                  {saveErrorText(toggle.error)}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </SettingsCard>
+    )
+  );
+
   return (
     <SettingsPage>
-      {experiments.isPending ? (
-        <p className="text-sm text-tertiary">{m.experiments_loading()}</p>
-      ) : !experiments.data ? (
-        <div className="flex flex-col items-start gap-3">
-          <p role="alert" className="text-sm text-error-primary">
-            {m.experiments_load_error()}
-          </p>
-          <Button color="secondary" size="sm" onPress={() => void experiments.refetch()}>
-            {m.controls_retry()}
-          </Button>
-        </div>
-      ) : (
-        <SettingsCard>
-          {experiments.data.experiments.map((experiment) => {
-            const text = EXPERIMENT_TEXT[experiment.key];
-            const failed = toggle.isError && toggle.variables.key === experiment.key;
-            return (
-              <div key={experiment.key} className="flex flex-col gap-2">
-                <SettingsField inline label={text.name()} description={text.description()}>
-                  <div className="flex shrink-0 items-center gap-3">
-                    {experiment.reload && changed.has(experiment.key) && (
-                      <Button color="link-color" size="sm" onPress={() => window.location.reload()}>
-                        {m.experiments_reload()}
-                      </Button>
-                    )}
-                    <Toggle
-                      size="md"
-                      aria-label={text.name()}
-                      isSelected={
-                        toggle.isPending && toggle.variables.key === experiment.key
-                          ? toggle.variables.enabled
-                          : experiment.enabled
-                      }
-                      isDisabled={toggle.isPending}
-                      onChange={(enabled) => toggle.mutate({ key: experiment.key, enabled })}
-                    />
-                  </div>
-                </SettingsField>
-                {failed && (
-                  <p role="alert" className="text-sm text-error-primary">
-                    {saveErrorText(toggle.error)}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </SettingsCard>
+      <SettingsGroup icon={UserCircle} label={m.settings_personal_group()}>
+        <AiWorkbenchSetting />
+      </SettingsGroup>
+      {workspaceBlock !== false && (
+        <SettingsGroup icon={Building07} label={m.settings_workspace_group()}>
+          {workspaceBlock}
+        </SettingsGroup>
       )}
     </SettingsPage>
+  );
+}
+
+/** This account's AI Workbench switch. The sidebar reads the same query, so a change shows there
+ * at once. */
+function AiWorkbenchSetting() {
+  const save = useServerFn(saveAiWorkbenchPreference);
+  const queryClient = useQueryClient();
+  const enabled = useAiWorkbenchEnabled();
+  const toggle = useMutation({
+    mutationFn: (next: boolean) => save({ data: { enabled: next } }),
+    onSuccess: (saved) => queryClient.setQueryData(AI_WORKBENCH_QUERY_KEY, saved),
+  });
+  return (
+    <SettingsCard>
+      <SettingsField inline label={m.experiments_ai_workbench()}>
+        <Toggle
+          size="md"
+          aria-label={m.experiments_ai_workbench()}
+          isSelected={toggle.isPending ? toggle.variables : enabled}
+          isDisabled={toggle.isPending}
+          onChange={(next) => toggle.mutate(next)}
+        />
+      </SettingsField>
+      {toggle.isError && (
+        <p role="alert" className="text-sm text-error-primary">
+          {m.experiments_save_error()}
+        </p>
+      )}
+    </SettingsCard>
   );
 }

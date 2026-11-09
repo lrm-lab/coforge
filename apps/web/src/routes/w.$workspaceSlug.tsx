@@ -31,6 +31,7 @@ import { loadWorkspaceAgents } from "#src/features/agents/workspace-agents.funct
 import { WorkspaceAgentsProvider } from "#src/features/agents/workspace-agents-realtime";
 import { WorkspacePresenceProvider } from "#src/features/workspaces/member-presence";
 import { getUserPreferences } from "#src/features/settings/settings.functions";
+import { useAiWorkbenchEnabled } from "#src/features/settings/ai-workbench";
 import { loadMemberWorkspaceSettings } from "#src/features/workspaces/member-settings.functions";
 import { loadOnboardingWizard } from "#src/features/onboarding/onboarding-wizard.functions";
 import { PanelTabOrderProvider } from "#src/features/panel-tabs/panel-tab-order-context";
@@ -133,6 +134,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       timeZone: preferences.timeZone,
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
+      aiWorkbenchEnabled: preferences.aiWorkbenchEnabled,
       tabOrders: memberSettings.tabOrders,
     };
   },
@@ -152,6 +154,7 @@ function AppLayout() {
     timeZone,
     assumedPhone,
     timeFormat,
+    aiWorkbenchEnabled,
     tabOrders,
     onboarding,
     canSeeUsageLimits,
@@ -169,6 +172,7 @@ function AppLayout() {
   useEffect(() => {
     void rememberQueryCache(queryClient);
   }, [queryClient, currentWorkspace.slug]);
+  const aiWorkbench = useAiWorkbenchEnabled(aiWorkbenchEnabled);
   useLastLocationMemory();
   useSearchShortcut(currentWorkspace.id, user.id);
   useSidebarShortcut();
@@ -239,6 +243,7 @@ function AppLayout() {
                       workspaces={workspaces}
                       currentWorkspace={currentWorkspace}
                       recordsPreview={recordsPreview}
+                      aiWorkbench={aiWorkbench}
                       canSeeUsageLimits={canSeeUsageLimits}
                       onSelectWorkspace={async (slug) => {
                         await navigate({

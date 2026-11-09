@@ -98,6 +98,9 @@ model UserPreference {
   /// Interface language ("en" or "zh-CN"); NULL means the code's default. The server renders
   /// pushes and other outbound text in it, and the browser uses it as the source of truth.
   language                    String?
+  /// Whether AI Workbench is on for this person's account (task #743). NULL means off, so only
+  /// a person who turned it on has stored true. Enforced by the server, not just hidden in the UI.
+  aiWorkbenchEnabled          Boolean?
   /// What the person mainly does, from the first-sign-in survey (`PERSON_ROLES`): one of
   /// engineer, designer, product, marketing, research, founder. Metadata for the platform
   /// assistant only (it reads it when it introduces itself); never shown in the UI.

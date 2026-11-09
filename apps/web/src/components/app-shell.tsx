@@ -76,6 +76,7 @@ function useNavItems(
   base: string,
   recordsPreview: boolean,
   workspaceId: string,
+  aiWorkbench: boolean,
   activityDot?: ReactNode,
 ): (NavItemType & {
   icon: FC<{ className?: string }>;
@@ -104,7 +105,7 @@ function useNavItems(
       icon: Activity,
       badge: activityDot,
     },
-    { label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 },
+    ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
     { label: m.projects_title(), ...item("projects"), icon: Folder },
     {
       label: m.navigation_agents(),
@@ -159,7 +160,10 @@ export function AppShell({
   children,
   recordsPreview = false,
   canSeeUsageLimits = false,
+  aiWorkbench = false,
 }: {
+  /** Whether this account has AI Workbench on; its sidebar entry shows only then. */
+  aiWorkbench?: boolean;
   /** An owner or admin, who sees the Workspace's system notifications. */
   canSeeUsageLimits?: boolean;
   user: AppUser;
@@ -194,6 +198,7 @@ export function AppShell({
     base,
     recordsPreview,
     workspaceId,
+    aiWorkbench,
     hasActivityAttention ? <UnreadDot className="ml-auto" /> : undefined,
   );
   const section = pathname.slice(base.length).split("/")[1] ?? "";

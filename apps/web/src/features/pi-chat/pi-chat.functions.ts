@@ -3,6 +3,7 @@ import { z } from "zod";
 import { piChatCommandSchema } from "@lrm/coforge-sdk/internal/pi-chat";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
+import { requireAiWorkbench } from "#src/server/pi-chat/ai-workbench.server";
 import {
   getPiChatControlsLease,
   getPiChatFilesLease,
@@ -16,6 +17,7 @@ export const getPiChatComputers = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     declareNoStore();
+    await requireAiWorkbench(context.db, context.user.id);
     const computers = await context.db.computer.findMany({
       where: {
         ownerId: context.user.id,
@@ -54,6 +56,7 @@ export const executePiChat = createServerFn({ method: "POST" })
   .validator(z.object({ computerId: z.uuid(), command: piChatCommandSchema }))
   .handler(async ({ context, data }) => {
     declareNoStore();
+    await requireAiWorkbench(context.db, context.user.id);
     return productionPiChat(context.db).execute(
       { userId: context.user.id, workspaceId: context.workspaceId },
       data.computerId,

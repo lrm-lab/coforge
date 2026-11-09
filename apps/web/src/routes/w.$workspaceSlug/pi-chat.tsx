@@ -1,8 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { z } from "zod";
 import { getPiChatComputers } from "#src/features/pi-chat/pi-chat.functions";
 import { PiChatPage } from "#src/features/pi-chat/pi-chat-page";
 import { PiChatPending } from "#src/features/pi-chat/pi-chat-pending";
+import { fetchAiWorkbenchEnabled } from "#src/features/settings/ai-workbench";
+import { PiChatOff } from "#src/features/pi-chat/pi-chat-off";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 
 export const Route = createFileRoute("/w/$workspaceSlug/pi-chat")({
@@ -13,10 +16,19 @@ export const Route = createFileRoute("/w/$workspaceSlug/pi-chat")({
       .optional()
       .catch(undefined),
   }),
+  // Read fresh, so a switch turned off elsewhere is honoured before the page opens.
+  beforeLoad: async ({ params, context }) => {
+    if (!(await fetchAiWorkbenchEnabled(context.queryClient)))
+      throw redirect({
+        to: "/w/$workspaceSlug",
+        params: { workspaceSlug: params.workspaceSlug },
+      });
+  },
   loader: () => getPiChatComputers(),
   component: Page,
   pendingComponent: PiChatPending,
-  errorComponent: PageLoadError,
+  errorComponent: (props) =>
+    isAppErrorCode(props.error, "ACCESS_DENIED") ? <PiChatOff /> : <PageLoadError {...props} />,
 });
 
 function Page() {

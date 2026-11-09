@@ -28,6 +28,7 @@ export const SETTINGS_SECTION_GROUPS = [
       { id: "preferences", label: () => m.settings_preferences(), icon: Sliders01 },
       { id: "notifications", label: () => m.settings_notifications(), icon: BellRinging01 },
       { id: "integrations", label: () => m.settings_integrations(), icon: Share01 },
+      { id: "experiments", label: () => m.settings_experiments(), icon: Beaker01 },
     ],
   },
   {
@@ -37,8 +38,6 @@ export const SETTINGS_SECTION_GROUPS = [
       { id: "members", label: () => m.settings_members(), icon: Users01 },
       { id: "labels", label: () => m.settings_labels(), icon: Tag01 },
       { id: "applications", label: () => m.settings_applications(), icon: Link03 },
-      // Owner and admin only: the navigation leaves it out for everyone else.
-      { id: "experiments", label: () => m.settings_experiments(), icon: Beaker01 },
     ],
   },
   {

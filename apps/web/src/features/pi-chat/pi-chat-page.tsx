@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Plus, RefreshCw01, SearchLg } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
@@ -8,6 +8,8 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { PageHeader } from "#src/components/layout/page-header";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
+import { markAiWorkbenchOff, useAiWorkbenchEnabled } from "#src/features/settings/ai-workbench";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getPiChatComputers } from "./pi-chat.functions";
@@ -17,6 +19,7 @@ import { PiChatFilesPanel } from "./pi-chat-files-panel";
 import { PiChatSessionList } from "./pi-chat-session-list";
 import type { PiChatDraft, PiChatView } from "./pi-chat-state";
 import { PiChatConversation } from "./pi-chat-conversation";
+import { PiChatOff } from "./pi-chat-off";
 
 type Props = {
   userId: string;
@@ -29,12 +32,22 @@ type Props = {
   select(computerId: string, sessionId?: string): void;
 };
 
+/** The Workbench, or one line saying it is off once the account's switch turns off. */
 export function PiChatPage(props: Props) {
+  return useAiWorkbenchEnabled() ? <PiChatContent {...props} /> : <PiChatOff />;
+}
+
+function PiChatContent(props: Props) {
+  const queryClient = useQueryClient();
   const { workspaceSlug, configured, sessionId, select } = props;
   const getComputers = useServerFn(getPiChatComputers);
   const capabilities = useQuery({
     queryKey: ["pi-chat", workspaceSlug, props.userId, "computers"],
-    queryFn: () => getComputers(),
+    queryFn: () =>
+      getComputers().catch((error: unknown) => {
+        if (isAppErrorCode(error, "ACCESS_DENIED")) markAiWorkbenchOff(queryClient);
+        throw error;
+      }),
     refetchInterval: 10_000,
     enabled: configured,
     retry: false,

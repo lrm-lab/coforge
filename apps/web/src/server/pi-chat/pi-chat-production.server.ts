@@ -7,6 +7,7 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
+import { isAiWorkbenchEnabled } from "./ai-workbench.server";
 import { PiChatGateway } from "./pi-chat-gateway.server";
 import { RedisPiChatResults } from "./pi-chat-results.server";
 import {
@@ -23,6 +24,7 @@ export function piChatConfiguration() {
   );
 }
 export async function canUsePiChat(db: PrismaClient, scope: PiChatScope) {
+  if (!(await isAiWorkbenchEnabled(db, scope.userId))) return false;
   return !!(await db.computer.findFirst({
     where: {
       id: scope.computerId,
