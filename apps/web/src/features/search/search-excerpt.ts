@@ -5,9 +5,9 @@ const LEAD = 40;
 
 /**
  * A result's excerpt: the text starting a little before the first match (with an ellipsis when
- * cut), split into parts where each term match is flagged, case-insensitively.
+ * cut; `lead` of `Infinity` never cuts), split into parts where each term match is flagged, case-insensitively.
  */
-export function searchExcerpt(text: string, terms: string[]): ExcerptPart[] {
+export function searchExcerpt(text: string, terms: string[], lead = LEAD): ExcerptPart[] {
   const flat = text.replace(/\s+/g, " ").trim();
   if (terms.length === 0) return [{ text: flat, match: false }];
   const pattern = new RegExp(
@@ -19,7 +19,7 @@ export function searchExcerpt(text: string, terms: string[]): ExcerptPart[] {
     "gi",
   );
   const first = flat.search(pattern);
-  const start = first > LEAD ? first - LEAD : 0;
+  const start = first > lead ? first - lead : 0;
   const shown = start > 0 ? `…${flat.slice(start)}` : flat;
   const lowerTerms = terms.map((term) => term.toLowerCase());
   // Unicode regexp case matching can differ from lowercase equality.

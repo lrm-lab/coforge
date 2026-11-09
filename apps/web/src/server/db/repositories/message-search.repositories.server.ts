@@ -35,7 +35,7 @@ export type MessageSearchCriteria = {
 };
 
 /** `ILIKE` treats `\`, `%` and `_` as syntax; escape them so every term matches literally. */
-function containsPattern(term: string): string {
+export function containsPattern(term: string): string {
   return `%${escapeLikeTerm(term)}%`;
 }
 

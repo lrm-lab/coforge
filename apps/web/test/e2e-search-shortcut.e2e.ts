@@ -208,6 +208,35 @@ test("search opens over the page, walks by keyboard and lands on the message", a
     await browser("press", "Escape");
     await waitFor(`${dialog} === null`);
 
+    // Esc gives the focus back to what had it before the dialog opened.
+    const rail = `document.querySelector('aside a[href="${workspacePath}/search"]')`;
+    await browser("eval", `${rail}.focus()`);
+    await browser("press", "Meta+k");
+    await waitFor(`${box} !== null && document.activeElement === ${box}`);
+    await browser("press", "Escape");
+    await waitFor(`${dialog} === null && document.activeElement === ${rail}`);
+
+    // The first row shows as chosen from the box, and stays so as the results change; Down from
+    // the box goes to the row after it, Up back along the list and into the box.
+    const firstIsMarked = `${options}[0]?.hasAttribute("data-search-first") === true`;
+    await browser("press", "Meta+k");
+    await waitFor(`document.activeElement === ${box}`);
+    await browser("fill", 'input[type="search"]', phrase);
+    await waitFor(`${hits} === 2 && ${firstIsMarked}`);
+    await browser("fill", 'input[type="search"]', `${phrase} `);
+    await browser("fill", 'input[type="search"]', oldWord);
+    await waitFor(`${hits} === 1 && ${firstIsMarked}`);
+    await browser("fill", 'input[type="search"]', phrase);
+    await waitFor(`${hits} === 2 && ${firstIsMarked}`);
+    await browser("press", "ArrowDown");
+    await waitFor(`document.activeElement === ${options}[1]`);
+    await browser("press", "ArrowUp");
+    await waitFor(`document.activeElement === ${options}[0]`);
+    await browser("press", "ArrowUp");
+    await waitFor(`document.activeElement === ${box}`);
+    await browser("press", "Escape");
+    await waitFor(`${dialog} === null`);
+
     // An old address opens the dialog with its search, over the Workspace.
     await browser(
       "open",

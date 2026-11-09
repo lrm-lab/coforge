@@ -1,13 +1,13 @@
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent } from "react";
 import { SearchLg, XClose } from "@untitledui/icons";
+import { Input as AriaInput } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { isImeComposing } from "#src/lib/ime";
 import { m } from "#src/paraglide/messages";
 import type { SearchIntent } from "./search-dialog-context";
-import { SearchFilterBar } from "./search-filter-bar";
+import { SearchFilterChips, SearchFilterMenu } from "./search-filter-bar";
 import { clearedFilters, hasActiveFilter, type SearchFilters } from "./search-filters";
 import { SearchHome } from "./search-home";
 import { searchEntityKey } from "./search-memory";
@@ -109,6 +109,10 @@ export function SearchDialog({
     }
   };
 
+  const changeFilters = (next: SearchFilters) => {
+    setDeferred(false);
+    setFilters(next);
+  };
   const searching = query || (hasActiveFilter(filters) && !deferred);
   return (
     <ModalOverlay
@@ -124,22 +128,30 @@ export function SearchDialog({
         >
           <div onKeyDown={onKeyDown} className="flex max-h-[inherit] h-full min-h-0 flex-col">
             <div
-              className="flex flex-col gap-2 border-b border-secondary p-3"
+              className="flex flex-col gap-3 border-b border-secondary p-4"
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
             >
-              <div className="flex items-center gap-2">
-                <Input
+              <div className="flex items-center gap-3">
+                <SearchLg
+                  aria-hidden="true"
+                  className="size-5 shrink-0 text-brand-600 dark:text-brand-400"
+                />
+                <AriaInput
                   type="search"
-                  size="md"
-                  icon={SearchLg}
                   aria-label={m.search_title()}
                   placeholder={m.search_placeholder()}
                   maxLength={SEARCH_QUERY_MAX_LENGTH}
                   ref={box}
                   value={text}
-                  onChange={setText}
-                  className="w-full"
+                  onChange={(event) => setText(event.target.value)}
+                  className="w-full min-w-0 bg-transparent text-lg text-primary caret-brand-600 outline-hidden placeholder:text-placeholder [&::-webkit-search-cancel-button]:appearance-none"
+                />
+                <SearchFilterMenu
+                  workspaceId={workspaceId}
+                  query={query}
+                  filters={filters}
+                  onChange={changeFilters}
                 />
                 {/* A phone has no Esc and no backdrop to tap: the dialog fills the screen. */}
                 <ButtonUtility
@@ -152,17 +164,11 @@ export function SearchDialog({
                   onClick={onClose}
                 />
               </div>
-              {(query || hasActiveFilter(filters)) && (
-                <SearchFilterBar
-                  workspaceId={workspaceId}
-                  query={query}
-                  filters={filters}
-                  onChange={(next) => {
-                    setDeferred(false);
-                    setFilters(next);
-                  }}
-                />
-              )}
+              <SearchFilterChips
+                workspaceId={workspaceId}
+                filters={filters}
+                onChange={changeFilters}
+              />
             </div>
             <div ref={list} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
               {searching ? (

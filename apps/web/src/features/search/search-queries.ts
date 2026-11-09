@@ -4,7 +4,7 @@ import { listComputerNames } from "#src/features/computers/computers.functions";
 import { channelNamesQuery } from "#src/features/conversations/conversation-queries";
 import { loadWorkspaceDirectory } from "#src/features/workspaces/workspaces.functions";
 import { messageSearchParams, type SearchFilters } from "./search-filters";
-import { searchWorkspaceMessages } from "./search.functions";
+import { searchWorkspaceMessages, searchWorkspaceTasks } from "./search.functions";
 import { SEARCH_PAGE_SIZE } from "./search.schemas";
 
 /**
@@ -58,6 +58,21 @@ export const messageSearchQuery = (
         : undefined,
     // Results are a snapshot of the moment the search ran; revisiting the same search within a
     // minute shows it again instead of refetching.
+    staleTime: 60_000,
+  });
+
+/** The Tasks a query finds; the viewer's conversation ranks first. */
+export const taskSearchQuery = (
+  workspaceId: string,
+  query: string,
+  conversationId: string | undefined,
+  currentConversationId: string | undefined,
+) =>
+  queryOptions({
+    queryKey: ["task-search", workspaceId, query, conversationId, currentConversationId],
+    queryFn: ({ signal }) =>
+      searchWorkspaceTasks({ data: { query, conversationId, currentConversationId }, signal }),
+    enabled: Boolean(query),
     staleTime: 60_000,
   });
 

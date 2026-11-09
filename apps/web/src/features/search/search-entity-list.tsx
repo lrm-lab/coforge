@@ -19,7 +19,7 @@ export const SEARCH_HEADING_CLASS = "px-2 py-1 text-xs text-tertiary";
 
 /** A row in the dialog's lists; the first shows as chosen while the box has focus. */
 export const SEARCH_ROW_CLASS =
-  "flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-hidden transition-colors hover:bg-secondary focus-visible:bg-secondary group-has-[input:focus]/search:data-[search-first]:bg-secondary";
+  "flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-hidden transition-colors hover:bg-secondary focus-visible:bg-brand-50 dark:focus-visible:bg-brand-950 group-has-[input:focus]/search:data-[search-first]:bg-brand-50 dark:group-has-[input:focus]/search:data-[search-first]:bg-brand-950";
 
 /**
  * An entity as a link to where it opens: a channel itself; the viewer's own Agent its direct

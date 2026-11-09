@@ -2,7 +2,10 @@ import { ChannelTitle } from "#src/features/conversations/channel-name";
 import { actionCardPreviewText } from "#src/features/conversations/action-card-preview";
 import { useMemo } from "react";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
+
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { conversationAt } from "#src/features/conversations/last-conversation";
 import { MessageTextSquare01, SearchLg } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
@@ -30,9 +33,10 @@ import type { WorkspaceDirectory } from "#src/features/workspaces/workspaces.fun
 import type { MessageSearchHit } from "#src/server/conversations/message-search.server";
 import { matchSearchEntities, type SearchEntity } from "./search-entities";
 import { SEARCH_HEADING_CLASS, SEARCH_ROW_CLASS, SearchEntityList } from "./search-entity-list";
-import { searchExcerpt } from "./search-excerpt";
 import { searchEntityKey, type SearchEntityKey } from "./search-memory";
-import { SearchMessageSender } from "./search-message-sender";
+import { SearchMatches } from "./search-matches";
+import { SearchTaskList } from "./search-task-list";
+import { taskSearchQuery } from "./search-queries";
 import type { SearchFilters } from "./search-filters";
 import { messageSearchQuery, searchDirectoryQuery } from "./search-queries";
 
@@ -59,6 +63,14 @@ export function SearchResults({
 }) {
   const search = useMessageSearch(workspaceId, query, filters, timeZone);
   const { entities, pending: entitiesPending } = useSearchEntities(workspaceId, query);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const here = conversationAt(pathname);
+  const currentConversationId =
+    here && "channelId" in here ? here.channelId : here && "dmId" in here ? here.dmId : undefined;
+  const taskSearch = useQuery(
+    taskSearchQuery(workspaceId, query, filters.channelId, currentConversationId),
+  );
+  const tasks = taskSearch.data ?? [];
   const refreshing = search.isFetching && !search.isFetchingNextPage;
   const hits = search.data?.pages.flatMap((page) => page.results) ?? [];
   const terms = searchTerms(query);
@@ -66,7 +78,7 @@ export function SearchResults({
   // Nothing matched only once both the messages and the Workspace lists have loaded.
   const nothingMatched =
     hits.length === 0 && !search.isPending && !search.isError && !entitiesPending;
-  if (nothingMatched && entities.length === 0) {
+  if (nothingMatched && entities.length === 0 && tasks.length === 0 && !taskSearch.isPending) {
     return (
       <div className="flex items-start justify-center px-6 py-10">
         <Empty>
@@ -93,6 +105,9 @@ export function SearchResults({
 
   return (
     <div className="pb-2" aria-busy={refreshing}>
+      {tasks.length > 0 && (
+        <SearchTaskList tasks={tasks} terms={terms} onOpen={() => onOpen(undefined)} />
+      )}
       {entities.length > 0 && (
         <SearchEntityList
           entities={entities}
@@ -362,38 +377,38 @@ function SearchResultRow({
         onClick={onOpen}
         // A middle click opens a new tab without a click event; it is still an open.
         onAuxClick={(event) => event.button === 1 && onOpen()}
-        className={cx(SEARCH_ROW_CLASS, "flex-col items-stretch gap-0.5")}
+        className={cx(SEARCH_ROW_CLASS, "items-start")}
       >
-        <div className="flex min-w-0 items-center gap-2 text-xs text-tertiary">
-          <span className="truncate font-medium">{place}</span>
-          {message.threadRootId && (
-            <span className="inline-flex shrink-0 items-center gap-1 text-quaternary">
-              <MessageTextSquare01 aria-hidden="true" className="size-3" />
-              {m.conversation_thread()}
+        <ActorAvatar
+          presence={false}
+          size="sm"
+          src={message.senderAvatarUrl ?? null}
+          name={message.senderName}
+          alt=""
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary">
+            <span className="truncate font-medium text-primary">{message.senderName}</span>
+            <span className="truncate">{place}</span>
+            {message.threadRootId && (
+              <span className="inline-flex shrink-0 items-center gap-1 text-quaternary">
+                <MessageTextSquare01 aria-hidden="true" className="size-3" />
+                {m.conversation_thread()}
+              </span>
+            )}
+            {conversation.archived && (
+              <Badge size="sm" color="gray" type="modern">
+                {m.search_archived()}
+              </Badge>
+            )}
+            <span className="ml-auto shrink-0">
+              <RelativeTime value={message.createdAt} />
             </span>
-          )}
-          {conversation.archived && (
-            <Badge size="sm" color="gray" type="modern">
-              {m.search_archived()}
-            </Badge>
-          )}
-          <SearchMessageSender
-            name={message.senderName}
-            avatarUrl={message.senderAvatarUrl ?? null}
-          />
-          <RelativeTime value={message.createdAt} />
+          </div>
+          <p className="mt-0.5 line-clamp-2 text-sm break-words text-primary">
+            <SearchMatches text={text} terms={terms} />
+          </p>
         </div>
-        <p className="mt-0.5 line-clamp-2 text-sm break-words text-secondary">
-          {searchExcerpt(text, terms).map((part, index) =>
-            part.match ? (
-              <mark key={index} className="bg-transparent font-semibold text-primary">
-                {part.text}
-              </mark>
-            ) : (
-              part.text
-            ),
-          )}
-        </p>
       </Link>
     </li>
   );
