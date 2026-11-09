@@ -30,7 +30,7 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 3. **完整链路仍未验证。** 尚无 staging/browser E2E 覆盖：owner action → Server Function → Redis pending → Centrifugo daemon request → real Agent transcript/captured log → child restore → gzip HTTP upload → scoped result acceptance → browser render。现有 Web 测试是纯 principal helper，不能证明真实 auth、transport、Redis 或 provider 行为。因此 Pi/Builtin 的 writer/source 实现已对齐，但真实 provider E2E 仍为 **NOT VERIFIED**。
 
-4. **实现层面的可观测差异。** child 内部会先构造并 JSON encode view 再按 `maxBytes` 拒绝，父 daemon 还会再次序列化检查；这满足 bounded result，但与 Raft 在构造阶段更早截断的内存峰值仍可能不同。Pi capture barrier 对正常 request 已闭合 offset 竞态；provider 超过 5 秒才开始 stream 时仍会走 timeout 兜底，暂列 P2 边界。
+4. **实现层面的可观测差异。** child 内部会先构造并 JSON encode view 再按 `maxBytes` 拒绝，父 daemon 还会再次序列化检查；这满足 bounded result，但与 Raft 在构造阶段更早截断的内存峰值仍可能不同。Pi capture barrier 对正常 request 已闭合 offset 竞态；provider 超过 5 秒才开始 stream 时仍会走 timeout 兜底，暂列 P2 边界。结果 envelope 现在携带 `response_found`、`digest_match`、`trigger_found`、恢复/脱敏计数、`view_bytes` 和 `failure_detail`；真实 provider 运行证据仍未验证。
 
 ## 有意差异（不是缺陷）
 
