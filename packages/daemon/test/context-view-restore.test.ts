@@ -486,6 +486,37 @@ describe("context view provider restore", () => {
       expect(result.view.messages.map((entry) => entry.role)).toEqual(["user", "assistant"]);
   });
 
+  test("projects Pi media and compaction placeholders without retaining payloads", () => {
+    const records = buffer([
+      {
+        type: "request",
+        sessionId: "s1",
+        messageId: "m1",
+        api: "openai-completions",
+        body: {
+          messages: [
+            { role: "user", content: [{ type: "media_removed", mediaType: "image/png" }] },
+            { role: "user", content: [{ type: "compaction", text: "summary" }] },
+          ],
+        },
+      },
+    ]);
+    const result = restoreContextView({
+      runtime: "pi",
+      sessionId: "s1",
+      messageId: "m1",
+      buffer: records,
+      offset: records.length,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const serialized = JSON.stringify(result.view.messages);
+      expect(serialized).toContain("media removed");
+      expect(serialized).toContain("compaction");
+      expect(serialized).not.toContain("image/png");
+    }
+  });
+
   test("projects OpenAI choices and Google text parts", () => {
     const openai = buffer([
       {

@@ -11,7 +11,18 @@ function piContentParts(content: unknown): unknown[] {
   return items.flatMap((item) => {
     if (typeof item === "string") return [{ kind: "text", text: item }];
     if (!isRecord(item)) return [];
+    if (item.type === "compaction")
+      return [{ kind: "compaction", text: typeof item.text === "string" ? item.text : null }];
     if (typeof item.text === "string") return [{ kind: "text", text: item.text }];
+    if (item.type === "media_removed") return [{ kind: "text", text: "[media removed]" }];
+    if (item.type === "image" || item.type === "audio" || item.type === "media")
+      return [
+        {
+          kind: "image",
+          mediaType: typeof item.mediaType === "string" ? item.mediaType : null,
+          sizeBytes: null,
+        },
+      ];
     if (item.type === "input_text" || item.type === "output_text")
       return [{ kind: "text", text: typeof item.text === "string" ? item.text : "" }];
     if (Array.isArray(item.tool_calls))
