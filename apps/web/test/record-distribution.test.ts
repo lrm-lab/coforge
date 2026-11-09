@@ -464,7 +464,7 @@ test("runDueScheduledWeeklyAssignments creates the format on the schedule-timezo
 
   // 2026-11-07T20:00Z is Saturday in America/New_York but already Sunday
   // 2026-11-08 04:00 in Asia/Shanghai (ISO week 45). The cron path once passed
-  // the pre-zoned scheduleNow into ensureFormatForSettings, which re-zoned it
+  // a pre-zoned calendar date into ensureFormatForSettings, which re-zoned it
   // to Monday's week 46 on hosts west of UTC+4 — the format landed on a cycle
   // the send never targets.
   const previousTz = process.env.TZ;

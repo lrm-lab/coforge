@@ -1,7 +1,7 @@
 /** Session recall for Records sidebar section/week expand state (leave 周报 and return without a full-open tree). */
 
 import { isRecord } from "@lrm/coforge-sdk/internal";
-import { currentIsoWeek } from "./records-content";
+import { currentScheduledIsoWeek } from "./weekly-report-schedule-due";
 import { browserSessionStorage, type BrowserSessionStorage } from "./browser-session-storage";
 
 export type RecordsSidebarSectionId = "favorites" | "myReports" | "members" | "notes";
@@ -169,6 +169,6 @@ export function defaultMemberWeekExpanded(input: {
   if (input.queryActive && input.hasSubmissions) return true;
   if (input.weekSelected) return true;
   if (!input.hasSubmissions) return false;
-  const current = currentIsoWeek(input.now);
+  const current = currentScheduledIsoWeek(input.now);
   return input.year === current.year && input.week === current.week;
 }

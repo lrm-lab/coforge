@@ -1,7 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
-  currentIsoWeek,
   isAutoSendCancelled,
   isWeekSendDismissed,
   normalizeReportContent,
@@ -9,8 +8,8 @@ import {
 } from "#src/features/records/records-content";
 import { canSendWeeklyAssignmentsNow } from "#src/features/records/weekly-send-window";
 import {
+  currentScheduledIsoWeek,
   isWeeklyScheduleDue,
-  zonedCalendarDate,
 } from "#src/features/records/weekly-report-schedule-due";
 import {
   distributeWeeklyReport,
@@ -71,7 +70,7 @@ export function recordDistribution(db: Db, notifier?: WeeklyReportNotifier) {
       select: { id: true },
     });
     if (liveFormat?.id !== input.reportId) return { canSend: false, schedule: null };
-    const currentWeek = currentIsoWeek(zonedCalendarDate(now));
+    const currentWeek = currentScheduledIsoWeek(now);
     const alreadySent = Boolean(
       await db.weeklyReport.findFirst({
         where: {
@@ -223,8 +222,7 @@ export function recordDistribution(db: Db, notifier?: WeeklyReportNotifier) {
         continue;
       }
 
-      const scheduleNow = zonedCalendarDate(now);
-      const { year, week } = currentIsoWeek(scheduleNow);
+      const { year, week } = currentScheduledIsoWeek(now);
       const alreadySent = await db.weeklyReport.findFirst({
         where: {
           workspaceId: row.workspaceId,
@@ -298,7 +296,7 @@ export function recordDistribution(db: Db, notifier?: WeeklyReportNotifier) {
         settingsId: row.id,
         settingsName: row.name,
         // `now` must be a real instant: the callee derives the schedule-timezone
-        // week itself, so the pre-zoned `scheduleNow` would shift a day.
+        // week itself, so a pre-zoned calendar date would shift a day.
         now,
       });
 

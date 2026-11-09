@@ -3,10 +3,10 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import {
-  currentIsoWeek,
   normalizeReportContent,
   reportContentForRecipient,
 } from "#src/features/records/records-content";
+import { isoWeekOfDate } from "#src/features/records/weekly-report-schedule-due";
 import { buildWeeklyReportHtml } from "./weekly-report-html.server";
 import { buildWeeklyReportPresentation } from "./weekly-report-presentation.server";
 import { REPORT_PERSON_SELECT } from "./record-member-weeks.server";
@@ -20,7 +20,7 @@ function isoWeeksTouchingMonth(year: number, month: number): Array<{ year: numbe
   const days = new Date(year, month, 0).getDate();
   const seen = new Set<string>();
   for (let day = 1; day <= days; day += 1) {
-    const iso = currentIsoWeek(new Date(year, month - 1, day));
+    const iso = isoWeekOfDate(new Date(year, month - 1, day));
     const key = `${iso.year}-${iso.week}`;
     if (seen.has(key)) continue;
     seen.add(key);

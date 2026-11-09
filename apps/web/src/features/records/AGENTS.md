@@ -33,8 +33,10 @@ These rules also cover `src/server/records/`.
   dialog mounts twice and `ariaHideOutside` makes the visible one inert.
   Render settings dialogs as siblings outside `Tabs` (see `weekly-report-settings.tsx`).
 - 「取消本周周报」and schedule-tick skip keys use the current ISO week
-  (`currentIsoWeek(zonedCalendarDate(now))`), not the live format document's
-  possibly stale `cycle`. Stamp dismiss with that calendar week.
+  (`currentScheduledIsoWeek(now)`, the one schedule-timezone "this week";
+  every Records path shares it except the UTC-civil collect windows, whose
+  boundaries are Monday 00:00 UTC), not the live format document's possibly
+  stale `cycle`. Stamp dismiss with that calendar week.
 - Format offer-send (发送 / 取消本周周报) is posted once per report for the
   current ISO week into the session that loads first. Earlier weeks' cards stay
   in that thread as history. Do not fan the current week's card out to every

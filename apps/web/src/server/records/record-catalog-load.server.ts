@@ -2,7 +2,6 @@ import { humanLabel } from "#src/lib/human-label";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import {
-  currentIsoWeek,
   isAutoSendCancelled,
   memberReportTitle,
   normalizeReportContent,
@@ -21,7 +20,7 @@ import {
   reportPersonView,
 } from "./record-member-weeks.server";
 import { requireMembership } from "./record-catalog-access.server";
-import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
+import { currentScheduledIsoWeek } from "#src/features/records/weekly-report-schedule-due";
 
 type Db = PrismaClient;
 
@@ -47,7 +46,7 @@ export async function loadRecordsCatalog(
 ) {
   const membership = await requireMembership(db, input.workspaceId, input.userId);
   const now = input.now ?? new Date();
-  const currentWeek = currentIsoWeek(zonedCalendarDate(now));
+  const currentWeek = currentScheduledIsoWeek(now);
   // Directory rows need report metadata only. Bodies stay out of these queries: unread is a
   // separate id-only JSON-path read for the viewer's own assignments, so cost does not grow
   // with every peer's markdown history. Member weeks are read a page at a time

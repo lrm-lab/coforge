@@ -1,11 +1,10 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
-  currentIsoWeek,
   normalizeReportContent,
   withWeekSendDismissed,
 } from "#src/features/records/records-content";
-import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
+import { currentScheduledIsoWeek } from "#src/features/records/weekly-report-schedule-due";
 import type { WeeklyReportNotifier } from "./weekly-report-distribution.server";
 import { recordDistribution } from "./record-distribution.server";
 import { recordSideChat } from "./record-side-chat.server";
@@ -82,7 +81,7 @@ export function recordReportSend(db: Db, notifier?: WeeklyReportNotifier) {
     });
     if (!sendState.canSend && !sendState.schedule) throw new AppError("INVALID_INPUT");
     const now = input.now ?? new Date();
-    const { year, week } = currentIsoWeek(zonedCalendarDate(now));
+    const { year, week } = currentScheduledIsoWeek(now);
     const content = withWeekSendDismissed(normalizeReportContent(report.content), year, week);
     await db.weeklyReport.update({
       where: { id: report.id },

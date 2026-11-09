@@ -1,11 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import {
-  currentIsoWeek,
-  isAutoSendCancelled,
-  normalizeReportContent,
-} from "#src/features/records/records-content";
+import { isAutoSendCancelled, normalizeReportContent } from "#src/features/records/records-content";
 import { isWeeklySendArmed } from "#src/features/records/weekly-send-window";
-import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
+import { currentScheduledIsoWeek } from "#src/features/records/weekly-report-schedule-due";
 import { requireMembership } from "./record-catalog-access.server";
 
 export function recordNavAttention(db: PrismaClient) {
@@ -25,7 +21,7 @@ export function recordNavAttention(db: PrismaClient) {
     if (unreadAssignment) return { preview: true as const };
 
     const now = input.now ?? new Date();
-    const currentWeek = currentIsoWeek(zonedCalendarDate(now));
+    const currentWeek = currentScheduledIsoWeek(now);
     const settings = await db.weeklyReportTemplate.findMany({
       where: {
         workspaceId: input.workspaceId,

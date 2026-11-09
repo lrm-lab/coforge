@@ -4,8 +4,10 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { WeeklyReportWorkflow } from "#src/server/records/weekly-report-workflow.server";
 import { distributeWeeklyReport } from "#src/server/records/weekly-report-distribution.server";
 import { ensureCurrentCycle } from "#src/server/records/record-catalog-format.server";
-import { currentIsoWeek } from "#src/features/records/records-content";
-import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
+import {
+  currentScheduledIsoWeek,
+  isoWeekOfDate,
+} from "#src/features/records/weekly-report-schedule-due";
 
 // Run explicitly against a disposable PostgreSQL database, never production.
 const connectionString = Bun.env.WEEKLY_REPORT_TEST_DATABASE_URL;
@@ -56,8 +58,8 @@ test("a send across the schedule-week boundary still clears the live format's se
       sendTime: "15:00",
     })) as { id: string };
     const boundaryNow = new Date("2026-11-08T20:00:00Z");
-    const scheduleWeek = currentIsoWeek(zonedCalendarDate(boundaryNow));
-    expect(currentIsoWeek(boundaryNow)).not.toEqual(scheduleWeek);
+    const scheduleWeek = currentScheduledIsoWeek(boundaryNow);
+    expect(isoWeekOfDate(boundaryNow)).not.toEqual(scheduleWeek);
     const cycle = await ensureCurrentCycle(db, { ...actor, now: boundaryNow });
     expect({ year: cycle.year, week: cycle.week }).toEqual(scheduleWeek);
     const liveFormat = await db.weeklyReport.create({

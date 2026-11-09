@@ -872,16 +872,6 @@ export function reportContentToMarkdown(content: ReportContent): string {
     .join("\n\n");
 }
 
-/** ISO week-year and week number for the given local calendar date. */
-export function currentIsoWeek(date = new Date()): { year: number; week: number } {
-  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = utc.getUTCDay() || 7;
-  utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
-  return { year: utc.getUTCFullYear(), week };
-}
-
 /** ISO week-of-year for format meta edits (1–53). */
 export function isValidIsoWeekNumber(week: number): boolean {
   return Number.isInteger(week) && week >= 1 && week <= 53;

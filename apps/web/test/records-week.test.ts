@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 
 import {
   clearReportContent,
-  currentIsoWeek,
   emptyReportContent,
   isValidIsoWeekNumber,
   isValidTemplateName,
@@ -12,19 +11,36 @@ import {
   memberWeekTitle,
   normalizeReportContent,
 } from "#src/features/records/records-content";
+import {
+  currentScheduledIsoWeek,
+  isoWeekOfDate,
+} from "#src/features/records/weekly-report-schedule-due";
 
 test("formats member week titles like the design catalog", () => {
   expect(memberWeekTitle(2026, 36)).toBe("2026 W36 工作周报");
 });
 
 test("resolves the ISO week for a fixed calendar day", () => {
-  expect(currentIsoWeek(new Date("2026-09-01T12:00:00+08:00"))).toEqual({
+  expect(isoWeekOfDate(new Date("2026-09-01T12:00:00+08:00"))).toEqual({
     year: 2026,
     week: 36,
   });
-  expect(currentIsoWeek(new Date("2026-09-09T12:00:00+08:00"))).toEqual({
+  expect(isoWeekOfDate(new Date("2026-09-09T12:00:00+08:00"))).toEqual({
     year: 2026,
     week: 37,
+  });
+});
+
+test("currentScheduledIsoWeek follows the Asia/Shanghai schedule clock", () => {
+  // 2026-11-08T20:00Z is Sunday of week 45 in UTC but already Monday of week 46
+  // in Shanghai; four hours earlier Shanghai is still on Sunday.
+  expect(currentScheduledIsoWeek(new Date("2026-11-08T20:00:00Z"))).toEqual({
+    year: 2026,
+    week: 46,
+  });
+  expect(currentScheduledIsoWeek(new Date("2026-11-08T15:59:59Z"))).toEqual({
+    year: 2026,
+    week: 45,
   });
 });
 

@@ -25,7 +25,6 @@ import {
   updateFormatReportMeta,
 } from "./records.functions";
 import {
-  currentIsoWeek,
   isAutoSendCancelled,
   isValidTemplateName,
   isWeekSendDismissed,
@@ -43,7 +42,7 @@ import { RecordSidePanel } from "./record-side-panel";
 import { TemplateChildrenTable } from "./template-children-table";
 import { normalizeLeaderFormatTabs, resetLeaderFormatPage } from "./template-outline-sections";
 import { WEEKLY_SEND_TOAST_MS, WeeklySendConfirmDialog } from "./weekly-send-confirm-dialog";
-import { zonedCalendarDate } from "./weekly-report-schedule-due";
+import { currentScheduledIsoWeek } from "./weekly-report-schedule-due";
 import { sendWindowEnd, useWeeklySendArmed } from "./use-send-window";
 import { fileToDataUrlUpload } from "./file-data-url-upload";
 import type { ReportSubject } from "./record-subject";
@@ -88,7 +87,7 @@ export function TemplateReportDetail({
   const reportIdRef = useRef(report.id);
   reportIdRef.current = report.id;
   // Schedule cancel/dismiss keys follow the calendar week (same as the tick), not the document cycle.
-  const scheduleWeek = currentIsoWeek(zonedCalendarDate(new Date()));
+  const scheduleWeek = currentScheduledIsoWeek(new Date());
   const formatCancelled = isAutoSendCancelled(content, scheduleWeek.year, scheduleWeek.week);
   const weekDismissed = isWeekSendDismissed(content, scheduleWeek.year, scheduleWeek.week);
   const [sideOpen, setSideOpen] = useReportSidePanelOpen(report.id, formatSurface);
@@ -242,7 +241,7 @@ export function TemplateReportDetail({
       setConfirmOpen(false);
       return;
     }
-    const week = currentIsoWeek(zonedCalendarDate(new Date()));
+    const week = currentScheduledIsoWeek(new Date());
     const draft = withoutWeekSendDismissed(
       normalizeReportContent(contentRef.current),
       week.year,
@@ -502,7 +501,7 @@ export function TemplateReportDetail({
           setConfirmOpen(true);
         }}
         onWeekSendDismissed={() => {
-          const week = currentIsoWeek(zonedCalendarDate(new Date()));
+          const week = currentScheduledIsoWeek(new Date());
           const next = withWeekSendDismissed(contentRef.current, week.year, week.week);
           replaceContent(next);
           writeReportDraft(report.id, next);

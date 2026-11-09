@@ -2,7 +2,6 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import {
-  currentIsoWeek,
   insertAssistantReportBody,
   isAutoSendCancelled,
   memberReportMatchesReceived,
@@ -20,7 +19,7 @@ import { canEditWeeklyReportContent } from "./weekly-report-editability.server";
 import { requireMembership } from "./record-catalog-access.server";
 import { syncSettingsOutlineFromFormat } from "./record-catalog-format.server";
 import { canSendWeeklyAssignmentsNow } from "#src/features/records/weekly-send-window";
-import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
+import { currentScheduledIsoWeek } from "#src/features/records/weekly-report-schedule-due";
 
 type Db = PrismaClient;
 
@@ -163,7 +162,7 @@ export function recordReportContent(db: Db) {
     }
     const now = input.now ?? new Date();
     // Live format may still be bound to the week it was created; cancel/send keys follow the calendar week.
-    const week = currentIsoWeek(zonedCalendarDate(now));
+    const week = currentScheduledIsoWeek(now);
     const wasCancelled = isAutoSendCancelled(stored, week.year, week.week);
     let autoSendJustCancelled = false;
     if (

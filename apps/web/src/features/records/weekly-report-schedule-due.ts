@@ -58,6 +58,24 @@ export function zonedCalendarDate(
   return new Date(Number(byType.year), Number(byType.month) - 1, Number(byType.day), 12, 0, 0);
 }
 
+/** ISO week-year and week number for the given local calendar date — week-of-date math with no
+ * schedule clock. */
+export function isoWeekOfDate(date: Date): { year: number; week: number } {
+  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = utc.getUTCDay() || 7;
+  utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  return { year: utc.getUTCFullYear(), week };
+}
+
+/** The current ISO week on the schedule clock: the one "this week" every weekly-report path —
+ * sends, cycles, stamps, skips and highlights — must share, so they can never disagree across a
+ * week boundary. */
+export function currentScheduledIsoWeek(now: Date = new Date()): { year: number; week: number } {
+  return isoWeekOfDate(zonedCalendarDate(now));
+}
+
 /** True when local weekday matches and local clock is at or after sendTime. */
 export function isWeeklyScheduleDue(input: {
   now: Date;

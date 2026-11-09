@@ -3,7 +3,6 @@ import { humanLabel } from "#src/lib/human-label";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
-  currentIsoWeek,
   memberReportTitle,
   memberWeekTitle,
   normalizeReportContent,
@@ -16,7 +15,7 @@ import {
   parseTemplateSections,
   reportContentFromSections,
 } from "#src/features/records/template-outline-sections";
-import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
+import { currentScheduledIsoWeek } from "#src/features/records/weekly-report-schedule-due";
 
 export type WeeklyReportAssignmentNotice = {
   workspaceId: string;
@@ -37,7 +36,7 @@ export async function distributeWeeklyReport(
   input: { workspaceId: string; userId: string; templateId: string; content?: unknown; now?: Date },
   notifier?: WeeklyReportNotifier,
 ) {
-  const { year, week } = currentIsoWeek(zonedCalendarDate(input.now ?? new Date()));
+  const { year, week } = currentScheduledIsoWeek(input.now ?? new Date());
   const distribution = await db.$transaction(async (tx) => {
     // Serialize manual sends, cron and retries on the existing settings row.
     await tx.$queryRaw`SELECT id FROM weekly_report_templates WHERE id = ${input.templateId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid FOR UPDATE`;

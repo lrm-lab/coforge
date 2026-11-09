@@ -1,7 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
-  currentIsoWeek,
   emptyReportContent,
   isValidTemplateName,
   memberWeekTitle,
@@ -16,7 +15,7 @@ import {
 } from "#src/features/records/template-outline-sections";
 import { requireMembership } from "./record-catalog-access.server";
 import { isValidIsoWeekNumber } from "#src/features/records/records-content";
-import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
+import { currentScheduledIsoWeek } from "#src/features/records/weekly-report-schedule-due";
 
 export async function updateFormatReportMeta(
   db: PrismaClient,
@@ -121,7 +120,7 @@ export async function ensureCurrentCycle(
   input: { workspaceId: string; userId: string; now?: Date },
 ) {
   await requireMembership(db, input.workspaceId, input.userId);
-  const { year, week } = currentIsoWeek(zonedCalendarDate(input.now ?? new Date()));
+  const { year, week } = currentScheduledIsoWeek(input.now ?? new Date());
   return ensureCycleAt(db, { workspaceId: input.workspaceId, userId: input.userId, year, week });
 }
 
@@ -163,7 +162,7 @@ export async function rebaseLiveFormatToCurrentWeek(
     now: Date;
   },
 ): Promise<{ year: number; week: number }> {
-  const current = currentIsoWeek(zonedCalendarDate(input.now));
+  const current = currentScheduledIsoWeek(input.now);
   if (input.cycle.year === current.year && input.cycle.week === current.week) return current;
   const cycle = await ensureCycleAt(db, {
     workspaceId: input.workspaceId,
@@ -272,7 +271,7 @@ export async function ensureFormatForSettings(
   const cycle = await ensureCycleAt(db, {
     workspaceId: input.workspaceId,
     userId: input.userId,
-    ...currentIsoWeek(zonedCalendarDate(input.now ?? new Date())),
+    ...currentScheduledIsoWeek(input.now ?? new Date()),
   });
   const baseContent =
     input.sections && input.sections.length > 0

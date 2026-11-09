@@ -8,6 +8,10 @@ import {
   rememberRecordsSidebarExpand,
   sanitizeRecordsSidebarExpand,
 } from "#src/features/records/records-sidebar-expand";
+import {
+  currentScheduledIsoWeek,
+  isoWeekOfDate,
+} from "#src/features/records/weekly-report-schedule-due";
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -158,4 +162,20 @@ test("defaultMemberWeekExpanded opens the selected week or the current ISO week"
       now,
     }),
   ).toBe(true);
+});
+
+test("defaultMemberWeekExpanded highlights the schedule-timezone week, not the browser's", () => {
+  // Sunday 2026-11-08 20:00Z: still week 45 in UTC/the Americas, already Monday of
+  // week 46 in Asia/Shanghai — the schedule clock decides the highlight.
+  const now = new Date("2026-11-08T20:00:00Z");
+  const schedule = currentScheduledIsoWeek(now);
+  expect(schedule).toEqual({ year: 2026, week: 46 });
+  const base = { weekSelected: false, hasSubmissions: true, queryActive: false, now };
+  expect(defaultMemberWeekExpanded({ ...base, year: schedule.year, week: schedule.week })).toBe(
+    true,
+  );
+  const local = isoWeekOfDate(now);
+  if (local.year !== schedule.year || local.week !== schedule.week) {
+    expect(defaultMemberWeekExpanded({ ...base, year: local.year, week: local.week })).toBe(false);
+  }
 });

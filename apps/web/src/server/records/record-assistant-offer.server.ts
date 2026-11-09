@@ -1,9 +1,8 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
-import { currentIsoWeek } from "#src/features/records/records-content";
+import { currentScheduledIsoWeek } from "#src/features/records/weekly-report-schedule-due";
 import { parseRecordAssistantPayload } from "#src/features/records/weekly-highlight-extract";
 import { formatOfferSendWeekTitle } from "#src/features/records/weekly-send-window";
-import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
 import { offerSendRecipient } from "./weekly-report-offer-recipient.server";
 import { recordDistribution } from "./record-distribution.server";
 import { recordSideChat } from "./record-side-chat.server";
@@ -94,7 +93,7 @@ export function recordAssistantOffer(db: Db, notifier?: WeeklyReportNotifier) {
     existing: SideChatComments;
     now?: Date;
   }) {
-    const { year, week } = currentIsoWeek(zonedCalendarDate(input.now ?? new Date()));
+    const { year, week } = currentScheduledIsoWeek(input.now ?? new Date());
     const sessionHasCurrentWeek = input.existing.some((row) => {
       const payload = parseRecordAssistantPayload(row.payload);
       return payload?.kind === "offer-send" && payload.year === year && payload.week === week;
@@ -142,7 +141,7 @@ export function recordAssistantOffer(db: Db, notifier?: WeeklyReportNotifier) {
     reportId: string;
     now?: Date;
   }): Promise<boolean> {
-    const { year, week } = currentIsoWeek(zonedCalendarDate(input.now ?? new Date()));
+    const { year, week } = currentScheduledIsoWeek(input.now ?? new Date());
     const rows = await db.recordComment.findMany({
       where: {
         workspaceId: input.workspaceId,
