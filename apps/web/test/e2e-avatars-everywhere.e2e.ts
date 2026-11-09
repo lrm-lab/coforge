@@ -247,6 +247,68 @@ test("names carry their faces", async () => {
       ).not.toBe("rgba(0, 0, 0, 0)");
       await shoot(name);
     }
+    // A notice in a thread names its people by face too: the thread pane sits beside the
+    // conversation, outside its message list (task #coforge-ui:#25).
+    const root = await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: notices.id,
+        sequence: 4,
+        senderMemberId: meIn.id,
+        body: "Can someone take this?",
+      },
+    });
+    const threaded = await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: notices.id,
+        sequence: 5,
+        senderMemberId: null,
+        threadRootId: root.id,
+        body: `${agent.name} added ${DEV_BROWSER_USER.username} to this channel.`,
+      },
+    });
+    await db.systemMessage.create({
+      data: {
+        messageId: threaded.id,
+        conversationId: notices.id,
+        workspaceId,
+        kind: "channel.member_added",
+        params: {
+          actor: { memberId: agentIn.id, handle: agent.name, displayName: agent.displayName },
+          members: [
+            { memberId: meIn.id, handle: DEV_BROWSER_USER.username, displayName: "Dev User" },
+          ],
+        },
+      },
+    });
+    // A person's reply too: a thread of notices alone shows no preview to open it by.
+    await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: notices.id,
+        sequence: 6,
+        senderMemberId: agentIn.id,
+        threadRootId: root.id,
+        body: "On it.",
+      },
+    });
+    await db.conversation.update({ where: { id: notices.id }, data: { lastSequence: 6 } });
+    const threadNotice = `document.querySelector('section [data-message-id="${threaded.id}"] [data-message="system"]')`;
+    await browser("set", "viewport", "1280", "900");
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${notices.id}`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.querySelector('[data-message-id="${root.id}"] [data-thread-preview]') != null`,
+    );
+    await evaluate(
+      `document.querySelector('[data-message-id="${root.id}"] [data-thread-preview]').click() ?? true`,
+    );
+    await browser("wait", "--fn", `${threadNotice} != null`);
+    await browser("wait", "500");
+    expect(await evaluate<number>(`${threadNotice}.querySelectorAll("img").length`)).toBe(2);
+    await shoot("thread-notice");
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: { in: cleanup } } }).catch(() => undefined);

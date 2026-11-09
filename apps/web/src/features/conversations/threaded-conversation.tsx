@@ -52,7 +52,9 @@ const NO_MESSAGES: DirectConversationView["messages"] = [];
 export function ThreadedConversation(props: ThreadedConversationProps) {
   return (
     <ConversationIdProvider conversationId={props.conversation.conversationId}>
-      <ThreadedConversationContent {...props} />
+      <SeenByDirectory members={props.conversation.mentionables}>
+        <ThreadedConversationContent {...props} />
+      </SeenByDirectory>
     </ConversationIdProvider>
   );
 }
@@ -315,23 +317,21 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   if (taskPopup) return taskLayer;
   const conversationMainPane = (
     <ThreadStoreProvider store={threads}>
-      <SeenByDirectory members={conversation.mentionables}>
-        <ConversationPane
-          {...conversationProps}
-          streamRead={windowRead}
-          onOpenTask={openTaskReference}
-          channelNames={channelNames}
-          channels={channelList}
-          jumpMessage={jumpMessage ?? jumpMessageId}
-          onJumpMessageConsumed={jumpMessage ? onJumpMessageConsumed : clearJumpMessage}
-          onLoadMessageAround={onLoadMessageAround}
-          onReadLatest={onReadLatest}
-          header={header}
-          conversation={conversation}
-          composerTarget={threadContext}
-          onOpenThread={openThread}
-        />
-      </SeenByDirectory>
+      <ConversationPane
+        {...conversationProps}
+        streamRead={windowRead}
+        onOpenTask={openTaskReference}
+        channelNames={channelNames}
+        channels={channelList}
+        jumpMessage={jumpMessage ?? jumpMessageId}
+        onJumpMessageConsumed={jumpMessage ? onJumpMessageConsumed : clearJumpMessage}
+        onLoadMessageAround={onLoadMessageAround}
+        onReadLatest={onReadLatest}
+        header={header}
+        conversation={conversation}
+        composerTarget={threadContext}
+        onOpenThread={openThread}
+      />
     </ThreadStoreProvider>
   );
   const conversationSidePane = visibleSlot && (
