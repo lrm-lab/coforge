@@ -3,6 +3,8 @@ import {
   DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
   decodeRuntimeAuthStatusReport,
   type RuntimeAuthStatusReport,
+  type RuntimeMetadata,
+  type CodeAgentModelCatalog,
 } from "@lrm/coforge-sdk/internal";
 
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -12,6 +14,9 @@ import {
   storedRuntimeAuth,
 } from "#src/server/computers/computer-runtime-auth.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
+import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
+import { agentStartIntent } from "#src/server/agents/manage-agents.server";
+import { userAgentControl } from "#src/server/agents/user-agent-control.server";
 import { rejectNonDaemonPrincipal } from "./daemon-principal.server";
 import { createCentrifugoServerApi } from "./server-api.server";
 import {
@@ -62,6 +67,35 @@ export function createRuntimeAuthReportMethod(
   };
 }
 
+/** After inventory lands, restart Agents that failed launch only because the runtime was not
+ * reported yet (new Workspace race). `runtime_not_installed` is non-retryable, so without this
+ * they stay offline until someone edits the runtime by hand. */
+async function recoverAgentsAfterInventory(
+  db: PrismaClient,
+  scope: { workspaceId: string; computerId: string },
+  runtimes: RuntimeMetadata[],
+): Promise<void> {
+  const inventory = new PrismaComputerRuntimeRepository(db);
+  const control = userAgentControl(db);
+  const store = new PrismaAgentControlStore(db);
+  for (const runtime of runtimes) {
+    if (runtime.unavailableCode) continue;
+    const agentIds = await inventory.findFailedAgentIdsForRuntime(
+      scope.workspaceId,
+      scope.computerId,
+      runtime.provider,
+      "runtime_not_installed",
+    );
+    for (const agentId of agentIds) {
+      const cleared = await control.clearLaunchFailure(agentId, "runtime_not_installed");
+      if (!cleared) continue;
+      const agent = await store.get(agentId);
+      if (!agent || agent.stoppedAt || agent.deletedAt || agent.migrating) continue;
+      await control.recover(agentStartIntent(agent), agent.ownerId).catch(() => {});
+    }
+  }
+}
+
 /** What a daemon reports about its Computer's runtimes, or the 503 stubs without a database. */
 export function computerRuntimeMethods(
   db: PrismaClient | null,
@@ -72,7 +106,17 @@ export function computerRuntimeMethods(
   });
   return {
     [DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD]: db
-      ? createDaemonRuntimeCodeAgentsUpdateMethod(new PrismaComputerRuntimeRepository(db))
+      ? createDaemonRuntimeCodeAgentsUpdateMethod({
+          replace: async (
+            scope: { workspaceId: string; computerId: string },
+            runtimes: RuntimeMetadata[],
+            catalogs: CodeAgentModelCatalog[],
+          ) => {
+            await new PrismaComputerRuntimeRepository(db).replace(scope, runtimes, catalogs);
+            // Best-effort: inventory persistence already succeeded.
+            void recoverAgentsAfterInventory(db, scope, runtimes).catch(() => {});
+          },
+        })
       : unavailable,
     [RUNTIME_AUTH_STATUS_REPORT_METHOD]: db
       ? createRuntimeAuthReportMethod(

@@ -1,6 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { prepareDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import {
   HostJobError,
   compareJobs,
@@ -116,6 +117,11 @@ export class PrismaCloudFleet implements CloudFleet {
 
   async link(computerId: string, workspaceId: string, _slug: string): Promise<void> {
     await this.db.workspaceComputer.create({ data: { workspaceId, computerId } });
+    // Seed Code Agent inventory from another Workspace on this Computer so the new Workspace's
+    // auto-started assistant can launch before its own Daemon inventory report lands.
+    await new PrismaComputerRuntimeRepository(this.db)
+      .inheritFromSibling(workspaceId, computerId)
+      .catch(() => {});
   }
 }
 

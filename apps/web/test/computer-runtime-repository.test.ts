@@ -177,4 +177,83 @@ describe("PrismaComputerRuntimeRepository", () => {
       args: { where: { workspaceId: "workspace-1", computerId: "computer-1" } },
     });
   });
+
+  test("inheritFromSibling copies another Workspace's inventory onto a fresh link", async () => {
+    const created: unknown[] = [];
+    const observedAt = new Date("2026-11-09T08:00:00.000Z");
+    const db = {
+      computerRuntime: {
+        count: async () => 0,
+        findFirst: async () => ({ workspaceId: "workspace-old" }),
+        findMany: async () => [
+          {
+            provider: "pi",
+            version: "1.5.0",
+            displayName: "Pi",
+            unavailableCode: null,
+            diagnostic: null,
+            isPublic: true,
+            observedAt,
+          },
+        ],
+        create: async (args: unknown) => created.push({ table: "runtime", args }),
+      },
+      computerModelCatalog: {
+        findMany: async () => [
+          { provider: "pi", models: [{ id: "muse-spark" }], observedAt },
+        ],
+        create: async (args: unknown) => created.push({ table: "catalog", args }),
+      },
+      $transaction: async (execute: (tx: typeof db) => Promise<void>) => execute(db),
+    } as unknown as PrismaClient;
+
+    const copied = await new PrismaComputerRuntimeRepository(db).inheritFromSibling(
+      "workspace-new",
+      "computer-1",
+    );
+
+    expect(copied).toBe(1);
+    expect(created).toEqual([
+      {
+        table: "runtime",
+        args: {
+          data: {
+            workspaceId: "workspace-new",
+            computerId: "computer-1",
+            provider: "pi",
+            version: "1.5.0",
+            displayName: "Pi",
+            unavailableCode: null,
+            diagnostic: null,
+            isPublic: false,
+            observedAt,
+          },
+        },
+      },
+      {
+        table: "catalog",
+        args: {
+          data: {
+            workspaceId: "workspace-new",
+            computerId: "computer-1",
+            provider: "pi",
+            models: [{ id: "muse-spark" }],
+            observedAt,
+          },
+        },
+      },
+    ]);
+  });
+
+  test("inheritFromSibling is a no-op when the Workspace already has inventory", async () => {
+    const db = {
+      computerRuntime: {
+        count: async () => 2,
+        findFirst: async () => {
+          throw new Error("must not look up a sibling");
+        },
+      },
+    } as unknown as PrismaClient;
+    expect(await new PrismaComputerRuntimeRepository(db).inheritFromSibling("ws", "pc")).toBe(0);
+  });
 });
