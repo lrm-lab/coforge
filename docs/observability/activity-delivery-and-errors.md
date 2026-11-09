@@ -141,6 +141,9 @@ thinking；重试中断当前 thinking，恢复后的文本或 thinking 立即�
 fence，同样走下线路径：可见 `detail` 为
 `Runtime stopped after <N> repeated runtime errors with the same fingerprint (<fp>). Last error: <msg> Restart after the runtime/tooling issue is fixed.`，
 `runtimeError.errorReason` 为 `runtime_error_fenced`，`errorClass` 沿用底层错误的分类。
+服务商连不上（`provider_connection_error`）、服务商自身 5xx（`provider_server_error`）和限流
+（`rate_limited`）这三类不计入 fingerprint fence（任务 #726，与参考客户端一致）：它们只走投递退避
+（10 秒起、最长 5 分钟），Agent 保持在线；夹在两次相同错误之间的这类错误也不清零已有计数。
 
 同一个 launch 内，连续 5 次明确 HTTP 404 且分类为 `NotFoundError` 的错误也会熔断，
 不要求指纹相同；裸 `not found` 不计数。其他错误打断计数，输出/工具输出/阶段完成

@@ -2,7 +2,7 @@
 
 The Grok provider requires **Grok Build 1.0.62 or newer**. A session owns one
 `grok agent --no-leader stdio` process. It uses the existing process-tree owner,
-including terminal cleanup's five-second graceful-exit allowance and forced-exit
+including terminal cleanup's ten-second graceful-exit allowance and forced-exit
 fallback.
 
 Idle input uses `session/prompt`, with the prompt id the session assigns as
