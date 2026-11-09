@@ -1,7 +1,9 @@
 import type { ForwardedMessageView } from "#src/features/conversations/message-forward";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import type { ArtifactMessageCard } from "#src/server/artifacts/artifact-composition.server";
-import { artifactMessageCards } from "#src/server/artifacts/artifact-composition.server";
+import {
+  artifactMessageCards,
+  type ArtifactMessageCard,
+} from "#src/server/artifacts/artifact-composition.server";
 import { attachActionCardViews } from "./action-card-attach.server";
 import type { ActionCardView } from "./action-card-view.server";
 import { attachForwardedAccess } from "./message-forward-view.server";

@@ -16,10 +16,10 @@ import {
   productionArtifacts,
 } from "#src/server/artifacts/artifact-composition.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
-import { agentMessagesPostDependencies } from "./messages";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import { parsePeerTarget } from "#src/server/db/repositories/agent-peer-target.server";
+import { agentMessagesPostDependencies } from "./messages";
 
 /**
  * `coforge artifact create|read|push|history|revert` (task #385): one operation per request, as
