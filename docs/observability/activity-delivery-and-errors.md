@@ -146,11 +146,8 @@ fence，同样走下线路径：可见 `detail` 为
 （10 秒起、最长 5 分钟），Agent 保持在线；夹在两次相同错误之间的这类错误也不清零已有计数。
 既然这类错误不会让 Agent 下线，排队就没有上限：每个退避台阶记一行
 `agent.runtime.delivery_held`（`agent_id`、`error_class`、`attempt`、`retry_in_ms`、`held`、`reason`，
-不含消息正文）；`AgentDeliveryQueue` 每个 Agent 最多留 100 条（与服端重放上限
-`AGENT_RECOVERY_MESSAGE_LIMIT` 一致），超出时丢最旧的并记 `agent.runtime.delivery_dropped`
-（`dropped`/`held`/`limit`/`outcome=requeued_on_server`，同样不含正文）。被丢的投递从未 ACK，
-服务端行仍是 `receivedAt: null`，下次 daemon ready 的 `resendPending` 或 rejection 触发的
-`readAgentRecoveryContext` 会再投一次——丢的是通知，不是消息。
+不含消息正文）。`AgentDeliveryQueue` 没有容量上限，不会因为排队过多而丢弃投递（与参考客户端一致）；同一个
+`deliveryId` 的重发（新的 requestId）只占一个位置，仍会 ACK，通知也只算一条消息。
 
 同一个 launch 内，连续 5 次明确 HTTP 404 且分类为 `NotFoundError` 的错误也会熔断，
 不要求指纹相同；裸 `not found` 不计数。其他错误打断计数，输出/工具输出/阶段完成

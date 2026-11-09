@@ -62,3 +62,43 @@ export const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
  * message timestamp of their own (only the server knows when a message was written), so the
  * arrival time is what a locally built preview can honestly show. */
 export type PendingWindowEntry = { delivery: AgentMessageDelivery; receivedAt: number };
+
+/** Whether `receive` already recorded this delivery's attention: its id is in the remembered
+ * window, or it is held (see `NoticeGeneration.recordedHeld`). */
+export function attentionRecorded(
+  generation: { seenDeliveryIds: ReadonlySet<string>; recordedHeld: ReadonlySet<string> },
+  deliveryId: string,
+): boolean {
+  return generation.seenDeliveryIds.has(deliveryId) || generation.recordedHeld.has(deliveryId);
+}
+
+/**
+ * Settles deliveries a notice of which was accepted. They stop being held only now: a Memory batch
+ * whose notice failed is flushed again, and must still be known as recorded.
+ */
+export function markFlushed(
+  generation: {
+    seenDeliveryIds: ReadonlySet<string>;
+    notified: Set<string>;
+    recordedHeld: Set<string>;
+  },
+  flushed: readonly AgentMessageDelivery[],
+): void {
+  markNotified(generation, flushed);
+  for (const message of flushed) generation.recordedHeld.delete(message.deliveryId);
+}
+
+/**
+ * Marks deliveries as notified once a notice of them was accepted. `notified` only holds ids the
+ * remembered window still holds, as `#remember` prunes it, so a notice accepted after the window
+ * moved past its delivery, or a backlog flushed past the window, leaves no id behind that nothing
+ * would ever forget.
+ */
+export function markNotified(
+  generation: { seenDeliveryIds: ReadonlySet<string>; notified: Set<string> },
+  accepted: readonly AgentMessageDelivery[],
+): void {
+  for (const message of accepted)
+    if (generation.seenDeliveryIds.has(message.deliveryId))
+      generation.notified.add(message.deliveryId);
+}

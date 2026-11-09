@@ -1,4 +1,3 @@
-import { getLogger } from "@logtape/logtape";
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { AgentConversationScope } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
@@ -33,16 +32,6 @@ export type DeliveryHoldReason =
   | "rate_limit_backoff"
   | "runtime_error_backoff"
   | "fingerprint_fence";
-
-/**
- * How many held deliveries one Agent may accumulate before the oldest are dropped: the hundred
- * the server's replay sends at a time (`AGENT_RECOVERY_MESSAGE_LIMIT`), so a queue this long is
- * already the whole backlog the server would tell it about again. Both the transient-error
- * exemption (task #726) and a long-fenced Agent can otherwise grow a queue with no bound at all.
- */
-export const AGENT_DELIVERY_HOLD_LIMIT = 100;
-
-const logger = getLogger(["coforge", "daemon", "agent-delivery"]);
 
 /** Scope decision: moving Claude/Codex/Pi steering into the daemon itself, so this
  * table could eventually replace every provider's own busy handling, is a later cleanup. This PR
@@ -150,29 +139,17 @@ export class AgentDeliveryQueue {
    * Records a delivery as held. From the attention index, deliveryId dedupe has already happened
    * for a *first* delivery (only a not-yet-notified resend of an already-accepted deliveryId — a
    * distinct request, its own requestId — reaches this while held); the runtime's deliveries for
-   * an exited Agent are recorded by `flush` instead. Every held request is flushed and ACKed once,
-   * so none is silently dropped even when its deliveryId repeats.
+   * an exited Agent are recorded by `flush` instead. A resend of a delivery that is already held
+   * is the same delivery: it takes the earlier entry's place, so the queue holds each deliveryId
+   * once and the wait the oldest has put in is not restarted. The caller acknowledges every
+   * request it enqueues as it takes it; nothing is acknowledged from the queue.
    */
   enqueue(agentId: string, message: AgentMessageDelivery): void {
     const list = this.#held.get(agentId) ?? [];
     if (list.length === 0) this.#heldSince.set(agentId, Date.now());
-    list.push(message);
-    const excess = list.length - AGENT_DELIVERY_HOLD_LIMIT;
-    // Each held item carries the message's own text, so the queue is bounded the way the
-    // server's replay is. A dropped item was never ACKed: its row stays `receivedAt: null` and
-    // the next `resendPending` (daemon ready, or a rejection's wake) delivers it again.
-    if (excess > 0) {
-      const dropped = list.splice(0, excess);
-      logger.warning("Dropped the oldest held deliveries past the queue limit", {
-        event: "agent.runtime.delivery_dropped",
-        agent_id: agentId,
-        dropped: dropped.length,
-        held: list.length,
-        limit: AGENT_DELIVERY_HOLD_LIMIT,
-        reason: "hold_limit",
-        outcome: "requeued_on_server",
-      });
-    }
+    const held = list.findIndex((entry) => entry.deliveryId === message.deliveryId);
+    if (held >= 0) list[held] = message;
+    else list.push(message);
     this.#held.set(agentId, list);
   }
 
@@ -199,7 +176,8 @@ export class AgentDeliveryQueue {
    * Unconditionally drains and returns everything held for the Agent, ignoring busy/idle and any
    * explicit hold — for a caller that has already decided these held deliveries are redundant
    * (a relaunch's `recover()` pass already told the Agent about the same canonical
-   * unread state) and only needs them back to ACK each one, never to notify with them.
+   * unread state) and only needs them back to account for them, never to notify with them. Each
+   * was acknowledged when the daemon took it.
    */
   discardPending(agentId: string): AgentMessageDelivery[] {
     return this.#drain(agentId);

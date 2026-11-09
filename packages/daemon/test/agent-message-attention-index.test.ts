@@ -1104,30 +1104,6 @@ test("flush also marks busy synchronously, before the coalesced notice it sends 
   await flushing;
 });
 
-test("a not-yet-notified resend while held stays held instead of notifying again", async () => {
-  const notices: string[] = [];
-  const queue = heldQueue();
-  const index = new AgentMessageAttentionIndex(
-    "workspace-1",
-    { session: () => session((notice) => notices.push(notice)) },
-    async () => {},
-    () => {},
-    queue.hold,
-  );
-
-  queue.setHolding(true);
-  await index.receive(delivery("one"));
-  await index.receive(delivery("one"));
-  expect(notices).toEqual([]);
-  const held = queue.drain();
-  expect(held).toHaveLength(2);
-  await index.flush("agent-1", held);
-  expect(notices).toHaveLength(1);
-  // Both request attempts stay in the queue so each can be ACKed, but they are one message and
-  // the notice must say one.
-  expect(notices[0]).toContain("@agent 1 new message");
-});
-
 test("clearAgent forgets an Agent's read-context state", () => {
   const index = new AgentMessageAttentionIndex(
     "workspace-1",

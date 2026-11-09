@@ -56,11 +56,14 @@ import { PendingAttentionReads } from "./agent-message-attention-pending";
 import {
   PENDING_WINDOW_LIMIT,
   REMEMBERED_DELIVERIES,
+  attentionRecorded,
   byNumber,
   containsSorted,
   firstAbove,
   isAscending,
   isCardEvent,
+  markFlushed,
+  markNotified,
   sameThreadRoot,
   type PendingWindowEntry,
 } from "./agent-message-attention-index-helpers";
@@ -142,9 +145,9 @@ export class AgentMessageAttentionIndex {
       /** The deliveries held for this Agent that it has not been shown yet. The notice counts
        * these, so its number is always a count of messages the daemon is holding right now rather
        * than a running total it would have to invalidate later. Concrete deliveries rather than a
-       * number because the same message can be enqueued more than once — one request retried
-       * while held keeps both attempts for ACK bookkeeping — and a notice must count messages,
-       * not attempts. Optional: a composition without a delivery queue holds nothing. */
+       * number because one message can be held as more than one delivery, and a notice must
+       * count messages, not deliveries. Optional: a composition without a delivery queue holds
+       * nothing. */
       queued?(agentId: string): readonly AgentMessageDelivery[];
       /** The Agent's durable consumed cursor (its state database). Without it the index is
        * exactly as volatile as it was: the cursor then only lives as long as this process. */
@@ -183,7 +186,7 @@ export class AgentMessageAttentionIndex {
       throw new Error("agent message targets another Workspace");
     if (!hasDeliveryScope(message)) throw new Error("invalid agent message scope");
     const generation = this.#generation(message.agentId);
-    if (generation.seenDeliveryIds.has(message.deliveryId)) {
+    if (attentionRecorded(generation, message.deliveryId)) {
       if (!generation.notified.has(message.deliveryId)) {
         // The Agent read this before the server re-sent it (a lost acknowledgement): nothing to
         // announce, and the replay is acknowledged so it stops coming back.
@@ -197,13 +200,7 @@ export class AgentMessageAttentionIndex {
           await this.#memoryUpdates.add(message);
           return;
         }
-        if (this.hold.shouldHold(message.agentId)) {
-          this.logDecision(message, "held");
-          this.hold.enqueue(message.agentId, message);
-          // Held for a later notice: the daemon has it, so it is acknowledged now.
-          this.acknowledgeCustody(message);
-          return;
-        }
+        if (this.hold.shouldHold(message.agentId)) return this.#hold(message);
         const attempt = generation.notificationAttempts.get(message.deliveryId);
         this.logDecision(message, attempt ? "already_notified" : "notified");
         await (attempt ?? this.#notify(message));
@@ -227,22 +224,26 @@ export class AgentMessageAttentionIndex {
         (observed.get(message.target) ?? new Set<number>()).add(message.sequence),
       );
       this.#observedSequences.set(message.agentId, observed);
+      generation.recordedHeld.add(message.deliveryId);
       this.logDecision(message, "held");
       this.acknowledgeCustody(message);
       await this.#memoryUpdates.add(message);
       return;
     }
-    if (this.hold.shouldHold(message.agentId)) {
-      this.logDecision(message, "held");
-      this.hold.enqueue(message.agentId, message);
-      // Held for a later notice: the daemon has it, so it is acknowledged now.
-      this.acknowledgeCustody(message);
-      return;
-    }
+    if (this.hold.shouldHold(message.agentId)) return this.#hold(message);
     this.logDecision(message, "notified");
     await this.#notify(message, current);
     if (this.#generations.get(message.agentId) !== generation) return;
     await this.acknowledge(message);
+  }
+
+  /** Holds a delivery `receive` has recorded the attention of; `flush` must not record it again. */
+  #hold(message: AgentMessageDelivery): void {
+    this.logDecision(message, "held");
+    this.hold.enqueue(message.agentId, message);
+    this.#generation(message.agentId).recordedHeld.add(message.deliveryId);
+    // Held for a later notice: the daemon has it, so it is acknowledged now.
+    this.acknowledgeCustody(message);
   }
 
   /**
@@ -347,7 +348,7 @@ export class AgentMessageAttentionIndex {
         this.logDecision(message, "consumed");
         continue;
       }
-      if (generation.seenDeliveryIds.has(message.deliveryId)) {
+      if (attentionRecorded(generation, message.deliveryId)) {
         announced.push(message);
         continue;
       }
@@ -378,7 +379,7 @@ export class AgentMessageAttentionIndex {
     }
     // Every held delivery was acknowledged when the daemon took it; a redelivery of one after this
     // notice is acknowledged again without another notice.
-    for (const message of settled) generation.notified.add(message.deliveryId);
+    markFlushed(generation, settled);
   }
 
   async recover(
@@ -566,7 +567,7 @@ export class AgentMessageAttentionIndex {
       })
       .then(() => {
         if (this.#generations.get(message.agentId) === generation) {
-          generation.notified.add(message.deliveryId);
+          markNotified(generation, [message]);
           this.#previewSeen.record(message.agentId, view.whole);
           this.noticeActionClocks.noteNoticeAccepted(message.agentId);
           this.messageReceived(message.agentId, conversation);

@@ -17,6 +17,11 @@ export type NoticeGeneration = {
   seenDeliveryIds: Set<string>;
   seenMessageIds: Set<string>;
   notified: Set<string>;
+  /** Ids of deliveries whose attention `receive` recorded and that are held (or batched, for
+   * Memory) until `flush` takes them. The remembered window forgets the oldest ids, so it cannot
+   * say, past its size, whether a held delivery was recorded; a resend of one is not recorded
+   * again, and `flush` does not record it a second time. */
+  recordedHeld: Set<string>;
   notificationAttempts: Map<string, Promise<void>>;
 };
 
@@ -26,6 +31,7 @@ export function noticeGeneration(): NoticeGeneration {
     seenDeliveryIds: new Set(),
     seenMessageIds: new Set(),
     notified: new Set(),
+    recordedHeld: new Set(),
     notificationAttempts: new Map(),
   };
 }
