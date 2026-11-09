@@ -1,34 +1,12 @@
-import claudeCodeMark from "@lobehub/icons-static-svg/icons/claudecode-color.svg";
-import codexMark from "@lobehub/icons-static-svg/icons/codex-color.svg";
-import cursorMark from "@lobehub/icons-static-svg/icons/cursor.svg";
-import kiroMark from "@lobehub/icons-static-svg/icons/kiro-color.svg";
-import piMark from "@lobehub/icons-static-svg/icons/pi.svg";
 import { Link } from "@tanstack/react-router";
 
+import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
+import {
+  RUNTIME_PROVIDER_DISPLAY_ORDER,
+  runtimeProviderLabel,
+} from "#src/features/agents/runtime-provider-display";
 import { m } from "#src/paraglide/messages";
 import { LoginArt } from "./login-art";
-
-// Marks come from LobeHub's static icon set, as on the homepage. Codex, Claude Code and Kiro have
-// colour versions; Pi and Cursor only have a single-colour mark, drawn in the text colour.
-const platforms = [
-  { name: "Claude Code", mark: claudeCodeMark, monochrome: false },
-  { name: "Codex", mark: codexMark, monochrome: false },
-  { name: "Pi", mark: piMark, monochrome: true },
-  { name: "Kiro", mark: kiroMark, monochrome: false },
-  { name: "Cursor", mark: cursorMark, monochrome: true },
-] as const;
-
-function PlatformMark({ mark, monochrome }: { mark: string; monochrome: boolean }) {
-  if (!monochrome) return <img src={mark} alt="" className="size-5 shrink-0" />;
-  return (
-    <span
-      aria-hidden="true"
-      className="size-5 shrink-0 bg-current mask-contain mask-center mask-no-repeat"
-      // Vite inlines small SVGs as data URLs that contain quotes, so the url() must be quoted.
-      style={{ maskImage: `url("${mark}")`, WebkitMaskImage: `url("${mark}")` }}
-    />
-  );
-}
 
 /**
  * The sign-in page's left half, from `lg` up: the logo, the illustration, the tagline and the
@@ -50,11 +28,14 @@ export function LoginBrandPanel() {
         <br />
         {m.landing_headline_line_2()}
       </p>
-      <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm">
-        {platforms.map((platform) => (
-          <li key={platform.name} className="inline-flex items-center gap-2">
-            <PlatformMark mark={platform.mark} monochrome={platform.monochrome} />
-            {platform.name}
+      {/* Every code agent the Daemon runs (Frank, 11-09), from the one table the runtime picker
+          reads, so a runtime added there shows here too. They wrap onto a second line. */}
+      <ul className="mt-8 flex flex-wrap gap-x-5 gap-y-3 text-sm">
+        {RUNTIME_PROVIDER_DISPLAY_ORDER.map((provider) => (
+          <li key={provider} className="inline-flex items-center gap-2">
+            {/* A single-colour mark takes the panel's own grey: the panel stays light in dark mode. */}
+            <RuntimeProviderMark provider={provider} className="size-5" glyphColor="bg-gray-600" />
+            {runtimeProviderLabel(provider)}
           </li>
         ))}
       </ul>

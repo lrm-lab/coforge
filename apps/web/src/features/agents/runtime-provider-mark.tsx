@@ -15,9 +15,13 @@ import {
 export function RuntimeProviderMark({
   provider,
   className = "size-4",
+  glyphColor = "bg-fg-primary",
 }: {
   provider: RuntimeProvider;
   className?: string;
+  /** A single-colour glyph's fill; a surface that keeps its colours in both themes (the sign-in
+   * page's brand panel) passes a fixed one. Full-colour marks ignore it. */
+  glyphColor?: string;
 }) {
   if (provider === RUNTIME_PROVIDER.COFORGE) return <CoForgeMark className={className} />;
   const mark = RUNTIME_PROVIDER_MARK[provider];
@@ -26,7 +30,7 @@ export function RuntimeProviderMark({
   return (
     <span
       aria-hidden="true"
-      className={cn("shrink-0 bg-fg-primary mask-contain mask-center mask-no-repeat", className)}
+      className={cn("shrink-0 mask-contain mask-center mask-no-repeat", glyphColor, className)}
       style={{ maskImage: `url("${mark}")`, WebkitMaskImage: `url("${mark}")` }}
     />
   );
