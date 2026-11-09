@@ -171,3 +171,33 @@ test("records the server feature trigger on a gate-on availability report", () =
   );
   expect(reports).toEqual([expect.objectContaining({ trigger: "server_features" })]);
 });
+
+test("refreshes availability after the Raft maximum interval", () => {
+  const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
+  const transcript = join(root, "session.jsonl");
+  writeFileSync(transcript, '{"type":"additional_tools"}', "utf8");
+  const reports: unknown[] = [];
+  let now = 1_000;
+  const service = new AgentContextViewService({
+    stateDirectory: root,
+    serverId: "server-1",
+    workspaceId: "workspace-1",
+    computerId: "computer-1",
+    now: () => now,
+    reportAvailability: (value) => reports.push(value),
+  });
+  const facts = {
+    agentId: "agent-1",
+    runtime: "codex",
+    sessionId: "session-1",
+    transcript: "session.jsonl",
+    transcriptPath: transcript,
+  };
+  service.reportAvailability(facts);
+  now += 23 * 60 * 60 * 1000;
+  service.compactAndSweep();
+  expect(reports).toHaveLength(1);
+  now += 2 * 60 * 60 * 1000;
+  service.compactAndSweep();
+  expect(reports).toHaveLength(2);
+});

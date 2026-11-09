@@ -9,6 +9,7 @@ export const CONTEXT_VIEW_SUPPORTED_RUNTIMES = [
   "pi",
   "builtin",
 ] as const;
+export const AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS = 24 * 60 * 60 * 1000;
 export type ContextViewRuntime = (typeof CONTEXT_VIEW_SUPPORTED_RUNTIMES)[number];
 const SUPPORT_SCAN_BYTES = 8 * 1024 * 1024;
 const SUPPORT_MARKERS: Record<ContextViewRuntime, Buffer> = {
@@ -72,6 +73,10 @@ export class AgentContextViewService {
   readonly #reported = new Map<string, string>();
   readonly #retainedSince = new Map<string, string>();
   readonly #requestLogs = new Map<string, string>();
+  readonly #availabilityFacts = new Map<
+    string,
+    { facts: ContextViewAgentFacts; enabled: boolean; lastReportedAt: number }
+  >();
   #maintenance?: ReturnType<typeof setInterval>;
 
   constructor(options: Options) {
@@ -118,18 +123,24 @@ export class AgentContextViewService {
     facts: ContextViewAgentFacts,
     enabled = true,
     trigger: ContextViewAvailability["trigger"] = "startup",
+    force = false,
   ): void {
     this.#rememberRequestLog(facts);
+    this.#availabilityFacts.set(facts.agentId, {
+      facts,
+      enabled,
+      lastReportedAt: this.#now(),
+    });
     if (!enabled) return;
     const runtime = normalizeRuntime(facts.runtime);
     if (!runtime) {
-      this.#report(facts, facts.runtime, false, "unsupported_runtime", trigger);
+      this.#report(facts, facts.runtime, false, "unsupported_runtime", trigger, force);
     } else if (!facts.sessionId || !facts.transcript || !facts.transcriptPath) {
-      this.#report(facts, runtime, false, "no_session", trigger);
+      this.#report(facts, runtime, false, "no_session", trigger, force);
     } else if (!this.#hasSupportedTranscript(facts.transcriptPath, runtime)) {
-      this.#report(facts, runtime, false, "no_session", trigger);
+      this.#report(facts, runtime, false, "no_session", trigger, force);
     } else {
-      this.#report(facts, runtime, true, undefined, trigger);
+      this.#report(facts, runtime, true, undefined, trigger, force);
     }
   }
 
@@ -160,10 +171,18 @@ export class AgentContextViewService {
           );
       }
     }
+    const now = this.#now();
+    for (const [agentId, state] of this.#availabilityFacts) {
+      if (now - state.lastReportedAt < AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS) continue;
+      state.lastReportedAt = now;
+      this.reportAvailability(state.facts, state.enabled, "startup", true);
+      this.#availabilityFacts.set(agentId, state);
+    }
   }
 
   startMaintenance(intervalMs = 60 * 60 * 1000): () => void {
     this.stopMaintenance();
+    this.compactAndSweep();
     this.#maintenance = setInterval(() => this.compactAndSweep(), intervalMs);
     this.#maintenance.unref?.();
     return () => this.stopMaintenance();
@@ -205,6 +224,7 @@ export class AgentContextViewService {
     supported: boolean,
     unsupportedReason?: "unsupported_runtime" | "no_session",
     trigger: ContextViewAvailability["trigger"] = "startup",
+    force = false,
   ): void {
     const retainedSince =
       (supported ? this.#store(facts.agentId).oldestSentAt() : undefined) ??
@@ -223,7 +243,7 @@ export class AgentContextViewService {
       ...(supported ? (retainedSince ? { retainedSince } : {}) : { unsupportedReason }),
     };
     const encoded = JSON.stringify(availability);
-    if (this.#reported.get(facts.agentId) === encoded) return;
+    if (!force && this.#reported.get(facts.agentId) === encoded) return;
     this.#reported.set(facts.agentId, encoded);
     this.#reportAvailability?.(availability);
   }
