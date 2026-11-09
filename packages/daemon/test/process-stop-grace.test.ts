@@ -16,4 +16,9 @@ test("the release deadline a restart waits on outlasts both rungs of the cleanup
   // release reports "did not exit in time", and a restart over a stopped process begins while
   // its tree may still be alive.
   expect(STALLED_RECOVERY_EXIT_TIMEOUT_MS).toBeGreaterThan(2 * PROCESS_TREE_EXIT_GRACE_MS);
+  // And leaves room past the ladder for the drains that follow it — the provider's stderr pipe and
+  // ACP disposal are awaited inside the same deadline.
+  expect(STALLED_RECOVERY_EXIT_TIMEOUT_MS - 2 * PROCESS_TREE_EXIT_GRACE_MS).toBeGreaterThanOrEqual(
+    10_000,
+  );
 });

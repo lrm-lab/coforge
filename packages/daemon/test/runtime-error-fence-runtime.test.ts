@@ -48,8 +48,11 @@ test.each([
       for (let attempt = 0; attempt < 3; attempt++) fake.emit({ type: "error", message });
       fake.emit({ type: "completed", status: "failed" });
 
-      // Still running: nothing reported the Agent inactive and its process was not ended.
-      expect(statuses.map((status) => status.status)).not.toContain("inactive");
+      // Still running: the Agent reported itself active, nothing reported it inactive, and its
+      // process was not ended.
+      const reported = statuses.map((status) => status.status);
+      expect(reported).toContain("active");
+      expect(reported).not.toContain("inactive");
 
       // The next delivery is held by the backoff — acknowledged, not rejected, not sent.
       await deliver(1);
