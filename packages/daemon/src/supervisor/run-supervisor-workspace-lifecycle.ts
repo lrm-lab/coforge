@@ -1,3 +1,4 @@
+import { getLogger } from "@logtape/logtape";
 import {
   UPGRADE_ERROR_CODE,
   thrownMessage,
@@ -8,6 +9,8 @@ import { UpgradeLaunchFailedError } from "./upgrade-error";
 import type { MachineSupervisor } from "./machine-supervisor";
 import type { ComputerUpgradeReceipt } from "#src/platform/computer-upgrade-receipts";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
+
+const logger = getLogger(["coforge", "daemon", "supervisor", "upgrades"]);
 
 /** The bindings still carrying this request's pending copy, with its recorded requestedAt. */
 async function pendingMachineUpgradeCopies(
@@ -24,7 +27,25 @@ async function pendingMachineUpgradeCopies(
   );
 }
 
-/** Settles every binding's pending copy of a machine-level request; returns the settled ids. */
+/** Every binding carrying this request's copy, and whether that copy is still pending — one read
+ * of the bindings, since a request never has two copies on one binding. */
+async function machineUpgradeCarriers(
+  supervisor: MachineSupervisor,
+  requestId: string,
+): Promise<{ workspaceId: string; pending: boolean }[]> {
+  return (await supervisor.snapshot()).flatMap((binding) => {
+    const copy = (binding.upgradeOperations ?? []).find(
+      (operation) => operation.requestId === requestId,
+    );
+    return copy ? [{ workspaceId: binding.workspaceId, pending: copy.state === "pending" }] : [];
+  });
+}
+
+/**
+ * Settles every binding's pending copy of a machine-level request. One binding's failed save must
+ * not keep the rest pending: that is the refusal this settlement exists to clear, and the caller
+ * reports the launch failure regardless.
+ */
 async function settleMachineUpgradeCopies(
   supervisor: MachineSupervisor,
   completeUpgrade: (
@@ -34,11 +55,19 @@ async function settleMachineUpgradeCopies(
   ) => Promise<unknown>,
   requestId: string,
   receipt: ComputerUpgradeReceipt,
-): Promise<string[]> {
-  const settled: string[] = [];
-  for (const { workspaceId } of await pendingMachineUpgradeCopies(supervisor, requestId))
-    if (await completeUpgrade(workspaceId, requestId, receipt)) settled.push(workspaceId);
-  return settled;
+): Promise<void> {
+  for (const { workspaceId } of await pendingMachineUpgradeCopies(supervisor, requestId)) {
+    try {
+      await completeUpgrade(workspaceId, requestId, receipt);
+    } catch (error) {
+      logger.warn("Settling a failed Computer upgrade launch left a copy pending", {
+        event: "upgrade:launch_failure_settle_failed",
+        request_id: requestId,
+        workspace_id: workspaceId,
+        error_message: thrownMessage(error),
+      });
+    }
+  }
 }
 
 /**
@@ -139,21 +168,28 @@ export async function runWorkspaceLifecycleCommand({
       request.expectedVersion,
     );
     if (created) {
-      // Pushes down any settlement `recordUpgrade` just applied to the pending operation it
-      // replaced, in addition to the new one, without restarting this Workspace.
-      await refreshChildUpgradeConfig(request.workspaceId);
+      // Pushes down any settlement `recordUpgrade` just applied to the pending operations it
+      // replaced, in addition to the new one, without restarting this Workspace. The record is
+      // machine-wide, so every binding's child learns it, not only the requesting one.
+      await Promise.all(
+        (await supervisor.snapshot()).map((binding) =>
+          refreshChildUpgradeConfig(binding.workspaceId),
+        ),
+      );
       try {
         await launchComputerUpgrade(request.requestId, request.expectedVersion, {
           stateDirectory,
           releaseChannel: request.releaseChannel,
         });
       } catch (error) {
-        // `recordUpgrade` already committed a "pending" operation for this request; a job that
-        // never started must not leave it sitting there for the full pending TTL, refusing every
-        // later upgrade in the meantime (the requirement this record exists for: never leave an
-        // operation pending when the launch itself is what failed).
+        // `recordUpgrade` already committed a "pending" operation on every binding; a job that
+        // never started must not leave those sitting there for the full pending TTL, refusing
+        // every later upgrade in the meantime (the requirement this record exists for: never
+        // leave an operation pending when the launch itself is what failed). The operation is
+        // machine-wide, so its settlement is too: settling only the requesting Workspace would
+        // leave the other copies refusing upgrades until the TTL expired.
         const message = thrownMessage(error);
-        await completeUpgrade(request.workspaceId, request.requestId, {
+        await settleMachineUpgradeCopies(supervisor, completeUpgrade, request.requestId, {
           requestId: request.requestId,
           status: "failed",
           at: Date.now(),
@@ -162,7 +198,14 @@ export async function runWorkspaceLifecycleCommand({
         });
         throw new UpgradeLaunchFailedError(message, { cause: error });
       }
-      watchPendingUpgrade(request.workspaceId, request.requestId, Date.now());
+      // Every binding carries a pending copy, so every copy gets its own receipt watch — the
+      // same fan-out `daemon:computer_upgrade` makes. A copy nobody watches would stay pending
+      // until the next admission or the Coordinator's startup sweep.
+      for (const { workspaceId, requestedAt } of await pendingMachineUpgradeCopies(
+        supervisor,
+        request.requestId,
+      ))
+        watchPendingUpgrade(workspaceId, request.requestId, requestedAt);
     }
     return undefined;
   }
@@ -205,10 +248,29 @@ export async function runWorkspaceLifecycleCommand({
   }
   if (method === "daemon:upgrade_ack") {
     if (!request.workspaceId) throw new Error("upgrade acknowledgement requires workspace");
-    if (await supervisor.acknowledgeUpgrade(request.workspaceId, request.requestId))
-      // Drops the now-acknowledged operation from the child's local config too, or a later
-      // reconnect would keep re-reporting the same already-acknowledged result.
-      await refreshChildUpgradeConfig(request.workspaceId);
+    // The operation is machine-wide, so its acknowledgement is too: a copy left unacknowledged
+    // on another binding is re-reported on every later reconnect. A copy that is still pending -
+    // its own receipt watcher settles it a poll later - is skipped rather than allowed to abort
+    // the pass, and one binding's failed save does not stop the rest.
+    const carriers = await machineUpgradeCarriers(supervisor, request.requestId);
+    for (const { workspaceId, pending } of carriers.length
+      ? carriers
+      : [{ workspaceId: request.workspaceId, pending: false }]) {
+      if (pending) continue;
+      try {
+        if (await supervisor.acknowledgeUpgrade(workspaceId, request.requestId))
+          // Drops the now-acknowledged operation from the child's local config too, or a later
+          // reconnect would keep re-reporting the same already-acknowledged result.
+          await refreshChildUpgradeConfig(workspaceId);
+      } catch (error) {
+        logger.warn("Acknowledging a Computer upgrade operation left a copy unacknowledged", {
+          event: "upgrade:ack_failed",
+          request_id: request.requestId,
+          workspace_id: workspaceId,
+          error_message: thrownMessage(error),
+        });
+      }
+    }
     return undefined;
   }
   return undefined;

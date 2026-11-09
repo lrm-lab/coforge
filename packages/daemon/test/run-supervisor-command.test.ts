@@ -78,6 +78,23 @@ test("upgrade, upgrade_ack and detach answer the view; the snapshot does too", a
         detached.push("detached");
         return { detached: true };
       },
+      // The upgrade record is machine-wide, so the command reads the bindings it fans out onto.
+      // The copy answers `daemon:upgrade_ack`'s own request, and a settled copy is what that
+      // command may acknowledge.
+      snapshot: async () => [
+        {
+          workspaceId: "ws-1",
+          upgradeOperations: [
+            {
+              requestId: "req-daemon:upgrade_ack",
+              expectedVersion: "1.2.3",
+              state: "failed" as const,
+              requestedAt: 1,
+              terminal: { at: 2, status: "failed" as const },
+            },
+          ],
+        },
+      ],
     } as unknown as MachineSupervisor,
   });
   for (const method of [

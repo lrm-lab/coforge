@@ -6,7 +6,10 @@ import {
 } from "@lrm/coforge-sdk/internal";
 
 import { runWorkspaceLifecycleCommand } from "#src/supervisor/run-supervisor-workspace-lifecycle";
-import { UpgradeOperationPendingError } from "#src/supervisor/upgrade-error";
+import {
+  UpgradeLaunchFailedError,
+  UpgradeOperationPendingError,
+} from "#src/supervisor/upgrade-error";
 
 /** `command()`'s workspace-scoped lifecycle (task #417 step 3): upgrade records and launches,
  * upgrade_ack acknowledges, detach detaches and answers the view — start/stop/restart are not
@@ -36,8 +39,18 @@ test("daemon:start, daemon:stop and daemon:restart are not this branch's", async
 });
 
 test("daemon:upgrade records, launches and watches, answering undefined for the caller's view", async () => {
+  const pending = {
+    requestId: "req",
+    expectedVersion: "2",
+    state: "pending" as const,
+    requestedAt: 7,
+  };
   const supervisor = {
     recordUpgrade: mock(async () => true),
+    snapshot: mock(async () => [
+      { workspaceId: "ws", upgradeOperations: [pending] },
+      { workspaceId: "other", upgradeOperations: [pending] },
+    ]),
   };
   const d = deps({
     method: "daemon:upgrade",
@@ -50,14 +63,22 @@ test("daemon:upgrade records, launches and watches, answering undefined for the 
   });
   expect(await runWorkspaceLifecycleCommand(d)).toBeUndefined();
   expect(supervisor.recordUpgrade).toHaveBeenCalledWith("ws", "req", "2");
+  // The pending record is machine-wide, so every binding's child learns it.
   expect(d.refreshChildUpgradeConfig).toHaveBeenCalledWith("ws");
+  expect(d.refreshChildUpgradeConfig).toHaveBeenCalledWith("other");
   expect(d.launchComputerUpgrade).toHaveBeenCalled();
-  expect(d.watchPendingUpgrade).toHaveBeenCalledWith("ws", "req", expect.any(Number));
+  // The record is machine-wide: every copy gets its own receipt watch, or the copies nobody
+  // watched stay pending until the next admission.
+  expect(d.watchPendingUpgrade).toHaveBeenCalledWith("ws", "req", 7);
+  expect(d.watchPendingUpgrade).toHaveBeenCalledWith("other", "req", 7);
 });
 
 test("daemon:upgrade_ack acknowledges and refreshes, answering undefined", async () => {
+  // No binding carries the request here, so the fallback acknowledges the requesting Workspace:
+  // the command still refreshes its child config and answers the view.
   const supervisor = {
     acknowledgeUpgrade: mock(async () => true),
+    snapshot: mock(async () => [{ workspaceId: "ws", upgradeOperations: [] }]),
   };
   const d = deps({
     method: "daemon:upgrade_ack",
@@ -67,6 +88,143 @@ test("daemon:upgrade_ack acknowledges and refreshes, answering undefined", async
   expect(await runWorkspaceLifecycleCommand(d)).toBeUndefined();
   expect(supervisor.acknowledgeUpgrade).toHaveBeenCalledWith("ws", "req");
   expect(d.refreshChildUpgradeConfig).toHaveBeenCalledWith("ws");
+});
+
+test("daemon:upgrade's failed launch settles every Workspace's copy, not only its own", async () => {
+  // One Computer, two bindings: `recordUpgrade` fans the pending operation out onto both, so a
+  // job that never started must clear both — otherwise the other Workspace keeps refusing
+  // upgrades for the whole pending TTL (task #706).
+  const pending = {
+    requestId: "req",
+    expectedVersion: "2",
+    state: "pending" as const,
+    requestedAt: 7,
+  };
+  const supervisor = {
+    recordUpgrade: mock(async () => true),
+    snapshot: mock(async () => [
+      { workspaceId: "a", upgradeOperations: [pending] },
+      { workspaceId: "b", upgradeOperations: [pending] },
+    ]),
+  };
+  const d = deps({
+    method: "daemon:upgrade",
+    request: { workspaceId: "a", requestId: "req", expectedVersion: "2" } as DaemonCommandRequest,
+    supervisor: supervisor as never,
+    launchComputerUpgrade: mock(async () => {
+      throw new Error("job did not start");
+    }),
+  });
+  await expect(runWorkspaceLifecycleCommand(d)).rejects.toBeInstanceOf(UpgradeLaunchFailedError);
+  expect(d.completeUpgrade).toHaveBeenCalledTimes(2);
+  for (const workspaceId of ["a", "b"])
+    expect(d.completeUpgrade).toHaveBeenCalledWith(
+      workspaceId,
+      "req",
+      expect.objectContaining({ status: "failed" }),
+    );
+});
+
+test("daemon:upgrade's failed launch still settles the copies after one that cannot be settled", async () => {
+  // A failed save on one binding must not leave the rest pending: that refusal is exactly what
+  // this settlement exists to clear, and the launch failure is still what the caller reports.
+  const pending = {
+    requestId: "req",
+    expectedVersion: "2",
+    state: "pending" as const,
+    requestedAt: 7,
+  };
+  const supervisor = {
+    recordUpgrade: mock(async () => true),
+    snapshot: mock(async () => [
+      { workspaceId: "a", upgradeOperations: [pending] },
+      { workspaceId: "b", upgradeOperations: [pending] },
+      { workspaceId: "c", upgradeOperations: [pending] },
+    ]),
+  };
+  const settled: string[] = [];
+  const d = deps({
+    method: "daemon:upgrade",
+    request: { workspaceId: "a", requestId: "req", expectedVersion: "2" } as DaemonCommandRequest,
+    supervisor: supervisor as never,
+    launchComputerUpgrade: mock(async () => {
+      throw new Error("job did not start");
+    }),
+    completeUpgrade: mock(async (workspaceId: string) => {
+      if (workspaceId === "b") throw new Error("binding save failed");
+      settled.push(workspaceId);
+      return true;
+    }),
+  });
+  await expect(runWorkspaceLifecycleCommand(d)).rejects.toBeInstanceOf(UpgradeLaunchFailedError);
+  expect(settled).toEqual(["a", "c"]);
+});
+
+test("daemon:upgrade_ack skips a sibling still pending instead of aborting the pass", async () => {
+  // Copies are settled by their own receipt watchers, a poll apart, so a settled copy can sit
+  // beside a pending one. The server's acknowledgement must not be lost for the settled ones,
+  // and one binding whose save fails must not stop the copies after it either.
+  const copy = (state: "failed" | "pending") => ({
+    requestId: "req",
+    expectedVersion: "2",
+    state,
+    requestedAt: 7,
+    ...(state === "failed" ? { terminal: { at: 8, status: "failed" as const } } : {}),
+  });
+  const supervisor = {
+    acknowledgeUpgrade: mock(async (workspaceId: string) => {
+      if (workspaceId === "b") throw new Error("binding save failed");
+      return true;
+    }),
+    snapshot: mock(async () => [
+      { workspaceId: "a", upgradeOperations: [copy("failed")] },
+      { workspaceId: "b", upgradeOperations: [copy("failed")] },
+      { workspaceId: "c", upgradeOperations: [copy("pending")] },
+      { workspaceId: "d", upgradeOperations: [copy("failed")] },
+    ]),
+  };
+  const d = deps({
+    method: "daemon:upgrade_ack",
+    request: { workspaceId: "a", requestId: "req" } as DaemonCommandRequest,
+    supervisor: supervisor as never,
+  });
+  expect(await runWorkspaceLifecycleCommand(d)).toBeUndefined();
+  // "b" fails and "c" is still pending, so neither is acknowledged; "d" comes after both and
+  // still is, which is what pins that a skipped or failing copy does not end the pass.
+  expect(supervisor.acknowledgeUpgrade).toHaveBeenCalledTimes(3);
+  for (const workspaceId of ["a", "b", "d"])
+    expect(supervisor.acknowledgeUpgrade).toHaveBeenCalledWith(workspaceId, "req");
+  expect(d.refreshChildUpgradeConfig).toHaveBeenCalledTimes(2);
+  expect(d.refreshChildUpgradeConfig).toHaveBeenCalledWith("a");
+  expect(d.refreshChildUpgradeConfig).toHaveBeenCalledWith("d");
+});
+
+test("daemon:upgrade_ack acknowledges every Workspace's copy of the machine-wide operation", async () => {
+  // The server's acknowledgement is machine-wide, like the operation: a copy left unacknowledged
+  // here is re-reported on every later reconnect (task #706).
+  const settled = {
+    requestId: "req",
+    expectedVersion: "2",
+    state: "failed" as const,
+    requestedAt: 7,
+    terminal: { at: 8, status: "failed" as const },
+  };
+  const supervisor = {
+    acknowledgeUpgrade: mock(async () => true),
+    snapshot: mock(async () => [
+      { workspaceId: "a", upgradeOperations: [settled] },
+      { workspaceId: "b", upgradeOperations: [settled] },
+    ]),
+  };
+  const d = deps({
+    method: "daemon:upgrade_ack",
+    request: { workspaceId: "a", requestId: "req" } as DaemonCommandRequest,
+    supervisor: supervisor as never,
+  });
+  expect(await runWorkspaceLifecycleCommand(d)).toBeUndefined();
+  expect(supervisor.acknowledgeUpgrade).toHaveBeenCalledWith("a", "req");
+  expect(supervisor.acknowledgeUpgrade).toHaveBeenCalledWith("b", "req");
+  expect(d.refreshChildUpgradeConfig).toHaveBeenCalledWith("b");
 });
 
 test("daemon:detach detaches and answers the view; an unconfirmed answer refuses", async () => {
