@@ -161,6 +161,62 @@ test("owner check rejects before contacting the Computer", async () => {
     { userId: "attacker", workspaceId: "w" },
     { computerId: "c", agentId: "a", messageId: "m", sessionId: "s", maxBytes: 1 },
   );
-  expect(result).toEqual({ status: "unavailable" });
+  expect(result).toEqual({ status: "unavailable", reason: "no_computer" });
   expect(published).toBe(false);
+});
+
+test("labels an offline Computer with the Raft failure reason", async () => {
+  const service = new ComputerAgentContextViews({
+    owned: async () => true,
+    online: async () => false,
+    supported: async () => true,
+    publish: async () => {
+      throw new Error("must not publish while offline");
+    },
+    results: { begin: async () => {}, read: async () => undefined, clear: async () => {} },
+  });
+  await expect(
+    service.view(
+      { userId: "u", workspaceId: "w" },
+      { computerId: "c", agentId: "a", messageId: "m", sessionId: "s", maxBytes: 1 },
+    ),
+  ).resolves.toEqual({ status: "offline", reason: "offline" });
+});
+
+test("labels a missing daemon result as an old daemon", async () => {
+  let now = 0;
+  const service = new ComputerAgentContextViews(
+    {
+      owned: async () => true,
+      online: async () => true,
+      supported: async () => true,
+      publish: async () => {},
+      results: { begin: async () => {}, read: async () => undefined, clear: async () => {} },
+    },
+    { now: () => now, wait: async () => { now = 30_000; }, timeoutMs: 30_000 },
+  );
+  await expect(
+    service.view(
+      { userId: "u", workspaceId: "w" },
+      { computerId: "c", agentId: "a", messageId: "m", sessionId: "s", maxBytes: 1 },
+    ),
+  ).resolves.toEqual({ status: "timeout", reason: "old_daemon" });
+});
+
+test("preserves an availability unsupported reason", async () => {
+  const service = new ComputerAgentContextViews({
+    owned: async () => true,
+    online: async () => true,
+    supported: async () => ({ supported: false, reason: "no_session" as const }),
+    publish: async () => {
+      throw new Error("must not publish without an available session");
+    },
+    results: { begin: async () => {}, read: async () => undefined, clear: async () => {} },
+  });
+  await expect(
+    service.view(
+      { userId: "u", workspaceId: "w" },
+      { computerId: "c", agentId: "a", messageId: "m", sessionId: "s", maxBytes: 1 },
+    ),
+  ).resolves.toEqual({ status: "unsupported", reason: "no_session" });
 });

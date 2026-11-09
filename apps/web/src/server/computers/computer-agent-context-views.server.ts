@@ -4,7 +4,13 @@ export type AgentContextViewViewer = { userId: string; workspaceId: string };
 export type AgentContextViewResponse =
   | { status: "ready"; result: AgentContextViewResult }
   | { status: "failed"; result: AgentContextViewResult }
-  | { status: "offline" | "unsupported" | "timeout" | "unavailable" };
+  | { status: "offline"; reason: "offline" }
+  | { status: "unsupported"; reason?: "unsupported_runtime" | "no_session" | "old_daemon" }
+  | { status: "timeout"; reason: "old_daemon" }
+  | {
+      status: "unavailable";
+      reason?: "no_computer" | "agent_moved" | "context_mismatch" | "read_failed" | "offline";
+    };
 
 export function sameAgentContextViewScope(
   request: AgentContextViewRequest,
@@ -38,7 +44,13 @@ export class ComputerAgentContextViews {
         workspaceId: string;
         computerId: string;
         agentId: string;
-      }): Promise<boolean>;
+      }): Promise<
+        | boolean
+        | {
+            supported: boolean;
+            reason?: "unsupported_runtime" | "no_session" | "old_daemon";
+          }
+      >;
       enabled?: (viewer: AgentContextViewViewer) => Promise<boolean>;
       publish(request: AgentContextViewRequest): Promise<void>;
       results: PendingResults;
@@ -63,14 +75,17 @@ export class ComputerAgentContextViews {
       ...input,
     };
     if (!(await this.dependencies.owned(viewer, request.computerId)))
-      return { status: "unavailable" };
+      return { status: "unavailable", reason: "no_computer" };
     const scope = { workspaceId: viewer.workspaceId, computerId: request.computerId };
     const [online, supported] = await Promise.all([
       this.dependencies.online(scope),
       this.dependencies.supported({ ...scope, agentId: request.agentId, userId: viewer.userId }),
     ]);
-    if (!online) return { status: "offline" };
-    if (!supported) return { status: "unsupported" };
+    if (!online) return { status: "offline", reason: "offline" };
+    const support =
+      typeof supported === "boolean" ? { supported } : supported;
+    if (!support.supported)
+      return { status: "unsupported", ...(support.reason ? { reason: support.reason } : {}) };
     try {
       await this.dependencies.results.begin({ request, userId: viewer.userId });
       await this.dependencies.publish(request);
@@ -78,11 +93,10 @@ export class ComputerAgentContextViews {
       while (this.timing.now() < deadline) {
         const result = await this.dependencies.results.read(request.requestId);
         if (result) {
-          if (
-            !(await this.dependencies.owned(viewer, request.computerId)) ||
-            !sameAgentContextViewScope(request, result)
-          )
-            return { status: "unavailable" };
+          if (!(await this.dependencies.owned(viewer, request.computerId)))
+            return { status: "unavailable", reason: "agent_moved" };
+          if (!sameAgentContextViewScope(request, result))
+            return { status: "unavailable", reason: "context_mismatch" };
           if (result.encoding === "gzip") {
             try {
               return {
@@ -94,7 +108,7 @@ export class ComputerAgentContextViews {
                 },
               };
             } catch {
-              return { status: "unavailable" };
+              return { status: "unavailable", reason: "read_failed" };
             }
           }
           return result.status === "failed"
@@ -103,7 +117,8 @@ export class ComputerAgentContextViews {
         }
         await this.timing.wait(100);
       }
-      return { status: "timeout" };
+      // Raft exposes a viewer timeout as old_daemon when the advertised daemon never answers.
+      return { status: "timeout", reason: "old_daemon" };
     } catch {
       return { status: "unavailable" };
     } finally {

@@ -2,12 +2,14 @@ import {
   AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
   decodeAgentContextViewAvailability,
 } from "@lrm/coforge-sdk/internal";
+import type { AgentContextViewAvailability } from "@lrm/coforge-sdk/internal";
 import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 
 const TTL_SECONDS = 24 * 60 * 60;
 const PREFIX = "coforge:agent-context-view:availability";
+const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 type Redis = Pick<import("bun").RedisClient, "get" | "set">;
 
 export class AgentContextViewAvailabilityStore {
@@ -20,15 +22,48 @@ export class AgentContextViewAvailabilityStore {
       String(TTL_SECONDS),
     );
   }
-  async supports(workspaceId: string, computerId: string, agentId: string): Promise<boolean> {
+  async read(
+    workspaceId: string,
+    computerId: string,
+    agentId: string,
+  ): Promise<AgentContextViewAvailability | undefined> {
     const raw = await this.redis.get(`${PREFIX}:${workspaceId}:${computerId}:${agentId}`);
-    if (!raw) return false;
+    if (!raw) return undefined;
     try {
-      const value = JSON.parse(raw) as { supported?: unknown };
-      return value.supported === true;
+      const value = JSON.parse(raw) as Partial<AgentContextViewAvailability>;
+      if (
+        value.type === "agent:context_view_availability" &&
+        value.protocolMajor === 1 &&
+        ID.test(value.workspaceId) &&
+        ID.test(value.computerId) &&
+        ID.test(value.agentId) &&
+        value.workspaceId === workspaceId &&
+        value.computerId === computerId &&
+        value.agentId === agentId &&
+        typeof value.runtime === "string" &&
+        value.runtime.length > 0 &&
+        typeof value.retentionDays === "number" &&
+        Number.isSafeInteger(value.retentionDays) &&
+        value.retentionDays >= 1 &&
+        value.retentionDays <= 365 &&
+        (value.supported ||
+          value.unsupportedReason === "unsupported_runtime" ||
+          value.unsupportedReason === "no_session") &&
+        (value.trigger === undefined ||
+          value.trigger === "startup" ||
+          value.trigger === "message" ||
+          value.trigger === "server_features") &&
+        (value.retainedSince === undefined || typeof value.retainedSince === "string") &&
+        typeof value.supported === "boolean"
+      )
+        return value as AgentContextViewAvailability;
     } catch {
-      return false;
+      // A malformed or stale availability record is not evidence of support.
     }
+    return undefined;
+  }
+  async supports(workspaceId: string, computerId: string, agentId: string): Promise<boolean> {
+    return (await this.read(workspaceId, computerId, agentId))?.supported === true;
   }
 }
 

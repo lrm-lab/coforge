@@ -30,21 +30,34 @@ export function computerAgentContextViews(db: Pick<PrismaClient, "computer" | "a
         }),
       ),
     online: (scope) => getComputerStatusCache().get(scope),
-    supported: async ({ userId, workspaceId, computerId, agentId }) =>
-      Boolean(
-        (await db.agent.findFirst({
-          where: {
-            id: agentId,
-            workspaceId,
-            computerId,
-            ownerId: userId,
-            deletedAt: null,
-          },
-          select: { id: true },
-        })) &&
-        (await getAgentContextViewCapabilityLease().supports(workspaceId, computerId)) &&
-        (await getAgentContextViewAvailabilityStore().supports(workspaceId, computerId, agentId)),
-      ),
+    supported: async ({ userId, workspaceId, computerId, agentId }) => {
+      const agent = await db.agent.findFirst({
+        where: {
+          id: agentId,
+          workspaceId,
+          computerId,
+          ownerId: userId,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      // The Web layer only has the current Agent row here; a missing session seam is no_session.
+      if (!agent) return { supported: false, reason: "no_session" as const };
+      if (!(await getAgentContextViewCapabilityLease().supports(workspaceId, computerId)))
+        return { supported: false, reason: "old_daemon" as const };
+      const availability = await getAgentContextViewAvailabilityStore().read(
+        workspaceId,
+        computerId,
+        agentId,
+      );
+      if (!availability) return { supported: false, reason: "old_daemon" as const };
+      if (!availability.supported)
+        return {
+          supported: false,
+          reason: availability.unsupportedReason ?? ("no_session" as const),
+        };
+      return { supported: true };
+    },
     publish: (request) =>
       centrifugo.publish(
         daemonControlChannel(request.workspaceId, request.computerId),
