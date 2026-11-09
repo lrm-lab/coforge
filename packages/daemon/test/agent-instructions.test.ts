@@ -199,8 +199,26 @@ test("provider-specific rules remain available once when supplied", () => {
   expect(rendered.split("- This runtime uses PowerShell.")).toHaveLength(2);
 });
 
-test("the shared standing guidance stays within a 4480-byte budget", () => {
-  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(4480);
+test("the shared standing guidance stays within a 5200-byte budget", () => {
+  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(5200);
+});
+
+test("the standing guidance says what to work on next, in the queue the CLI now prints", () => {
+  expect(instructions).toContain(
+    'Then work "Your queue" in `coforge task list --mine` top to bottom',
+  );
+  // A person outranks the queue, and a task nobody is pressing does not interrupt work in hand.
+  expect(instructions).toContain(
+    "A person's instruction — a DM, an @handle, a person in a task — comes before anything queued",
+  );
+  expect(instructions).toContain(
+    "is `urgent`; otherwise say in its thread where it sits and carry on",
+  );
+  // Every level means what the person who set it meant, and there is no fifth level to hide in.
+  for (const level of ["urgent", "high", "medium", "low"])
+    expect(instructions).toContain(`\`${level}\``);
+  expect(instructions).toContain("Always pick one of the four");
+  expect(instructions).not.toContain("`none`");
 });
 
 test("CLI instructions include a copyable stdin submission example", () => {
