@@ -14,6 +14,10 @@ import type {
  * ignored, so no dead switch is left behind.
  *
  * `reload` says a change only takes full effect after the page reloads or reconnects.
+ *
+ * A new entry breaks three tests in `apps/web/test/experiments.test.ts` until they name it: the
+ * registry's own flags, and two whole-list comparisons. Run that file after editing this map;
+ * `mise run check` does not.
  */
 export const EXPERIMENTS = {
   taskConversations: { flag: null, defaultEnabled: false, reload: false },
