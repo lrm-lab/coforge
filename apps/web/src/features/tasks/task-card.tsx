@@ -190,7 +190,7 @@ export function TaskCard({
   return (
     <article
       onPointerEnter={onPointerEnter}
-      className="group relative flex flex-col gap-2.5 rounded-xl border border-secondary bg-primary p-3 shadow-xs transition-shadow hover:shadow-md"
+      className="group relative flex flex-col gap-2.5 rounded-xl border border-secondary bg-primary p-3 transition-colors hover:border-primary"
     >
       {/* The channel leads: a number counts within its channel, so two cards can share one. */}
       <div className="flex h-4 items-center gap-1.5 text-xs tabular-nums">

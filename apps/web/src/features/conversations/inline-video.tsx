@@ -29,7 +29,7 @@ export function InlineVideo({ attachment, href }: { attachment: Attachment; href
     <div
       ref={media.watchNear}
       data-no-row-tap
-      className="relative mt-1 max-w-full overflow-hidden rounded-[10px] bg-black"
+      className="relative mt-1 max-w-full overflow-hidden rounded-lg bg-black"
       style={inlineVideoBox(size)}
     >
       {media.failure ? (

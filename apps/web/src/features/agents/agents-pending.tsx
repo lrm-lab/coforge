@@ -62,7 +62,7 @@ export function AgentsPending() {
               <div
                 key={index}
                 aria-hidden="true"
-                className="flex min-h-48 min-w-0 flex-col rounded-xl bg-primary p-4 shadow-xs ring-1 ring-secondary ring-inset"
+                className="flex min-h-48 min-w-0 flex-col rounded-xl bg-primary p-4 ring-1 ring-secondary ring-inset"
               >
                 <div className="flex flex-1 flex-col gap-2.5 motion-safe:animate-pulse">
                   <div className="flex items-start justify-between">

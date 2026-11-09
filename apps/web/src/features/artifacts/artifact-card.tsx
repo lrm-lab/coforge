@@ -56,7 +56,7 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
   return (
     <article
       aria-label={m.doc_card_label({ kind, title })}
-      className="relative flex w-full max-w-[34rem] items-start gap-3 rounded-xl border border-secondary bg-primary p-3 shadow-xs transition has-[a:hover]:border-primary has-[a:hover]:shadow-sm has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring"
+      className="relative flex w-full max-w-[34rem] items-start gap-3 rounded-xl border border-secondary bg-primary p-3 transition has-[a:hover]:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring"
     >
       <ArtifactIcon kind={card.kind} />
       <div className="min-w-0 flex-1">

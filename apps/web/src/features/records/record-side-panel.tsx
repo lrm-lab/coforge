@@ -858,7 +858,7 @@ export function RecordSidePanel({
         ) : null}
 
         <form onSubmit={(event) => void onSubmit(event)} className="border-t border-secondary p-3">
-          <div className="flex items-end gap-2 rounded-lg border border-secondary bg-primary p-1.5 shadow-xs">
+          <div className="flex items-end gap-2 rounded-lg border border-secondary bg-primary p-1.5">
             <ButtonUtility
               type="button"
               size="sm"

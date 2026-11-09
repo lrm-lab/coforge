@@ -94,7 +94,7 @@ export function DeviceVerifyPage({
         ) : (
           <>
             <div
-              className={`mx-auto mb-6 flex size-14 items-center justify-center rounded-xl shadow-xs ${
+              className={`mx-auto mb-6 flex size-14 items-center justify-center rounded-xl ${
                 stage.name === "confirm"
                   ? "bg-primary text-brand-secondary ring-1 ring-brand"
                   : "bg-primary text-primary ring-1 ring-secondary"

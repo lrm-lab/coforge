@@ -290,7 +290,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
             if (next) showList({ view: next });
           }}
         >
-          <div className="grid gap-4 rounded-xl border border-secondary p-4 shadow-xs">
+          <div className="grid gap-4 rounded-xl border border-secondary p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="grid gap-1">
                 <h3 className="text-md font-semibold text-primary">{m.apps_card_title()}</h3>

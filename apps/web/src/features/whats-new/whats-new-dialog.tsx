@@ -98,7 +98,7 @@ function WhatsNewPages({
               <span
                 key={each}
                 className={cx(
-                  "h-1.5 rounded-full transition-all duration-150",
+                  "h-1.5 rounded-full transition-[width,background-color] duration-150",
                   at === index ? "w-3.5 bg-fg-secondary" : "w-1.5 bg-quaternary",
                 )}
               />

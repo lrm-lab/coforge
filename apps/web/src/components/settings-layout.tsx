@@ -33,7 +33,7 @@ export function SettingsGroup({
 
 export function SettingsCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-6 rounded-xl border border-secondary bg-primary p-5 shadow-xs sm:p-6">
+    <div className="flex flex-col gap-6 rounded-xl border border-secondary bg-primary p-5 sm:p-6">
       {children}
     </div>
   );

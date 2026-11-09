@@ -25,7 +25,7 @@ export function ComputersPending() {
         <div aria-hidden="true" className="space-y-1 px-3 pt-1 motion-safe:animate-pulse">
           {["w-3/5", "w-2/5", "w-1/2"].map((width) => (
             <div key={width} className="flex h-16 items-center gap-3 px-3">
-              <Skeleton className="size-9 shrink-0 rounded-[10px]" />
+              <Skeleton className="size-9 shrink-0 rounded-lg" />
               <div className="min-w-0 flex-1 space-y-2">
                 <Skeleton className={`h-3 ${width}`} />
                 <Skeleton className="h-3 w-4/5" />

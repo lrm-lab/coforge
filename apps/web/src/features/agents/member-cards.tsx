@@ -24,7 +24,7 @@ type DirectoryAgent = MemberAgent;
 type DirectoryPerson = MemberPerson;
 
 const CARD_CLASS =
-  "flex min-w-0 flex-col gap-2.5 rounded-xl bg-primary p-4 shadow-xs ring-1 ring-secondary outline-focus-ring ring-inset data-focus-visible:outline-2 data-focus-visible:outline-offset-2";
+  "flex min-w-0 flex-col gap-2.5 rounded-xl bg-primary p-4 ring-1 ring-secondary outline-focus-ring ring-inset data-focus-visible:outline-2 data-focus-visible:outline-offset-2";
 
 export function PersonCard({ person, selected }: { person: DirectoryPerson; selected: boolean }) {
   const { total, items } = person.createdAgents;

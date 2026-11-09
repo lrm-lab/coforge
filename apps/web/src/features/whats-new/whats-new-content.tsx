@@ -23,7 +23,7 @@ function Chip({ dot, label }: { dot: string; label: string }) {
 
 function TaskRow({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-lg bg-primary px-3 py-2.5 shadow-xs ring-1 ring-secondary">
+    <div className="rounded-lg bg-primary px-3 py-2.5 ring-1 ring-secondary">
       <p className="flex items-center gap-2 truncate text-sm font-medium text-primary">
         <span className="size-3.5 shrink-0 rounded-full ring-[1.5px] ring-fg-quaternary ring-inset" />
         {title}

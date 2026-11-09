@@ -77,7 +77,7 @@ export function PendingActionCard({
       role="group"
       aria-label={title}
       data-no-row-tap
-      className="mt-1 flex max-w-md flex-col gap-3 rounded-xl border border-secondary bg-primary p-4 shadow-xs"
+      className="mt-1 flex max-w-md flex-col gap-3 rounded-xl border border-secondary bg-primary p-4"
     >
       <div className="flex items-center gap-2">
         <span className="flex size-6.5 shrink-0 items-center justify-center rounded-md bg-tertiary text-secondary">

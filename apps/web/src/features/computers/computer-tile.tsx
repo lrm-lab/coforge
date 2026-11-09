@@ -10,7 +10,7 @@ import { computerIcon, type ComputerIdentity } from "./computer-identity";
 /** The tile's pieces at its one size, 36px. */
 const dims = {
   tile: "size-9",
-  radius: "rounded-[10px]",
+  radius: "rounded-lg",
   icon: "size-4",
   dot: "size-2.5",
   dotBorder: "border-2",

@@ -90,7 +90,7 @@ export function ArchivedChannelsGroup({
     >
       {error && <SaveErrorMessage error={error} />}
       {rows.length > 0 && (
-        <ul className="divide-y divide-secondary rounded-xl border border-secondary bg-primary shadow-xs">
+        <ul className="divide-y divide-secondary rounded-xl border border-secondary bg-primary">
           {rows.map((channel) => (
             <ArchivedChannelRow
               key={channel.id}

@@ -52,7 +52,6 @@
   gap: 1px;
   padding: 0.25rem;
   background: color-mix(in srgb, black 75%, transparent);
-  backdrop-filter: blur(8px);
   border-radius: var(--radius-lg);
   opacity: 0;
   transition: opacity 0.15s;

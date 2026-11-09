@@ -178,7 +178,7 @@ export function AttachmentTile({
           noTextPadding
           aria-label={`${file.name} · ${failure ? `${failureLabel}. ${failureDetail}` : status}`}
           className={cx(
-            "overflow-hidden rounded-lg border border-primary bg-primary p-0 shadow-xs hover:bg-primary_hover",
+            "overflow-hidden rounded-lg border border-primary bg-primary p-0 hover:bg-primary_hover",
             thumbnail ? "size-14" : "h-14 w-52 justify-start px-2.5",
             retryable && "pr-10",
             failure && "border-error",

@@ -137,7 +137,7 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
         <div className="mt-1 flex">
           <ImageThumbnail
             attachment={lone}
-            className="max-w-full rounded-[10px]"
+            className="max-w-full rounded-lg"
             style={singleImageBox(lone)}
             imgClassName="object-contain"
             onFailed={() => setBrokenId(lone.id)}
@@ -212,7 +212,7 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
 
 /** The card's own button: the whole card opens the file's preview, or downloads it. */
 const CARD =
-  "h-auto w-full min-w-0 justify-start rounded-[10px] bg-primary px-2.5 py-2 ring-1 ring-secondary ring-inset hover:bg-primary_hover [&>span]:w-full [&>span]:min-w-0";
+  "h-auto w-full min-w-0 justify-start rounded-lg bg-primary px-2.5 py-2 ring-1 ring-secondary ring-inset hover:bg-primary_hover [&>span]:w-full [&>span]:min-w-0";
 
 /**
  * One non-image file, laid out as Raft does (fixed width, two to a row in the image grid's width)

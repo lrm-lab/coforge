@@ -23,7 +23,7 @@ export function TaskCardSkeleton({ list }: { list: boolean }) {
       </div>
     );
   return (
-    <div aria-hidden="true" className="rounded-lg border border-secondary bg-primary p-3 shadow-xs">
+    <div aria-hidden="true" className="rounded-lg border border-secondary bg-primary p-3">
       <div className="flex h-6 items-center justify-between">
         <Skeleton className="h-3 w-20" />
         <Skeleton className="size-6 rounded-full" />

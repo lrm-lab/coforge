@@ -39,7 +39,7 @@ export function ArchivedAgentsGroup({
         </Badge>
       }
     >
-      <ul className="divide-y divide-secondary rounded-xl border border-secondary bg-primary shadow-xs">
+      <ul className="divide-y divide-secondary rounded-xl border border-secondary bg-primary">
         {agents.map((agent) => (
           <ArchivedAgentRow
             key={agent.id}

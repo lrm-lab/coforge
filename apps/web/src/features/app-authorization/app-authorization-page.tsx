@@ -53,7 +53,7 @@ export function AppAuthorizationPage({
           <Card>
             <AuthorizationConsent page={shown} account={account} onRefused={setShown} />
           </Card>
-          <aside className="self-start rounded-xl bg-primary p-5 shadow-xs ring-1 ring-secondary">
+          <aside className="self-start rounded-xl bg-primary p-5 ring-1 ring-secondary">
             <AuthorizationFaq />
           </aside>
         </main>
@@ -70,7 +70,7 @@ export function AppAuthorizationPage({
 
 function Card({ children }: { children: ReactNode }) {
   return (
-    <section className="min-w-0 rounded-xl bg-primary p-4 shadow-xs ring-1 ring-secondary sm:p-6">
+    <section className="min-w-0 rounded-xl bg-primary p-4 ring-1 ring-secondary sm:p-6">
       {children}
     </section>
   );

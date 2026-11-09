@@ -39,7 +39,7 @@ export function InlineAudio({ attachment, href }: { attachment: Attachment; href
     <div
       ref={media.watchNear}
       data-no-row-tap
-      className="mt-1 flex w-full flex-col gap-1 rounded-[10px] bg-primary p-1.5 ring-1 ring-secondary ring-inset"
+      className="mt-1 flex w-full flex-col gap-1 rounded-lg bg-primary p-1.5 ring-1 ring-secondary ring-inset"
       style={{ maxWidth: `min(${MESSAGE_GALLERY_MAX_WIDTH_PX}px, 100%)` }}
     >
       <div className="flex min-w-0 items-center gap-1">

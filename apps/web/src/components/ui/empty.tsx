@@ -35,7 +35,7 @@ function EmptyMedia({
       className={cn(
         "relative mb-4 flex shrink-0 items-center justify-center [&_svg]:pointer-events-none [&_svg]:shrink-0",
         variant === "icon" &&
-          "size-10 rounded-lg bg-primary text-primary shadow-xs ring-1 ring-secondary [&_svg:not([class*='size-'])]:size-5",
+          "size-10 rounded-lg bg-primary text-primary ring-1 ring-secondary [&_svg:not([class*='size-'])]:size-5",
         className,
       )}
       {...props}

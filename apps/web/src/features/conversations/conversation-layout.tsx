@@ -80,7 +80,7 @@ export function EmptyConversation() {
   if (opening || firstJoinedChannel(channels)) return <ConversationPending />;
   return (
     <div className="grid h-full place-content-center justify-items-center px-6 text-center">
-      <div className="mb-5 flex size-12 items-center justify-center rounded-xl border border-secondary bg-primary shadow-xs">
+      <div className="mb-5 flex size-12 items-center justify-center rounded-xl border border-secondary bg-primary">
         <MessagesSquare aria-hidden="true" className="size-6 text-tertiary" />
       </div>
       <p className="text-lg font-semibold">{m.messages_empty_title()}</p>
