@@ -1,9 +1,5 @@
 import { fstatSync, lstatSync, openSync, constants, closeSync, readSync } from "node:fs";
-import {
-  ContextViewStore,
-  type ContextViewIndexEntry,
-  type ContextViewLookup,
-} from "./context-view-store";
+import { ContextViewStore, type ContextViewIndexEntry } from "./context-view-store";
 
 export const CONTEXT_VIEW_SUPPORTED_RUNTIMES = [
   "claude",
@@ -159,16 +155,9 @@ export class AgentContextViewService {
   }
 
   find(agentId: string, messageId: string): ContextViewIndexEntry | undefined {
-    const lookup = this.lookup(agentId, messageId);
-    return lookup.status === "found" ? lookup.entry : undefined;
-  }
-
-  lookup(agentId: string, messageId: string): ContextViewLookup | { status: "not_found" } {
-    if (!ContextViewStore.exists(this.#stateDirectory, this.#serverId, agentId))
-      return { status: "not_found" };
+    if (!ContextViewStore.exists(this.#stateDirectory, this.#serverId, agentId)) return undefined;
     const store = this.#store(agentId);
-    const lookup = store.lookup(messageId);
-    return store.isOff() && lookup.status === "found" ? { status: "expired" } : lookup;
+    return store.isOff() ? undefined : store.find(messageId);
   }
 
   #store(agentId: string): ContextViewStore {

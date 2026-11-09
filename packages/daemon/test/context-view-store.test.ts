@@ -31,22 +31,9 @@ describe("ContextViewStore", () => {
     const store = new ContextViewStore(root, "server-1", "agent-1", () => now);
     store.record(entry);
     expect(store.compact(30)).toBe(0);
-    expect(store.lookup("message-1")).toEqual({ status: "expired" });
     const current = { ...entry, messageId: "message-2", sentAt: new Date(now).toISOString() };
     store.record(current);
-    expect(store.lookup("message-2")).toEqual({ status: "found", entry: current });
-    expect(store.lookup("message-3")).toEqual({ status: "not_recorded" });
     expect(readFileSync(store.indexPath).length).toBeLessThanOrEqual(AGENT_CONTEXT_INDEX_MAX_BYTES);
-  });
-
-  test("retains an expired lookup after off-grace cleanup", () => {
-    const root = mkdtempSync(join(tmpdir(), "coforge-context-view-"));
-    const store = new ContextViewStore(root, "server-1", "agent-1", () => 1_000);
-    store.record(entry);
-    store.markOff();
-    expect(store.sweepOff(1_000 + AGENT_CONTEXT_VIEW_OFF_GRACE_MS)).toBe(true);
-    expect(store.lookup("message-1")).toEqual({ status: "expired" });
-    expect(store.lookup("message-2")).toEqual({ status: "not_recorded" });
   });
 
   test("keeps disabled data for 24 hours and rejects symlinked state", () => {

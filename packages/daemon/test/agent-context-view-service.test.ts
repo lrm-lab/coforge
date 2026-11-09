@@ -60,7 +60,6 @@ test("does not create unknown agent state and hides moved agent data after disab
     computerId: "computer-1",
   });
   expect(service.find("missing-agent", "message-1")).toBeUndefined();
-  expect(service.lookup("missing-agent", "message-1")).toEqual({ status: "not_found" });
   service.onMessageCommitted(
     {
       agentId: "agent-1",
@@ -74,8 +73,6 @@ test("does not create unknown agent state and hides moved agent data after disab
   );
   service.disable("agent-1");
   expect(service.find("agent-1", "message-1")).toBeUndefined();
-  expect(service.lookup("agent-1", "message-1")).toEqual({ status: "expired" });
-  expect(service.lookup("agent-1", "message-2")).toEqual({ status: "not_recorded" });
 });
 
 describe("unsupported context view runtimes", () => {
