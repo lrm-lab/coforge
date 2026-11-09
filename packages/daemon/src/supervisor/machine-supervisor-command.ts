@@ -211,3 +211,16 @@ export function runLifecycleCommand(
     throw error;
   });
 }
+
+/**
+ * Stops every binding at once, for the Coordinator's own shutdown. A shutdown costs the slowest
+ * Workspace rather than the sum of their stops: one stop may spend 30 s on the process-tree ladder
+ * (task #726), and bindings stopped one after another could outlast launchd's `ExitTimeOut` and be
+ * killed mid-teardown. Each binding's stop touches only its own unit and adoption record, so running
+ * them together is safe. A failing stop still rejects the shutdown, with the rest already begun.
+ */
+export function stopEveryBinding(context: MachineCommandContext): Promise<void> {
+  return context.serialize(async () => {
+    await Promise.all(context.bindings().map((binding) => context.stop(binding)));
+  });
+}

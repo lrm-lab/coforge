@@ -1,26 +1,15 @@
-import {
-  type DaemonConnectRejectionReason,
-  type RunnerHoldReason,
-} from "@lrm/coforge-sdk/internal";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
-import { answeredWithin, type RunnerHoldSnapshot } from "./runner-hold";
-import { WorkspaceParkedError } from "./workspace-health-journal";
-import { WorkspaceLifecycleSupersededError } from "./lifecycle-superseded-error";
+import { answeredWithin } from "./runner-hold";
 import { SerialQueue } from "./serial-queue";
 import {
   runLifecycleCommand,
-  runWorkspaceCommand,
+  stopEveryBinding,
   type MachineCommandContext,
 } from "./machine-supervisor-command";
 import { detachManagedBinding } from "./machine-supervisor-detach";
-import {
-  appendRestartResult,
-  cancelledRestartResults,
-  stopped,
-  workspaceIdOf,
-} from "./machine-supervisor-bindings";
+import { cancelledRestartResults, stopped } from "./machine-supervisor-bindings";
 
 export {
   LIFECYCLE_FAILURE_OPERATIONS,
@@ -32,24 +21,21 @@ export {
   type BindingStore,
   type CommandAnswer,
   type CommandOptions,
-  type CommandProgress,
   type ManagedBinding,
   type RestartHoldTuning,
   type RestartProgress,
   type WorkspaceProcesses,
   WorkspaceRecoveryError,
 } from "./machine-supervisor-contracts";
-import type {
-  BindingStore,
-  CommandAnswer,
-  CommandOptions,
-  CommandProgress,
-  ManagedBinding,
-  RestartHoldTuning,
-  RestartProgress,
-  WorkspaceProcesses,
+import {
+  type BindingStore,
+  type CommandAnswer,
+  type CommandOptions,
+  type ManagedBinding,
+  type RestartHoldTuning,
+  type WorkspaceProcesses,
+  WorkspaceRecoveryError,
 } from "./machine-supervisor-contracts";
-import { WorkspaceRecoveryError } from "./machine-supervisor-contracts";
 export type {
   LifecycleFailure,
   PendingUpgradeSettlement,
@@ -86,8 +72,6 @@ import {
 import {
   type LifecycleFailure,
   type PendingUpgradeSettler,
-  type RestartResult,
-  type UpgradeOperation,
   type UpgradeOperationTerminal,
 } from "./machine-supervisor-operations";
 
@@ -247,23 +231,6 @@ export class MachineSupervisor {
     return trackWorkspaceWork(this.#inFlightOps, workspaceId, run);
   }
 
-  async #command(
-    operation: "start" | "stop" | "restart",
-    workspaceId: string | undefined,
-    requestId: string | undefined,
-    sequence: number,
-    progress: CommandProgress,
-  ): Promise<CommandAnswer> {
-    return runWorkspaceCommand(
-      this.#commandOps,
-      operation,
-      workspaceId,
-      requestId,
-      sequence,
-      progress,
-    );
-  }
-
   /**
    * Settles with `work` if it finishes by `deadline`, otherwise with `early()`. Work that outlives
    * the answer keeps running; a later failure goes to `late`, since nobody is waiting for it.
@@ -326,9 +293,7 @@ export class MachineSupervisor {
   }
 
   shutdown() {
-    return this.#serialize(async () => {
-      for (const binding of this.#bindings) await this.#stop(binding);
-    });
+    return stopEveryBinding(this.#commandOps);
   }
 
   async #reconcileBindings(): Promise<void> {
