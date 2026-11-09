@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+// A non-secret Agent runtime configuration update. Provider credentials and environment values
+// are deliberately absent; the Daemon obtains those through its existing authorized launch path.
+message AgentConfigSync {
+  uint32 protocol_major = 1;
+  string workspace_id = 2;
+  string computer_id = 3;
+  string agent_id = 4;
+  uint64 revision = 5;
+  string provider = 6;
+  string model = 7;
+  string model_provider = 8;
+  string reasoning = 9;
+  optional bool fast_mode = 10;
+  optional string provider_kind = 11;
+  optional string provider_id = 12;
+  string message_type = 13;
+}

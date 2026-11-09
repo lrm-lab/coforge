@@ -5,6 +5,11 @@ package coforge.rpc.v1;
 import "coforge/rpc/v1/computer.proto";
 import "coforge/rpc/v1/runtime_auth.proto";
 
+message AgentConfigRevision {
+  string agent_id = 1;
+  uint64 revision = 2;
+}
+
 message DaemonRuntimeConfigureRequest {
   uint32 protocol_major = 1;
   string request_id = 2;
@@ -48,6 +53,7 @@ message DaemonRuntimeReadyRequest {
   repeated string recovered_upgrade_request_ids = 14;
   // Additive release selector advertised by Computers that persist channel state locally.
   optional string release_channel = 15;
+  repeated AgentConfigRevision applied_agent_configs = 16;
 }
 
 // The server's answer to a ready. An older server answers empty bytes, which decode to an

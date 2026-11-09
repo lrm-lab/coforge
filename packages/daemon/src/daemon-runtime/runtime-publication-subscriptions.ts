@@ -12,6 +12,7 @@ import type {
   ReminderSync,
   AppConfigSync,
   AgentServerFeatures,
+  AgentConfigSync,
 } from "@lrm/coforge-sdk/internal";
 import type { AppRegistrationNotice } from "@lrm/coforge-sdk/internal/app-registration-notice";
 import type {
@@ -46,6 +47,7 @@ export type RuntimePublicationSubscriptionPorts = {
   applyReminderSync: (sync: ReminderSync) => Promise<void>;
   applyAppConfigSync: (sync: AppConfigSync) => void;
   applyAgentServerFeatures: (sync: AgentServerFeatures) => void;
+  applyAgentConfigSync?: (sync: AgentConfigSync) => void;
   acceptAppRegistrationNotice: (notice: AppRegistrationNotice) => Promise<void>;
   migration?: {
     pruneLeftovers: () => Promise<void>;
@@ -196,7 +198,11 @@ export class RuntimePublicationSubscriptions {
     );
     subscribe(transport.onAppConfigSync?.((sync) => this.ports.applyAppConfigSync(sync)));
     subscribe(
-      transport.onAgentServerFeatures?.((sync) => this.ports.applyAgentServerFeatures(sync)),
+      transport.onAgentServerFeatures?.((sync) => {
+        if ("provider" in sync)
+          this.ports.applyAgentConfigSync?.(sync as unknown as AgentConfigSync);
+        else this.ports.applyAgentServerFeatures(sync);
+      }),
     );
     subscribe(
       transport.onAppRegistrationNotice?.((notice) => {

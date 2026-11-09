@@ -52,6 +52,17 @@ test("additively round-trips the persisted release channel", () => {
   );
 });
 
+test("additively round-trips applied Agent config revisions", () => {
+  const request = {
+    ...ready,
+    capabilities: ["agent-config:v1"],
+    appliedAgentConfigs: [{ agentId: "agent-1", revision: 3 }],
+  };
+  expect(decodeDaemonRuntimeReadyRequest(encodeDaemonRuntimeReadyRequest(request))).toEqual(
+    request,
+  );
+});
+
 test("round-trips a Workspace-scoped Computer restart intent", async () => {
   const { decodeComputerRestartIntent, encodeComputerRestartIntent } = await import("./codec");
   const intent = {

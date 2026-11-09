@@ -13,6 +13,7 @@ import {
   RELEASE_CHANNEL_CAPABILITY,
   AGENT_CONTEXT_VIEW_CAPABILITY,
   AGENT_CONTROL_ACCEPTED_CAPABILITY,
+  AGENT_CONFIG_CAPABILITY,
 } from "@lrm/coforge-sdk/internal";
 import { APP_REGISTRATION_NOTICE_CAPABILITY } from "@lrm/coforge-sdk/internal/app-registration-notice";
 import {
@@ -41,6 +42,7 @@ export function readyCapabilities(
     RELEASE_CHANNEL_CAPABILITY,
     AGENT_CONTEXT_VIEW_CAPABILITY,
     AGENT_CONTROL_ACCEPTED_CAPABILITY,
+    AGENT_CONFIG_CAPABILITY,
     ...(runtimeAuth ? [RUNTIME_AUTH_CAPABILITY, RUNTIME_AUTH_STATUS_READ_CAPABILITY] : []),
     ...(runtimeAuth && kiroEnterpriseAuthSupported(platform)
       ? [KIRO_IDENTITY_CENTER_AUTH_CAPABILITY]
