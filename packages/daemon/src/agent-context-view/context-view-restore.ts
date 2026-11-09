@@ -46,6 +46,12 @@ export type ContextViewRestoreResult =
   | { ok: false; failure: ContextViewRestoreFailure; tooLargeCause?: ContextViewTooLargeCause };
 
 export type RecordValue = Record<string, unknown>;
+export const CONTEXT_VIEW_RECORD_END = Symbol("context-view-record-end");
+
+export function recordEnd(record: RecordValue): number | undefined {
+  const end = record[CONTEXT_VIEW_RECORD_END as never];
+  return typeof end === "number" ? end : undefined;
+}
 
 export function isRecord(value: unknown): value is RecordValue {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -60,7 +66,13 @@ function parseRecords(buffer: Buffer, offset: number): RecordValue[] | null | "t
     if (stop > start) {
       try {
         const value = JSON.parse(buffer.toString("utf8", start, stop)) as unknown;
-        if (isRecord(value)) records.push(value);
+        if (isRecord(value)) {
+          Object.defineProperty(value, CONTEXT_VIEW_RECORD_END, {
+            value: end < 0 ? buffer.length : end + 1,
+            enumerable: false,
+          });
+          records.push(value);
+        }
       } catch {
         return null;
       }
@@ -241,12 +253,16 @@ export function restoreContextView(request: RestoreRequest): ContextViewRestoreR
     request.offset > request.buffer.length
   )
     return { ok: false, failure: "read_failed" };
-  // Kimi's availability index is captured at request commit, while the send tool result that
-  // proves a viewer message may be appended a few records later. Its reader searches the complete
-  // bounded source and stops at that send result; the other providers retain offset-bounded reads.
+  // Native Kimi and captured Pi indexes are captured at request commit, while the send result or
+  // continuation that proves a viewer message may be appended later. Their readers search the
+  // complete bounded source and use parsed record ends to retain the offset boundary.
   const records = parseRecords(
     request.buffer,
-    request.runtime === "kimi-sdk" ? request.buffer.length : request.offset,
+    request.runtime === "kimi-sdk" ||
+      request.runtime === RUNTIME_PROVIDER.PI ||
+      request.runtime === RUNTIME_PROVIDER.COFORGE
+      ? request.buffer.length
+      : request.offset,
   );
   if (records === "too_many")
     return { ok: false, failure: "too_large", tooLargeCause: "restore_limit" };

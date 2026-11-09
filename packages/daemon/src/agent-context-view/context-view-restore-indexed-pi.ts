@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import type { RecordValue, RestoreRequest, ContextViewRestoreResult } from "./context-view-restore";
+import {
+  recordEnd,
+  type RecordValue,
+  type RestoreRequest,
+  type ContextViewRestoreResult,
+} from "./context-view-restore";
 import { buildView, isRecord, message, sessionMatches } from "./context-view-restore-primitives";
 import { piRequestMessages, piResponseParts } from "./context-view-pi-projection";
 
@@ -35,22 +40,17 @@ function reportsMessage(value: unknown, messageId: string): boolean {
   ).test(typeof value === "string" ? value : JSON.stringify(value ?? ""));
 }
 
-function hasReportedResponse(
-  records: RecordValue[],
-  start: number,
-  sessionId: string,
-  messageId: string,
-): boolean {
-  for (const record of records.slice(start + 1)) {
-    if (record.type === "request" && typeof record.shapeHash === "string") return false;
-    if (
-      record.type === "response" &&
-      sessionMatches(record, sessionId) &&
-      reportsMessage(record.body ?? record, messageId)
-    )
-      return true;
-  }
-  return false;
+function holdsSendResult(messages: readonly { parts: unknown[] }[], messageId: string): boolean {
+  return messages.some((entry) =>
+    entry.parts.some(
+      (part) =>
+        isRecord(part) && part.kind === "tool_result" && reportsMessage(part.output, messageId),
+    ),
+  );
+}
+
+function sameMessage(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function restorePiIndexed(
@@ -103,6 +103,21 @@ function restorePiIndexed(
     }
   }
   if (order.length === 0) return { ok: false, failure: "not_found" };
+  const responseRequestSources = new Set<number>();
+  let activeRequestSource = -1;
+  for (const [sourceIndex, record] of records.entries()) {
+    if (record.type === "request" && typeof record.shapeHash === "string") {
+      activeRequestSource = sourceIndex;
+      continue;
+    }
+    if (
+      activeRequestSource >= 0 &&
+      record.type === "response" &&
+      sessionMatches(record, request.sessionId) &&
+      reportsMessage(record.body ?? record, request.messageId)
+    )
+      responseRequestSources.add(activeRequestSource);
+  }
   const hashesFor = (entry: IndexedPiRequest): string[] | null => {
     const chain: IndexedPiRequest[] = [];
     const seen = new Set<string>();
@@ -137,20 +152,48 @@ function restorePiIndexed(
     }
     return messages;
   };
-  const candidate = [...order]
-    .reverse()
-    .find(
-      (entry): entry is IndexedPiRequest =>
-        "id" in entry &&
-        sessionMatches(entry, request.sessionId) &&
-        ((Array.isArray(entry.messageIds) && entry.messageIds.includes(request.messageId)) ||
-          reportsMessage(entry, request.messageId) ||
-          hasReportedResponse(records, entry.sourceIndex, request.sessionId, request.messageId)),
-    );
-  if (!candidate) return { ok: false, failure: "not_found" };
+  let matchingIndex = -1;
+  for (const [index, entry] of order.entries()) {
+    if (
+      "id" in entry &&
+      sessionMatches(entry, request.sessionId) &&
+      (recordEnd(entry) === undefined || recordEnd(entry)! <= request.offset) &&
+      ((Array.isArray(entry.messageIds) && entry.messageIds.includes(request.messageId)) ||
+        reportsMessage(entry, request.messageId) ||
+        responseRequestSources.has(entry.sourceIndex))
+    )
+      matchingIndex = index;
+  }
+  let candidate: IndexedPiRequest | undefined;
+  let messages: unknown[] | null = null;
+  let projected: ReturnType<typeof piRequestMessages> | undefined;
+  for (let index = matchingIndex; index >= 0; index -= 1) {
+    const current = order[index];
+    if (!current || !("id" in current) || !sessionMatches(current, request.sessionId)) continue;
+    const currentShape = shapes.get(current.shapeHash);
+    const currentMessages = verifiedMessages(current);
+    if (!currentShape || !currentMessages) return { ok: false, failure: "context_mismatch" };
+    const currentBody = {
+      ...currentShape.shape,
+      ...current.params,
+      [currentShape.messagesKey]: currentMessages,
+    };
+    if (isRecord(currentShape.shape.config) || isRecord(current.params.config))
+      currentBody.config = {
+        ...(isRecord(currentShape.shape.config) ? currentShape.shape.config : {}),
+        ...(isRecord(current.params.config) ? current.params.config : {}),
+      };
+    const currentApi = typeof current.api === "string" ? current.api : undefined;
+    const currentProjected = piRequestMessages(currentBody, currentApi);
+    if (holdsSendResult(currentProjected, request.messageId)) continue;
+    candidate = current;
+    messages = currentMessages;
+    projected = currentProjected;
+    break;
+  }
+  if (!candidate || !messages || !projected) return { ok: false, failure: "not_found" };
   const shape = shapes.get(candidate.shapeHash);
-  const messages = verifiedMessages(candidate);
-  if (!shape || !messages) return { ok: false, failure: "context_mismatch" };
+  if (!shape) return { ok: false, failure: "context_mismatch" };
   const api = typeof candidate.api === "string" ? candidate.api : undefined;
   const supportedApis = new Set([
     "anthropic-messages",
@@ -162,17 +205,55 @@ function restorePiIndexed(
     "google-vertex",
   ]);
   if (!api || !supportedApis.has(api)) return { ok: false, failure: "unsupported_runtime" };
-  const body = { ...shape.shape, ...candidate.params, [shape.messagesKey]: messages };
-  if (isRecord(shape.shape.config) || isRecord(candidate.params.config))
-    body.config = {
-      ...(isRecord(shape.shape.config) ? shape.shape.config : {}),
-      ...(isRecord(candidate.params.config) ? candidate.params.config : {}),
-    };
-  const projected = piRequestMessages(body, api);
   let responseFound = false;
   let trigger: { toolUseId: string } | undefined;
+  const nextRequest = order.find(
+    (entry): entry is IndexedPiRequest =>
+      "id" in entry &&
+      sessionMatches(entry, request.sessionId) &&
+      entry.sourceIndex > candidate!.sourceIndex,
+  );
+  if (nextRequest) {
+    const nextShape = shapes.get(nextRequest.shapeHash);
+    const nextMessages = verifiedMessages(nextRequest);
+    if (!nextShape || !nextMessages) return { ok: false, failure: "context_mismatch" };
+    const nextBody = {
+      ...nextShape.shape,
+      ...nextRequest.params,
+      [nextShape.messagesKey]: nextMessages,
+    };
+    const nextProjected = piRequestMessages(
+      nextBody,
+      typeof nextRequest.api === "string" ? nextRequest.api : undefined,
+    );
+    if (
+      nextProjected.length > projected.length &&
+      projected.every((entry, index) => sameMessage(entry, nextProjected[index]))
+    ) {
+      const continuation = nextProjected.slice(projected.length);
+      const replyEnd = continuation.findIndex((entry) => entry.role !== "assistant");
+      const reply = replyEnd < 0 ? continuation : continuation.slice(0, replyEnd);
+      projected.push(...reply);
+      responseFound = reply.length > 0;
+      const result = continuation
+        .slice(reply.length)
+        .flatMap((entry) => entry.parts)
+        .find(
+          (part) =>
+            isRecord(part) &&
+            part.kind === "tool_result" &&
+            reportsMessage(part.output, request.messageId),
+        );
+      if (isRecord(result) && typeof result.toolUseId === "string")
+        trigger = { toolUseId: result.toolUseId };
+    }
+  }
   for (const record of records.slice(candidate.sourceIndex + 1)) {
-    if (record.type === "gap") return { ok: false, failure: "not_recorded" };
+    if (record.type === "gap") {
+      if (record.reason === "off" || record.reason === "write_failed")
+        return { ok: false, failure: "not_recorded" };
+      break;
+    }
     if (record.type === "request" && typeof record.shapeHash === "string") break;
     if (record.type !== "response" || !sessionMatches(record, request.sessionId)) continue;
     if (
