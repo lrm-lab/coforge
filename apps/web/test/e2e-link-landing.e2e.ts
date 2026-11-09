@@ -307,8 +307,9 @@ test("a pasted reply link lands on the reply; a shared short id says so", async 
       `getComputedStyle(document.getElementById("message-${rootId}") ?? document.body).boxShadow !== "none"`,
     );
 
-    // On a phone the thread's ring is whole: neither side is cut off by the history's edge
-    // (task #37). The ring reaches as far as its widest box-shadow spread.
+    // On a phone the thread's ring is whole, with room to spare: it stays at least 2px clear of
+    // the history's edge on both sides (task #37). The ring reaches as far as its widest
+    // box-shadow spread.
     await browser("set", "viewport", "390", "844");
     await browser("open", replyLinks.notification);
     await browser(
@@ -335,8 +336,8 @@ test("a pasted reply link lands on the reply; a shared short id says so", async 
     })()`);
     await browser("screenshot", join(artifacts, "reply-link-phone.png"));
     expect(ring.reach).toBeGreaterThan(0);
-    expect(ring.left).toBeGreaterThanOrEqual(ring.viewLeft);
-    expect(ring.right).toBeLessThanOrEqual(ring.viewRight);
+    expect(ring.left - ring.viewLeft).toBeGreaterThanOrEqual(2);
+    expect(ring.viewRight - ring.right).toBeGreaterThanOrEqual(2);
   } finally {
     await browser("close").catch(() => undefined);
     await db.$disconnect();
