@@ -183,6 +183,68 @@ test("labels an offline Computer with the Raft failure reason", async () => {
   ).resolves.toEqual({ status: "offline", reason: "offline" });
 });
 
+test("labels a pending request transport failure as offline", async () => {
+  const service = new ComputerAgentContextViews({
+    owned: async () => true,
+    online: async () => true,
+    supported: async () => true,
+    publish: async () => {
+      throw new Error("Centrifugo unavailable");
+    },
+    results: { begin: async () => {}, read: async () => undefined, clear: async () => {} },
+  });
+  await expect(
+    service.view(
+      { userId: "u", workspaceId: "w" },
+      { computerId: "c", agentId: "a", messageId: "m", sessionId: "s", maxBytes: 1 },
+    ),
+  ).resolves.toEqual({ status: "unavailable", reason: "offline" });
+});
+
+test("labels a pending result setup failure as offline", async () => {
+  const service = new ComputerAgentContextViews({
+    owned: async () => true,
+    online: async () => true,
+    supported: async () => true,
+    publish: async () => {},
+    results: {
+      begin: async () => {
+        throw new Error("Redis unavailable");
+      },
+      read: async () => undefined,
+      clear: async () => {},
+    },
+  });
+  await expect(
+    service.view(
+      { userId: "u", workspaceId: "w" },
+      { computerId: "c", agentId: "a", messageId: "m", sessionId: "s", maxBytes: 1 },
+    ),
+  ).resolves.toEqual({ status: "unavailable", reason: "offline" });
+});
+
+test("labels a pending result read failure as read_failed", async () => {
+  const service = new ComputerAgentContextViews({
+    owned: async () => true,
+    online: async () => true,
+    supported: async () => true,
+    publish: async () => {},
+    results: {
+      begin: async () => {},
+      read: async () => {
+        throw new Error("Redis unavailable");
+      },
+      clear: async () => {},
+    },
+  });
+  await expect(
+    service.view(
+      { userId: "u", workspaceId: "w" },
+      { computerId: "c", agentId: "a", messageId: "m", sessionId: "s", maxBytes: 1 },
+    ),
+  ).resolves.toEqual({ status: "unavailable", reason: "read_failed" });
+});
+
 test("labels a missing daemon result as an old daemon", async () => {
   let now = 0;
   const service = new ComputerAgentContextViews(

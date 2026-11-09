@@ -85,9 +85,11 @@ export class ComputerAgentContextViews {
     const support = typeof supported === "boolean" ? { supported } : supported;
     if (!support.supported)
       return { status: "unsupported", ...(support.reason ? { reason: support.reason } : {}) };
+    let phase: "transport" | "read" = "transport";
     try {
       await this.dependencies.results.begin({ request, userId: viewer.userId });
       await this.dependencies.publish(request);
+      phase = "read";
       const deadline = this.timing.now() + this.timing.timeoutMs;
       while (this.timing.now() < deadline) {
         const result = await this.dependencies.results.read(request.requestId);
@@ -119,7 +121,10 @@ export class ComputerAgentContextViews {
       // Raft exposes a viewer timeout as old_daemon when the advertised daemon never answers.
       return { status: "timeout", reason: "old_daemon" };
     } catch {
-      return { status: "unavailable" };
+      return {
+        status: "unavailable",
+        reason: phase === "transport" ? "offline" : "read_failed",
+      };
     } finally {
       await this.dependencies.results.clear(request.requestId).catch(() => {});
     }
