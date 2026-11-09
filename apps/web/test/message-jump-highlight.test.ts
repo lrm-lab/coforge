@@ -26,13 +26,14 @@ test("the landed row wears exactly the classes the :target treatment uses", asyn
   const source = await readFile(MESSAGE_ROW, "utf8");
   const targetLine = source.split("\n").find((line) => line.includes("target:bg-tertiary"));
   expect(targetLine).toBeDefined();
+  // A breakpoint keeps its place in front of the variant: `md:target:x` is the landed row's `md:x`.
   const deepLinkClasses = (targetLine as string)
-    .match(/target:[^\s"]+/g)
-    ?.map((token) => token.replace(/^target:/, ""))
+    .match(/[^\s"]*target:[^\s"]+/g)
+    ?.map((token) => token.replace("target:", ""))
     .sort();
   expect(deepLinkClasses?.length).toBeGreaterThan(0);
   const landedClasses = source
-    .match(/highlighted && "([^"]+)"/)?.[1]
+    .match(/highlighted &&\s*"([^"]+)"/)?.[1]
     .split(/\s+/)
     .sort();
   expect(landedClasses).toBeDefined();
