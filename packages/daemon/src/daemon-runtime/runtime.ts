@@ -645,6 +645,7 @@ export class DaemonRuntime {
       sendControlResult: async (result) => {
         await this.#transport.sendAgentControlResult?.(result);
       },
+      agentControlAccepted: () => this.#transport.agentControlAccepted?.() ?? false,
     });
     this.#agentSessions = control.agentSessions;
     this.#agentControl = control.agentControl;
@@ -1452,35 +1453,27 @@ export class DaemonRuntime {
     return context;
   }
 
+  #runnerHoldCell() {
+    const runtime = this;
+    return {
+      get hold() {
+        return runtime.#runnerHold;
+      },
+      set hold(value) {
+        runtime.#runnerHold = value;
+      },
+    };
+  }
+
   /** Stops admitting new Agent turns and reports which Agents are still busy. */
   holdRunners(reason: RunnerHoldReason): BusyAgentReport[] {
-    const runtime = this;
-    return holdRunners(
-      {
-        get hold() {
-          return runtime.#runnerHold;
-        },
-        set hold(value) {
-          runtime.#runnerHold = value;
-        },
-      },
-      reason,
-      this.#activityPublisher,
-    );
+    return holdRunners(this.#runnerHoldCell(), reason, this.#activityPublisher);
   }
 
   /** Lifts the hold and resumes every delivery queued behind it, in arrival order. */
   releaseRunners(): BusyAgentReport[] {
-    const runtime = this;
     return releaseRunners(
-      {
-        get hold() {
-          return runtime.#runnerHold;
-        },
-        set hold(value) {
-          runtime.#runnerHold = value;
-        },
-      },
+      this.#runnerHoldCell(),
       this.#activityPublisher,
       this.#inputDrain,
       this.#agentProcessManager,

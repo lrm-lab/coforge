@@ -335,7 +335,7 @@ function launchFailureDetail(
  * refusals a person must act on, whose runtime wording is written for the user (#686,
  * #682). Anything else — an untyped spawn failure above all — keeps its text in the Computer
  * log only, because the redactor recognizes credential shapes, not arbitrary internals. */
-const PROVIDER_MESSAGE_REASONS: readonly LaunchFailureReason[] = [
+export const PROVIDER_MESSAGE_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED,
   LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED,
   LAUNCH_FAILURE_REASON.RUNTIME_VERSION_TOO_OLD,

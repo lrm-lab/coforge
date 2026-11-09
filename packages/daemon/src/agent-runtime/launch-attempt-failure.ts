@@ -1,14 +1,17 @@
 import { getLogger } from "@logtape/logtape";
 import {
   diagnosticErrorCode,
+  refusalText,
   type AgentControlResult,
   type AgentControlScope,
   type AgentStartIntent,
 } from "@lrm/coforge-sdk/internal";
+import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import {
   isNonRetryableLaunchFailure,
   launchFailureLogFields,
   launchFailureReason,
+  PROVIDER_MESSAGE_REASONS,
 } from "./launch-failure";
 import type { AgentRuntimeRecord, AgentRuntimeStateStore } from "./agent-runtime-state";
 import { LAUNCH_FAILURE_MAX_ATTEMPTS, type LaunchFailureBackoff } from "./launch-failure-backoff";
@@ -94,6 +97,11 @@ export async function settleLaunchFailure(
     launchId: ports.launchId,
     sequence: ++record.sequence,
     errorCode: reason,
+    // The same redacted provider words the launch-failure Activity carries, so the control
+    // result's `errorDetail` never exposes more than `providerMessage` already does.
+    ...(PROVIDER_MESSAGE_REASONS.includes(reason)
+      ? { errorDetail: scrubRuntimeErrorText(refusalText(error)) }
+      : {}),
   };
   logger.warning("Agent launch failed", {
     event: "agent_control:launch_failed",

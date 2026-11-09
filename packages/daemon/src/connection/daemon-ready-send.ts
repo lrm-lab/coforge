@@ -6,6 +6,7 @@ import {
   decodeDaemonRuntimeReadyResponse,
   encodeDaemonRuntimeReadyRequest,
   type DaemonRuntimeReadyRequest,
+  type DaemonRuntimeReadyResponse,
   DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
   encodeDaemonRuntimeCodeAgentsUpdateRequest,
   type DaemonRuntimeCodeAgentsUpdateRequest,
@@ -21,23 +22,30 @@ import {
 } from "@lrm/coforge-sdk/internal";
 
 /** The ready RPC: sends the request and reports the release feed's newest Computer version the
- * reply named (nothing when the server is older or the feed read failed). */
+ * reply named (nothing when the server is older or the feed read failed), plus whether the
+ * server takes the `accepted` Agent control phase — `false` on an older server's empty or
+ * undecodable reply, so a daemon never sends a phase that server would reject. */
 export async function sendDaemonReady(
   client: CentrifugeWorkspaceClient,
   request: DaemonRuntimeReadyRequest,
   onLatestComputerVersion?: (version: string) => void,
+  onAgentControlAccepted?: (accepted: boolean) => void,
 ): Promise<void> {
   const reply = await client.rpc(
     DAEMON_RUNTIME_READY_METHOD,
     encodeDaemonRuntimeReadyRequest(request),
   );
+  let response: DaemonRuntimeReadyResponse;
   try {
-    const version = decodeDaemonRuntimeReadyResponse(rpcData(reply)).latestComputerVersion;
-    if (version) onLatestComputerVersion?.(version);
+    response = decodeDaemonRuntimeReadyResponse(rpcData(reply));
   } catch {
-    // Best effort: an older server answers a shape this build does not know, and the version
-    // hint is not worth failing an accepted ready for.
+    // Best effort: an older server answers a shape this build does not know, and neither hint
+    // is worth failing an accepted ready for.
+    onAgentControlAccepted?.(false);
+    return;
   }
+  if (response.latestComputerVersion) onLatestComputerVersion?.(response.latestComputerVersion);
+  onAgentControlAccepted?.(response.agentControlAccepted === true);
 }
 
 export async function sendCodeAgentsUpdate(

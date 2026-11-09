@@ -196,6 +196,9 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   /** The release feed's newest Computer version as a ready reply named it; nothing when the
    * server is older or the feed read failed. */
   onLatestComputerVersion?(callback: (version: string) => void): () => void;
+  /** Whether the server's ready reply accepts the `accepted` Agent control phase; absent on
+   * transports and tests that predate it, read as unsupported. */
+  agentControlAccepted?(): boolean;
   /** The cloud refused an already-running connection for good; the connection no longer
    * reconnects. A refusal while `start` is connecting rejects `start` instead. */
   onConnectionRefused?(callback: (reason: DaemonConnectRejectionReason) => void): () => void;

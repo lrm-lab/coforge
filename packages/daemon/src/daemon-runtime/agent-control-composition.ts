@@ -1,5 +1,6 @@
 import type {
   AgentControlResult,
+  AgentControlScope,
   AgentSessionReport,
   AgentStartIntent,
   SessionIdentity,
@@ -47,6 +48,9 @@ export type AgentControlCompositionPorts = {
   sendSessionInvalidate(message: ReturnType<typeof connectionSessionInvalidate>): void;
   reportSession(report: AgentSessionReport): Promise<void>;
   sendControlResult(result: AgentControlResult): Promise<void>;
+  /** Whether the server's ready reply accepts the `accepted` control phase; an older server
+   * never does, and this daemon must then never send the phase it would reject. */
+  agentControlAccepted(): boolean;
 };
 
 export type AgentControlComposition = {
@@ -150,19 +154,43 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
       }
     },
   });
+  // The `accepted` acknowledgement goes out ahead of the serialized `state.run` queue, once per
+  // command, and only while the server has confirmed it takes the phase (task #584). It is
+  // fire-and-forget like the other best-effort reports: the operation's own result is what the
+  // server's state machine waits on.
+  const accepted = (scope: AgentControlScope) => {
+    if (!ports.agentControlAccepted()) return;
+    const result: AgentControlResult = { ...scope, phase: "accepted", sequence: 1 };
+    void ports
+      .sendControlResult(result)
+      .catch(() => {})
+      .finally(() => opTiming.resultSent(result));
+  };
   // Time each fenced operation from its AgentControl entry to its result send (task #584).
   // The wrapped methods keep `this` bound to the real instance, so its private state is intact.
   const { start, stop, resetWorkspace } = agentControl;
   agentControl.start = (intent) => {
     opTiming.received("start", intent.agentId, intent.requestId);
+    if (intent.controlEpoch)
+      accepted({
+        protocolMajor: 1,
+        requestId: intent.requestId,
+        workspaceId: intent.workspaceId,
+        computerId: intent.computerId,
+        agentId: intent.agentId,
+        provider: intent.provider,
+        epoch: intent.controlEpoch,
+      });
     return start.call(agentControl, intent);
   };
   agentControl.stop = (scope) => {
     opTiming.received("stop", scope.agentId, scope.requestId);
+    accepted(scope);
     return stop.call(agentControl, scope);
   };
   agentControl.resetWorkspace = (request) => {
     opTiming.received("reset-workspace", request.agentId, request.requestId);
+    accepted(request);
     return resetWorkspace.call(agentControl, request);
   };
   return { agentSessions, agentControl };

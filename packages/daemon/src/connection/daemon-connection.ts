@@ -94,7 +94,6 @@ import { ReadyPublicationHold } from "./ready-publication-hold";
 import { InboundQuietness } from "./connection-liveness";
 import { encodeDaemonConnectionStatus } from "./connection-status-payload";
 import {
-  readStatusLatestVersion,
   sendDaemonReady,
   sendCodeAgentsUpdate,
   sendRuntimeAuthLogin,
@@ -278,8 +277,8 @@ import {
 } from "./connection-retry";
 import { acceptLifecycleRequest, sendUpgradeResultOnce } from "#src/connection/upgrade-result-send";
 
-const AGENT_STATUS_REFRESH_MS = 30_000;
-export const COMPUTER_STATUS_REFRESH_MS = 30_000;
+export { COMPUTER_STATUS_REFRESH_MS } from "./daemon-status-refresh";
+import { DaemonStatusRefresh } from "./daemon-status-refresh";
 const logger = getLogger(["coforge", "daemon", "connection"]);
 
 /** The Daemon's single connection for its configured Workspace. */
@@ -317,6 +316,10 @@ export class DaemonConnection
   readonly #reconnect = new ListenerSlot<() => void>();
   readonly #inboundQuiet = new InboundQuietness(() => this.#nowMs());
   readonly #latestComputerVersion = new ListenerSlot<(version: string) => void>();
+  /** The last ready reply's `agentControlAccepted`: whether this server takes the `accepted`
+   * Agent control phase. Cleared by every ready that does not confirm it, so an old server's
+   * empty reply can never leave a stale `true` behind. */
+  #agentControlAccepted = false;
   readonly #connectionRefused = new ListenerSlot<(reason: DaemonConnectRejectionReason) => void>();
   /** Set only while `start` waits for the first connection; rejecting it ends that `start`. */
   #failPendingStart: ((error: Error) => void) | undefined;
@@ -367,8 +370,15 @@ export class DaemonConnection
   readonly #restartRequestIds = new Set<string>();
   readonly #upgradeRequestIds = new Set<string>();
   readonly #reportedUpgradeRequestIds = new Set<string>();
-  #statusRefreshTimer: ReturnType<typeof setInterval> | undefined;
-  #computerStatusRefreshTimer: unknown;
+  readonly #statusRefresh = new DaemonStatusRefresh({
+    client: () => this.#client,
+    connected: () => this.#connected,
+    statuses: () => this.#latestStatuses.values(),
+    queueStatus: (client, status) => this.#queueAgentStatus(client, status),
+    inboundQuiet: this.#inboundQuiet,
+    latestComputerVersion: this.#latestComputerVersion,
+    timing: () => this.timing,
+  });
   /** When this connection last carried inbound traffic, by the connection's own clock. Only a
    * publication on the Daemon's channel or an answered status RPC sets it; an open socket does
    * not, which is the whole point. Undefined until the connection first reports connected. */
@@ -461,7 +471,7 @@ export class DaemonConnection
         this.#flushPendingActivity(client);
         this.#observations.flush(client);
         for (const status of this.#latestStatuses.values()) this.#queueAgentStatus(client, status);
-        this.#startStatusRefresh(config);
+        this.#statusRefresh.start(config);
         if (reconnect && this.#readyRequestFactory) {
           this.#readyPublications.hold();
           this.#startReadyRecovery(client, this.#readyRequestFactory);
@@ -800,43 +810,6 @@ export class DaemonConnection
     void client
       .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))
       .catch(() => {});
-  }
-
-  #startStatusRefresh(config: DaemonConnectionConfig): void {
-    if (!this.#statusRefreshTimer) {
-      this.#statusRefreshTimer = setInterval(() => {
-        const client = this.#client;
-        if (!this.#connected || !client) return;
-        for (const status of this.#latestStatuses.values()) {
-          if (status.status !== "active") continue;
-          this.#queueAgentStatus(client, { ...status, requestId: crypto.randomUUID() });
-        }
-      }, AGENT_STATUS_REFRESH_MS);
-      this.#statusRefreshTimer.unref();
-    }
-
-    if (this.#computerStatusRefreshTimer) return;
-    const refresh = () => {
-      const client = this.#client;
-      if (!this.#connected || !client) return;
-      this.#inboundQuiet.check(client, config);
-      void client
-        .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))
-        .then((reply) => {
-          // An answered round trip is the only inbound traffic a Workspace with nothing to say
-          // produces, so it is what keeps a legitimately quiet connection alive.
-          if (client === this.#client) this.#inboundQuiet.markInbound();
-          const version = readStatusLatestVersion(reply);
-          if (version) this.#latestComputerVersion.current?.(version);
-        })
-        .catch(() => {});
-    };
-    this.#computerStatusRefreshTimer = this.timing.scheduleRepeating
-      ? this.timing.scheduleRepeating(refresh, COMPUTER_STATUS_REFRESH_MS)
-      : setInterval(refresh, COMPUTER_STATUS_REFRESH_MS);
-    if (!this.timing.scheduleRepeating) {
-      (this.#computerStatusRefreshTimer as ReturnType<typeof setInterval>).unref();
-    }
   }
 
   #nowMs(): number {
@@ -1521,6 +1494,11 @@ export class DaemonConnection
   async sendAgentControlResult(result: AgentControlResult) {
     await this.#rpc(AGENT_CONTROL_RESULT_METHOD, encodeAgentControlResult(result));
   }
+
+  /** Whether the server's last ready reply accepts the `accepted` control phase. */
+  agentControlAccepted(): boolean {
+    return this.#agentControlAccepted;
+  }
   async sendAgentTurnInterruptResult(result: AgentTurnInterruptResult) {
     await this.#rpc(AGENT_TURN_INTERRUPT_RESULT_METHOD, encodeAgentTurnInterruptResult(result));
   }
@@ -1700,8 +1678,13 @@ export class DaemonConnection
       computer_id: request.computerId,
     };
     try {
-      await sendDaemonReady(client, request, (version) =>
-        this.#latestComputerVersion.current?.(version),
+      await sendDaemonReady(
+        client,
+        request,
+        (version) => this.#latestComputerVersion.current?.(version),
+        (accepted) => {
+          this.#agentControlAccepted = accepted;
+        },
       );
     } catch (error) {
       if (!recovering()) return;
@@ -1795,14 +1778,7 @@ export class DaemonConnection
     this.#readyFailure = undefined;
     this.#readyRetryAttempts = 0;
     this.#readyFailingSinceMs = undefined;
-    if (this.#statusRefreshTimer) clearInterval(this.#statusRefreshTimer);
-    this.#statusRefreshTimer = undefined;
-    if (this.#computerStatusRefreshTimer !== undefined) {
-      if (this.timing.cancelRepeating)
-        this.timing.cancelRepeating(this.#computerStatusRefreshTimer);
-      else clearInterval(this.#computerStatusRefreshTimer as ReturnType<typeof setInterval>);
-      this.#computerStatusRefreshTimer = undefined;
-    }
+    this.#statusRefresh.stop();
     await this.#statusRpcQueue;
     this.#client = undefined;
     this.#connected = false;
