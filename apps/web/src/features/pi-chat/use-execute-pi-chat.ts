@@ -6,7 +6,7 @@ import { isAppErrorCode } from "#src/lib/app-error";
 import { executePiChat } from "./pi-chat.functions";
 
 /**
- * `executePiChat` for the Workbench page. The server refuses it once the account's switch is off,
+ * `executePiChat` for the Workbench page. The server refuses it once the Workspace's switch is off,
  * and that refusal shows the switch as off, so the page is replaced by the off message instead of
  * staying on a failed call.
  */

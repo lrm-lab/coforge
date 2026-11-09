@@ -28,7 +28,6 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
       timeZone: null,
       timeFormat: null,
       language: null,
-      aiWorkbenchEnabled: true,
     });
     expect(await preferences.getBrowserNotificationsEnabled(user.id)).toBeFalse();
 
@@ -45,7 +44,6 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
       timeZone: "Asia/Tokyo",
       timeFormat: null,
       language: null,
-      aiWorkbenchEnabled: true,
     });
 
     expect(await preferences.setTimeFormat(user.id, "24h")).toBe("24h");
@@ -57,7 +55,6 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
       timeZone: null,
       timeFormat: "24h",
       language: "zh-CN",
-      aiWorkbenchEnabled: true,
     });
   } finally {
     await db.user.delete({ where: { id: user.id } });

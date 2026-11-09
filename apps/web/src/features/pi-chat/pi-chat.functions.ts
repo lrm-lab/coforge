@@ -3,7 +3,7 @@ import { z } from "zod";
 import { piChatCommandSchema } from "@lrm/coforge-sdk/internal/pi-chat";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
-import { requireAiWorkbench } from "#src/server/pi-chat/ai-workbench.server";
+import { isAiWorkbenchEnabled, requireAiWorkbench } from "#src/server/pi-chat/ai-workbench.server";
 import {
   getPiChatControlsLease,
   getPiChatFilesLease,
@@ -12,6 +12,14 @@ import {
   piChatConfiguration,
   productionPiChat,
 } from "#src/server/pi-chat/pi-chat-production.server";
+
+/** Whether the viewer's Workspace has AI Workbench on; any member may ask, only the answer. */
+export const loadAiWorkbenchOn = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }) => {
+    declareNoStore();
+    return isAiWorkbenchEnabled(context.db, context.workspaceId);
+  });
 
 export const getPiChatComputers = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])

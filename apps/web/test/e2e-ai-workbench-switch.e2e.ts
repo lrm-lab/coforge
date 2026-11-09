@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import {
   browserSession,
@@ -11,9 +11,10 @@ import {
 } from "./helpers/browser-e2e";
 
 /**
- * The AI Workbench switch on Settings → Experiments (task #743): on by default (Frank 11-09), the
- * sidebar entry following it without a reload, `/pi-chat` going home while it is off, and a second browser
- * session of the same account following when it regains focus.
+ * The Workspace's AI Workbench experiment on Settings → Experiments (tasks #743, #43): on by default
+ * (Frank 11-09), switched by the Workspace's owner or admin, the sidebar entry following it without
+ * a reload, `/pi-chat` going home while it is off, and a second browser session following when it
+ * regains focus.
  *
  * Opt-in like the other browser e2e files: real local Web, `agent-browser` and PostgreSQL. The
  * Experiments row is photographed on and off in both languages under /tmp/hp/743/.
@@ -29,13 +30,32 @@ test("the AI Workbench switch controls the sidebar entry and the route, across s
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
     include: { workspace: { select: { slug: true } } },
   });
-  const before = await db.userPreference.findUnique({ where: { userId: DEV_BROWSER_USER.id } });
-  const store = (aiWorkbenchEnabled: boolean | null) =>
-    db.userPreference.upsert({
-      where: { userId: DEV_BROWSER_USER.id },
-      create: { userId: DEV_BROWSER_USER.id, aiWorkbenchEnabled },
-      update: { aiWorkbenchEnabled },
-    });
+  const before = (
+    await db.workspace.findUniqueOrThrow({
+      where: { slug: workspace.slug },
+      select: { experiments: true },
+    })
+  ).experiments;
+  const stored = async () =>
+    (
+      (
+        await db.workspace.findUniqueOrThrow({
+          where: { slug: workspace.slug },
+          select: { experiments: true },
+        })
+      ).experiments as Record<string, boolean> | null
+    )?.aiWorkbench;
+  /** Back to never stored: the key is removed, the Workspace's other experiments stay. */
+  const clear = async () => {
+    const current = ((
+      await db.workspace.findUniqueOrThrow({
+        where: { slug: workspace.slug },
+        select: { experiments: true },
+      })
+    ).experiments ?? {}) as Record<string, boolean>;
+    const { aiWorkbench: _removed, ...rest } = current;
+    await db.workspace.update({ where: { slug: workspace.slug }, data: { experiments: rest } });
+  };
   const entry = `document.querySelectorAll('a[href*="/pi-chat"]').length > 0`;
   const switchInput = `document.querySelector('input[aria-label="AI Workbench"]')`;
   const home = (locale: string) => `${origin}/${locale}/w/${workspace.slug}`;
@@ -66,11 +86,11 @@ test("the AI Workbench switch controls the sidebar entry and the route, across s
     );
   try {
     await mkdir(screenshots, { recursive: true });
-    await store(null);
+    await clear();
     await first.browser("set", "viewport", "1280", "860");
     await second.browser("set", "viewport", "1280", "860");
 
-    // Default on: an account that never chose has the switch on and the sidebar entry.
+    // Default on: a Workspace that never chose has the switch on and the sidebar entry.
     await first.browser("open", experiments("en"));
     await first.waitFor(`${pageHydrated} && ${switchInput} != null`, 60_000);
     expect(await first.evaluate<boolean>(`${switchInput}.checked`)).toBe(true);
@@ -84,13 +104,13 @@ test("the AI Workbench switch controls the sidebar entry and the route, across s
     await second.browser("open", `${home("en")}/pi-chat`);
     await second.waitFor(`${pageHydrated} && ${entry}`, 60_000);
 
-    // Turning it off hides the entry at once, with no reload, and stores false for this account.
+    // The owner turns it off in the Workspace's list: the entry hides at once, in the same page
+    // load (the marker survives only without a reload), and false is stored for the Workspace.
+    await first.browser("eval", `(window.__noReload = true)`);
     await toggle(first, false);
     await first.waitFor(`!(${entry})`);
-    expect(
-      (await db.userPreference.findUniqueOrThrow({ where: { userId: DEV_BROWSER_USER.id } }))
-        .aiWorkbenchEnabled,
-    ).toBe(false);
+    expect(await first.evaluate<boolean>(`window.__noReload === true`)).toBe(true);
+    expect(await stored()).toBe(false);
     await shot(first, "experiments-zh-CN-off");
     await first.browser("open", `${home("en")}/pi-chat`);
     await first.waitFor(`${pageHydrated} && !location.pathname.endsWith("/pi-chat")`, 60_000);
@@ -113,8 +133,12 @@ test("the AI Workbench switch controls the sidebar entry and the route, across s
     await second.browser("open", home("en"));
     await second.waitFor(`${pageHydrated} && !(${entry})`, 60_000);
     await first.browser("open", experiments("en"));
+    await first.waitFor(`${pageHydrated} && ${switchInput} != null`, 60_000);
+    await first.browser("eval", `(window.__noReload = true)`);
     await toggle(first, true);
     await first.waitFor(entry);
+    expect(await first.evaluate<boolean>(`window.__noReload === true`)).toBe(true);
+    expect(await stored()).toBe(true);
     await shot(first, "experiments-en-on");
     await refocus(second);
     await second.waitFor(entry);
@@ -123,8 +147,10 @@ test("the AI Workbench switch controls the sidebar entry and the route, across s
   } finally {
     await first.browser("close").catch(() => {});
     await second.browser("close").catch(() => {});
-    if (before) await store(before.aiWorkbenchEnabled);
-    else await db.userPreference.deleteMany({ where: { userId: DEV_BROWSER_USER.id } });
+    await db.workspace.update({
+      where: { slug: workspace.slug },
+      data: { experiments: before ?? Prisma.DbNull },
+    });
     await db.$disconnect();
   }
 }, 240_000);

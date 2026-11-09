@@ -162,7 +162,7 @@ export function AppShell({
   canSeeUsageLimits = false,
   aiWorkbench = false,
 }: {
-  /** Whether this account has AI Workbench on; its sidebar entry shows only then. */
+  /** Whether the Workspace has AI Workbench on; its sidebar entry shows only then. */
   aiWorkbench?: boolean;
   /** An owner or admin, who sees the Workspace's system notifications. */
   canSeeUsageLimits?: boolean;

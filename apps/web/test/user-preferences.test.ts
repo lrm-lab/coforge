@@ -36,7 +36,6 @@ describe("user time zone preferences", () => {
         timeZone: saved,
         timeFormat: null,
         language: null,
-        aiWorkbenchEnabled: null,
       }),
       setTimeZone: async (_userId, timeZone) => {
         saved = timeZone;
@@ -49,7 +48,6 @@ describe("user time zone preferences", () => {
       },
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
       setLanguage: async (_userId, language) => language,
-      setAiWorkbenchEnabled: async (_userId, enabled) => enabled,
       setRole: async (_userId, role) => role,
     };
     const preferences = new UserPreferences(repository);
@@ -70,14 +68,12 @@ describe("user time zone preferences", () => {
         timeZone: null,
         timeFormat: null,
         language: null,
-        aiWorkbenchEnabled: null,
       }),
       setTimeZone: async () => null,
       getBrowserNotificationsEnabled: async () => enabled,
       setBrowserNotificationsEnabled: async (_userId, next) => (enabled = next),
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
       setLanguage: async (_userId, language) => language,
-      setAiWorkbenchEnabled: async (_userId, enabled) => enabled,
       setRole: async (_userId, role) => role,
     };
     const preferences = new UserPreferences(repository);
@@ -94,14 +90,12 @@ describe("user time zone preferences", () => {
         timeZone: null,
         timeFormat: null,
         language: null,
-        aiWorkbenchEnabled: null,
       }),
       setTimeZone: async () => null,
       getBrowserNotificationsEnabled: async () => false,
       setBrowserNotificationsEnabled: async (_userId, next) => next,
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
       setLanguage: async (_userId, language) => language,
-      setAiWorkbenchEnabled: async (_userId, enabled) => enabled,
       setRole: async (_userId, role) => {
         saved.push(role);
         return role;
@@ -162,14 +156,12 @@ describe("user time zone preferences", () => {
         timeZone: null,
         timeFormat: saved,
         language: null,
-        aiWorkbenchEnabled: null,
       }),
       setTimeZone: async () => null,
       getBrowserNotificationsEnabled: async () => false,
       setBrowserNotificationsEnabled: async (_userId, enabled) => enabled,
       setTimeFormat: async (_userId, timeFormat) => (saved = timeFormat),
       setLanguage: async (_userId, language) => language,
-      setAiWorkbenchEnabled: async (_userId, enabled) => enabled,
       setRole: async (_userId, role) => role,
     });
 
@@ -189,7 +181,6 @@ describe("user time zone preferences", () => {
           timeZone: "Asia/Tokyo",
           timeFormat: "25h",
           language: null,
-          aiWorkbenchEnabled: true,
         };
       },
       setTimeZone: async () => null,
@@ -197,7 +188,6 @@ describe("user time zone preferences", () => {
       setBrowserNotificationsEnabled: async (_userId, enabled) => enabled,
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
       setLanguage: async (_userId, language) => language,
-      setAiWorkbenchEnabled: async (_userId, enabled) => enabled,
       setRole: async (_userId, role) => role,
     });
 
@@ -206,7 +196,6 @@ describe("user time zone preferences", () => {
       timeZone: "Asia/Tokyo",
       timeFormat: null,
       language: null,
-      aiWorkbenchEnabled: true,
     });
     expect(reads).toBe(1);
   });
