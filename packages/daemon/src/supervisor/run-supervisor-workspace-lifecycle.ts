@@ -42,6 +42,30 @@ async function machineUpgradeCarriers(
 }
 
 /**
+ * Pushes the recorded pending operation into every binding's child upgrade config. One binding's
+ * refresh failing must not skip the launch below: the record is already committed, so returning
+ * early would leave it pending for the full TTL while nothing is installing.
+ */
+async function refreshMachineUpgradeConfigs(
+  supervisor: MachineSupervisor,
+  refreshChildUpgradeConfig: (workspaceId: string) => Promise<void>,
+  requestId: string,
+): Promise<void> {
+  for (const { workspaceId } of await supervisor.snapshot()) {
+    try {
+      await refreshChildUpgradeConfig(workspaceId);
+    } catch (error) {
+      logger.warn("Refreshing a child's upgrade config after recording a request failed", {
+        event: "upgrade:config_refresh_failed",
+        request_id: requestId,
+        workspace_id: workspaceId,
+        error_message: thrownMessage(error),
+      });
+    }
+  }
+}
+
+/**
  * Settles every binding's pending copy of a machine-level request. One binding's failed save must
  * not keep the rest pending: that is the refusal this settlement exists to clear, and the caller
  * reports the launch failure regardless.
@@ -132,7 +156,7 @@ export async function runWorkspaceLifecycleCommand({
     if (created) {
       // Every binding carries a copy of the pending record, so every child's upgrade config
       // learns it — the same settlement push `daemon:upgrade` gives its one Workspace.
-      await Promise.all(carriers.map((workspaceId) => refreshChildUpgradeConfig(workspaceId)));
+      await refreshMachineUpgradeConfigs(supervisor, refreshChildUpgradeConfig, request.requestId);
       try {
         await launchComputerUpgrade(request.requestId, request.expectedVersion, {
           stateDirectory,
@@ -171,11 +195,7 @@ export async function runWorkspaceLifecycleCommand({
       // Pushes down any settlement `recordUpgrade` just applied to the pending operations it
       // replaced, in addition to the new one, without restarting this Workspace. The record is
       // machine-wide, so every binding's child learns it, not only the requesting one.
-      await Promise.all(
-        (await supervisor.snapshot()).map((binding) =>
-          refreshChildUpgradeConfig(binding.workspaceId),
-        ),
-      );
+      await refreshMachineUpgradeConfigs(supervisor, refreshChildUpgradeConfig, request.requestId);
       try {
         await launchComputerUpgrade(request.requestId, request.expectedVersion, {
           stateDirectory,

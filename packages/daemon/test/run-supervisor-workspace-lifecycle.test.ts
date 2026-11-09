@@ -73,6 +73,43 @@ test("daemon:upgrade records, launches and watches, answering undefined for the 
   expect(d.watchPendingUpgrade).toHaveBeenCalledWith("other", "req", 7);
 });
 
+test("daemon:upgrade still launches when one binding's config refresh fails", async () => {
+  // `recordUpgrade` has already committed the pending operation on every binding. Aborting the
+  // refresh pass there would skip the launch and leave the record pending for its full TTL,
+  // refusing every later upgrade — so one bad binding only costs its own refresh.
+  const pending = {
+    requestId: "req",
+    expectedVersion: "2",
+    state: "pending" as const,
+    requestedAt: 7,
+  };
+  const supervisor = {
+    recordUpgrade: mock(async () => true),
+    snapshot: mock(async () => [
+      { workspaceId: "ws", upgradeOperations: [pending] },
+      { workspaceId: "broken", upgradeOperations: [pending] },
+      { workspaceId: "other", upgradeOperations: [pending] },
+    ]),
+  };
+  const refreshChildUpgradeConfig = mock(async (workspaceId: string) => {
+    if (workspaceId === "broken") throw new Error("binding save failed");
+  });
+  const d = deps({
+    method: "daemon:upgrade",
+    request: {
+      workspaceId: "ws",
+      requestId: "req",
+      expectedVersion: "2",
+    } as DaemonCommandRequest,
+    supervisor: supervisor as never,
+    refreshChildUpgradeConfig,
+  });
+  expect(await runWorkspaceLifecycleCommand(d)).toBeUndefined();
+  expect(refreshChildUpgradeConfig).toHaveBeenCalledTimes(3);
+  expect(d.launchComputerUpgrade).toHaveBeenCalledWith("req", "2", { stateDirectory: "/state" });
+  expect(d.watchPendingUpgrade).toHaveBeenCalledWith("broken", "req", 7);
+});
+
 test("daemon:upgrade_ack acknowledges and refreshes, answering undefined", async () => {
   // No binding carries the request here, so the fallback acknowledges the requesting Workspace:
   // the command still refreshes its child config and answers the view.
@@ -313,6 +350,35 @@ test("daemon:computer_upgrade admits machine-wide, refreshes every child, launch
   expect(d.launchComputerUpgrade).toHaveBeenCalledWith("req", "2", { stateDirectory: "/state" });
   expect(d.watchPendingUpgrade).toHaveBeenCalledWith("a", "req", 7);
   expect(d.watchPendingUpgrade).toHaveBeenCalledWith("b", "req", 7);
+});
+
+test("daemon:computer_upgrade still launches when one binding's config refresh fails", async () => {
+  const pending = {
+    requestId: "req",
+    expectedVersion: "2",
+    state: "pending" as const,
+    requestedAt: 7,
+  };
+  const supervisor = {
+    snapshot: mock(async () => [
+      { workspaceId: "a", upgradeOperations: [pending] },
+      { workspaceId: "broken", upgradeOperations: [pending] },
+    ]),
+    recordUpgrade: mock(async () => true),
+  };
+  const refreshChildUpgradeConfig = mock(async (workspaceId: string) => {
+    if (workspaceId === "broken") throw new Error("binding save failed");
+  });
+  const d = deps({
+    method: "daemon:computer_upgrade",
+    request: { requestId: "req", expectedVersion: "2" } as DaemonCommandRequest,
+    supervisor: supervisor as never,
+    refreshChildUpgradeConfig,
+  });
+  expect(await runWorkspaceLifecycleCommand(d)).toBeUndefined();
+  expect(refreshChildUpgradeConfig).toHaveBeenCalledTimes(2);
+  expect(d.launchComputerUpgrade).toHaveBeenCalledWith("req", "2", { stateDirectory: "/state" });
+  expect(d.watchPendingUpgrade).toHaveBeenCalledWith("broken", "req", 7);
 });
 
 test("daemon:computer_upgrade replay and pending refusal never launch a second job", async () => {
