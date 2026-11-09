@@ -139,6 +139,7 @@ test("Skills result RPC trusts daemon claims rather than claimed payload scope",
   const method = createAgentSkillsListResultMethod({
     accept: async () => {
       accepted++;
+      return true;
     },
   });
   const bytes = encodeAgentSkillsListResult(result);

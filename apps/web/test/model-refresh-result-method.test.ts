@@ -15,6 +15,7 @@ describe("Daemon model refresh result method", () => {
     const method = createDaemonRuntimeProviderModelRefreshResultMethod({
       async accept(result) {
         accepted.push(result);
+        return true;
       },
     });
     const payload = encodeDaemonRuntimeProviderModelRefreshResponse({
@@ -52,6 +53,7 @@ describe("Daemon model refresh result method", () => {
     const method = createDaemonRuntimeProviderModelRefreshResultMethod({
       async accept(result) {
         accepted.push(result);
+        return true;
       },
     });
     const payload = encodeDaemonRuntimeProviderModelRefreshResponse({

@@ -301,6 +301,7 @@ test("Workspace Files list result RPC trusts daemon claims rather than claimed p
   const method = createAgentWorkspaceFilesListResultMethod({
     accept: async () => {
       accepted++;
+      return true;
     },
   });
   const bytes = encodeAgentWorkspaceFilesListResult(result);
@@ -339,6 +340,7 @@ test("Workspace file read result RPC trusts daemon claims rather than claimed pa
   const method = createAgentWorkspaceFileReadResultMethod({
     accept: async () => {
       accepted++;
+      return true;
     },
   });
   const bytes = encodeAgentWorkspaceFileReadResult(result);

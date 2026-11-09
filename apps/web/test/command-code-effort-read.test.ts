@@ -152,6 +152,7 @@ test("the effort result RPC stores this Computer's reply and refuses another Com
   const method = createDaemonRuntimeCommandCodeEffortReadResultMethod({
     accept: async (response) => {
       accepted.push(response.status);
+      return true;
     },
   });
   const payload = encodeDaemonRuntimeCommandCodeEffortReadResponse({

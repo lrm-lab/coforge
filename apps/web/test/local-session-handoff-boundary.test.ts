@@ -98,7 +98,12 @@ test("local session result RPCs accept only their daemon principal scope", async
     [createLocalSessionExcerptResultMethod, encodeLocalSessionExcerptResult(excerpt)],
   ] as const) {
     let accepted = 0;
-    const receive = method({ accept: async () => void accepted++ });
+    const receive = method({
+      accept: async () => {
+        accepted++;
+        return true;
+      },
+    });
     for (const principal of [
       { userId: "", workspaceId: "workspace-1", computerId: "computer-1" },
       { userId: "owner", workspaceId: "other", computerId: "computer-1" },
