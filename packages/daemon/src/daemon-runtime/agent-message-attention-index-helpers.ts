@@ -1,5 +1,6 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { HELD_CONTEXT_LIMIT } from "@lrm/coforge-sdk/internal";
+import type { AgentConsumedSeqEntry } from "#src/persistence/agent-consumed-seq-store";
 
 export const byNumber = (left: number, right: number) => left - right;
 
@@ -102,3 +103,14 @@ export function markNotified(
     if (generation.seenDeliveryIds.has(message.deliveryId))
       generation.notified.add(message.deliveryId);
 }
+
+export type ConsumedAgent = {
+  targets: Map<string, ConsumedTarget>;
+  aliases: Map<string, string>;
+  lastReadOrder: number;
+};
+/** Exact sequences stay sorted above the frontier. reviewedSeq advances only for presented
+ * review context, independently of consumption; readOrder compares reviews across targets. */
+export type ConsumedTarget = {
+  -readonly [K in keyof AgentConsumedSeqEntry]: AgentConsumedSeqEntry[K];
+};

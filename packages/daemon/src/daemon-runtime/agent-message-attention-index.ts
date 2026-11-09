@@ -65,6 +65,8 @@ import {
   markFlushed,
   markNotified,
   sameThreadRoot,
+  type ConsumedAgent,
+  type ConsumedTarget,
   type PendingWindowEntry,
 } from "./agent-message-attention-index-helpers";
 
@@ -190,7 +192,7 @@ export class AgentMessageAttentionIndex {
       if (!generation.notified.has(message.deliveryId)) {
         // The Agent read this before the server re-sent it (a lost acknowledgement): nothing to
         // announce, and the replay is acknowledged so it stops coming back.
-        if (!isCardEvent(message) && this.#alreadyRead(message.agentId, message)) {
+        if (this.#alreadyRead(message.agentId, message)) {
           this.logDecision(message, "consumed");
           await this.acknowledge(message);
           return;
@@ -210,7 +212,7 @@ export class AgentMessageAttentionIndex {
       return;
     }
     this.#remember(generation, message.deliveryId);
-    if (!isCardEvent(message) && this.#alreadyRead(message.agentId, message)) {
+    if (this.#alreadyRead(message.agentId, message)) {
       this.logDecision(message, "consumed");
       await this.acknowledge(message);
       return;
@@ -286,11 +288,13 @@ export class AgentMessageAttentionIndex {
 
   /** Whether the Agent already saw this sequence or its preview. The delivery's conversation is
    * bound first: a cursor still counting another conversation's sequences (the channel was
-   * recreated under the same name) says nothing about this message and is reset by the bind. */
+   * recreated under the same name) says nothing about this message and is reset by the bind.
+   * A card event is never read: it carries its card's own sequence, which the Agent has read. */
   #alreadyRead(
     agentId: string,
-    message: { target: string; sequence: number; conversationId: string },
+    message: { target: string; sequence: number; conversationId: string; reason?: string },
   ): boolean {
+    if (isCardEvent(message)) return false;
     this.bindConversation(agentId, message.target, message.conversationId);
     return (
       this.hasSeen(agentId, message.target, message.sequence) ||
@@ -793,6 +797,7 @@ export class AgentMessageAttentionIndex {
   }
 
   #consumed(message: AgentMessageDelivery & { target: string }): boolean {
+    if (isCardEvent(message)) return false;
     if (message.conversationId)
       this.bindConversation(message.agentId, message.target, message.conversationId);
     return this.hasSeen(message.agentId, message.target, message.sequence);
@@ -1138,12 +1143,3 @@ export class AgentMessageAttentionIndex {
 }
 
 const NO_SEQUENCES: readonly number[] = [];
-
-type ConsumedAgent = {
-  targets: Map<string, ConsumedTarget>;
-  aliases: Map<string, string>;
-  lastReadOrder: number;
-};
-/** Exact sequences stay sorted above the frontier. reviewedSeq advances only for presented
- * review context, independently of consumption; readOrder compares reviews across targets. */
-type ConsumedTarget = { -readonly [K in keyof AgentConsumedSeqEntry]: AgentConsumedSeqEntry[K] };
