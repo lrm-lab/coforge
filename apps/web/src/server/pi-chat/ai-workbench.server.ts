@@ -1,16 +1,19 @@
-import type { DatabaseScope } from "#src/server/db/transaction.server";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
+import { Experiments } from "#src/server/experiments/experiments.server";
+import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
-/** Whether the account has AI Workbench on. NULL, a person who never chose, is on (Frank, 11-09). */
-export async function isAiWorkbenchEnabled(db: DatabaseScope, userId: string) {
-  const row = await db.userPreference.findUnique({
-    where: { userId },
-    select: { aiWorkbenchEnabled: true },
-  });
-  return row?.aiWorkbenchEnabled !== false;
+/** Whether the Workspace has AI Workbench on: on unless its owner or an admin switched the
+ * `aiWorkbench` experiment off, for everyone in it (Frank, 11-09). */
+export function isAiWorkbenchEnabled(db: PrismaClient, workspaceId: string) {
+  return new Experiments(new PrismaExperimentsRepository(db), isFeatureEnabled).enabled(
+    "aiWorkbench",
+    { workspaceId },
+  );
 }
 
-/** Refuses an account whose AI Workbench switch is off; every Workbench entry calls it. */
-export async function requireAiWorkbench(db: DatabaseScope, userId: string) {
-  if (!(await isAiWorkbenchEnabled(db, userId))) throw new AppError("ACCESS_DENIED");
+/** Refuses a Workspace whose AI Workbench switch is off; every Workbench entry calls it. */
+export async function requireAiWorkbench(db: PrismaClient, workspaceId: string) {
+  if (!(await isAiWorkbenchEnabled(db, workspaceId))) throw new AppError("ACCESS_DENIED");
 }

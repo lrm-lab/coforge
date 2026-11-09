@@ -24,7 +24,7 @@ export function piChatConfiguration() {
   );
 }
 export async function canUsePiChat(db: PrismaClient, scope: PiChatScope) {
-  if (!(await isAiWorkbenchEnabled(db, scope.userId))) return false;
+  if (!(await isAiWorkbenchEnabled(db, scope.workspaceId))) return false;
   return !!(await db.computer.findFirst({
     where: {
       id: scope.computerId,

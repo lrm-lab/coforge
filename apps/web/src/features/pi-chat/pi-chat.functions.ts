@@ -17,7 +17,7 @@ export const getPiChatComputers = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     declareNoStore();
-    await requireAiWorkbench(context.db, context.user.id);
+    await requireAiWorkbench(context.db, context.workspaceId);
     const computers = await context.db.computer.findMany({
       where: {
         ownerId: context.user.id,
@@ -56,7 +56,7 @@ export const executePiChat = createServerFn({ method: "POST" })
   .validator(z.object({ computerId: z.uuid(), command: piChatCommandSchema }))
   .handler(async ({ context, data }) => {
     declareNoStore();
-    await requireAiWorkbench(context.db, context.user.id);
+    await requireAiWorkbench(context.db, context.workspaceId);
     return productionPiChat(context.db).execute(
       { userId: context.user.id, workspaceId: context.workspaceId },
       data.computerId,

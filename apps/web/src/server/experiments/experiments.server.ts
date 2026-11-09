@@ -19,6 +19,7 @@ export const EXPERIMENTS = {
   taskConversations: { flag: null, defaultEnabled: false, reload: false },
   drafts: { flag: null, defaultEnabled: true, reload: false },
   artifacts: { flag: null, defaultEnabled: false, reload: false },
+  aiWorkbench: { flag: null, defaultEnabled: true, reload: false },
 } as const satisfies Record<
   string,
   { flag: FeatureFlag | null; defaultEnabled: boolean; reload: boolean }
