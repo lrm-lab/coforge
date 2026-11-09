@@ -199,9 +199,7 @@ describe("PrismaComputerRuntimeRepository", () => {
         create: async (args: unknown) => created.push({ table: "runtime", args }),
       },
       computerModelCatalog: {
-        findMany: async () => [
-          { provider: "pi", models: [{ id: "muse-spark" }], observedAt },
-        ],
+        findMany: async () => [{ provider: "pi", models: [{ id: "muse-spark" }], observedAt }],
         create: async (args: unknown) => created.push({ table: "catalog", args }),
       },
       $transaction: async (execute: (tx: typeof db) => Promise<void>) => execute(db),
