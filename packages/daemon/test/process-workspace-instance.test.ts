@@ -32,7 +32,9 @@ test("ensureStarted spawns __workspace-daemon once and reuses a live PID", async
   const cfg = await config();
   const spawns: { command: string[]; env: Record<string, string> }[] = [];
   let alive = true;
+  const savedDaemonApiKey = process.env.COFORGE_DAEMON_API_KEY;
   try {
+    process.env.COFORGE_DAEMON_API_KEY = "dk_computer-secret";
     const instance = new ProcessWorkspaceInstance(
       cfg,
       async (input) => {
@@ -57,6 +59,7 @@ test("ensureStarted spawns __workspace-daemon once and reuses a live PID", async
     expect(spawns[0]?.env.COFORGE_DAEMON_CONNECTION_ENDPOINT).toBe(
       "ws://127.0.0.1:8000/connection/websocket",
     );
+    expect(spawns[0]?.env.COFORGE_DAEMON_API_KEY).toBeUndefined();
     // The child self-registers the instance record so a Coordinator that dies before its own
     // write still leaves an adoptable live instance.
     expect(spawns[0]?.env.COFORGE_WORKSPACE_INSTANCE_RECORD).toBe(
@@ -73,6 +76,8 @@ test("ensureStarted spawns __workspace-daemon once and reuses a live PID", async
     const second = await instance.identity();
     expect(second?.invocationId).not.toBe(first?.invocationId);
   } finally {
+    if (savedDaemonApiKey === undefined) delete process.env.COFORGE_DAEMON_API_KEY;
+    else process.env.COFORGE_DAEMON_API_KEY = savedDaemonApiKey;
     await rm(cfg.root, { recursive: true, force: true });
   }
 });

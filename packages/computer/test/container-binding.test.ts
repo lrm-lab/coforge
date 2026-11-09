@@ -8,6 +8,7 @@ import {
   prepareContainerBinding,
   type RunningWorkspaceStart,
 } from "#src/host/container-binding";
+import { CONTAINER_BINDING_ENV_KEYS } from "#src/host/container-binding-env";
 import { FileDaemonCredentialStore, workspaceStateDirectory } from "@lrm/coforge-daemon";
 
 const daemonKey = `dk_${"b".repeat(43)}`;
@@ -263,6 +264,24 @@ test("preparing the live container environment marks the process as a cloud comp
     if (saved === undefined) delete process.env.COFORGE_COMPUTER_CLOUD;
     else process.env.COFORGE_COMPUTER_CLOUD = saved;
     for (const [key, value] of savedKeys) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("preparing the live container environment clears its binding variables", async () => {
+  const directory = await stateDirectory();
+  const savedCloudMarker = process.env.COFORGE_COMPUTER_CLOUD;
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  try {
+    Object.assign(process.env, env);
+    expect(await prepareContainerBinding(process.env, directory)).toBe(true);
+    for (const key of CONTAINER_BINDING_ENV_KEYS) expect(process.env[key]).toBeUndefined();
+  } finally {
+    if (savedCloudMarker === undefined) delete process.env.COFORGE_COMPUTER_CLOUD;
+    else process.env.COFORGE_COMPUTER_CLOUD = savedCloudMarker;
+    for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }

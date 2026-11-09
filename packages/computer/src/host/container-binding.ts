@@ -35,7 +35,8 @@ export async function prepareContainerBinding(
   // Only the container's own live environment proves this process is a cloud Computer; a
   // snapshot passed for a dry run must not mark it. Workspace Daemons and Agents inherit the
   // marker so they never mistake the workspace for a desktop session.
-  if (env === process.env) process.env.COFORGE_COMPUTER_CLOUD = "1";
+  const liveEnvironment = env === process.env;
+  if (liveEnvironment) process.env.COFORGE_COMPUTER_CLOUD = "1";
   const daemonApiKey = text(env.COFORGE_DAEMON_API_KEY);
   const workspaceId = text(env.COFORGE_WORKSPACE_ID);
   const computerId = text(env.COFORGE_COMPUTER_ID);
@@ -83,6 +84,7 @@ export async function prepareContainerBinding(
   } else {
     await credentials.save(workspaceId, computerId, daemonApiKey);
   }
+  if (liveEnvironment) for (const key of CONTAINER_BINDING_ENV_KEYS) delete process.env[key];
   return true;
 }
 
@@ -94,12 +96,12 @@ export async function attachRunningWorkspace(
   expectedServerUrl: string | undefined,
   startWorkspace: (config: RunningWorkspaceStart) => Promise<void>,
 ): Promise<boolean> {
-  const wrote = await prepareContainerBinding(env, stateDirectory, expectedServerUrl);
-  if (!wrote) return false;
   const workspaceId = text(env.COFORGE_WORKSPACE_ID);
   const computerId = text(env.COFORGE_COMPUTER_ID);
   const envKey = text(env.COFORGE_DAEMON_API_KEY);
   const serverHttpUrl = text(env.COFORGE_SERVER_URL)?.replace(/\/+$/, "");
+  const wrote = await prepareContainerBinding(env, stateDirectory, expectedServerUrl);
+  if (!wrote) return false;
   if (!workspaceId || !computerId || !envKey || !serverHttpUrl) return false;
   // Configure must carry the credential the file actually holds: `prepareContainerBinding` may
   // have kept a confirmed `sk_computer` over the env's `dk_`, and the supervisor's configure

@@ -54,6 +54,7 @@ export const DAEMON_LAUNCH_ENV_KEYS = [
   // on that Workspace (a Daemon test run from an Agent's checkout booted out every Agent job of
   // its host Workspace).
   "COFORGE_DAEMON_HOME",
+  "COFORGE_DAEMON_API_KEY",
   "COFORGE_DAEMON_SERVER_URL",
   "COFORGE_DAEMON_VERSION",
   "COFORGE_WORKSPACE_AGENT_PREFIX",

@@ -269,6 +269,15 @@ test("an Agent never inherits the Workspace Daemon's own launch scope", () => {
   expect(environment.ANTHROPIC_API_KEY).toBe("host-provider-key");
 });
 
+test("an Agent never inherits the Computer's daemon credential", () => {
+  const environment = agentEnvironment(undefined, {
+    PATH: "/usr/bin",
+    COFORGE_DAEMON_API_KEY: "dk_computer-secret",
+  });
+
+  expect(environment).not.toHaveProperty("COFORGE_DAEMON_API_KEY");
+});
+
 test("source development resolves the CLI without a separately compiled daemon CLI", () => {
   const result = Bun.spawnSync(["coforge", "message", "check"], {
     cwd: "/tmp",
