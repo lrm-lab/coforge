@@ -5,6 +5,7 @@ import {
   type DaemonCommandRequest,
   type ManagedRuntimeIdentity,
 } from "@lrm/coforge-sdk/internal";
+import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { UpgradeLaunchFailedError } from "./upgrade-error";
 import type { MachineSupervisor } from "./machine-supervisor";
 import type { ComputerUpgradeReceipt } from "#src/platform/computer-upgrade-receipts";
@@ -59,7 +60,9 @@ async function refreshMachineUpgradeConfigs(
         event: "upgrade:config_refresh_failed",
         request_id: requestId,
         workspace_id: workspaceId,
-        error_message: thrownMessage(error),
+        // The child's own words may carry a credential; the redactor is the one every other
+        // provider-facing log field goes through, and it bounds the length too.
+        error_message: scrubRuntimeErrorText(thrownMessage(error)),
       });
     }
   }
