@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { totalmem } from "node:os";
 import { isAbsolute, relative } from "node:path";
+import { isPrivateRegularFile } from "#src/agent-runtime/private-file";
 
 export const CONTEXT_VIEW_SOURCE_MAX_BYTES = 512 * 1024 * 1024;
 export const CONTEXT_VIEW_SOURCE_READ_FLAGS =
@@ -58,11 +59,11 @@ export function readContextViewSource(
     const inRoot = realRoots.some((root) => contained(realSource, root));
     if (!inRoot) return { ok: false, failure: "outside_root" };
     const listed = lstatSync(sourcePath);
-    if (!listed.isFile() || listed.nlink > 1) return { ok: false, failure: "unsafe" };
+    if (!isPrivateRegularFile(listed)) return { ok: false, failure: "unsafe" };
     const fd = openSync(sourcePath, CONTEXT_VIEW_SOURCE_READ_FLAGS);
     try {
       const info = fstatSync(fd);
-      if (!info.isFile() || info.nlink > 1 || info.dev !== listed.dev || info.ino !== listed.ino)
+      if (!isPrivateRegularFile(info) || info.dev !== listed.dev || info.ino !== listed.ino)
         return { ok: false, failure: "unsafe" };
       if (info.size > maxBytes) return { ok: false, failure: "too_large" };
       const buffer = readFileSync(fd);

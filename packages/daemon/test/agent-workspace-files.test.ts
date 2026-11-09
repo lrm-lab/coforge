@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { chmod, mkdtemp, mkdir, rm, stat, symlink } from "node:fs/promises";
+import { chmod, link, mkdtemp, mkdir, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -243,6 +243,37 @@ test("Workspace File read returns the exact text content for a normal file", asy
     expect(result.sizeBytes).toBe("hello workspace".length);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Workspace Files listing and reading refuse a hard link to a file outside the workspace", async () => {
+  const parent = await mkdtemp(join(tempRoot, "workspace-files-hardlink-"));
+  const root = join(parent, "agent");
+  const outside = join(parent, "outside");
+  try {
+    await mkdir(root);
+    await mkdir(outside);
+    const outsideFile = join(outside, "secret.txt");
+    await Bun.write(outsideFile, "outside contents");
+    const linkedFile = join(root, "linked.txt");
+    await link(outsideFile, linkedFile);
+
+    const listed = await listAgentWorkspaceFiles({
+      agentWorkspaceDirectory: root,
+      dirPath: "",
+      includeHidden: false,
+    });
+    expect(listed.entries.find((entry) => entry.name === "linked.txt")?.type).toBe("other");
+
+    const read = await readAgentWorkspaceFile({
+      agentWorkspaceDirectory: root,
+      path: "linked.txt",
+    });
+    expect(read.status).toBe("unreadable");
+    expect(read.text).toBe("");
+    expect(read.contentBase64).toBe("");
+  } finally {
+    await rm(parent, { recursive: true, force: true });
   }
 });
 

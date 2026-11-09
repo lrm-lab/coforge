@@ -37,15 +37,18 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
         offset={desktopOffset}
         mobileOffset={offset}
         style={toastStyle}
+        closeButton
         icons={{
           success: <CheckCircle aria-hidden="true" className="size-4 text-success-primary" />,
           error: <AlertCircle aria-hidden="true" className="size-4 text-error-primary" />,
         }}
         toastOptions={{
           classNames: {
-            toast: "rounded-xl!",
+            toast: "group relative rounded-xl!",
             title: "text-sm! font-medium!",
             description: "text-xs! text-tertiary!",
+            closeButton: "opacity-0! transition-opacity! group-hover:opacity-100! bg-tertiary! text-primary! border-none!",
+            actionButton: "opacity-0! transition-opacity! group-hover:opacity-100! bg-primary! text-primary! rounded-md! px-3! py-1.5!",
           },
         }}
       />

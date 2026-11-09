@@ -4,6 +4,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { COFORGE_RUNTIME_STORAGE_DIRS } from "@coforge/agent";
 import { RPC_PAYLOAD_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
+import { isPrivateRegularFile } from "./private-file";
 
 const logger = getLogger(["coforge", "daemon", "agent-workspace"]);
 
@@ -255,7 +256,7 @@ export async function listAgentWorkspaceFiles(params: {
               ? "symlink"
               : info.isDirectory()
                 ? "dir"
-                : info.isFile()
+                : isPrivateRegularFile(info)
                   ? "file"
                   : "other";
             return {
@@ -314,7 +315,7 @@ export async function readAgentWorkspaceFile(params: {
     }
     try {
       const info = await file.stat();
-      if (!info.isFile()) return { status: "unreadable", ...empty };
+      if (!isPrivateRegularFile(info)) return { status: "unreadable", ...empty };
       const sizeBytes = info.size;
       const modifiedAtMs = Math.round(info.mtimeMs);
       /** This file's metadata with no content: a read that will not hand its bytes over. */
