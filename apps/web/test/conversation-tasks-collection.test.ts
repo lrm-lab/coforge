@@ -6,6 +6,7 @@ import {
   createConversationTasks,
   DEMAND_GC_TIME_MS,
   messageWindowTasks,
+  taskNumberReads,
   type ConversationTasksApi,
 } from "#src/features/tasks/conversation-tasks-collection";
 import { UNFINISHED_STATUSES } from "#src/features/tasks/finished-tasks";
@@ -450,4 +451,23 @@ test("a message's Task is found by the message it is attached to, whatever the T
   // Its deletion takes it off the message too.
   tasks.apply([{ tasks: [], deleted: ["task-own-id-7"] }]);
   expect(tasks.store.state.byMessage.has("message-7")).toBe(false);
+});
+
+test("a window naming more Tasks than one read takes asks for them all, a read per block of numbers", () => {
+  // A busy channel's history: #1 to #250, then #682, #701 and #709 (task #coforge-ui:#26, where
+  // only the first 200 were read and the newest references showed as bare numbers).
+  const named = [...Array.from({ length: 250 }, (_, index) => index + 1), 682, 701, 709];
+  const messages = named.map((number, index) => ({
+    sequence: index + 1,
+    body: `<@task:${number}>`,
+  }));
+  const window = messageWindowTasks(messages, false, HERE)!;
+  expect(window.numbers).toEqual(named);
+  const reads = taskNumberReads(window.numbers);
+  expect(reads.map((read) => read.numbers.length)).toEqual([200, 50, 3]);
+  expect(reads.flatMap((read) => read.numbers)).toEqual(named);
+  for (const read of reads) expect(read.numbers.length).toBeLessThanOrEqual(200);
+  // A block's read stays the same when another block gains a number.
+  const more = taskNumberReads([...window.numbers, 300]);
+  expect(more.find((read) => read.block === 0)).toEqual(reads.find((read) => read.block === 0));
 });

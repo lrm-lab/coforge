@@ -104,10 +104,22 @@ export function messageWindowTasks(
   return {
     sequenceFrom,
     ...(hasNewer && { sequenceTo }),
-    numbers: [...numbers]
-      .sort((left, right) => left - right)
-      .slice(0, CONVERSATION_TASK_NUMBERS_MAX),
+    numbers: [...numbers].sort((left, right) => left - right),
   };
+}
+
+/**
+ * Those numbers in reads of at most `CONVERSATION_TASK_NUMBERS_MAX` each: one per block of numbers
+ * (1-200, 201-400, ...), so a window naming more Tasks than one read takes reads them all (a busy
+ * channel's history names hundreds), and a page that adds a number re-reads only its block.
+ */
+export function taskNumberReads(numbers: readonly number[]) {
+  const blocks = new Map<number, number[]>();
+  for (const number of numbers) {
+    const block = Math.floor((number - 1) / CONVERSATION_TASK_NUMBERS_MAX);
+    blocks.set(block, [...(blocks.get(block) ?? []), number]);
+  }
+  return [...blocks].map(([block, inBlock]) => ({ block, numbers: inBlock }));
 }
 
 /** Task changes to apply: announced ones (`task.changed.v1`), or a command's own result. */

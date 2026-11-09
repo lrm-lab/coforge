@@ -1,7 +1,11 @@
 import { memo, useMemo } from "react";
 import { and, gte, inArray, lte, useLiveQuery } from "@tanstack/react-db";
 
-import { DEMAND_GC_TIME_MS, messageWindowTasks } from "./conversation-tasks-collection";
+import {
+  DEMAND_GC_TIME_MS,
+  messageWindowTasks,
+  taskNumberReads,
+} from "./conversation-tasks-collection";
 import { useConversationTasksCollection } from "./use-conversation-tasks";
 
 /**
@@ -57,8 +61,8 @@ const TaskReads = memo(function TaskReads({
   openTaskNumber: number | undefined;
 }) {
   const { collection } = useConversationTasksCollection(conversationId);
-  const numbers = useMemo(
-    () => (numbersKey ? numbersKey.split(",").map(Number) : []),
+  const reads = useMemo(
+    () => taskNumberReads(numbersKey ? numbersKey.split(",").map(Number) : []),
     [numbersKey],
   );
   useLiveQuery({
@@ -74,19 +78,35 @@ const TaskReads = memo(function TaskReads({
             ),
     gcTime: DEMAND_GC_TIME_MS,
   });
-  useLiveQuery({
-    query: (q) =>
-      numbers.length === 0
-        ? undefined
-        : q.from({ task: collection }).where(({ task }) => inArray(task.number, numbers)),
-    gcTime: DEMAND_GC_TIME_MS,
-  });
   // The popup's Task may be none of those (a finished one opened from the Tasks tab).
   useLiveQuery({
     query: (q) =>
       openTaskNumber === undefined
         ? undefined
         : q.from({ task: collection }).where(({ task }) => inArray(task.number, [openTaskNumber])),
+    gcTime: DEMAND_GC_TIME_MS,
+  });
+  // The Tasks the bodies name, a read per block of numbers.
+  return reads.map((read) => (
+    <NumberRead
+      key={read.block}
+      conversationId={conversationId}
+      numbersKey={read.numbers.join(",")}
+    />
+  ));
+});
+
+const NumberRead = memo(function NumberRead({
+  conversationId,
+  numbersKey,
+}: {
+  conversationId: string;
+  numbersKey: string;
+}) {
+  const { collection } = useConversationTasksCollection(conversationId);
+  const numbers = useMemo(() => numbersKey.split(",").map(Number), [numbersKey]);
+  useLiveQuery({
+    query: (q) => q.from({ task: collection }).where(({ task }) => inArray(task.number, numbers)),
     gcTime: DEMAND_GC_TIME_MS,
   });
   return null;
