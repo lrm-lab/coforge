@@ -163,6 +163,87 @@ test("9. QA's staging flow: the Agent replies in its own message's thread; openi
   await shot("9-thread-read-after-reload");
 }, 180_000);
 
+test("10. QA's second staging flow: the viewer's own root, the DM opened first, the thread opened from its summary", async () => {
+  const peer = await newPeer("viewer-root");
+  await browser("set", "viewport", "1440", "900");
+  const root = await viewerSays(peer, "Probe root from the viewer");
+  await openPage(`/channel/${state.otherChannelId}`, peer);
+  await agentSays(peer, "OK probe reply", root.id);
+  await expectBadge(peer, 1);
+  // The DM first: its row clears (QA saw this half work).
+  await openPage(`/dm/${peer.conversationId}`, peer);
+  await expectBadge(peer, 0);
+  const summary = `[...document.querySelectorAll("button, a")].find((el) => /^1 reply/.test(el.textContent?.trim() ?? ""))`;
+  await browser("wait", "--fn", `Boolean(${summary})`, "--timeout", "15000");
+  await browser("eval", `${summary}.click()`);
+  await browser("wait", "--fn", `location.search.includes("threadRootId")`, "--timeout", "10000");
+  await Bun.sleep(4_000);
+  await shot("10-thread-open");
+  const reads = await db.threadRead.findMany({
+    where: { rootMessageId: root.id, memberId: peer.memberId },
+  });
+  const reply = await db.message.findFirstOrThrow({ where: { threadRootId: root.id } });
+  expect(reads.map((read) => read.readThroughSequence)).toEqual([reply.sequence]);
+  // The summary under the root clears there and then, with no reload.
+  expect(
+    JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${summary}.textContent)`))),
+  ).not.toContain("unread");
+  await openPage(`/dm/${peer.conversationId}`, peer);
+  await browser("wait", "--fn", `Boolean(${summary})`, "--timeout", "15000");
+  expect(
+    JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${summary}.textContent)`))),
+  ).not.toContain("unread");
+}, 180_000);
+
+test("11. the thread pane is open when the Agent's reply arrives live; it is read, past a reload", async () => {
+  const peer = await newPeer("live-thread");
+  await browser("set", "viewport", "1440", "900");
+  const root = await viewerSays(peer, "Live probe root");
+  await openPage(`/dm/${peer.conversationId}?threadRootId=${root.id}`, peer);
+  await agentSays(peer, "Live probe reply", root.id);
+  await browser(
+    "wait",
+    "--fn",
+    `document.body.innerText.includes("Live probe reply")`,
+    "--timeout",
+    "15000",
+  );
+  await Bun.sleep(4_000);
+  const reply = await db.message.findFirstOrThrow({ where: { threadRootId: root.id } });
+  const reads = await db.threadRead.findMany({
+    where: { rootMessageId: root.id, memberId: peer.memberId },
+  });
+  expect(reads.map((read) => read.readThroughSequence)).toEqual([reply.sequence]);
+}, 180_000);
+
+test("12. a thread read stored elsewhere (another tab) clears the summary on reload", async () => {
+  const peer = await newPeer("stored-read");
+  await browser("set", "viewport", "1440", "900");
+  const root = await viewerSays(peer, "Stored read root");
+  await agentSays(peer, "Stored read reply", root.id);
+  const reply = await db.message.findFirstOrThrow({ where: { threadRootId: root.id } });
+  // The browser keeps a copy of the DM showing the thread unread.
+  await openPage(`/dm/${peer.conversationId}`, peer);
+  const summary = `[...document.querySelectorAll("button, a")].find((el) => /^1 reply/.test(el.textContent?.trim() ?? ""))?.textContent ?? ""`;
+  await browser("wait", "--fn", `${summary}.includes("unread")`, "--timeout", "15000");
+  await openPage(`/channel/${state.otherChannelId}`, peer);
+  const member = await db.conversationMember.findUniqueOrThrow({ where: { id: peer.memberId } });
+  await db.threadRead.create({
+    data: {
+      memberId: peer.memberId,
+      rootMessageId: root.id,
+      conversationId: peer.conversationId,
+      workspaceId: member.workspaceId,
+      readThroughSequence: reply.sequence,
+    },
+  });
+  await openPage(`/dm/${peer.conversationId}`, peer, 8_000);
+  await shot("12-stored-read-after-reload");
+  expect(JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${summary})`)))).not.toContain(
+    "unread",
+  );
+}, 180_000);
+
 test("6. no badge while the DM is open; once left, the next reply badges it", async () => {
   const peer = await newPeer("open");
   await browser("set", "viewport", "1440", "900");
