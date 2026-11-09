@@ -332,7 +332,7 @@ export function ChannelConversation({
       }}
       header={
         <ChannelConversationHeader
-          conversation={conversation}
+          conversation={conversationWithFreshDirectory}
           active="chat"
           onShowTasks={onShowTasks}
           onShowFiles={onShowFiles}

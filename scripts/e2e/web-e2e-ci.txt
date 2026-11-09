@@ -46,6 +46,7 @@ e2e-search-home.e2e.ts 13
 e2e-avatars-everywhere.e2e.ts 13
 e2e-channel-create-agent-entry.e2e.ts 13
 e2e-activity-inbox.e2e.ts 12
+e2e-channel-coordinator-members.e2e.ts 12
 e2e-channel-notify-menu.e2e.ts 12
 e2e-conversation-task-board.e2e.ts 12
 e2e-message-task-pill.e2e.ts 12

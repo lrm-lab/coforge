@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -32,6 +32,7 @@ import {
 import { useReopenClosedOnOpen } from "./sidebar-lists";
 import { useStandaloneThread } from "./standalone-thread";
 import { useChannelConversation, useDirectConversation } from "./use-conversation-data";
+import { useChannelMentionables } from "./use-channel-mentionables";
 import { useConversationView, useShownConversationTab } from "./use-conversation-view";
 import { useConversationOpened } from "./use-conversation-open";
 import { usePageAttended } from "./use-page-attended";
@@ -72,12 +73,28 @@ function ChannelConversationPage({
   const { page, taskView, refreshChannelAndSidebar, conversationProps } =
     useChannelConversation(channelId);
   const { conversation } = page;
+  // The page payload's member directory is a mount-time copy: it only changes on a full reload.
+  // Every surface below the composer — the settings panel's coordinator picker, the header, the
+  // Tasks tab's member list — reads the live directory instead, the same one `member.changed.v1`
+  // already refreshes for @-completion (task #736).
+  const freshMentionables = useChannelMentionables(channelId, conversation.mentionables);
+  const freshConversation = useMemo(
+    () => ({
+      ...conversation,
+      mentionables: freshMentionables ?? conversation.mentionables,
+    }),
+    [conversation, freshMentionables],
+  );
+  const freshPage = useMemo(
+    () => ({ ...page, conversation: freshConversation }),
+    [page, freshConversation],
+  );
   const advanceReadCursor = useServerFn(markPublicChannelRead);
   return (
     <ConversationPageBody
       {...props}
       unreadKey={channelId}
-      page={page}
+      page={freshPage}
       taskView={taskView}
       // Only a member advances the read cursor, creates Tasks and moves them; anyone else sees the
       // join prompt. The viewer is always a member of their own direct conversation.
@@ -89,13 +106,18 @@ function ChannelConversationPage({
       }}
       header={(tabs) => (
         <ChannelConversationHeader
-          conversation={conversation}
+          conversation={freshConversation}
           {...tabs}
           onChanged={refreshChannelAndSidebar}
         />
       )}
       conversation={(chat) => (
-        <ChannelConversation key={channelId} {...conversationProps} {...chat} />
+        <ChannelConversation
+          key={channelId}
+          {...conversationProps}
+          conversation={freshConversation}
+          {...chat}
+        />
       )}
     />
   );
