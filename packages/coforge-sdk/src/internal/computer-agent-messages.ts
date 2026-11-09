@@ -112,9 +112,11 @@ export type DaemonRuntimeReadyRequest = {
 };
 
 /** The server's answer to a daemon's ready: the release feed's newest Computer version, so a
- * daemon on an older Computer can say so. Absent from an older server's empty reply. */
+ * daemon on an older Computer can say so; and whether this server takes the `accepted` Agent
+ * control phase. Both absent from an older server's empty reply. */
 export type DaemonRuntimeReadyResponse = {
   latestComputerVersion?: string;
+  agentControlAccepted?: boolean;
 };
 export type ComputerRestartIntent = {
   protocolMajor: number;

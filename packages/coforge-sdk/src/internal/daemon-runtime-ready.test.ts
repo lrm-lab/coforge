@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import {
   decodeDaemonRuntimeReadyRequest,
+  decodeDaemonRuntimeReadyResponse,
   encodeDaemonRuntimeReadyRequest,
+  encodeDaemonRuntimeReadyResponse,
 } from "./daemon-runtime-ready-codec";
 
 const ready = {
@@ -60,6 +62,18 @@ test("round-trips a Workspace-scoped Computer restart intent", async () => {
     messageType: "coforge.rpc.v1.ComputerRestartIntent" as const,
   };
   expect(decodeComputerRestartIntent(encodeComputerRestartIntent(intent))).toEqual(intent);
+});
+
+test("round-trips the optional accepted-control capability flag in the ready response", () => {
+  const response = { agentControlAccepted: true, latestComputerVersion: "1.2.3" };
+  expect(
+    decodeDaemonRuntimeReadyResponse(encodeDaemonRuntimeReadyResponse(response)),
+  ).toMatchObject(response);
+  // An old server sends nothing; the flag stays absent rather than defaulting true.
+  expect(decodeDaemonRuntimeReadyResponse(new Uint8Array()).agentControlAccepted).toBeUndefined();
+  expect(
+    decodeDaemonRuntimeReadyResponse(encodeDaemonRuntimeReadyResponse({})).agentControlAccepted,
+  ).toBeUndefined();
 });
 
 test("rejects empty and duplicate running Agent IDs", () => {

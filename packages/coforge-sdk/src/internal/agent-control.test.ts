@@ -114,3 +114,36 @@ test("exports stable lifecycle methods", () => {
   expect(AGENT_CONTROL_RESULT_METHOD).toBe("agent:v1:control:result");
   expect(AGENT_SESSION_METHOD).toBe("agent:v1:session:get");
 });
+
+test("round-trips the accepted acknowledgement and bounded failure detail", () => {
+  const accepted = { ...scope, phase: "accepted" as const, sequence: 1 };
+  expect(decodeAgentControlResult(encodeAgentControlResult(accepted))).toEqual(accepted);
+
+  const failed = {
+    ...scope,
+    phase: "failed" as const,
+    sequence: 1,
+    errorCode: "provider-error",
+    errorDetail: "Provider refused the launch: quota exceeded",
+  };
+  expect(decodeAgentControlResult(encodeAgentControlResult(failed))).toEqual(failed);
+
+  // The bound counts code points, not UTF-16 units.
+  const detail = "界".repeat(512);
+  expect(
+    decodeAgentControlResult(encodeAgentControlResult({ ...failed, errorDetail: detail }))
+      .errorDetail,
+  ).toBe(detail);
+});
+
+test("rejects failure detail past the code-point bound", () => {
+  expect(() =>
+    encodeAgentControlResult({
+      ...scope,
+      phase: "failed",
+      sequence: 1,
+      errorCode: "provider-error",
+      errorDetail: "界".repeat(513),
+    }),
+  ).toThrow();
+});

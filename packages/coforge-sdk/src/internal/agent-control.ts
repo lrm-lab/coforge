@@ -1,6 +1,8 @@
 import { RPC_METHODS } from "./rpc-methods";
 import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
+import { codePointLength } from "./truncate";
+import { MAX_VISIBLE_ERROR_CHARS } from "./runtime-error-action";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   AgentWorkspaceResetRequestSchema,
@@ -10,6 +12,9 @@ import { requireRuntimeProvider, type RuntimeProvider } from "./index";
 
 export const AGENT_WORKSPACE_RESET_METHOD = RPC_METHODS.agentWorkspaceReset;
 export const AGENT_CONTROL_RESULT_METHOD = RPC_METHODS.agentControlResult;
+/** Daemon capability: this daemon sends an `accepted` AgentControlResult before queueing a
+ * control operation, and only when the server's ready reply sets `agentControlAccepted`. */
+export const AGENT_CONTROL_ACCEPTED_CAPABILITY = "agent-control-accepted:v1" as const;
 
 const WORKSPACE_RESET_TYPE = "coforge.rpc.v1.AgentWorkspaceResetRequest";
 const RESULT_TYPE = "coforge.rpc.v1.AgentControlResult";
@@ -36,11 +41,16 @@ export type AgentControlScope = {
 export type AgentWorkspaceResetRequest = AgentControlScope;
 
 export type AgentControlResult = AgentControlScope & {
-  phase: "stopped" | "workspace-reset" | "started" | "failed";
+  /** `accepted` is the daemon's immediate acknowledgement ahead of the serialized operation;
+   * the remaining phases are the operation's terminal or intermediate lifecycle reports. */
+  phase: "accepted" | "stopped" | "workspace-reset" | "started" | "failed";
   launchId?: string;
   sequence: number;
   identity?: SessionIdentity;
   errorCode?: string;
+  /** A `failed` result's provider/runtime failure words, credential-redacted and capped at
+   * `MAX_VISIBLE_ERROR_CHARS`; absent when the failure carries none. */
+  errorDetail?: string;
 };
 
 export type AgentSessionSnapshot = AgentControlScope & {
@@ -121,14 +131,22 @@ export function decodeAgentWorkspaceResetRequest(bytes: Uint8Array): AgentWorksp
   return scope({ ...value, provider: provider(value.provider) });
 }
 
+const CONTROL_PHASES = ["accepted", "stopped", "workspace-reset", "started", "failed"] as const;
+
 function checkedResult(value: AgentControlResult): AgentControlResult {
   const checkedScope = scope(value);
-  if (!["stopped", "workspace-reset", "started", "failed"].includes(value.phase))
+  if (!(CONTROL_PHASES as readonly string[]).includes(value.phase))
     throw new Error("Invalid Agent lifecycle phase");
   if (value.launchId !== undefined && !isScopeId(value.launchId))
     throw new Error("Invalid Agent lifecycle launch ID");
   if (value.errorCode !== undefined && !ERROR_CODE.test(value.errorCode))
     throw new Error("Invalid Agent lifecycle error code");
+  if (
+    value.errorDetail !== undefined &&
+    (typeof value.errorDetail !== "string" ||
+      codePointLength(value.errorDetail) > MAX_VISIBLE_ERROR_CHARS)
+  )
+    throw new Error("Invalid Agent lifecycle error detail");
   return {
     ...checkedScope,
     phase: value.phase,
@@ -136,6 +154,7 @@ function checkedResult(value: AgentControlResult): AgentControlResult {
     ...(value.launchId !== undefined ? { launchId: value.launchId } : {}),
     ...(value.identity !== undefined ? { identity: identity(value.identity) } : {}),
     ...(value.errorCode !== undefined ? { errorCode: value.errorCode } : {}),
+    ...(value.errorDetail !== undefined ? { errorDetail: value.errorDetail } : {}),
   };
 }
 

@@ -55,6 +55,10 @@ message DaemonRuntimeReadyRequest {
 // daemon whose Computer is older can say so without a call of its own. Additive.
 message DaemonRuntimeReadyResponse {
   optional string latest_computer_version = 1;
+  // The server understands the AgentControlResult `accepted` phase: set so a daemon that
+  // advertised `agent-control-accepted:v1` may send it. Absent from an older server's reply,
+  // which a daemon reads as "never send accepted". Additive.
+  optional bool agent_control_accepted = 2;
 }
 
 // The Workspace daemon's last word before it closes its connection on purpose: why it is going

@@ -33,6 +33,10 @@ message AgentControlResult {
   SessionIdentity identity = 11;
   optional string error_code = 12;
   string message_type = 13;
+  // The provider/runtime's own failure words for a `failed` result, credential-redacted and
+  // bounded by the sender; absent when the failure carries none. Additive: an older peer that
+  // never sends it decodes the field as absent, and an older decoder ignores it.
+  optional string error_detail = 14;
 }
 
 // Versioned server-to-daemon request to stop only the current Agent turn, or —
