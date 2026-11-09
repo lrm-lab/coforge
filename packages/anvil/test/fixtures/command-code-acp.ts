@@ -104,6 +104,16 @@ for await (const line of console) {
       break;
     case "session/new":
     case "session/resume":
+      // What `cmd acp` 1.88.1 answers on a logged-out Computer, and any other -32000 a test wants
+      // to keep distinguishable from it.
+      if (Bun.env.COMMAND_CODE_FIXTURE_ACP_ERROR) {
+        write({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32000, message: Bun.env.COMMAND_CODE_FIXTURE_ACP_ERROR },
+        });
+        break;
+      }
       if (Bun.env.COMMAND_CODE_FIXTURE_EXIT_BEFORE_CONFIG === "1") {
         reply({ sessionId, configOptions: [] });
         await new Promise((resolve) => setTimeout(resolve, 50));

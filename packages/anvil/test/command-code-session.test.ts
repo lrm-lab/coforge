@@ -465,6 +465,38 @@ async function rejectedLaunch(options: {
 }
 
 test(
+  "a logged-out Computer is told to log in, not that the runtime failed to start",
+  async () => {
+    // The sentence `cmd acp` 1.88.1 answers session/new with on an empty HOME (task #726).
+    const { error, launch } = await rejectedLaunch({
+      instructions: "startup briefing",
+      environment: {
+        COMMAND_CODE_FIXTURE_ACP_ERROR: "Not authenticated. Run `cmd login` in a terminal first.",
+      },
+    });
+    expect(error).toMatchObject({ name: "RuntimeLoginRequiredError" });
+    expect((error as Error).message).toContain("run `cmd login` in the user's terminal");
+    const modPath = instructionModPath(launch);
+    await expect(stat(modPath)).rejects.toThrow();
+    await expect(stat(dirname(modPath))).rejects.toThrow();
+  },
+  TEST_BUDGET_MS,
+);
+
+test(
+  "another -32000 keeps its own meaning instead of becoming a login",
+  async () => {
+    const { error } = await rejectedLaunch({
+      instructions: "startup briefing",
+      environment: { COMMAND_CODE_FIXTURE_ACP_ERROR: "workspace is read-only" },
+    });
+    expect((error as Error).name).not.toBe("RuntimeLoginRequiredError");
+    expect((error as Error).message).toContain("workspace is read-only");
+  },
+  TEST_BUDGET_MS,
+);
+
+test(
   "Command Code removes the instruction mod when startup fails",
   async () => {
     const { error, launch } = await rejectedLaunch({

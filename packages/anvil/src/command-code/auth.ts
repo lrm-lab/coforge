@@ -1,14 +1,40 @@
+import { RequestError } from "@agentclientprotocol/sdk";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import type {
-  RuntimeAuthAdapter,
-  RuntimeAuthLoginInteraction,
-  RuntimeAuthLoginResult,
-  RuntimeAuthLogoutResult,
-  RuntimeAuthStatus,
+import {
+  RuntimeLoginRequiredError,
+  type RuntimeAuthAdapter,
+  type RuntimeAuthLoginInteraction,
+  type RuntimeAuthLoginResult,
+  type RuntimeAuthLogoutResult,
+  type RuntimeAuthStatus,
 } from "#src/contract";
 import { withDeadline } from "#src/deadline";
 import { asRecord } from "#src/json-record";
 import { runtimeAuthAccount } from "#src/runtime-auth-status";
+
+/** The ACP application code `cmd acp` 1.88.1 answers `session/new` with on a logged-out Computer,
+ * alongside the sentence below (captured with an empty HOME). The launch turns it into a login
+ * prompt instead of the generic spawn failure #740's QA saw (task #726). */
+export const COMMAND_CODE_AUTH_REQUIRED_CODE = -32000;
+/** -32000 is a shared application code, so the refusal's own sentence decides. */
+const NOT_AUTHENTICATED = /not authenticated|not logged in/iu;
+export const COMMAND_CODE_LOGIN_SENTENCE =
+  "Command Code is not logged in: run `cmd login` in the user's terminal, then start the Agent again.";
+
+export function commandCodeLoginRequired(): RuntimeLoginRequiredError {
+  return new RuntimeLoginRequiredError(COMMAND_CODE_LOGIN_SENTENCE, {
+    detailHint: COMMAND_CODE_LOGIN_SENTENCE,
+  });
+}
+
+/** The login a refused `session/new`/`session/resume` means, or `undefined` for any other error,
+ * which keeps its own meaning. */
+export function commandCodeLoginRefusal(error: unknown): RuntimeLoginRequiredError | undefined {
+  if (!(error instanceof RequestError)) return undefined;
+  return error.code === COMMAND_CODE_AUTH_REQUIRED_CODE && NOT_AUTHENTICATED.test(error.message)
+    ? commandCodeLoginRequired()
+    : undefined;
+}
 
 /** `cmd status` prints "Not authenticated" on stderr. `--json` puts `authenticated` on stdout. */
 function commandCodeLoggedOut(output: string): boolean {

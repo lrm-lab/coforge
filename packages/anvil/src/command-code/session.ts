@@ -12,6 +12,7 @@ import { RuntimeModelNotFoundError } from "#src/contract";
 import type { AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import type { AcpConnection } from "#src/acp/connection";
+import { commandCodeLoginRefusal } from "./auth";
 import {
   commandCodeConnection,
   COMMAND_CODE_ACP_TIMEOUT_MS,
@@ -68,19 +69,26 @@ export class CommandCodeSession implements AgentSession {
           );
         const cwd = options.agentWorkspaceDirectory;
         const resuming = sessionId !== undefined && options.sessionMode !== "create";
-        const state = resuming
-          ? await commandCodeBounded(
-              transport.connection.agent.request("session/resume", {
-                sessionId: sessionId!,
-                cwd,
-                mcpServers: [],
-              }),
-              timeoutMs,
-            )
-          : await commandCodeBounded(
-              transport.connection.agent.request("session/new", { cwd, mcpServers: [] }),
-              timeoutMs,
-            );
+        let state;
+        try {
+          state = resuming
+            ? await commandCodeBounded(
+                transport.connection.agent.request("session/resume", {
+                  sessionId: sessionId!,
+                  cwd,
+                  mcpServers: [],
+                }),
+                timeoutMs,
+              )
+            : await commandCodeBounded(
+                transport.connection.agent.request("session/new", { cwd, mcpServers: [] }),
+                timeoutMs,
+              );
+        } catch (error) {
+          // A logged-out Computer answers session/new with -32000 "Not authenticated…"; that is a
+          // login the person can fix, not a spawn failure no one can act on.
+          throw commandCodeLoginRefusal(error) ?? error;
+        }
         const created = resuming ? sessionId! : "sessionId" in state ? state.sessionId : undefined;
         if (typeof created !== "string" || !created.trim())
           throw new Error("Command Code did not create a session");
