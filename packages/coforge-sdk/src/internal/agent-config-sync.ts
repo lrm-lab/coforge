@@ -36,7 +36,8 @@ function validate(value: AgentConfigSync): void {
     value.reasoning.length > 512 ||
     (value.providerConfig !== undefined &&
       ((value.providerConfig.kind !== "default" && value.providerConfig.kind !== "coforge") ||
-        (value.providerConfig.kind === "coforge" && !ID.test(value.providerConfig.providerId))))
+        (value.providerConfig.kind === "coforge" &&
+          (!value.providerConfig.providerId || value.providerConfig.providerId.length > 512))))
   )
     throw new Error("Invalid Agent config sync");
 }

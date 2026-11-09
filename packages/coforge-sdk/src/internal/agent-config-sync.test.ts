@@ -36,3 +36,21 @@ test("Agent config sync rejects invalid revisions and scope", () => {
   expect(() => encodeAgentConfigSync({ ...value, revision: 0 })).toThrow();
   expect(() => encodeAgentConfigSync({ ...value, agentId: "" })).toThrow();
 });
+
+test("Agent config sync carries any provider id and model provider a Start accepts", () => {
+  const legal = {
+    ...value,
+    modelProvider: "open router/anthropic",
+    providerConfig: { kind: "coforge" as const, providerId: "acme/prod model" },
+  };
+  expect(decodeAgentConfigSync(encodeAgentConfigSync(legal))).toEqual(legal);
+  expect(() =>
+    encodeAgentConfigSync({ ...value, providerConfig: { kind: "coforge", providerId: "" } }),
+  ).toThrow();
+  expect(() =>
+    encodeAgentConfigSync({
+      ...value,
+      providerConfig: { kind: "coforge", providerId: "p".repeat(513) },
+    }),
+  ).toThrow();
+});

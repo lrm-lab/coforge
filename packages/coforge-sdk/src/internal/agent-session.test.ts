@@ -88,7 +88,13 @@ test("keeps lifecycle extension tags wire-compatible", () => {
     sequence: 14,
     sessionState: 15,
   });
-  expect(startFields).toMatchObject({ previousLaunchId: 16, sessionMode: 17, controlEpoch: 18 });
+  expect(startFields).toMatchObject({
+    previousLaunchId: 16,
+    sessionMode: 17,
+    controlEpoch: 18,
+    fastMode: 24,
+    agentConfigRevision: 25,
+  });
 });
 
 test("rejects invalid report snapshot extensions and missing correlation", () => {

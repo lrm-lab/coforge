@@ -69,6 +69,8 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
     throw new Error("invalid Agent start launchId");
   if (value.toolProfile !== undefined && !isMemoryAgentToolProfile(value.toolProfile))
     throw new Error(`unsupported Agent tool profile: ${value.toolProfile}`);
+  if (value.agentConfigRevision !== undefined)
+    assertPositiveControlCounter(value.agentConfigRevision, "Agent config revision");
   if ((value.resumeMessages?.length ?? 0) > 100)
     throw new Error("Agent recovery resumeMessages exceeds 100");
   const recoveryMessages = [
@@ -160,6 +162,8 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     throw new Error("invalid agent start intent launchId");
   if (v.toolProfile !== undefined && !isMemoryAgentToolProfile(v.toolProfile))
     throw new Error(`unsupported Agent tool profile: ${v.toolProfile}`);
+  if (v.agentConfigRevision !== undefined)
+    assertPositiveControlCounter(v.agentConfigRevision, "Agent config revision");
   const recoveryMessages = [...(v.wakeMessage ? [v.wakeMessage] : []), ...v.resumeMessages];
   const summaryTargets = new Set(v.unreadSummary.map(({ target }) => target));
   const messageIds = new Set(recoveryMessages.map(({ messageId }) => messageId));
@@ -239,6 +243,7 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     ...(v.resumePrompt !== undefined ? { resumePrompt: v.resumePrompt } : {}),
     ...(v.introductionPrompt !== undefined ? { introductionPrompt: v.introductionPrompt } : {}),
     ...(v.fastMode === true ? { fastMode: true } : {}),
+    ...(v.agentConfigRevision !== undefined ? { agentConfigRevision: v.agentConfigRevision } : {}),
     ...(v.wakeMessage ? { wakeMessage: recoveryMessage(v.wakeMessage) } : {}),
     ...(v.resumeMessages.length ? { resumeMessages: v.resumeMessages.map(recoveryMessage) } : {}),
     ...(v.unreadSummary.some((entry) => entry.conversationId)

@@ -260,6 +260,8 @@ export type AgentStartIntent = {
   /** Whether this launch asks the runtime for its Fast service tier. Absent means the ordinary
    * tier; an older daemon that never heard of it ignores it. */
   fastMode?: boolean;
+  /** The Agent's config revision this Start launches with; absent from an older server. */
+  agentConfigRevision?: number;
 };
 export type AgentStopIntent = {
   protocolMajor: number;

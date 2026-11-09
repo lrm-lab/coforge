@@ -291,3 +291,32 @@ test("recovery messages carry when the server created them, and leave it unset o
     "invalid Agent recovery creation time",
   );
 });
+
+test("round-trips the Agent's config revision on a start intent, and leaves it absent otherwise", () => {
+  const revised = { ...base, agentConfigRevision: 7 };
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(revised))).toEqual({
+    ...revised,
+    modelProvider: "",
+    providerConfig: undefined,
+  });
+  // An older server sends no revision; it must not decode as 0.
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).not.toHaveProperty(
+    "agentConfigRevision",
+  );
+});
+
+test("rejects a start intent whose config revision is not a positive integer", () => {
+  for (const agentConfigRevision of [0, -1, 1.5, 2 ** 31, Number.NaN])
+    expect(() => encodeAgentStartIntent({ ...base, agentConfigRevision })).toThrow(
+      "invalid Agent config revision",
+    );
+  const encoded = toBinary(
+    AgentStartIntentSchema,
+    create(AgentStartIntentSchema, {
+      ...base,
+      messageType: AGENT_START_MESSAGE_TYPE,
+      agentConfigRevision: 0,
+    }),
+  );
+  expect(() => decodeAgentStartIntent(encoded)).toThrow("invalid Agent config revision");
+});

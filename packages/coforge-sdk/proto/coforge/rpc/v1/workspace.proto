@@ -204,6 +204,9 @@ message AgentStartIntent {
   // thread/start. Absent (and older daemons that never heard of it) means the ordinary tier.
   // Additive: protocol_major stays 1.
   optional bool fast_mode = 24;
+  // The `AgentConfigSync.revision` this Start launches with; absent from an older server.
+  // Additive: protocol_major stays 1.
+  optional uint32 agent_config_revision = 25;
 }
 
 // Versioned server-to-daemon stop intent. A replacement is expressed as a
