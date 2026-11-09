@@ -130,4 +130,20 @@ describe("agent context view wire codec", () => {
       value,
     );
   });
+
+  test("round trips the periodic availability trigger", () => {
+    const value = {
+      protocolMajor: 1,
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      agentId: "agent-1",
+      runtime: "codex",
+      retentionDays: 30,
+      supported: true,
+      trigger: "periodic" as const,
+    };
+    expect(decodeAgentContextViewAvailability(encodeAgentContextViewAvailability(value))).toEqual(
+      value,
+    );
+  });
 });

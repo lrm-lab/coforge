@@ -8,7 +8,17 @@ import {
 } from "./context-view-providers";
 
 export const AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS = 24 * 60 * 60 * 1000;
+export const AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_JITTER_MS = 4 * 60 * 60 * 1000;
 const SUPPORT_SCAN_BYTES = 8 * 1024 * 1024;
+
+export function agentContextViewAvailabilityRefreshDelay(random = Math.random): number {
+  const sample = Math.min(0.999999, Math.max(0, random()));
+  return Math.floor(
+    AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS -
+      AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_JITTER_MS +
+      sample * AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_JITTER_MS,
+  );
+}
 
 export type ContextViewAvailability = {
   type: "agent:context_view_availability";
@@ -21,7 +31,7 @@ export type ContextViewAvailability = {
   retentionDays: number;
   supported: boolean;
   unsupportedReason?: "unsupported_runtime" | "no_session";
-  trigger?: "startup" | "message" | "server_features";
+  trigger?: "startup" | "message" | "server_features" | "periodic";
 };
 
 export type ContextViewAgentFacts = {
@@ -41,6 +51,7 @@ type Options = {
   workspaceRoot?: string;
   retentionDays?: number;
   now?: () => number;
+  random?: () => number;
   reportAvailability?: (availability: ContextViewAvailability) => void;
 };
 
@@ -52,6 +63,7 @@ export class AgentContextViewService {
   readonly #workspaceRoot?: string;
   readonly #retentionDays: number;
   readonly #now: () => number;
+  readonly #random: () => number;
   readonly #reportAvailability?: Options["reportAvailability"];
   readonly #stores = new Map<string, ContextViewStore>();
   readonly #reported = new Map<string, string>();
@@ -62,6 +74,8 @@ export class AgentContextViewService {
     { facts: ContextViewAgentFacts; enabled: boolean; lastReportedAt: number }
   >();
   #maintenance?: ReturnType<typeof setInterval>;
+  #availabilityRefreshTimer?: ReturnType<typeof setTimeout>;
+  #maintenanceActive = false;
 
   constructor(options: Options) {
     this.#stateDirectory = options.stateDirectory;
@@ -71,6 +85,7 @@ export class AgentContextViewService {
     this.#workspaceRoot = options.workspaceRoot;
     this.#retentionDays = options.retentionDays ?? 30;
     this.#now = options.now ?? Date.now;
+    this.#random = options.random ?? Math.random;
     this.#reportAvailability = options.reportAvailability;
   }
 
@@ -159,22 +174,39 @@ export class AgentContextViewService {
     for (const [agentId, state] of this.#availabilityFacts) {
       if (now - state.lastReportedAt < AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS) continue;
       state.lastReportedAt = now;
-      this.reportAvailability(state.facts, state.enabled, "startup", true);
+      this.reportAvailability(state.facts, state.enabled, "periodic", true);
       this.#availabilityFacts.set(agentId, state);
     }
   }
 
   startMaintenance(intervalMs = 60 * 60 * 1000): () => void {
     this.stopMaintenance();
+    this.#maintenanceActive = true;
     this.compactAndSweep();
+    this.#scheduleAvailabilityRefresh();
     this.#maintenance = setInterval(() => this.compactAndSweep(), intervalMs);
     this.#maintenance.unref?.();
     return () => this.stopMaintenance();
   }
 
   stopMaintenance(): void {
+    this.#maintenanceActive = false;
     if (this.#maintenance !== undefined) clearInterval(this.#maintenance);
     this.#maintenance = undefined;
+    if (this.#availabilityRefreshTimer !== undefined) clearTimeout(this.#availabilityRefreshTimer);
+    this.#availabilityRefreshTimer = undefined;
+  }
+
+  #scheduleAvailabilityRefresh(): void {
+    if (!this.#maintenanceActive || this.#availabilityRefreshTimer !== undefined) return;
+    this.#availabilityRefreshTimer = setTimeout(() => {
+      this.#availabilityRefreshTimer = undefined;
+      if (!this.#maintenanceActive) return;
+      for (const state of this.#availabilityFacts.values())
+        this.reportAvailability(state.facts, state.enabled, "periodic", true);
+      this.#scheduleAvailabilityRefresh();
+    }, agentContextViewAvailabilityRefreshDelay(this.#random));
+    this.#availabilityRefreshTimer.unref?.();
   }
 
   find(agentId: string, messageId: string): ContextViewIndexEntry | undefined {

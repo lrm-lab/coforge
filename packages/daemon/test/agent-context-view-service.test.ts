@@ -3,7 +3,12 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
-import { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
+import {
+  AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_JITTER_MS,
+  AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS,
+  AgentContextViewService,
+  agentContextViewAvailabilityRefreshDelay,
+} from "#src/agent-context-view/agent-context-view-service";
 import { ContextViewStore } from "#src/agent-context-view/context-view-store";
 
 test("indexes a committed message at the native transcript size and reports availability once", () => {
@@ -259,4 +264,17 @@ test("refreshes availability after the Raft maximum interval", () => {
   now += 2 * 60 * 60 * 1000;
   service.compactAndSweep();
   expect(reports).toHaveLength(2);
+  expect(reports.at(-1)).toEqual(expect.objectContaining({ trigger: "periodic" }));
+});
+
+test("uses Raft's 20-to-24-hour availability refresh jitter", () => {
+  expect(agentContextViewAvailabilityRefreshDelay(() => 0)).toBe(
+    AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS -
+      AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_JITTER_MS,
+  );
+  expect(agentContextViewAvailabilityRefreshDelay(() => 1)).toBe(
+    AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS -
+      AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_JITTER_MS +
+      Math.floor(0.999999 * AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_JITTER_MS),
+  );
 });
