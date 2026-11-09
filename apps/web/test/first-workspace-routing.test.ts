@@ -43,6 +43,7 @@ const workspaceReads = {
     loadWorkspaceAgents: { agents: [], extraAgents: [], streamPositions: {} },
   },
   "#src/features/settings/settings.functions": { getUserPreferences: {} },
+  "#src/features/pi-chat/pi-chat.functions": { loadAiWorkbenchOn: true },
   "#src/features/workspaces/member-settings.functions": {
     loadMemberWorkspaceSettings: { tabOrders: {}, setupPending: false },
   },
