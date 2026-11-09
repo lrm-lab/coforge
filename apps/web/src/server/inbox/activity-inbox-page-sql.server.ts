@@ -138,6 +138,12 @@ export function activityPageSql(
       SELECT COUNT(*)::int AS "count", (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
       FROM "messages" m
       WHERE listed."rootMessageId" IS NULL AND ${conversationUnreadMessageSql}
+        -- A muted channel counts only the viewer's mentions; its row is listed for those alone.
+        AND (cm."notificationLevel" <> 'muted' OR listed."channelName" IS NULL
+          OR listed."taskBoardId" IS NOT NULL OR EXISTS (
+            SELECT 1 FROM "message_mentions" mm
+            WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"
+          ))
     ) unread ON TRUE
     -- A thread item's unread replies.
     LEFT JOIN LATERAL (

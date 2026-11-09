@@ -213,7 +213,7 @@ export function ActivityInboxView({
       refreshWaiting();
     },
     onSubscribed,
-    refreshOnPins: true,
+    refreshOnPreferences: true,
   });
 
   // A failed change is shown in the toolbar with its retry until it succeeds or is dismissed.

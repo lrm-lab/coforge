@@ -58,7 +58,10 @@ export const conversationUnreadProbeLateral = unreadProbeLateral(conversationUnr
  */
 export const conversationMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
   SELECT COALESCE(BOOL_OR(${HUMAN_UNREAD_BASE_SQL}), FALSE) AS "unread",
-    (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
+    (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId",
+    (ARRAY_AGG(m."id" ORDER BY m."sequence" DESC))[1] AS "lastId",
+    MAX(m."sequence") AS "lastSequence",
+    MAX(m."createdAt") AS "lastAt"
   FROM "message_mentions" mm
   JOIN "messages" m ON m."id" = mm."messageId" AND m."conversationId" = mm."conversationId"
   WHERE mm."memberId" = cm."id"
@@ -127,6 +130,22 @@ function conversationItemVisibleSql(userId: string) {
 
 /** A joined conversation's newest top-level message is past the viewer's Done boundary. */
 export const conversationPastDoneSql = Prisma.sql`(latest."sequence" > COALESCE(cm."doneThroughSequence", 0))`;
+
+/** A channel the viewer muted (`cm`, `c`): only their mentions list it, count, or move it. A muted
+ * DM keeps its row, because a person's direct messages always reach them. */
+const mutedChannelItemSql = Prisma.sql`(cm."notificationLevel" = 'muted' AND c."channelName" IS NOT NULL)`;
+
+/** The list's activity past Done: in a muted channel that takes a mention of the viewer. */
+const conversationListedActivitySql = Prisma.sql`(${conversationPastDoneSql}
+  AND (NOT ${mutedChannelItemSql} OR mention."firstId" IS NOT NULL))`;
+
+/** The newest message an item shows and sorts by: a muted channel's newest mention, if it has one. */
+function conversationLatestSql(mentionColumn: string, latestColumn: string) {
+  const mention = Prisma.raw(`mention."${mentionColumn}"`);
+  const latest = Prisma.raw(`latest."${latestColumn}"`);
+  return Prisma.sql`CASE WHEN ${mutedChannelItemSql} AND mention."firstId" IS NOT NULL
+    THEN ${mention} ELSE ${latest} END`;
+}
 
 /** A joined conversation is listed when the inbox can list it and it has activity past Done. */
 function conversationItemListedSql(userId: string) {
@@ -224,8 +243,7 @@ export function navHasUnreadSql(workspaceId: string, userId: string, taskTerm: P
     ) OR EXISTS (
       SELECT 1 FROM ${conversationItemsSql(workspaceId, userId)}
       CROSS JOIN LATERAL (
-        -- A muted channel stops pushing, so its unread does not light the Workspace dot; its own
-        -- row still shows the count (task #420).
+        -- A muted channel stops pushing, so its unread does not light the Workspace dot (task #420).
         SELECT 1 FROM "messages" m
         WHERE ${conversationUnreadMessageSql} AND cm."notificationLevel" <> 'muted'
         ORDER BY m."sequence" LIMIT 1
@@ -306,13 +324,14 @@ export function conversationItemRowsSql(workspaceId: string, userId: string) {
       c."visibility" AS "visibility",
       c."directKey" AS "directKey",
       peer."agentId" AS "agentId",
-      latest."id" AS "latestMessageId",
-      latest."sequence" AS "latestSequence",
-      latest."createdAt" AS "latestAt",
-      ${conversationPastDoneSql} AS "pastDone",
+      ${conversationLatestSql("lastId", "id")} AS "latestMessageId",
+      ${conversationLatestSql("lastSequence", "sequence")} AS "latestSequence",
+      ${conversationLatestSql("lastAt", "createdAt")} AS "latestAt",
+      ${conversationListedActivitySql} AS "pastDone",
       pin."sortOrder" AS "pinOrder",
       pin."createdAt" AS "pinnedAt",
-      unread."found" IS NOT NULL AS "hasUnread",
+      CASE WHEN ${mutedChannelItemSql} THEN mention."unread"
+        ELSE unread."found" IS NOT NULL END AS "hasUnread",
       mention."unread" AS "unreadMention",
       mention."firstId" AS "firstMentionMessageId",
       ${noTaskColumns},
@@ -326,7 +345,7 @@ export function conversationItemRowsSql(workspaceId: string, userId: string) {
     ${conversationUnreadProbeLateral}
     ${conversationMentionLateral}
     WHERE ${conversationItemVisibleSql(userId)}
-      AND (${conversationPastDoneSql} OR pin."memberId" IS NOT NULL)`;
+      AND (${conversationListedActivitySql} OR pin."memberId" IS NOT NULL)`;
 }
 
 /** The list's thread items: every listed followed thread with its DM Agent, newest reply,

@@ -23,8 +23,8 @@ const REFRESH_DELAY_MS = 300;
  * Listens to the viewer's own conversation channel and calls `onMessage` for every message that
  * concerns them (`conversation.activity.v1`, already filtered to the people who may read it), and
  * `onActivity` once per burst for anything else that reached their Activity inbox and, with
- * `refreshOnPins`, for a pin change. The nav rail's Activity dot sets itself from `onMessage`
- * without a read, and from `onAttention` when a change says where the inbox stands; the Activity
+ * `refreshOnPreferences`, for a pin or mute change. The nav rail's Activity dot sets itself from
+ * `onMessage` without a read, and from `onAttention` when a change says where the inbox stands; the Activity
  * page re-reads its first page from it.
  */
 export function useActivityInboxRealtime({
@@ -33,7 +33,7 @@ export function useActivityInboxRealtime({
   onActivity,
   onAttention,
   onSubscribed,
-  refreshOnPins = false,
+  refreshOnPreferences = false,
 }: {
   userId: string;
   /** One message the viewer may read: not their own, not a system notice; `position` is where
@@ -46,7 +46,7 @@ export function useActivityInboxRealtime({
   /** The channel became `subscribed`, and may have missed what was published before (see
    * `queryMissedBySubscribe`). */
   onSubscribed?: (recovery: SubscribedRecovery) => void;
-  refreshOnPins?: boolean;
+  refreshOnPreferences?: boolean;
 }) {
   const onActivityRef = useRef(onActivity);
   useEffect(() => {
@@ -82,16 +82,17 @@ export function useActivityInboxRealtime({
         ({ attention } = decodeActivityChangedEvent(publication.data));
       } catch {
         // Neither a message nor an Activity signal (the channels also carry other events): only a
-        // pin change the caller asked for refreshes.
-        if (!refreshOnPins) return;
+        // pin or mute change the caller asked for refreshes.
+        if (!refreshOnPreferences) return;
         const event = decodeViewerEvent(publication.data);
-        if (event?.type !== "pref.changed.v1" || event.name !== "pins") return;
+        if (event?.type !== "pref.changed.v1" || (event.name !== "pins" && event.name !== "muted"))
+          return;
       }
       if (attention && onAttentionRef.current) return onAttentionRef.current(attention);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => onActivityRef.current(), REFRESH_DELAY_MS);
     },
-    [refreshOnPins, userId],
+    [refreshOnPreferences, userId],
   );
 
   useRealtimeSubscription({
