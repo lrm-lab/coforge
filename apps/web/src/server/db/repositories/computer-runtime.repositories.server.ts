@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import {
   parseRuntimeUnavailableCode,
   requireRuntimeProvider,
@@ -108,6 +108,64 @@ export class PrismaComputerRuntimeRepository implements ComputerRuntimeVisibilit
       select: { id: true },
     });
     return agents.map((agent) => agent.id);
+  }
+
+  /**
+   * When a Workspace is newly linked to a Computer that already reported runtimes for another
+   * Workspace, copy those rows so Agent launch does not see "not installed" before this
+   * Workspace's own Daemon inventory arrives. No-op when this Workspace already has rows or the
+   * Computer has none elsewhere.
+   */
+  async inheritFromSibling(workspaceId: string, computerId: string): Promise<number> {
+    const existing = await this.db.computerRuntime.count({
+      where: { workspaceId, computerId },
+    });
+    if (existing > 0) return 0;
+    const sibling = await this.db.computerRuntime.findFirst({
+      where: { computerId, workspaceId: { not: workspaceId } },
+      orderBy: { observedAt: "desc" },
+      select: { workspaceId: true },
+    });
+    if (!sibling) return 0;
+    const [runtimes, catalogs] = await Promise.all([
+      this.db.computerRuntime.findMany({
+        where: { workspaceId: sibling.workspaceId, computerId },
+      }),
+      this.db.computerModelCatalog.findMany({
+        where: { workspaceId: sibling.workspaceId, computerId },
+      }),
+    ]);
+    if (runtimes.length === 0) return 0;
+    await this.db.$transaction(async (transaction) => {
+      for (const runtime of runtimes) {
+        await transaction.computerRuntime.create({
+          data: {
+            workspaceId,
+            computerId,
+            provider: runtime.provider,
+            version: runtime.version,
+            displayName: runtime.displayName,
+            unavailableCode: runtime.unavailableCode,
+            diagnostic: runtime.diagnostic,
+            // Sharing is per Workspace: do not carry another Workspace's public flag.
+            isPublic: false,
+            observedAt: runtime.observedAt,
+          },
+        });
+      }
+      for (const catalog of catalogs) {
+        await transaction.computerModelCatalog.create({
+          data: {
+            workspaceId,
+            computerId,
+            provider: catalog.provider,
+            models: catalog.models as Prisma.InputJsonValue,
+            observedAt: catalog.observedAt,
+          },
+        });
+      }
+    });
+    return runtimes.length;
   }
 
   async replace(
