@@ -52,6 +52,7 @@ import { installChannelTurnPolicy } from "./channel-turn-policy";
 
 import { createMemoryDispositionTool } from "./memory-disposition-tool";
 import { contextViewRequestLogFields } from "./session-context-view-log";
+import type { CreateSessionOptions } from "./session-options";
 
 export type MemoryAgentProxy = {
   post(path: string, body: unknown): Promise<unknown>;
@@ -403,26 +404,7 @@ export const createRuntime: CreateAgentSessionRuntimeFactory = async ({
   };
 };
 
-export async function createSession(options: {
-  cwd: string;
-  agentId?: string;
-  agentDir?: string;
-  sessionDir?: string;
-  sessionId?: string;
-  sessionMode?: "create" | "resume";
-  modelProvider?: string;
-  model?: string;
-  reasoning?: string;
-  apiKey?: string;
-  instructions: string;
-  environment?: Readonly<Record<string, string>>;
-  sessionKind?: "coforge" | "pi";
-  conversation?: AgentConversationScope;
-  memoryControlSession?: boolean;
-  toolProfile?: MemoryAgentToolProfile;
-  /** Eval-only Offer contract; ordinary product sessions retain channel send. */
-  memoryOfferOnly?: boolean;
-}) {
+export async function createSession(options: CreateSessionOptions) {
   const cwd = options.cwd;
   const environment = options.environment
     ? { ...options.environment }
@@ -593,7 +575,11 @@ export async function createSession(options: {
     get sessionId() {
       return sessionManager.getSessionId();
     },
-    ...contextViewRequestLogFields(sessionDir),
+    ...contextViewRequestLogFields(
+      sessionDir,
+      options.contextViewRequestLogDirectory,
+      sessionManager.getSessionId(),
+    ),
     dispose: async () => {
       removeChannelTurnPolicy();
       created.session.clearQueue();

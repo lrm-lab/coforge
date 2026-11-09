@@ -1,30 +1,29 @@
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { PiRequestLogWriter } from "./pi-request-log";
 
-const requestLogDirectories = new Map<string, string>();
-
-export function registerContextViewRequestLogDirectory(
+export function contextViewRequestLogFields(
   sessionDir: string,
-  requestLogDirectory: string,
-): void {
-  requestLogDirectories.set(sessionDir, requestLogDirectory);
-}
-
-export function clearContextViewRequestLogDirectory(sessionDir: string): void {
-  requestLogDirectories.delete(sessionDir);
-}
-
-export function contextViewRequestLogFields(sessionDir: string): {
+  requestLogDirectory?: string,
+  sessionId?: string,
+): {
   contextViewRequestLog: PiRequestLogWriter;
   contextViewRequestLogPath: string;
 } {
-  const requestLogDirectory = requestLogDirectories.get(sessionDir);
-  requestLogDirectories.delete(sessionDir);
   const contextViewRequestLogPath = requestLogDirectory
-    ? join(requestLogDirectory, "session.jsonl")
+    ? join(requestLogDirectory, `${sessionId ?? "session"}.jsonl`)
     : join(sessionDir, "pi-requests.jsonl");
+  const trustedRoot = requestLogDirectory ? managedRequestLogRoot(requestLogDirectory) : undefined;
   return {
-    contextViewRequestLog: new PiRequestLogWriter(contextViewRequestLogPath),
+    contextViewRequestLog: new PiRequestLogWriter(contextViewRequestLogPath, trustedRoot),
     contextViewRequestLogPath,
   };
+}
+
+function managedRequestLogRoot(directory: string): string | undefined {
+  let current = directory;
+  while (current !== dirname(current)) {
+    if (basename(current) === "agent-context") return dirname(current);
+    current = dirname(current);
+  }
+  return undefined;
 }

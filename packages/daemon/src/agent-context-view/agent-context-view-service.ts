@@ -150,13 +150,14 @@ export class AgentContextViewService {
   compactAndSweep(): void {
     for (const agentId of ContextViewStore.agentIds(this.#stateDirectory, this.#serverId))
       this.#store(agentId);
-    for (const store of this.#stores.values()) {
+    for (const [agentId, store] of this.#stores) {
       store.compact(this.#retentionDays);
-      const agentId = [...this.#stores.entries()].find(([, candidate]) => candidate === store)?.[0];
       const off = store.sweepOff(this.#now());
-      if (agentId && !off) {
-        store.sweepRequestLogs(this.#now() - this.#retentionDays * 24 * 60 * 60 * 1000);
+      if (off) {
+        this.#stores.delete(agentId);
+        continue;
       }
+      store.sweepRequestLogs(this.#now() - this.#retentionDays * 24 * 60 * 60 * 1000);
     }
     const now = this.#now();
     for (const [agentId, state] of this.#availabilityFacts) {

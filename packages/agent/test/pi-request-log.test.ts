@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { lstat, mkdtemp, readFile, symlink } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PiRequestLogWriter, piContextRequestDigest, piRequestDigest } from "../src/pi-request-log";
@@ -51,9 +51,35 @@ test("Pi indexed requests carry a base chain with a trimmed tail", async () => {
 test("Pi request logs reject a symlinked parent directory", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-log-symlink-"));
   const outside = await mkdtemp(join(tmpdir(), "coforge-pi-log-outside-"));
-  const linked = join(root, "linked");
-  await symlink(outside, linked);
-  const writer = new PiRequestLogWriter(join(linked, "session.jsonl"));
-  await writer.append({ type: "request", body: { messages: ["secret"] } });
-  expect(await lstat(join(outside, "session.jsonl")).catch(() => undefined)).toBeUndefined();
+  try {
+    const linked = join(root, "linked");
+    await symlink(outside, linked);
+    const writer = new PiRequestLogWriter(join(linked, "session.jsonl"));
+    await writer.append({ type: "request", body: { messages: ["secret"] } });
+    expect(await lstat(join(outside, "session.jsonl")).catch(() => undefined)).toBeUndefined();
+  } finally {
+    await Promise.all([
+      rm(root, { recursive: true, force: true }),
+      rm(outside, { recursive: true, force: true }),
+    ]);
+  }
+});
+
+test("Pi request logs reject a symlinked ancestor of an existing parent", async () => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), "coforge-pi-log-ancestor-"));
+  const outside = await mkdtemp(join(await realpath(tmpdir()), "coforge-pi-log-outside-"));
+  try {
+    await mkdir(join(outside, "nested"));
+    await symlink(outside, join(root, "linked"));
+    const writer = new PiRequestLogWriter(join(root, "linked", "nested", "session.jsonl"), root);
+    await writer.append({ type: "request", body: { messages: ["secret"] } });
+    expect(
+      await lstat(join(outside, "nested", "session.jsonl")).catch(() => undefined),
+    ).toBeUndefined();
+  } finally {
+    await Promise.all([
+      rm(root, { recursive: true, force: true }),
+      rm(outside, { recursive: true, force: true }),
+    ]);
+  }
 });

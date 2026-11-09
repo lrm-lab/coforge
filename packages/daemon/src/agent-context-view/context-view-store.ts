@@ -10,7 +10,6 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
-  rmdirSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -303,7 +302,7 @@ export class ContextViewStore {
       }
     }
     if (existsSync(this.#offSincePath)) unlinkSync(this.#offSincePath);
-    rmdirSync(this.#directory);
+    rmSync(this.#directory, { recursive: true, force: true });
     return true;
   }
 

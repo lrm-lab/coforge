@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
@@ -109,59 +109,69 @@ test("startup maintenance enumerates disk stores and compacts old entries", () =
 
 test("restart maintenance sweeps request logs from the managed state directory", () => {
   const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
-  const now = 31 * 24 * 60 * 60 * 1000;
-  const first = new AgentContextViewService({
-    stateDirectory: root,
-    serverId: "server-1",
-    workspaceId: "workspace-1",
-    computerId: "computer-1",
-    now: () => 1_000,
-  });
-  const store = new ContextViewStore(root, "server-1", "agent-1", () => now);
-  store.record({ ...entryForRequestLog(), sentAt: new Date(1_000).toISOString() });
-  const log = join(store.requestLogDirectory, "session-1.jsonl");
-  writeFileSync(log, '{"type":"request"}\n', "utf8");
-  utimesSync(log, new Date(1), new Date(1));
-  first.compactAndSweep();
+  try {
+    const now = 31 * 24 * 60 * 60 * 1000;
+    const first = new AgentContextViewService({
+      stateDirectory: root,
+      serverId: "server-1",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      now: () => 1_000,
+    });
+    const store = new ContextViewStore(root, "server-1", "agent-1", () => now);
+    store.record({ ...entryForRequestLog(), sentAt: new Date(1_000).toISOString() });
+    const log = join(store.requestLogDirectory, "session-1.jsonl");
+    writeFileSync(log, '{"type":"request"}\n', "utf8");
+    utimesSync(log, new Date(1), new Date(1));
+    first.compactAndSweep();
 
-  const restarted = new AgentContextViewService({
-    stateDirectory: root,
-    serverId: "server-1",
-    workspaceId: "workspace-1",
-    computerId: "computer-1",
-    now: () => now,
-  });
-  restarted.compactAndSweep();
-  expect(() => readFileSync(log, "utf8")).toThrow();
+    const restarted = new AgentContextViewService({
+      stateDirectory: root,
+      serverId: "server-1",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      now: () => now,
+    });
+    restarted.compactAndSweep();
+    expect(() => readFileSync(log, "utf8")).toThrow();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("restart maintenance removes managed request logs after the off grace", () => {
   const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
-  const offAt = 1_000;
-  const first = new AgentContextViewService({
-    stateDirectory: root,
-    serverId: "server-1",
-    workspaceId: "workspace-1",
-    computerId: "computer-1",
-    now: () => offAt,
-  });
-  const store = new ContextViewStore(root, "server-1", "agent-1", () => offAt);
-  store.record(entryForRequestLog());
-  const log = join(store.requestLogDirectory, "session-1.jsonl");
-  writeFileSync(log, '{"type":"request"}\n', "utf8");
-  store.markOff(offAt);
-  first.compactAndSweep();
+  try {
+    const offAt = 1_000;
+    const first = new AgentContextViewService({
+      stateDirectory: root,
+      serverId: "server-1",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      now: () => offAt,
+    });
+    const store = new ContextViewStore(root, "server-1", "agent-1", () => offAt);
+    store.record(entryForRequestLog());
+    const log = join(store.requestLogDirectory, "session-1.jsonl");
+    writeFileSync(log, '{"type":"request"}\n', "utf8");
+    store.markOff(offAt);
+    first.compactAndSweep();
 
-  const restarted = new AgentContextViewService({
-    stateDirectory: root,
-    serverId: "server-1",
-    workspaceId: "workspace-1",
-    computerId: "computer-1",
-    now: () => offAt + 24 * 60 * 60 * 1000,
-  });
-  restarted.compactAndSweep();
-  expect(() => readFileSync(log, "utf8")).toThrow();
-  expect(ContextViewStore.exists(root, "server-1", "agent-1")).toBe(false);
+    const restarted = new AgentContextViewService({
+      stateDirectory: root,
+      serverId: "server-1",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      now: () => offAt + 24 * 60 * 60 * 1000,
+    });
+    restarted.compactAndSweep();
+    expect(() => readFileSync(log, "utf8")).toThrow();
+    expect(ContextViewStore.exists(root, "server-1", "agent-1")).toBe(false);
+    restarted.compactAndSweep();
+    expect(ContextViewStore.exists(root, "server-1", "agent-1")).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 function entryForRequestLog() {

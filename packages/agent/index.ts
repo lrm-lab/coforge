@@ -69,8 +69,4 @@ export type {
   UsageWindow,
 } from "#src/contract";
 export { createMemoryDispositionTool } from "#src/memory-disposition-tool";
-export {
-  clearContextViewRequestLogDirectory,
-  registerContextViewRequestLogDirectory,
-} from "#src/session-context-view-log";
 export { piContextHasMedia, piRequestBody, PiRequestLogWriter } from "#src/pi-request-log";

@@ -1,6 +1,6 @@
 import { lstat, mkdir, open, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
-import { dirname, join, parse, resolve, sep } from "node:path";
+import { dirname, join, parse, relative, resolve, sep } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
 /** Small serialized writer for the Pi/Builtin captured request log. */
@@ -20,19 +20,21 @@ export function piContextRequestDigest(
 
 export class PiRequestLogWriter {
   readonly path: string;
+  readonly #trustedRoot?: string;
   #tail = Promise.resolve();
   #lastHash: string | undefined;
   #initialized = false;
   #indexedLast: { id: string; hashes: string[] } | undefined;
 
-  constructor(path: string) {
+  constructor(path: string, trustedRoot?: string) {
     this.path = path;
+    this.#trustedRoot = trustedRoot;
   }
 
   append(record: Record<string, unknown>): Promise<void> {
     this.#tail = this.#tail
       .then(async () => {
-        await ensurePrivateDirectory(dirname(this.path));
+        await ensurePrivateDirectory(dirname(this.path), this.#trustedRoot);
         const existing = await lstat(this.path).catch(() => undefined);
         if (existing && (!existing.isFile() || existing.nlink > 1 || existing.isSymbolicLink()))
           return;
@@ -152,8 +154,31 @@ export class PiRequestLogWriter {
   }
 }
 
-async function ensurePrivateDirectory(path: string): Promise<void> {
+async function ensurePrivateDirectory(path: string, trustedRoot?: string): Promise<void> {
   const absolute = resolve(path);
+  if (trustedRoot) {
+    const root = resolve(trustedRoot);
+    const child = relative(root, absolute);
+    if (child.startsWith("..") || child.includes("\0"))
+      throw new Error("Pi request log directory is outside its root");
+    let current = root;
+    const rootInfo = await lstat(current).catch(() => undefined);
+    if (!rootInfo || rootInfo.isSymbolicLink() || !rootInfo.isDirectory())
+      throw new Error("Pi request log directory is unsafe");
+    for (const segment of child.split(sep).filter(Boolean)) {
+      current = join(current, segment);
+      const info = await lstat(current).catch(() => undefined);
+      if (!info) {
+        await mkdir(current, { mode: 0o700 });
+        const created = await lstat(current);
+        if (created.isSymbolicLink() || !created.isDirectory())
+          throw new Error("Pi request log directory is unsafe");
+      } else if (info.isSymbolicLink() || !info.isDirectory()) {
+        throw new Error("Pi request log directory is unsafe");
+      }
+    }
+    return;
+  }
   const root = parse(absolute).root;
   const missing: string[] = [];
   let current = absolute;

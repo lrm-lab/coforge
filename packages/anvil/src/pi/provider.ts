@@ -1,9 +1,5 @@
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import {
-  clearContextViewRequestLogDirectory,
-  PI_SESSION_DIR,
-  registerContextViewRequestLogDirectory,
-} from "@coforge/agent";
+import { PI_SESSION_DIR } from "@coforge/agent";
 import { join } from "node:path";
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { ModelProviderSettingError, type CodeAgentProvider } from "#src/contract";
@@ -31,35 +27,27 @@ export class PiProvider implements CodeAgentProvider {
       throw new ModelProviderSettingError("Pi model provider is required for an Agent API key");
     const environment = this.#host.buildSessionEnvironment(options);
     const hostAgentDir = environment.PI_CODING_AGENT_DIR ?? this.#host.getDefaultAgentDirectory();
-    if (options.contextViewRequestLogDirectory)
-      registerContextViewRequestLogDirectory(
-        join(options.agentWorkspaceDirectory, PI_SESSION_DIR),
-        options.contextViewRequestLogDirectory,
-      );
-    try {
-      return await createPiAgentSession(
-        {
-          cwd: options.agentWorkspaceDirectory,
-          agentDir: hostAgentDir,
-          sessionDir: join(options.agentWorkspaceDirectory, PI_SESSION_DIR),
-          sessionId: options.sessionId,
-          sessionMode: options.sessionMode,
-          modelProvider: runtime?.modelProvider,
-          model: runtime?.model,
-          reasoning: runtime?.reasoning,
-          apiKey: credential?.apiKey,
-          instructions: options.instructions,
-          environment,
-          sessionKind: "pi",
-          toolProfile: runtime?.toolProfile,
-          conversation: options.conversation,
-          memoryControlSession: options.memoryControlSession,
-        },
-        async (...args) => options.onSessionId?.(...args),
-        this.#host,
-      );
-    } finally {
-      clearContextViewRequestLogDirectory(join(options.agentWorkspaceDirectory, PI_SESSION_DIR));
-    }
+    return createPiAgentSession(
+      {
+        cwd: options.agentWorkspaceDirectory,
+        agentDir: hostAgentDir,
+        sessionDir: join(options.agentWorkspaceDirectory, PI_SESSION_DIR),
+        sessionId: options.sessionId,
+        sessionMode: options.sessionMode,
+        contextViewRequestLogDirectory: options.contextViewRequestLogDirectory,
+        modelProvider: runtime?.modelProvider,
+        model: runtime?.model,
+        reasoning: runtime?.reasoning,
+        apiKey: credential?.apiKey,
+        instructions: options.instructions,
+        environment,
+        sessionKind: "pi",
+        toolProfile: runtime?.toolProfile,
+        conversation: options.conversation,
+        memoryControlSession: options.memoryControlSession,
+      },
+      async (...args) => options.onSessionId?.(...args),
+      this.#host,
+    );
   }
 }
