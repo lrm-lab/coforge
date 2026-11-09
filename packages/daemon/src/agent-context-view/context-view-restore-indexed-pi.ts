@@ -1,9 +1,5 @@
 import { createHash } from "node:crypto";
-import type {
-  RecordValue,
-  RestoreRequest,
-  ContextViewRestoreResult,
-} from "./context-view-restore";
+import type { RecordValue, RestoreRequest, ContextViewRestoreResult } from "./context-view-restore";
 import { buildView, isRecord, message, sessionMatches } from "./context-view-restore-primitives";
 import { piRequestMessages, piResponseParts } from "./context-view-pi-projection";
 
