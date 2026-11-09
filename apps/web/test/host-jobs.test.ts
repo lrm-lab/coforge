@@ -17,7 +17,7 @@ describe("cloud computer quota", () => {
     let nickname = "Ada Lovelace";
     const { hosts } = harness({ accounts: { displayName: async () => nickname } });
     const created = await hosts.ensureDefault({ ...request, displayName: "李建" });
-    expect(created.name).toBe("李建的默认云电脑");
+    expect(created.name).toBe("李建's Default Cloud Computer");
     nickname = "别人";
     expect((await hosts.ensureDefault(request)).name).toBe(created.name);
   });
