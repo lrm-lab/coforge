@@ -296,6 +296,13 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       `[...document.querySelectorAll("[data-task-board] article h3")].map((h) => h.textContent.trim())`,
     );
     expect(projectCards).toContain("Book the webinar speakers");
+    // A card names its owner beside the face (task #task_v2:#8), on the one footer line.
+    const footers = await evaluate<{ title: string; text: string; height: number }[]>(
+      `[...document.querySelectorAll("[data-task-board] article")].map((card) => { const footer = card.querySelector("[data-task-card-footer]"); return { title: card.querySelector("h3").textContent.trim(), text: footer.textContent, height: footer.getBoundingClientRect().height }; })`,
+    );
+    const drafted = footers.find((footer) => footer.title === "Draft the onboarding emails");
+    expect(drafted?.text).toContain("Lin Xia");
+    for (const footer of footers) expect(footer.height).toBeLessThanOrEqual(28);
     expect(projectCards).not.toContain("Plan the partner webinar");
     // "New task", filled in, over the board.
     await browser(

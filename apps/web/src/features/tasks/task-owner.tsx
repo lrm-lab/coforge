@@ -46,10 +46,17 @@ export function TaskPerson({
  * show it; no owner is a dashed ring. A deleted Agent keeps its greyed avatar and its ARCHIVED
  * marker, as everywhere a Task names its holder. No tooltip: its trigger would add a tab stop to
  * every card. */
-export function TaskOwnerAvatar({ owner }: { owner: TaskView["owner"] }) {
+export function TaskOwnerAvatar({
+  owner,
+  showName = false,
+}: {
+  owner: TaskView["owner"];
+  /** Names the owner beside the face, on one line that truncates first when the row is tight. */
+  showName?: boolean;
+}) {
   const name = owner?.name ?? m.tasks_unassigned();
   return (
-    <span className="flex shrink-0 items-center gap-1.5">
+    <span className={cn("flex items-center gap-1.5", showName ? "min-w-0" : "shrink-0")}>
       <span className="sr-only">
         {m.tasks_overview_owner()}: {name}
       </span>
@@ -68,6 +75,11 @@ export function TaskOwnerAvatar({ owner }: { owner: TaskView["owner"] }) {
           <span className="size-6 shrink-0 rounded-full border border-dashed border-primary" />
         )}
       </span>
+      {showName && owner && (
+        <span aria-hidden="true" className="min-w-0 truncate text-xs text-secondary">
+          {owner.name}
+        </span>
+      )}
       {owner?.deleted && <DeletedAgentBadge />}
     </span>
   );

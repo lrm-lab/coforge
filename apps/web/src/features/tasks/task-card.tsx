@@ -241,13 +241,15 @@ export function TaskCard({
       {/* Its owner, then how much talk it holds and when it was made. With a touch pointer the
           tools sit at this row's end, so it keeps room for them and stays even with no owner. */}
       <div
+        data-task-card-footer
         className={cn(
           "flex min-h-7 items-center justify-between gap-2",
           tools && "any-pointer-coarse:pr-16",
         )}
       >
-        <TaskOwnerAvatar owner={task.owner} />
-        <span className="flex min-w-0 items-center gap-3">
+        <TaskOwnerAvatar owner={task.owner} showName />
+        {/* The counts and the date keep their room; the owner's name gives way first. */}
+        <span className="flex shrink-0 items-center gap-3">
           <TaskCount
             icon={MessageChatCircle}
             count={task.replyCount}
