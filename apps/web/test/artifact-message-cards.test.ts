@@ -1,10 +1,22 @@
 import { expect, test } from "bun:test";
+import { canReadConversationHome } from "#src/server/conversations/channel-read-access.server";
 import { ArtifactReads } from "#src/server/artifacts/artifact-reads.server";
 
 const ids = Array.from(
   { length: 20 },
   (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
 );
+
+test("artifact home access shares one matrix for channels and DMs", () => {
+  const cases = [
+    [{ channelName: "general", visibility: "public", member: false }, true],
+    [{ channelName: "secret", visibility: "private", member: true }, true],
+    [{ channelName: "secret", visibility: "private", member: false }, false],
+    [{ channelName: null, visibility: "private", member: true }, true],
+    [{ channelName: null, visibility: "private", member: false }, false],
+  ] as const;
+  for (const [input, expected] of cases) expect(canReadConversationHome(input)).toBe(expected);
+});
 
 test("a message page projects twenty artifact links with three batch reads", async () => {
   const calls: string[] = [];
@@ -96,4 +108,85 @@ test("a reader without the artifact's existing access gets a redacted card", asy
     })
   )[0]!;
   expect(card).toEqual({ kind: "artifact", state: "forbidden", artifactId: id, canOpen: false });
+});
+
+test("message cards do not reveal deletion to a reader without home access", async () => {
+  const inaccessible = ids[1]!;
+  const readable = ids[2]!;
+  const db = {
+    artifact: {
+      findMany: async () => [
+        {
+          id: inaccessible,
+          title: "Hidden deleted",
+          preview: "private",
+          kind: "markdown",
+          currentVersion: 1,
+          homeKey: "conversation:private-2",
+          access: "conversation",
+          deletedAt: new Date(),
+          authorAgentId: "agent-secret",
+          workspace: { slug: "docs" },
+        },
+        {
+          id: readable,
+          title: "Visible deleted",
+          preview: "visible",
+          kind: "markdown",
+          currentVersion: 1,
+          homeKey: "workspace",
+          access: "workspace",
+          deletedAt: new Date(),
+          authorAgentId: "agent-secret",
+          workspace: { slug: "docs" },
+        },
+      ],
+    },
+    workspaceMembership: { findUnique: async () => ({ userId: "user-1" }) },
+    conversation: {
+      findMany: async () => [
+        { id: "private-2", channelName: "secret", visibility: "private", members: [] },
+      ],
+    },
+  };
+  const reads = new ArtifactReads(db as never, async () => true);
+  const [hidden, visible] = (
+    await reads.messageCards({
+      workspaceId: "workspace-1",
+      reader: { userId: "user-1" },
+      messages: [
+        {
+          body: `/w/docs/artifacts/${inaccessible}\n/w/docs/artifacts/${readable}`,
+        },
+      ],
+    })
+  )[0]!;
+  expect(hidden).toEqual({
+    kind: "artifact",
+    state: "forbidden",
+    artifactId: inaccessible,
+    canOpen: false,
+  });
+  expect(visible).toEqual({
+    kind: "artifact",
+    state: "deleted",
+    artifactId: readable,
+    canOpen: false,
+  });
+});
+
+test("a page without artifact links does not read the artifacts experiment", async () => {
+  let enabledCalls = 0;
+  const reads = new ArtifactReads({} as never, async () => {
+    enabledCalls += 1;
+    return true;
+  });
+  expect(
+    await reads.messageCards({
+      workspaceId: "workspace-1",
+      reader: { userId: "user-1" },
+      messages: [{ body: "ordinary message" }],
+    }),
+  ).toEqual([[]]);
+  expect(enabledCalls).toBe(0);
 });

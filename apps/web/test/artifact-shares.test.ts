@@ -126,3 +126,28 @@ test("an Agent target with mixed artifact access uses the neutral plural share t
     `One artifact was shared:\n/w/docs/artifacts/${ARTIFACT}\n/w/docs/artifacts/${second}`,
   ]);
 });
+
+test("artifact sharing rejects more than twenty artifacts or targets", async () => {
+  const shares = new ArtifactShares({} as never, async () => true);
+  const send = async () => ({ id: "message", sequence: 1 });
+  const base = {
+    workspaceId: "workspace-1",
+    actor: { agentId: "agent-1" } as const,
+    requestId: "00000000-0000-4000-8000-000000000005",
+    send,
+  };
+  await expect(
+    shares.share({
+      ...base,
+      artifactIds: Array.from({ length: 21 }, () => ARTIFACT),
+      targets: ["#launch"],
+    }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  await expect(
+    shares.share({
+      ...base,
+      artifactIds: [ARTIFACT],
+      targets: Array.from({ length: 21 }, (_, index) => `#launch-${index}`),
+    }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});

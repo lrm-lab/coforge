@@ -58,7 +58,7 @@ const RULES = {
   revert: z.object({ artifact: id, to: version, baseVersion: version, idempotencyKey: id }),
   share: z.object({
     artifactIds: z.array(id).min(1).max(20),
-    targets: z.array(z.string().trim().min(1).max(200)).min(1).max(50),
+    targets: z.array(z.string().trim().min(1).max(200)).min(1).max(20),
     note: note.optional(),
     requestId: id,
   }),

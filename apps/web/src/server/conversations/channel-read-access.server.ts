@@ -89,6 +89,15 @@ export function canReadChannel(channel: { visibility: string }, isActiveMember: 
   return channel.visibility === CHANNEL_VISIBILITY.PUBLIC || isActiveMember;
 }
 
+/** The shared in-memory read rule for an artifact's conversation home. */
+export function canReadConversationHome(input: {
+  channelName: string | null;
+  visibility: string;
+  member: boolean;
+}) {
+  return input.channelName === null ? input.member : canReadChannel(input, input.member);
+}
+
 /**
  * Whether a person reads one conversation, for a gate that has only its id (a realtime
  * subscription, a file download): a DM they are an active member of, or a channel of a Workspace
@@ -159,7 +168,11 @@ export async function actorConversationAccess(
   if (!conversation) return undefined;
   const member = conversation.members.length > 0;
   return {
-    read: conversation.channelName === null ? member : canReadChannel(conversation, member),
+    read: canReadConversationHome({
+      channelName: conversation.channelName,
+      visibility: conversation.visibility,
+      member,
+    }),
     write: member && conversation.archivedAt === null,
     kind: conversation.channelName === null ? "dm" : "channel",
   };

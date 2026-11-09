@@ -1,6 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
 import { AppError } from "#src/lib/app-error";
+import { canReadConversationHome } from "#src/server/conversations/channel-read-access.server";
 import {
   artifactHomeAccess,
   artifactsDisabled,
@@ -267,11 +268,11 @@ export class ArtifactReads {
     reader: ArtifactActor;
     messages: readonly { body: string }[];
   }): Promise<ArtifactMessageCard[][]> {
-    if (!(await this.enabled(input.workspaceId))) return input.messages.map(() => []);
     const ids = [
       ...new Set(input.messages.flatMap((message) => artifactIdsInBody(message.body, 100))),
     ];
     if (ids.length === 0) return input.messages.map(() => []);
+    if (!(await this.enabled(input.workspaceId))) return input.messages.map(() => []);
     const rows = await this.db.artifact.findMany({
       where: { workspaceId: input.workspaceId, id: { in: ids } },
       select: {
@@ -327,10 +328,10 @@ export class ArtifactReads {
     const member = membership !== null;
     const cardFor = (id: string): ArtifactMessageCard => {
       const row = byId.get(id);
-      if (!row || row.deletedAt !== null)
+      if (!row)
         return {
           kind: "artifact",
-          state: row?.deletedAt ? "deleted" : "forbidden",
+          state: "forbidden",
           artifactId: id,
           canOpen: false,
         };
@@ -342,11 +343,15 @@ export class ArtifactReads {
         row.homeKey === "workspace"
           ? member
           : conversation !== undefined &&
-            (conversation.channelName !== null
-              ? conversation.visibility === "public" || conversation.members.length > 0
-              : conversation.members.length > 0);
+            canReadConversationHome({
+              channelName: conversation.channelName,
+              visibility: conversation.visibility,
+              member: conversation.members.length > 0,
+            });
       const canOpen = homeRead || (row.access === "workspace" && member);
       if (!canOpen) return { kind: "artifact", state: "forbidden", artifactId: id, canOpen: false };
+      if (row.deletedAt !== null)
+        return { kind: "artifact", state: "deleted", artifactId: id, canOpen: false };
       return {
         kind: "artifact",
         state: "open",
