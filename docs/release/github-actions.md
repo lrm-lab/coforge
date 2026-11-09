@@ -108,9 +108,9 @@ after they land, so a maintainer runs the local checks before pushing. A PR
 update cancels the PR's stale CI run. Every push to `main` runs to completion in
 a concurrency group of its own commit: a shared group keeps only one pending run
 and cancels the rest even without `cancel-in-progress`. Release-track checks do
-not cancel an active publication or deployment.
-The cloud workflow keeps GitHub's default single pending run: a newer dispatch
-replaces a waiting one, and the running deployment is never cancelled.
+not cancel an active publication or deployment. The cloud workflow keeps
+GitHub's default single pending run: a newer dispatch replaces a waiting one,
+and the running deployment is never cancelled.
 
 Module-owned test/check/build commands remain unchanged. Local full validation
 still uses `mise run test`, `mise run check`, and `mise run build`; CI-policy
@@ -149,17 +149,23 @@ unchanged inputs then keeps its digest when its commands write the same bytes,
 as the migration toolchain's `bun install` does, and deploy hosts do not pull it
 again.
 
-Deploy and release jobs also restore nothing from the Actions cache:
-`cache: false` on `jdx/mise-action` and `cache-binary: false` on
-`docker/setup-buildx-action`. GitHub does not verify cache contents, and a
-restored mise cache supplies the mise binary itself, which the action runs
-unchecked in a job that holds deploy or publish credentials or builds what a
-publish job uploads. CI jobs hold no deploy or publish credentials and publish
+Deploy and release jobs keep `cache: false` on `jdx/mise-action` and
+`cache-binary: false` on `docker/setup-buildx-action`. GitHub does not verify
+cache contents, and a restored mise cache supplies the binary itself, which
+the action runs in a job holding deploy or publish credentials or building
+what a publish job uploads. CI jobs hold no such credentials and publish
 nothing, so they keep the cache.
 
-The external realtime probe requires a successful WebSocket handshake within
-ten seconds. HTTP error pages, including 404 and 502, fail deployment verification;
-the probe does not claim to validate an authenticated application session.
+The credential jobs restore one thing: the `mise` binary alone, via a separate
+`actions/cache` step scoped to the binary files under `<miseDir>/bin` (task
+#714), keyed by the sha256 in `.github/mise-digests.env` (regenerate: `bun scripts/ci/mise-digests.ts`).
+Default-checkout jobs call `.github/actions/setup-verified-mise`, which verifies
+the restored binaries — rejecting any other restored file, since `bin/` joins
+PATH — before `mise-action` runs them: the action executes a cache-hit binary
+before its own `sha256` check, so a poisoned cache fails closed. Tools stay
+uncached (rebuilt from `mise.lock`); Windows verifies `mise-shim` too. Jobs
+checking out `inputs.commit` or a `workflow_run` head_sha inline the same
+steps. The realtime probe contract is in [Health verification](health-verification.md).
 
 Publishing a local-distribution release is **manual**. The workflow exposes only
 `workflow_dispatch`; it is not triggered by merging to `main`. A client release

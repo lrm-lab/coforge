@@ -27,30 +27,38 @@ jobs:
           - release_target: darwin-arm64
             rust_target: aarch64-apple-darwin
             runner: macos-latest
+            mise_sha256: ed2ea8c994d98d0bfdc214d19c7351fb5bb506164dc368840bd09992d1bd07c5
             tools: rust
           # Cross-compiled on the arm64 runner. The linker leaves x86_64 output unsigned, so the
           # job ad-hoc signs it the way Bun signs its darwin-x64 executables.
           - release_target: darwin-x64
             rust_target: x86_64-apple-darwin
             runner: macos-latest
+            mise_sha256: ed2ea8c994d98d0bfdc214d19c7351fb5bb506164dc368840bd09992d1bd07c5
             tools: rust
           # musl, statically linked: no glibc version floor on the user's machine. This entry
           # also generates the licence notices, which every target's release ships beside it.
           - release_target: linux-x64
             rust_target: x86_64-unknown-linux-musl
             runner: ubuntu-24.04
+            mise_sha256: 2950f8e1c59f3d9716bc3ee7d9242de94f9ab4054d97e65e12f2e67867c5f8fd
             tools: rust github:EmbarkStudios/cargo-about
           - release_target: linux-arm64
             rust_target: aarch64-unknown-linux-musl
             runner: ubuntu-24.04-arm
+            mise_sha256: 2cea9423c16afa5e1f90646c35ebb3bc8d4647671a605d5856eb96dbbbf87e47
             tools: rust
           - release_target: windows-x64
             rust_target: x86_64-pc-windows-msvc
             runner: windows-latest
+            mise_sha256: 8a03fe2f169a215acbff3311098c89fb13f170a606b41c27e507467cde62e683
+            mise_shim_sha256: 0097193b65bfc082e3fd8bde911a60ad4fc81536d66649ed3b305642c755a62d
             tools: rust
           - release_target: windows-arm64
             rust_target: aarch64-pc-windows-msvc
             runner: windows-11-arm
+            mise_sha256: 8f2ac6fb63035d46465fdb8e962f5c02120e2ba1004c46aad7763fdc68c267c8
+            mise_shim_sha256: f0eb02a137b672c6518b78f9f9c277e93c29363f6942a9ffab143fa6a046a12f
             tools: rust
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -79,14 +87,89 @@ jobs:
           ref: ${{ inputs.commit }}
           persist-credentials: false
 
+      - name: Resolve the mise binary cache path
+        id: mise-bin-path
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            dir="$(cygpath -m "$LOCALAPPDATA/mise/bin")"
+          else
+            dir="$HOME/.local/share/mise/bin"
+          fi
+          {
+            echo "path=$dir"
+            # The cache holds binary files only: a directory entry could
+            # carry an unverified executable that bin/'s PATH entry would run.
+            echo "cache_paths<<__MISE_CACHE_PATHS__"
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              printf '%s\n' "$dir/mise.exe" "$dir/mise-shim.exe"
+            else
+              printf '%s\n' "$dir/mise"
+            fi
+            echo "__MISE_CACHE_PATHS__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore the mise binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.mise-bin-path.outputs.cache_paths }}
+          key: mise-bin-2026.9.2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.mise_sha256 }}
+
+      # mise-action runs a restored binary before its own sha256 check, so a
+      # poisoned cache must be rejected here, before setup executes it.
+      - name: Verify the restored mise binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          bindir="${{ steps.mise-bin-path.outputs.path }}"
+          for entry in "$bindir"/*; do
+            [ -e "$entry" ] || continue
+            case "$(basename "$entry")" in
+              mise|mise.exe|mise-shim.exe) ;;
+              *) echo "unexpected entry in restored mise bin: $entry" >&2; exit 1 ;;
+            esac
+          done
+          for f in "$bindir/mise" "$bindir/mise.exe" "$bindir/mise-shim.exe"; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *mise-shim.exe) want="${{ matrix.mise_shim_sha256 }}" ;;
+              *) want="${{ matrix.mise_sha256 }}" ;;
+            esac
+            got="$(sha256sum "$f" 2>/dev/null || shasum -a 256 "$f")"
+            [ "${got%% *}" = "$want" ] || {
+              echo "restored $(basename "$f") sha256 mismatch" >&2
+              exit 1
+            }
+          done
+
       # From crates/installer/ mise also sees the root tools, so install only what this entry uses.
       - name: Install pinned Rust tools
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           version: "2026.9.2"
           cache: false
+          sha256: ${{ matrix.mise_sha256 }}
           working_directory: crates/installer
           install_args: ${{ matrix.tools }}
+
+      # sha256 above covers mise.exe only; the archive's second binary needs its own check.
+      - name: Verify the mise shim
+        if: startsWith(matrix.release_target, 'windows')
+        shell: bash
+        run: |
+          set -euo pipefail
+          shim="$(cygpath -u "$LOCALAPPDATA")/mise/bin/mise-shim.exe"
+          if [ ! -f "$shim" ]; then
+            echo "mise-shim.exe is absent; mise falls back to file shim mode"
+            exit 0
+          fi
+          got="$(sha256sum "$shim" | cut -d' ' -f1)"
+          want="${{ matrix.mise_shim_sha256 }}"
+          if [ "$got" != "$want" ]; then
+            echo "mise-shim.exe sha256 mismatch: expected $want, got $got" >&2
+            exit 1
+          fi
 
       - name: Add the Rust target
         run: mise exec rust -- rustup target add "${{ matrix.rust_target }}"

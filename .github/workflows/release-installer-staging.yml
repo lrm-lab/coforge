@@ -67,11 +67,9 @@ jobs:
           persist-credentials: false
 
       - name: Set up mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: ./.github/actions/setup-verified-mise
         with:
-          version: "2026.9.2"
-          cache: false
-          install: false
+          install: "false"
 
       - name: Install toolchain
         run: mise install
@@ -164,13 +162,11 @@ jobs:
           persist-credentials: false
 
       # From crates/installer/ mise also sees the root tools, so install only what this entry uses.
-      - name: Install pinned Rust tools
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: Set up mise
+        uses: ./.github/actions/setup-verified-mise
         with:
-          version: "2026.9.2"
-          cache: false
-          working_directory: crates/installer
-          install_args: ${{ matrix.tools }}
+          working-directory: crates/installer
+          install-args: ${{ matrix.tools }}
 
       - name: Add the Rust target
         run: mise exec rust -- rustup target add "${{ matrix.rust_target }}"
@@ -258,11 +254,9 @@ jobs:
           persist-credentials: false
 
       - name: Set up mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: ./.github/actions/setup-verified-mise
         with:
-          version: "2026.9.2"
-          cache: false
-          install: false
+          install: "false"
 
       - name: Install toolchain
         run: mise install
@@ -327,11 +321,9 @@ jobs:
           persist-credentials: false
 
       - name: Set up mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: ./.github/actions/setup-verified-mise
         with:
-          version: "2026.9.2"
-          cache: false
-          install: false
+          install: "false"
 
       - name: Install toolchain
         run: mise install

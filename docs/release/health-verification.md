@@ -29,6 +29,11 @@ that a successful bundle build cannot detect. Nitro's documented
 currently avoids cyclic server-chunk initialization; browser splitting is unchanged.
 This workaround does not replace staging checks with real dependencies.
 
+The external realtime probe requires a successful WebSocket handshake within
+ten seconds. HTTP error pages, including 404 and 502, fail deployment
+verification; the probe does not claim to validate an authenticated application
+session.
+
 Before automatic rollback, `remote-deploy.sh` reports allowlisted container
 state, exit/restart counts, health state, loopback HTTP status, and fixed startup
 error signatures. It examines at most 80 log lines from five minutes, capped at

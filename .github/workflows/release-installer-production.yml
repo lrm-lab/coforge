@@ -159,11 +159,32 @@ jobs:
           ref: ${{ inputs.commit }}
           persist-credentials: false
 
+      - name: Restore the mise binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/mise/bin/mise
+          key: mise-bin-2026.9.2-${{ runner.os }}-${{ runner.arch }}-2950f8e1c59f3d9716bc3ee7d9242de94f9ab4054d97e65e12f2e67867c5f8fd
+
+      # sha256 before mise-action executes a restored binary (task #714).
+      - name: Verify the restored mise binary
+        shell: bash
+        run: |
+          bindir="$HOME/.local/share/mise/bin"
+          for entry in "$bindir"/*; do
+            [ -e "$entry" ] || continue
+            [ "$(basename "$entry")" = "mise" ] || { echo "unexpected entry in restored mise bin: $entry" >&2; exit 1; }
+          done
+          bin="$bindir/mise"
+          [ ! -f "$bin" ] && exit 0
+          got="$(sha256sum "$bin" 2>/dev/null || shasum -a 256 "$bin")"
+          [ "${got%% *}" = "2950f8e1c59f3d9716bc3ee7d9242de94f9ab4054d97e65e12f2e67867c5f8fd" ] || { echo "restored mise sha256 mismatch" >&2; exit 1; }
+
       - name: Set up mise
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           version: "2026.9.2"
           cache: false
+          sha256: 2950f8e1c59f3d9716bc3ee7d9242de94f9ab4054d97e65e12f2e67867c5f8fd
           install: false
 
       - name: Install toolchain
@@ -232,11 +253,32 @@ jobs:
           ref: ${{ inputs.commit }}
           persist-credentials: false
 
+      - name: Restore the mise binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/mise/bin/mise
+          key: mise-bin-2026.9.2-${{ runner.os }}-${{ runner.arch }}-2950f8e1c59f3d9716bc3ee7d9242de94f9ab4054d97e65e12f2e67867c5f8fd
+
+      # sha256 before mise-action executes a restored binary (task #714).
+      - name: Verify the restored mise binary
+        shell: bash
+        run: |
+          bindir="$HOME/.local/share/mise/bin"
+          for entry in "$bindir"/*; do
+            [ -e "$entry" ] || continue
+            [ "$(basename "$entry")" = "mise" ] || { echo "unexpected entry in restored mise bin: $entry" >&2; exit 1; }
+          done
+          bin="$bindir/mise"
+          [ ! -f "$bin" ] && exit 0
+          got="$(sha256sum "$bin" 2>/dev/null || shasum -a 256 "$bin")"
+          [ "${got%% *}" = "2950f8e1c59f3d9716bc3ee7d9242de94f9ab4054d97e65e12f2e67867c5f8fd" ] || { echo "restored mise sha256 mismatch" >&2; exit 1; }
+
       - name: Set up mise
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           version: "2026.9.2"
           cache: false
+          sha256: 2950f8e1c59f3d9716bc3ee7d9242de94f9ab4054d97e65e12f2e67867c5f8fd
           install: false
 
       - name: Install toolchain
@@ -303,11 +345,9 @@ jobs:
           persist-credentials: false
 
       - name: Set up mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: ./.github/actions/setup-verified-mise
         with:
-          version: "2026.9.2"
-          cache: false
-          install: false
+          install: "false"
 
       - name: Install toolchain
         run: mise install

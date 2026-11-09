@@ -4,6 +4,8 @@ export const parse = async (file: string) =>
 export type Step = {
   id?: string;
   name?: string;
+  if?: string;
+  "continue-on-error"?: boolean | string;
   run?: string;
   uses?: string;
   env?: Record<string, string>;
@@ -11,6 +13,7 @@ export type Step = {
 };
 export type Job = {
   if?: string;
+  "runs-on"?: string;
   needs?: string | string[];
   environment?: string;
   permissions?: Record<string, string>;

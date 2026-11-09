@@ -76,12 +76,10 @@ jobs:
           persist-credentials: false
 
       # The script needs Bun alone, not the whole toolchain.
-      - name: Install pinned Bun
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: Set up mise
+        uses: ./.github/actions/setup-verified-mise
         with:
-          version: "2026.9.2"
-          cache: false
-          install_args: bun
+          install-args: bun
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

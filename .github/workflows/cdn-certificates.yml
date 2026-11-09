@@ -50,11 +50,9 @@ jobs:
           persist-credentials: false
 
       - name: Set up mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: ./.github/actions/setup-verified-mise
         with:
-          version: "2026.9.2"
-          cache: false
-          install: false
+          install: "false"
 
       - name: Install toolchain
         run: mise install

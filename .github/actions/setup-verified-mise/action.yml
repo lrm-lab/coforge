@@ -1,0 +1,130 @@
+name: Set up verified mise
+description: >-
+  Restores only the mise binary from an actions/cache entry, sha256-verifies it
+  against .github/mise-digests.env before jdx/mise-action can execute it, runs
+  mise-action with its own cache disabled, and re-verifies the downloaded
+  Windows shim afterwards (task #714). mise-action executes a cache-hit binary
+  before its own sha256 input is checked, so credential jobs verify first and
+  fail closed on a poisoned cache. Only jobs whose checkout is the workflow's
+  own ref may use it: a local action resolves from the checked-out workspace,
+  so a job that checks out inputs.commit or a workflow_run head_sha — a ref
+  that may predate this action — inlines the same steps in workflow YAML.
+inputs:
+  install:
+    description: Passed through to jdx/mise-action's install input.
+    required: false
+    default: "true"
+  install-args:
+    description: Passed through to jdx/mise-action's install_args input.
+    required: false
+    default: ""
+  working-directory:
+    description: Passed through to jdx/mise-action's working_directory input.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Resolve the mise pin
+      id: pin
+      shell: bash
+      run: |
+        set -euo pipefail
+        digests="$GITHUB_WORKSPACE/.github/mise-digests.env"
+        [ -f "$digests" ] || { echo "missing $digests" >&2; exit 1; }
+        get() { sed -n "s/^$1=//p" "$digests"; }
+        version="$(get MISE_VERSION)"
+        os_key="$(printf '%s' "$RUNNER_OS" | tr '[:lower:]' '[:upper:]')"
+        arch_key="$(printf '%s' "$RUNNER_ARCH" | tr '[:lower:]' '[:upper:]')"
+        sha256="$(get "SHA256_${os_key}_${arch_key}")"
+        shim_sha256="$(get "SHA256_${os_key}_${arch_key}_SHIM")"
+        [ -n "$version" ] && [ -n "$sha256" ] || {
+          echo "incomplete mise digests for ${os_key}_${arch_key}" >&2
+          exit 1
+        }
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          path="$(cygpath -m "$LOCALAPPDATA/mise/bin")"
+        else
+          path="$HOME/.local/share/mise/bin"
+        fi
+        {
+          echo "version=$version"
+          echo "sha256=$sha256"
+          echo "shim_sha256=$shim_sha256"
+          echo "path=$path"
+          # The cache holds binary files only: a directory entry could carry
+          # an unverified executable that bin/'s PATH entry would run.
+          echo "cache_paths<<__MISE_CACHE_PATHS__"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            printf '%s\n' "$path/mise.exe" "$path/mise-shim.exe"
+          else
+            printf '%s\n' "$path/mise"
+          fi
+          echo "__MISE_CACHE_PATHS__"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore the mise binary
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pin.outputs.cache_paths }}
+        key: mise-bin-${{ steps.pin.outputs.version }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.sha256 }}
+
+    # mise-action runs a restored binary before its own sha256 check, so a
+    # poisoned cache must be rejected here, before setup executes it.
+    - name: Verify the restored mise binaries
+      shell: bash
+      env:
+        MISE_BIN_DIR: ${{ steps.pin.outputs.path }}
+        MISE_SHA256: ${{ steps.pin.outputs.sha256 }}
+        MISE_SHIM_SHA256: ${{ steps.pin.outputs.shim_sha256 }}
+      run: |
+        set -euo pipefail
+        # bin/ is added to PATH wholesale, so a restored entry that is not one
+        # of the three known binaries would run unchecked in a credential job.
+        for entry in "$MISE_BIN_DIR"/*; do
+          [ -e "$entry" ] || continue
+          case "$(basename "$entry")" in
+            mise|mise.exe|mise-shim.exe) ;;
+            *) echo "unexpected entry in restored mise bin: $entry" >&2; exit 1 ;;
+          esac
+        done
+        for f in "$MISE_BIN_DIR/mise" "$MISE_BIN_DIR/mise.exe" "$MISE_BIN_DIR/mise-shim.exe"; do
+          [ -f "$f" ] || continue
+          case "$f" in
+            *mise-shim.exe) want="$MISE_SHIM_SHA256" ;;
+            *) want="$MISE_SHA256" ;;
+          esac
+          got="$(sha256sum "$f" 2>/dev/null || shasum -a 256 "$f")"
+          [ "${got%% *}" = "$want" ] || {
+            echo "restored $(basename "$f") sha256 mismatch" >&2
+            exit 1
+          }
+        done
+
+    - name: Set up mise
+      uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      with:
+        version: ${{ steps.pin.outputs.version }}
+        cache: false
+        sha256: ${{ steps.pin.outputs.sha256 }}
+        install: ${{ inputs.install }}
+        install_args: ${{ inputs.install-args }}
+        working_directory: ${{ inputs.working-directory }}
+
+    # sha256 above covers mise.exe only; on a cache miss the downloaded
+    # archive's second binary still needs its own check.
+    - name: Verify the downloaded mise shim
+      shell: bash
+      env:
+        MISE_BIN_DIR: ${{ steps.pin.outputs.path }}
+        MISE_SHIM_SHA256: ${{ steps.pin.outputs.shim_sha256 }}
+      run: |
+        set -euo pipefail
+        [ "$RUNNER_OS" = "Windows" ] || exit 0
+        shim="$MISE_BIN_DIR/mise-shim.exe"
+        [ ! -f "$shim" ] && { echo "mise-shim.exe absent; mise falls back to file shim mode"; exit 0; }
+        got="$(sha256sum "$shim" 2>/dev/null || shasum -a 256 "$shim")"
+        [ "${got%% *}" = "$MISE_SHIM_SHA256" ] || {
+          echo "mise-shim.exe sha256 mismatch" >&2
+          exit 1
+        }
