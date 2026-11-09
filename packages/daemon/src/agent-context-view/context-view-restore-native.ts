@@ -67,7 +67,6 @@ export function restoreCodex(
   const messages: RestoredContextMessage[] = [];
   const effective: RecordValue[] = [];
   let compacted = false;
-  let sawTurnContext = false;
   let model: string | null = null;
   let requestAt: string | null = null;
   let sawAdditionalTools = false;
@@ -75,7 +74,6 @@ export function restoreCodex(
   for (const original of records) {
     const record = providerPayload(original);
     if (record.type === "turn_context") {
-      sawTurnContext = true;
       const context = isRecord(record.payload) ? record.payload : record;
       if (typeof context.model === "string") model = context.model;
       if (typeof record.timestamp === "string") requestAt = record.timestamp;
