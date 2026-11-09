@@ -94,7 +94,7 @@ export function HoverPopover({
         shouldSkipAnimation={false}
         className={cn(
           "z-50 w-80 max-w-[calc(100vw-24px)] origin-(--trigger-anchor-point) overflow-y-auto rounded-xl border border-secondary bg-primary text-primary shadow-lg outline-none",
-          "motion-safe:data-[entering]:animate-in motion-safe:data-[entering]:fade-in motion-safe:data-[entering]:duration-(--motion-in-sm) motion-safe:data-[entering]:ease-snap motion-safe:data-[exiting]:animate-out motion-safe:data-[exiting]:fade-out motion-safe:data-[exiting]:duration-(--motion-out-sm) motion-safe:data-[exiting]:ease-in",
+          "motion-safe:data-[entering]:animate-in motion-safe:data-[entering]:fade-in motion-safe:data-[entering]:motion-enter-sm motion-safe:data-[exiting]:animate-out motion-safe:data-[exiting]:fade-out motion-safe:data-[exiting]:motion-leave-sm",
           className,
         )}
       >

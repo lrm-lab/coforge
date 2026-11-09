@@ -6,7 +6,7 @@
  * eased reset reads the old clipped height, so a menu short of room below would not flip above.
  */
 export const POPOVER_MOTION = [
-  "transition-[translate,opacity] duration-(--motion-in-sm) ease-snap exiting:duration-(--motion-out-sm) exiting:ease-in",
+  "transition-[translate,opacity] motion-enter-sm exiting:motion-leave-sm",
   "entering:opacity-0 exiting:opacity-0",
   "placement-bottom:entering:-translate-y-0.5 placement-bottom:exiting:-translate-y-0.5",
   "placement-top:entering:translate-y-0.5 placement-top:exiting:translate-y-0.5",

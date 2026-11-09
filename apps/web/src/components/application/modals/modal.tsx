@@ -14,8 +14,8 @@ export const ModalOverlay = (props: AriaModalOverlayProps) => {
                     // Vertical padding
                     "pt-(--modal-pt) pb-(--modal-pb) [--modal-pb:clamp(16px,8vh,64px)] [--modal-pt:16px] sm:[--modal-pb:32px] sm:[--modal-pt:32px]",
                     // Animations
-                    state.isEntering && "duration-(--motion-in) ease-snap animate-in fade-in",
-                    state.isExiting && "duration-(--motion-out) ease-in animate-out fade-out",
+                    state.isEntering && "motion-enter animate-in fade-in",
+                    state.isExiting && "motion-leave animate-out fade-out",
                     typeof props.className === "function" ? props.className(state) : props.className,
                 )
             }
@@ -32,8 +32,8 @@ export const Modal = (props: AriaModalOverlayProps) => (
                 // Max height based on parent's vertical padding
                 "max-h-[calc(var(--visual-viewport-height)-var(--modal-pt)-var(--modal-pb))]",
                 // Animations
-                state.isEntering && "duration-(--motion-in) ease-snap animate-in zoom-in-95",
-                state.isExiting && "duration-(--motion-out) ease-in animate-out zoom-out-95",
+                state.isEntering && "motion-enter animate-in zoom-in-95",
+                state.isExiting && "motion-leave animate-out zoom-out-95",
                 typeof props.className === "function" ? props.className(state) : props.className,
             )
         }

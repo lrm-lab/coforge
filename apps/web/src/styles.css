@@ -99,8 +99,8 @@
 
   /* The app's one curve for anything that appears or answers a press (Frank, 11-09: ease-out,
      under 300ms): it moves at once and settles gently, so the same duration reads quicker than
-     the browser's own ease-out. Leaving uses plain ease-in and a shorter duration (the
-     `--motion-*` times below). */
+     the browser's own ease-out. Leaving uses it too, in a shorter time (the `--motion-*` times
+     and `motion-enter` / `motion-leave` utilities below). */
   --ease-snap: cubic-bezier(0.23, 1, 0.32, 1);
   /* A spinner turning slowly reads as stuck; a quicker turn reads as working. */
   --animate-spin: spin 0.7s linear infinite;
@@ -392,9 +392,10 @@ html[data-drag-cursor] [data-drop-blocked] * {
 }
 
 /* How long things take to appear (`in`) and leave (`out`), in three sizes, so every overlay is
-   timed from here (`duration-(--motion-in)`): sm for what sits by its trigger (menus, selects,
-   tooltips, hover cards), the default for dialogs and the mobile menu, lg for panels that cross
-   the screen (side panels, bottom sheets). Leaving is always the quicker of the two. */
+   timed from here: sm for what sits by its trigger (menus, selects, tooltips, hover cards), the
+   default for dialogs and the mobile menu, lg for panels that cross the screen (side panels,
+   bottom sheets). Leaving is the quicker of the two, but it uses the same quick-start curve as
+   entering: nothing eases in. */
 :root {
   --motion-in-sm: 150ms;
   --motion-out-sm: 100ms;
@@ -402,4 +403,80 @@ html[data-drag-cursor] [data-drop-blocked] * {
   --motion-out: 150ms;
   --motion-in-lg: 250ms;
   --motion-out-lg: 200ms;
+}
+
+/* The only way a component names a time and a curve: `motion-enter-sm`, `motion-leave`, and so
+   on, next to `animate-in` / `animate-out` or a `transition-*`, and with a React Aria variant
+   as `exiting:motion-leave-sm`. They set the animation and the transition together, so either
+   kind of overlay takes the same time. The doubled `&&` raises their specificity above
+   `animate-in` / `animate-out`, which set their own duration and are written after them. */
+@utility motion-enter-sm {
+  && {
+    animation-duration: var(--motion-in-sm);
+    transition-duration: var(--motion-in-sm);
+    animation-timing-function: var(--ease-snap);
+    transition-timing-function: var(--ease-snap);
+  }
+}
+@utility motion-enter {
+  && {
+    animation-duration: var(--motion-in);
+    transition-duration: var(--motion-in);
+    animation-timing-function: var(--ease-snap);
+    transition-timing-function: var(--ease-snap);
+  }
+}
+@utility motion-enter-lg {
+  && {
+    animation-duration: var(--motion-in-lg);
+    transition-duration: var(--motion-in-lg);
+    animation-timing-function: var(--ease-snap);
+    transition-timing-function: var(--ease-snap);
+  }
+}
+@utility motion-leave-sm {
+  && {
+    animation-duration: var(--motion-out-sm);
+    transition-duration: var(--motion-out-sm);
+    animation-timing-function: var(--ease-snap);
+    transition-timing-function: var(--ease-snap);
+  }
+}
+@utility motion-leave {
+  && {
+    animation-duration: var(--motion-out);
+    transition-duration: var(--motion-out);
+    animation-timing-function: var(--ease-snap);
+    transition-timing-function: var(--ease-snap);
+  }
+}
+@utility motion-leave-lg {
+  && {
+    animation-duration: var(--motion-out-lg);
+    transition-duration: var(--motion-out-lg);
+    animation-timing-function: var(--ease-snap);
+    transition-timing-function: var(--ease-snap);
+  }
+}
+
+/* Reduced motion, for every overlay at once: they keep fading but stop moving. The slide and
+   zoom classes of tailwindcss-animate move through the `--tw-enter-*` / `--tw-exit-*` variables
+   its `enter` and `exit` keyframes read, so those go to zero here; React Aria's popovers move
+   through `translate` (see utils/popover-motion.ts), which goes to none. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-out {
+    --tw-enter-translate-x: 0 !important;
+    --tw-enter-translate-y: 0 !important;
+    --tw-enter-scale: 1 !important;
+    --tw-enter-rotate: 0 !important;
+    --tw-exit-translate-x: 0 !important;
+    --tw-exit-translate-y: 0 !important;
+    --tw-exit-scale: 1 !important;
+    --tw-exit-rotate: 0 !important;
+  }
+  [data-entering],
+  [data-exiting] {
+    translate: none !important;
+  }
 }

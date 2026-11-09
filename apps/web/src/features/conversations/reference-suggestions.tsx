@@ -143,7 +143,7 @@ export function ReferenceSuggestionList({
       }
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
-      className="absolute inset-x-3 bottom-full z-20 mb-1 origin-bottom overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt animate-in fade-in slide-in-from-bottom-1 duration-(--motion-in-sm) ease-snap motion-reduce:animate-none"
+      className="absolute inset-x-3 bottom-full z-20 mb-1 origin-bottom overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt animate-in fade-in slide-in-from-bottom-1 motion-enter-sm motion-reduce:animate-none"
     >
       <ul
         role="presentation"
