@@ -13,6 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { escapePathIdentity, isSafePathScope } from "#src/persistence/path-scope";
 
 export const AGENT_CONTEXT_VIEW_RETENTION_DAYS = 30;
@@ -31,14 +32,14 @@ export const CONTEXT_VIEW_APPEND_FLAGS =
 export type ContextViewIndexEntry = {
   messageId: string;
   sentAt: string;
-  runtime: "claude" | "codex" | "kimi-sdk" | "pi" | "builtin";
+  runtime: "claude" | typeof RUNTIME_PROVIDER.CODEX | "kimi-sdk" | "pi" | "builtin";
   sessionId: string;
   transcript: string;
   offset: number;
 };
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
-const RUNTIMES = new Set(["claude", "codex", "kimi-sdk", "pi", "builtin"]);
+const RUNTIMES = new Set(["claude", RUNTIME_PROVIDER.CODEX, "kimi-sdk", "pi", "builtin"]);
 
 function assertEntry(entry: ContextViewIndexEntry): void {
   if (!ID.test(entry.messageId) || !ID.test(entry.sessionId))

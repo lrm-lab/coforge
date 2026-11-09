@@ -2,6 +2,7 @@ import { relative, isAbsolute, join } from "node:path";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { findClaudeSessionTranscript } from "@lrm/coforge-anvil/claude-code";
 import { findCodexRollout } from "@lrm/coforge-anvil/codex";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { claudeHistoryHost } from "#src/code-agent/claude-code/history-host";
 import { codexHistoryHost } from "#src/code-agent/codex/history-host";
 
@@ -17,7 +18,7 @@ export function providerTranscriptRoot(
       env.CLAUDE_CONFIG_DIR?.trim() ||
       join(env.HOME || claudeHistoryHost.homeDirectory(), ".claude")
     );
-  if (runtime === "codex")
+  if (runtime === RUNTIME_PROVIDER.CODEX)
     return env.CODEX_HOME?.trim() || join(env.HOME || codexHistoryHost.homeDirectory(), ".codex");
   if (runtime === "kimi-sdk")
     return env.KIMI_CODE_HOME?.trim() || join(env.HOME || process.env.HOME || ".", ".kimi-code");
@@ -106,10 +107,10 @@ export async function findProviderTranscript(
     const root = providerTranscriptRoot(runtime, envVars);
     return absolute && root ? relativeSource(root, absolute, "claude") : undefined;
   }
-  if (runtime === "codex") {
+  if (runtime === RUNTIME_PROVIDER.CODEX) {
     const absolute = await findCodexRollout(sessionId, envVars, codexHistoryHost);
     const root = providerTranscriptRoot(runtime, envVars);
-    return absolute && root ? relativeSource(root, absolute, "codex") : undefined;
+    return absolute && root ? relativeSource(root, absolute, RUNTIME_PROVIDER.CODEX) : undefined;
   }
   if (runtime === "kimi-sdk") {
     const root = providerTranscriptRoot(runtime, envVars);

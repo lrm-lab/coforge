@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { redactContextViewValue, type ContextViewRedactionCounts } from "./context-view-redaction";
 import { restoreClaude, restoreCodex } from "./context-view-restore-native";
 import { restoreKimi, restorePi } from "./context-view-restore-captured";
@@ -7,7 +8,7 @@ export type RestoredContextMessage = {
   parts: unknown[];
 };
 export type RestoredContextView = {
-  runtime: "claude" | "codex" | "kimi-sdk" | "pi" | "builtin";
+  runtime: "claude" | typeof RUNTIME_PROVIDER.CODEX | "kimi-sdk" | "pi" | "builtin";
   sessionId: string;
   messageId: string;
   messages: RestoredContextMessage[];
@@ -227,7 +228,7 @@ export function restoreContextView(request: RestoreRequest): ContextViewRestoreR
   switch (request.runtime) {
     case "claude":
       return restoreClaude(records, request);
-    case "codex":
+    case RUNTIME_PROVIDER.CODEX:
       return restoreCodex(records, request);
     case "kimi-sdk":
       return restoreKimi(records, request);

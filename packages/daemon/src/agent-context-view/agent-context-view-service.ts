@@ -1,10 +1,11 @@
 import { fstatSync, lstatSync, openSync, constants, closeSync, readSync } from "node:fs";
 import { relative } from "node:path";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { ContextViewStore, type ContextViewIndexEntry } from "./context-view-store";
 
 export const CONTEXT_VIEW_SUPPORTED_RUNTIMES = [
   "claude",
-  "codex",
+  RUNTIME_PROVIDER.CODEX,
   "kimi-sdk",
   "pi",
   "builtin",
