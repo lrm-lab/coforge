@@ -47,12 +47,12 @@ async function sendResult(
   transport: DaemonConnectionClient,
   result: AgentContextViewResult,
   agentApiKey?: string,
-): Promise<void> {
+): Promise<"accepted" | "failed"> {
   try {
     if (!agentApiKey) throw new Error("context view Agent API key unavailable");
     if (transport.postAgentContextViewResult) {
       await transport.postAgentContextViewResult(result, agentApiKey);
-      return;
+      return "accepted";
     }
     throw new Error("context view HTTP result upload is unavailable");
   } catch (error) {
@@ -62,7 +62,24 @@ async function sendResult(
       error_code: error instanceof Error ? error.name : "unknown",
     });
     // The request has already been logged; no local state is mutated by a failed upload.
+    return "failed";
   }
+}
+
+function logRequestTrace(
+  request: AgentContextViewRequest,
+  startedAt: number,
+  fields: Record<string, unknown>,
+): void {
+  logger.info("Context view request finished", {
+    event: "context_view:result",
+    request_id: request.requestId,
+    agent_id: request.agentId,
+    outcome: fields.outcome,
+    failure_detail: fields.failure_detail,
+    duration_ms: Math.max(0, Date.now() - startedAt),
+    ...fields,
+  });
 }
 
 export function subscribeContextViewQueries(
@@ -74,20 +91,66 @@ export function subscribeContextViewQueries(
     const receivedAt = Date.now();
     const run = requestChain.then(async () => {
       // Leave the final five seconds of Raft's 30 second viewer window for upload and polling.
-      if (Date.now() - receivedAt >= 23_000) return;
-      await answer(request);
+      if (Date.now() - receivedAt >= 23_000) {
+        logRequestTrace(request, receivedAt, {
+          outcome: "expired",
+          failure_detail: "queue_deadline",
+          post_outcome: "skipped",
+        });
+        return;
+      }
+      try {
+        await answer(request);
+      } catch (error) {
+        logRequestTrace(request, receivedAt, {
+          outcome: "failed",
+          failure_detail: "exception",
+          error_class: error instanceof Error ? error.name : "unknown",
+          post_outcome: "skipped",
+        });
+      }
     });
     requestChain = run.catch(() => undefined);
     return run;
   };
   const answer = async (request: AgentContextViewRequest) => {
     const startedAt = Date.now();
+    if (ports.isStopping()) {
+      logRequestTrace(request, startedAt, {
+        outcome: "rejected",
+        failure_detail: "daemon_stopping",
+        post_outcome: "skipped",
+      });
+      return;
+    }
     if (
-      ports.isStopping() ||
       request.workspaceId !== ports.connection.workspaceId ||
       request.computerId !== ports.connection.computerId
-    )
+    ) {
+      logRequestTrace(request, startedAt, {
+        outcome: "rejected",
+        failure_detail: "scope_mismatch",
+        post_outcome: "skipped",
+      });
       return;
+    }
+    const finish = async (
+      result: AgentContextViewResult,
+      fields: Record<string, unknown> = {},
+    ): Promise<void> => {
+      const postOutcome = await sendResult(transport, result, ports.agentApiKey?.(request.agentId));
+      logRequestTrace(request, startedAt, {
+        ...fields,
+        outcome: result.status,
+        failure_detail: result.failureDetail ?? result.reason,
+        post_outcome: postOutcome,
+        status: result.status,
+        reason: result.reason,
+        failure: result.reason,
+        source_bytes: result.sourceBytes,
+        view_bytes: result.viewBytes,
+      });
+    };
     const entry = ports.contextView.find(request.agentId, request.messageId);
     if (!entry) {
       logger.info("Context view request unavailable", {
@@ -96,11 +159,7 @@ export function subscribeContextViewQueries(
         agent_id: request.agentId,
         failure: "not_found",
       });
-      await sendResult(
-        transport,
-        failure(request, "not_found"),
-        ports.agentApiKey?.(request.agentId),
-      );
+      await finish(failure(request, "not_found"));
       return;
     }
     if (entry.sessionId !== request.sessionId) {
@@ -110,11 +169,7 @@ export function subscribeContextViewQueries(
         agent_id: request.agentId,
         failure: "context_mismatch",
       });
-      await sendResult(
-        transport,
-        failure(request, "context_mismatch"),
-        ports.agentApiKey?.(request.agentId),
-      );
+      await finish(failure(request, "context_mismatch"));
       return;
     }
     const providerPath =
@@ -145,13 +200,15 @@ export function subscribeContextViewQueries(
           : source.failure === "missing"
             ? "not_found"
             : "read_failed";
-      await sendResult(
-        transport,
-        failure(request, reason, source.failure, {
-          ...(reason === "too_large" ? { tooLargeCause: "session_file" as const } : {}),
-        }),
-        ports.agentApiKey?.(request.agentId),
-      );
+      const result =
+        reason === "too_large"
+          ? failure(request, reason, source.failure, { tooLargeCause: "session_file" })
+          : failure(request, reason, source.failure);
+      await finish(result, {
+        runtime: entry.runtime,
+        source: providerPath ? "provider" : "workspace_or_state_fallback",
+        index_or_fallback: entry.transcript,
+      });
       return;
     }
     const restored = await runContextViewRestoreInChild({
@@ -195,31 +252,33 @@ export function subscribeContextViewQueries(
             ? { tooLargeCause: restored.tooLargeCause }
             : {}),
         });
-    logger.info("Context view request finished", {
-      event: "context_view:result",
-      request_id: request.requestId,
-      agent_id: request.agentId,
+    const fields = {
       runtime: entry.runtime,
-      status: result.status,
-      failure: result.reason,
       source: providerPath ? "provider" : "workspace_or_state_fallback",
       index_or_fallback: entry.transcript,
       response_found: restored.ok ? restored.view.responseFound === true : false,
       digest_match: restored.ok ? restored.view.digestMatch === true : false,
       redacted_media: restored.ok ? restored.view.redactions.media : 0,
       redacted_diagnostic: restored.ok ? restored.view.redactions.diagnostic : 0,
-      view_bytes: result.status === "ok" ? result.content.byteLength : 0,
-      source_bytes: result.sourceBytes ?? source.sourceBytes,
       verification: restored.ok ? restored.view.verification : undefined,
       message_count: restored.ok ? restored.view.messages.length : 0,
       unrestored_message_count: restored.ok ? (restored.view.unrestoredMessages ?? 0) : 0,
       trigger_found: restored.ok ? restored.view.trigger !== undefined : false,
-      failure_detail: restored.ok ? undefined : restored.failure,
       restore_duration_ms: restoreFinishedAt - startedAt,
-      duration_ms: Date.now() - startedAt,
-    });
-    if (!ports.isStopping() && ports.currentTransport() === transport)
-      await sendResult(transport, result, ports.agentApiKey?.(request.agentId));
+    };
+    if (!ports.isStopping() && ports.currentTransport() === transport) await finish(result, fields);
+    else
+      logRequestTrace(request, startedAt, {
+        ...fields,
+        outcome: result.status,
+        failure_detail: result.failureDetail ?? result.reason,
+        post_outcome: "skipped",
+        status: result.status,
+        reason: result.reason,
+        failure: result.reason,
+        source_bytes: result.sourceBytes,
+        view_bytes: result.viewBytes,
+      });
   };
   return transport.onAgentContextView?.(queued);
 }
