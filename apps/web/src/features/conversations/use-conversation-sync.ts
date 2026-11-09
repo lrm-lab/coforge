@@ -6,6 +6,8 @@ import { messageIdFromHash, threadRootFromMessageAnchor } from "./conversation-t
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { conversationAroundQuery } from "./conversation-queries";
+import { tellJumpFailure } from "./use-message-jump";
+import { useAppToast } from "#src/components/ui/toast";
 import { markOpenReadStale } from "./conversation-open-query";
 import type { ThreadRootLoad } from "./thread-root-state";
 import type { DirectConversationView } from "./conversation-types";
@@ -54,6 +56,7 @@ export function useConversationSync({
   closeThread: () => void;
 }) {
   const queryClient = useQueryClient();
+  const toast = useAppToast();
   const [visited, setVisited] = useState<string[]>([]);
   // Replacing the window with an "around" read leaves the stream with no messages until its answer
   // lands; the stream must show loading, not "empty", while that is happening (stream-state.ts).
@@ -189,8 +192,7 @@ export function useConversationSync({
     attemptedHashLoad.current = hash;
     // The window holds top-level messages only, so a reply's hash is never found in it: the read
     // around it answers with the thread it belongs to, which opens. A failed read leaves the
-    // stream where it was, as a hash for a message that is gone does; the rejection is not left
-    // unhandled.
+    // stream where it was and says why, as a `?message=` jump does (task #34).
     loadWindowAround(messageId)
       .then(() => {
         const around = queryClient.getQueryData(
@@ -198,7 +200,7 @@ export function useConversationSync({
         );
         if (around?.anchorThreadRootId) openThreadFromHash(around.anchorThreadRootId);
       })
-      .catch(() => {});
+      .catch((error: unknown) => tellJumpFailure(toast, error));
   }, [
     conversation.messages,
     conversation.conversationId,
@@ -206,6 +208,7 @@ export function useConversationSync({
     loadWindowAround,
     openThreadFromHash,
     queryClient,
+    toast,
   ]);
 
   return { visited, windowRead, threadRootFailure, loadThreadRoot };

@@ -11,6 +11,18 @@ import { JUMP_HIGHLIGHT_MS } from "./message-jump-highlight";
 const UUID_LIKE = new RegExp(`^${UUID_LIKE_SOURCE}$`, "i");
 
 /**
+ * Tells the viewer why a jump to a message did not land. A link to a message that is gone (deleted,
+ * or never in this conversation) cannot load on a retry, so it says so instead of asking to try
+ * again; a short id more than one message starts with says so rather than pick one (#34).
+ */
+export function tellJumpFailure(toast: ReturnType<typeof useAppToast>, error: unknown) {
+  if (isAppErrorCode(error, "NOT_FOUND")) toast.notice(m.conversation_message_gone());
+  else if (isAppErrorCode(error, "AMBIGUOUS_TARGET"))
+    toast.notice(m.conversation_message_link_ambiguous());
+  else toast.error(m.conversation_history_load_error());
+}
+
+/**
  * Every way the pane lands on one message — a `#message-` hash, the Saved view's `?message=`
  * param, the own-messages navigator's `showMessage` — plus the highlight the landed row keeps
  * for a moment. The pane keeps the open position (oldest unread or latest) and bottom-follow;
@@ -152,13 +164,7 @@ export function useMessageJump({
         }
       } catch (error) {
         pendingMessageIdRef.current = undefined;
-        // A link to a message that is gone (deleted, or never in this conversation) cannot load
-        // on a retry, so it says so instead of asking to try again.
-        if (isAppErrorCode(error, "NOT_FOUND")) toast.notice(m.conversation_message_gone());
-        // A short id more than one message starts with: say so rather than pick one (#34).
-        else if (isAppErrorCode(error, "AMBIGUOUS_TARGET"))
-          toast.notice(m.conversation_message_link_ambiguous());
-        else toast.error(m.conversation_history_load_error());
+        tellJumpFailure(toast, error);
         // A conversation that was opening on the message opens at the latest instead.
         if (opening) {
           setFollowingLatest(true);

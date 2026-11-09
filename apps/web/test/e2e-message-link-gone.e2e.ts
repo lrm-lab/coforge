@@ -10,7 +10,8 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * A link into a conversation names a message that is gone (`?message=`: deleted, or never in it).
  * The server answers NOT_FOUND (`ConversationHistory.loadAround`), which no retry can change, so the
  * conversation opens at its latest and says the message no longer exists, never the red "Messages
- * could not be loaded. Try again.", which outlived the page onto Records (Frank, 2026-11-09).
+ * could not be loaded. Try again.", which outlived the page onto Records (Frank, 2026-11-09). A
+ * `#message-` link says the same (task #34).
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const dir = join(import.meta.dir, "../../../.amp/e2e/message-link-gone");
@@ -59,6 +60,22 @@ test("a link to a message that is gone opens the conversation and says so, with 
     await browser("back");
     await browser("wait", "--fn", `location.pathname.includes("/channel/")`);
     expect(await evaluate<string>("location.search")).not.toContain("message=");
+
+    // A notification's `#message-` link to a message that is gone says so too, instead of
+    // quietly opening at the latest (task #34). Opened as a new page: from the channel itself,
+    // only the hash would change.
+    await browser("open", "about:blank");
+    await browser(
+      "open",
+      `${origin}/en/w/${workspace.slug}/channel/${general.id}?view=chat#message-${MISSING}`,
+    );
+    await browser("wait", "--fn", pageHydrated);
+    await browser(
+      "wait",
+      "--fn",
+      `${toasts}.some((t) => t.includes("That message no longer exists"))`,
+    );
+    await browser("screenshot", join(dir, "hash-link.png"));
   } finally {
     await browser("close").catch(() => undefined);
     await db.$disconnect();
