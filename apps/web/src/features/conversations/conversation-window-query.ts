@@ -81,11 +81,13 @@ export function conversationPages<M extends PageMessage, T extends ConversationP
         {
           beforeSequence: requestCursor?.before,
           afterSequence: requestCursor?.after,
-          limit: windowPageLimit({
-            forward: requestCursor?.after !== undefined,
-            fullRefetch,
-            windowAtTail,
-          }),
+          limit:
+            requestCursor?.limit ??
+            windowPageLimit({
+              forward: requestCursor?.after !== undefined,
+              fullRefetch,
+              windowAtTail,
+            }),
         },
         signal,
       );

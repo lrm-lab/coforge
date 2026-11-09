@@ -5,7 +5,7 @@ import { noteRestoredCopyReplaced } from "#src/features/cache-persistence/browse
 import type { FinishedWindow } from "#src/features/tasks/finished-tasks";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
 import type { ConversationTab } from "./conversation-tabs";
-import type { ConversationWindowCursor } from "#src/lib/conversation-window";
+import { aroundWindowCursor, type ConversationWindowCursor } from "#src/lib/conversation-window";
 import {
   aroundWindow,
   channelNamesQuery,
@@ -209,7 +209,7 @@ async function readConversationWindow<M extends PageMessage, T extends Conversat
           ...aroundWindow(around),
         },
       ],
-      pageParams: [undefined],
+      pageParams: [aroundWindowCursor(around.messages)],
     };
     queryClient.setQueryData(query.queryKey, window);
     // The window is a read of the server now: no longer the browser's stored copy, whose own read

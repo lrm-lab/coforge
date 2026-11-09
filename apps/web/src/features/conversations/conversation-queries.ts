@@ -16,6 +16,7 @@ import {
 } from "./conversation-reconciliation";
 import { useConversationRealtime } from "./conversation-realtime-client";
 import {
+  aroundWindowCursor,
   flushWindowUpdates,
   foldWindowUpdates,
   type ConversationWindowCursor,
@@ -383,7 +384,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     await windowReadSettled(queryClient, query.queryKey);
     setPages((pages) => ({
       pages: [{ ...pages.pages.at(-1)!, ...aroundWindow(around) }],
-      pageParams: [undefined],
+      pageParams: [aroundWindowCursor(around.messages)],
     }));
     return around.anchorMessageId;
   };

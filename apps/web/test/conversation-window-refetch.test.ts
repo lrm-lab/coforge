@@ -4,6 +4,7 @@ import { InfiniteQueryObserver, QueryClient, type InfiniteData } from "@tanstack
 import { mergeMessages } from "#src/features/conversations/conversation-messages";
 import { conversationPages } from "#src/features/conversations/conversation-window-query";
 import {
+  aroundWindowCursor,
   CONVERSATION_WINDOW_MAX_PAGES,
   CONVERSATION_WINDOW_PAGE_SIZE,
   CONVERSATION_WINDOW_SERVER_PAGE_LIMIT,
@@ -206,4 +207,24 @@ test("a refetch of a window that is not at the tail keeps the ordinary page size
   expect(opened.window().pages.map((page) => page.messages.map((row) => row.sequence))).toEqual(
     before.pages.map((page) => page.messages.map((row) => row.sequence)),
   );
+});
+
+test("a refetch of a window read around an old message re-reads that window (task #34)", async () => {
+  const server = fakeServer(2000);
+  const opened = openWindow(server);
+  // A link opens the channel on message 500: the window around it replaces the newest page, as
+  // the page loader and `loadMessageAround` write it, and the reader stands on it.
+  const around = server.store.slice(479, 520);
+  opened.client.setQueryData<Window>(QUERY_KEY, {
+    pages: [{ conversationId: "channel-1", hasOlder: true, hasNewer: true, messages: around }],
+    pageParams: [aroundWindowCursor(around)],
+  });
+  opened.followingLatest.current = false;
+
+  await opened.client.refetchQueries({ queryKey: QUERY_KEY });
+
+  expect(opened.window().pages.map((page) => page.messages.map((row) => row.sequence))).toEqual([
+    around.map((row) => row.sequence),
+  ]);
+  expect(newestPage(opened.window()).hasNewer).toBe(true);
 });

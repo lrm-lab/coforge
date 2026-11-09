@@ -40,8 +40,24 @@ export const CONVERSATION_WINDOW_PAGE_SIZE = 20;
 export const CONVERSATION_WINDOW_SERVER_PAGE_LIMIT = 100;
 
 /** A page's fetch direction: `before` reads history upwards, `after` reads towards the live end.
- * `undefined` is the initial (uncursored) fetch, which lands on the newest page. */
-export type ConversationWindowCursor = { before?: number; after?: number } | undefined;
+ * `undefined` is the initial (uncursored) fetch, which lands on the newest page. `limit` is set
+ * only by `aroundWindowCursor`, whose page holds more rows than an ordinary one. */
+export type ConversationWindowCursor =
+  | { before?: number; after?: number; limit?: number }
+  | undefined;
+
+/**
+ * The cursor of a window read around one message (a link, a search jump, an old first unread):
+ * forward from just before its first row, as many rows as it holds. A full refetch re-reads a
+ * window's first page from its own cursor; with none, it would read the newest page in its place,
+ * and the message the reader came for would be gone (task #34).
+ */
+export function aroundWindowCursor(
+  messages: readonly { sequence: number }[],
+): ConversationWindowCursor {
+  const first = messages[0];
+  return first ? { after: first.sequence - 1, limit: messages.length } : undefined;
+}
 
 /** The backward page to fetch when paging up into history, or `undefined` at the start of it. */
 export function previousPageCursor(
