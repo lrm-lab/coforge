@@ -1,10 +1,7 @@
 import { AgentStateMachine, type AgentStatus } from "./agent-state-machine";
 import type { AgentRuntimeConfig, AgentSession } from "@coforge/agent";
 import type { CodeAgentProviderFactory } from "@lrm/coforge-anvil";
-import { AgentProcessCleanupError, scrubRuntimeErrorText, withDeadline } from "@lrm/coforge-anvil";
-import { refusalText } from "@lrm/coforge-sdk/internal";
-import { reclaimAgentLaunchTagStrays } from "#src/daemon-runtime/agent-launch-tags";
-import { straySurvivors } from "#src/platform/agent-launch-tag-sweep";
+import { AgentProcessCleanupError, withDeadline } from "@lrm/coforge-anvil";
 import {
   createAgentSession,
   prepareAgentLaunch,
@@ -14,6 +11,7 @@ import {
 import type { ConversationSessionStore } from "./memory-conversation-sessions";
 import { resolveGitHookInjectionForLaunch } from "#src/code-agent/git-hooks";
 import { processClockMs } from "#src/platform/process-tree";
+import { confirmGone, throwStopFailure, UNCLEARED, type AgentTeardown } from "./agent-teardown";
 
 export type { AgentStatus } from "./agent-state-machine";
 
@@ -55,21 +53,6 @@ export type AgentProcessStartOptions = Omit<AgentLaunchInput, "agentId" | "confi
 };
 
 export type { CodeAgentProviderFactory } from "@lrm/coforge-anvil";
-
-/** How far an Agent's teardown got. `stopping` is in flight; `failed` and `exit-failed` mean it
- * could not confirm the process exited (a Stop's dispose, and an exit whose process tree it could
- * not collect, respectively) — both retryable, both re-cleared by the next Start (#704, #705). */
-type AgentTeardown = "stopping" | "failed" | "exit-failed";
-
-/** The marks that hide the runtime from the daemon's liveness questions and gate the next Start on
- * clearing what the failed teardown left. */
-const UNCLEARED = new Set<AgentTeardown>(["failed", "exit-failed"]);
-
-/** A dispose that could not confirm exit keeps the runtime's own words, so the refusal a person
- * reads says why the old process is still there (task #705). */
-function throwStopFailure(error: unknown): never {
-  throw new AgentProcessCleanupError(scrubRuntimeErrorText(refusalText(error)));
-}
 
 /** Owns Agent availability and runtime processes for one supervised Workspace. */
 export class AgentProcessManager {
@@ -308,7 +291,7 @@ export class AgentProcessManager {
       await runtime.session.dispose();
       // A dispose that resolves proves nothing when an earlier teardown could not confirm exit:
       // that tree is only settled by the process table (task #704, #705).
-      if (uncleared !== undefined && UNCLEARED.has(uncleared)) await this.#confirmGone(agentId);
+      if (uncleared !== undefined && UNCLEARED.has(uncleared)) await confirmGone(agentId);
     } catch (error) {
       // A Stop that cannot confirm exit is retryable, and its next Start re-clears the tree
       // first; leaving it marked stopping muted the Agent forever (task #705).
@@ -422,18 +405,9 @@ export class AgentProcessManager {
     // stays, and only a process-table kill can settle it (#704). Both paths therefore decide on
     // the sweep, which spares no token, so the failed launch's own processes are collected.
     if (runtime) await runtime.session.dispose().catch(throwStopFailure);
-    await this.#confirmGone(agentId);
+    await confirmGone(agentId);
     if (runtime) this.#forgetRuntime(agentId, runtime.session);
     this.#teardown.delete(agentId);
-  }
-
-  /** The evidence a Start or a Stop needs before it may treat a failed teardown as settled. */
-  async #confirmGone(agentId: string): Promise<void> {
-    const survivors = straySurvivors(await reclaimAgentLaunchTagStrays(agentId));
-    if (survivors.length > 0)
-      throw new AgentProcessCleanupError(
-        `${survivors.length} process(es) from its previous launch are still running`,
-      );
   }
 
   /** Forgets a runtime whose session is the one that just ended. Another launch's is left alone. */
