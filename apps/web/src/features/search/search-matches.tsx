@@ -1,7 +1,7 @@
 import { searchExcerpt } from "./search-excerpt";
 
 /** The class of a found word: the brand color, never heavier black. */
-const SEARCH_MATCH_CLASS = "bg-transparent font-medium text-brand-600 dark:text-brand-400";
+const SEARCH_MATCH_CLASS = "bg-transparent font-medium text-fg-brand-primary";
 
 /** `text` around its found words, each marked. */
 export function SearchMatches({

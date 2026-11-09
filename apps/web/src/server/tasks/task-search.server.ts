@@ -22,6 +22,8 @@ export type TaskSearchInput = {
  */
 function taskMatch(query: string): Prisma.Sql[] {
   const reference = /^#(?:([^\s:#]+):#)?(\d+)$/.exec(query);
+  // A Task number is an int4: a longer one names no Task, and Postgres would reject it.
+  if (reference && Number(reference[2]) > 2_147_483_647) return [];
   if (reference)
     return [
       ...(reference[1] ? [Prisma.sql`c."channelName" = ${reference[1]}`] : []),

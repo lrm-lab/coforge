@@ -99,7 +99,7 @@ export function SearchFilterChips({
           key={chip.name}
           aria-label={m.search_chip_remove({ name: chip.name })}
           onPress={() => onChange(chip.next)}
-          className="inline-flex max-w-[16rem] cursor-pointer items-center gap-1 rounded-lg bg-brand-50 px-2 py-1 text-xs font-medium text-brand-600 outline-focus-ring focus-visible:outline-2 dark:bg-brand-950 dark:text-brand-400"
+          className="inline-flex max-w-[16rem] cursor-pointer items-center gap-1 rounded-lg bg-brand-primary_alt px-2 py-1 text-xs font-medium text-fg-brand-primary outline-focus-ring focus-visible:outline-2"
         >
           <span className="truncate">{chip.name}</span>
           <XClose aria-hidden="true" className="size-3 shrink-0" />

@@ -142,7 +142,8 @@ function useSearchTasks(workspaceId: string, query: string, conversationId: stri
     ...taskSearchQuery(workspaceId, query, conversationId, currentConversationId),
     placeholderData: keepPreviousData,
   });
-  return { tasks: data ?? [], pending: Boolean(query) && isPending };
+  // A disabled query still shows its placeholder: without a query there are no Tasks.
+  return { tasks: query ? (data ?? []) : [], pending: Boolean(query) && isPending };
 }
 
 function useSearchEntities(
