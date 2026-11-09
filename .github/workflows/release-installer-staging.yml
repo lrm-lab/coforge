@@ -167,6 +167,7 @@ jobs:
         with:
           working-directory: crates/installer
           install-args: ${{ matrix.tools }}
+          bun: "false"
 
       - name: Add the Rust target
         run: mise exec rust -- rustup target add "${{ matrix.rust_target }}"

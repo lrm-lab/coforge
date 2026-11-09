@@ -156,16 +156,16 @@ binary itself, which the action runs in credential jobs and ones building
 publish artifacts. Credential-free jobs keep the default full miseDir cache,
 so tool downloads — bun included — hit cache instead of GitHub releases (#714).
 
-The credential jobs restore one thing: the `mise` binary alone, via a separate
-`actions/cache` step scoped to the binary files under `<miseDir>/bin` (task
-#714), keyed by the sha256 in `.github/mise-digests.env` (regenerate: `bun scripts/ci/mise-digests.ts`).
-Default-checkout jobs call `.github/actions/setup-verified-mise`, which verifies
-the restored binaries — rejecting any other restored file, since `bin/` joins
-PATH — before `mise-action` runs them: the action executes a cache-hit binary
-before its own `sha256` check, so a poisoned cache fails closed. Tools stay
-uncached (rebuilt from `mise.lock`); Windows verifies `mise-shim` too. Jobs
-checking out `inputs.commit` or a `workflow_run` head_sha inline the same
-steps. The realtime probe contract is in [Health verification](health-verification.md).
+The credential jobs restore two things via `actions/cache` steps scoped to
+binary files: `mise` under `<miseDir>/bin` and `bun` under
+`installs/bun/<BUN_VERSION>/bin`, keyed by sha256s in `.github/mise-digests.env`.
+Default-checkout jobs call `.github/actions/setup-verified-mise`, which
+verifies restored binaries, rejecting unexpected files since `bin/` joins
+PATH, before `mise-action` runs them (it executes a cache-hit binary before
+its own `sha256` check, so a poisoned cache fails closed). bun's `bunx` link
+is recreated on restore; other tools stay uncached; Windows verifies
+`mise-shim` too. Jobs checking out `inputs.commit`/`workflow_run` head_sha
+inline the same steps.
 
 Publishing a local-distribution release is **manual**. The workflow exposes only
 `workflow_dispatch`; it is not triggered by merging to `main`. A client release

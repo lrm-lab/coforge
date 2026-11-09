@@ -22,6 +22,14 @@ inputs:
     description: Passed through to jdx/mise-action's working_directory input.
     required: false
     default: ""
+  bun:
+    description: >-
+      Also restore and verify the bun binary under installs/bun before
+      mise-action runs `mise install`, so a job that installs bun does not
+      download it from GitHub releases. Pass "false" for jobs that install
+      no bun (the Rust installer builds).
+    required: false
+    default: "true"
 runs:
   using: composite
   steps:
@@ -34,10 +42,12 @@ runs:
         [ -f "$digests" ] || { echo "missing $digests" >&2; exit 1; }
         get() { sed -n "s/^$1=//p" "$digests"; }
         version="$(get MISE_VERSION)"
+        bun_version="$(get BUN_VERSION)"
         os_key="$(printf '%s' "$RUNNER_OS" | tr '[:lower:]' '[:upper:]')"
         arch_key="$(printf '%s' "$RUNNER_ARCH" | tr '[:lower:]' '[:upper:]')"
         sha256="$(get "SHA256_${os_key}_${arch_key}")"
         shim_sha256="$(get "SHA256_${os_key}_${arch_key}_SHIM")"
+        bun_sha256="$(get "BUN_SHA256_${os_key}_${arch_key}")"
         [ -n "$version" ] && [ -n "$sha256" ] || {
           echo "incomplete mise digests for ${os_key}_${arch_key}" >&2
           exit 1
@@ -47,11 +57,29 @@ runs:
         else
           path="$HOME/.local/share/mise/bin"
         fi
+        # installs/ is mise's tool dir, a sibling of bin/ under the same
+        # miseDir root; the bun zip ships one binary that mise lays out as
+        # bin/bun plus a bunx link.
+        bun_root="${path%/bin}/installs/bun/${bun_version}/bin"
+        bun_cache_paths=""
+        bun_bin_dir=""
+        if [ -n "$bun_version" ] && [ -n "$bun_sha256" ]; then
+          bun_bin_dir="$bun_root"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            bun_cache_paths="$bun_root/bun.exe"
+          else
+            bun_cache_paths="$bun_root/bun"
+          fi
+        fi
         {
           echo "version=$version"
           echo "sha256=$sha256"
           echo "shim_sha256=$shim_sha256"
           echo "path=$path"
+          echo "bun_version=$bun_version"
+          echo "bun_sha256=$bun_sha256"
+          echo "bun_cache_paths=$bun_cache_paths"
+          echo "bun_bin_dir=$bun_bin_dir"
           # The cache holds binary files only: a directory entry could carry
           # an unverified executable that bin/'s PATH entry would run.
           echo "cache_paths<<__MISE_CACHE_PATHS__"
@@ -100,6 +128,49 @@ runs:
             exit 1
           }
         done
+
+    # `mise install` downloads bun from GitHub releases — the same outage
+    # surface as the mise binary — so credential jobs restore the installed
+    # binary too. A restored installs/bun/<ver>/bin/bun plus the bunx link
+    # is a complete install; mise reports it already installed and skips
+    # the download. Verified before mise-action can run `mise install`.
+    - name: Restore the bun binary
+      if: inputs.bun == 'true' && steps.pin.outputs.bun_sha256 != ''
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pin.outputs.bun_cache_paths }}
+        key: bun-bin-${{ steps.pin.outputs.bun_version }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.bun_sha256 }}
+
+    - name: Verify the restored bun binary
+      if: inputs.bun == 'true' && steps.pin.outputs.bun_sha256 != ''
+      shell: bash
+      env:
+        BUN_BIN_DIR: ${{ steps.pin.outputs.bun_bin_dir }}
+        BUN_SHA256: ${{ steps.pin.outputs.bun_sha256 }}
+      run: |
+        set -euo pipefail
+        # bunx is the bun binary under another argv[0], so every restored
+        # entry must be a known name and hash to the same verified bytes.
+        for entry in "$BUN_BIN_DIR"/*; do
+          [ -e "$entry" ] || continue
+          case "$(basename "$entry")" in
+            bun|bun.exe|bunx|bunx.exe) ;;
+            *) echo "unexpected entry in restored bun bin: $entry" >&2; exit 1 ;;
+          esac
+        done
+        for f in "$BUN_BIN_DIR"/*; do
+          [ -f "$f" ] || continue
+          got="$(sha256sum "$f" 2>/dev/null || shasum -a 256 "$f")"
+          [ "${got%% *}" = "$BUN_SHA256" ] || {
+            echo "restored $(basename "$f") sha256 mismatch" >&2
+            exit 1
+          }
+        done
+        # A cache hit restores only bun; a real install's bunx is a symlink
+        # to it, so recreate the link when the restore did not bring one.
+        if [ "$RUNNER_OS" != "Windows" ] && [ -f "$BUN_BIN_DIR/bun" ] && [ ! -e "$BUN_BIN_DIR/bunx" ]; then
+          ln -s bun "$BUN_BIN_DIR/bunx"
+        fi
 
     - name: Set up mise
       uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0

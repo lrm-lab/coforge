@@ -33,17 +33,26 @@ const COMPOSITE = "./.github/actions/setup-verified-mise";
 
 const miseDigests = (() => {
   const text = readFileSync(".github/mise-digests.env", "utf8");
-  const digests = { version: "", sha: new Map<string, string>(), shim: new Map<string, string>() };
+  const digests = {
+    version: "",
+    bunVersion: "",
+    sha: new Map<string, string>(),
+    shim: new Map<string, string>(),
+    bunSha: new Map<string, string>(),
+  };
   for (const line of text.split("\n")) {
     const assign = line.match(/^([A-Z0-9_]+)=(\S+)$/);
     if (!assign) continue;
     const [, key, value] = assign;
     if (key === "MISE_VERSION") digests.version = value!;
+    if (key === "BUN_VERSION") digests.bunVersion = value!;
     const sha = line.match(/^SHA256_([A-Z]+)_([A-Z0-9]+?)(_SHIM)?=([0-9a-f]{64})$/);
     if (sha) {
       const target = `${sha[1]}_${sha[2]}`;
       (sha[3] ? digests.shim : digests.sha).set(target, sha[4]!);
     }
+    const bunSha = line.match(/^BUN_SHA256_([A-Z]+)_([A-Z0-9]+)=([0-9a-f]{64})$/);
+    if (bunSha) digests.bunSha.set(`${bunSha[1]}_${bunSha[2]}`, bunSha[3]!);
   }
   return digests;
 })();
@@ -79,12 +88,16 @@ test("the verified-mise composite restores, verifies, then sets up mise", async 
   const pin = at("Resolve the mise pin");
   const cache = at("Restore the mise binary");
   const verify = at("Verify the restored mise binaries");
+  const bunCache = at("Restore the bun binary");
+  const bunVerify = at("Verify the restored bun binary");
   const setup = at("Set up mise");
   const shim = at("Verify the downloaded mise shim");
-  expect([pin, cache, verify, setup, shim].every((i) => i >= 0)).toBe(true);
+  expect([pin, cache, verify, bunCache, bunVerify, setup, shim].every((i) => i >= 0)).toBe(true);
   expect(pin).toBeLessThan(cache);
   expect(cache).toBeLessThan(verify);
-  expect(verify).toBeLessThan(setup);
+  expect(verify).toBeLessThan(bunCache);
+  expect(bunCache).toBeLessThan(bunVerify);
+  expect(bunVerify).toBeLessThan(setup);
   expect(setup).toBeLessThan(shim);
 
   // The pin comes from the digest file, never from call-site inputs, so the
@@ -117,6 +130,30 @@ test("the verified-mise composite restores, verifies, then sets up mise", async 
   expect(setupWith.version).toBe("${{ steps.pin.outputs.version }}");
   expect(setupWith.sha256).toBe("${{ steps.pin.outputs.sha256 }}");
   expect(String(steps[shim]?.run ?? "")).toContain("MISE_SHIM_SHA256");
+
+  // bun downloads from GitHub releases too, so the composite restores and
+  // verifies the installed binary before `mise install` can run. Both bun
+  // steps are conditional: a caller opts out with bun:"false" and a platform
+  // without a digest skips them.
+  const pinRunBun = String(steps[pin]?.run ?? "");
+  expect(pinRunBun).toContain("BUN_VERSION");
+  expect(pinRunBun).toContain("BUN_SHA256_");
+  for (const index of [bunCache, bunVerify]) {
+    expect(String(steps[index]?.if ?? ""), `bun step ${index} if`).toContain("inputs.bun");
+    expect(String(steps[index]?.if ?? ""), `bun step ${index} if`).toContain("bun_sha256");
+    expect(steps[index]?.["continue-on-error"], `bun step ${index} coe`).toBeUndefined();
+  }
+  expect(String(steps[bunCache]?.with?.path ?? "")).toBe(
+    "${{ steps.pin.outputs.bun_cache_paths }}",
+  );
+  expect(String(steps[bunCache]?.with?.key ?? "")).toContain("bun-bin-");
+  expect(String(steps[bunCache]?.with?.key ?? "")).toContain("${{ steps.pin.outputs.bun_sha256 }}");
+  const bunVerifyRun = String(steps[bunVerify]?.run ?? "");
+  expect(bunVerifyRun).toContain("unexpected entry in restored bun bin");
+  expect(bunVerifyRun).toContain("BUN_SHA256");
+  // A cache hit restores only bun; the bunx symlink a real install has must
+  // be recreated or `bunx` calls fail.
+  expect(bunVerifyRun).toContain("ln -s bun");
 });
 
 test("deploy and release jobs use only the verified mise binary cache", async () => {
@@ -125,11 +162,16 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
     "jdx/mise-action": "cache",
     "docker/setup-buildx-action": "cache-binary",
   };
-  const allowedCompositeInputs = new Set(["install", "install-args", "working-directory"]);
+  const allowedCompositeInputs = new Set(["install", "install-args", "working-directory", "bun"]);
   let checked = 0;
   let compositeSites = 0;
   let inlineCredentialSites = 0;
   let binaryCaches = 0;
+  let bunCaches = 0;
+  // BUN_VERSION mirrors the `bun` pin in mise.toml; drift would cache the
+  // wrong binary.
+  const tomlBun = readFileSync("mise.toml", "utf8").match(/^bun = "([^"]+)"/m)?.[1];
+  expect(miseDigests.bunVersion).toBe(tomlBun);
   for (const file of new Bun.Glob("*.{yml,yaml}").scanSync(".github/workflows")) {
     const { jobs } = Bun.YAML.parse(await Bun.file(`.github/workflows/${file}`).text()) as {
       jobs: Record<string, Job>;
@@ -145,11 +187,15 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
         expect(isCredential, `${jobKey} composite`).toBe(true);
         compositeSites += 1;
         // The composite derives version and digests itself; call sites may
-        // only pass through the action's optional install inputs.
+        // only pass through the action's optional install inputs. bun:"false"
+        // is for jobs that install no bun — only the Rust installer build.
         expect(composites).toHaveLength(1);
         for (const key of Object.keys(composites[0]?.with ?? {})) {
           expect(allowedCompositeInputs.has(key), `${jobKey} input ${key}`).toBe(true);
         }
+        expect(composites[0]?.with?.bun, jobKey).toBe(
+          jobKey === "release-installer-staging.yml build" ? "false" : undefined,
+        );
         // The cache, verify, and setup steps live inside the composite; none
         // may also appear inline, and a job checking out an older commit
         // cannot resolve the local action.
@@ -182,6 +228,27 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
             // cache smuggled in as an actions/cache step would bypass the
             // bin-only rule, so only unrelated caches (e.g. Bun's) may appear.
             expect(key.startsWith("mise-bin-") || path.includes("mise"), jobKey).toBe(false);
+            continue;
+          }
+          if (key.startsWith("bun-bin-")) {
+            // The bun binary cache follows the same contract as mise's:
+            // credential jobs only, one verified file, platform digest.
+            expect(isCredential, `${jobKey} bun cache`).toBe(true);
+            expect(path, `${jobKey} bun cache path ${path}`).toBe(
+              `~/.local/share/mise/installs/bun/${miseDigests.bunVersion}/bin/bun`,
+            );
+            const bunSha = miseDigests.bunSha.get(runnerPlatform(String(job["runs-on"] ?? "")));
+            expect(key, jobKey).toBe(
+              `bun-bin-${miseDigests.bunVersion}-\${{ runner.os }}-\${{ runner.arch }}-${bunSha}`,
+            );
+            const bunVerify = steps[index + 1];
+            const bunVerifyRun = String(bunVerify?.run ?? "");
+            expect(bunVerifyRun, jobKey).toContain("unexpected entry in restored bun bin");
+            expect(bunVerifyRun, jobKey).toContain(String(bunSha));
+            expect(bunVerifyRun, jobKey).toContain("ln -s bun");
+            expect(bunVerify?.if, `${jobKey} bun verify if`).toBeUndefined();
+            expect(bunVerify?.["continue-on-error"], `${jobKey} bun verify coe`).toBeUndefined();
+            bunCaches += 1;
             continue;
           }
           // Only credential jobs may cache at all, and only the mise binary
@@ -234,9 +301,23 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
         // mise-action executes a restored binary before its own sha256 check
         // (getInstalledMiseVersion runs `mise version` on a cache hit), so the
         // restore must be followed by a verify step that rejects a poisoned
-        // binary before setup runs it. Order: cache, verify, mise-action.
-        const verify = steps[index - 1];
+        // binary before setup runs it. The bun cache pair may sit between the
+        // mise verify and setup, so locate the steps by content, not index.
+        const verifyIndex = steps
+          .slice(0, index)
+          .findLastIndex((s) =>
+            String(s.run ?? "").includes("unexpected entry in restored mise bin"),
+          );
+        const verify = steps[verifyIndex];
         const verifyRun = String(verify?.run ?? "");
+        const cacheIndex = steps
+          .slice(0, verifyIndex)
+          .findLastIndex((s) => uses(s) === "actions/cache");
+        const cache = steps[cacheIndex];
+        expect(verifyIndex, `${jobKey} mise verify position`).toBeGreaterThanOrEqual(0);
+        expect(cacheIndex, `${jobKey} mise cache position`).toBeGreaterThanOrEqual(0);
+        expect(verifyIndex, `${jobKey} verify after cache`).toBeGreaterThan(cacheIndex);
+        expect(verifyIndex, `${jobKey} verify before setup`).toBeLessThan(index);
         expect(localUses(verify ?? {}), jobKey).toBe(false);
         expect(verify?.if, `${jobKey} verify if`).toBeUndefined();
         expect(verify?.["continue-on-error"], `${jobKey} verify coe`).toBeUndefined();
@@ -250,8 +331,6 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
         if (sha256 === "${{ matrix.mise_sha256 }}") {
           expect(verifyRun, jobKey).toContain("${{ matrix.mise_shim_sha256 }}");
         }
-        const cache = steps[index - 2];
-        expect(uses(cache ?? {}), jobKey).toBe("actions/cache");
         expect(String(cache?.with?.key ?? ""), jobKey).toContain(
           sha256 === "${{ matrix.mise_sha256 }}" ? "${{ matrix.mise_sha256 }}" : sha256,
         );
@@ -278,8 +357,11 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
   expect(compositeSites).toBe(13);
   expect(inlineCredentialSites).toBe(5);
   // The five inline credential jobs each keep one bin-only actions/cache;
-  // the composite's own cache step is asserted in the first test.
+  // the composite's own cache step is asserted in the first test. Four of
+  // them also keep an inline bun binary cache — the Rust installer build
+  // installs no bun.
   expect(binaryCaches).toBe(5);
+  expect(bunCaches).toBe(4);
   // 6 cache-disabled setup steps remain in workflows (5 inline credential
   // mise-action plus docker/setup-buildx-action's cache-binary); class-2 jobs
   // and ci.yml keep the default full miseDir cache. The composite's inner
