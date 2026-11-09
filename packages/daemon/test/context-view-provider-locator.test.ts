@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   findProviderTranscript,
+  KIMI_SESSION_INDEX_MAX_BYTES,
   resolveProviderTranscriptToken,
 } from "#src/agent-context-view/context-view-provider-locator";
 
@@ -62,6 +63,17 @@ test("does not resurrect a Kimi session tombstoned in session_index.jsonl", asyn
     join(root, "session_index.jsonl"),
     JSON.stringify({ sessionId: "session-1", sessionDir, deleted: true }) + "\n",
   );
+  expect(
+    await findProviderTranscript("kimi-sdk", "session-1", { KIMI_CODE_HOME: root }),
+  ).toBeUndefined();
+});
+
+test("fails closed on an oversized Kimi session index", async () => {
+  const root = mkdtempSync(join("/tmp", "kimi-context-"));
+  const sessionDir = join(root, "sessions", "2026-11-09", "session-1");
+  mkdirSync(join(sessionDir, "agents", "main"), { recursive: true });
+  writeFileSync(join(sessionDir, "agents", "main", "wire.jsonl"), "{}\n");
+  writeFileSync(join(root, "session_index.jsonl"), "x".repeat(KIMI_SESSION_INDEX_MAX_BYTES + 1));
   expect(
     await findProviderTranscript("kimi-sdk", "session-1", { KIMI_CODE_HOME: root }),
   ).toBeUndefined();

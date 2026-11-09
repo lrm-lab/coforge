@@ -1,13 +1,27 @@
 import { relative, isAbsolute, join } from "node:path";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { findClaudeSessionTranscript } from "@lrm/coforge-anvil/claude-code";
 import { findCodexRollout } from "@lrm/coforge-anvil/codex";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { claudeHistoryHost } from "#src/code-agent/claude-code/history-host";
 import { codexHistoryHost } from "#src/code-agent/codex/history-host";
+import { isPrivateRegularFile } from "#src/agent-runtime/private-file";
 import { CONTEXT_VIEW_PROVIDERS } from "./context-view-providers";
 
 export type ProviderTranscriptSource = { absolute: string; relative: string };
+export const KIMI_SESSION_INDEX_MAX_BYTES = 8 * 1024 * 1024;
+const KIMI_INDEX_READ_FLAGS =
+  constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 
 export function providerTranscriptRoot(
   runtime: string,
@@ -53,8 +67,32 @@ function relativeSource(
 function findKimiSessionDirectory(root: string, sessionId: string): string | null | undefined {
   const indexPath = join(root, "session_index.jsonl");
   let indexed: string | null | undefined;
+  let indexText: string | undefined;
   try {
-    for (const line of readFileSync(indexPath, "utf8").split("\n")) {
+    const listed = lstatSync(indexPath);
+    if (!isPrivateRegularFile(listed) || listed.size > KIMI_SESSION_INDEX_MAX_BYTES)
+      return undefined;
+    const fd = openSync(indexPath, KIMI_INDEX_READ_FLAGS);
+    try {
+      const info = fstatSync(fd);
+      if (!isPrivateRegularFile(info) || info.size > KIMI_SESSION_INDEX_MAX_BYTES) return undefined;
+      const buffer = Buffer.alloc(info.size);
+      let offset = 0;
+      while (offset < buffer.byteLength) {
+        const count = readSync(fd, buffer, offset, buffer.byteLength - offset, offset);
+        if (count === 0) return undefined;
+        offset += count;
+      }
+      indexText = buffer.toString("utf8");
+    } finally {
+      closeSync(fd);
+    }
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? error.code : undefined;
+    if (code !== "ENOENT") return undefined;
+  }
+  try {
+    for (const line of indexText?.split("\n") ?? []) {
       if (!line.trim()) continue;
       try {
         const entry = JSON.parse(line) as Record<string, unknown>;
@@ -74,7 +112,7 @@ function findKimiSessionDirectory(root: string, sessionId: string): string | nul
       }
     }
   } catch {
-    // The index is optional for older Kimi installations.
+    // Ignore malformed index rows and use the bounded legacy directory fallback.
   }
   if (indexed !== undefined) return indexed;
   if (!sessionId || sessionId === "." || sessionId === ".." || /[/\0]/.test(sessionId))
