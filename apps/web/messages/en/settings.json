@@ -214,6 +214,6 @@
   "experiments_artifacts": "Documents",
   "experiments_artifacts_description": "Versioned documents that people and Agents edit together in a conversation. Applies to the whole Workspace, Agents included.",
   "experiments_ai_workbench": "AI Workbench",
-  "experiments_ai_workbench_description": "Chat with an AI that works on your Computer, in the sidebar. Applies to the whole Workspace.",
+  "experiments_ai_workbench_description": "Chat with an AI in the sidebar and have it work on your Computer. Applies to the whole Workspace.",
   "settings_labels": "Labels"
 }
