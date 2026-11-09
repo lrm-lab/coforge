@@ -61,8 +61,8 @@ export function SystemMessageRow({
         data-message="system"
         data-scroll-anchor
         className={cn(
-          "flex scroll-m-6 items-center gap-2 px-4 py-1 text-xs text-tertiary transition-[background-color,box-shadow] duration-500 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:px-6",
-          highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
+          "mx-1 flex scroll-m-6 items-center gap-2 rounded-lg px-3 py-1 text-xs text-tertiary transition-[background-color,box-shadow] duration-500 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-2 target:ring-offset-primary md:mx-3",
+          highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-2 ring-offset-primary",
         )}
       >
         <CentredOnRule>

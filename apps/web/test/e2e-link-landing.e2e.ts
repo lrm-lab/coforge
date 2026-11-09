@@ -306,6 +306,37 @@ test("a pasted reply link lands on the reply; a shared short id says so", async 
       "--fn",
       `getComputedStyle(document.getElementById("message-${rootId}") ?? document.body).boxShadow !== "none"`,
     );
+
+    // On a phone the thread's ring is whole: neither side is cut off by the history's edge
+    // (task #37). The ring reaches as far as its widest box-shadow spread.
+    await browser("set", "viewport", "390", "844");
+    await browser("open", replyLinks.notification);
+    await browser(
+      "wait",
+      "--fn",
+      // Every row wears a transparent shadow; the ring is the one with a spread.
+      `/0px 0px 0px [1-9]/.test(getComputedStyle(document.getElementById("message-${target}") ?? document.body).boxShadow)`,
+    );
+    // Past the ring's 500 ms fade-in, inside its 2.5 s.
+    await browser("wait", "700");
+    const ring = await evaluate<{
+      reach: number;
+      left: number;
+      right: number;
+      viewLeft: number;
+      viewRight: number;
+    }>(`(() => {
+      const row = document.getElementById("message-${target}");
+      const spreads = [...getComputedStyle(row).boxShadow.matchAll(/(-?[\\d.]+)px (-?[\\d.]+)px (-?[\\d.]+)px (-?[\\d.]+)px/g)].map((m) => Number(m[4]));
+      const reach = Math.max(0, ...spreads);
+      const box = row.getBoundingClientRect();
+      const view = row.closest("[data-scroll-restoration-id]").getBoundingClientRect();
+      return { reach, left: box.left - reach, right: box.right + reach, viewLeft: view.left, viewRight: view.right };
+    })()`);
+    await browser("screenshot", join(artifacts, "reply-link-phone.png"));
+    expect(ring.reach).toBeGreaterThan(0);
+    expect(ring.left).toBeGreaterThanOrEqual(ring.viewLeft);
+    expect(ring.right).toBeLessThanOrEqual(ring.viewRight);
   } finally {
     await browser("close").catch(() => undefined);
     await db.$disconnect();
