@@ -180,6 +180,20 @@ beforeAll(async () => {
       { conversationId: channel.id, workspaceId, agentId: agents.private.id },
     ],
   });
+  // One message the public Agent wrote, so the stream shows its sender avatar beside the
+  // members-page and profile surfaces the consistency check compares.
+  const publicMember = await db.conversationMember.findFirstOrThrow({
+    where: { conversationId: channel.id, agentId: agents.public.id },
+  });
+  await db.message.create({
+    data: {
+      conversationId: channel.id,
+      workspaceId,
+      senderMemberId: publicMember.id,
+      body: "members status check",
+      sequence: 1,
+    },
+  });
 });
 
 afterAll(async () => {
@@ -231,4 +245,24 @@ test("a plain member's channel roster reads another member's Agent status, publi
     expect(text).toContain("Online");
     expect(text).not.toContain("Status unknown");
   }
+
+  // Every face the public Agent shows — the message-stream avatar and its members card — reads
+  // the one live store, so each carries the same status word (task #735 follow-up, Frank's
+  // coordinator screenshot: avatar dot and profile header must agree).
+  const avatarLabels = `(() => [...document.querySelectorAll('[role="img"]')].map((el) => el.getAttribute("aria-label") ?? "").filter((label) => label.startsWith(${JSON.stringify(`${agents.public.displayName},`)}) || label.startsWith(${JSON.stringify(`${agents.public.name},`)})))()`;
+  const before = await evaluate<string[]>(avatarLabels);
+  expect(before.length).toBeGreaterThanOrEqual(1);
+  for (const label of before) expect(label).toContain(", Online");
+
+  // Its members row opens the profile inside the sheet (the roster's search box goes away); the
+  // header's face is another `[role="img"]` with the same aria-label shape and must agree too.
+  await evaluate(`(() => {
+    const row = ${agentRow(agents.public.displayName)};
+    (row?.querySelector('a,button,[role="button"],[role="link"]') ?? row)?.click();
+    return true;
+  })()`);
+  await waitFor(`document.querySelector('input[placeholder="Search members…"]') === null`, 15_000);
+  const withProfile = await evaluate<string[]>(avatarLabels);
+  expect(withProfile.length).toBeGreaterThanOrEqual(2);
+  for (const label of withProfile) expect(label).toContain(", Online");
 }, 120_000);
