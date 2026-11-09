@@ -3,22 +3,32 @@
  * it. One width (`--w`) sizes it from the viewport's height so the whole panel fits.
  *
  * The agent floats on the homepage's beat (4.8 s, ease-in-out) and the shadow breathes on the very
- * same beat, so lifted means smaller and lighter. Hovering the arch swings it open inward on its
- * left edge like a door. Both are off when the person asked for less motion.
+ * same beat, so lifted means smaller and lighter. Hovering the illustration swings only the inner
+ * door panel (its own layer, cut out of the arch) inward a little on its left edge, over the calm
+ * lilac interior painted into the arch. Both are off when the person asked for less motion.
  */
 .login-art {
   --w: min(23rem, 40vh);
   position: relative;
   width: var(--w);
   margin-bottom: calc(var(--w) * 0.16);
-  perspective: calc(var(--w) * 3);
 }
 
-.login-art__door {
+.login-art__arch {
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* The inner door panel's box in arch.webp (800 x 1013), hinged on its left edge. */
+.login-art__door {
+  position: absolute;
+  left: 31.125%;
+  top: 16.3%;
+  width: 56.25%;
+  height: auto;
   transform-origin: 0% 50%;
+  transform: perspective(calc(var(--w) * 2.5));
 }
 
 .login-art__agent,
@@ -29,10 +39,10 @@
 }
 
 .login-art__agent {
-  left: 7%;
-  top: 27.7%;
-  width: 102%;
-  z-index: 1;
+  left: 21%;
+  top: 36.3%;
+  width: 71%;
+  z-index: 2;
 }
 
 .login-art__shadow {
@@ -41,13 +51,81 @@
   width: 96%;
 }
 
+/* The sign-in forms' look (the Tabs, fields and buttons keep their shared components): light-mode
+ * hexes from the designer, dark mode on the theme's own tokens. */
+.login-form {
+  --login-border: #e0e5f1;
+  --login-muted: #777d8d;
+  --login-brand: #5d36dc;
+  --login-brand-hover: #4c2ab8;
+  --login-focus-border: #c2b3f6;
+  --login-focus-halo: #eae4fd;
+}
+
+.dark-mode .login-form {
+  --login-border: var(--color-border-primary);
+  --login-muted: var(--color-text-tertiary);
+  --login-brand: var(--color-brand-400);
+  --login-brand-hover: var(--color-brand-300);
+  --login-focus-border: var(--color-brand-400);
+  --login-focus-halo: color-mix(in srgb, var(--color-brand-400) 25%, transparent);
+}
+
+.login-form [role="tab"]:not([data-hovered], [aria-selected="true"]) {
+  color: var(--login-muted);
+}
+
+.login-form [role="tab"][data-hovered],
+.login-form [role="tab"][aria-selected="true"] {
+  color: var(--login-brand);
+  border-bottom-color: var(--login-brand);
+}
+
+.login-form [class~="group/input"] {
+  min-height: 3rem;
+  border: 1px solid var(--login-border);
+  box-shadow: none;
+}
+
+.login-form [class~="group/input"][data-focus-within] {
+  border-color: var(--login-focus-border);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.05),
+    0 0 0 4px var(--login-focus-halo);
+}
+
+.login-form [class~="group/input"][data-invalid] {
+  border-color: var(--color-border-error);
+}
+
+.login-form [class~="group/input"][data-invalid][data-focus-within] {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.05),
+    0 0 0 4px color-mix(in srgb, var(--color-border-error) 18%, transparent);
+}
+
+.login-form input::placeholder {
+  color: var(--login-muted);
+}
+
+.login-form [aria-label="Toggle password visibility"] {
+  color: var(--login-muted);
+}
+
+.login-form .login-outline {
+  min-height: 3rem;
+  border: 1px solid var(--login-border);
+  box-shadow: none;
+  color: var(--login-muted);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .login-art__door {
-    transition: transform 700ms cubic-bezier(0.22, 0.8, 0.3, 1);
+    transition: transform 240ms cubic-bezier(0.22, 0.8, 0.3, 1);
   }
 
   .login-art:hover .login-art__door {
-    transform: rotateY(22deg);
+    transform: perspective(calc(var(--w) * 2.5)) rotateY(24deg);
   }
 
   .login-art__agent {

@@ -26,6 +26,11 @@ function GitHubMark({ className }: { className?: string }) {
   );
 }
 
+/** The mark stays the text colour of the page while the label is muted. */
+const DarkMark = ({ className }: { className?: string }) => (
+  <GitHubMark className={cx(className, "text-primary")} />
+);
+
 /**
  * Signing in with GitHub, below the sign-in forms: a document navigation to `/auth/github`, which
  * takes the person to GitHub and back through the server (`server/auth/github-sign-in`). A
@@ -51,8 +56,8 @@ export function GitHubSignIn({
       <Button
         color="secondary"
         size="lg"
-        className="w-full"
-        iconLeading={GitHubMark}
+        className="login-outline w-full text-sm"
+        iconLeading={DarkMark}
         onPress={() => window.location.assign(githubSignInHref(returnTo, prompt))}
       >
         {m.login_github()}

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { githubClientId, githubConnection, startFakeGithub } from "./e2e-fake-github";
 import {
   accountFieldSelector,
   codeFieldSelector,
@@ -34,7 +35,27 @@ const people: Record<string, Person> = {};
 
 test("the split sign-in page: tabs, fields, email-code link and screenshots", async () => {
   const { browser, evaluate, waitFor, button } = openBrowser(`login-split-${process.pid}`);
-  const stack = await startSignInStack({ people, webPort, artifacts });
+  const github = startFakeGithub();
+  const stack = await startSignInStack({
+    people,
+    webPort,
+    artifacts,
+    github: { connection: githubConnection, consume: github.consume },
+    env: {
+      COFORGE_GITHUB_SIGN_IN_CLIENT_ID: githubClientId,
+      AUTHING_GITHUB_CONNECTION: githubConnection,
+      COFORGE_GITHUB_SIGN_IN_AUTHORIZE_URL: github.authorizeUrl,
+    },
+  });
+  const style = (selector: string, property: string) =>
+    evaluate<string>(
+      `getComputedStyle(document.querySelector(${JSON.stringify(selector)}))[${JSON.stringify(property)}]`,
+    );
+  const titleTop = () =>
+    evaluate<number>(`document.querySelector("h1").getBoundingClientRect().top`);
+  const tabColor = (tab: string) => evaluate<string>(`getComputedStyle(${tab}).color`);
+  const fieldGroup = (selector: string) =>
+    `document.querySelector(${JSON.stringify(selector)}).closest('[class~="group/input"]')`;
   const exists = (selector: string) =>
     evaluate<boolean>(`!!document.querySelector(${JSON.stringify(selector)})`);
   const selected = (tab: string) => evaluate<string>(`${tab}.getAttribute("aria-selected")`);
@@ -62,13 +83,43 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     expect(await exists(codeFieldSelector)).toBe(true);
     expect(await exists(passwordFieldSelector)).toBe(false);
     expect(await evaluate<boolean>(`!!${button("Send code")}`)).toBe(true);
-    expect(await evaluate<boolean>(`!!${button("Sign In")}`)).toBe(true);
+    expect(await evaluate<boolean>(`!!${button("Sign in")}`)).toBe(true);
     expect(await brandVisible()).toBe(true);
+
+    // The homepage's logo, the selected tab in brand purple and the other grey, GitHub below the
+    // submit button (full width) on this tab only.
+    expect(
+      await evaluate<string>(`document.querySelector(".login-brand-logo")?.getAttribute("src")`),
+    ).toBe("/login/homepage-logo.webp");
+    expect(await tabColor(codeTab)).toBe("rgb(93, 54, 220)");
+    expect(await tabColor(passwordTab)).toBe("rgb(119, 125, 141)");
+    expect(await evaluate<boolean>(`!!${button("Continue with GitHub")}`)).toBe(true);
+    const phoneTitleTop = await titleTop();
+    // The phone field has the focus: 1px #C2B3F6 border and the two shadows.
+    const focused = await evaluate<{ border: string; shadow: string }>(
+      `(() => { const s = getComputedStyle(${fieldGroup(destinationFieldSelector)}); return { border: s.borderTopWidth + " " + s.borderTopColor, shadow: s.boxShadow }; })()`,
+    );
+    expect(focused.border).toBe("1px rgb(194, 179, 246)");
+    expect(focused.shadow).toContain("rgb(234, 228, 253) 0px 0px 0px 4px");
+    expect(focused.shadow).toContain("0px 1px 2px");
+    expect(
+      await evaluate<string>(
+        `getComputedStyle(document.querySelector(${JSON.stringify(codeFieldSelector)}), "::placeholder").color`,
+      ),
+    ).toBe("rgb(119, 125, 141)");
 
     // The password tab: account and password, the submit button, then the two links of one row.
     await browser("eval", `${passwordTab}.click()`);
     await waitFor(`!!document.querySelector(${JSON.stringify(accountFieldSelector)})`);
     expect(await selected(passwordTab)).toBe("true");
+    // The tab colours ease over 100 ms.
+    await browser("wait", "300");
+    expect(await tabColor(passwordTab)).toBe("rgb(93, 54, 220)");
+    expect(await tabColor(codeTab)).toBe("rgb(119, 125, 141)");
+    // Switching tabs leaves the title where it was, and GitHub is the phone tab's alone.
+    expect(await titleTop()).toBe(phoneTitleTop);
+    expect(await evaluate<boolean>(`!!${button("Continue with GitHub")}`)).toBe(false);
+    expect(await evaluate<boolean>(`!!${button("Sign in")}`)).toBe(true);
     expect(await exists(passwordFieldSelector)).toBe(true);
     expect(await exists(destinationFieldSelector)).toBe(false);
     expect(await evaluate<boolean>(`!!${button("Forgot password?")}`)).toBe(true);
@@ -114,7 +165,10 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     // The agent floats and the shadow breathes on one beat, unless motion is reduced.
     await setViewport(1440);
     await browser("hover", ".login-art");
-    await browser("wait", "900");
+    await browser("wait", "500");
+    // Only the inner door panel swings, not the arch behind it.
+    expect(await style(".login-art__door", "transform")).not.toBe("none");
+    expect(await style(".login-art__arch", "transform")).toBe("none");
     await browser("screenshot", join(artifacts, "arch-open-1440.png"));
     await browser("mouse", "move", "1200", "100");
     const animations = await evaluate<{ agent: string; shadow: string }>(

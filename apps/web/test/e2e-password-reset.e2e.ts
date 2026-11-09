@@ -179,10 +179,10 @@ test("setting a new password with a code sent by SMS or email", async () => {
 
     // The old password no longer signs in; the new one does, to the name step of a first sign-in.
     await setInput(passwordFieldSelector, personPassword);
-    await browser("eval", `${button("Sign In")}.click()`);
+    await browser("eval", `${button("Sign in")}.click()`);
     await waitFor(`${formError} === "Account or password is incorrect."`);
     await setInput(passwordFieldSelector, newPassword);
-    await browser("eval", `${button("Sign In")}.click()`);
+    await browser("eval", `${button("Sign in")}.click()`);
     await waitFor(onNameStepHere);
     expect(await evaluate<string>(`${nameField}.value`)).toBe(people.alice.name);
     expect(fake.signIns.at(-1)).toMatchObject({ person: "alice", connection: "PASSWORD" });

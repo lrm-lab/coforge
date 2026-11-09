@@ -64,7 +64,7 @@ export function SendCodeRow({
         type="button"
         color="secondary"
         size={size}
-        className="shrink-0"
+        className="login-outline shrink-0"
         isLoading={sending}
         isDisabled={secondsLeft > 0}
         onPress={onSend}

@@ -17,7 +17,8 @@ export function LoginSplitLayout({ children }: { children: ReactNode }) {
         <Link to="/" aria-label="CoForge" className="self-start lg:hidden">
           <CoForgeMark className="h-7" />
         </Link>
-        <main className="flex flex-1 items-center justify-center py-12">
+        {/* From the top, not centred, so the title stays put when the tabs differ in height. */}
+        <main className="flex flex-1 items-start justify-center pt-12 pb-12 lg:pt-[16vh]">
           <div className="w-full max-w-sm">{children}</div>
         </main>
       </div>

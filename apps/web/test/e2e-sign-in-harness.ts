@@ -379,7 +379,7 @@ export function openBrowser(session: string) {
   async function submitSignIn(
     account: string,
     password: string,
-    label = "Sign In",
+    label = "Sign in",
     tab = passwordTab,
   ) {
     await browser("eval", `${tab}.click()`);
@@ -396,7 +396,7 @@ export function openBrowser(session: string) {
   /** On the code tab, types `code` and presses its button (`Sign In`). */
   async function submitCode(code: string) {
     await setInput(codeFieldSelector, code);
-    await browser("eval", `${button("Sign In")}.click()`);
+    await browser("eval", `${button("Sign in")}.click()`);
   }
   return {
     browser,

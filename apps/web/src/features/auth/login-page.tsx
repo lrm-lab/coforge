@@ -40,7 +40,7 @@ export function LoginPage({
   const [byEmail, setByEmail] = useState(false);
   return (
     <LoginSplitLayout>
-      <div className="flex w-full flex-col gap-8">
+      <div className="login-form flex w-full flex-col gap-8">
         <h1 className="text-display-sm font-semibold text-primary">{m.login_heading()}</h1>
         {passwordUpdated ? (
           <p role="status" className="text-md text-success-primary">
@@ -48,11 +48,21 @@ export function LoginPage({
           </p>
         ) : null}
         <Tabs selectedKey={tab} onSelectionChange={setTab}>
-          <TabList aria-label={m.login_heading()} type="underline" size="md">
-            <Tab id="code">{byEmail ? m.login_tab_email_code() : m.login_tab_phone()}</Tab>
-            <Tab id="password">{m.login_tab_password()}</Tab>
+          <TabList
+            aria-label={m.login_heading()}
+            type="underline"
+            size="md"
+            className="w-max gap-10"
+          >
+            <Tab id="code" className="px-0 *:px-0">
+              {byEmail ? m.login_tab_email_code() : m.login_tab_phone()}
+            </Tab>
+            <Tab id="password" className="px-0 *:px-0">
+              {m.login_tab_password()}
+            </Tab>
           </TabList>
-          <TabPanel id="code" className="pt-8">
+          {/* Both panels share a minimum height, so the tabs and title above them never move. */}
+          <TabPanel id="code" className="min-h-72 pt-10">
             <CodeSignInForm
               key={byEmail ? "email" : "phone"}
               returnTo={returnTo}
@@ -67,8 +77,13 @@ export function LoginPage({
                 </Button>
               </div>
             ) : null}
+            {github ? (
+              <div className="mt-5">
+                <GitHubSignIn returnTo={returnTo} prompt={prompt} error={error} />
+              </div>
+            ) : null}
           </TabPanel>
-          <TabPanel id="password" className="pt-8">
+          <TabPanel id="password" className="min-h-72 pt-10">
             <PasswordSignInForm
               returnTo={returnTo}
               prompt={prompt}
@@ -80,7 +95,6 @@ export function LoginPage({
             />
           </TabPanel>
         </Tabs>
-        {github ? <GitHubSignIn returnTo={returnTo} prompt={prompt} error={error} /> : null}
       </div>
     </LoginSplitLayout>
   );

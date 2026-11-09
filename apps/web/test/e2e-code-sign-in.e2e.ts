@@ -107,7 +107,7 @@ test("signing in with a code sent by SMS or email", async () => {
     await waitFor(`${formError} === "Enter a mainland China phone number or an email address."`);
     await setInput('main input[name="destination"]', "e2e-code-alice@coforge.test");
     await setInput('main input[name="code"]', "12ab");
-    await browser("eval", `${button("Sign In")}.click()`);
+    await browser("eval", `${button("Sign in")}.click()`);
     await waitFor(`${formError} === "The verification code is incorrect or expired."`);
     expect(fake.sentCodes).toEqual([]);
     expect(fake.signIns).toEqual([]);

@@ -39,7 +39,11 @@ export function LoginBrandPanel() {
   return (
     <div className="hidden flex-col bg-[#EEEBFE] px-10 py-10 text-gray-600 lg:flex xl:px-20">
       <Link to="/" aria-label="CoForge" className="self-start">
-        <img src="/login/coforge-brand-light.svg" alt="" className="h-11 w-auto" />
+        <img
+          src="/login/homepage-logo.webp"
+          alt=""
+          className="login-brand-logo h-[42px] w-[170px]"
+        />
       </Link>
       <div className="flex flex-1 items-center justify-center py-8">
         <LoginArt />

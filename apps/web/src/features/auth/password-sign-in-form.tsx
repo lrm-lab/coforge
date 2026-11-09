@@ -111,7 +111,7 @@ export function PasswordSignInForm({
       <Button
         type="submit"
         size="lg"
-        className="mt-8 w-full"
+        className="mt-8 h-12 w-full"
         isLoading={submitting}
         showTextWhileLoading
       >
@@ -122,7 +122,7 @@ export function PasswordSignInForm({
         <Link
           to="/login/reset-password"
           search={{ returnTo, prompt }}
-          className="text-md font-semibold text-brand-secondary hover:text-brand-secondary_hover"
+          className="text-md font-semibold text-(--login-brand) hover:text-(--login-brand-hover)"
         >
           {m.login_forgot_password()}
         </Link>

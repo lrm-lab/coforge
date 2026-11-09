@@ -102,7 +102,7 @@ export function CodeSignInForm({
       <Button
         type="submit"
         size="lg"
-        className="mt-8 w-full"
+        className="mt-8 h-12 w-full"
         isLoading={submitting}
         showTextWhileLoading
       >
