@@ -11,8 +11,8 @@ import {
 } from "./helpers/browser-e2e";
 
 /**
- * The AI Workbench switch on Settings → Experiments (task #743): off by default, the sidebar entry
- * following it without a reload, `/pi-chat` going home while it is off, and a second browser
+ * The AI Workbench switch on Settings → Experiments (task #743): on by default (Frank 11-09), the
+ * sidebar entry following it without a reload, `/pi-chat` going home while it is off, and a second browser
  * session of the same account following when it regains focus.
  *
  * Opt-in like the other browser e2e files: real local Web, `agent-browser` and PostgreSQL. The
@@ -70,40 +70,36 @@ test("the AI Workbench switch controls the sidebar entry and the route, across s
     await first.browser("set", "viewport", "1280", "860");
     await second.browser("set", "viewport", "1280", "860");
 
-    // Default off: no sidebar entry, and the route goes home.
+    // Default on: an account that never chose has the switch on and the sidebar entry.
     await first.browser("open", experiments("en"));
     await first.waitFor(`${pageHydrated} && ${switchInput} != null`, 60_000);
-    expect(await first.evaluate<boolean>(`${switchInput}.checked`)).toBe(false);
-    expect(await first.evaluate<boolean>(entry)).toBe(false);
-    await shot(first, "experiments-en-off");
+    expect(await first.evaluate<boolean>(`${switchInput}.checked`)).toBe(true);
+    expect(await first.evaluate<boolean>(entry)).toBe(true);
+    await shot(first, "experiments-en-default-on");
+    await first.browser("open", experiments("zh-CN"));
+    await first.waitFor(`${pageHydrated} && ${switchInput} != null`, 60_000);
+    await shot(first, "experiments-zh-CN-default-on");
+
+    // A second session of the same account, on the Workbench page.
+    await second.browser("open", `${home("en")}/pi-chat`);
+    await second.waitFor(`${pageHydrated} && ${entry}`, 60_000);
+
+    // Turning it off hides the entry at once, with no reload, and stores false for this account.
+    await toggle(first, false);
+    await first.waitFor(`!(${entry})`);
+    expect(
+      (await db.userPreference.findUniqueOrThrow({ where: { userId: DEV_BROWSER_USER.id } }))
+        .aiWorkbenchEnabled,
+    ).toBe(false);
+    await shot(first, "experiments-zh-CN-off");
     await first.browser("open", `${home("en")}/pi-chat`);
     await first.waitFor(`${pageHydrated} && !location.pathname.endsWith("/pi-chat")`, 60_000);
     expect(await first.evaluate<string>(`location.pathname`)).toBe(`/en/w/${workspace.slug}`);
 
-    // Turning it on shows the entry at once, with no reload, and stores true for this account.
-    await first.browser("open", experiments("en"));
-    await toggle(first, true);
-    await first.waitFor(entry);
-    expect(
-      (await db.userPreference.findUniqueOrThrow({ where: { userId: DEV_BROWSER_USER.id } }))
-        .aiWorkbenchEnabled,
-    ).toBe(true);
-    await shot(first, "experiments-en-on");
-    await first.browser("open", experiments("zh-CN"));
-    await first.waitFor(`${pageHydrated} && ${switchInput} != null`, 60_000);
-    expect(await first.evaluate<boolean>(`${switchInput}.checked`)).toBe(true);
-    await shot(first, "experiments-zh-CN-on");
-
-    // A second session of the same account follows the change when it regains focus.
-    await second.browser("open", `${home("en")}/pi-chat`);
-    await second.waitFor(`${pageHydrated} && ${entry}`, 60_000);
-    await first.browser("open", experiments("zh-CN"));
-    await toggle(first, false);
-    await shot(first, "experiments-zh-CN-off");
-    await first.waitFor(`!(${entry})`);
+    // The other session follows when it regains focus: its open Workbench page is replaced by one
+    // line and a link to the switch.
     await refocus(second);
     await second.waitFor(`!(${entry})`);
-    // The Workbench page open in that session is replaced by one line and a link to the switch.
     await second.waitFor(
       `document.querySelector('main [role="status"]')?.textContent.includes("AI Workbench is off")`,
     );
@@ -112,14 +108,14 @@ test("the AI Workbench switch controls the sidebar entry and the route, across s
         `document.querySelector('main [role="status"] a').getAttribute("href")`,
       ),
     ).toContain("/settings?section=experiments");
-    await second.browser("open", `${home("en")}/pi-chat`);
-    await second.waitFor(`${pageHydrated} && !location.pathname.endsWith("/pi-chat")`, 60_000);
 
     // Turning it back on restores the entry here and, on focus, in the other session.
     await second.browser("open", home("en"));
     await second.waitFor(`${pageHydrated} && !(${entry})`, 60_000);
+    await first.browser("open", experiments("en"));
     await toggle(first, true);
     await first.waitFor(entry);
+    await shot(first, "experiments-en-on");
     await refocus(second);
     await second.waitFor(entry);
     await second.browser("open", `${home("en")}/pi-chat`);

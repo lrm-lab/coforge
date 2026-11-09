@@ -9,8 +9,8 @@ import {
 import { requireAiWorkbench } from "#src/server/pi-chat/ai-workbench.server";
 import { canUsePiChat } from "#src/server/pi-chat/pi-chat-production.server";
 
-/** Task #743: AI Workbench is a per-account switch that is off until the person turns it on. */
-test("AI Workbench is off by default, refuses while off, and is per account", async () => {
+/** Task #743: AI Workbench is a per-account switch, on until the person turns it off (Frank 11-09). */
+test("AI Workbench is on by default, refuses once turned off, and is per account", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
   if (!connectionString)
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
@@ -64,26 +64,27 @@ test("AI Workbench is off by default, refuses while off, and is per account", as
   try {
     const preferences = new UserPreferences(new PrismaUserPreferencesRepository(db));
 
-    // A person with no preferences row, and a row that never chose, are both off.
-    expect((await preferences.read(alice!.id)).aiWorkbenchEnabled).toBeFalse();
-    expect(await refused(alice!.id)).toBeTrue();
+    // A person with no preferences row, and a row that never chose, are both on.
+    expect((await preferences.read(alice!.id)).aiWorkbenchEnabled).toBeTrue();
+    expect(await refused(alice!.id)).toBeFalse();
     await preferences.set(alice!.id, "Asia/Tokyo");
-    expect((await preferences.read(alice!.id)).aiWorkbenchEnabled).toBeFalse();
-    expect(await refused(alice!.id)).toBeTrue();
-    expect(await canUsePiChat(db, scope(0, alice))).toBeFalse();
-
-    // Turning it on for Alice leaves Bob, in the same Workspace, refused.
-    expect(await preferences.setAiWorkbenchEnabled(alice!.id, true)).toBeTrue();
+    expect((await preferences.read(alice!.id)).aiWorkbenchEnabled).toBeTrue();
     expect(await refused(alice!.id)).toBeFalse();
     expect(await canUsePiChat(db, scope(0, alice))).toBeTrue();
-    expect(await refused(bob!.id)).toBeTrue();
-    expect(await canUsePiChat(db, scope(1, bob))).toBeFalse();
-    expect((await preferences.read(alice!.id)).timeZone).toBe("Asia/Tokyo");
 
-    // Turning it off again refuses at once; the daemon's reply frames and the gateway share `canUsePiChat`.
+    // Turning it off for Alice refuses her at once and leaves Bob, in the same Workspace, on; the
+    // daemon's reply frames and the gateway share `canUsePiChat`.
     expect(await preferences.setAiWorkbenchEnabled(alice!.id, false)).toBeFalse();
     expect(await refused(alice!.id)).toBeTrue();
     expect(await canUsePiChat(db, scope(0, alice))).toBeFalse();
+    expect(await refused(bob!.id)).toBeFalse();
+    expect(await canUsePiChat(db, scope(1, bob))).toBeTrue();
+    expect((await preferences.read(alice!.id)).timeZone).toBe("Asia/Tokyo");
+
+    // Turning it back on lets her in again.
+    expect(await preferences.setAiWorkbenchEnabled(alice!.id, true)).toBeTrue();
+    expect(await refused(alice!.id)).toBeFalse();
+    expect(await canUsePiChat(db, scope(0, alice))).toBeTrue();
   } finally {
     await db.computer.deleteMany({ where: { id: { in: computers.map((c) => c.id) } } });
     await db.workspace.delete({ where: { id: workspace.id } });

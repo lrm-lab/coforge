@@ -1,13 +1,13 @@
 import type { DatabaseScope } from "#src/server/db/transaction.server";
 import { AppError } from "#src/lib/app-error";
 
-/** Whether the account has AI Workbench on. NULL, a person who never chose, is off. */
+/** Whether the account has AI Workbench on. NULL, a person who never chose, is on (Frank, 11-09). */
 export async function isAiWorkbenchEnabled(db: DatabaseScope, userId: string) {
   const row = await db.userPreference.findUnique({
     where: { userId },
     select: { aiWorkbenchEnabled: true },
   });
-  return row?.aiWorkbenchEnabled === true;
+  return row?.aiWorkbenchEnabled !== false;
 }
 
 /** Refuses an account whose AI Workbench switch is off; every Workbench entry calls it. */

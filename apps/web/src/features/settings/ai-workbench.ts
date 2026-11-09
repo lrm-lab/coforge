@@ -18,13 +18,13 @@ export const aiWorkbenchQuery = {
   refetchOnWindowFocus: "always",
 } as const;
 
-/** The switch, seeded from what the page loaded; it is off until the person turns it on. */
+/** The switch, seeded from what the page loaded; it is on until the person turns it off. */
 export function useAiWorkbenchEnabled(initial?: boolean) {
   const { data } = useQuery({
     ...aiWorkbenchQuery,
     ...(initial === undefined ? {} : { initialData: initial, initialDataUpdatedAt: Date.now() }),
   });
-  return data ?? false;
+  return data ?? true;
 }
 
 /** The switch as the server has it right now, for a route that must not open while it is off. */

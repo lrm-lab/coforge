@@ -85,7 +85,7 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
   }
 
   async setAiWorkbenchEnabled(userId: string, enabled: boolean) {
-    return (await this.write(userId, { aiWorkbenchEnabled: enabled })).aiWorkbenchEnabled === true;
+    return (await this.write(userId, { aiWorkbenchEnabled: enabled })).aiWorkbenchEnabled !== false;
   }
 
   async setRole(userId: string, role: PersonRole | null) {
@@ -103,8 +103,8 @@ export class UserPreferences {
       timeZone: stored.timeZone,
       timeFormat: isTimeFormat(stored.timeFormat) ? stored.timeFormat : null,
       language: isUserLanguage(stored.language) ? stored.language : null,
-      // NULL is off: only a person who turned it on has stored true.
-      aiWorkbenchEnabled: stored.aiWorkbenchEnabled === true,
+      // NULL is on: only a person who turned it off has stored false.
+      aiWorkbenchEnabled: stored.aiWorkbenchEnabled !== false,
     };
   }
 
