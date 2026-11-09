@@ -42,7 +42,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
   const { browser, evaluate } = browserSession(browserPath, session);
   /** The text of every row this test seeded (its channel's and its thread's), in page order. */
   const seededRows = `[...document.querySelectorAll(${rowItems})]
-    .map((row) => row.textContent)
+    .map((row) => row.textContent + " " + [...row.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" "))
     .filter((text) => text.includes("e2e-activity-inbox"))`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
@@ -132,16 +132,16 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser("wait", "--fn", `${seededRows}.length === 2 && ${pageHydrated}`);
     const rows = await evaluate<string[]>(seededRows);
     // Newest activity first: the channel's unread message was posted after the thread reply. A
-    // channel's row names it in its first line, then the sender and the latest message; a
-    // thread's first line names its channel and quotes the thread's first message.
-    expect(rows[0]).toContain("#e2e-activity-inbox");
+    // channel's row goes by its bare name (the # is its icon); a thread's names its channel
+    // before the latest reply.
+    expect(rows[0]).toContain("e2e-activity-inbox");
+    expect(rows[0]).not.toContain("#e2e-activity-inbox");
     expect(rows[0]).toContain("1 new");
-    expect(rows[0]).toContain("Activity PeerE2E activity unread");
+    expect(rows[0]).toContain("Activity Peer: E2E activity unread");
     expect(rows[1]).toContain("E2E activity root");
     expect(rows[1]).toContain("@you");
     expect(rows[1]).toContain("1 new");
-    expect(rows[1]).toContain("Thread in #e2e-activity-inbox: “E2E activity root");
-    expect(rows[1]).toContain("Activity Peer");
+    expect(rows[1]).toContain("#e2e-activity-inbox · Activity Peer: ");
     // Nothing is open, so there is no conversation area: the list spans the page.
     expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
     const fullWidth = await evaluate<number>(listColumnWidth);
@@ -211,7 +211,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
             .click() ?? true`),
         );
     // One line: a wait expression is passed to the browser CLI as a single argument.
-    const channelRow = `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E activity unread")).textContent`;
+    const channelRow = `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E activity unread"))?.querySelector('[aria-label$=" new"]')?.getAttribute("aria-label") ?? ""`;
     await channelMenu("Mark as read");
     await browser("wait", "--fn", `!${channelRow}.includes("1 new")`);
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);

@@ -27,13 +27,15 @@ test("Activity's header marks all done with Undo, and a row's hover shows only D
   /** The header's "More actions" (⋯) button, and the items of the menu it opens. */
   const moreButton = `document.querySelector('[data-activity-list] header button[aria-label="More actions"]')`;
   const menuItems = `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`;
+  // A real click, so focus moves into the menu and Escape reaches it.
   const openMenu = async () => {
-    await evaluate(`(${moreButton}.click(), true)`);
+    await browser("click", `[data-activity-list] header button[aria-label="More actions"]`);
     await waitFor(`${menuItems}.length > 0`);
   };
+  // Gone, not just closing: a menu animating out keeps its items (task #479).
   const closeMenu = async () => {
     await browser("press", "Escape");
-    await waitFor(`${menuItems}.length === 0`);
+    await waitFor(`document.querySelectorAll('[role="menu"]').length === 0`);
   };
   const toastButton = `[...document.querySelectorAll("[data-sonner-toast] button")].find((b) => b.textContent.trim() === "Undo")`;
   const openSeeded = async (workspaceSlug: string) => {
@@ -58,6 +60,8 @@ test("Activity's header marks all done with Undo, and a row's hover shows only D
     await closeMenu();
     await browser("find", "role", "tab", "click", "--name", "Unread");
     await waitFor(`location.search.includes("unread") && ${moreButton} !== null`);
+    // The tab's own list replaces the previous one's placeholder rows (and its menu) a beat later.
+    await Bun.sleep(1_500);
     await openMenu();
     expect(await evaluate<string[]>(menuItems)).toEqual(["Mark all read"]);
     await closeMenu();

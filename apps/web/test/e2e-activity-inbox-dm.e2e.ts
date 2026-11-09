@@ -31,7 +31,7 @@ test("a direct message with a member, and the one with themself, list with the m
   const { browser, evaluate } = browserSession(browserPath, session);
   /** One seeded row's text and the picture its avatar shows, found by a message it previews. */
   const row = (text: string) =>
-    `(() => { const row = [...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)})); return row ? { text: row.textContent, avatar: row.querySelector("[data-avatar] img")?.getAttribute("src") ?? null } : null; })()`;
+    `(() => { const row = [...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)})); return row ? { text: row.textContent + " " + [...row.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" "), avatar: row.querySelector("[data-avatar] img")?.getAttribute("src") ?? null } : null; })()`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -115,22 +115,20 @@ test("a direct message with a member, and the one with themself, list with the m
       "--fn",
       `${row("E2E activity DM hello")} !== null && ${row("E2E activity note to self")} !== null && ${pageHydrated}`,
     );
-    // A DM's first line says what it is, then the latest sender (name and face) and message; the
-    // face of the other side stays on the row.
+    // The member's DM goes by their name and face, unread; the viewer's own by theirs, "(you)".
+    // The title is the bare name, without an @.
     const dm = await evaluate<{ text: string; avatar: string | null }>(
       row("E2E activity DM hello"),
     );
     expect(dm.text).not.toContain("@Activity DM Peer");
     expect(dm.text).toContain("1 new");
-    expect(dm.text).toContain("Direct message");
-    expect(dm.text).toContain("Activity DM PeerE2E activity DM hello");
+    expect(dm.text).toContain("Activity DM Peer: E2E activity DM hello");
     // A member with no picture shows the cartoon person their id chooses.
     expect(dm.avatar).toBe(personAvatarUrl(peer.id, null));
     const self = await evaluate<{ text: string; avatar: string | null }>(
       row("E2E activity note to self"),
     );
-    expect(self.text).toContain("Direct message");
-    expect(self.text).toContain(viewerName);
+    expect(self.text).toContain(`${viewerName} (you)`);
     expect(self.text).not.toContain(`@${viewerName}`);
     expect(self.text).not.toMatch(/\d+ new/);
     expect(self.avatar).not.toBeNull();

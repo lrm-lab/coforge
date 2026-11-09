@@ -90,7 +90,9 @@ test("Activity list, Done hover, Unread header and Undo toast in each locale, th
           await waitFor(`document.querySelectorAll('[role="menuitem"]').length > 0`);
           await Bun.sleep(400);
           await browser("screenshot", join(out, `${name}-menu.png`));
-          await evaluate(`([...document.querySelectorAll('[role="menuitem"]')].at(-1).click(), true)`);
+          await evaluate(
+            `([...document.querySelectorAll('[role="menuitem"]')].at(-1).click(), true)`,
+          );
           await waitFor(`document.querySelector("[data-sonner-toast] button") !== null`);
           await Bun.sleep(600);
           await browser("screenshot", join(out, `${name}-undo.png`));

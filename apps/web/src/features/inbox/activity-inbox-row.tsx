@@ -217,8 +217,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
             </span>
             <span className={cn("truncate text-sm", unread ? "text-secondary" : "text-quaternary")}>
               {placeLabel && <>{placeLabel} · </>}
-              {sender}:
-              <Preview message={item.latest} />
+              {sender}: <Preview message={item.latest} />
             </span>
           </span>
         </AriaLink>

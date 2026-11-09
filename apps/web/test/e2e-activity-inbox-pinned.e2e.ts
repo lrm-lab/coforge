@@ -31,7 +31,7 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
   const channelId = seededUuid("e2e-activity-inbox:pinned-channel");
   /** The text of every row under `selector` that previews this test's messages. */
   const rowsIn = (selector: string) =>
-    `[...document.querySelectorAll(${selector})].map((row) => row.textContent).filter((text) => text.includes("E2E pinned"))`;
+    `[...document.querySelectorAll(${selector})].map((row) => row.textContent + " " + [...row.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" ")).filter((text) => text.includes("E2E pinned"))`;
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -64,15 +64,16 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     );
     // The channel's own row is under Pinned, and only there; its followed thread is below.
     const [pinnedRow] = await evaluate<string[]>(rowsIn(pinnedItems));
-    // The channel's name in its first line, with the mention and new-message badges.
-    expect(pinnedRow).toContain("#e2e-activity-pinned");
+    // The bare channel name, with the mention and new-message badges.
+    expect(pinnedRow).toContain("e2e-activity-pinned");
+    expect(pinnedRow).not.toContain("#e2e-activity-pinned");
     expect(pinnedRow).toContain("@you");
-    expect(pinnedRow).toContain("Activity Peer");
+    expect(pinnedRow).toContain("Activity Peer: ");
     expect(pinnedRow).toContain("E2E pinned hello");
     expect(pinnedRow).toContain("1 new");
     const [threadRow] = await evaluate<string[]>(rowsIn(rowItems));
     expect(threadRow).toContain("E2E pinned root");
-    expect(threadRow).toContain("Thread in #e2e-activity-pinned");
+    expect(threadRow).toContain("#e2e-activity-pinned · ");
     expect(threadRow).not.toContain("E2E pinned hello");
     // Pinned, its rows, then All conversations and the rest of the list.
     expect(
