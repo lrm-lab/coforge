@@ -260,7 +260,7 @@ export function QuestionsStepper({
             >
               <div
                 className={cn(
-                  "flex flex-col gap-1.5 animate-in duration-150 fade-in motion-reduce:animate-none",
+                  "flex flex-col gap-1.5 animate-in motion-enter-sm fade-in motion-reduce:animate-none",
                   direction > 0 ? "slide-in-from-right-2" : "slide-in-from-left-2",
                 )}
               >

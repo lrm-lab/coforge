@@ -121,7 +121,7 @@ export function ReportDetailHeader({
             {sendAck ? (
               <span
                 role="status"
-                className="inline-flex items-center gap-1 text-sm font-medium text-success-primary duration-200 animate-in fade-in"
+                className="inline-flex items-center gap-1 text-sm font-medium text-success-primary motion-enter animate-in fade-in"
               >
                 <CheckCircle aria-hidden="true" className="size-4" />
                 {m.records_report_send_succeeded()}
