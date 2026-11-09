@@ -86,6 +86,7 @@ export async function launchAgentProcess(
     agentApiKey = launchConfig.agentApiKey;
     timing.phase("config");
     ports.sync.launched(agentId, launchConfig.identity);
+    ports.contextViewGate(agentId, launchConfig.identity?.features?.agentContextView);
     ports.assertRunning();
     ports.assertAgentNotStopping(agentId);
     // Skipped at spawn, never deleted: report each reserved stored variable by name.

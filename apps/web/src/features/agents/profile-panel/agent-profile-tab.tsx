@@ -29,6 +29,7 @@ import type { getAgentProfile } from "#src/features/agents/agents.functions";
 import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/agent-skills";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { AgentContextSection } from "#src/features/agents/agent-context-section";
+import { AgentContextViewForAgent } from "#src/features/agents/agent-context-view";
 import { InlineEditField, SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { FactRow } from "./agent-fact-row";
@@ -370,6 +371,9 @@ function AgentProfileTabBody({
                 requested={profile.runtimeConfig!.fastMode === true}
                 reading={fastMode}
               />
+              {profile.ownedByCurrentUser && profile.computer && (
+                <AgentContextViewForAgent agentId={profile.id} />
+              )}
             </>
           )}
         </div>

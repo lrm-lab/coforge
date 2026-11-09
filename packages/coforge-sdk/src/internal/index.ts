@@ -30,11 +30,15 @@ export {
   decodeAgentContextViewResult,
   encodeAgentContextViewRequest,
   encodeAgentContextViewResult,
+  AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
+  decodeAgentContextViewAvailability,
+  encodeAgentContextViewAvailability,
 } from "./agent-context-view";
 export type {
   AgentContextViewRequest,
   AgentContextViewResult,
   AgentContextViewStatus,
+  AgentContextViewAvailability,
 } from "./agent-context-view";
 export const COMPUTER_RESTART_METHOD = RPC_METHODS.computerRestart;
 export const COMPUTER_RESTART_MESSAGE_TYPE = "coforge.rpc.v1.ComputerRestartIntent" as const;

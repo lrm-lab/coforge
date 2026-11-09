@@ -35,6 +35,7 @@ export type RuntimeStopPorts = {
   stalledRecoverySweep: { stop(): void };
   catalogFreshnessSweep: { stop(): void };
   machineStatus: { stop(): void };
+  contextView: { stopMaintenance(): void };
   activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "disable">;
   currentActivityLaunches: Map<string, ActivityLaunch>;
   phaseBookkeeping: Pick<PhaseBookkeeping, "disposeAll">;
@@ -96,6 +97,7 @@ export class RuntimeStop {
     ports.stalledRecoverySweep.stop();
     ports.catalogFreshnessSweep.stop();
     ports.machineStatus.stop();
+    ports.contextView.stopMaintenance();
     ports.activityPublisher.disable();
     for (const [agentId, launch] of ports.currentActivityLaunches) {
       launch.startup?.dispose();

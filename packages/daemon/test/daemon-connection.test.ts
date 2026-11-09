@@ -59,7 +59,7 @@ import { AgentAppConfigRequestError } from "#src/connection/agent-app-config-req
 import { captureDaemonLogs } from "./log-capture";
 const TEST_AGENT_API_KEY = `sk_agent_${"a".repeat(43)}`;
 
-function fakeClient() {
+export function fakeClient() {
   let connected = () => {};
   let failed = (_error: unknown) => {};
   let disconnected = (_context?: { code: number; reason: string }) => {};
@@ -149,7 +149,7 @@ test("sends a delivery rejection through its own RPC method, never as an ACK", a
   expect(decodeAgentMessageDeliveryRejection(calls[1]!.data)).toEqual(rejection);
 });
 
-test("sends the Daemon API key as a connect header Centrifugo redacts, not connect data", async () => {
+test("sends the Daemon API key as a redacted connect header", async () => {
   const fake = fakeClient();
   let connection: { headers?: Record<string, string> } | undefined;
   const transport = new DaemonConnection("wss://cloud.example", (_endpoint, headers) => {
@@ -754,7 +754,7 @@ test("logs an old server's unknown-method rejection of context usage at most onc
   });
 });
 
-const config = {
+export const config = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
 };

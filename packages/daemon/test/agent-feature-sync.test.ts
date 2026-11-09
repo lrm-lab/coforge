@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 import { AgentFeatureSync } from "#src/daemon-runtime/agent-feature-sync";
 
-type Features = { taskConversations?: boolean; artifacts?: boolean };
+type Features = {
+  taskConversations?: boolean;
+  artifacts?: boolean;
+  agentContextView?: boolean;
+};
 type Message = { agentId: string; text: string; features?: Features };
 
 const NOTICE_ON =
@@ -15,6 +19,9 @@ const NOTICE_OFF =
 const ARTIFACTS_ON =
   "CoForge notice: this workspace's features changed: Documents turned on " +
   "(`coforge artifact` creates and edits them); " +
+  "Your standing instructions now describe what is available here. No reply is needed.";
+const CONTEXT_VIEW_OFF =
+  "CoForge notice: this workspace's features changed: Agent context view turned off; " +
   "Your standing instructions now describe what is available here. No reply is needed.";
 
 /** A fake runtime: a restart ends the session and relaunches it with `serverFeatures`, then
@@ -51,6 +58,19 @@ test("turning it off says so", async () => {
   const { events, deliver } = harness({ taskConversations: true }, { taskConversations: false });
   await deliver({ agentId: "a", text: "hi", features: { taskConversations: false } });
   expect(events).toEqual(["restart", `input:${NOTICE_OFF}\nhi`]);
+});
+
+test("turning agent context view off restarts and names the capability", async () => {
+  const { events, deliver } = harness(
+    { taskConversations: true, agentContextView: true },
+    { taskConversations: true, agentContextView: false },
+  );
+  await deliver({
+    agentId: "a",
+    text: "hi",
+    features: { taskConversations: true, agentContextView: false },
+  });
+  expect(events).toEqual(["restart", `input:${CONTEXT_VIEW_OFF}\nhi`]);
 });
 
 test("an artifacts flip restarts the same way and names documents", async () => {
@@ -149,6 +169,19 @@ test("a launch config that states no features never restarts the session over a 
     } as never),
   ).toBe(false);
   expect(restarts).toEqual([]);
+});
+
+test("an older launch identity leaves an omitted context-view gate unknown", () => {
+  const observed: Array<Features | undefined> = [];
+  const sync = new AgentFeatureSync({
+    live: () => false,
+    keep: () => {},
+    restart: async () => {},
+    observe: (_agentId, features) => observed.push(features),
+  });
+  sync.launched("a", undefined);
+  sync.launched("a", { features: { taskConversations: true } });
+  expect(observed).toEqual([undefined, { taskConversations: true }]);
 });
 
 test("a restart that fails leaves no notice for a prompt that did not change", async () => {

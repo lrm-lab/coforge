@@ -89,6 +89,12 @@ To roll back, disable or remove the flag. New protocol fields, local channel fil
 remain harmless; subsequent upgrades immediately use the legacy path. Re-enable the same flag after
 the cohort is healthy without reinstalling or changing the Computer data.
 
+### Agent context view rollout
+
+`agentContextView` gates the owner-only Agent profile context view. Keep it off until the Web
+receiver, the `agent-context-view:v0` capability lease, and the Computer's availability reports
+are deployed together. A disabled flag must not publish a request or expose the result route.
+
 Every flag is boolean, with the variants `on` and `off` and `off` as the default variant.
 
 ## The flag registry

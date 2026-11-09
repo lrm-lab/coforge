@@ -6,6 +6,7 @@ import type {
   AgentSessionOptions,
 } from "@coforge/agent";
 import { createSession, SessionEnvironmentError } from "@coforge/agent";
+import { piContextHasMedia, piRequestBody } from "@coforge/agent";
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import {
   AgentEnvironmentError,
@@ -75,6 +76,9 @@ type PromptOptions = Parameters<SdkSession["prompt"]>[1];
 class AgentSessionImpl implements AgentSession {
   /** Busy input steers the live stream (`streamingBehavior: "steer"`). */
   readonly steersBusyTurn = true;
+  get contextViewRequestLogPath(): string {
+    return this.#runtime.contextViewRequestLogPath;
+  }
   readonly #runtime: Awaited<ReturnType<typeof createSession>>;
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   readonly #exit = new SessionExit();
@@ -90,6 +94,10 @@ class AgentSessionImpl implements AgentSession {
   #disposed = false;
   #disposal: Promise<void> | undefined;
   #identity: AgentSessionIdentity;
+  #contextViewMessageIds: string[] = [];
+  #contextViewRequestMessageIds: Array<string[] | undefined> = [];
+  #resolveContextViewCapture: (() => void) | undefined;
+  #contextViewCapture: Promise<void> = Promise.resolve();
 
   constructor(
     runtime: Awaited<ReturnType<typeof createSession>>,
@@ -105,6 +113,32 @@ class AgentSessionImpl implements AgentSession {
     // the provider's first stream event. Observe the public stream seam between them.
     const stream = runtime.session.agent.streamFunction.bind(runtime.session.agent);
     runtime.session.agent.streamFunction = (model, context, options) => {
+      const requestMessageIds = this.#contextViewMessageIds;
+      this.#contextViewRequestMessageIds.push(
+        requestMessageIds.length ? requestMessageIds : undefined,
+      );
+      const writes: Promise<void>[] = [];
+      if (piContextHasMedia(context))
+        writes.push(
+          runtime.contextViewRequestLog.append({
+            type: "media",
+            sessionId: runtime.sessionId,
+            ...(requestMessageIds[0] ? { messageId: requestMessageIds[0] } : {}),
+            ...(requestMessageIds.length ? { messageIds: requestMessageIds } : {}),
+            timestamp: new Date().toISOString(),
+          }),
+        );
+      writes.push(
+        runtime.contextViewRequestLog.append({
+          type: "request",
+          sessionId: runtime.sessionId,
+          ...(requestMessageIds[0] ? { messageId: requestMessageIds[0] } : {}),
+          ...(requestMessageIds.length ? { messageIds: requestMessageIds } : {}),
+          body: piRequestBody(context, model),
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      void Promise.all(writes).then(() => this.#resolveContextViewCapture?.());
       // The window every request runs in, for the compaction log: Pi's own model entry knows it,
       // and the compaction result itself does not carry one.
       this.#windowTokens = model.contextWindow;
@@ -138,12 +172,25 @@ class AgentSessionImpl implements AgentSession {
       // A failed attempt may be retried, and cancellation may surface as an error.
       // Only settlement determines the run's terminal result.
       if (event.type === "message_end" && event.message.role === "assistant") {
+        const responseMessageIds = this.#contextViewRequestMessageIds.shift();
+        void runtime.contextViewRequestLog.append({
+          type: "response",
+          sessionId: runtime.sessionId,
+          ...(responseMessageIds?.[0] ? { messageId: responseMessageIds[0] } : {}),
+          ...(responseMessageIds?.length ? { messageIds: responseMessageIds } : {}),
+          body: event.message,
+          timestamp: new Date().toISOString(),
+        });
         this.#failure =
           event.message.stopReason === "error"
             ? (event.message.errorMessage ?? "Agent failed")
             : undefined;
       }
       if (event.type === "agent_settled") {
+        this.#resolveContextViewCapture?.();
+        this.#resolveContextViewCapture = undefined;
+        this.#contextViewMessageIds = [];
+        this.#contextViewRequestMessageIds = [];
         // The SDK resolves the settled run's prompt() promise only after _startRun returns,
         // a microtask after this event — so its bookkeeping must end here, before "completed"
         // reaches listeners that read hasLiveTurn (the invariant Kiro documents on #turn).
@@ -162,6 +209,21 @@ class AgentSessionImpl implements AgentSession {
         this.#failure = undefined;
       }
     });
+  }
+  setContextViewMessageId(messageId: string | undefined): void {
+    this.#contextViewMessageIds = messageId ? [messageId] : [];
+  }
+  setContextViewMessageIds(messageIds: readonly string[]): void {
+    this.#contextViewMessageIds = [...messageIds];
+    this.#contextViewCapture = new Promise((resolve) => {
+      this.#resolveContextViewCapture = resolve;
+    });
+  }
+  async waitForContextViewCapture(): Promise<void> {
+    await Promise.race([
+      this.#contextViewCapture,
+      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+    ]);
   }
   async sendMessage(message: string) {
     if (this.#disposed || this.#interrupting || this.#runtime.session.isStreaming) {

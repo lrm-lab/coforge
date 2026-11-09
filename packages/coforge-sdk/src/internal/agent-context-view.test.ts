@@ -1,19 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import {
+  decodeAgentContextViewAvailability,
   decodeAgentContextViewRequest,
   decodeAgentContextViewResult,
   encodeAgentContextViewRequest,
   encodeAgentContextViewResult,
+  encodeAgentContextViewAvailability,
 } from "./agent-context-view";
 
 const request = {
   protocolMajor: 1,
-  requestId: "request-1",
+  requestId: "ctxv_1234567890abcdef",
   workspaceId: "workspace-1",
   computerId: "computer-1",
   agentId: "agent-1",
   messageId: "message-1",
   sessionId: "session-1",
+  maxBytes: 1024,
 };
 
 describe("agent context view wire codec", () => {
@@ -36,12 +39,31 @@ describe("agent context view wire codec", () => {
 
   test("rejects mismatched identities and oversized content", () => {
     expect(() => encodeAgentContextViewRequest({ ...request, agentId: "" })).toThrow();
-    expect(() => encodeAgentContextViewResult({
-      ...request,
-      status: "ok",
-      createdAtMs: 1,
-      content: new Uint8Array(32 * 1024 * 1024 + 1),
-      encoding: "identity",
-    })).toThrow();
+    expect(() =>
+      encodeAgentContextViewResult({
+        ...request,
+        status: "ok",
+        createdAtMs: 1,
+        content: new Uint8Array(32 * 1024 * 1024 + 1),
+        encoding: "identity",
+      }),
+    ).toThrow();
+  });
+
+  test("round trips availability and requires an explicit unsupported reason", () => {
+    const value = {
+      protocolMajor: 1,
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      agentId: "agent-1",
+      runtime: "codex",
+      retainedSince: new Date(1).toISOString(),
+      retentionDays: 30,
+      supported: true,
+    };
+    expect(decodeAgentContextViewAvailability(encodeAgentContextViewAvailability(value))).toEqual(
+      value,
+    );
+    expect(() => encodeAgentContextViewAvailability({ ...value, supported: false })).toThrow();
   });
 });

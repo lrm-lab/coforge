@@ -1,0 +1,2 @@
+{"type":"request","sessionId":"s1","hash":"a","body":{"input":"hello","message_id":"m1"}}
+{"type":"response","sessionId":"s1","prevHash":"a","hash":"b","body":"world"}

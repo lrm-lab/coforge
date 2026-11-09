@@ -7,6 +7,7 @@ import type {
 import type { AgentConversationScope } from "@coforge/agent";
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
+import { setContextViewMessageIds } from "./context-view-runtime-wiring";
 import { NoticeActionClocks } from "./notice-action-clocks";
 import { countDistinctMessages } from "./agent-history-read";
 import {
@@ -131,16 +132,7 @@ export class AgentMessageAttentionIndex {
       agentId: string,
       conversation?: AgentConversationScope,
     ) => void = () => {},
-    /**
-     * The daemon-owned delivery queue (`agent-delivery-queue.ts`). `shouldHold` decides
-     * whether this delivery must wait rather than reach `AgentSession.notify` now; `enqueue`
-     * records it as held once this class has already updated its own attention/dedupe
-     * bookkeeping for it. `busy` marks the Agent mid-turn — called synchronously, right before
-     * every `session.notify` call this class makes, so a second delivery decided upon before the runtime has
-     * emitted any event of its own still sees the Agent as busy. Defaults to never holding and a
-     * no-op `busy`, so every existing caller and test observes the prior immediate-notify
-     * behavior unchanged.
-     */
+    /** Daemon-owned delivery queue and synchronous busy marker. */
     private readonly hold: {
       shouldHold(agentId: string): boolean;
       enqueue(agentId: string, message: AgentMessageDelivery): void;
@@ -342,16 +334,7 @@ export class AgentMessageAttentionIndex {
     return current;
   }
 
-  /**
-   * Delivers every notice `AgentDeliveryQueue` held for `agentId`, oldest first, as
-   * one call to `AgentSession.notify` once the Agent is idle — the daemon core is the only
-   * caller, right after `AgentDeliveryQueue.idle`/`release` hands back what it drained. A delivery
-   * held by `receive` already passed its checks and has its attention recorded. One the runtime
-   * queued before the Agent's process existed (a wake cooldown, a batched wake) gets `receive`'s
-   * treatment here: an already-consumed one is not announced and a malformed one is skipped.
-   * Every delivery was acknowledged when the daemon took it into the queue, so this only
-   * presents them.
-   */
+  /** Delivers queued notices oldest first when the Agent becomes idle. */
   async flush(agentId: string, held: readonly AgentMessageDelivery[]): Promise<void> {
     if (!held.length) return;
     const generation = this.#generation(agentId);
@@ -532,6 +515,10 @@ export class AgentMessageAttentionIndex {
     if (!session?.notify)
       throw new AgentWakeupUnavailableError("Agent session cannot receive a wakeup notice");
     if (!message.target) return Promise.reject(new Error("delivery target is missing"));
+    setContextViewMessageIds(
+      session,
+      announced.map((item) => item.messageId),
+    );
     // Mark busy synchronously, in the same tick as this decision to write to the
     // session — before the next queued input for this Agent can be drained and see a stale
     // "not busy yet" state.
@@ -566,12 +553,15 @@ export class AgentMessageAttentionIndex {
         if (this.#generations.get(message.agentId) !== generation)
           throw new AgentWakeupUnavailableError("Agent notice was cancelled");
         return this.#acceptNotice(generation.cancellation.signal, () =>
-          conversation || trackedIds.length
+          (conversation || trackedIds.length
             ? session.notify!(notice, {
                 ...(trackedIds.length ? { deliveryIds: trackedIds } : {}),
                 ...(conversation ? { conversation } : {}),
               })
-            : session.notify!(notice),
+            : session.notify!(notice)
+          ).then(async () => {
+            await session.waitForContextViewCapture?.();
+          }),
         );
       })
       .then(() => {

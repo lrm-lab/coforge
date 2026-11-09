@@ -1,5 +1,6 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
+  AgentContextViewAvailabilitySchema,
   AgentContextViewRequestSchema,
   AgentContextViewResultSchema,
 } from "#src/internal/gen/coforge/rpc/v1/agent_context_view_pb";
@@ -8,10 +9,13 @@ import { RPC_METHODS } from "./rpc-methods";
 export const AGENT_CONTEXT_VIEW_CAPABILITY = "agent-context-view:v0" as const;
 export const AGENT_CONTEXT_VIEW_METHOD = RPC_METHODS.daemonAgentContextView;
 export const AGENT_CONTEXT_VIEW_RESULT_METHOD = RPC_METHODS.daemonAgentContextViewResult;
+export const AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD = RPC_METHODS.agentContextViewAvailability;
 
 const REQUEST_TYPE = "coforge.rpc.v1.AgentContextViewRequest";
 const RESULT_TYPE = "coforge.rpc.v1.AgentContextViewResult";
+const AVAILABILITY_TYPE = "coforge.rpc.v1.AgentContextViewAvailability";
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const REQUEST_ID = /^ctxv_[A-Za-z0-9_-]{16,64}$/;
 const MESSAGE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const STATUSES = new Set(["ok", "unavailable", "failed"]);
@@ -40,6 +44,7 @@ export type AgentContextViewRequest = {
   agentId: string;
   messageId: string;
   sessionId: string;
+  maxBytes: number;
 };
 export type AgentContextViewStatus = "ok" | "unavailable" | "failed";
 export type AgentContextViewResult = AgentContextViewRequest & {
@@ -50,25 +55,48 @@ export type AgentContextViewResult = AgentContextViewRequest & {
   content: Uint8Array;
   encoding: "identity" | "gzip";
 };
+export type AgentContextViewAvailability = {
+  protocolMajor: number;
+  workspaceId: string;
+  computerId: string;
+  agentId: string;
+  runtime: string;
+  retainedSince?: string;
+  retentionDays: number;
+  supported: boolean;
+  unsupportedReason?: "unsupported_runtime" | "no_session";
+};
 
 function text(value: string, pattern: RegExp, label: string): void {
-  if (!pattern.test(value) || value.includes("\0")) throw new Error(`Invalid context view ${label}`);
+  if (!pattern.test(value) || value.includes("\0"))
+    throw new Error(`Invalid context view ${label}`);
 }
 function scope(value: AgentContextViewRequest): void {
   if (value.protocolMajor !== 1) throw new Error("Invalid context view protocol");
-  text(value.requestId, ID, "request id");
+  text(value.requestId, REQUEST_ID, "request id");
   text(value.workspaceId, ID, "workspace id");
   text(value.computerId, ID, "computer id");
   text(value.agentId, ID, "agent id");
   text(value.messageId, MESSAGE_ID, "message id");
   text(value.sessionId, SESSION_ID, "session id");
+  if (
+    !Number.isSafeInteger(value.maxBytes) ||
+    value.maxBytes < 1 ||
+    value.maxBytes > 32 * 1024 * 1024
+  )
+    throw new Error("Invalid context view max bytes");
 }
 function result(value: AgentContextViewResult): void {
   scope(value);
   if (!STATUSES.has(value.status)) throw new Error("Invalid context view status");
-  if (value.reason !== undefined && !REASONS.has(value.reason)) throw new Error("Invalid context view reason");
-  if (value.status === "ok" && value.content.byteLength === 0) throw new Error("Empty context view result");
-  if (value.content.byteLength > 32 * 1024 * 1024) throw new Error("Context view result is too large");
+  if (value.reason !== undefined && !REASONS.has(value.reason))
+    throw new Error("Invalid context view reason");
+  if (value.status === "failed" && value.reason === undefined)
+    throw new Error("Missing context view failure reason");
+  if (value.status === "ok" && value.content.byteLength === 0)
+    throw new Error("Empty context view result");
+  if (value.content.byteLength > 32 * 1024 * 1024)
+    throw new Error("Context view result is too large");
   if (!Number.isSafeInteger(value.createdAtMs) || value.createdAtMs < 0)
     throw new Error("Invalid context view timestamp");
   if (!ENCODINGS.has(value.encoding)) throw new Error("Invalid context view encoding");
@@ -76,10 +104,13 @@ function result(value: AgentContextViewResult): void {
 
 export function encodeAgentContextViewRequest(value: AgentContextViewRequest): Uint8Array {
   scope(value);
-  return toBinary(AgentContextViewRequestSchema, create(AgentContextViewRequestSchema, {
-    ...value,
-    messageType: REQUEST_TYPE,
-  }));
+  return toBinary(
+    AgentContextViewRequestSchema,
+    create(AgentContextViewRequestSchema, {
+      ...value,
+      messageType: REQUEST_TYPE,
+    }),
+  );
 }
 export function decodeAgentContextViewRequest(bytes: Uint8Array): AgentContextViewRequest {
   const value = fromBinary(AgentContextViewRequestSchema, bytes);
@@ -92,17 +123,22 @@ export function decodeAgentContextViewRequest(bytes: Uint8Array): AgentContextVi
     agentId: value.agentId,
     messageId: value.messageId,
     sessionId: value.sessionId,
+    maxBytes: value.maxBytes,
   };
   scope(resultValue);
   return resultValue;
 }
 export function encodeAgentContextViewResult(value: AgentContextViewResult): Uint8Array {
   result(value);
-  return toBinary(AgentContextViewResultSchema, create(AgentContextViewResultSchema, {
-    ...value,
-    messageType: RESULT_TYPE,
-    createdAtMs: BigInt(value.createdAtMs),
-  }));
+  return toBinary(
+    AgentContextViewResultSchema,
+    create(AgentContextViewResultSchema, {
+      ...value,
+      messageType: RESULT_TYPE,
+      maxBytes: value.maxBytes,
+      createdAtMs: BigInt(value.createdAtMs),
+    }),
+  );
 }
 export function decodeAgentContextViewResult(bytes: Uint8Array): AgentContextViewResult {
   const value = fromBinary(AgentContextViewResultSchema, bytes);
@@ -115,6 +151,7 @@ export function decodeAgentContextViewResult(bytes: Uint8Array): AgentContextVie
     agentId: value.agentId,
     messageId: value.messageId,
     sessionId: value.sessionId,
+    maxBytes: value.maxBytes,
     status: value.status as AgentContextViewStatus,
     reason: value.reason || undefined,
     provider: value.provider || undefined,
@@ -123,5 +160,59 @@ export function decodeAgentContextViewResult(bytes: Uint8Array): AgentContextVie
     encoding: value.encoding as AgentContextViewResult["encoding"],
   };
   result(resultValue);
+  return resultValue;
+}
+
+function validateAvailability(value: AgentContextViewAvailability): void {
+  if (
+    value.protocolMajor !== 1 ||
+    !ID.test(value.workspaceId) ||
+    !ID.test(value.computerId) ||
+    !ID.test(value.agentId)
+  )
+    throw new Error("Invalid context view availability scope");
+  if (
+    !value.runtime ||
+    !Number.isSafeInteger(value.retentionDays) ||
+    value.retentionDays < 1 ||
+    value.retentionDays > 365
+  )
+    throw new Error("Invalid context view availability");
+  if (!value.supported && value.unsupportedReason === undefined)
+    throw new Error("Missing context view unsupported reason");
+}
+
+export function encodeAgentContextViewAvailability(
+  value: AgentContextViewAvailability,
+): Uint8Array {
+  validateAvailability(value);
+  return toBinary(
+    AgentContextViewAvailabilitySchema,
+    create(AgentContextViewAvailabilitySchema, {
+      ...value,
+      messageType: AVAILABILITY_TYPE,
+    }),
+  );
+}
+
+export function decodeAgentContextViewAvailability(
+  bytes: Uint8Array,
+): AgentContextViewAvailability {
+  const value = fromBinary(AgentContextViewAvailabilitySchema, bytes);
+  if (value.messageType !== AVAILABILITY_TYPE) throw new Error("Invalid context view availability");
+  const resultValue: AgentContextViewAvailability = {
+    protocolMajor: value.protocolMajor,
+    workspaceId: value.workspaceId,
+    computerId: value.computerId,
+    agentId: value.agentId,
+    runtime: value.runtime,
+    retainedSince: value.retainedSince || undefined,
+    retentionDays: value.retentionDays,
+    supported: value.supported,
+    unsupportedReason: value.unsupportedReason
+      ? (value.unsupportedReason as AgentContextViewAvailability["unsupportedReason"])
+      : undefined,
+  };
+  validateAvailability(resultValue);
   return resultValue;
 }

@@ -10,7 +10,8 @@ message AgentContextViewRequest {
   string agent_id = 5;
   string message_id = 6;
   string session_id = 7;
-  string message_type = 8;
+  uint32 max_bytes = 8;
+  string message_type = 9;
 }
 
 message AgentContextViewResult {
@@ -21,11 +22,25 @@ message AgentContextViewResult {
   string agent_id = 5;
   string message_id = 6;
   string session_id = 7;
-  string message_type = 8;
-  string status = 9;
-  string reason = 10;
-  string provider = 11;
-  uint64 created_at_ms = 12;
-  bytes content = 13;
-  string encoding = 14;
+  uint32 max_bytes = 8;
+  string message_type = 9;
+  string status = 10;
+  string reason = 11;
+  string provider = 12;
+  uint64 created_at_ms = 13;
+  bytes content = 14;
+  string encoding = 15;
+}
+
+message AgentContextViewAvailability {
+  uint32 protocol_major = 1;
+  string workspace_id = 2;
+  string computer_id = 3;
+  string agent_id = 4;
+  string runtime = 5;
+  string retained_since = 6;
+  uint32 retention_days = 7;
+  bool supported = 8;
+  string unsupported_reason = 9;
+  string message_type = 10;
 }

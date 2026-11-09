@@ -52,6 +52,7 @@ export const RPC_METHODS = {
   daemonLocalSessionExcerptResult: "daemon:v1:local_session:excerpt_result",
   daemonAgentContextView: "daemon:v1:agent_context:view",
   daemonAgentContextViewResult: "daemon:v1:agent_context:view_result",
+  agentContextViewAvailability: "agent:v1:context:availability",
   daemonComputerFilePull: "daemon:v1:computer_file:pull",
   daemonComputerFilePullResult: "daemon:v1:computer_file:pull_result",
   computerRestart: "computer:v1:lifecycle:restart",

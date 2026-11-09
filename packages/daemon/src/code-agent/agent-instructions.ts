@@ -18,6 +18,7 @@ import {
 import { MESSAGE_LINE_SEPARATOR } from "@lrm/coforge-sdk/internal";
 import { WORKSPACE_ASSISTANT_INSTRUCTIONS } from "./workspace-assistant-instructions";
 import { MEMORY_AGENT_RETRIEVAL_GUIDANCE } from "./memory-agent-guidance";
+import type { AgentLaunchFeatures } from "./agent-feature-types";
 import { TASK_CONVERSATIONS_SECTION } from "./task-conversations-guidance";
 
 /** Set only by the collaboration evaluation's daemon assembly. */
@@ -46,8 +47,8 @@ export type AgentLaunchIdentity = {
   /** The Workspace's installed apps as of this launch, already normalised by the launch-config
    * parser (`normalizeAgentLaunchApps`); built-in Agent Apps are not among them. */
   apps?: AgentLaunchApp[];
-  /** Features the server stated at launch; an unnamed switch is unknown, not off. */
-  features?: { taskConversations?: boolean; artifacts?: boolean };
+  /** Feature switches; omitted is unknown. */
+  features?: AgentLaunchFeatures;
 };
 
 /**

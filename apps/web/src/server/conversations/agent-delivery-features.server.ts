@@ -1,6 +1,7 @@
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { taskConversationsEnabled } from "#src/server/tasks/task-conversations-gate.server";
 import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
+import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
 /**
  * The Workspace's features a delivery tells its Agent's daemon, so a session launched with other
@@ -9,15 +10,18 @@ import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
  */
 export async function deliveryFeatures(
   workspaceId: string,
-): Promise<{ taskConversations: boolean; artifacts: boolean } | undefined> {
+): Promise<
+  { taskConversations: boolean; artifacts: boolean; agentContextView: boolean } | undefined
+> {
   const db = getDatabaseClient();
   if (!db) return undefined;
   try {
-    const [taskConversations, artifacts] = await Promise.all([
+    const [taskConversations, artifacts, agentContextView] = await Promise.all([
       taskConversationsEnabled(db, { workspaceId }),
       artifactsEnabled(db, workspaceId),
+      isFeatureEnabled("agentContextView", { workspaceId }),
     ]);
-    return { taskConversations, artifacts };
+    return { taskConversations, artifacts, agentContextView };
   } catch {
     return undefined;
   }

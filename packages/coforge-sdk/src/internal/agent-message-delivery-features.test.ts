@@ -38,6 +38,14 @@ test("the artifacts switch rides the delivery beside task conversations, on or o
     ).toEqual({ taskConversations: true, artifacts });
 });
 
+test("the context view gate rides the delivery on or off", () => {
+  for (const agentContextView of [true, false])
+    expect(
+      decodeAgentMessageDelivery(encodeAgentMessageDelivery(delivery({ agentContextView })))
+        .features,
+    ).toEqual({ agentContextView });
+});
+
 test("a delivery naming only task conversations leaves artifacts unknown, not off", () => {
   // A server that predates the artifacts field must not read as documents-off: the daemon
   // compares only the switches a delivery actually states.

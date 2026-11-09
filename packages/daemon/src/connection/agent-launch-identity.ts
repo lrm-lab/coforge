@@ -59,6 +59,8 @@ function parseIdentityFeatures(value: unknown): AgentLaunchIdentity["features"] 
   if (typeof record.taskConversations === "boolean")
     features.taskConversations = record.taskConversations;
   if (typeof record.artifacts === "boolean") features.artifacts = record.artifacts;
+  if (typeof record.agentContextView === "boolean")
+    features.agentContextView = record.agentContextView;
   return Object.keys(features).length > 0 ? features : undefined;
 }
 

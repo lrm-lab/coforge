@@ -58,13 +58,13 @@ export class RedisPendingResults<
     await this.redis.send("DEL", this.keys(requestId));
   }
 
-  async accept(result: Result) {
+  async accept(result: Result): Promise<boolean> {
     const keys = this.keys(result.requestId);
     const value = await this.redis.get(keys[0]!);
-    if (!value) return;
+    if (!value) return false;
     const pending = JSON.parse(value) as Pending;
-    if (!this.kind.sameScope(pending.request, result)) return;
-    await this.redis.send("EVAL", [
+    if (!this.kind.sameScope(pending.request, result)) return false;
+    const outcome = await this.redis.send("EVAL", [
       ACCEPT,
       "2",
       ...keys,
@@ -72,5 +72,6 @@ export class RedisPendingResults<
       Buffer.from(this.kind.encode(result)).toString("base64"),
       String(this.kind.resultTtlSeconds ?? 30),
     ]);
+    return outcome === undefined || Number(outcome) === 1;
   }
 }

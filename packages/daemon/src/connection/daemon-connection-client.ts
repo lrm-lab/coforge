@@ -42,6 +42,7 @@ import type {
   LocalSessionExcerptResult,
   AgentContextViewRequest,
   AgentContextViewResult,
+  AgentContextViewAvailability,
   ComputerFilePullRequest,
   ComputerFilePullResult,
   ComputerUpgradeResult,
@@ -165,7 +166,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   ): () => void;
   sendLocalSessionExcerptResult?(result: LocalSessionExcerptResult): Promise<void>;
   onAgentContextView?(callback: (request: AgentContextViewRequest) => Promise<void>): () => void;
-  sendAgentContextViewResult?(result: AgentContextViewResult): Promise<void>;
+  postAgentContextViewResult?(result: AgentContextViewResult, agentApiKey?: string): Promise<void>;
   onComputerFilePull?(callback: (request: ComputerFilePullRequest) => Promise<void>): () => void;
   sendComputerFilePullResult?(result: ComputerFilePullResult): Promise<void>;
   onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;
@@ -230,6 +231,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   /** Fire-and-forget observation of the launch's service tier, buffered and flushed the same way
    * as `sendAgentContextUsage`. */
   sendAgentServiceTier?(message: AgentServiceTier): void;
+  sendAgentContextViewAvailability?(message: AgentContextViewAvailability): void;
   sendAgentDeliveryAck?(ack: AgentMessageDeliveryAck): Promise<void>;
   /** Rejects a delivery the daemon did not take custody of back to the server; never an ACK. */
   sendAgentDeliveryRejection?(rejection: AgentMessageDeliveryRejection): Promise<void>;

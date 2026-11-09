@@ -31,6 +31,7 @@ import {
 } from "#src/server/agents/agent-runtime-context.server";
 import type { AgentLaunchApp } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import { agentLaunchApps } from "#src/server/app-agent-access/app-agent-access-composition.server";
+import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
 const createAgentApiKeyInputSchema = z.object({
   agentId: z.string().min(1),
@@ -71,7 +72,7 @@ function buildAgentLaunchIdentity(agent: {
   computer: LaunchIdentityComputer;
   apps: AgentLaunchApp[];
   /** The Workspace's features as of this launch; a daemon older than the field ignores it. */
-  features: { taskConversations: boolean; artifacts: boolean };
+  features: { taskConversations: boolean; artifacts: boolean; agentContextView: boolean };
 }) {
   const runtimeContext = buildAgentRuntimeContext(agent);
   const identity = {
@@ -179,9 +180,10 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           computerId: principal.computerId,
           repository: new PrismaAgentApiKeyRepository(db),
         });
-        const [taskConversations, artifacts] = await Promise.all([
+        const [taskConversations, artifacts, agentContextView] = await Promise.all([
           taskConversationsEnabled(db, { workspaceId: agent.workspaceId }),
           artifactsEnabled(db, agent.workspaceId),
+          isFeatureEnabled("agentContextView", { workspaceId: agent.workspaceId }),
         ]);
         const identity = buildAgentLaunchIdentity({
           systemKind: agent.systemKind,
@@ -194,7 +196,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           // The lookup above already requires `computerId: principal.computerId`.
           computer: agent.computer,
           apps: await agentLaunchApps(db, agent.workspaceId),
-          features: { taskConversations, artifacts },
+          features: { taskConversations, artifacts, agentContextView },
         });
         const assignedSkillPacks = agent.weeklyReportAssistant
           ? (["weekly-report"] as const)

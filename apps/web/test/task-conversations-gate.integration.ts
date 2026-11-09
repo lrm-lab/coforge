@@ -64,11 +64,13 @@ test("a delivery carries the same answer, and none when the Workspace cannot be 
     expect(await deliveryFeatures(workspaceId)).toEqual({
       taskConversations: true,
       artifacts: false,
+      agentContextView: false,
     });
     await experiments.write(workspaceId, "taskConversations", false);
     expect(await deliveryFeatures(workspaceId)).toEqual({
       taskConversations: false,
       artifacts: false,
+      agentContextView: false,
     });
     Bun.env.DATABASE_URL = "";
     expect(await deliveryFeatures(workspaceId)).toBeUndefined();

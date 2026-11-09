@@ -5,6 +5,7 @@ import type {
   ReceivedAgentMigrationLease,
 } from "./daemon-connection-client";
 import {
+  type AgentContextViewResult,
   type RuntimeAuthIntent,
   type RuntimeAuthLoginReport,
   type RuntimeAuthLogoutReport,
@@ -97,6 +98,7 @@ import {
   sendRuntimeAuthStatus,
 } from "./daemon-ready-send";
 import { AgentObservationPublisher } from "./agent-observation-publisher";
+import { postAgentContextViewResult } from "./agent-context-view-upload";
 import {
   daemonConnectRejectionReason,
   type DaemonConnectRejectionReason,
@@ -109,6 +111,7 @@ import {
   AGENT_SESSION_INVALIDATE_METHOD,
   AGENT_CONTEXT_USAGE_METHOD,
   AGENT_SERVICE_TIER_METHOD,
+  AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
   type AgentWorkspaceResetRequest,
   type AgentControlResult,
   type AgentTurnInterruptResult,
@@ -116,6 +119,7 @@ import {
   type AgentSessionInvalidate,
   type AgentContextUsage,
   type AgentServiceTier,
+  type AgentContextViewAvailability,
   decodeAgentStartIntent,
   decodeAgentStopIntent,
   decodeAgentTurnInterruptIntent,
@@ -354,6 +358,7 @@ export class DaemonConnection
   readonly #observations = new AgentObservationPublisher({
     contextUsage: AGENT_CONTEXT_USAGE_METHOD,
     serviceTier: AGENT_SERVICE_TIER_METHOD,
+    contextViewAvailability: AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
   });
   readonly #latestStatuses = new Map<string, AgentStatus>();
   readonly #restartRequestIds = new Set<string>();
@@ -527,13 +532,7 @@ export class DaemonConnection
     return outage;
   }
 
-  /**
-   * The client stopped reconnecting for a reason that is not a refusal for good: a non-temporary
-   * connect error, a server disconnect code in 3500-3999, or a message over the size limit. None
-   * of them says this Workspace may never connect again, so the connection connects the client
-   * again after its own backoff, first connect included, instead of staying offline until a
-   * person restarts the Computer.
-   */
+  /** Resumes after recoverable connection failures. */
   #resumeAfterGiveUp(
     client: CentrifugeWorkspaceClient,
     scope: Record<string, unknown>,
@@ -695,6 +694,17 @@ export class DaemonConnection
     this.#observations.sendServiceTier(message, this.#activeClient());
   }
 
+  sendAgentContextViewAvailability(message: AgentContextViewAvailability): void {
+    this.#observations.sendContextViewAvailability(message, this.#activeClient());
+  }
+
+  async postAgentContextViewResult(
+    result: AgentContextViewResult,
+    agentApiKey?: string,
+  ): Promise<void> {
+    await postAgentContextViewResult(this.#serverHttpUrl, this.#token, result, agentApiKey);
+  }
+
   #activeClient(): CentrifugeWorkspaceClient | undefined {
     return this.#connected ? this.#client : undefined;
   }
@@ -704,13 +714,7 @@ export class DaemonConnection
     if (this.#connected && this.#client) this.#queueAgentStatus(this.#client, status);
   }
 
-  /**
-   * Only an outbound message that is neither Activity nor a session invalidate itself teaches
-   * this connection which launch is now current for an Agent. Drops a pending invalidate whose
-   * launch differs from the one just observed — the correctly-directional replacement for the
-   * old rule that dropped it on ANY differing-launch Activity, including a late Activity from
-   * an OLDER launch that would have wrongly dropped a NEWER pending invalidate.
-   */
+  /** Records launch identity from non-Activity outbound messages. */
   #observeLaunchIdentity(agentId: string, launchId: string): void {
     this.#latestObservedLaunchByAgent.set(agentId, launchId);
     const pending = this.#pendingSessionInvalidate.get(agentId);

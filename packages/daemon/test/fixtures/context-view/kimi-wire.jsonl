@@ -1,0 +1,2 @@
+{"type":"llm.request","sessionId":"s1","request":{"messages":"hello","message_id":"m1"}}
+{"type":"llm.response","sessionId":"s1","content":"world"}

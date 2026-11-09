@@ -15,6 +15,7 @@ import {
 } from "#src/server/pi-chat/pi-chat-capability.server";
 import { getLocalSessionHandoffCapabilityLease } from "#src/server/computers/local-session-capability.server";
 import { getComputerFileUploadCapabilityLease } from "#src/server/computers/computer-file-upload-capability.server";
+import { getAgentContextViewCapabilityLease } from "#src/server/computers/agent-context-view-capability.server";
 
 /** Every ready and heartbeat updates the same set of feature capability leases. */
 export function daemonCapabilityLeases() {
@@ -33,6 +34,7 @@ export function daemonCapabilityLeases() {
     getPiChatFilesLease(),
     getLocalSessionHandoffCapabilityLease(),
     getComputerFileUploadCapabilityLease(),
+    getAgentContextViewCapabilityLease(),
   ];
   return {
     reminderLease,

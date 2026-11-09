@@ -29,6 +29,8 @@ export const FEATURE_FLAGS = {
     "Store `#channel:#N` and `dm:@peer:#N` in message bodies (written by the server, read by every client)",
   "computer-release-channels":
     "Computers phase 1: honor the release channel reported by upgraded Computers; keep off until the upgraded cohort is verified",
+  agentContextView:
+    "Agents: show the retained provider context view when the Computer advertises agent-context-view:v0",
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS;

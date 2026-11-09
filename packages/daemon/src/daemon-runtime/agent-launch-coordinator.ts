@@ -64,6 +64,8 @@ export type AgentLaunchCoordinatorPorts = {
   usageReport: AgentUsageReport;
   fastModeWarned: Set<string>;
   sync: AgentFeatureSync;
+  /** Applies the server-authored context-view gate for a newly fetched launch config. */
+  contextViewGate: (agentId: string, enabled: boolean | undefined) => void;
   agentApiKeys: Map<string, string>;
   agentProxy?: AgentProxy;
   agentProxyTokens: Map<string, string>;

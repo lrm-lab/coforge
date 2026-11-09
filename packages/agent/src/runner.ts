@@ -51,6 +51,7 @@ export { MemoryAgentTurnBudget } from "./memory-agent-turn";
 import { installChannelTurnPolicy } from "./channel-turn-policy";
 
 import { createMemoryDispositionTool } from "./memory-disposition-tool";
+import { contextViewRequestLogFields } from "./session-context-view-log";
 
 export type MemoryAgentProxy = {
   post(path: string, body: unknown): Promise<unknown>;
@@ -135,12 +136,7 @@ function formatChannelMissingArguments(
   return `invalid ${toolName} arguments: missing ${missing.join(", ")}. Example: ${example}.${alias}`;
 }
 
-/**
- * Rejects an empty arguments object before schema validation and before
- * `decodeOpenVikingAgentCommand`, so the model gets a copyable example and
- * the read budget is never touched. `message` fills `content` only when
- * `content` is absent.
- */
+/** Rejects empty arguments before schema validation and fills missing content. */
 function prepareFenceArguments(input: {
   args: unknown;
   emptyError?: string;
@@ -597,6 +593,7 @@ export async function createSession(options: {
     get sessionId() {
       return sessionManager.getSessionId();
     },
+    ...contextViewRequestLogFields(sessionDir),
     dispose: async () => {
       removeChannelTurnPolicy();
       created.session.clearQueue();

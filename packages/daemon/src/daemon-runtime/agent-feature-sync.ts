@@ -3,9 +3,11 @@ import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 /** Workspace features as a launch identity or a delivery envelope states them. A launch identity
  * states every switch it knows; a delivery may name only some — a switch it does not name is
  * unknown, never off, and never a reason to restart. */
-type WireFeatures = { features?: { taskConversations?: boolean; artifacts?: boolean } };
-type FeatureKey = "taskConversations" | "artifacts";
-const FEATURE_KEYS: readonly FeatureKey[] = ["taskConversations", "artifacts"];
+type WireFeatures = {
+  features?: { taskConversations?: boolean; artifacts?: boolean; agentContextView?: boolean };
+};
+type FeatureKey = "taskConversations" | "artifacts" | "agentContextView";
+const FEATURE_KEYS: readonly FeatureKey[] = ["taskConversations", "artifacts", "agentContextView"];
 
 const NOTICE_HEAD = "CoForge notice: this workspace's features changed:";
 const NOTICE_TAIL =
@@ -19,6 +21,10 @@ const FEATURE_NOTICES: Record<FeatureKey, { on: string; off: string }> = {
   artifacts: {
     on: "Documents turned on (`coforge artifact` creates and edits them)",
     off: "Documents turned off (`coforge artifact` refuses; send files as attachments)",
+  },
+  agentContextView: {
+    on: "Agent context view turned on",
+    off: "Agent context view turned off",
   },
 };
 
@@ -45,6 +51,8 @@ export type AgentFeatureSyncPorts = Readonly<{
   keep(message: AgentMessageDelivery): void;
   /** Ends the session and launches it again from fresh launch config, awaiting that launch. */
   restart(agentId: string): Promise<void>;
+  /** Publishes launch-time feature gates to other daemon subsystems. */
+  observe?(agentId: string, features: WireFeatures["features"] | undefined): void;
 }>;
 
 /**
@@ -65,6 +73,7 @@ export class AgentFeatureSync {
     // nothing to compare against, so no delivery restarts the session over it.
     if (identity?.features) this.#launched.set(agentId, identity.features);
     else this.#launched.delete(agentId);
+    this.ports.observe?.(agentId, identity?.features);
   }
 
   /** Whether `message` shows a feature that changed since the session launched. Synchronous, so a

@@ -69,3 +69,4 @@ export type {
   UsageWindow,
 } from "#src/contract";
 export { createMemoryDispositionTool } from "#src/memory-disposition-tool";
+export { piContextHasMedia, piRequestBody, PiRequestLogWriter } from "#src/pi-request-log";

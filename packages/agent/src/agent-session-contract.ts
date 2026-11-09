@@ -7,6 +7,13 @@ export type AgentNoticeOptions = {
   conversation?: AgentConversationScope;
 };
 export interface AgentSession {
+  readonly contextViewRequestLogPath?: string;
+  /** Associates the next provider request with the daemon's triggering message. */
+  setContextViewMessageId?(messageId: string | undefined): void;
+  /** Associates the next provider request with every delivery in a coalesced notice. */
+  setContextViewMessageIds?(messageIds: readonly string[]): void;
+  /** Resolves once the provider has captured the request associated with the notice. */
+  waitForContextViewCapture?(): Promise<void>;
   /** Provider-observed work, including pending admission and interruption.
    * Undefined means the adapter cannot determine it; never infer idle from silence. */
   readonly hasLiveTurn?: boolean;

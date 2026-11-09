@@ -44,6 +44,9 @@ import { subscribeProviderScans } from "./provider-scan-handlers";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
 import { subscribeLocalSessionQueries } from "./local-session-query-handlers";
 import { subscribeComputerFileQueries } from "./computer-file-query-handlers";
+import { subscribeContextViewQueries } from "./context-view-query-handlers";
+import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
+import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view-store";
 import { LocalSessionCatalog } from "#src/local-session/local-session-catalog";
 import {
   RuntimePublicationSubscriptions,
@@ -85,6 +88,10 @@ export type RuntimeStartupPorts = {
   >;
   scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse>;
   workspaceQueries: Pick<AgentWorkspaceQueries, "listSkills" | "listFiles" | "readFile" | "scan">;
+  stateDirectory: string;
+  contextView: Pick<AgentContextViewService, "find">;
+  agentApiKey(agentId: string): string | undefined;
+  resolveProviderSource?(agentId: string, entry: ContextViewIndexEntry): string | undefined;
   deleteWorkspace(
     request: AgentWorkspaceDeleteRequest,
   ): Promise<Pick<AgentWorkspaceDeleteResult, "status">>;
@@ -270,6 +277,17 @@ export class RuntimeStartup {
         isStopping: () => ports.isStopping(),
       }))
         this.#subscribe(unsubscribe);
+      this.#subscribe(
+        subscribeContextViewQueries(transport, {
+          connection,
+          stateDirectory: ports.stateDirectory,
+          contextView: ports.contextView,
+          agentApiKey: ports.agentApiKey,
+          resolveProviderSource: ports.resolveProviderSource,
+          currentTransport: () => ports.transport(),
+          isStopping: () => ports.isStopping(),
+        }),
+      );
       for (const unsubscribe of subscribeComputerFileQueries(transport, {
         connection,
         currentTransport: () => ports.transport(),

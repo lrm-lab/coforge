@@ -113,6 +113,7 @@ import { Route as ApiIntegrationsGithubWebhookRouteImport } from './routes/api/i
 import { Route as ApiOpenvikingWorkspaceIdSplatRouteImport } from './routes/api/openviking/$workspaceId/$'
 import { Route as ApiProjectsProjectIdIconRouteImport } from './routes/api/projects.$projectId.icon'
 import { Route as ApiWorkspacesWorkspaceIdIconRouteImport } from './routes/api/workspaces/$workspaceId/icon'
+import { Route as InternalComputerAgentContextRequestIdRouteImport } from './routes/internal/computer/agent-context/$requestId'
 import { Route as WWorkspaceSlugChatIndexRouteImport } from './routes/w.$workspaceSlug/_chat.index'
 import { Route as WWorkspaceSlugChatDraftsRouteImport } from './routes/w.$workspaceSlug/_chat.drafts'
 import { Route as WWorkspaceSlugChatSavedRouteImport } from './routes/w.$workspaceSlug/_chat.saved'
@@ -740,6 +741,12 @@ const ApiWorkspacesWorkspaceIdIconRoute =
     path: '/api/workspaces/$workspaceId/icon',
     getParentRoute: () => rootRouteImport,
   } as any)
+const InternalComputerAgentContextRequestIdRoute =
+  InternalComputerAgentContextRequestIdRouteImport.update({
+    id: '/internal/computer/agent-context/$requestId',
+    path: '/internal/computer/agent-context/$requestId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const WWorkspaceSlugChatIndexRoute = WWorkspaceSlugChatIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -1272,6 +1279,7 @@ export interface FileRoutesByFullPath {
   '/api/openviking/$workspaceId/$': typeof ApiOpenvikingWorkspaceIdSplatRoute
   '/api/projects/$projectId/icon': typeof ApiProjectsProjectIdIconRoute
   '/api/workspaces/$workspaceId/icon': typeof ApiWorkspacesWorkspaceIdIconRoute
+  '/internal/computer/agent-context/$requestId': typeof InternalComputerAgentContextRequestIdRoute
   '/w/$workspaceSlug/drafts': typeof WWorkspaceSlugChatDraftsRoute
   '/w/$workspaceSlug/saved': typeof WWorkspaceSlugChatSavedRoute
   '/w/$workspaceSlug/computers': typeof WWorkspaceSlugComputersComputersRoute
@@ -1448,6 +1456,7 @@ export interface FileRoutesByTo {
   '/api/openviking/$workspaceId/$': typeof ApiOpenvikingWorkspaceIdSplatRoute
   '/api/projects/$projectId/icon': typeof ApiProjectsProjectIdIconRoute
   '/api/workspaces/$workspaceId/icon': typeof ApiWorkspacesWorkspaceIdIconRoute
+  '/internal/computer/agent-context/$requestId': typeof InternalComputerAgentContextRequestIdRoute
   '/w/$workspaceSlug/drafts': typeof WWorkspaceSlugChatDraftsRoute
   '/w/$workspaceSlug/saved': typeof WWorkspaceSlugChatSavedRoute
   '/w/$workspaceSlug/computers': typeof WWorkspaceSlugComputersComputersRoute
@@ -1627,6 +1636,7 @@ export interface FileRoutesById {
   '/api/openviking/$workspaceId/$': typeof ApiOpenvikingWorkspaceIdSplatRoute
   '/api/projects/$projectId/icon': typeof ApiProjectsProjectIdIconRoute
   '/api/workspaces/$workspaceId/icon': typeof ApiWorkspacesWorkspaceIdIconRoute
+  '/internal/computer/agent-context/$requestId': typeof InternalComputerAgentContextRequestIdRoute
   '/w/$workspaceSlug/_chat/drafts': typeof WWorkspaceSlugChatDraftsRoute
   '/w/$workspaceSlug/_chat/saved': typeof WWorkspaceSlugChatSavedRoute
   '/w/$workspaceSlug/_computers/computers': typeof WWorkspaceSlugComputersComputersRoute
@@ -1806,6 +1816,7 @@ export interface FileRouteTypes {
     | '/api/openviking/$workspaceId/$'
     | '/api/projects/$projectId/icon'
     | '/api/workspaces/$workspaceId/icon'
+    | '/internal/computer/agent-context/$requestId'
     | '/w/$workspaceSlug/drafts'
     | '/w/$workspaceSlug/saved'
     | '/w/$workspaceSlug/computers'
@@ -1982,6 +1993,7 @@ export interface FileRouteTypes {
     | '/api/openviking/$workspaceId/$'
     | '/api/projects/$projectId/icon'
     | '/api/workspaces/$workspaceId/icon'
+    | '/internal/computer/agent-context/$requestId'
     | '/w/$workspaceSlug/drafts'
     | '/w/$workspaceSlug/saved'
     | '/w/$workspaceSlug/computers'
@@ -2160,6 +2172,7 @@ export interface FileRouteTypes {
     | '/api/openviking/$workspaceId/$'
     | '/api/projects/$projectId/icon'
     | '/api/workspaces/$workspaceId/icon'
+    | '/internal/computer/agent-context/$requestId'
     | '/w/$workspaceSlug/_chat/drafts'
     | '/w/$workspaceSlug/_chat/saved'
     | '/w/$workspaceSlug/_computers/computers'
@@ -2324,6 +2337,7 @@ export interface RootRouteChildren {
   ApiOpenvikingWorkspaceIdSplatRoute: typeof ApiOpenvikingWorkspaceIdSplatRoute
   ApiProjectsProjectIdIconRoute: typeof ApiProjectsProjectIdIconRoute
   ApiWorkspacesWorkspaceIdIconRoute: typeof ApiWorkspacesWorkspaceIdIconRoute
+  InternalComputerAgentContextRequestIdRoute: typeof InternalComputerAgentContextRequestIdRoute
   ApiAgentV1ActionsPrepareRoute: typeof ApiAgentV1ActionsPrepareRoute
   ApiAgentV1AppsMarketplaceRoute: typeof ApiAgentV1AppsMarketplaceRoute
   ApiAgentV1AttachmentUploadSessionsUploadIdRoute: typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
@@ -3099,6 +3113,13 @@ declare module '@tanstack/react-router' {
       path: '/api/workspaces/$workspaceId/icon'
       fullPath: '/api/workspaces/$workspaceId/icon'
       preLoaderRoute: typeof ApiWorkspacesWorkspaceIdIconRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/internal/computer/agent-context/$requestId': {
+      id: '/internal/computer/agent-context/$requestId'
+      path: '/internal/computer/agent-context/$requestId'
+      fullPath: '/internal/computer/agent-context/$requestId'
+      preLoaderRoute: typeof InternalComputerAgentContextRequestIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/w/$workspaceSlug/_chat/': {
@@ -3942,6 +3963,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOpenvikingWorkspaceIdSplatRoute: ApiOpenvikingWorkspaceIdSplatRoute,
   ApiProjectsProjectIdIconRoute: ApiProjectsProjectIdIconRoute,
   ApiWorkspacesWorkspaceIdIconRoute: ApiWorkspacesWorkspaceIdIconRoute,
+  InternalComputerAgentContextRequestIdRoute:
+    InternalComputerAgentContextRequestIdRoute,
   ApiAgentV1ActionsPrepareRoute: ApiAgentV1ActionsPrepareRoute,
   ApiAgentV1AppsMarketplaceRoute: ApiAgentV1AppsMarketplaceRoute,
   ApiAgentV1AttachmentUploadSessionsUploadIdRoute:

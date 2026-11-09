@@ -39,6 +39,9 @@ if (Bun.argv[2] === "__pi-chat") {
 } else if (Bun.argv[2] === "__agent-cli") {
   const { runAgentCli } = await import("@lrm/coforge/runner");
   await runAgentCli(Bun.argv.slice(3));
+} else if (Bun.argv[2] === "__restore-context-view" || Bun.argv[1] === "__restore-context-view") {
+  const { runContextViewRestoreChildMain } = await import("@lrm/coforge-daemon");
+  await runContextViewRestoreChildMain();
 } else if (Bun.argv[2] === "__daemon") {
   const { runMachineSupervisor } = await import("@lrm/coforge-daemon");
   performance.mark("coforge:startup:daemon_imported");

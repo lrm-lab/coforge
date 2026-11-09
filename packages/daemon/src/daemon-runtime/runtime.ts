@@ -146,6 +146,13 @@ import { AgentFeatureSync } from "./agent-feature-sync";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
+import { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
+import {
+  applyContextViewGate,
+  deliverContextViewMessage,
+  reportContextViewAvailability,
+  resolveContextViewProviderSource,
+} from "./context-view-runtime-wiring";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
 import { ReplyIntentPublisher } from "./reply-intent-publisher";
 import {
@@ -213,9 +220,10 @@ export class DaemonRuntime {
   /** The Agent requests the daemon only authorizes and forwards over Agent HTTPS. */
   readonly agentRequests: AgentRequestForwarder;
   readonly #mentionDeliveries: MentionDeliveryTracker;
-  /** The launch and native session last reported to the cloud per Agent: the identity a tracked
-   * mention's envelope must name, while that launch is still the running one. */
+  /** Last cloud-reported launch/session identity per Agent. */
   readonly #reportedSessions = new Map<string, RunningMentionIdentity>();
+  /** Durable context-view indexing and availability reporting for this Workspace runtime. */
+  readonly #contextViewService: AgentContextViewService;
   /** Busy-gated delivery holding for providers with no safe busy path. */
   readonly #deliveryQueue = new AgentDeliveryQueue();
   /** Launch failures of message-triggered wakes, per Agent. */
@@ -267,6 +275,7 @@ export class DaemonRuntime {
     live: (agentId) => this.#runtimeRelease.canRestartForFreshConfig(agentId),
     keep: (m) => this.#exitedDelivery.keepForNextLaunch(m.agentId, m),
     restart: (agentId) => this.#runtimeRelease.restartForFreshConfig(agentId),
+    observe: (agentId, features) => applyContextViewGate(this, agentId, features?.agentContextView),
   });
   readonly #runtimeRelease: RuntimeRelease<ActivityLaunch> = assembleRuntimeRelease({
     launches: () => this.#currentActivityLaunches,
@@ -339,6 +348,8 @@ export class DaemonRuntime {
   readonly #consumedSeqs: AgentConsumedSeqStore;
   readonly #startedAt = Date.now();
   readonly #agentContexts = new Map<string, string>();
+  /** Latest server-authored context-view gate received in a delivery. */
+  readonly #contextViewEnabled = new Map<string, boolean>();
   readonly #agentProxyTokens = new Map<string, string>();
   readonly agentApiKeys = new Map<string, string>();
   /** Agents launched with the weekly-report-collect skill pack. */
@@ -351,10 +362,12 @@ export class DaemonRuntime {
     hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
     isLaunching: (agentId) => this.#agentLaunches.has(agentId),
     isStopping: (agentId) => this.#stopState.stopping(agentId),
-    deliverMessage: (_agentId, message) =>
-      isTrackedMention(message)
-        ? this.#mentionDeliveries.deliver(message)
-        : this.#messageAttention.receive(message),
+    deliverMessage: (agentId, message) =>
+      deliverContextViewMessage(this, agentId, message, () =>
+        isTrackedMention(message)
+          ? this.#mentionDeliveries.deliver(message)
+          : this.#messageAttention.receive(message),
+      ),
     runStartup: async (agentId, session, launch, text) => {
       this.#launchCustody.noteStartupTurn(agentId);
       await launch.startup?.run(session.sendMessage(text));
@@ -371,11 +384,7 @@ export class DaemonRuntime {
   });
   /** Delivery admission, launch-boundary recovery, and turn-open bookkeeping. */
   readonly #launchCustody: AgentLaunchCustody;
-  /** Agents whose current process was already handed its introduction turn: one per process,
-   * however many Starts carry `introductionPrompt`. Set only when a live session takes the turn;
-   * a Start also queues none while one waits unsent, so one a crashed process left queued goes to
-   * its relaunch. Forgotten when the Agent's input queue closes or its process exits, so a later
-   * launch introduces again while the server still asks. */
+  /** Agents whose current process already received its introduction turn. */
   readonly #introducedAgents = new Set<string>();
   readonly #desktops = createAgentDesktopHolds();
   /** Which Agents are stopping and which Session each launch reported. */
@@ -417,8 +426,7 @@ export class DaemonRuntime {
     (message) => this.#transport.sendAgentContextUsage?.(message),
     (message) => this.#transport.sendAgentServiceTier?.(message),
   );
-  /** Agents whose launch has already been warned that Fast mode was requested but is not applied.
-   * One warning per launch, forgotten with the usage report. */
+  /** Agents warned once per launch that Fast mode was not applied. */
   readonly #fastModeWarned = new Set<string>();
   readonly #agentProxy?: AgentProxy;
   readonly #activityPublisher: AgentActivityPublisher<ActivityLaunch>;
@@ -428,8 +436,7 @@ export class DaemonRuntime {
     workspaceId: () => this.#connection.workspaceId,
     active: () => this.#startup.started,
   });
-  /** Runner-hold reason while this runtime is refusing new turns; undefined when not held.
-   * Deliberately in-memory only, so a restarted daemon is never born held. */
+  /** Runner-hold reason, or undefined when turns are admitted. */
   #runnerHold: RunnerHold | undefined;
   /** Each phase's open state and stale watchdog — see `phase-bookkeeping.ts`. */
   readonly #memoryHooks = () => ({
@@ -445,18 +452,16 @@ export class DaemonRuntime {
     (agentId, detailKind, detail) => this.#activity(agentId, detailKind, "info", detail),
     (agentId) => this.#usageReport.lastContextUsage(agentId),
   );
-  /** Provider-event observation: the runtime's collaborators by reference, its helpers as calls.
-   * Assigned at the constructor's end — every collaborator it names exists by then. */
+  /** Provider-event collaborators, assigned after construction. */
   readonly #observationPorts: RuntimeEventObservationPorts;
   readonly #codeAgentInventory: CodeAgentInventorySync;
   readonly #runtimeAuth: RuntimeAuthReporter;
   readonly #upgradeResults: UpgradeResultReporter;
-  /** The Workspace connection's open sequence and the state it installs; assigned at the
-   * constructor's end, once every collaborator it names exists. */
+  /** Workspace connection state, assigned after collaborators exist. */
   readonly #startup: RuntimeStartup;
-  /** The closing flow; assigned at the constructor's end like `#startup`. */
+  /** Closing flow, assigned after construction. */
   readonly #shutdown: RuntimeStop;
-  /** The cloud-facing Agent operations; assigned at the constructor's end. */
+  /** Cloud-facing Agent operations. */
   readonly #agentOperations: AgentOperations;
   readonly #workspaceQueries = new AgentWorkspaceQueries(
     (agentId) => this.#agentProcessManager.runtime(agentId)?.config.provider,
@@ -479,24 +484,19 @@ export class DaemonRuntime {
       ): Promise<void>;
       recoveredRestartRequestIds?: string[];
       recoveredUpgradeRequestIds?: string[];
-      /** Terminal upgrade operations this machine still owes the server a report for, as known
-       * at construction time. */
+      /** Upgrade results still owed to the server. */
       recoveredUpgradeResults?: RecoveredUpgradeResult[];
       /**
-       * Re-reads the upgrade operations in durable local config, which the Coordinator rewrites
-       * whenever it records, settles or acknowledges one; `UpgradeResultReporter` polls it while
-       * one is pending. Absent: `recoveredUpgradeResults` is all there is.
+       * Re-reads durable upgrade operations while one is pending.
        */
       readUpgradeOperations?(): Promise<UpgradeOperationsReading>;
-      /** The reporter's poll and retry timer; absent, an unref'd `setTimeout`. */
+      /** Reporter retry timer. */
       upgradeResultSchedule?: UnrefTimerSchedule;
       /** Called once the server has accepted a reported result. */
       acknowledgeUpgradeResult?(requestId: string): Promise<void>;
-      /** The cloud refused this Workspace's running connection for good. Called after every
-       * Agent was stopped; the Workspace process then parks itself. */
+      /** Called when the cloud permanently refuses this Workspace. */
       connectionRefused?(reason: DaemonConnectRejectionReason): void;
-      /** Whether an installer upgrade is in flight, read when a stop names its reason. Absent
-       * means no upgrade is known to be in flight. */
+      /** Whether an installer upgrade is in flight. */
       installerJournalExists?(): boolean;
     } = {},
     private readonly computerVersion?: string,
@@ -525,6 +525,15 @@ export class DaemonRuntime {
       reconcileIdleTurn: this.#reconcileIdleTurn,
     });
     this.#connection = connection;
+    this.#contextViewService = new AgentContextViewService({
+      stateDirectory,
+      serverId: connection.computerId,
+      workspaceId: connection.workspaceId,
+      computerId: connection.computerId,
+      reportAvailability: (availability) =>
+        this.#transport.sendAgentContextViewAvailability?.(availability),
+    });
+    this.#contextViewService.startMaintenance();
     this.#drafts = agentActivityDrafts(connection.workspaceId);
     this.#createProvider = createProvider;
     this.#agentProcessManager = new AgentProcessManager(
@@ -706,6 +715,7 @@ export class DaemonRuntime {
       usageReport: this.#usageReport,
       fastModeWarned: this.#fastModeWarned,
       sync: this.#sync,
+      contextViewGate: (agentId, enabled) => applyContextViewGate(this, agentId, enabled),
       agentApiKeys: this.agentApiKeys,
       agentProxy: this.#agentProxy,
       agentProxyTokens: this.#agentProxyTokens,
@@ -806,6 +816,11 @@ export class DaemonRuntime {
       codeAgentInventory: this.#codeAgentInventory,
       scanUsage: (provider) => this.scanUsage(provider),
       workspaceQueries: this.#workspaceQueries,
+      stateDirectory: this.stateDirectory,
+      contextView: this.#contextViewService,
+      agentApiKey: (agentId) => this.agentApiKeys.get(agentId),
+      resolveProviderSource: (agentId, entry) =>
+        resolveContextViewProviderSource(this, agentId, entry),
       deleteWorkspace: (request) => this.#deleteWorkspace(this.#connection, request),
       sendPiChatFrame: async (frame) => {
         if (this.#stopping || !this.#transport.sendPiChatFrame)
@@ -904,6 +919,7 @@ export class DaemonRuntime {
       replaceTransport: () => this.#replaceTransport(),
       consumedSeqs: this.#consumedSeqs,
       sendAgentStatus: this.#sendAgentStatus,
+      contextView: this.#contextViewService,
     });
   }
 
@@ -1192,14 +1208,7 @@ export class DaemonRuntime {
     );
   }
 
-  /**
-   * Answers a server-side liveness probe with the Agent's real current activity, first match wins:
-   * `Message received` while a message delivered to it waits unread in its attention (unless the
-   * fingerprint fence holds its deliveries), the starting frame while its launch starts, the
-   * remembered last busy activity when one is live for the current launch, otherwise idle. An
-   * Agent that is not running at all gets no reply; the process presence lease already tells the
-   * server the process is gone. Never mutates any other runtime state.
-   */
+  /** Answers a liveness probe from current Agent activity without mutating runtime state. */
   async handleAgentActivityProbe(probe: AgentActivityProbe): Promise<void> {
     return this.#agentOperations.handleActivityProbe(probe);
   }
@@ -1208,8 +1217,7 @@ export class DaemonRuntime {
     return handleAgentMessage(this.#messageDeliveryPorts(), message);
   }
 
-  /** The launch and native session a tracked mention may name: the ones last reported for this
-   * Agent, while that launch is the one running. */
+  /** Launch/session identity used by tracked mentions. */
   #runningMentionIdentity(agentId: string): RunningMentionIdentity | undefined {
     return runningMentionIdentity(
       agentId,
@@ -1227,6 +1235,26 @@ export class DaemonRuntime {
       launchId: report.launchId,
       sessionId: report.sessionId,
     });
+    await reportContextViewAvailability(this, report);
+  }
+
+  get service(): AgentContextViewService {
+    return this.#contextViewService;
+  }
+  get enabled(): Map<string, boolean> {
+    return this.#contextViewEnabled;
+  }
+  runtime(agentId: string) {
+    return this.#agentProcessManager.runtime(agentId);
+  }
+  restartConfig(agentId: string) {
+    return this.#agentProcessManager.restartConfig(agentId);
+  }
+  get workspaceRoot(): string {
+    return this.#connection.workspaceRoot;
+  }
+  reported(agentId: string) {
+    return this.#reportedSessions.get(agentId);
   }
 
   #wakeAgent = (agentId: string, restart: WakeRestart): Promise<AgentRuntime> =>
@@ -1237,9 +1265,7 @@ export class DaemonRuntime {
       this.#wakeLaunchFailures,
     );
 
-  /** Drops an Agent's local state for channels it can no longer read: waiting deliveries (each
-   * acknowledged, so a rejoin does not bring them back on `ready`) and the pending attention of
-   * those channels and their threads. */
+  /** Drops local state for channels an Agent can no longer read. */
   handleAgentInboxPurge(purge: AgentInboxPurge): void {
     return this.#agentOperations.handleInboxPurge(purge);
   }
@@ -1316,6 +1342,8 @@ export class DaemonRuntime {
 
   /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
   #forgetLocalAgent = (agentId: string): void => {
+    this.#contextViewEnabled.delete(agentId);
+    this.#contextViewService.disable(agentId);
     this.#inboxCoordinator.forgetAgent(agentId, {
       systemCleaner: this.systemCleaner,
       offlineResidency: this.#offlineResidency,

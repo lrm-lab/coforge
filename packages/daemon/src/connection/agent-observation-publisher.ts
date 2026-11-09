@@ -1,7 +1,15 @@
 import type { CentrifugeWorkspaceClient } from "./centrifuge-workspace-client";
-import type { AgentContextUsage, AgentServiceTier } from "@lrm/coforge-sdk/internal";
+import type {
+  AgentContextUsage,
+  AgentServiceTier,
+  AgentContextViewAvailability,
+} from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { encodeAgentContextUsage, encodeAgentServiceTier } from "@lrm/coforge-sdk/internal";
+import {
+  encodeAgentContextUsage,
+  encodeAgentServiceTier,
+  encodeAgentContextViewAvailability,
+} from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "connection"]);
@@ -21,11 +29,15 @@ type PendingObservation = {
  * logged once per connection lifetime rather than on every send.
  */
 export class AgentObservationPublisher {
-  readonly #methods: { contextUsage: string; serviceTier: string };
+  readonly #methods: { contextUsage: string; serviceTier: string; contextViewAvailability: string };
   readonly #pending = new Map<string, PendingObservation>();
   readonly #loggedUnknownMethod = new Set<string>();
 
-  constructor(methods: { contextUsage: string; serviceTier: string }) {
+  constructor(methods: {
+    contextUsage: string;
+    serviceTier: string;
+    contextViewAvailability: string;
+  }) {
     this.#methods = methods;
   }
 
@@ -61,6 +73,26 @@ export class AgentObservationPublisher {
           computer_id: message.computerId,
           agent_id: message.agentId,
           launch_id: message.launchId,
+        },
+      },
+      client,
+    );
+  }
+
+  sendContextViewAvailability(
+    message: AgentContextViewAvailability,
+    client?: CentrifugeWorkspaceClient,
+  ): void {
+    this.#send(
+      {
+        agentId: message.agentId,
+        method: this.#methods.contextViewAvailability,
+        payload: encodeAgentContextViewAvailability(message),
+        log: {
+          event: "agent_context_view_availability:rejected",
+          workspace_id: message.workspaceId,
+          computer_id: message.computerId,
+          agent_id: message.agentId,
         },
       },
       client,
