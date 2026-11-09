@@ -30,6 +30,14 @@ message AgentContextViewResult {
   uint64 created_at_ms = 13;
   bytes content = 14;
   string encoding = 15;
+  string failure_detail = 16;
+  optional bool response_found = 17;
+  optional bool digest_match = 18;
+  optional bool trigger_found = 19;
+  optional uint32 unrestored_message_count = 20;
+  optional uint32 redacted_media_count = 21;
+  optional uint32 redacted_diagnostic_count = 22;
+  optional uint32 view_bytes = 23;
 }
 
 message AgentContextViewAvailability {

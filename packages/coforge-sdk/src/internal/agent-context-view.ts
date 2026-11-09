@@ -54,6 +54,14 @@ export type AgentContextViewResult = AgentContextViewRequest & {
   createdAtMs: number;
   content: Uint8Array;
   encoding: "identity" | "gzip";
+  failureDetail?: string;
+  responseFound?: boolean;
+  digestMatch?: boolean;
+  triggerFound?: boolean;
+  unrestoredMessageCount?: number;
+  redactedMediaCount?: number;
+  redactedDiagnosticCount?: number;
+  viewBytes?: number;
 };
 export type AgentContextViewAvailability = {
   protocolMajor: number;
@@ -93,12 +101,30 @@ function result(value: AgentContextViewResult): void {
     throw new Error("Invalid context view reason");
   if (value.status === "failed" && value.reason === undefined)
     throw new Error("Missing context view failure reason");
+  if (value.status !== "failed" && value.failureDetail !== undefined)
+    throw new Error("Unexpected context view failure detail");
+  if (
+    value.failureDetail !== undefined &&
+    new TextEncoder().encode(value.failureDetail).byteLength > 1024
+  )
+    throw new Error("Context view failure detail is too large");
   if (value.status === "ok" && value.content.byteLength === 0)
     throw new Error("Empty context view result");
   if (value.content.byteLength > 32 * 1024 * 1024)
     throw new Error("Context view result is too large");
   if (!Number.isSafeInteger(value.createdAtMs) || value.createdAtMs < 0)
     throw new Error("Invalid context view timestamp");
+  for (const [label, count] of [
+    ["unrestored message", value.unrestoredMessageCount],
+    ["redacted media", value.redactedMediaCount],
+    ["redacted diagnostic", value.redactedDiagnosticCount],
+    ["view bytes", value.viewBytes],
+  ] as const) {
+    if (count !== undefined && (!Number.isSafeInteger(count) || count < 0))
+      throw new Error(`Invalid context view ${label} count`);
+  }
+  if (value.viewBytes !== undefined && value.viewBytes > 32 * 1024 * 1024)
+    throw new Error("Context view view bytes are too large");
   if (!ENCODINGS.has(value.encoding)) throw new Error("Invalid context view encoding");
 }
 
@@ -158,6 +184,14 @@ export function decodeAgentContextViewResult(bytes: Uint8Array): AgentContextVie
     createdAtMs: Number(value.createdAtMs),
     content: value.content,
     encoding: value.encoding as AgentContextViewResult["encoding"],
+    failureDetail: value.failureDetail || undefined,
+    responseFound: value.responseFound,
+    digestMatch: value.digestMatch,
+    triggerFound: value.triggerFound,
+    unrestoredMessageCount: value.unrestoredMessageCount,
+    redactedMediaCount: value.redactedMediaCount,
+    redactedDiagnosticCount: value.redactedDiagnosticCount,
+    viewBytes: value.viewBytes,
   };
   result(resultValue);
   return resultValue;

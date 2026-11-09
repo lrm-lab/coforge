@@ -37,6 +37,41 @@ describe("agent context view wire codec", () => {
     expect(result).toEqual(value);
   });
 
+  test("round trips Raft restore observability fields", () => {
+    const value = {
+      ...request,
+      status: "ok" as const,
+      provider: "claude",
+      createdAtMs: 123,
+      content: new TextEncoder().encode("context"),
+      encoding: "identity" as const,
+      responseFound: true,
+      digestMatch: false,
+      triggerFound: true,
+      unrestoredMessageCount: 2,
+      redactedMediaCount: 1,
+      redactedDiagnosticCount: 3,
+      viewBytes: 7,
+      failureDetail: undefined,
+    };
+    expect(decodeAgentContextViewResult(encodeAgentContextViewResult(value))).toEqual(value);
+  });
+
+  test("preserves explicit zero observability counts", () => {
+    const value = {
+      ...request,
+      status: "ok" as const,
+      createdAtMs: 123,
+      content: new TextEncoder().encode("context"),
+      encoding: "identity" as const,
+      unrestoredMessageCount: 0,
+      redactedMediaCount: 0,
+      redactedDiagnosticCount: 0,
+      viewBytes: 7,
+    };
+    expect(decodeAgentContextViewResult(encodeAgentContextViewResult(value))).toEqual(value);
+  });
+
   test("rejects mismatched identities and oversized content", () => {
     expect(() => encodeAgentContextViewRequest({ ...request, agentId: "" })).toThrow();
     expect(() =>

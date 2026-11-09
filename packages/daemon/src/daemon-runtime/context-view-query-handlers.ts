@@ -28,11 +28,13 @@ type Ports = {
 function failure(
   request: AgentContextViewRequest,
   reason: AgentContextViewResult["reason"],
+  detail?: string,
 ): AgentContextViewResult {
   return {
     ...request,
     status: "failed",
     reason,
+    failureDetail: detail,
     createdAtMs: Date.now(),
     content: new Uint8Array(),
     encoding: "identity",
@@ -141,7 +143,11 @@ export function subscribeContextViewQueries(
           : source.failure === "missing"
             ? "not_found"
             : "read_failed";
-      await sendResult(transport, failure(request, reason), ports.agentApiKey?.(request.agentId));
+      await sendResult(
+        transport,
+        failure(request, reason, source.failure),
+        ports.agentApiKey?.(request.agentId),
+      );
       return;
     }
     const restored = await runContextViewRestoreInChild({
@@ -165,9 +171,16 @@ export function subscribeContextViewQueries(
                 createdAtMs: Date.now(),
                 content,
                 encoding: "identity" as const,
+                responseFound: restored.view.responseFound,
+                digestMatch: restored.view.digestMatch ?? undefined,
+                triggerFound: restored.view.trigger !== undefined,
+                unrestoredMessageCount: restored.view.unrestoredMessages,
+                redactedMediaCount: restored.view.redactions.media,
+                redactedDiagnosticCount: restored.view.redactions.diagnostic,
+                viewBytes: content.byteLength,
               };
         })()
-      : failure(request, restored.failure);
+      : failure(request, restored.failure, restored.failure);
     logger.info("Context view request finished", {
       event: "context_view:result",
       request_id: request.requestId,
