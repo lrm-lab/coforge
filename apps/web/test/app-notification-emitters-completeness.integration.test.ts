@@ -29,7 +29,10 @@ const environment = defineEmitterCases([
         conversationId: made.channel.id,
         actorUserId: fixture.owner.id,
         now: new Date(),
+        // The Workspace offers the experiment here: this case is about the membership notice, and
+        // the deployment's switch only decides the memory behind the Agent (task #6).
         gate: { prototypeEnabled: false },
+        workspaceEnabled: true,
       });
       made.memoryAgentId = (
         await env.db.workspaceMemoryAgent.findUniqueOrThrow({
