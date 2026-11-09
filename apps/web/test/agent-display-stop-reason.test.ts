@@ -43,6 +43,8 @@ const activity = (
   ...overrides,
 });
 const fence = { daemonInstanceId: "daemon-a", launchId: "launch-a" };
+const SENTENCE =
+  "Cursor is not logged in on this machine. Please log in to Cursor locally, then retry starting this Agent.";
 
 describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
   beforeAll(async () => {
@@ -215,6 +217,7 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
       activity(3, "runtime_error", {
         launchId: "launch-b",
         level: "error",
+        detail: SENTENCE,
         runtimeError: {
           errorClass: "RuntimeUnavailableError",
           errorReason: "runtime_login_required",
@@ -228,6 +231,12 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
     expect(offline.activityKind).toBe("offline");
     expect(offline.stopReason).toBe("runtime_login_required");
     expect(offline.stopDetail).toBe("Cursor CLI is not signed in on this Computer");
+    // The Daemon's own sentence for the failure goes with the reason (task #682).
+    expect(offline.stopMessage).toBe(SENTENCE);
+    // A fresh active process clears it with the reason.
+    await subject.observeStatus(status(4));
+    await subject.observeStatus(status(5, "inactive"));
+    expect((await subject.snapshot(scope)).stopMessage).toBeNull();
   });
 
   test("a never-launched Agent records its first launch's failure reason", async () => {
@@ -327,6 +336,7 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
     await subject.observeActivity(
       activity(2, "runtime_error", {
         level: "error",
+        detail: SENTENCE,
         runtimeError: {
           errorClass: "RuntimeUnavailableError",
           errorReason: "runtime_login_required",
@@ -342,6 +352,10 @@ describe.skipIf(!redisServer)("RedisAgentDisplay stop reason", () => {
     const offline = await subject.snapshot(scope);
     expect(offline.stopReason).toBe("runtime_login_required");
     expect(offline.stopDetail).toBe("Cursor CLI is not signed in on this Computer");
+    expect(offline.stopMessage).toBe(SENTENCE);
+    // A different reason settling later is another failure: the old sentence goes.
+    await subject.recordStopReason(scope, "billing_exhausted");
+    expect((await subject.snapshot(scope)).stopMessage).toBeNull();
   });
 
   test("a different settled reason replaces the recorded one and its words", async () => {

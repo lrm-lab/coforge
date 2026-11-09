@@ -47,6 +47,12 @@ export type AgentDisplaySnapshot = {
    */
   stopDetail?: string | null;
   /**
+   * The Daemon's own sentence for that failure (the error Activity's `detail`), which the Activity
+   * log shows: what failed and what to do, in the runtime's terms. Recorded and cleared with
+   * `stopReason`; never on the status floor. Absent on an older server.
+   */
+  stopMessage?: string | null;
+  /**
    * `true` on the status floor a private Agent also publishes on the shared Workspace status
    * channel: `activityKind`, `stopReason` and `expiresAt` only, with `detailKind`, `detail`
    * and `entries` always empty — never what the Agent is doing. Absent on a full snapshot.
@@ -93,6 +99,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
   const fastMode = parseFastMode(item.fastMode);
   const stopReason = parseStopReason(item.stopReason);
   const stopDetail = parseStopDetail(item.stopDetail);
+  const stopMessage = parseStopDetail(item.stopMessage);
   const statusOnly = parseStatusOnly(item);
   return {
     protocolMajor: 1,
@@ -109,6 +116,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
     ...(fastMode !== undefined ? { fastMode } : {}),
     ...(stopReason !== undefined ? { stopReason } : {}),
     ...(stopDetail !== undefined ? { stopDetail } : {}),
+    ...(stopMessage !== undefined ? { stopMessage } : {}),
     ...(statusOnly ? { statusOnly } : {}),
   } as AgentDisplaySnapshot;
 }
@@ -125,7 +133,8 @@ function parseStatusOnly(item: Record<string, unknown>): true | undefined {
     item.entries.length !== 0 ||
     item.contextUsage !== undefined ||
     item.fastMode !== undefined ||
-    item.stopDetail !== undefined
+    item.stopDetail !== undefined ||
+    item.stopMessage !== undefined
   )
     throw new Error("invalid Agent display snapshot");
   return true;

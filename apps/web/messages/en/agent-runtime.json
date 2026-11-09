@@ -20,6 +20,5 @@
   "agent_stop_model_detail": "Pick another model in the Agent's runtime settings, then start the Agent.",
   "agent_stop_environment": "Invalid environment variable",
   "agent_stop_environment_detail": "Fix the Agent's environment variables, then start the Agent.",
-  "agent_stop_reason_sentence": "{label}. {detail}",
-  "agent_stop_reason_with_words": "{label}: {words} {detail}"
+  "agent_stop_reason_sentence": "{label}. {detail}"
 }

@@ -35,6 +35,8 @@ test("agentStatusOnlySnapshot keeps the status floor and drops every Activity wo
     fastMode: { requested: true, observed: "on", observedAtMs: 1 },
     stopReason: "billing_exhausted",
     stopDetail: "the provider's words",
+    stopMessage:
+      "Pi's model provider rejected the API key, or no key is set for it on this machine.",
   });
   const floor = agentStatusOnlySnapshot(full);
   expect(floor).toEqual({
@@ -53,6 +55,11 @@ test("agentStatusOnlySnapshot keeps the status floor and drops every Activity wo
   });
   expect(floor).not.toHaveProperty("contextUsage");
   expect(floor).not.toHaveProperty("fastMode");
+  // The Daemon's sentence names the model and provider a private Agent's owner chose (task #682).
+  expect(floor).not.toHaveProperty("stopMessage");
+  expect(() =>
+    parseAgentDisplaySnapshot({ ...floor, stopMessage: "Pi's model provider rejected the key." }),
+  ).toThrow();
   // The floor parses at the public boundary like any other snapshot.
   expect(parseAgentDisplaySnapshot(floor)).toEqual(floor);
 });

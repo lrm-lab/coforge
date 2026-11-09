@@ -11,7 +11,6 @@ import { HoverPopover, useClosePreview } from "#src/components/ui/hover-popover"
 import { ClockTime } from "#src/components/ui/relative-time";
 import { Badge } from "#src/components/base/badges/badges";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { presentActivityRows } from "./agent-activity-presentation";
 import { agentDisplay } from "./agent-status-display";
@@ -154,13 +153,8 @@ function AgentCard({
                 {m.agent_bot_badge()}
               </Badge>
             )}
-            {display && (
-              <span
-                className={cn(
-                  "flex min-w-0 items-center gap-1 text-xs",
-                  view.alert ? "text-error-primary" : "text-tertiary",
-                )}
-              >
+            {display && !view.alert && (
+              <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
                 <AgentStatusMarker status={view} className="size-1.5 shrink-0" />
                 <span className="truncate">{view.label}</span>
               </span>
@@ -169,6 +163,16 @@ function AgentCard({
           {/* The handle only when it says something the name does not. */}
           {shownHandle && shownHandle !== displayName && (
             <p className="truncate text-xs text-tertiary">@{shownHandle}</p>
+          )}
+          {/* A stop's sentence on lines of its own under the name: the card is where it reads
+              whole, while a list or a header cuts it to one line. */}
+          {display && view.alert && (
+            <p className="mt-1 flex items-start gap-1 text-xs break-words text-error-primary">
+              <span className="flex h-4 shrink-0 items-center">
+                <AgentStatusMarker status={view} />
+              </span>
+              <span className="min-w-0">{view.label}</span>
+            </p>
           )}
           {profile.isError ? (
             <p className="mt-2 border-t border-secondary pt-2 text-xs text-tertiary">

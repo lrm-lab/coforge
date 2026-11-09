@@ -29,8 +29,7 @@ export function AgentErrorBanner({
    * reads the tab's feed) goes with it. */
   onViewLogs?: () => void;
 }) {
-  // "Error: <detail>", the same label the DM header and the Activity log give this state; a state
-  // to act on shows the provider's own words (Frank, 11-07), or our guidance where none was kept.
+  // "Error: <detail>", the same label the DM header and the Activity log give this state.
   const status = agentDisplay(display);
   const label = status.alertText || status.label;
   return (

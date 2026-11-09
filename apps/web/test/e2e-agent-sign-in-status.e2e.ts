@@ -78,22 +78,26 @@ test("a signed-out runtime's Agent says so, and what to do", async () => {
   });
   const display = getAgentDisplay();
   const launchId = `launch-${suffix}`;
-  const words: Record<string, string> = { en: "Runtime not signed in", "zh-CN": "运行时未登录" };
+  // The Daemon's own sentence for the failure, as the Activity log shows it: the banner shows it
+  // word for word, and never the provider's raw error beside it (Frank, 11-09).
+  const logged =
+    "Cursor is not logged in on this machine. Please log in to Cursor locally, then retry starting this Agent.";
+  // Every surface names the stop in that sentence, whatever the page's language (Frank, 11-09).
+  const words: Record<string, string> = { en: logged, "zh-CN": logged };
   const said = words.en!;
-  const todo = "Sign in to the runtime on the Computer page, then start the Agent.";
   await display.observeStatus({ ...frame(1), status: "active" } as never);
   await display.observeActivity(
     {
       ...frame(2),
       detailKind: "runtime_error",
       level: "error",
-      detail: "CoForge stopped retrying.",
+      detail: logged,
       launchId,
       runtimeError: {
         errorClass: "AuthError",
         errorReason: "auth_failed",
         fingerprint: `fp-${suffix}`,
-        providerMessage: "Authentication required. Please run 'agent login' first.",
+        providerMessage: '401 "invalid api key"',
       },
     } as never,
     { daemonInstanceId: `e2e-${suffix}`, launchId },
@@ -197,16 +201,21 @@ test("a signed-out runtime's Agent says so, and what to do", async () => {
     const profile = `[...document.querySelectorAll("button")].find((b) => b.querySelector("h1"))`;
     await until(`${pageHydrated} && ${profile} != null`);
     await press(profile);
-    await until(
-      `document.querySelector(".bg-error-primary")?.textContent.includes(${JSON.stringify(todo)}) && document.querySelector(".bg-error-primary").textContent.includes("agent login")`,
-    );
+    const banner = `document.querySelector(".bg-error-primary")?.textContent ?? ""`;
+    await until(`${banner}.includes(${JSON.stringify(logged)})`);
     await shots("profile-en-desktop");
+    expect(await evaluate<string>(banner)).not.toContain("invalid api key");
+    await browser("set", "viewport", "390", "844");
+    await browser("open", page("en", `/dm/${direct.id}`));
+    await until(`${pageHydrated} && ${profile} != null`);
+    await press(profile);
+    await until(`${banner}.includes(${JSON.stringify(logged)})`);
+    await shots("profile-en-phone");
+    await browser("set", "viewport", "1280", "860");
     await browser("open", page("zh-CN", `/dm/${direct.id}`));
     await until(`${pageHydrated} && ${profile} != null`);
     await press(profile);
-    await until(
-      `document.querySelector(".bg-error-primary")?.textContent.includes("在电脑页登录")`,
-    );
+    await until(`${banner}.includes(${JSON.stringify(logged)})`);
     await shots("profile-zh-CN-desktop");
     await browser("open", page("en", `/computer/${computer.id}`));
     await until(`${pageHydrated} && ${warning(said)}`);

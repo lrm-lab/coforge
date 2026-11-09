@@ -116,32 +116,37 @@ test("a stopped Agent reads in the provider's words, and ours where none were ke
   }
 });
 
-test("a runtime signed out names the reason, the runtime's own words, and what to do", () => {
+test("a stop with the Daemon's sentence reads as that sentence everywhere, nothing of ours", () => {
+  const sentence =
+    "Pi's model provider rejected the API key, or no key is set for it on this machine. Check the API key for this Agent's provider, then retry starting this Agent.";
+  const view = agentDisplay(
+    display({
+      activityKind: "offline",
+      stopReason: "auth_failed",
+      stopDetail: '401 "invalid api key"',
+      stopMessage: sentence,
+    }),
+  );
+  expect(view.alert).toBe(true);
+  expect(view.label).toBe(sentence);
+  expect(view.alertText).toBe(sentence);
+  // An older server sends no sentence: only the short word, no sentence of ours.
+  const older = agentDisplay(display({ activityKind: "offline", stopReason: "auth_failed" }));
+  expect(older.label).toBe(m.agent_stop_sign_in());
+  expect(older.alertText).toBe(m.agent_stop_sign_in());
+});
+
+test("a runtime signed out with no sentence of its own shows the short word, never the raw error", () => {
   for (const stopReason of ["runtime_login_required", "auth_failed"]) {
     const view = agentDisplay(
-      display({ activityKind: "offline", stopReason, stopDetail: "Not logged in" }),
+      display({ activityKind: "offline", stopReason, stopDetail: '401 "invalid api key"' }),
     );
     expect(view.label).toBe(m.agent_stop_sign_in());
     expect(view.statusDetail).toBe(m.agent_stop_sign_in_detail());
     expect(view.alert).toBe(true);
-    expect(view.alertText).toBe(
-      m.agent_stop_reason_with_words({
-        label: m.agent_stop_sign_in(),
-        words: "Not logged in",
-        detail: m.agent_stop_sign_in_detail(),
-      }),
-    );
+    // The raw error stays in the logs (Frank, 11-09); no sentence of ours stands in for the Daemon's.
+    expect(view.alertText).toBe(m.agent_stop_sign_in());
   }
-  // A launch failure carries no words of its own: the reason and what to do.
-  expect(
-    agentDisplay(display({ activityKind: "offline", stopReason: "runtime_login_required" }))
-      .alertText,
-  ).toBe(
-    m.agent_stop_reason_sentence({
-      label: m.agent_stop_sign_in(),
-      detail: m.agent_stop_sign_in_detail(),
-    }),
-  );
 });
 
 test("a reason nobody has to act on leaves the plain offline status", () => {

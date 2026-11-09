@@ -26,6 +26,7 @@ if not accepted then return reject_projection(projected, state) end
 if ARGV[5] == "active" then
   state.stopReason = nil
   state.stopDetail = nil
+  state.stopMessage = nil
   state.pendingStopReason = nil
   state.pendingStopDetail = nil
 end
@@ -95,6 +96,7 @@ end
 if record_reason then
   state.stopReason = ARGV[16]
   state.stopDetail = ARGV[17] ~= "" and ARGV[17] or nil
+  state.stopMessage = ARGV[12] ~= "" and ARGV[12] or nil
   state.pendingStopReason = nil
   state.pendingStopDetail = nil
   state.stopLaunch = { launchId = ARGV[7], observedAt = tonumber(ARGV[11]) }
@@ -144,14 +146,18 @@ state.activityVisible = true
 -- hides the Activity, and the snapshot keeps reporting this until the next active process.
 -- A later non-error observation proves the Agent kept running past the error, so the reason
 -- no longer describes a stop; an error-kind frame without a reason keeps the last one.
+-- The Daemon's own sentence for the failure (the error Activity's detail) goes with it, so
+-- every surface names the stop in the words the Activity log shows.
 if ARGV[16] ~= "" then
   state.stopReason = ARGV[16]
   state.stopDetail = ARGV[17] ~= "" and ARGV[17] or nil
+  state.stopMessage = ARGV[12] ~= "" and ARGV[12] or nil
   state.pendingStopReason = nil
   state.pendingStopDetail = nil
 elseif ARGV[5] ~= "error" then
   state.stopReason = nil
   state.stopDetail = nil
+  state.stopMessage = nil
   state.pendingStopReason = nil
   state.pendingStopDetail = nil
 end
@@ -180,8 +186,9 @@ return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
 // process live is often the stale one a failed launch leaves behind, so dropping the
 // write would lose the reason exactly when it is needed. A genuinely running Agent's
 // next status or Activity clears it, same lifecycle as stopReason. A bare re-record
-// of the same reason keeps provider words an Activity already wrote; a different reason
-// replaces both, since the old words described the old failure.
+// of the same reason keeps the provider words and sentence an Activity already wrote
+// (only an Activity carries the sentence, so a pending reason never has one); a different
+// reason drops them, since they described the old failure.
 export const RECORD_STOP_REASON = `${LUA_COMMON}
 local state = decode_state(redis.call("GET", KEYS[1]))
 local now = tonumber(ARGV[1])
@@ -210,6 +217,7 @@ if state.stopReason == reason and detail == nil then stop_detail = state.stopDet
 if state.stopReason == reason and state.stopDetail == stop_detail then
   return reject_projection(projected, state)
 end
+if state.stopReason ~= reason then state.stopMessage = nil end
 state.stopReason = reason
 state.stopDetail = stop_detail
 state.pendingStopReason = nil

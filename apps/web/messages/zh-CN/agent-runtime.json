@@ -20,6 +20,5 @@
   "agent_stop_model_detail": "在 Agent 的运行时设置里换一个模型，然后启动 Agent。",
   "agent_stop_environment": "环境变量有误",
   "agent_stop_environment_detail": "修改 Agent 的环境变量，然后启动 Agent。",
-  "agent_stop_reason_sentence": "{label}。{detail}",
-  "agent_stop_reason_with_words": "{label}：{words} {detail}"
+  "agent_stop_reason_sentence": "{label}。{detail}"
 }

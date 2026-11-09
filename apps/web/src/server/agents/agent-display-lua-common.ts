@@ -80,6 +80,7 @@ local function snapshot(state, workspace_id, computer_id, agent_id, now)
   local fast_mode = cjson.null
   local stop_reason = cjson.null
   local stop_detail = cjson.null
+  local stop_message = cjson.null
   if active then
     kind = "online"
     expires_at = state.process.leaseUntil
@@ -118,13 +119,14 @@ local function snapshot(state, workspace_id, computer_id, agent_id, now)
   if kind == "offline" and state.stopReason then
     stop_reason = state.stopReason
     stop_detail = state.stopDetail or cjson.null
+    stop_message = state.stopMessage or cjson.null
   end
   return cjson.encode({
     protocolMajor = 1, workspaceId = workspace_id, computerId = computer_id,
     agentId = agent_id, revision = state.revision, activityKind = kind,
     detailKind = detail_kind, detail = detail, entries = entries, expiresAt = expires_at,
     contextUsage = context_usage, fastMode = fast_mode, stopReason = stop_reason,
-    stopDetail = stop_detail
+    stopDetail = stop_detail, stopMessage = stop_message
   })
 end
 

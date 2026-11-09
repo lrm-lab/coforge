@@ -40,10 +40,9 @@ export function stopReasonCopy(reason: string | null | undefined): StopReasonCop
   return reason && Object.hasOwn(STOP_REASONS, reason) ? STOP_REASONS[reason] : undefined;
 }
 
-/** The reason and what to do, as one line: a banner's, or a refused Start's. The runtime's own
- * words go between them when it sent any (Frank, 11-07: they say how to sign in). */
-export function stopReasonSentence(copy: StopReasonCopy, words?: string | null) {
-  return words
-    ? m.agent_stop_reason_with_words({ label: copy.label(), words, detail: copy.detail() })
-    : m.agent_stop_reason_sentence({ label: copy.label(), detail: copy.detail() });
+/** The reason and what to do, as one line: a banner's where the log is not the viewer's, or a
+ * refused Start's. The provider's raw error is never in it (a `401 "invalid api key"` means nothing
+ * to the reader, Frank 11-09); it stays in the logs and the copied diagnostics. */
+export function stopReasonSentence(copy: StopReasonCopy) {
+  return m.agent_stop_reason_sentence({ label: copy.label(), detail: copy.detail() });
 }

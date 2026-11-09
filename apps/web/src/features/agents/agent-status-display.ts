@@ -1,7 +1,7 @@
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import { m } from "#src/paraglide/messages";
-import { stopReasonCopy, stopReasonSentence } from "./agent-stop-reason";
+import { stopReasonCopy } from "./agent-stop-reason";
 import {
   isBusyTone,
   presentActivity,
@@ -41,8 +41,11 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
   const reason = stopReasonCopy(display.stopReason);
   // The provider's own words for a quota (Frank, 11-07); our word only where none was kept.
   const providerWords = display.stopReason === "billing_exhausted" ? display.stopDetail : null;
+  // The Daemon's own sentence for the stop, as the Activity log shows it (Frank, 11-09: the same
+  // words everywhere, nothing of ours); our short word only where none was recorded.
+  const stopWords = (reason && display.stopMessage) || providerWords;
   const label = reason
-    ? providerWords || reason.label()
+    ? stopWords || reason.label()
     : kind === "online"
       ? m.agent_status_online()
       : kind === "offline"
@@ -67,8 +70,8 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
       ? {
           statusDetail: reason.detail(),
           alert: true,
-          // The one line a banner has: the provider's words, or our reason and what to do.
-          alertText: providerWords || stopReasonSentence(reason, display.stopDetail),
+          // The one line a banner has: the same words, or the short word alone.
+          alertText: stopWords || reason.label(),
         }
       : options?.stopped === true && kind === "offline"
         ? { statusDetail: STOPPED_STATUS_DETAIL }
