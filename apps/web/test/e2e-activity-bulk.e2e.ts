@@ -24,8 +24,17 @@ test("Activity's header marks all done with Undo, and a row's hover shows only D
   );
   const rows = `[...document.querySelectorAll(${rowItems})]`;
   const seeded = `${rows}.filter((row) => row.textContent.includes("e2e-keys"))`;
-  /** The labels of the header's visible buttons (a narrow column shows icons, not labels). */
-  const headerButtons = `[...document.querySelectorAll("[data-activity-list] > div > header button")].filter((b) => b.offsetParent !== null).map((b) => b.textContent.trim())`;
+  /** The header's "More actions" (⋯) button, and the items of the menu it opens. */
+  const moreButton = `document.querySelector('[data-activity-list] header button[aria-label="More actions"]')`;
+  const menuItems = `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`;
+  const openMenu = async () => {
+    await evaluate(`(${moreButton}.click(), true)`);
+    await waitFor(`${menuItems}.length > 0`);
+  };
+  const closeMenu = async () => {
+    await browser("press", "Escape");
+    await waitFor(`${menuItems}.length === 0`);
+  };
   const toastButton = `[...document.querySelectorAll("[data-sonner-toast] button")].find((b) => b.textContent.trim() === "Undo")`;
   const openSeeded = async (workspaceSlug: string) => {
     await browser("open", `${origin}/en/w/${workspaceSlug}/activity`);
@@ -42,15 +51,22 @@ test("Activity's header marks all done with Undo, and a row's hover shows only D
     await browser("set", "viewport", "1440", "900");
     await openSeeded(workspace.slug);
 
-    // On All the header offers both; on Unread and Mentions only Mark all read.
-    expect(await evaluate<string[]>(headerButtons)).toEqual(["Mark all read", "Mark all done"]);
-    for (const tab of ["Unread", "Mentions"]) {
-      await browser("find", "role", "tab", "click", "--name", tab);
-      await waitFor(`${headerButtons}.length === 1`);
-      expect(await evaluate<string[]>(headerButtons)).toEqual(["Mark all read"]);
-    }
+    // On All the ⋯ menu offers both; on Unread only Mark all read. Both reach every row of the
+    // list, so Mentions, which shows only some of them, offers no menu at all.
+    await openMenu();
+    expect(await evaluate<string[]>(menuItems)).toEqual(["Mark all read", "Mark all done"]);
+    await closeMenu();
+    await browser("find", "role", "tab", "click", "--name", "Unread");
+    await waitFor(`location.search.includes("unread") && ${moreButton} !== null`);
+    await openMenu();
+    expect(await evaluate<string[]>(menuItems)).toEqual(["Mark all read"]);
+    await closeMenu();
+    await browser("find", "role", "tab", "click", "--name", "Mentions");
+    await waitFor(`location.search.includes("mentions")`);
+    await Bun.sleep(1_000);
+    expect(await evaluate<boolean>(`${moreButton} === null`)).toBe(true);
     await browser("find", "role", "tab", "click", "--name", "All");
-    await waitFor(`${headerButtons}.length === 2`);
+    await waitFor(`${moreButton} !== null`);
 
     // A hovered row floats one button, Done, which is hidden at rest.
     const first = `${seeded}[0]`;
@@ -64,8 +80,9 @@ test("Activity's header marks all done with Undo, and a row's hover shows only D
     await waitFor(`${shown} === 1`);
 
     // Mark all done empties the list; its Undo refills it.
+    await openMenu();
     await evaluate(
-      `([...document.querySelectorAll("[data-activity-list] > div > header button")].find((b) => b.textContent.trim() === "Mark all done").click(), true)`,
+      `([...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.trim() === "Mark all done").click(), true)`,
     );
     await waitFor(`${seeded}.length === 0`);
     await waitFor(`${toastButton} !== undefined`);
