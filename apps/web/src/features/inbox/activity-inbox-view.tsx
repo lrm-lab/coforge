@@ -15,9 +15,16 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { CheckDone01, MessageQuestionCircle, Pin01 } from "@untitledui/icons";
+import {
+  Check,
+  CheckDone01,
+  DotsHorizontal,
+  MessageQuestionCircle,
+  Pin01,
+} from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { PageHeader } from "#src/components/layout/page-header";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
@@ -55,6 +62,7 @@ import { useActivityDays } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
 import { ActivityInboxLoadMore, ActivityInboxSectionHeading } from "./activity-inbox-list-parts";
 import { useActivityListKeyboard } from "./use-activity-list-keyboard";
+import { useActivityBulkActions } from "./use-activity-bulk-actions";
 import { WaitingChoiceRow } from "./waiting-choice-row";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -241,10 +249,15 @@ export function ActivityInboxView({
 
   const days = useActivityDays(items, (item) => item.latest.createdAt);
   // The rows in the order they are laid out, which the keyboard walks.
-  const { tabStopKey, listProps } = useActivityListKeyboard(
-    useMemo(() => [...pinned, ...days.flatMap((day) => day.items)], [pinned, days]),
-    actions,
-  );
+  const rows = useMemo(() => [...pinned, ...days.flatMap((day) => day.items)], [pinned, days]);
+  const { doneAll } = useActivityBulkActions({
+    workspaceId,
+    onChanged: refresh,
+    onFailure: setFailure,
+    onDoneStarted: startDone,
+    onDoneSettled: settleDone,
+  });
+  const { tabStopKey, listProps } = useActivityListKeyboard(rows, actions);
   // Not empty while the waiting cards are still being read: they may be all there is.
   const empty =
     items.length === 0 &&
@@ -331,6 +344,7 @@ export function ActivityInboxView({
             </span>
           )
         }
+        tabsStart
         tabs={
           <ActivityInboxTabs
             filter={filter}
@@ -347,28 +361,37 @@ export function ActivityInboxView({
         actions={
           !query.isPlaceholderData &&
           firstPage &&
-          firstPage.unreadItemCount > 0 && (
-            // A list column dragged narrow keeps the button as its icon, named in a tooltip, so
-            // it never covers the heading.
-            <>
-              <Button
-                size="sm"
-                color="secondary"
-                iconLeading={CheckDone01}
-                className="hidden @[22rem]/tabbed-header:inline-flex"
-                onClick={readAll}
-              >
-                {m.activity_inbox_mark_all_read()}
-              </Button>
+          // Linear keeps "mark everything" out of the header (Frank, 11-09): one quiet "⋯",
+          // offered only while it has something to do.
+          (firstPage.unreadItemCount > 0 || (filter === "all" && items.length > 0)) && (
+            <Dropdown.Root>
               <ButtonUtility
                 size="sm"
-                color="secondary"
-                icon={CheckDone01}
-                tooltip={m.activity_inbox_mark_all_read()}
-                className="@[22rem]/tabbed-header:hidden"
-                onClick={readAll}
+                color="tertiary"
+                icon={DotsHorizontal}
+                tooltip={m.activity_inbox_more_actions()}
               />
-            </>
+              <Dropdown.Popover placement="bottom end" className="w-48">
+                <Dropdown.Menu aria-label={m.activity_inbox_more_actions()}>
+                  {firstPage.unreadItemCount > 0 && (
+                    <Dropdown.Item
+                      id="read-all"
+                      icon={CheckDone01}
+                      label={m.activity_inbox_mark_all_read()}
+                      onAction={readAll}
+                    />
+                  )}
+                  {filter === "all" && loadedAt !== undefined && items.length > 0 && (
+                    <Dropdown.Item
+                      id="done-all"
+                      icon={Check}
+                      label={m.activity_bulk_mark_all_done()}
+                      onAction={() => doneAll(loadedAt, items)}
+                    />
+                  )}
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown.Root>
           )
         }
       />

@@ -8,7 +8,7 @@ import { cn } from "#src/lib/utils";
  * The 48px header band every page owns. On mobile it carries the drawer button.
  *
  * With `tabs` it is the conversation header's row (`TabbedHeader`): title on the left, the tabs
- * centered, actions on the right.
+ * centered (or, with `tabsStart`, after it), actions on the right.
  */
 export function PageHeader({
   leading,
@@ -18,6 +18,7 @@ export function PageHeader({
   meta,
   actions,
   tabs,
+  tabsStart,
   headingClassName,
 }: {
   /** A control that belongs before the title, such as a panel's way back. */
@@ -32,6 +33,8 @@ export function PageHeader({
   actions?: React.ReactNode;
   /** Underline tabs that switch the page's view. */
   tabs?: React.ReactNode;
+  /** Puts the tabs after the title, left-aligned, where they would be centered. */
+  tabsStart?: boolean;
   /** For a heading that gives way on a phone, where `meta` carries the page's name. */
   headingClassName?: string;
 }) {
@@ -52,6 +55,7 @@ export function PageHeader({
         identity={title}
         actions={actions && <div className="flex items-center gap-2">{actions}</div>}
         tabs={tabs}
+        tabsStart={tabsStart}
         className="px-page"
       />
     );

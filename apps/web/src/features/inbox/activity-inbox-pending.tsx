@@ -12,7 +12,11 @@ export function ActivityInboxPending() {
       className="flex h-full min-h-0 flex-col"
     >
       {/* The tabs' place, so the list does not move when the page lands. */}
-      <PageHeader heading={m.navigation_activity()} tabs={<Skeleton className="mb-3 h-6 w-64" />} />
+      <PageHeader
+        heading={m.navigation_activity()}
+        tabs={<Skeleton className="mb-3 h-6 w-64" />}
+        tabsStart
+      />
       {/* The list's rows at their final inset and size, full width: nothing is open yet. */}
       <ol className="flex flex-col py-1">
         {[0, 1, 2, 3].map((row) => (
