@@ -37,8 +37,8 @@ function PlatformMark({ mark, monochrome }: { mark: string; monochrome: boolean 
  */
 export function LoginBrandPanel() {
   return (
-    <div className="relative hidden flex-col bg-[#EEEBFE] px-10 pt-[75px] pb-10 text-gray-600 lg:flex xl:px-20">
-      {/* Placed by `login-art.css` to match the homepage's logo; the top inset is its 75 px bar. */}
+    <div className="login-brand-panel relative hidden flex-col bg-[#EEEBFE] px-10 pb-10 text-gray-600 lg:flex xl:px-20">
+      {/* Placed by `login-art.css` to match the homepage's logo, above the panel's top inset. */}
       <Link to="/" aria-label="CoForge" className="login-brand-logo">
         <img src="/login/homepage-logo.webp" alt="" className="h-auto w-full" />
       </Link>

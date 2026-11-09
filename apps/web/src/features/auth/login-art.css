@@ -20,16 +20,30 @@
   height: auto;
 }
 
-/* The inner door panel's box in arch.webp (800 x 1013), hinged on its right edge: on hover its left
- * edge swings inward, away from the viewer (@qq971766802, 11-09). */
-.login-art__door {
+/* The inner door panel's box in arch.webp (800 x 1013), hinged on its right edge. It stands a
+ * little open, and on hover the whole door swings further in, its left edge going away from the
+ * viewer (@qq971766802, 11-09). */
+.login-art__door,
+.login-art__backing {
   position: absolute;
   left: 31.125%;
   top: 16.3%;
   width: 56.25%;
+}
+
+.login-art__door {
   height: auto;
   transform-origin: 100% 50%;
-  transform: perspective(calc(var(--w) * 2.5));
+  transform: perspective(calc(var(--w) * 2.5)) rotateY(-10deg);
+}
+
+/* What the swinging door uncovers is the arch's own lilac face, not the darker opening painted in
+ * arch.webp, so no hole shows: the door's own shape, filled with the face's colours (sampled from
+ * the arch either side of the door). */
+.login-art__backing {
+  aspect-ratio: 450 / 773;
+  background: linear-gradient(90deg, rgb(237 231 255), rgb(226 219 250));
+  mask: url("/login/door.webp") center / 100% 100% no-repeat;
 }
 
 .login-art__agent,
@@ -52,20 +66,28 @@
   width: 96%;
 }
 
-/* The logo sits exactly where the homepage's does, so moving between the two pages keeps it still:
- * 170 px wide, centred in the homepage's 75 px bar (top 16 px), and on the homepage's column edge
- * (its 94 px inset less the 15 px nudge from 1281 px up, 48 px less 15 px below that). */
+/* The logo sits exactly where the homepage's does, so moving between the two pages keeps it still.
+ * The homepage is one 1440 x 900 design scaled to the window, s = min(100vw / 1440, 100vh / 900,
+ * 1.5), and centred: its logo is 170 px wide, 16.25 px from the top and 79 px in, all times s, with
+ * the design's left edge at 50vw - 720 s (33 px in up to 1280 px wide). Each length below is that number times s, written as the
+ * smallest of its three forms because CSS cannot divide one length by another. */
+/* The homepage's 75 px bar, scaled the same way, so the illustration starts below the logo. */
+.login-brand-panel {
+  padding-top: min(100vw * 75 / 1440, 100vh * 75 / 900, 112.5px);
+}
+
 .login-brand-logo {
   position: absolute;
-  top: 16px;
-  left: 33px;
-  width: 170px;
+  top: min(100vw * 16.25 / 1440, 100vh * 16.25 / 900, 24.375px);
+  left: calc(50vw - min(100vw * 641 / 1440, 100vh * 641 / 900, 961.5px));
+  width: min(100vw * 170 / 1440, 100vh * 170 / 900, 255px);
   height: auto;
 }
 
-@media (min-width: 1281px) {
+/* Up to 1280 px the homepage's column inset is 33 px of the design, not 79 px. */
+@media (max-width: 1280px) {
   .login-brand-logo {
-    left: calc(max(0px, (100vw - 1440px) / 2) + 79px);
+    left: calc(50vw - min(100vw * 687 / 1440, 100vh * 687 / 900, 1030.5px));
   }
 }
 
@@ -144,7 +166,7 @@
   }
 
   .login-art:hover .login-art__door {
-    transform: perspective(calc(var(--w) * 2.5)) rotateY(-24deg);
+    transform: perspective(calc(var(--w) * 2.5)) rotateY(-32deg);
     transition-duration: var(--motion-in-lg);
   }
 

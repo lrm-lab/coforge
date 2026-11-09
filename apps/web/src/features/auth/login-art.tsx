@@ -8,6 +8,7 @@ export function LoginArt() {
   return (
     <div className="login-art" aria-hidden="true">
       <img src="/login/arch.webp" alt="" className="login-art__arch" />
+      <span className="login-art__backing" />
       <img src="/login/door.webp" alt="" className="login-art__door" />
       <img src="/login/shadow.webp" alt="" className="login-art__shadow" />
       <img src="/login/agent.webp" alt="" className="login-art__agent" />
