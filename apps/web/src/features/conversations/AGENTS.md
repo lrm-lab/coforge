@@ -115,7 +115,7 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
   themself included): always writable, no Agent in it, and its composer offers no
   @-completion because the server keeps a mention there as plain text. `threaded-conversation.tsx`
   coordinates thread/profile panes; `conversation-pane.tsx` renders one message
-  stream (`conversation-scroll-anchor.ts` keeps the row a page load moves; `conversation-bottom-pin.ts` keeps bottom-follow intent across layout changes); `use-conversation-sync.ts` owns browser-only deep-link and read-cursor sync.
+  stream (`conversation-message-list.tsx` its rows, `use-reading-position.ts` where the reader is and what moves them; `conversation-scroll-anchor.ts` keeps the row a page load moves; `conversation-bottom-pin.ts` keeps bottom-follow intent across layout changes); `use-conversation-sync.ts` owns browser-only deep-link and read-cursor sync.
 - Every main stream and thread opens at its oldest unread, or the bottom when all are read or no cursor exists; a deep link, search, or Saved jump wins. The oldest unread is the server's, read on every open (`conversationOpenQuery`, `use-conversation-open.ts`), never a window's cursor: a held window paints at once, and its divider, landing and read-cursor writes wait for that read. Activity clears a conversation `msg` after that landing (a standalone thread keeps it as the root). While following the latest, a newer page pins the bottom.
   `conversation-host.tsx` supplies the Workspace's channels and Saved list. A host's loader reads `savedMessagesQuery` into
   the Query cache, which the store starts from. Once hydrated
