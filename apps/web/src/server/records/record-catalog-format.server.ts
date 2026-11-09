@@ -121,7 +121,7 @@ export async function ensureCurrentCycle(
   input: { workspaceId: string; userId: string; now?: Date },
 ) {
   await requireMembership(db, input.workspaceId, input.userId);
-  const { year, week } = currentIsoWeek(input.now ?? new Date());
+  const { year, week } = currentIsoWeek(zonedCalendarDate(input.now ?? new Date()));
   return ensureCycleAt(db, { workspaceId: input.workspaceId, userId: input.userId, year, week });
 }
 
@@ -272,7 +272,7 @@ export async function ensureFormatForSettings(
   const cycle = await ensureCycleAt(db, {
     workspaceId: input.workspaceId,
     userId: input.userId,
-    ...currentIsoWeek(input.now ?? new Date()),
+    ...currentIsoWeek(zonedCalendarDate(input.now ?? new Date())),
   });
   const baseContent =
     input.sections && input.sections.length > 0

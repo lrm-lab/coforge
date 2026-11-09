@@ -297,7 +297,9 @@ export function recordDistribution(db: Db, notifier?: WeeklyReportNotifier) {
         userId: row.ownerId,
         settingsId: row.id,
         settingsName: row.name,
-        now: scheduleNow,
+        // `now` must be a real instant: the callee derives the schedule-timezone
+        // week itself, so the pre-zoned `scheduleNow` would shift a day.
+        now,
       });
 
       const membership = await db.workspaceMembership.findUnique({

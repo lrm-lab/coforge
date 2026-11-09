@@ -389,6 +389,102 @@ test("runDueScheduledWeeklyAssignments sends when due and not yet sent", async (
   expect(sendCalls).toBeGreaterThan(0);
 });
 
+test("runDueScheduledWeeklyAssignments creates the format on the schedule-timezone week", async () => {
+  const cycleCreates: Array<Record<string, unknown>> = [];
+  let rowSeq = 0;
+  let formatRow: { id: string; settingsId: string; content: unknown } | null = null;
+  const db = {
+    workspaceMembership: {
+      findUnique: async () => ({ role: "owner", userId: "leader" }),
+      findMany: async () => [{ userId: "leader" }, { userId: "member-a" }],
+    },
+    weeklyReportTemplate: {
+      findMany: async () => [
+        {
+          id: "settings-1",
+          name: "算法汇报",
+          workspaceId: "workspace-1",
+          ownerId: "leader",
+          sendTime: "00:00",
+          sendWeekday: 7,
+        },
+      ],
+      findFirst: async () => ({
+        id: "settings-1",
+        name: "算法汇报",
+        allMembers: false,
+        recipients: [{ userId: "member-a" }],
+      }),
+    },
+    weeklyReport: {
+      findFirst: async (query: { where?: Record<string, unknown> }) => {
+        const where = query.where ?? {};
+        const submissions = where.submissions as { some?: unknown; none?: unknown } | undefined;
+        if (submissions?.some || submissions?.none) return null;
+        if (where.id === formatRow?.id) return formatRow;
+        return null;
+      },
+      update: async () => ({}),
+      create: async (query: { data: Record<string, unknown> }) => {
+        rowSeq += 1;
+        const id = `row-${rowSeq}`;
+        if (!formatRow && query.data.settingsId) {
+          formatRow = {
+            id,
+            settingsId: query.data.settingsId as string,
+            content: query.data.content,
+          };
+        }
+        return { id, title: query.data.title };
+      },
+      createMany: async (query: { data: Array<Record<string, unknown>> }) => ({
+        count: query.data.length,
+      }),
+    },
+    weeklyReportCycle: {
+      findUnique: async (query: { where?: { workspaceId_year_week?: unknown } }) =>
+        query.where?.workspaceId_year_week
+          ? null
+          : { id: "cycle-dist", year: 2026, week: 45, title: "2026 W45 工作周报" },
+      create: async (query: { data: Record<string, unknown> }) => {
+        cycleCreates.push(query.data);
+        return {
+          id: "cycle-new",
+          year: query.data.year,
+          week: query.data.week,
+          title: query.data.title,
+        };
+      },
+    },
+    user: {
+      findMany: async () => [{ id: "member-a", displayName: "Alice", username: "alice" }],
+      findUnique: async () => ({ displayName: "Boss", username: "boss" }),
+    },
+  } as unknown as PrismaClient;
+
+  // 2026-11-07T20:00Z is Saturday in America/New_York but already Sunday
+  // 2026-11-08 04:00 in Asia/Shanghai (ISO week 45). The cron path once passed
+  // the pre-zoned scheduleNow into ensureFormatForSettings, which re-zoned it
+  // to Monday's week 46 on hosts west of UTC+4 — the format landed on a cycle
+  // the send never targets.
+  const previousTz = process.env.TZ;
+  process.env.TZ = "America/New_York";
+  try {
+    const result = await recordDistribution(distributionDatabase(db), {
+      notify: async () => ({ status: "notified" }),
+    }).runDueScheduledWeeklyAssignments({
+      now: new Date("2026-11-07T20:00:00.000Z"),
+    });
+
+    expect(result.results[0]).toMatchObject({ status: "sent", assignmentCount: 1 });
+    expect(cycleCreates).toHaveLength(1);
+    expect(cycleCreates[0]).toMatchObject({ year: 2026, week: 45 });
+  } finally {
+    if (previousTz === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTz;
+  }
+});
+
 test("runDueScheduledWeeklyAssignments skips when Leader edited the format this week", async () => {
   const db = {
     weeklyReportTemplate: {
