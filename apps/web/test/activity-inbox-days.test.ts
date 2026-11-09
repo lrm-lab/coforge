@@ -45,3 +45,15 @@ test("a 12-hour clock drops the hour's leading zero, a 24-hour one keeps it", ()
   expect(formatClockTime(at, "UTC", "en-US", "12h", false)).toBe("9:49 AM");
   expect(formatClockTime(at, "UTC", "en-GB", "24h", false)).toBe("09:49");
 });
+
+test("an older day names its weekday within this year and its year before it", () => {
+  const items = [
+    { id: "this-year", at: "2026-11-02T09:00:00Z" },
+    { id: "last-year", at: "2025-12-31T09:00:00Z" },
+  ];
+  const [thisYear, lastYear] = groupByDay(items, at, "UTC", now).map((group) => group.label!);
+  expect(thisYear).toMatch(/Monday/);
+  expect(thisYear).not.toMatch(/2026/);
+  expect(lastYear).toMatch(/2025/);
+  expect(lastYear).not.toMatch(/Wednesday/);
+});
