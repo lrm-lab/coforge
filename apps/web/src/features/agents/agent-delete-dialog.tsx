@@ -38,6 +38,7 @@ export function AgentDeleteDialog({
   const controlSize = useDialogControlSize();
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
+  const [bodyScrolled, setBodyScrolled] = useState(false);
   const [deleting, guard] = useSubmitGuard();
   const confirmed = confirmation.trim() === agentName;
 
@@ -91,9 +92,14 @@ export function AgentDeleteDialog({
                 />
               </div>
               {/* Only the middle scrolls: with the keyboard up the title and the buttons stay in
-                  view, so the confirmation can be typed and confirmed. */}
-              <div className="min-h-0 flex-1 overflow-y-auto pb-6" data-dialog-body>
-                <div className="mx-6 mt-4 flex items-start gap-3">
+                  view, so the confirmation can be typed and confirmed. Once it has scrolled, a rule
+                  under the title shows the text above continues rather than starting mid-sentence. */}
+              <div
+                className={`mt-4 min-h-0 flex-1 overflow-y-auto border-t pb-6 ${bodyScrolled ? "border-secondary" : "border-transparent"}`}
+                onScroll={(event) => setBodyScrolled(event.currentTarget.scrollTop > 0)}
+                data-dialog-body
+              >
+                <div className="mx-6 flex items-start gap-3">
                   <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
                   <Text slot="description" className="text-sm text-secondary">
                     {m.agent_delete_dialog_description()}

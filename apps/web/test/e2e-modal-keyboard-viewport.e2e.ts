@@ -170,6 +170,11 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
     expect(after.confirm[0]).toBeGreaterThanOrEqual(after.field[1]);
     expect(after.confirm[1]).toBeLessThanOrEqual(bottom);
     expect(after.focused).toBe(true);
+    // Text scrolled up under the title gets a rule there, so it does not read as starting mid-sentence.
+    const edge = await evaluate<{ scrolled: boolean; rule: string }>(
+      `(() => { const body = document.querySelector("[data-agent-delete-dialog] [data-dialog-body]"); return { scrolled: body.scrollTop > 0, rule: getComputedStyle(body).borderTopColor }; })()`,
+    );
+    if (edge.scrolled) expect(edge.rule).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
   } finally {
     await browser("close").catch(() => {});
     if (createdAgent) await db.agent.deleteMany({ where: { id: createdAgent } }).catch(() => {});

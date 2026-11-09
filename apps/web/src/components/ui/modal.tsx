@@ -59,7 +59,10 @@ export function ModalOverlay({
           // so the dialogs inside (their `max-h`, a lightbox's height) read the same.
           !keyboardMayBeUp &&
             "max-sm:[--visual-viewport-height:100dvh]! max-sm:[--visual-viewport-top:0px]!",
-          centered && "items-center",
+          // Centered, a confirmation keeps the same 16px above and below: the taller bottom gap is
+          // for a sheet rising from the edge, and with the keyboard up it would take the room the
+          // dialog's text needs, scrolling its first lines under the title.
+          centered && "items-center max-sm:[--modal-pb:16px]",
           typeof className === "function" ? className(state) : className,
         )
       }
