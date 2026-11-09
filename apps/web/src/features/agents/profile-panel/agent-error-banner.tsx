@@ -20,6 +20,7 @@ export function AgentErrorBanner({
   display,
   onActivityTab,
   onViewLogs,
+  retry,
 }: {
   agent: AgentDiagnosticFacts;
   display: AgentDisplaySnapshot;
@@ -28,10 +29,16 @@ export function AgentErrorBanner({
   /** Opens the Activity tab; absent when the viewer cannot see it, and the diagnostics copy (which
    * reads the tab's feed) goes with it. */
   onViewLogs?: () => void;
+  /** Starts the Agent again (task #731): offered while it is stopped for a reason only a person
+   * clears, so whoever fixed the cause restarts it where they read it. */
+  retry?: AgentRetry;
 }) {
   // "Error: <detail>", the same label the DM header and the Activity log give this state.
   const status = agentDisplay(display);
   const label = status.alertText || status.label;
+  // A stopped Agent waits for a person; one still running retries on its own.
+  const offerRetry = retry && !status.isOnline;
+  const showLinks = !onActivityTab && onViewLogs;
   return (
     <div
       role="status"
@@ -54,22 +61,38 @@ export function AgentErrorBanner({
         )}
       >
         <span className="min-w-0 flex-1 text-sm break-words text-primary">{label}</span>
-        {!onActivityTab && onViewLogs && (
+        {(offerRetry || showLinks) && (
           <div className="-my-1 flex shrink-0 items-center gap-1">
-            <CopyDiagnosticsButton agent={agent} display={display} />
+            {offerRetry && (
+              <Button
+                color="secondary"
+                size="sm"
+                isDisabled={retry.busy}
+                onPress={retry.onPress}
+                className="mr-1"
+              >
+                {retry.busy ? m.agent_control_start_pending() : m.agent_error_banner_retry()}
+              </Button>
+            )}
+            {showLinks && <CopyDiagnosticsButton agent={agent} display={display} />}
             {/* Underlined at rest, not only on hover: a text link in a status line has to read as
                 one before the pointer finds it. */}
-            <Button
-              color="link-gray"
-              size="sm"
-              className="*:data-text:decoration-fg-quaternary *:data-text:underline-offset-2"
-              onPress={onViewLogs}
-            >
-              {m.agent_error_banner_view_logs()}
-            </Button>
+            {showLinks && (
+              <Button
+                color="link-gray"
+                size="sm"
+                className="*:data-text:decoration-fg-quaternary *:data-text:underline-offset-2"
+                onPress={onViewLogs}
+              >
+                {m.agent_error_banner_view_logs()}
+              </Button>
+            )}
           </div>
         )}
       </div>
     </div>
   );
 }
+
+/** The banner's Retry: the panel's Start (`useAgentRuntimeControls`), busy while any control runs. */
+export type AgentRetry = { onPress: () => void; busy: boolean };

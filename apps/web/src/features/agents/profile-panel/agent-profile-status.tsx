@@ -10,7 +10,7 @@ import { interruptAgentTurn } from "#src/features/agents/agent-turn-interrupt.fu
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { m } from "#src/paraglide/messages";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
-import { AgentErrorBanner } from "./agent-error-banner";
+import { AgentErrorBanner, type AgentRetry } from "./agent-error-banner";
 
 type Outcome = Awaited<ReturnType<typeof interruptAgentTurn>>;
 type Failure = Extract<Outcome, "needs_upgrade" | "offline" | "failed">;
@@ -31,11 +31,13 @@ export function AgentProfileStatus({
   display,
   onActivityTab,
   onViewLogs,
+  retry,
 }: {
   agent: AgentDiagnosticFacts;
   display?: AgentDisplaySnapshot;
   onActivityTab: boolean;
   onViewLogs?: () => void;
+  retry?: AgentRetry;
 }) {
   const stalled = display?.detailKind === "runtime_stalled" && display.activityKind !== "offline";
   if (stalled) return <StalledTurnStatus agentId={agent.id} />;
@@ -46,6 +48,7 @@ export function AgentProfileStatus({
       display={display!}
       onActivityTab={onActivityTab}
       onViewLogs={onViewLogs}
+      retry={retry}
     />
   ) : null;
 }

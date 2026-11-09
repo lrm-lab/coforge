@@ -274,6 +274,7 @@ export function AgentProfilePanel({
           agent={diagnosticFacts}
           display={display}
           onActivityTab={tab === "activity"}
+          retry={{ onPress: controls.submitStart, busy: controls.startStopBusy }}
           onViewLogs={
             tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
           }

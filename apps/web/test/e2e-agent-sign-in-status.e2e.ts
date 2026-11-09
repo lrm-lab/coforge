@@ -205,6 +205,9 @@ test("a signed-out runtime's Agent says so, and what to do", async () => {
     await until(`${banner}.includes(${JSON.stringify(logged)})`);
     await shots("profile-en-desktop");
     expect(await evaluate<string>(banner)).not.toContain("invalid api key");
+    // Stopped until a person acts, so the banner offers to start it again (task #731).
+    const retry = `[...document.querySelectorAll(".bg-error-primary button")].find((b) => b.textContent.trim() === "Retry")`;
+    expect(await evaluate<boolean>(`${retry} != null && !${retry}.disabled`)).toBe(true);
     await browser("set", "viewport", "390", "844");
     await browser("open", page("en", `/dm/${direct.id}`));
     await until(`${pageHydrated} && ${profile} != null`);
@@ -217,6 +220,11 @@ test("a signed-out runtime's Agent says so, and what to do", async () => {
     await press(profile);
     await until(`${banner}.includes(${JSON.stringify(logged)})`);
     await shots("profile-zh-CN-desktop");
+    expect(
+      await evaluate<boolean>(
+        `[...document.querySelectorAll(".bg-error-primary button")].some((b) => b.textContent.trim() === "重试")`,
+      ),
+    ).toBe(true);
     await browser("open", page("en", `/computer/${computer.id}`));
     await until(`${pageHydrated} && ${warning(said)}`);
     await shots("computer-en-desktop");
