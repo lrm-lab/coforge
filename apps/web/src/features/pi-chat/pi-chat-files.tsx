@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { FileTrigger } from "react-aria-components";
 import {
   ArrowLeft,
@@ -22,7 +21,7 @@ import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { formatFileSize } from "#src/features/files/file-meta";
 import { m } from "#src/paraglide/messages";
-import { executePiChat } from "./pi-chat.functions";
+import { useExecutePiChat } from "./use-execute-pi-chat";
 
 const FileView = lazy(() =>
   import("#src/features/projects/project-file-view").then((module) => ({
@@ -42,7 +41,7 @@ type Props = {
 
 export function PiChatFiles(props: Props) {
   const { computerId, workspaceSlug, supported, path, onPath, onMention } = props;
-  const execute = useServerFn(executePiChat);
+  const execute = useExecutePiChat();
   const queryClient = useQueryClient();
   const [hidden, setHidden] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -270,7 +269,7 @@ function FileEntry({
   onPath(path: string): void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const execute = useServerFn(executePiChat);
+  const execute = useExecutePiChat();
   const children = useQuery({
     queryKey: [
       "pi-chat-files",

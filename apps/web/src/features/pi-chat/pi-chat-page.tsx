@@ -10,7 +10,8 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { executePiChat, getPiChatComputers } from "./pi-chat.functions";
+import { getPiChatComputers } from "./pi-chat.functions";
+import { useExecutePiChat } from "./use-execute-pi-chat";
 import { PiChatFilesContext } from "./pi-chat-files-context";
 import { PiChatFilesPanel } from "./pi-chat-files-panel";
 import { PiChatSessionList } from "./pi-chat-session-list";
@@ -51,7 +52,7 @@ export function PiChatPage(props: Props) {
   const [search, setSearch] = useState("");
   const [drafts, setDrafts] = useState<Record<string, PiChatDraft>>({});
   const key = `${workspaceSlug}:${computerId}:${sessionId ?? "new"}`;
-  const execute = useServerFn(executePiChat);
+  const execute = useExecutePiChat();
   const sessions = useQuery({
     queryKey: ["pi-chat", workspaceSlug, computerId, "sessions"],
     queryFn: () => execute({ data: { computerId: computerId!, command: { action: "list" } } }),

@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { ArrowDown, ArrowLeft, Folder } from "@untitledui/icons";
 import type { PiChatCommand, PiChatSession, PiChatResult } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
 import { m } from "#src/paraglide/messages";
-import { executePiChat } from "./pi-chat.functions";
+import { useExecutePiChat } from "./use-execute-pi-chat";
 import { PiChatTranscript } from "./pi-chat-transcript";
 import { PiChatComposer } from "./pi-chat-composer";
 import { PiChatSessionActions } from "./pi-chat-session-actions";
@@ -48,7 +47,7 @@ export function PiChatConversation({
   onDraft(value: PiChatDraft): void;
   onSelect(id?: string): void;
 }) {
-  const execute = useServerFn(executePiChat);
+  const execute = useExecutePiChat();
   const files = usePiChatFiles();
   const queryClient = useQueryClient();
   const [error, setError] = useState(false);

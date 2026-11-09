@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Heading } from "react-aria-components";
-import { useServerFn } from "@tanstack/react-start";
 import { DotsHorizontal, Edit03, Trash01 } from "@untitledui/icons";
 import type { PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
@@ -9,7 +8,7 @@ import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { m } from "#src/paraglide/messages";
-import { executePiChat } from "./pi-chat.functions";
+import { useExecutePiChat } from "./use-execute-pi-chat";
 import {
   DialogAction,
   DialogActions,
@@ -32,7 +31,7 @@ export function PiChatSessionActions({
   onDeleted(): void;
 }) {
   const controlSize = useDialogControlSize();
-  const execute = useServerFn(executePiChat);
+  const execute = useExecutePiChat();
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [title, setTitle] = useState("");
