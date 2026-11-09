@@ -190,12 +190,9 @@ export class AgentProcessManager {
           () => new Error(`Agent runtime did not exit in time: ${agentId}`),
         );
         this.#forgetRuntime(agentId, runtime.session);
-      } catch (error) {
-        // The tree may still be running, but a release is not a stop and claims nothing about it:
-        // the runtime stays registered and this session keeps delivering, so only a real Stop
-        // settles its process (task #705).
-        throw error;
       } finally {
+        // A release that failed claims nothing about the tree: the runtime stays registered and
+        // this session keeps delivering, so only a real Stop settles its process (task #705).
         if (this.#teardown.get(agentId) === "stopping") this.#teardown.delete(agentId);
       }
     })();
