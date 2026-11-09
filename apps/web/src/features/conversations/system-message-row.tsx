@@ -62,7 +62,8 @@ export function SystemMessageRow({
         data-scroll-anchor
         className={cn(
           "mx-1 flex scroll-m-6 items-center gap-2 rounded-lg px-3 py-1 text-xs text-tertiary transition-[background-color,box-shadow] duration-500 target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-0 target:ring-offset-primary md:target:ring-offset-2 md:mx-3",
-          highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-0 ring-offset-primary md:ring-offset-2",
+          highlighted &&
+            "bg-tertiary ring-2 ring-brand/50 ring-offset-0 ring-offset-primary md:ring-offset-2",
         )}
       >
         <CentredOnRule>

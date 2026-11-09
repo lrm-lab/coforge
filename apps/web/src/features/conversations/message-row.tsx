@@ -273,7 +273,8 @@ export const MessageRow = memo(function MessageRow({
         onClick={selection?.onClick ?? openActions}
         className={cn(
           "group/message relative mx-1 flex scroll-m-6 rounded-lg px-3 transition-[background-color,box-shadow] duration-500 hover:bg-message-hover focus-within:bg-message-hover target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-0 target:ring-offset-primary md:target:ring-offset-2 md:mx-3",
-          highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-0 ring-offset-primary md:ring-offset-2",
+          highlighted &&
+            "bg-tertiary ring-2 ring-brand/50 ring-offset-0 ring-offset-primary md:ring-offset-2",
           "gap-3",
           messagePaddingClass(grouped),
           selection?.selected && "bg-tertiary hover:bg-tertiary focus-within:bg-tertiary",
