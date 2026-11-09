@@ -6,6 +6,7 @@ import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
 import { waitingChoiceCards } from "#src/server/conversations/waiting-choice-cards.server";
 import {
+  activityDoneUndoSchema,
   activityInboxPageSchema,
   activityInboxReadAllSchema,
   activityItemDoneSchema,
@@ -41,6 +42,27 @@ export const markActivityItemDone = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { db, workspaceId, user } = context;
     await browserActivityInbox(db).markDone(workspaceId, user.id, data);
+  });
+
+/** Marks everything the list holds Done, through when the viewer's list was loaded. Returns how
+ * many items it took off and what Undo needs. */
+export const markActivityAllDone = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(activityInboxReadAllSchema)
+  .handler(async ({ context, data }) => {
+    const { db, workspaceId, user } = context;
+    return browserActivityInbox(db).markAllDone(workspaceId, user.id, {
+      before: new Date(data.before),
+    });
+  });
+
+/** Takes back a Mark all done, where nothing newer has changed those rows since. */
+export const undoActivityDone = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(activityDoneUndoSchema)
+  .handler(async ({ context, data }) => {
+    const { db, workspaceId, user } = context;
+    await browserActivityInbox(db).undoDone(workspaceId, user.id, data);
   });
 
 /** Reads every joined conversation and listed thread up to when the viewer's list was loaded;

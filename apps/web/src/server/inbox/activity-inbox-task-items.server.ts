@@ -15,7 +15,7 @@ import {
  * what lets them read: a public channel, or one they are on. A task on a direct board is not
  * listed.
  */
-function taskItemsSql(workspaceId: string, userId: string) {
+export function taskItemsSql(workspaceId: string, userId: string) {
   return Prisma.sql`"conversation_members" cm
     JOIN "conversations" c
       ON c."id" = cm."conversationId"
@@ -43,7 +43,7 @@ function taskItemsSql(workspaceId: string, userId: string) {
 const taskBoardReadableSql = Prisma.sql`(b."visibility" = ${CHANNEL_VISIBILITY.PUBLIC} OR bm."id" IS NOT NULL)`;
 
 /** Listed with activity past Done, for a task the viewer follows or was mentioned in. */
-const taskItemListedSql = (mentionFirstId: Prisma.Sql) => Prisma.sql`${taskBoardReadableSql}
+export const taskItemListedSql = (mentionFirstId: Prisma.Sql) => Prisma.sql`${taskBoardReadableSql}
   AND ${conversationPastDoneSql}
   AND (tf."taskId" IS NOT NULL OR ${mentionFirstId} IS NOT NULL)`;
 

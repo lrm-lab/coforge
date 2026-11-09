@@ -97,7 +97,7 @@ const threadMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
  * an item query over `cm` and `c`. The list and the nav dot share it, so they cannot disagree on what
  * is listed; the list adds `conversationPeerLateral` for the DM's Agent it shows.
  */
-function conversationItemsSql(workspaceId: string, userId: string) {
+export function conversationItemsSql(workspaceId: string, userId: string) {
   return Prisma.sql`"conversation_members" cm
     JOIN "conversations" c
       ON c."id" = cm."conversationId"
@@ -148,7 +148,7 @@ function conversationLatestSql(mentionColumn: string, latestColumn: string) {
 }
 
 /** A joined conversation is listed when the inbox can list it and it has activity past Done. */
-function conversationItemListedSql(userId: string) {
+export function conversationItemListedSql(userId: string) {
   return Prisma.sql`${conversationItemVisibleSql(userId)} AND ${conversationPastDoneSql}`;
 }
 
@@ -157,7 +157,7 @@ function conversationItemListedSql(userId: string) {
  * conversation (`c`), thread cursors (`tr`) and newest reply (`latest`), as the `FROM` of an item
  * query. `threadItemListedSql` is its `WHERE`; the list adds `threadPeerLateral`.
  */
-function threadItemsSql(workspaceId: string, userId: string) {
+export function threadItemsSql(workspaceId: string, userId: string) {
   return Prisma.sql`(
       SELECT 'channel' AS "kind", followed.* FROM (${followedChannelThreadsSql(workspaceId, userId)}) followed
       UNION ALL
@@ -185,7 +185,7 @@ const threadPeerLateral = Prisma.sql`LEFT JOIN LATERAL (
 ) peer ON TRUE`;
 
 /** A thread is listed with a reply past Done; a direct-message thread only in the viewer's own DMs. */
-function threadItemListedSql(userId: string) {
+export function threadItemListedSql(userId: string) {
   return Prisma.sql`latest."sequence" > COALESCE(tr."doneThroughSequence", 0)
     AND (threads."kind" = 'channel' OR ${viewerDirectConversationSql(userId)})`;
 }

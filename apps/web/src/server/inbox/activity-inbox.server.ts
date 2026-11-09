@@ -5,6 +5,7 @@ import {
 import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
+  ActivityDoneUndo,
   ActivityInboxCursor,
   ActivityInboxFilter,
   ActivityItemDone,
@@ -25,6 +26,7 @@ import {
   markActivityDone,
   type ActivityInboxRealtime,
 } from "./activity-inbox-writes.server";
+import { markActivityAllDone, undoActivityDone } from "./activity-inbox-bulk-writes.server";
 import {
   peoplePeer,
   peoplePeerUserFields,
@@ -203,6 +205,16 @@ export class ActivityInbox {
    */
   async markAllRead(workspaceId: string, userId: string, options: { before: Date }) {
     return markActivityAllRead(this.db, this.realtime, workspaceId, userId, options);
+  }
+
+  /** Marks everything listed Done through `before`, handing back what Undo needs. */
+  async markAllDone(workspaceId: string, userId: string, options: { before: Date }) {
+    return markActivityAllDone(this.db, this.realtime, workspaceId, userId, options);
+  }
+
+  /** Takes back a Mark all done where nothing newer has changed the rows since. */
+  async undoDone(workspaceId: string, userId: string, undo: ActivityDoneUndo) {
+    return undoActivityDone(this.db, this.realtime, workspaceId, userId, undo);
   }
 
   private authorize(workspaceId: string, userId: string) {
