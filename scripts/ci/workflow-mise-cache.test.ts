@@ -202,22 +202,30 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
           continue;
         }
         if (!(action in cacheInputs)) continue;
-        // ci.yml keeps the action's default full miseDir cache (class 2).
-        if (file !== "ci.yml") {
-          checked += 1;
-          expect(step.with?.[cacheInputs[action]], jobKey).toBe(false);
+        if (action !== "jdx/mise-action") {
+          // docker/setup-buildx-action keeps its binary cache off everywhere
+          // but ci.yml, which does not run it.
+          if (file !== "ci.yml") {
+            checked += 1;
+            expect(step.with?.[cacheInputs[action]], jobKey).toBe(false);
+          }
+          continue;
         }
-        if (action !== "jdx/mise-action") continue;
         // The digest file is the single version pin; every inline workflow
         // setup must agree with it.
         expect(step.with?.version, jobKey).toBe(miseDigests.version);
         if (file === "ci.yml") continue;
         const sha256 = String(step.with?.sha256 ?? "");
         if (!isCredential) {
-          // Class-2 jobs keep the plain cache:false setup until their turn.
+          // Class-2 jobs hold no credentials and publish nothing, so they
+          // keep the action's default full miseDir cache (task #714): a
+          // cache:false here would make every run download bun again.
+          expect(step.with?.cache, jobKey).not.toBe(false);
           expect(sha256, jobKey).toBe("");
           continue;
         }
+        checked += 1;
+        expect(step.with?.cache, jobKey).toBe(false);
         inlineCredentialSites += 1;
         expect(
           sha256 === "${{ matrix.mise_sha256 }}" || /^[0-9a-f]{64}$/.test(sha256),
@@ -272,8 +280,9 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
   // The five inline credential jobs each keep one bin-only actions/cache;
   // the composite's own cache step is asserted in the first test.
   expect(binaryCaches).toBe(5);
-  // 10 cache-disabled setup steps remain in workflows (5 inline credential +
-  // 5 class-2) plus docker/setup-buildx-action's cache-binary, plus the
-  // composite's inner mise-action covered by the first test.
-  expect(checked).toBe(11);
+  // 6 cache-disabled setup steps remain in workflows (5 inline credential
+  // mise-action plus docker/setup-buildx-action's cache-binary); class-2 jobs
+  // and ci.yml keep the default full miseDir cache. The composite's inner
+  // mise-action is covered by the first test.
+  expect(checked).toBe(6);
 });

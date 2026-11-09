@@ -92,7 +92,6 @@ jobs:
         with:
           version: "2026.9.2"
           install: false
-          cache: false
 
       - name: Install toolchain
         run: mise install

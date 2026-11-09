@@ -149,12 +149,12 @@ unchanged inputs then keeps its digest when its commands write the same bytes,
 as the migration toolchain's `bun install` does, and deploy hosts do not pull it
 again.
 
-Deploy and release jobs keep `cache: false` on `jdx/mise-action` and
-`cache-binary: false` on `docker/setup-buildx-action`. GitHub does not verify
-cache contents, and a restored mise cache supplies the binary itself, which
-the action runs in a job holding deploy or publish credentials or building
-what a publish job uploads. CI jobs hold no such credentials and publish
-nothing, so they keep the cache.
+Jobs holding deploy or publish credentials keep `cache: false` on
+`jdx/mise-action` and `cache-binary: false` on `docker/setup-buildx-action`.
+GitHub does not verify cache contents, and a restored mise cache supplies the
+binary itself, which the action runs in credential jobs and ones building
+publish artifacts. Credential-free jobs keep the default full miseDir cache,
+so tool downloads — bun included — hit cache instead of GitHub releases (#714).
 
 The credential jobs restore one thing: the `mise` binary alone, via a separate
 `actions/cache` step scoped to the binary files under `<miseDir>/bin` (task
