@@ -72,6 +72,9 @@ test("search opens over the page, walks by keyboard and lands on the message", a
   };
   const dialog = `document.querySelector('[role="dialog"]')`;
   const box = `document.querySelector('[role="dialog"] input[type="search"]')`;
+  /** Lets the dialog that just closed finish handing focus back, which it does a frame later. */
+  const settled = () =>
+    browser("eval", "new Promise((done) => setTimeout(done, 100))");
   const options = `[...document.querySelectorAll('[role="dialog"] [data-search-option]')]`;
   const hits = `document.querySelectorAll('[role="dialog"] ol li').length`;
 
@@ -177,6 +180,7 @@ test("search opens over the page, walks by keyboard and lands on the message", a
     await waitFor(`${dialog} === null`);
 
     // Esc closes and hands focus back to where it was.
+    await settled();
     await browser("eval", `document.querySelector('[aria-label="Search this channel"]').focus()`);
     await browser("press", "Meta+k");
     await waitFor(`${box} !== null && document.activeElement === ${box}`);
@@ -210,6 +214,7 @@ test("search opens over the page, walks by keyboard and lands on the message", a
 
     // Esc gives the focus back to what had it before the dialog opened.
     const rail = `document.querySelector('aside a[href="${workspacePath}/search"]')`;
+    await settled();
     await browser("eval", `${rail}.focus()`);
     await browser("press", "Meta+k");
     await waitFor(`${box} !== null && document.activeElement === ${box}`);
@@ -256,7 +261,7 @@ test("search opens over the page, walks by keyboard and lands on the message", a
     await browser("press", "Enter");
     await waitFor(`${dialog} === null && location.pathname.endsWith("/channel/${channelB}")`);
     await waitFor(
-      `(() => { const row = [...document.querySelectorAll("main *")].find((el) => el.children.length === 0 && el.textContent === ${JSON.stringify(oldWord)}); if (!row) return false; const box = row.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight; })()`,
+      `(() => { const row = document.getElementById("message-${old.id}"); if (!row) return false; const box = row.getBoundingClientRect(); const history = row.closest("[data-scroll-restoration-id]").getBoundingClientRect(); return box.top >= history.top && box.bottom <= history.bottom; })()`,
     );
     await browser("screenshot", join(artifacts, "landed.png"));
   } finally {
