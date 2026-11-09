@@ -1,7 +1,11 @@
 import { deliveryTarget } from "./direct-conversation-agent-message.server";
 import { assertAgentDmWithinLimits } from "#src/server/conversations/agent-dm-limits.server";
 import { liveAgentPeer, peerSeatTarget } from "./agent-peer-direct.repositories.server";
-import { resolveMessage, type DirectConversationPorts } from "./agent-targets.repositories.server";
+import {
+  resolveMessage,
+  THREAD_ROOT_SCOPE,
+  type DirectConversationPorts,
+} from "./agent-targets.repositories.server";
 import { isAgentPeerDirectKey } from "#src/features/conversations/direct-key";
 import { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
@@ -82,7 +86,9 @@ export async function sendAgentMessage(
       },
     }),
     agentPeer ? liveAgentPeer(ports.db, conversation, agentId) : undefined,
-    threadRootId ? resolveMessage(ports, conversationId, threadRootId, true) : undefined,
+    threadRootId
+      ? resolveMessage(ports, conversationId, threadRootId, THREAD_ROOT_SCOPE)
+      : undefined,
   ]);
   let sender = members.find((m) => m.agentId === agentId && !m.leftAt);
   const user = members.find((m) => m.userId && !m.leftAt);

@@ -1,6 +1,6 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
 
-import { resolveMessage } from "./agent-targets.repositories.server";
+import { resolveMessage, THREAD_ROOT_SCOPE } from "./agent-targets.repositories.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import { advanceThreadRead } from "./thread-read-position.server";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
@@ -323,7 +323,7 @@ export async function markThreadReadForUser(
   rootMessageId: string,
   throughSequence: number,
 ): Promise<boolean> {
-  const root = await resolveMessage(ports, conversationId, rootMessageId, true);
+  const root = await resolveMessage(ports, conversationId, rootMessageId, THREAD_ROOT_SCOPE);
   const latest = await ports.db.message.findFirst({
     where: {
       conversationId,

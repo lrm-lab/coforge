@@ -16,6 +16,7 @@ export function readDirectConversationMessagesPage(input: {
   resolveTarget(target: string): Promise<ResolvedAgentTarget>;
   resolveAnchor(
     conversationId: string,
+    threadRootId: string | null,
     anchor: string,
   ): Promise<{ id: string; sequence: number; threadRootId: string | null }>;
   conversationReadChanged?: (input: ConversationReadChangedInput) => Promise<void>;
@@ -34,7 +35,7 @@ export function readDirectConversationMessagesPage(input: {
       page: input.page,
       consumptionScope: agentHistoryConsumptionScope(input.agentId, resolved),
       conversationReadChanged: input.conversationReadChanged,
-      resolveAnchor: (anchor) => input.resolveAnchor(conversationId, anchor),
+      resolveAnchor: (anchor) => input.resolveAnchor(conversationId, threadRootId, anchor),
     });
   });
 }

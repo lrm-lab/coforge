@@ -41,7 +41,8 @@ export async function readMessagesPage(
     target,
     page,
     resolveTarget: (value) => ports.resolveAgentTarget(workspaceId, agentId, value),
-    resolveAnchor: (conversationId, anchor) => resolveMessage(ports, conversationId, anchor),
+    resolveAnchor: (conversationId, threadRootId, anchor) =>
+      resolveMessage(ports, conversationId, anchor, { threadRootId }),
     conversationReadChanged: conversationReadChangedPort(ports.realtime),
   });
 }

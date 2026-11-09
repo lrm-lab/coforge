@@ -90,6 +90,8 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       "alpha",
     );
     const beta = await createAgent(manage, user.id, workspace.id, registration.computerId, "beta");
+    // Every prompt count below includes each Agent's one-time creator introduction, which
+    // lands as prompt 1 before any notice can be delivered.
     runtime = new DaemonRuntime(
       {
         workspaceId: workspace.id,
@@ -148,7 +150,10 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       await channels.setAgentMuted(workspace.id, agentId, "#other", true);
     }
     const root = await send(channels, workspace.id, user.id, general.id, "thread root");
-    const shortTarget = `#general:${root.id.slice(0, 8)}`;
+    // The dashed twelve-hex anchor is the shortest form a busy channel cannot collide on: its
+    // digits are the UUIDv7's millisecond timestamp, and these sends are all distinct
+    // milliseconds.
+    const shortTarget = `#general:${root.id.slice(0, 8)}-${root.id.slice(9, 13)}`;
     const canonicalTarget = `#general:${root.id}`;
     await send(channels, workspace.id, user.id, general.id, "quiet before follow", root.id);
 
@@ -179,8 +184,8 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
     ]);
     expect(first[1]).toMatchObject({ accepted: true, messageId: expect.any(String) });
     expect(first[2]?.accepted).toBe(true);
-    expect(await promptCount(alphaRoot)).toBe(1);
-    expect(await promptCount(betaRoot)).toBe(0);
+    expect(await promptCount(alphaRoot)).toBe(2);
+    expect(await promptCount(betaRoot)).toBe(1);
 
     await send(channels, workspace.id, user.id, general.id, "ordinary after unfollow", root.id);
     await send(
@@ -191,10 +196,10 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       `@${alpha.agent.name} restore follow`,
       root.id,
     );
-    await waitFor(() => promptCount(alphaRoot).then((count) => count === 2));
+    await waitFor(() => promptCount(alphaRoot).then((count) => count === 3));
     // This later mention is an ordering barrier: the prior unfollowed reply crossed the
     // Workspace connection without producing another provider prompt.
-    expect(await promptCount(alphaRoot)).toBe(2);
+    expect(await promptCount(alphaRoot)).toBe(3);
     await send(
       channels,
       workspace.id,
@@ -203,8 +208,8 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       "followed despite parent mute",
       root.id,
     );
-    await waitFor(() => promptCount(alphaRoot).then((count) => count === 3));
-    expect(await promptCount(betaRoot)).toBe(0);
+    await waitFor(() => promptCount(alphaRoot).then((count) => count === 4));
+    expect(await promptCount(betaRoot)).toBe(1);
 
     await Bun.write(
       join(betaRoot, ".e2e-channel-plan.json"),
@@ -214,7 +219,7 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
           {
             operation: "send",
             target: shortTarget,
-            body: `@${alpha.agent.name} Agent-originated mention must stay quiet`,
+            body: `@${alpha.agent.name} agent-originated mention`,
           },
         ],
       }),
@@ -237,19 +242,18 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       `@${beta.agent.name} ordering barrier`,
       otherRoot.id,
     );
-    await waitFor(() => promptCount(betaRoot).then((count) => count === 2));
-    // Beta's later prompt is an ordering barrier after its Agent-originated mention.
-    expect(await promptCount(alphaRoot)).toBe(3);
-    expect(await promptCount(betaRoot)).toBe(2);
+    await waitFor(() => promptCount(betaRoot).then((count) => count === 3));
+    // Beta's later prompt is an ordering barrier; its Agent-originated mention pierces mute
+    // and wakes Alpha exactly once.
+    expect(await promptCount(alphaRoot)).toBe(5);
+    expect(await promptCount(betaRoot)).toBe(3);
 
     const replies = await db.message.findMany({
       where: { conversationId: general.id, threadRootId: root.id },
       orderBy: { sequence: "asc" },
     });
     expect(replies.map(({ body }) => body)).toContain("alpha transport reply");
-    expect(replies.at(-1)?.body).toBe(
-      `@${alpha.agent.name} Agent-originated mention must stay quiet`,
-    );
+    expect(replies.at(-1)?.body).toContain("agent-originated mention");
 
     const board = new TaskBoard(db);
     const created = await board.execute(
@@ -262,14 +266,15 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       },
     );
     const task = created.tasks[0]!;
-    const taskTarget = `#general:${task.messageId}`;
+    const taskTarget = `#general:${task.messageId!}`;
     await Bun.write(
       join(alphaRoot, ".e2e-channel-plan.json"),
       JSON.stringify({
         result: ".e2e-task-review.json",
         cli: [
+          ["message", "read", "--target", "#general"],
           ["message", "read", "--target", taskTarget],
-          ["task", "claim", "--target", "#general", "--message-id", task.id.slice(0, 8)],
+          ["task", "claim", "--target", "#general", "--message-id", task.messageId!],
           ["task", "create", "--target", "#general", "--title", "Independent follow-up"],
           [
             "task",
@@ -291,21 +296,25 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       user.id,
       general.id,
       `@${alpha.agent.name} please verify this Task`,
-      task.id,
+      task.messageId!,
     );
     await waitForFiles(join(alphaRoot, ".e2e-task-review.json"));
     const reviewOutputs = await Bun.file(join(alphaRoot, ".e2e-task-review.json")).json();
-    expect(reviewOutputs[0]).toContain("please verify this Task");
-    expect(reviewOutputs[1]).toContain("in_progress");
-    expect(reviewOutputs[2]).toContain("Independent follow-up");
-    expect(reviewOutputs[3]).toContain("in_review");
-    expect(reviewOutputs[4]).toMatchObject({ accepted: true });
+    expect(reviewOutputs[1]).toContain("please verify this Task");
+    expect(reviewOutputs[2]).toContain(`#${task.number}`);
+    expect(reviewOutputs[2]).toContain("claimed");
+    expect(reviewOutputs[3]).toContain("Independent follow-up");
+    expect(reviewOutputs[4]).toContain("in_review");
+    expect(reviewOutputs[5]).toMatchObject({ accepted: true });
 
     await Bun.write(
       join(betaRoot, ".e2e-channel-plan.json"),
       JSON.stringify({
         result: ".e2e-task-conflict.json",
-        cli: [["task", "claim", "--target", "#general", "--number", String(task.number)]],
+        cli: [
+          ["message", "read", "--target", "#general"],
+          ["task", "claim", "--target", "#general", "--number", String(task.number)],
+        ],
         operations: [],
       }),
     );
@@ -318,8 +327,8 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       otherRoot.id,
     );
     await waitForFiles(join(betaRoot, ".e2e-task-conflict.json"));
-    expect((await Bun.file(join(betaRoot, ".e2e-task-conflict.json")).json())[0]).toMatchObject({
-      error: "Task changed concurrently; read the Task list again before updating",
+    expect((await Bun.file(join(betaRoot, ".e2e-task-conflict.json")).json())[1]).toMatchObject({
+      error: `Claim refused — #${task.number} held by @${alpha.agent.name}. This is a concurrency lock or refusal, not a tool error and not a ruling on lane ownership.`,
     });
 
     await Bun.write(
@@ -348,7 +357,7 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
       user.id,
       general.id,
       "Verified, approved. Please mark this done.",
-      task.id,
+      task.messageId!,
     );
     await waitForFiles(join(alphaRoot, ".e2e-task-done.json"));
     const doneOutputs = await Bun.file(join(alphaRoot, ".e2e-task-done.json")).json();

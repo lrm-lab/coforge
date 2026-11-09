@@ -1,5 +1,8 @@
 import { findAgentScopedMessage } from "./agent-message-lookup.repositories.server";
-import { isAttachmentMessageTarget } from "@lrm/coforge-sdk/internal";
+import {
+  isAttachmentMessageTarget,
+  type AgentMessageValidationMessage,
+} from "@lrm/coforge-sdk/internal";
 import { appEventConversation } from "#src/server/app-agent-events/app-event-target.server";
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
 import { WorkspaceAssistantCommands } from "#src/server/agents/workspace-assistant-commands.server";
@@ -66,31 +69,47 @@ export type DirectConversationPorts = {
   ): Promise<ResolvedAgentTarget>;
 };
 
-/** Resolves a thread anchor to its top-level root Message, refusing a reply's own root. */
+/** The scope a thread-root anchor resolves in: the conversation's top level. */
+export const THREAD_ROOT_SCOPE = {
+  threadRootId: null,
+  outsideScopeError: "thread root must be a top-level message",
+} as const;
+
+/** Resolves a message anchor inside one thread scope: `threadRootId` names the thread a page
+ * anchor must land in, `null` the top level a thread root must be. UUIDv7 ids minted in the same
+ * ~65-second window share an eight-hex prefix, so a root and its replies can collide on a short
+ * anchor — the scoped lookup settles it before the conversation-wide one classifies a miss. */
 export async function resolveMessage(
   ports: DirectConversationPorts,
   conversationId: string,
   anchor: string,
-  rootOnly = false,
+  scope: { threadRootId: string | null; outsideScopeError?: AgentMessageValidationMessage },
 ) {
   assertMessageAnchor(anchor);
-  const rows = await ports.db.message.findMany({
-    where: {
-      conversationId,
-      id: messageAnchorWhere(anchor),
-    },
+  const select = { id: true, sequence: true, threadRootId: true, senderMemberId: true };
+  const id = messageAnchorWhere(anchor);
+  const scoped = await ports.db.message.findMany({
+    where: { conversationId, threadRootId: scope.threadRootId, id },
     take: 2,
-    select: { id: true, sequence: true, threadRootId: true, senderMemberId: true },
+    select,
   });
-  const row = onlyAnchorMatch(rows, "message anchor not found in this conversation");
-  if (rootOnly && row.threadRootId)
-    throw new AgentMessageValidationError("thread root must be a top-level message");
-  return row;
+  if (scoped.length > 1)
+    throw new AgentMessageValidationError("ambiguous message prefix; use the full UUID");
+  if (scoped[0]) return scoped[0];
+  const rows = await ports.db.message.findMany({
+    where: { conversationId, id },
+    take: 2,
+    select,
+  });
+  onlyAnchorMatch(rows, "message anchor not found in this conversation");
+  throw new AgentMessageValidationError(
+    scope.outsideScopeError ?? "message anchor is outside this target",
+  );
 }
 
 async function targetRoot(ports: DirectConversationPorts, conversationId: string, target: string) {
   const root = target.split(":")[1];
-  return root ? (await resolveMessage(ports, conversationId, root, true)).id : null;
+  return root ? (await resolveMessage(ports, conversationId, root, THREAD_ROOT_SCOPE)).id : null;
 }
 
 /** Resolves an Agent target to its conversation, optional thread root and canonical spelling.

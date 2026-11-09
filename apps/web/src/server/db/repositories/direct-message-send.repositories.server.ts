@@ -1,7 +1,11 @@
 import { deliveryTarget } from "./direct-conversation-agent-message.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { humanRef } from "./agent-peer-direct.repositories.server";
-import { resolveMessage, type DirectConversationPorts } from "./agent-targets.repositories.server";
+import {
+  resolveMessage,
+  THREAD_ROOT_SCOPE,
+  type DirectConversationPorts,
+} from "./agent-targets.repositories.server";
 import { isAppBot } from "#src/features/agents/agent-system-kind";
 import { AppError } from "#src/lib/app-error";
 import { allocateSequence } from "./sequence-allocation.server";
@@ -52,7 +56,9 @@ export async function sendMessage(
         },
       },
     }),
-    threadRootId ? resolveMessage(ports, conversationId, threadRootId, true) : undefined,
+    threadRootId
+      ? resolveMessage(ports, conversationId, threadRootId, THREAD_ROOT_SCOPE)
+      : undefined,
   ]);
   if (!conversation) throw new Error("conversation not found");
   const sender = conversation.members.find(
