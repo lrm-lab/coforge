@@ -185,15 +185,16 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     await setViewport(1440);
     await browser("hover", ".login-art");
     await browser("wait", "500");
-    // Only the inner door panel swings, not the arch behind it, hinged on its right edge.
+    // Only the white door swings, not the frame around it, hinged on its body's right edge (the
+    // layer's glow reaches past it).
     expect(await style(".login-art__door", "transform")).not.toBe("none");
     expect(await style(".login-art__door", "transformOrigin")).toMatch(/^[\d.]+px /);
     expect(
       await evaluate<boolean>(
-        `(() => { const d = document.querySelector(".login-art__door"); return parseFloat(getComputedStyle(d).transformOrigin) > d.offsetWidth * 0.99; })()`,
+        `(() => { const d = document.querySelector(".login-art__door"); const x = parseFloat(getComputedStyle(d).transformOrigin) / d.offsetWidth; return x > 0.89 && x < 0.92; })()`,
       ),
     ).toBe(true);
-    expect(await style(".login-art__arch", "transform")).toBe("none");
+    expect(await style(".login-art__frame", "transform")).toBe("none");
     await browser("screenshot", join(artifacts, "arch-open-1440.png"));
     await browser("mouse", "move", "1200", "100");
     const animations = await evaluate<{ agent: string; shadow: string }>(

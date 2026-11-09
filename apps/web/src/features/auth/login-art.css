@@ -3,47 +3,37 @@
  * it. One width (`--w`) sizes it from the viewport's height so the whole panel fits.
  *
  * The agent floats on the homepage's beat (4.8 s, ease-in-out) and the shadow breathes on the very
- * same beat, so lifted means smaller and lighter. Hovering the illustration swings only the inner
- * door panel (its own layer, cut out of the arch) inward a little on its left edge, over the calm
- * lilac interior painted into the arch. Both are off when the person asked for less motion.
+ * same beat, so lifted means smaller and lighter. Hovering the illustration swings only the white
+ * door further in on its right-edge hinge. Both are off when the person asked for less motion.
  */
 .login-art {
   --w: min(23rem, 40vh);
   position: relative;
   width: var(--w);
+  /* The box the agent and shadow are placed in: the frame plus the ground below it. */
+  aspect-ratio: 800 / 1013;
   margin-bottom: calc(var(--w) * 0.16);
 }
 
-.login-art__arch {
-  display: block;
+/* The designer's two layers (@qq971766802, 11-09): the frame stays put; the white door, drawn
+ * already ajar, sits in its opening where her mock puts it, as fractions of the frame's width. */
+.login-art__frame {
+  position: absolute;
+  inset: 0 0 auto;
   width: 100%;
   height: auto;
 }
 
-/* The inner door panel's box in arch.webp (800 x 1013), hinged on its right edge. It stands a
- * little open, and on hover the whole door swings further in, its left edge going away from the
- * viewer (@qq971766802, 11-09). */
-.login-art__door,
-.login-art__backing {
-  position: absolute;
-  left: 31.125%;
-  top: 16.3%;
-  width: 56.25%;
-}
-
+/* Hinged on its right edge (the door body's, inside the glow: 90.4% across the layer); on hover it
+ * swings further in, its left edge going away from the viewer, over the frame's own lilac face. */
 .login-art__door {
+  position: absolute;
+  left: 24.93%;
+  top: calc(var(--w) * 0.1409);
+  width: 69.17%;
   height: auto;
-  transform-origin: 100% 50%;
-  transform: perspective(calc(var(--w) * 2.5)) rotateY(-10deg);
-}
-
-/* What the swinging door uncovers is the arch's own lilac face, not the darker opening painted in
- * arch.webp, so no hole shows: the door's own shape, filled with the face's colours (sampled from
- * the arch either side of the door). */
-.login-art__backing {
-  aspect-ratio: 450 / 773;
-  background: linear-gradient(90deg, rgb(237 231 255), rgb(226 219 250));
-  mask: url("/login/door.webp") center / 100% 100% no-repeat;
+  transform-origin: 90.4% 50%;
+  transform: perspective(calc(var(--w) * 2.5)) rotateY(0deg);
 }
 
 .login-art__agent,
@@ -166,7 +156,7 @@
   }
 
   .login-art:hover .login-art__door {
-    transform: perspective(calc(var(--w) * 2.5)) rotateY(-32deg);
+    transform: perspective(calc(var(--w) * 2.5)) rotateY(-24deg);
     transition-duration: var(--motion-in-lg);
   }
 
