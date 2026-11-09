@@ -14,6 +14,9 @@ export type LaunchRequest = {
   previousLaunchId?: string;
   sessionMode?: SessionMode;
   control?: { controlEpoch?: number; launchId: string };
+  /** Set when the launch comes from a server Start's own fields rather than the restart config;
+   * carries that Start's `agentConfigRevision`. */
+  fromStart?: { agentConfigRevision?: number };
   replacedSessionId?: string;
   /** Set only alongside `replacedSessionId`, threaded from `AgentControl.start()`'s retry
    * launch through `Runtime.launch(...)`; narrates the retry's cold-start Activity with the

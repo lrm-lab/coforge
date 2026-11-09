@@ -136,3 +136,12 @@ export class AgentObservationPublisher {
     });
   }
 }
+
+/** Publishes one Activity frame on the Workspace's shared channel, best effort. */
+export function publishAgentActivity(
+  client: CentrifugeWorkspaceClient,
+  workspaceId: string,
+  frame: Uint8Array,
+): void {
+  void client.publish?.(`agent:activity:${workspaceId}`, frame).catch(() => {});
+}

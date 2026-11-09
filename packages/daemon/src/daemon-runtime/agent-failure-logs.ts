@@ -2,6 +2,7 @@ import { getLogger } from "@logtape/logtape";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import type {
   AgentActivityProbe,
+  AgentConfigSync,
   AgentMessageDelivery,
   AgentStartIntent,
   AgentStopIntent,
@@ -85,6 +86,24 @@ export function logAgentOperationFailure(
     error_code: diagnosticErrorCode(error),
     error_message: loggedErrorMessage(error),
     ...controlCodeField(error),
+    outcome: "failed",
+  });
+}
+
+/** A pushed Agent config that could not be handled. Names the revision, never the configuration. */
+export function logAgentConfigFailure(
+  computerId: string,
+  sync: AgentConfigSync,
+  error: unknown,
+): void {
+  logger.warning("Daemon Agent config push failed", {
+    event: "agent_runtime:config_push_failed",
+    workspace_id: sync.workspaceId,
+    computer_id: computerId,
+    agent_id: sync.agentId,
+    config_revision: sync.revision,
+    error_code: diagnosticErrorCode(error),
+    error_message: loggedErrorMessage(error),
     outcome: "failed",
   });
 }

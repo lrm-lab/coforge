@@ -1,5 +1,10 @@
 import type { AgentRuntimeConfig } from "@coforge/agent";
-import type { AgentMessageDelivery, AgentStartIntent } from "@lrm/coforge-sdk/internal";
+import type {
+  AgentConfigSync,
+  AgentMessageDelivery,
+  AgentStartIntent,
+} from "@lrm/coforge-sdk/internal";
+import type { RestartRuntimeFields } from "#src/agent-runtime/agent-process-manager";
 
 export type AgentInputCompletion = {
   resolve: () => void;
@@ -51,18 +56,27 @@ export type AgentInputQueue = {
   closed: boolean;
 };
 
-/** The daemon's launch config from the versioned start intent; absent `fastMode` means the
- * ordinary service tier. */
-export function runtimeConfigOf(intent: AgentStartIntent): AgentRuntimeConfig {
+/** The runtime fields a Start and a config push both carry, with an absent field left out and
+ * an absent `fastMode` meaning the ordinary service tier. A new runtime field is added here. */
+export function runtimeFieldsOf(
+  intent: Pick<AgentStartIntent | AgentConfigSync, keyof RestartRuntimeFields>,
+): RestartRuntimeFields {
   return {
     provider: intent.provider,
     model: intent.model,
-    modelProvider: intent.modelProvider,
     reasoning: intent.reasoning,
-    providerConfig: intent.providerConfig,
+    ...(intent.modelProvider !== undefined ? { modelProvider: intent.modelProvider } : {}),
+    ...(intent.providerConfig !== undefined ? { providerConfig: intent.providerConfig } : {}),
+    ...(intent.fastMode ? { fastMode: true } : {}),
+  };
+}
+
+/** The daemon's launch config from the versioned start intent. */
+export function runtimeConfigOf(intent: AgentStartIntent): AgentRuntimeConfig {
+  return {
+    ...runtimeFieldsOf(intent),
     toolProfile: intent.toolProfile,
     ...(intent.memoryAgent ? { memoryAgent: true } : {}),
-    ...(intent.fastMode ? { fastMode: true } : {}),
   };
 }
 

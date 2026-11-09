@@ -1,4 +1,5 @@
-import { utf8Encoder } from "@lrm/coforge-sdk/internal";
+import { DAEMON_CONNECTION_STATUS_METHOD, utf8Encoder } from "@lrm/coforge-sdk/internal";
+import type { CentrifugeWorkspaceClient } from "./centrifuge-workspace-client";
 import type { DaemonConnectionConfig } from "./daemon-connection-client";
 
 /** The small heartbeat body; never serialize transport callbacks or server URLs from config. */
@@ -12,4 +13,14 @@ export function encodeDaemonConnectionStatus(config: DaemonConnectionConfig): Ui
       online: true,
     }),
   );
+}
+
+/** Tells the server this connection is online, best effort. */
+export function reportDaemonOnline(
+  client: CentrifugeWorkspaceClient,
+  config: DaemonConnectionConfig,
+): void {
+  void client
+    .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))
+    .catch(() => {});
 }

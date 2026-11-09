@@ -31,6 +31,9 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `activity-draft.ts` builds the Activity envelopes and the launch/stop frames (`starting`, `idle`, `stopped`, `interrupted`, quiet turn, `runtime_error`); `runtime.ts` supplies the workspace and publishes them.
 - `phase-bookkeeping.ts` holds each phase's open state and stale watchdog per Agent: providers report raw signals, it decides the wire Activity and closes a review silently at a turn's end.
 - `runtime-event-observation.ts` translates one coalesced provider event into cloud Activity, Session and usage updates; `runtime.ts` supplies the collaborators it reads by reference.
+- `runtime-event-observation-ports.ts` declares the collaborators `runtime-event-observation.ts` reads (`RuntimeEventObservationPorts`) and the `Publish` signature it publishes through.
+- `runtime-release-plans.ts` builds the `RuntimeReleasePlan` that `runtime-release.ts` carries out: what a stalled-runtime, feature-change or cold-idle release announces, logs and wakes.
+- `runtime-lifecycle.ts` declares the restart, upgrade and refusal hooks the Computer lends one `DaemonRuntime` (`DaemonRuntimeLifecycle`); `runtime-connection-config.ts` declares the Workspace connection identity (`DaemonConfig`) it is constructed with.
 - `agent-input-drain.ts` owns each Agent's serialized input queue: enqueue is admission, one drain loop is the only consumer, and a closed queue settles its live drain. `agent-launch-custody.ts` owns what the daemon owes a launch at its boundary: delivery custody acknowledgment, the recovery pass that reconciles held state, and turn-open bookkeeping.
 - `agent-inbox-coordinator.ts` owns per-Agent Message/App Inbox state, app-item notices, and fallback notice release; `runtime.ts` supplies lifecycle and process ports.
 - `runtime-reconnect.ts` owns reconnect recovery subscriptions; `runtime.ts` supplies inventory, reminder, replay, and upgrade-report callbacks.
@@ -52,6 +55,10 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   runs. Such an unattended restart resumes
   with a prompt naming where the turn stopped, and at most `UNATTENDED_RECOVERY_LIMIT` run in a row
   before a turn completes; past that the owner sees an error and only a message or a restart helps.
+- `agent-config-apply.ts` (built by `agent-config-apply-assembly.ts`) applies an `AgentConfigSync` only
+  when its Agent is next idle, never by cutting a turn, and always as a restart: env and credentials
+  are read at launch. A Memory Agent is never stopped by it. Details and log outcomes:
+  [config apply](../../../../docs/observability/agent-status-and-activity/config-apply.md).
 - `task-idle-nudge.ts` asks the cloud once when a turn leaves an Agent idle, and writes the
   answer as idle input: one ask per Agent at a time, 15 seconds, a 404 pauses asking for an hour
   (the web and the Computer ship separately), and a fresh session is asked once per session

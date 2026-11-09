@@ -25,6 +25,7 @@ import type { AgentControl } from "#src/agent-runtime/agent-control";
 import type { AgentSessions } from "#src/agent-runtime/agent-session";
 import type { OperatingSystemInfo } from "#src/platform/operating-system";
 import type { DaemonConfig } from "./runtime";
+import type { AgentConfigApply } from "./agent-config-apply";
 import type { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import type { CodeAgentInventorySync } from "./code-agent-inventory-sync";
 import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
@@ -78,6 +79,8 @@ export type RuntimeStartupPorts = {
   >;
   agentControl: Pick<AgentControl, "replay">;
   agentSessions: Pick<AgentSessions, "replay">;
+  /** The config revision held per Agent, reported on ready for the Agents running. */
+  configApply: Pick<AgentConfigApply, "appliedRevisions">;
   readyRunningAgentIds(): string[];
   operatingSystem: Pick<OperatingSystemInfo, "read" | "current">;
   upgradeResults: Pick<UpgradeResultReporter, "start" | "report" | "stop">;
@@ -340,6 +343,12 @@ export class RuntimeStartup {
       // factory is also where the hold learns how many attempts it has outlasted.
       await transport.ready(() => {
         this.#readyWait?.attempt();
+        const runningAgentIds = ports.readyRunningAgentIds();
+        const revisions = ports.configApply.appliedRevisions();
+        const appliedAgentConfigs = runningAgentIds.flatMap((agentId) => {
+          const revision = revisions.get(agentId);
+          return revision === undefined ? [] : [{ agentId, revision }];
+        });
         return {
           protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
           requestId: crypto.randomUUID(),
@@ -349,7 +358,8 @@ export class RuntimeStartup {
           // Protocol field retained for compatibility with the existing ready handshake.
           workerInstanceId: ports.runtimeInstanceId,
           startedAt: ports.startedAtMs,
-          runningAgentIds: ports.readyRunningAgentIds(),
+          runningAgentIds,
+          ...(appliedAgentConfigs.length ? { appliedAgentConfigs } : {}),
           daemonVersion: COFORGE_DAEMON_VERSION,
           computerVersion: ports.computerVersion,
           releaseChannel: ports.releaseChannel,

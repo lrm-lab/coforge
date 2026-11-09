@@ -32,6 +32,7 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 export type RuntimeStopPorts = {
   startup: Pick<RuntimeStartup, "close" | "unsubscribeAll" | "abort" | "pending">;
   coldIdleSweep: { stop(): void };
+  configApply: { dispose(): void };
   stalledRecoverySweep: { stop(): void };
   catalogFreshnessSweep: { stop(): void };
   machineStatus: { stop(): void };
@@ -94,6 +95,7 @@ export class RuntimeStop {
     // Close every local capability synchronously before any shutdown await.
     const piChatClosed = ports.startup.close();
     ports.coldIdleSweep.stop();
+    ports.configApply.dispose();
     ports.stalledRecoverySweep.stop();
     ports.catalogFreshnessSweep.stop();
     ports.machineStatus.stop();

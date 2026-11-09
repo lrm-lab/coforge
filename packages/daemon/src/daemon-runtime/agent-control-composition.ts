@@ -111,6 +111,7 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
           resumePrompt: intent.resumePrompt,
           introductionPrompt: intent.introductionPrompt,
           control: { controlEpoch: intent.controlEpoch, launchId },
+          fromStart: { agentConfigRevision: intent.agentConfigRevision },
           replacedSessionId,
           invalidateReason,
         },
@@ -126,6 +127,7 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
           requestId: intent.requestId,
           resumePrompt: intent.resumePrompt,
           introductionPrompt: intent.introductionPrompt,
+          fromStart: { agentConfigRevision: intent.agentConfigRevision },
         },
       );
     },

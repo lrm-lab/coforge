@@ -1,5 +1,6 @@
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { AgentStopRegistry } from "./agent-stop-registry";
+import type { AgentConfigApply } from "./agent-config-apply";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { AgentInputDrain } from "./agent-input-drain";
@@ -32,6 +33,7 @@ export type AgentStartCoordinatorPorts = {
   releaseSurvivingHolds(agentId: string): void;
   /** The Session each launch reported. */
   sessions: Pick<AgentStopRegistry, "sessionId">;
+  configApply: Pick<AgentConfigApply, "launched">;
 };
 
 export function startAgent(
@@ -167,6 +169,9 @@ export function startAgent(
         }))
       : undefined;
   void startupCompletion?.catch(() => {});
+  // A process is about to read its whole configuration afresh; a Start that only joined a launch
+  // above, or a running process, did not.
+  if (request.fromStart) ports.configApply.launched(agentId, request.fromStart.agentConfigRevision);
   const launching = ports.launchCoordinator.launchAgent(agentId, config, request);
   const launch = launching
     .then(

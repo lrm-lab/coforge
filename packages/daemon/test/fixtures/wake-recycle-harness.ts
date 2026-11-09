@@ -8,6 +8,7 @@ import type {
   AgentActivity,
   AgentSessionReport,
   AgentStartIntent,
+  DaemonRuntimeReadyRequest,
 } from "@lrm/coforge-sdk/internal";
 import type {
   AgentRuntimeConfig,
@@ -77,6 +78,8 @@ export type HarnessOptions = {
   disposeFails?: boolean;
   /** The first attempt to create a session fails, as a spawn failure does. */
   failFirstCreate?: boolean;
+  /** Holds the first session's creation open until it settles: a launch stays in flight. */
+  createGate?: Promise<void>;
 };
 
 /** One Claude-like Agent whose sessions, session reads and briefings can be observed. */
@@ -107,17 +110,23 @@ export async function harness(options: HarnessOptions = {}) {
     finish(): void;
   }> = [];
   const activities: AgentActivity[] = [];
+  let readyRequest: (() => DaemonRuntimeReadyRequest) | undefined;
   const reports: AgentSessionReport[] = [];
   const statuses: string[] = [];
   const rejections: string[] = [];
   const acks: string[] = [];
   const factReads: Array<{ sessionId: string; envVars?: Readonly<Record<string, string>> }> = [];
   let createFailed = false;
+  const createEntered = Promise.withResolvers<void>();
   const activityWaiters: Array<{ matches(a: AgentActivity): boolean; done(): void }> = [];
   const factsOf = "facts" in options ? options.facts : COLD;
   const provider: CodeAgentProvider = {
     provider: "claude-code",
     async createAgentSession(sessionOptions: AgentSessionOptions) {
+      if (sessions.length === 0 && options.createGate) {
+        createEntered.resolve();
+        await options.createGate;
+      }
       if (options.failFirstCreate && !createFailed) {
         createFailed = true;
         throw new Error("spawn failed");
@@ -197,7 +206,9 @@ export async function harness(options: HarnessOptions = {}) {
     {
       create: () => ({
         async start() {},
-        async ready() {},
+        async ready(get) {
+          readyRequest = get;
+        },
         async stop() {},
         async requestAgentLaunchConfig() {
           return {
@@ -250,6 +261,10 @@ export async function harness(options: HarnessOptions = {}) {
     rejections,
     acks,
     factReads,
+    /** Resolves once a launch is waiting on `createGate`. */
+    createEntered: createEntered.promise,
+    /** The Daemon ready request the runtime would send now. */
+    readyRequest: () => readyRequest!(),
     intent,
     /** Resolves when an Activity with this detail has been sent (now or later). */
     activityWith(detail: RegExp) {

@@ -13,6 +13,7 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
 - `daemon-status-refresh.ts` owns the two periodic status refreshes a live connection runs
   (active-Agent status replay and the Computer connection-status poll); the connection only
   supplies its collaborators.
+  cloud HTTP route; `daemon-connection.ts` supplies the connection's endpoint, keys and client.
 - This directory owns the daemon's long-lived WSS connection, ordered replay,
   reconnect, and protocol transport mechanics. Domain decisions stay in
   `daemon-runtime/` and below.
@@ -52,8 +53,8 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
   (`ready failed: <stage>`) or a connect attempt since the connection last
   came up.
 - Publications that arrive while a ready waits are held in
-  `ReadyPublicationHold` (`ready-publication-hold.ts`): only the latest start
-  and the latest stop per Agent (so a restart survives), and `HELD_NOTICE_CAP`
+  `ReadyPublicationHold` (`ready-publication-hold.ts`): only the latest start,
+  stop and config sync per Agent (so a restart survives), and `HELD_NOTICE_CAP`
   delivery notices, past which each Agent keeps only its latest (a notice wakes
   its Agent; what it reads comes from the cloud's read boundary). The server
   republishes pending deliveries while it handles ready, before it answers, so

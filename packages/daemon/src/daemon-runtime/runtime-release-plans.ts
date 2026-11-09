@@ -121,3 +121,28 @@ export function coldIdleRuntimePlan(
     },
   };
 }
+
+export function configApplyRuntimePlan(restart: AgentRestartConfig): RuntimeReleasePlan {
+  const runtimeName = runtimeDisplayName(restart.config.provider);
+  return {
+    announce: {
+      detailKind: AGENT_ACTIVITY_DETAIL_KIND.IDLE,
+      text: `Stopped ${runtimeName} runtime to apply its new configuration; it restarts on the next message`,
+    },
+    // The `agent.runtime.config_push` record, written by the caller, is this stop's log.
+    log: () => {},
+    failure: {
+      text: `Stopping the ${runtimeName} runtime to apply its new configuration failed`,
+      message: "Agent config apply stop failed",
+      event: "agent.runtime.config_apply_stop_failed",
+    },
+    wake: {
+      onlyIfParked: true,
+      awaited: false,
+      failure: {
+        message: "Agent config apply relaunch failed",
+        event: "agent.runtime.config_apply_wake_failed",
+      },
+    },
+  };
+}

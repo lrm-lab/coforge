@@ -65,6 +65,7 @@ import type {
   AgentStatus,
   AgentStartIntent,
   AgentStopIntent,
+  AgentConfigSync,
   AgentTurnInterruptIntent,
   AgentActivityProbe,
   AgentInboxPurge,
@@ -217,6 +218,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   onReminderSync?(callback: (sync: ReminderSync) => void): () => void;
   onAppConfigSync?(callback: (sync: AppConfigSync) => void): () => void;
   onAgentServerFeatures?(callback: (features: AgentServerFeatures) => void): () => void;
+  onAgentConfigSync?(callback: (sync: AgentConfigSync) => void): () => void;
   onAppRegistrationNotice?(callback: (notice: AppRegistrationNotice) => void): () => void;
   onAgentMigrationLease?(callback: (lease: ReceivedAgentMigrationLease) => void): () => void;
   onAgentMigrationCancel?(callback: (cancel: AgentMigrationCancel) => void): () => void;

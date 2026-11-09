@@ -6,7 +6,7 @@ const logger = getLogger(["coforge", "daemon", "connection"]);
 
 /** How a held publication replaces what came before it: an Agent's latest intent of one kind, or a
  * capped delivery notice. Absent: nothing later supersedes it. */
-type HoldKind = "start" | "stop" | "probe" | "notice";
+type HoldKind = "start" | "stop" | "config" | "probe" | "notice";
 
 /**
  * The publications the cloud sent while a ready handshake was in flight. The cloud publishes Agent

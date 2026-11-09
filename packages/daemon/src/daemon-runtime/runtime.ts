@@ -15,7 +15,7 @@ import { rebindAgent } from "./agent-rebind";
 import { AgentLaunchCustody } from "./agent-launch-custody";
 import { AgentContexts } from "./agent-contexts";
 import { assemblePhaseBookkeeping } from "./phase-bookkeeping-wiring";
-import { type RuntimeEventObservationPorts } from "./runtime-event-observation";
+import { type RuntimeEventObservationPorts } from "./runtime-event-observation-ports";
 import {
   launchEventObserver,
   handleAgentStart,
@@ -35,14 +35,8 @@ import { activityDraft } from "./activity-draft";
 import type { AgentRecoveryContext } from "./runtime-launch-intent";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
-export type DaemonConfig = {
-  workspaceId: string;
-  computerId: string;
-  workspaceRoot: string;
-  serverHttpUrl?: string;
-};
-/** @deprecated wire-facing callers should use DaemonConfig internally. */
-export type WorkspaceConfig = DaemonConfig;
+import type { DaemonConfig } from "./runtime-connection-config";
+export type { DaemonConfig, WorkspaceConfig } from "./runtime-connection-config";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import type {
   DaemonConnectionClient,
@@ -64,7 +58,6 @@ import {
   localVersionResponse,
 } from "#src/daemon-runtime/runtime-local-queries";
 import {
-  type DaemonConnectRejectionReason,
   type RunnerHoldReason,
   MENTION_DELIVERY_TERMINAL_CODES,
   type AgentActivity,
@@ -72,6 +65,7 @@ import {
   type AgentStartIntent,
   type AgentSessionReport,
   type AgentStopIntent,
+  type AgentConfigSync,
   type AgentTurnInterruptIntent,
   type SessionIdentity,
   type AgentActivityProbe,
@@ -131,6 +125,7 @@ import {
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ColdIdleSweep } from "./cold-idle-sweep";
+import { assembleAgentConfigApply } from "./agent-config-apply-assembly";
 import { stalledRecoverySweep } from "./stalled-recovery-sweep";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
 import { rememberUsage } from "./usage-memory";
@@ -187,12 +182,8 @@ import { assembleExitedDelivery } from "./assemble-exited-delivery";
 import { composeRuntimeServices } from "./runtime-services-composition";
 import { AgentOperations } from "./agent-operations";
 import { composeAgentControl } from "./agent-control-composition";
-import {
-  UpgradeResultReporter,
-  type RecoveredUpgradeResult,
-  type UpgradeOperationsReading,
-} from "./upgrade-result-reporter";
-import type { UnrefTimerSchedule } from "./unref-timer";
+import { UpgradeResultReporter } from "./upgrade-result-reporter";
+import type { DaemonRuntimeLifecycle } from "./runtime-lifecycle";
 import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { logComputerUpdateNoticeFailure } from "./agent-failure-logs";
@@ -285,6 +276,13 @@ export class DaemonRuntime {
     agent: (agentId) => this.#runtimeRelease.coldIdleAgent(agentId),
     provider: (provider) => this.#createProvider(provider),
     stop: (stop) => this.#runtimeRelease.stopColdIdle(stop),
+  });
+  /** Applies a pushed Agent configuration when the Agent is next idle. */
+  readonly #configApply = assembleAgentConfigApply({
+    runtimeRelease: () => this.#runtimeRelease,
+    processManager: () => this.#agentProcessManager,
+    agentLaunches: () => this.#agentLaunches,
+    activityLaunches: () => this.#currentActivityLaunches,
   });
   readonly #stalledRecoverySweep = stalledRecoverySweep({
     agentIds: () => this.#agentProcessManager.runningAgentIds(),
@@ -458,30 +456,7 @@ export class DaemonRuntime {
     agentProxy: AgentProxy | undefined,
     codeAgentDiscovery: CodeAgentDiscovery,
     private readonly stateDirectory = ".coforge-daemon-state",
-    private readonly lifecycle: {
-      requestRestart?(requestId: string): Promise<void>;
-      requestUpgrade?(
-        requestId: string,
-        expectedVersion?: string,
-        releaseChannel?: string,
-      ): Promise<void>;
-      recoveredRestartRequestIds?: string[];
-      recoveredUpgradeRequestIds?: string[];
-      /** Upgrade results still owed to the server. */
-      recoveredUpgradeResults?: RecoveredUpgradeResult[];
-      /**
-       * Re-reads durable upgrade operations while one is pending.
-       */
-      readUpgradeOperations?(): Promise<UpgradeOperationsReading>;
-      /** Reporter retry timer. */
-      upgradeResultSchedule?: UnrefTimerSchedule;
-      /** Called once the server has accepted a reported result. */
-      acknowledgeUpgradeResult?(requestId: string): Promise<void>;
-      /** Called when the cloud permanently refuses this Workspace. */
-      connectionRefused?(reason: DaemonConnectRejectionReason): void;
-      /** Whether an installer upgrade is in flight. */
-      installerJournalExists?(): boolean;
-    } = {},
+    private readonly lifecycle: DaemonRuntimeLifecycle = {},
     private readonly computerVersion?: string,
     systemCleaner: Pick<
       SystemCleanerOptions,
@@ -642,6 +617,7 @@ export class DaemonRuntime {
       get idleNudge() {
         return runtime.#launchCoordinator.idleNudge;
       },
+      configApply: this.#configApply,
       collectSkillAgents: this.#collectSkillAgents,
       fastModeWarned: this.#fastModeWarned,
       activityDraft: this.#activity,
@@ -768,6 +744,7 @@ export class DaemonRuntime {
       publications: {
         startAgent: (intent) => this.handleAgentStart(intent),
         stopAgent: (intent) => this.handleAgentStop(intent),
+        applyAgentConfigSync: (sync) => this.handleAgentConfig(sync),
         interruptAgent: (intent) => this.handleAgentTurnInterrupt(intent),
         probeAgent: (probe) => this.handleAgentActivityProbe(probe),
         purgeAgentInbox: (purge) => this.handleAgentInboxPurge(purge),
@@ -793,6 +770,7 @@ export class DaemonRuntime {
       },
       agentControl: this.#agentControl,
       agentSessions: this.#agentSessions,
+      configApply: this.#configApply,
       readyRunningAgentIds: () => this.#readyRunningAgentIds(),
       operatingSystem: this.#operatingSystem,
       upgradeResults: this.#upgradeResults,
@@ -855,6 +833,7 @@ export class DaemonRuntime {
     this.#shutdown = new RuntimeStop({
       startup: this.#startup,
       coldIdleSweep: this.#coldIdleSweep,
+      configApply: this.#configApply,
       stalledRecoverySweep: this.#stalledRecoverySweep,
       catalogFreshnessSweep: this.#catalogFreshnessSweep,
       machineStatus: this.#machineStatus,
@@ -1024,6 +1003,7 @@ export class DaemonRuntime {
         exitedDelivery: this.#exitedDelivery,
         releaseSurvivingHolds: (id) => this.#releaseSurvivingHolds(id),
         sessions: this.#stopState,
+        configApply: this.#configApply,
       },
       agentId,
       config,
@@ -1174,6 +1154,13 @@ export class DaemonRuntime {
     return handleAgentStop(this.#controlIntentPorts(), intent);
   }
 
+  /** A pushed runtime configuration: applied when the Agent is next idle, never by cutting a
+   * turn short. */
+  async handleAgentConfig(sync: AgentConfigSync): Promise<void> {
+    this.#assertOwnIntent(sync);
+    await this.#configApply.accept(sync);
+  }
+
   async handleAgentTurnInterrupt(intent: AgentTurnInterruptIntent): Promise<void> {
     return handleAgentTurnInterrupt(
       {
@@ -1256,6 +1243,7 @@ export class DaemonRuntime {
   }
 
   stopAgent(agentId: string): Promise<void> {
+    this.#configApply.stopped(agentId);
     return this.#agentOperations.stopAgent(agentId);
   }
 
@@ -1294,6 +1282,7 @@ export class DaemonRuntime {
     runtimeRelease: this.#runtimeRelease,
     systemCleaner: this.systemCleaner,
     idleNudge: this.#launchCoordinator.idleNudge,
+    configApply: this.#configApply,
     drafts: this.#drafts,
     activity: (
       agentId: string,

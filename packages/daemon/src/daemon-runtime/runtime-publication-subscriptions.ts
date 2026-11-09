@@ -22,6 +22,7 @@ import type {
 import { HeldPublications } from "#src/connection/held-publications";
 import {
   logAgentActivityProbeFailure,
+  logAgentConfigFailure,
   logAgentOperationFailure,
   logAgentStartFailure,
 } from "./agent-failure-logs";
@@ -37,6 +38,8 @@ export type RuntimePublicationSubscriptionPorts = {
   computerId: string;
   startAgent: (intent: AgentStartIntent) => Promise<unknown>;
   stopAgent: (intent: AgentStopIntent) => Promise<unknown>;
+  /** Optional so a runtime or test without config sync keeps working. */
+  applyAgentConfigSync?: (sync: AgentConfigSync) => Promise<unknown>;
   interruptAgent: (intent: AgentTurnInterruptIntent) => Promise<unknown>;
   probeAgent: (probe: AgentActivityProbe) => Promise<unknown>;
   purgeAgentInbox: (purge: AgentInboxPurge) => void;
@@ -47,7 +50,6 @@ export type RuntimePublicationSubscriptionPorts = {
   applyReminderSync: (sync: ReminderSync) => Promise<void>;
   applyAppConfigSync: (sync: AppConfigSync) => void;
   applyAgentServerFeatures: (sync: AgentServerFeatures) => void;
-  applyAgentConfigSync?: (sync: AgentConfigSync) => void;
   acceptAppRegistrationNotice: (notice: AppRegistrationNotice) => Promise<void>;
   migration?: {
     pruneLeftovers: () => Promise<void>;
@@ -57,8 +59,8 @@ export type RuntimePublicationSubscriptionPorts = {
 };
 
 export class RuntimePublicationSubscriptions {
-  /** Publications before ready are replayed after the handshake: latest start/stop/probe per
-   * Agent, control intents in arrival order, and capped delivery notices. */
+  /** Publications before ready are replayed after the handshake: latest start/stop/config/probe
+   * per Agent, control intents in arrival order, and capped delivery notices. */
   readonly #heldControl = new HeldPublications<() => Promise<void>>();
   readonly #heldMessages = new HeldPublications<() => Promise<void>>();
   #buffering = true;
@@ -78,7 +80,9 @@ export class RuntimePublicationSubscriptions {
         else void handle(value);
       };
     const latest =
-      <Value extends { agentId: string }>(kind: "start" | "stop" | "probe"): Hold<Value> =>
+      <Value extends { agentId: string }>(
+        kind: "start" | "stop" | "config" | "probe",
+      ): Hold<Value> =>
       (value, run) =>
         this.#heldControl.latestFor(value.agentId, kind, run);
     const control: Hold<unknown> = (_value, run) => this.#heldControl.add(run);
@@ -115,6 +119,19 @@ export class RuntimePublicationSubscriptions {
         ),
       ),
     );
+    const applyAgentConfigSync = this.ports.applyAgentConfigSync;
+    if (applyAgentConfigSync)
+      subscribe(
+        transport.onAgentConfigSync?.(
+          receive(latest("config"), async (sync: AgentConfigSync) => {
+            try {
+              await applyAgentConfigSync(sync);
+            } catch (error) {
+              logAgentConfigFailure(this.ports.computerId, sync, error);
+            }
+          }),
+        ),
+      );
     subscribe(
       transport.onAgentTurnInterrupt?.(
         receive(
@@ -198,11 +215,7 @@ export class RuntimePublicationSubscriptions {
     );
     subscribe(transport.onAppConfigSync?.((sync) => this.ports.applyAppConfigSync(sync)));
     subscribe(
-      transport.onAgentServerFeatures?.((sync) => {
-        if ("provider" in sync)
-          this.ports.applyAgentConfigSync?.(sync as unknown as AgentConfigSync);
-        else this.ports.applyAgentServerFeatures(sync);
-      }),
+      transport.onAgentServerFeatures?.((sync) => this.ports.applyAgentServerFeatures(sync)),
     );
     subscribe(
       transport.onAppRegistrationNotice?.((notice) => {

@@ -92,7 +92,7 @@ import { DaemonConnectionRefusedError } from "./daemon-connection-refused-error"
 import { DaemonConnectionStoppedError } from "./daemon-connection-stopped-error";
 import { ReadyPublicationHold } from "./ready-publication-hold";
 import { InboundQuietness } from "./connection-liveness";
-import { encodeDaemonConnectionStatus } from "./connection-status-payload";
+import { reportDaemonOnline } from "./connection-status-payload";
 import {
   sendDaemonReady,
   sendCodeAgentsUpdate,
@@ -100,7 +100,7 @@ import {
   sendRuntimeAuthLogout,
   sendRuntimeAuthStatus,
 } from "./daemon-ready-send";
-import { AgentObservationPublisher } from "./agent-observation-publisher";
+import { AgentObservationPublisher, publishAgentActivity } from "./agent-observation-publisher";
 import { postAgentContextViewResult } from "./agent-context-view-upload";
 import {
   daemonConnectRejectionReason,
@@ -141,7 +141,6 @@ import {
   DAEMON_RUNTIME_SHUTDOWN_METHOD,
   encodeDaemonRuntimeShutdown,
   type DaemonRuntimeShutdown,
-  DAEMON_CONNECTION_STATUS_METHOD,
   AGENT_STATUS_METHOD,
   type DaemonRuntimeReadyRequest,
   type DaemonRuntimeCodeAgentsUpdateRequest,
@@ -157,6 +156,7 @@ import {
   type AgentStatus,
   type AgentStartIntent,
   type AgentStopIntent,
+  type AgentConfigSync,
   type AgentTurnInterruptIntent,
   type AgentActivityProbe,
   type AgentInboxPurge,
@@ -466,7 +466,7 @@ export class DaemonConnection
           control_stream_binding: "connect_proxy",
           outcome: "ok",
         });
-        this.#reportOnline(client, config);
+        reportDaemonOnline(client, config);
         // Invalidate before Activity on reconnect.
         this.#flushPendingSessionInvalidate(client);
         this.#flushPendingActivity(client);
@@ -625,6 +625,10 @@ export class DaemonConnection
     return this.#serverPublications.onAgentServerFeatures(callback);
   }
 
+  onAgentConfigSync(callback: (sync: AgentConfigSync) => void): () => void {
+    return this.#serverPublications.onAgentConfigSync(callback);
+  }
+
   onAppRegistrationNotice(callback: (notice: AppRegistrationNotice) => void): () => void {
     return this.#appRegistrationNotice.set(callback);
   }
@@ -685,12 +689,12 @@ export class DaemonConnection
       this.#pendingActivity.set(activity.agentId, activity);
       return;
     }
-    this.#publishActivity(this.#client, activity.workspaceId, encodeAgentActivity(activity));
+    publishAgentActivity(this.#client, activity.workspaceId, encodeAgentActivity(activity));
   }
 
   sendAgentReplyIntent(frame: AgentReplyIntent): void {
     const client = this.#activeClient();
-    if (client) this.#publishActivity(client, frame.workspaceId, encodeAgentReplyIntent(frame));
+    if (client) publishAgentActivity(client, frame.workspaceId, encodeAgentReplyIntent(frame));
   }
 
   /** Fire-and-forget; never awaited by a caller and never fails a launch. */
@@ -747,21 +751,13 @@ export class DaemonConnection
 
   /** Puts an encoded Activity-channel frame (an observation or a reply intent) on the Workspace's
    * channel. It is an observation: failure must not block Agent work or be retried. */
-  #publishActivity(
-    client: CentrifugeWorkspaceClient,
-    workspaceId: string,
-    frame: Uint8Array,
-  ): void {
-    void client.publish?.(`agent:activity:${workspaceId}`, frame).catch(() => {});
-  }
-
   #flushPendingActivity(client: CentrifugeWorkspaceClient): void {
     if (!client.publish) return;
     const pending = [...this.#pendingActivity.values()];
     this.#pendingActivity.clear();
     this.#supersededActivityLaunches.clear();
     for (const activity of pending)
-      this.#publishActivity(client, activity.workspaceId, encodeAgentActivity(activity));
+      publishAgentActivity(client, activity.workspaceId, encodeAgentActivity(activity));
   }
 
   #publishSessionInvalidate(
@@ -810,12 +806,6 @@ export class DaemonConnection
         if (!this.#connected || client !== this.#client) return;
         await client.rpc(AGENT_STATUS_METHOD, encodeAgentStatus(status));
       })
-      .catch(() => {});
-  }
-
-  #reportOnline(client: CentrifugeWorkspaceClient, config: DaemonConnectionConfig): void {
-    void client
-      .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))
       .catch(() => {});
   }
 

@@ -18,6 +18,7 @@ import type { DeliveryHoldReason } from "./agent-delivery-queue";
 import type { LaunchRequest } from "./runtime-launch-types";
 import {
   coldIdleRuntimePlan,
+  configApplyRuntimePlan,
   freshConfigRuntimePlan,
   stalledRuntimePlan,
   type RuntimeReleasePlan,
@@ -271,6 +272,20 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     await this.#endAndWake(agentId, launch, session, coldIdleRuntimePlan(restart, stop));
   }
 
+  /** Ends an idle runtime so its next launch reads a pushed configuration. The Agent is judged
+   * again here by the cold idle sweep's guards; one that is no longer idle is left running.
+   * A message that arrives meanwhile waits for the launch, as for a cold idle stop. */
+  async stopForConfigApply(agentId: string): Promise<"stopped" | "busy" | "failed"> {
+    const agent = this.coldIdleAgent(agentId);
+    if (!agent || agent.busyReason !== undefined) return "busy";
+    const launch = this.#ports.launch(agentId);
+    const session = this.#ports.runtime(agentId)?.session;
+    const restart = this.#ports.restartConfig(agentId);
+    if (!launch || !session || !restart) return "busy";
+    const ended = await this.#endAndWake(agentId, launch, session, configApplyRuntimePlan(restart));
+    return ended ? "stopped" : "failed";
+  }
+
   /** Ends the runtime, then wakes the Agent on its remembered restart config, resuming the
    * session it last reported. A relaunch that fails reports its own launch error; the waiting
    * messages stay queued, acknowledged, for the Agent's next launch. */
@@ -279,14 +294,14 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     launch: L,
     session: AgentSession,
     plan: RuntimeReleasePlan,
-  ): Promise<void> {
+  ): Promise<boolean> {
     this.#recovering.add(agentId);
     try {
-      if (!(await this.#end(agentId, launch, session, plan))) return;
+      if (!(await this.#end(agentId, launch, session, plan))) return false;
       // A Stop that arrived meanwhile wins, and its config, not the one read before, is current.
       const current = this.#ports.restartConfig(agentId);
-      if (this.#ports.isStopping(agentId) || !current) return;
-      if (plan.wake.onlyIfParked && !this.#ports.hasParkedWork(agentId)) return;
+      if (this.#ports.isStopping(agentId) || !current) return true;
+      if (plan.wake.onlyIfParked && !this.#ports.hasParkedWork(agentId)) return true;
       const sessionId = this.#ports.sessionId(agentId) ?? current.sessionId;
       // From here a message joins the wake launch as any other does.
       this.#recovering.delete(agentId);
@@ -304,6 +319,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
         }),
       );
       if (plan.wake.awaited) await woken;
+      return true;
     } finally {
       this.#recovering.delete(agentId);
     }

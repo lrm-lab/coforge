@@ -10,9 +10,9 @@ export const HELD_NOTICE_CAP = 500;
 
 /**
  * Publications held back while a ready handshake waits, which can be hours during an outage.
- * Control intents that a later one supersedes are kept only once per key (the latest start and
- * the latest stop of each Agent), and delivery notices are capped, so the buffer stays bounded
- * and a late replay does not act on intents the cloud has long since replaced.
+ * Control intents that a later one supersedes are kept only once per key (the latest start, stop
+ * and config push of each Agent), and delivery notices are capped, so the buffer stays bounded and
+ * a late replay does not act on intents the cloud has long since replaced.
  */
 export class HeldPublications<Item> {
   readonly #held = new Map<string, Item>();
@@ -22,10 +22,10 @@ export class HeldPublications<Item> {
 
   constructor(private readonly noticeCap = HELD_NOTICE_CAP) {}
 
-  /** Holds an Agent's latest intent of one kind (its start, its stop, or its activity probe),
+  /** Holds an Agent's latest intent of one kind (its start, stop, config push or activity probe),
    * replacing the earlier one; it takes the newer arrival's place. A start and a stop are kept
    * apart, so a restart (stop, then start) survives. */
-  latestFor(agentId: string, kind: "start" | "stop" | "probe", item: Item): void {
+  latestFor(agentId: string, kind: "start" | "stop" | "config" | "probe", item: Item): void {
     this.#replace(agentId, kind, item);
   }
 

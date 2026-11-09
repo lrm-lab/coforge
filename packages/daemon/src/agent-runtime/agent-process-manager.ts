@@ -30,6 +30,12 @@ export type AgentRestartConfig = Readonly<{
   serverLaunch?: ServerLaunchIdentity;
 }>;
 
+/** The runtime fields a pushed configuration replaces on a remembered restart config. */
+export type RestartRuntimeFields = Pick<
+  AgentRuntimeConfig,
+  "provider" | "model" | "modelProvider" | "reasoning" | "providerConfig" | "fastMode"
+>;
+
 export type AgentTurnInterruptResult = "interrupted" | "restarted" | "not_running";
 
 export type AgentTurnInterruptOptions = Readonly<{
@@ -344,6 +350,22 @@ export class AgentProcessManager {
   forgetRestart(agentId: string): void {
     this.#restartConfigs.delete(agentId);
     this.#launchClientSeq.delete(agentId);
+  }
+
+  /** Replaces the runtime fields of the wake config, keeping everything else a launch put there
+   * (tool profile, Memory flag, variables, Session, server launch identity). `fields` is complete:
+   * an optional one it leaves out is removed, not kept. A live runtime is frozen and unchanged: this only
+   * changes what the next launch uses. A no-op without a restart config. */
+  replaceRestartRuntime(agentId: string, fields: RestartRuntimeFields): void {
+    const existing = this.#restartConfigs.get(agentId);
+    if (!existing) return;
+    const {
+      modelProvider: _modelProvider,
+      providerConfig: _providerConfig,
+      fastMode: _fastMode,
+      ...kept
+    } = existing.config;
+    this.#restartConfigs.set(agentId, { ...existing, config: { ...kept, ...fields } });
   }
 
   /** Drops the remembered resume pointer once its Session was invalidated, so the next wake

@@ -11,6 +11,15 @@ test("a keyed item replaces the earlier one under its key and takes the newer ar
   expect(held.take()).toEqual({ items: ["stop-1", "purge-1", "start-2"], dropped: 0 });
 });
 
+test("a config sync is kept apart from the Agent's start and stop, and only its latest survives", () => {
+  const held = new HeldPublications<string>();
+  held.latestFor("agent-1", "config", "config-1");
+  held.latestFor("agent-1", "start", "start-1");
+  held.latestFor("agent-1", "config", "config-2");
+
+  expect(held.take()).toEqual({ items: ["start-1", "config-2"], dropped: 0 });
+});
+
 test("past the cap, each Agent keeps only its latest notice and the rest are dropped and counted", () => {
   const held = new HeldPublications<string>(2);
 

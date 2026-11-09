@@ -13,10 +13,8 @@ import type {
 } from "#src/agent-runtime/agent-process-manager";
 import type { ActivityDraft } from "./agent-activity-publisher";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import {
-  observeRuntimeEvent,
-  type RuntimeEventObservationPorts,
-} from "./runtime-event-observation";
+import { observeRuntimeEvent } from "./runtime-event-observation";
+import type { RuntimeEventObservationPorts } from "./runtime-event-observation-ports";
 import { canonicalThreadTarget } from "./thread-target";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { ActivityLaunch } from "./activity-launch";
@@ -178,6 +176,7 @@ export async function handleAgentStart(
     sessionMode: intent.sessionMode,
     resumePrompt: intent.resumePrompt,
     introductionPrompt: intent.introductionPrompt,
+    fromStart: { agentConfigRevision: intent.agentConfigRevision },
   });
 }
 
