@@ -1,6 +1,8 @@
 import { basename, dirname, join } from "node:path";
 import { PiRequestLogWriter } from "./pi-request-log";
 
+const CONTEXT_VIEW_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
+
 export function contextViewRequestLogFields(
   sessionDir: string,
   requestLogDirectory?: string,
@@ -9,8 +11,10 @@ export function contextViewRequestLogFields(
   contextViewRequestLog: PiRequestLogWriter;
   contextViewRequestLogPath: string;
 } {
+  if (requestLogDirectory && (!sessionId || !CONTEXT_VIEW_SESSION_ID.test(sessionId)))
+    throw new Error("Invalid context view session ID");
   const contextViewRequestLogPath = requestLogDirectory
-    ? join(requestLogDirectory, `${sessionId ?? "session"}.jsonl`)
+    ? join(requestLogDirectory, `${sessionId}.jsonl`)
     : join(sessionDir, "pi-requests.jsonl");
   const trustedRoot = requestLogDirectory ? managedRequestLogRoot(requestLogDirectory) : undefined;
   return {

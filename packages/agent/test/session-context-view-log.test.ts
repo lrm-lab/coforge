@@ -18,3 +18,9 @@ test("managed request logs keep each actual provider session in its own file", a
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("managed request logs reject an unsafe session filename", () => {
+  expect(() =>
+    contextViewRequestLogFields("/tmp/sessions", "/tmp/pi-requests", "../escape"),
+  ).toThrow("Invalid context view session ID");
+});
