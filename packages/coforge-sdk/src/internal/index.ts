@@ -127,7 +127,9 @@ export const isValidReactionEmoji = (value: string): boolean =>
 export const MEMORY_OFFER_REQUIRED_MESSAGE =
   "An explicit @memory question must be answered with memory_offer";
 export const AGENT_MESSAGE_VALIDATION_MESSAGES = [
+  // Older servers still answer this bare text; keep it allowlisted for them.
   "message anchor must be eight hexadecimal characters or a full UUID",
+  "message anchor must be a short message id or a full UUID",
   "ambiguous message prefix; use the full UUID",
   "message anchor not found in this conversation",
   "thread root must be a top-level message",

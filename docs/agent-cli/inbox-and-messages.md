@@ -164,7 +164,8 @@ mutually exclusive. Sequence
 numbers are server-internal and are never supplied by an Agent.
 
 `coforge message resolve <message-id>` looks up one message by its full UUID
-or an unambiguous 8-hex prefix across every conversation the Agent belongs to,
+or an unambiguous prefix — the twelve-hex short id `message read`
+prints, or a longer one — across every conversation the Agent belongs to,
 and prints it in the same `[target=... msg=... time=...] @sender: body` line
 `message check` uses, always with the whole body — resolve names one message,
 so summarizing it would answer nothing. It never requires the Agent to know

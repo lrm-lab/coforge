@@ -15,7 +15,7 @@ type AgentScope = { workspaceId: string; agentId: string };
 
 /** `GET /api/agent/v1/messages/:messageId/mention-deliveries` — mention delivery (`coforge mention
  * delivery`): what became of each @mention in a message the calling Agent sent, named by its full
- * id or eight-hex prefix. Any other message is a 404, the same as one that does not exist. */
+ * id or short prefix. Any other message is a 404, the same as one that does not exist. */
 export async function handleAgentMentionDeliveriesGet(
   principal: AgentScope,
   messageId: string,

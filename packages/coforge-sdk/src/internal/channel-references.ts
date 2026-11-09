@@ -77,7 +77,7 @@ export function replaceChannelReferenceTokens(
  * `<@thread:<channel uuid>:<root message uuid>:<name>>`. The ids are the stable anchors a renderer
  * opens the thread by; the name is the channel's name when the message was sent, as in the channel
  * token. The short id a writer typed is not kept: every reader derives it from the root id (its
- * first eight hex characters), the one form a thread target takes.
+ * first twelve hex digits), the one form a thread target takes.
  */
 export const THREAD_REFERENCE_TOKEN_PATTERN = new RegExp(
   `<@thread:(${UUID}):(${UUID}):([a-z0-9][a-z0-9_-]*)>`,

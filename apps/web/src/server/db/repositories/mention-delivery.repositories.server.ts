@@ -215,7 +215,7 @@ export class PrismaMentionDeliveryRepository {
   constructor(private readonly db: MentionDeliveryDb) {}
 
   /**
-   * The messages the Agent sent that an anchor (a full id, or its eight-hex prefix) names, at most
+   * The messages the Agent sent that an anchor (a full id, or its short prefix) names, at most
    * two, each with its tracked mentions: the mentioned Agent, whether it is deleted, the handle
    * the message wrote for it (from its mention, or its non-member mention action), and the
    * outcome as stored.

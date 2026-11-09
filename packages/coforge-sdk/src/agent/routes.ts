@@ -2,7 +2,7 @@ import { APP_REGISTRATION_REQUEST_MAX_BYTES } from "./app-management";
 import { ARTIFACT_REQUEST_MAX_BYTES } from "./artifacts";
 
 /** Mention delivery (`coforge mention delivery`): what became of each @mention in a message the
- * Agent sent, by the message's full id or eight-hex prefix. */
+ * Agent sent, by the message's full id or short prefix. */
 const MENTION_DELIVERIES_ROUTE = {
   method: "GET",
   path: (messageId: string) =>

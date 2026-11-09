@@ -5,6 +5,7 @@ import { APP_ERROR_HTTP_STATUS, isAppError, type AppErrorCode } from "#src/lib/a
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { RequestAuthenticationError } from "#src/server/errors/request-error-handler.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
+import { agentMessageValidationResponse } from "./agent-target-status.server";
 import { MessageRequestInProgressError } from "#src/server/conversations/message-request-idempotency.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { errorResponse } from "./agent-http-error.server";
@@ -79,7 +80,9 @@ export function agentErrorResponse(error: unknown): Response {
   if (error instanceof RequestAuthenticationError)
     return textResponse("unauthorized", { status: 401, headers: NO_STORE });
   if (error instanceof AgentMessageValidationError)
-    return textResponse(error.message, { status: 400, headers: NO_STORE });
+    return noStore(
+      agentMessageValidationResponse(error) ?? textResponse(error.message, { status: 400 }),
+    );
   if (error instanceof MessageRequestInProgressError)
     return noStore(errorResponse("MESSAGE_REQUEST_IN_PROGRESS", error.message, 409, true));
   console.error(

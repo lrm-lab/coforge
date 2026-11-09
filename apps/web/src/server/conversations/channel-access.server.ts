@@ -89,7 +89,7 @@ export async function getAgentSendChannel(
 }
 
 /**
- * Resolves a thread anchor (an eight-hex prefix or a full UUID) to its top-level root Message in
+ * Resolves a thread anchor (a short prefix or a full UUID) to its top-level root Message in
  * `conversationId`. Shared by the channel thread operations and `ActionCards.prepare`
  * (`action-cards.server.ts`) so a channel thread target resolves identically everywhere.
  */
@@ -104,7 +104,10 @@ export async function resolveChannelThreadRoot(
     select: { id: true },
   });
   if (rows.length > 1)
-    throw new AgentMessageValidationError("ambiguous message prefix; use the full UUID");
+    throw new AgentMessageValidationError(
+      "ambiguous message prefix; use the full UUID",
+      rows.map((row) => row.id),
+    );
   if (!rows[0])
     throw new AgentMessageValidationError("message anchor not found in this conversation");
   return rows[0];

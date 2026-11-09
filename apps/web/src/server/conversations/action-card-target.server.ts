@@ -27,7 +27,7 @@ export async function resolveActionCardTarget(
 ) {
   const [parentTarget, anchor, extra] = target.split(":");
   if (!parentTarget || extra !== undefined) throw new AppError("INVALID_INPUT");
-  // A channel thread's anchor is eight hex characters or the whole id, as for `message send`;
+  // A channel thread's anchor is a short message id or the whole id, as for `message send`;
   // a shorter prefix that happens to be unique still names no thread.
   if (parentTarget.startsWith("#") && anchor !== undefined && !isChannelMessageTarget(target))
     throw new AppError("INVALID_INPUT");

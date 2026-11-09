@@ -1,4 +1,5 @@
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
+import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
 import { errorResponse } from "./agent-http-error.server";
 
 /**
@@ -80,6 +81,26 @@ export function ambiguousTargetResponse(error: unknown, target: string) {
     error.code,
     `${name} names both a person and an Agent in this Workspace; use ${name}~human or ${name}~agent`,
     409,
+    false,
+  );
+}
+
+/**
+ * An `AgentMessageValidationError` is already written for the Agent, so the read/search/events
+ * routes answer it as an explained refusal instead of the generic "invalid message query". An
+ * ambiguous anchor names its candidate ids so the Agent can retry with a longer one.
+ */
+export function agentMessageValidationResponse(error: unknown) {
+  if (!(error instanceof AgentMessageValidationError)) return undefined;
+  const candidates = error.candidates ?? [];
+  if (!candidates.length) return errorResponse("INVALID_MESSAGE_QUERY", error.message, 400, false);
+  const shown = candidates.slice(0, 10);
+  const rest = candidates.length - shown.length;
+  const suffix = rest ? ` (and ${rest} more)` : "";
+  return errorResponse(
+    "AMBIGUOUS_MESSAGE_PREFIX",
+    `${error.message} (candidates: ${shown.join(", ")}${suffix})`,
+    400,
     false,
   );
 }

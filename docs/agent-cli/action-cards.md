@@ -81,7 +81,7 @@ for `message send`, `DM_PEER_NOT_IN_WORKSPACE` and `TARGET_NOT_ACCESSIBLE`. The
 CLI reports its reason, code and next step. On success the CLI prints:
 
 ```
-Action card posted to <target> as message <uuid> (short <first 8>). The human can click the action verb to commit.
+Action card posted to <target> as message <uuid> (short id: first twelve hex digits). The human can click the action verb to commit.
 ```
 
 A card made by an older Computer (a `choice` without `to`) asks the Agent's owner; tell the owner

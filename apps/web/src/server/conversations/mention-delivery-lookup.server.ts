@@ -2,7 +2,7 @@ import type { AgentMentionDelivery } from "@lrm/coforge-sdk/agent";
 import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
 import type { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 
-/** A message the sending Agent names by its full id or the eight-hex prefix `message read`
+/** A message the sending Agent names by its full id or the short prefix `message read`
  * shows. */
 const SENDER_MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
 

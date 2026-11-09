@@ -71,10 +71,16 @@ test("an AppError's errorId travels inside the refusal reason", async () => {
   expect(decodeAgentApiRefusal(body)).toBeDefined();
 });
 
-test("a validation failure is a bare-text 400 and an in-progress send a retryable 409", async () => {
+test("a validation failure is an explained-refusal 400 and an in-progress send a retryable 409", async () => {
   const validation = agentErrorResponse(new AgentMessageValidationError(MESSAGE_NOT_VISIBLE));
   expect(validation.status).toBe(400);
-  expect(await validation.text()).toBe(MESSAGE_NOT_VISIBLE);
+  const validationBody = await validation.json();
+  expect(validationBody).toEqual({
+    error: MESSAGE_NOT_VISIBLE,
+    code: "INVALID_MESSAGE_QUERY",
+    retryable: false,
+  });
+  expect(decodeAgentApiRefusal(validationBody)).toBeDefined();
 
   const inProgress = agentErrorResponse(new MessageRequestInProgressError());
   expect(inProgress.status).toBe(409);

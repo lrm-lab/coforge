@@ -30,7 +30,7 @@ export type AgentMentionDelivery = { targetHandle: string; targetDeleted?: true 
   | { outcome: Exclude<AgentMentionDeliveryOutcome, "lost"> }
 );
 
-/** What the local Proxy hands the daemon: the message by full id or eight-hex prefix. */
+/** What the local Proxy hands the daemon: the message by full id or short prefix. */
 export type AgentMentionDeliveryRequest = { messageId: string };
 
 /** Response for `GET /api/agent/v1/messages/:messageId/mention-deliveries`; `messageId` is the

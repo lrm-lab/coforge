@@ -1,5 +1,6 @@
 import { textResponse } from "#src/server/http/text-response.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
+import { agentMessageValidationResponse } from "./agent-target-status.server";
 
 /** The optional request envelope shared by Agent POST endpoints. */
 export type AgentJsonBody = Record<string, unknown>;
@@ -27,7 +28,7 @@ export function agentRouteErrorResponse(
   knownValidationMessages: readonly string[] = [],
 ): Response {
   if (error instanceof AgentMessageValidationError)
-    return textResponse(error.message, { status: 400 });
+    return agentMessageValidationResponse(error) ?? textResponse(error.message, { status: 400 });
   if (error instanceof Error && knownValidationMessages.includes(error.message))
     return textResponse(error.message, { status: 400 });
   return textResponse(fallbackMessage, { status: 400 });

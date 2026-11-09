@@ -78,8 +78,7 @@ Notify, Add and Ignore for each target.
 `coforge mention delivery --message <id> [--json]` shows what became of each
 @mention of an Agent in a message the calling Agent sent, one line per
 Agent. It takes the message's full id (the Message ID `message send`
-printed) or its first eight hex characters (the `msg=` id `message read`
-shows). Each line names the Agent by the `@handle` the message wrote, and
+printed) or the short id `message read` prints (the first twelve hex digits). Each line names the Agent by the `@handle` the message wrote, and
 marks one deleted since then `(deleted)`; `--json` carries the same as
 `targetHandle` and `targetDeleted`.
 

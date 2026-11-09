@@ -3,6 +3,8 @@ import type { AgentEventsResponse } from "@lrm/coforge-sdk/agent";
 import { handleAppBotEventsGet } from "#src/server/app-bots/app-bot-agent-api.server";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { agentIdempotencyKeyFromQuery } from "#src/server/agents/agent-http-routes.server";
+import { agentMessageValidationResponse } from "#src/server/agents/agent-target-status.server";
+
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -51,8 +53,11 @@ export async function handleAgentEventsGet(
       hasMore: result.hasMore,
     };
     return Response.json(response);
-  } catch {
-    return Response.json({ error: "invalid events query" }, { status: 400 });
+  } catch (error) {
+    return (
+      agentMessageValidationResponse(error) ??
+      Response.json({ error: "invalid events query" }, { status: 400 })
+    );
   }
 }
 

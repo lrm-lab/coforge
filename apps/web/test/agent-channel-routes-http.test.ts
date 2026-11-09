@@ -76,7 +76,7 @@ test("mute hides an unexpected repository failure behind a generic message", asy
   expect(await result.text()).toBe("channel mute failed");
 });
 
-test("mute surfaces an AgentMessageValidationError verbatim", async () => {
+test("mute surfaces an AgentMessageValidationError as an explained refusal", async () => {
   const result = await handleAgentChannelMutePost(
     post("/api/agent/v1/channels/%23general/mute"),
     "#general",
@@ -90,7 +90,11 @@ test("mute surfaces an AgentMessageValidationError verbatim", async () => {
     },
   );
   expect(result.status).toBe(400);
-  expect(await result.text()).toBe("message not found or not visible to this Agent");
+  expect(await result.json()).toEqual({
+    error: "message not found or not visible to this Agent",
+    code: "INVALID_MESSAGE_QUERY",
+    retryable: false,
+  });
 });
 
 test("unmute forwards muted=false for the decoded channel target", async () => {

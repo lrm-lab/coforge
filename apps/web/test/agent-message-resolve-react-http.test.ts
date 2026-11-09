@@ -74,7 +74,7 @@ test("resolve generates a request id when the daemon omits one", async () => {
   expect(body.idempotencyKey.length).toBeGreaterThan(0);
 });
 
-test("resolve returns the exact validation text as a plain-text 400 body", async () => {
+test("resolve returns the exact validation text in an explained-refusal 400 body", async () => {
   const result = await handleAgentMessageResolveGet(
     new Request("https://server.example/api/agent/v1/messages/deadbeef/resolve"),
     "deadbeef",
@@ -88,7 +88,11 @@ test("resolve returns the exact validation text as a plain-text 400 body", async
     },
   );
   expect(result.status).toBe(400);
-  expect(await result.text()).toBe("message not found or not visible to this Agent");
+  expect(await result.json()).toEqual({
+    error: "message not found or not visible to this Agent",
+    code: "INVALID_MESSAGE_QUERY",
+    retryable: false,
+  });
 });
 
 test("resolve hides an unexpected repository failure behind a generic message", async () => {
@@ -161,7 +165,7 @@ test("react removes a reaction when active is false", async () => {
   expect(await result.json()).toMatchObject({ active: false });
 });
 
-test("react returns the exact emoji validation text as a plain-text 400 body", async () => {
+test("react returns the exact emoji validation text in an explained-refusal 400 body", async () => {
   const result = await handleAgentMessageReaction(
     new Request("https://server.example/api/agent/v1/messages/abcd1234/reactions", {
       method: "POST",
@@ -177,9 +181,11 @@ test("react returns the exact emoji validation text as a plain-text 400 body", a
     },
   );
   expect(result.status).toBe(400);
-  expect(await result.text()).toBe(
-    "reaction emoji must be one to sixteen characters without whitespace",
-  );
+  expect(await result.json()).toEqual({
+    error: "reaction emoji must be one to sixteen characters without whitespace",
+    code: "INVALID_MESSAGE_QUERY",
+    retryable: false,
+  });
 });
 
 test("react rejects a missing emoji", async () => {

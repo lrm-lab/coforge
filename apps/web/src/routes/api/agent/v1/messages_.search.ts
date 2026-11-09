@@ -4,6 +4,8 @@ import type { AgentSearchResponse, AgentMessage } from "@lrm/coforge-sdk/agent";
 import type { AgentMessageValidationMessage } from "@lrm/coforge-sdk/internal";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { agentIdempotencyKeyFromQuery } from "#src/server/agents/agent-http-routes.server";
+import { agentMessageValidationResponse } from "#src/server/agents/agent-target-status.server";
+
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { AgentMessageRepository } from "#src/server/agents/agent-messages.server";
 import { searchAgentMessages } from "#src/server/agents/agent-message-search.server";
@@ -53,8 +55,11 @@ export async function handleAgentMessagesSearchGet(
       searchedThrough: page.searchedThrough,
     };
     return Response.json(response);
-  } catch {
-    return Response.json({ error: "invalid message query" }, { status: 400 });
+  } catch (error) {
+    return (
+      agentMessageValidationResponse(error) ??
+      Response.json({ error: "invalid message query" }, { status: 400 })
+    );
   }
 }
 

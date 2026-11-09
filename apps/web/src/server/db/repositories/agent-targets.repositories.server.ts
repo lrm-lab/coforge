@@ -23,7 +23,7 @@ import {
   AgentMessageValidationError,
   MESSAGE_NOT_VISIBLE,
 } from "#src/server/conversations/agent-message-validation-error.server";
-import { messageAnchorWhere, messageIdMatchesAnchor } from "#src/server/db/message-anchor.server";
+import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
@@ -77,7 +77,7 @@ export const THREAD_ROOT_SCOPE = {
 
 /** Resolves a message anchor inside one thread scope: `threadRootId` names the thread a page
  * anchor must land in, `null` the top level a thread root must be. UUIDv7 ids minted in the same
- * ~65-second window share an eight-hex prefix, so a root and its replies can collide on a short
+ * ~65-second window share a short prefix, so a root and its replies can collide on a short
  * anchor — the scoped lookup settles it before the conversation-wide one classifies a miss. */
 export async function resolveMessage(
   ports: DirectConversationPorts,
@@ -94,7 +94,10 @@ export async function resolveMessage(
     select,
   });
   if (scoped.length > 1)
-    throw new AgentMessageValidationError("ambiguous message prefix; use the full UUID");
+    throw new AgentMessageValidationError(
+      "ambiguous message prefix; use the full UUID",
+      scoped.map((row) => row.id),
+    );
   if (scoped[0]) return scoped[0];
   const rows = await ports.db.message.findMany({
     where: { conversationId, id },
@@ -176,17 +179,32 @@ export async function drainScope(
     if (!parsed![2]) return { conversationId, threadRootId };
     // A root may be the full comment id or its short anchor, exactly as the read resolves it;
     // `attachmentId` sits on the comment row itself, so the thread table is never needed.
-    const root = await ports.db.attachmentComment.findFirst({
+    const roots = await ports.db.attachmentComment.findMany({
       where: {
         attachmentId: parsed![1],
         workspaceId,
         conversationId,
         message: { id: messageAnchorWhere(parsed![2]) },
       },
-      select: { message: { select: { threadRootId: true } } },
+      select: { message: { select: { id: true, threadRootId: true } } },
     });
-    if (!root) throw new AppError("NOT_FOUND");
-    return { conversationId, threadRootId: root.message.threadRootId };
+    if (!roots.length) throw new AppError("NOT_FOUND");
+    // A comment's thread root is its threadRootId, or the comment itself when it is a root
+    // comment (the `?? id` rule rootOf/replyTarget use). Several comments can share one root,
+    // so ambiguity is judged on the resolved scope, not the row count — and there is no row
+    // cap, because a capped read could hide the second distinct scope.
+    const scopes = new Map<string, { threadRootId: string; candidateId: string }>();
+    for (const row of roots) {
+      const threadRootId = row.message.threadRootId ?? row.message.id;
+      if (!scopes.has(threadRootId))
+        scopes.set(threadRootId, { threadRootId, candidateId: row.message.id });
+    }
+    if (scopes.size > 1)
+      throw new AgentMessageValidationError(
+        "ambiguous message prefix; use the full UUID",
+        [...scopes.values()].map((scope) => scope.candidateId),
+      );
+    return { conversationId, threadRootId: [...scopes.values()][0]!.threadRootId };
   }
   try {
     return await ports.resolveAgentTarget(workspaceId, agentId, target);
@@ -194,6 +212,7 @@ export async function drainScope(
     const [parent, anchor] = target.split(":");
     if (!parent?.startsWith("#") || !isAppError(error) || error.code !== "ACCESS_DENIED")
       throw error;
+    if (anchor) assertMessageAnchor(anchor);
     const notified = await ports.db.pendingMentionAction.findMany({
       where: {
         workspaceId,
@@ -205,16 +224,27 @@ export async function drainScope(
             ...visibleChannelWhere(workspaceId, { agentId }),
             channelName: parent.slice(1),
           },
-          threadRootId: anchor ? { not: null } : null,
+          threadRootId: anchor ? messageAnchorWhere(anchor) : null,
         },
       },
       select: { conversationId: true, message: { select: { threadRootId: true } } },
     });
-    const match = notified.find(
-      (row) => !anchor || messageIdMatchesAnchor(row.message.threadRootId!, anchor),
-    );
+    // pendingMentionAction has one row per notified message, and several messages can share
+    // one thread, so ambiguity is judged on the distinct resolved scopes, not the row count.
+    const scopes = new Map<string, { conversationId: string; threadRootId: string | null }>();
+    for (const row of notified) {
+      const threadRootId = row.message.threadRootId;
+      const key = `${row.conversationId}:${threadRootId ?? ""}`;
+      if (!scopes.has(key)) scopes.set(key, { conversationId: row.conversationId, threadRootId });
+    }
+    if (scopes.size > 1)
+      throw new AgentMessageValidationError(
+        "ambiguous message prefix; use the full UUID",
+        [...scopes.values()].map((scope) => scope.threadRootId!).filter(Boolean),
+      );
+    const match = [...scopes.values()][0];
     if (!match) throw error;
-    return { conversationId: match.conversationId, threadRootId: match.message.threadRootId };
+    return match;
   }
 }
 

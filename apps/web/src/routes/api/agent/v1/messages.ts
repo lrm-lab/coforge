@@ -45,6 +45,7 @@ import { isAppErrorCode } from "#src/lib/app-error";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 import { AGENT_DM_LIMIT_REASON } from "#src/server/conversations/agent-dm-limits.server";
 import {
+  agentMessageValidationResponse,
   ambiguousTargetResponse,
   postingTargetRefusalResponse,
 } from "#src/server/agents/agent-target-status.server";
@@ -138,6 +139,7 @@ export async function handleAgentMessagesGet(
     return (
       (isAttachmentMessageTarget(target) ? attachmentMessageRefusal(error) : undefined) ??
       ambiguousTargetResponse(error, target) ??
+      agentMessageValidationResponse(error) ??
       Response.json({ error: "invalid message query" }, { status: 400 })
     );
   }

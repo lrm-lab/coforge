@@ -5,7 +5,7 @@ import type {
   ReminderSummaryRecord,
 } from "@lrm/coforge-sdk/internal";
 
-/** The eight-hex prefix `message read` shows, as the reminder commands name a reminder. */
+/** The eight-hex prefix the reminder commands print. */
 function shortId(id: string): string {
   return id.slice(0, 8);
 }
