@@ -235,7 +235,19 @@ const RESTORE_READERS: Record<
 };
 
 export function restoreContextView(request: RestoreRequest): ContextViewRestoreResult {
-  const records = parseRecords(request.buffer, request.offset);
+  if (
+    !Number.isSafeInteger(request.offset) ||
+    request.offset < 0 ||
+    request.offset > request.buffer.length
+  )
+    return { ok: false, failure: "read_failed" };
+  // Kimi's availability index is captured at request commit, while the send tool result that
+  // proves a viewer message may be appended a few records later. Its reader searches the complete
+  // bounded source and stops at that send result; the other providers retain offset-bounded reads.
+  const records = parseRecords(
+    request.buffer,
+    request.runtime === "kimi-sdk" ? request.buffer.length : request.offset,
+  );
   if (records === "too_many")
     return { ok: false, failure: "too_large", tooLargeCause: "restore_limit" };
   if (!records) return { ok: false, failure: "read_failed" };

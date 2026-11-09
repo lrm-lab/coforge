@@ -83,10 +83,10 @@ export function restoreKimi(
               ? event.id
               : null;
         const name = typeof event.name === "string" ? event.name : "unknown";
+        const parsedArguments = parseToolInput(event.arguments ?? event.args);
         if (id) {
           if (pendingTools.has(id)) return { ok: false, failure: "context_mismatch" };
           toolNames.set(id, name);
-          const parsedArguments = parseToolInput(event.arguments);
           const command =
             isRecord(parsedArguments) && typeof parsedArguments.command === "string"
               ? parsedArguments.command
@@ -104,7 +104,7 @@ export function restoreKimi(
               type: "tool_use",
               toolName: name,
               toolUseId: id,
-              input: parseToolInput(event.arguments),
+              input: parsedArguments,
             },
           ]),
         );
