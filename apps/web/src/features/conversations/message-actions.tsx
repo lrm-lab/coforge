@@ -225,8 +225,8 @@ export function MessageActionSheet({
       className={(state) =>
         cn(
           "fixed inset-0 z-50 flex min-h-dvh items-end justify-center bg-overlay/70 outline-hidden backdrop-blur-[6px]",
-          state.isEntering && "duration-300 ease-out animate-in fade-in",
-          state.isExiting && "duration-200 ease-in animate-out fade-out",
+          state.isEntering && "duration-(--motion-in) ease-snap animate-in fade-in",
+          state.isExiting && "duration-(--motion-out) ease-in animate-out fade-out",
         )
       }
     >
@@ -234,8 +234,9 @@ export function MessageActionSheet({
         className={(state) =>
           cn(
             "w-full rounded-t-2xl bg-primary shadow-xl outline-hidden",
-            state.isEntering && "duration-300 ease-out animate-in slide-in-from-bottom",
-            state.isExiting && "duration-200 ease-in animate-out slide-out-to-bottom",
+            state.isEntering &&
+              "duration-(--motion-in-lg) ease-snap animate-in slide-in-from-bottom",
+            state.isExiting && "duration-(--motion-out-lg) ease-in animate-out slide-out-to-bottom",
           )
         }
       >

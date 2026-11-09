@@ -97,6 +97,14 @@
     "Segoe UI Emoji", "Noto Color Emoji";
   --font-display: var(--font-body);
 
+  /* The app's one curve for anything that appears or answers a press (Frank, 11-09: ease-out,
+     under 300ms): it moves at once and settles gently, so the same duration reads quicker than
+     the browser's own ease-out. Leaving uses plain ease-in and a shorter duration (the
+     `--motion-*` times below). */
+  --ease-snap: cubic-bezier(0.23, 1, 0.32, 1);
+  /* A spinner turning slowly reads as stuck; a quicker turn reads as working. */
+  --animate-spin: spin 0.7s linear infinite;
+
   /* An indeterminate progress bar's segment (a third of its track) sweeping across it. The
      official Untitled UI progress bar only shows a known value. */
   --animate-progress-indeterminate: progress-indeterminate 1.4s ease-in-out infinite;
@@ -381,4 +389,17 @@ html[data-drag-cursor] [data-drop-blocked] * {
     --epr-category-padding: 0.5rem 0.75rem !important;
     --epr-search-input-height: 2rem !important;
   }
+}
+
+/* How long things take to appear (`in`) and leave (`out`), in three sizes, so every overlay is
+   timed from here (`duration-(--motion-in)`): sm for what sits by its trigger (menus, selects,
+   tooltips, hover cards), the default for dialogs and the mobile menu, lg for panels that cross
+   the screen (side panels, bottom sheets). Leaving is always the quicker of the two. */
+:root {
+  --motion-in-sm: 150ms;
+  --motion-out-sm: 100ms;
+  --motion-in: 200ms;
+  --motion-out: 150ms;
+  --motion-in-lg: 250ms;
+  --motion-out-lg: 200ms;
 }

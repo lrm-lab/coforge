@@ -137,8 +137,8 @@ function NoticeSheet({ children }: { children: ReactNode }) {
       className={({ isEntering, isExiting }) =>
         cn(
           "fixed inset-0 z-50 flex items-end bg-overlay/70",
-          isEntering && "duration-200 ease-out animate-in fade-in",
-          isExiting && "duration-150 ease-in animate-out fade-out",
+          isEntering && "duration-(--motion-in) ease-snap animate-in fade-in",
+          isExiting && "duration-(--motion-out) ease-in animate-out fade-out",
         )
       }
     >
@@ -146,8 +146,8 @@ function NoticeSheet({ children }: { children: ReactNode }) {
         className={({ isEntering, isExiting }) =>
           cn(
             "w-full",
-            isEntering && "duration-200 ease-out animate-in slide-in-from-bottom",
-            isExiting && "duration-150 ease-in animate-out slide-out-to-bottom",
+            isEntering && "duration-(--motion-in-lg) ease-snap animate-in slide-in-from-bottom",
+            isExiting && "duration-(--motion-out-lg) ease-in animate-out slide-out-to-bottom",
           )
         }
       >
