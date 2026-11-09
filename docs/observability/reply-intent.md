@@ -48,7 +48,9 @@ Agent 即将在某个会话里发言时，输入框上方显示“某某正在�
 | --- | --- | --- |
 | Claude Code | 是（`--include-partial-messages` 已开启：`stream_event` 的 `content_block_start`（tool_use 的 id 与名称）+ `input_json_delta`，按 block index 对应） | `claude-code/stream-events.ts` 的 `ClaudeStreamEvents` |
 | Pi（含内置 CoForge Agent） | 是（`toolcall_delta`，调用 id 与名称在 `partial.content[contentIndex]`） | `pi/reply-intents.ts` 的 `PiReplyIntents` |
-| Codex、Cursor、OpenCode、Grok、Kiro、Antigravity | 否：adapter 与其夹具里没有参数片段，只在调用开始或完成时给出完整参数 | 只有 `tool-start` 路径 |
+| Cursor、OpenCode、Antigravity、Command Code、Devin、Droid、DSH | 是（工具调用更新带 `rawInput` 时序列化后交给 scanner） | 各自的 `update-events.ts`（Cursor、OpenCode、Antigravity、Droid 为 `acp-update-events.ts`） |
+| Grok | 是（工具调用的参数片段） | `grok/update-events.ts` |
+| Codex、Kiro | 否：只在调用开始或完成时给出完整参数 | 只有 `tool-start` 路径 |
 
 ## 服务端
 
