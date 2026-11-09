@@ -53,3 +53,41 @@ export const activityMentionReadSchema = z.object({
   resolutionId: z.uuid(),
   read: z.boolean(),
 });
+
+/** The most rows an Undo may name. A bigger write is not handed back for Undo. */
+export const ACTIVITY_UNDO_LIMIT = 5_000;
+
+const sequenceSchema = z.number().int().min(1).max(2_147_483_647);
+
+/**
+ * What a Mark all done changed, handed back to undo it: per member row (or thread) the Done boundary it
+ * held (`previous`; null: none) and the one the write left (`through`), which Undo checks is
+ * still there before it restores; and the mention actions the write dismissed, with the instant it
+ * did (epoch milliseconds). Nothing here grants reach: Undo only touches the caller's own rows.
+ */
+export const activityDoneUndoSchema = z.object({
+  members: z
+    .array(
+      z.object({
+        memberId: z.uuid(),
+        previous: sequenceSchema.nullable(),
+        through: sequenceSchema,
+      }),
+    )
+    .max(ACTIVITY_UNDO_LIMIT),
+  threads: z
+    .array(
+      z.object({
+        memberId: z.uuid(),
+        rootMessageId: z.uuid(),
+        previous: sequenceSchema.nullable(),
+        through: sequenceSchema,
+      }),
+    )
+    .max(ACTIVITY_UNDO_LIMIT),
+  mentions: z.object({
+    ids: z.array(z.uuid()).max(ACTIVITY_UNDO_LIMIT),
+    at: z.number().int().positive().max(8.64e15),
+  }),
+});
+export type ActivityDoneUndo = z.infer<typeof activityDoneUndoSchema>;
