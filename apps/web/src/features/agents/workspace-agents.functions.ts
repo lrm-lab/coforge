@@ -43,7 +43,11 @@ export const loadWorkspaceAgents = createServerFn({ method: "GET" })
         Promise.all([
           readAgentRoster(db, user.id, workspaceId),
           viewer
-            ? listExtraAgents(db, getAgentDisplay(), workspaceId, viewer).catch(() => undefined)
+            ? // The page load is the first-paint read: every visible public Agent's display, so
+              // an idle one never paints "unknown" while its steady-state reads stay busy/held.
+              listExtraAgents(db, getAgentDisplay(), workspaceId, viewer, [], true).catch(
+                () => undefined,
+              )
             : undefined,
           statusAgentScopes(db, workspaceId).catch(() => []),
         ]),

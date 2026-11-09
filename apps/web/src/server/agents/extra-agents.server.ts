@@ -1,6 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
-import { normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
+import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import { HELD_AGENT_IDS_LIMIT, type ExtraAgent } from "#src/features/agents/extra-agent";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "./active-agent.server";
 import type { AgentDisplay } from "./agent-display.server";
@@ -20,13 +20,22 @@ import {
  * rows, so the cost follows the busy Agents and the ids can never read what the viewer may not see.
  * A failed read leaves the rows without a display rather than failing the list, as `listAgents`
  * does, and the browser's next refresh asks again.
+ *
+ * `fullDisplays` is the first-paint and catch-up read: besides busy and held it also snapshots
+ * every visible public Agent with a Computer, up to `FULL_EXTRA_DISPLAY_LIMIT` beyond them, so a
+ * member sees an idle public Agent's real status instead of "unknown". Private Agents keep the
+ * busy/held rule — their status floor already covers them, and the read does not widen what a
+ * viewer may see. Steady-state reads leave it off.
  */
+export const FULL_EXTRA_DISPLAY_LIMIT = 200;
+
 export async function listExtraAgents(
   db: Pick<PrismaClient, "agent">,
   displays: Pick<AgentDisplay, "snapshotMany" | "busyScopes">,
   workspaceId: string,
   viewer: AgentVisibilityViewer,
   heldAgentIds: readonly string[] = [],
+  fullDisplays = false,
   now = Date.now(),
 ): Promise<ExtraAgent[]> {
   const rows = await db.agent.findMany({
@@ -54,6 +63,20 @@ export async function listExtraAgents(
   const busy = await displays.busyScopes(workspaceId, now).catch(() => []);
   const held = [...new Set(heldAgentIds)].slice(0, HELD_AGENT_IDS_LIMIT);
   const wanted = new Set([...busy.map((scope) => scope.agentId), ...held]);
+  if (fullDisplays) {
+    let added = 0;
+    for (const row of rows) {
+      if (added >= FULL_EXTRA_DISPLAY_LIMIT) break;
+      if (
+        !wanted.has(row.id) &&
+        row.computerId &&
+        normalizeAgentVisibility(row.visibility) === AGENT_VISIBILITY.PUBLIC
+      ) {
+        wanted.add(row.id);
+        added += 1;
+      }
+    }
+  }
   const scoped = rows.flatMap((row) =>
     row.computerId && wanted.has(row.id) ? [{ row, computerId: row.computerId }] : [],
   );

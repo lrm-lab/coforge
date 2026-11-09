@@ -145,6 +145,9 @@ export const agentIdInputSchema = z.object({ agentId: agentIdSchema });
  * only against abuse; the read itself dedupes and keeps the first `HELD_AGENT_IDS_LIMIT`. */
 export const loadExtraAgentsInputSchema = z.object({
   heldAgentIds: z.array(agentIdSchema).max(5_000),
+  /** First-paint and catch-up reads only: also snapshot every visible public Agent, so an idle
+   * one shows its real status instead of "unknown". Steady-state reads leave it off. */
+  fullDisplays: z.boolean().optional(),
 });
 /** Deleting an Agent is name-confirmed, the same guard `ProjectSettings.delete` uses —
  * the server re-checks the typed name against the current row in the delete itself, so a

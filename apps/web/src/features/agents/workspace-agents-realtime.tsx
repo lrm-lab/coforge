@@ -143,9 +143,12 @@ export function WorkspaceAgentsProvider({
     });
   }, [queryClient, workspaceId]);
   const readExtraAgents = useCallback(
-    () =>
+    (fullDisplays = false) =>
       loadExtras({
-        data: { heldAgentIds: heldDisplayAgentIds(heldAgents.current, Date.now(), watched.ids()) },
+        data: {
+          heldAgentIds: heldDisplayAgentIds(heldAgents.current, Date.now(), watched.ids()),
+          ...(fullDisplays ? { fullDisplays: true } : {}),
+        },
       }),
     [loadExtras, watched],
   );
@@ -190,7 +193,10 @@ export function WorkspaceAgentsProvider({
         ? queryClient
             .fetchQuery({
               queryKey: extraAgentsQueryKey(workspaceId),
-              queryFn: () => readExtraAgents(),
+              // `refresh` runs on subscribe catch-up and the directory/visibility/expiry events —
+              // the moments the extras' displays may be stale, so it reads them all (public ones;
+              // `listExtraAgents` keeps private Agents on the busy/held rule).
+              queryFn: () => readExtraAgents(true),
               staleTime: 0,
             })
             // The extras are an addition: without a fresh read the last ones read stay.

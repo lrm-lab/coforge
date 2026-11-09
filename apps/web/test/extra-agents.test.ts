@@ -4,7 +4,7 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { HELD_AGENT_IDS_LIMIT } from "#src/features/agents/extra-agent";
 import { ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { listExtraAgents } from "#src/server/agents/extra-agents.server";
+import { FULL_EXTRA_DISPLAY_LIMIT, listExtraAgents } from "#src/server/agents/extra-agents.server";
 import {
   visibleAgentWhere,
   type AgentVisibilityViewer,
@@ -139,7 +139,7 @@ describe("listExtraAgents", () => {
       // "gone" is busy but not among the viewer's visible rows: its lease is ignored.
       ["c", "a", "gone"],
     );
-    const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member, [], 5_000);
+    const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member, [], false, 5_000);
     expect(busyCalls).toEqual([{ workspaceId: WORKSPACE_ID, now: 5_000 }]);
     expect(scopeCalls).toEqual([
       [
@@ -251,5 +251,45 @@ describe("listExtraAgents", () => {
     const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member);
     expect(agents.map((agent) => agent.id)).toEqual(["a", "b"]);
     expect(agents.some((agent) => "display" in agent)).toBe(false);
+  });
+
+  test("fullDisplays snapshots every visible public Agent with a Computer, busy ones included once", async () => {
+    const { db, displays, scopeCalls } = fakes(
+      [row("a"), row("idle"), row("c", { computerId: "computer-moved" })],
+      ["c"],
+    );
+    const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member, [], true);
+    expect(scopeCalls).toEqual([
+      [
+        { workspaceId: WORKSPACE_ID, computerId: "computer-a", agentId: "a" },
+        { workspaceId: WORKSPACE_ID, computerId: "computer-idle", agentId: "idle" },
+        { workspaceId: WORKSPACE_ID, computerId: "computer-moved", agentId: "c" },
+      ],
+    ]);
+    expect(agents.map((agent) => "display" in agent)).toEqual([true, true, true]);
+  });
+
+  test("fullDisplays leaves private Agents on the busy/held rule and skips Agents with no Computer", async () => {
+    const { db, displays, scopeCalls } = fakes(
+      [
+        row("open"),
+        row("closed", { visibility: "private" }),
+        row("unplaced", { computerId: null }),
+        row("busy-private", { visibility: "private" }),
+      ],
+      ["busy-private"],
+    );
+    const agents = await listExtraAgents(db, displays, WORKSPACE_ID, member, [], true);
+    expect(scopeCalls[0]!.map((scope) => scope.agentId)).toEqual(["open", "busy-private"]);
+    expect(agents.map((agent) => "display" in agent)).toEqual([true, false, false, true]);
+  });
+
+  test("fullDisplays caps the added public Agents at FULL_EXTRA_DISPLAY_LIMIT", async () => {
+    const rows = Array.from({ length: FULL_EXTRA_DISPLAY_LIMIT + 10 }, (_, i) =>
+      row(`agent-${String(i).padStart(3, "0")}`),
+    );
+    const { db, displays, scopeCalls } = fakes(rows);
+    await listExtraAgents(db, displays, WORKSPACE_ID, member, [], true);
+    expect(scopeCalls[0]).toHaveLength(FULL_EXTRA_DISPLAY_LIMIT);
   });
 });

@@ -9,12 +9,20 @@ import { listExtraAgents } from "#src/server/agents/extra-agents.server";
 
 /** The Agents of the Workspace that the viewer may see beyond their own roster (`ExtraAgent`),
  * under the Members directory's visibility rule, with a display for the busy ones and the held
- * ones only. POST because the held ids are a body. */
+ * ones — and, when the read asks (`fullDisplays`, first paint and catch-up only), every visible
+ * public Agent. POST because the held ids are a body. */
 export const loadExtraAgents = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(loadExtraAgentsInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     declareNoStore();
     const viewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
-    return listExtraAgents(db, getAgentDisplay(), workspaceId, viewer, data.heldAgentIds);
+    return listExtraAgents(
+      db,
+      getAgentDisplay(),
+      workspaceId,
+      viewer,
+      data.heldAgentIds,
+      data.fullDisplays === true,
+    );
   });

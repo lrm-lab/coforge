@@ -23,6 +23,10 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * Web with skip-auth, PostgreSQL, local Centrifugo and agent-browser. No model runs. The suite
  * removes its own Workspace, people, Computer and channel. Screenshots live in
  * `.amp/e2e/channel-members-agent-status/`.
+ *
+ * The page load's extras read is the full-display one (task #735 follow-up): a public Agent that
+ * never reported reads its real "offline" snapshot instead of "Status unknown", while a private
+ * Agent stays on the floor/held rule and still reads "Status unknown" until one arrives.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -204,12 +208,15 @@ test("a plain member's channel roster reads another member's Agent status, publi
   await browser("eval", `${membersRow}.click()`);
   await waitFor(`${panel}?.querySelector('input[placeholder="Search members…"]') != null`, 15_000);
 
-  // Neither Agent has reported a display yet: both rows read "Status unknown".
-  for (const agent of [agents.public, agents.private]) {
-    const row = agentRow(agent.displayName);
-    await waitFor(`${row} !== undefined`, 15_000);
-    await waitFor(`${row}?.textContent.includes("Status unknown")`, 15_000);
-  }
+  // Neither Agent has reported a display yet. The public one's first-paint extras read already
+  // answered its real offline snapshot, so its row reads "Offline"; the private one stays on the
+  // floor/held rule and still reads "Status unknown" until a floor arrives.
+  const publicRow = agentRow(agents.public.displayName);
+  const privateRow = agentRow(agents.private.displayName);
+  await waitFor(`${publicRow} !== undefined`, 15_000);
+  await waitFor(`${privateRow} !== undefined`, 15_000);
+  await waitFor(`${publicRow}?.textContent.includes("Offline")`, 15_000);
+  await waitFor(`${privateRow}?.textContent.includes("Status unknown")`, 15_000);
 
   // The private Agent answers through its status floor on the shared channel; the public one
   // through its full display — both land on the same row the avatar's dot reads.
