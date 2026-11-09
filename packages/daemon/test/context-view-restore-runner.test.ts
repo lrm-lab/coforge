@@ -35,7 +35,12 @@ test("preserves the Raft too-large cause in child framing", () => {
 
 test("runs the real restore mode in a Bun child", async () => {
   const buffer = Buffer.from(
-    JSON.stringify({ type: "user_message", session_id: "s1", message: "hello" }) + "\n",
+    [
+      { type: "response_item", session_id: "s1", item: { type: "additional_tools", tools: [] } },
+      { type: "user_message", session_id: "s1", message: "hello" },
+    ]
+      .map((record) => JSON.stringify(record))
+      .join("\n") + "\n",
     "utf8",
   );
   const result = await runContextViewRestoreInChild(
