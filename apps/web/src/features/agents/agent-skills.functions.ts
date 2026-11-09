@@ -6,6 +6,7 @@ import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import {
   AgentSkillsQuery,
   findOwnedSkillsAssignment,
+  skillsDaemonOnline,
 } from "#src/server/agents/agent-skills.server";
 import {
   createCentrifugoServerApi,
@@ -20,11 +21,12 @@ export const getAgentSkills = createServerFn({ method: "POST" })
   .handler(async ({ data: agentId, context }) => {
     declareNoStore();
     const { user, db, workspaceId } = context;
+    const api = createCentrifugoServerApi();
     const query = new AgentSkillsQuery({
       findOwned: (viewer, id) => findOwnedSkillsAssignment(db, viewer, id),
-      online: (scope) => getComputerStatusCache().get(scope),
+      online: skillsDaemonOnline(api, getComputerStatusCache()),
       publish: (request) =>
-        createCentrifugoServerApi().publish(
+        api.publish(
           daemonControlChannel(request.workspaceId, request.computerId),
           encodeAgentSkillsListRequest(request),
         ),

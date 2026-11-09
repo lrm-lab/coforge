@@ -6,6 +6,11 @@ import type {
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { parseAgentRuntimeConfig } from "./agent-runtime-config.server";
+import type { ComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
+import {
+  daemonChannelReachable,
+  type CentrifugoConnections,
+} from "#src/server/centrifugo/server-api.server";
 
 export type SkillsViewer = { userId: string; workspaceId: string };
 export type SkillsAssignment = { computerId: string; provider: RuntimeProvider; revision: string };
@@ -13,11 +18,24 @@ export type PendingSkills = { request: AgentSkillsListRequest; userId: string; r
 export interface AgentSkillsResults {
   begin(pending: PendingSkills): Promise<void>;
   read(requestId: string): Promise<AgentSkillsListResult | undefined>;
+  /** Resolves `true` when the request's result was stored, `false` when `timeoutMs` elapsed. */
+  wait(requestId: string, timeoutMs: number): Promise<boolean>;
   clear(requestId: string): Promise<void>;
 }
 type SkillsResponse =
   | { status: "ready"; result: AgentSkillsListResult }
   | { status: "offline" | "timeout" | "unavailable" };
+
+/** "Online" for a Skills query means a live subscriber on the daemon's control channel: the
+ * status cache can outlive an ungraceful disconnect by its TTL, and a publish into a channel
+ * nobody reads is dropped unheard (task #738). */
+export function skillsDaemonOnline(
+  api: Pick<CentrifugoConnections, "presence">,
+  status: Pick<ComputerStatusCache, "get">,
+): (scope: { workspaceId: string; computerId: string }) => Promise<boolean> {
+  return async (scope) =>
+    (await status.get(scope)) && daemonChannelReachable(api, scope.workspaceId, scope.computerId);
+}
 
 /** Authorizes a fresh directory observation, not Computer inventory or session state. */
 export class AgentSkillsQuery {
@@ -28,7 +46,7 @@ export class AgentSkillsQuery {
       publish(request: AgentSkillsListRequest): Promise<void>;
       results: AgentSkillsResults;
     },
-    private readonly timing = { now: Date.now, wait: () => Bun.sleep(100), timeoutMs: 5_000 },
+    private readonly timing = { now: Date.now, timeoutMs: 5_000, fallbackMs: 1_000 },
   ) {}
 
   async get(viewer: SkillsViewer, agentId: string): Promise<SkillsResponse> {
@@ -48,7 +66,7 @@ export class AgentSkillsQuery {
       await results.begin({ request, userId: viewer.userId, revision: assignment.revision });
       await publish(request);
       const deadline = this.timing.now() + this.timing.timeoutMs;
-      do {
+      for (;;) {
         const result = await results.read(request.requestId);
         if (result) {
           const current = await findOwned(viewer, agentId);
@@ -62,9 +80,12 @@ export class AgentSkillsQuery {
             return { status: "unavailable" };
           return { status: "ready", result };
         }
-        await this.timing.wait();
-      } while (this.timing.now() < deadline);
-      return { status: "timeout" };
+        const remaining = deadline - this.timing.now();
+        if (remaining <= 0) return { status: "timeout" };
+        // A stored result wakes the wait; the slice only bounds a notification lost to a
+        // reconnect gap, so the poll is a backstop rather than the wait itself.
+        await results.wait(request.requestId, Math.min(remaining, this.timing.fallbackMs));
+      }
     } catch {
       return { status: "unavailable" };
     } finally {

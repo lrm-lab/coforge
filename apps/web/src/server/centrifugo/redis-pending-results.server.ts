@@ -1,4 +1,5 @@
 import type { RedisClient } from "bun";
+import { subscribeAcrossReconnects, type RedisSubscriber } from "#src/server/redis-client.server";
 
 // Compare the entire pending value atomically: expiry/cancellation cannot race the result write.
 // First valid result wins; duplicates do not extend its TTL.
@@ -31,13 +32,72 @@ export class RedisPendingResults<
   Result extends { requestId: string },
   Pending extends { request: Request } = { request: Request; userId: string; revision: string },
 > {
+  private readonly wakeWaiters = new Map<string, Set<(signaled: boolean) => void>>();
+  private wakeSubscription: Promise<void> | undefined;
+
   constructor(
     private readonly redis: Pick<RedisClient, "get" | "set" | "send">,
     private readonly kind: PendingResultsKind<Request, Result>,
+    /** Opt-in wake-up for `wait`: a stored result publishes its requestId on `<prefix>:wake`,
+     * locally and to every other web instance. Kinds that do not pass this behave as before. */
+    private readonly wake?: { subscribe: () => RedisSubscriber },
   ) {}
 
   private keys(id: string) {
     return [`${this.kind.prefix}:${id}:pending`, `${this.kind.prefix}:${id}:result`];
+  }
+
+  /** Resolves `true` when this request's result was stored, `false` when `timeoutMs` elapsed
+   * first. Callers still `read` on every wake: the result itself is the source of truth, so a
+   * notification lost to a reconnect gap only delays the read by the caller's next slice. */
+  wait(requestId: string, timeoutMs: number): Promise<boolean> {
+    if (timeoutMs <= 0) return Promise.resolve(false);
+    this.subscribeWake();
+    return new Promise<boolean>((resolve) => {
+      let pending = this.wakeWaiters.get(requestId);
+      if (!pending) this.wakeWaiters.set(requestId, (pending = new Set()));
+      const done = (signaled: boolean) => {
+        clearTimeout(timer);
+        pending!.delete(done);
+        if (pending!.size === 0 && this.wakeWaiters.get(requestId) === pending)
+          this.wakeWaiters.delete(requestId);
+        resolve(signaled);
+      };
+      const timer = setTimeout(() => done(false), timeoutMs);
+      pending.add(done);
+    });
+  }
+
+  private wakeChannel() {
+    return `${this.kind.prefix}:wake`;
+  }
+
+  private wakeLocal(requestId: string) {
+    const pending = this.wakeWaiters.get(requestId);
+    if (!pending) return;
+    this.wakeWaiters.delete(requestId);
+    for (const done of pending) done(true);
+  }
+
+  private wakeAllLocal() {
+    for (const requestId of this.wakeWaiters.keys()) this.wakeLocal(requestId);
+  }
+
+  private subscribeWake() {
+    const wake = this.wake;
+    if (!wake) return;
+    // After a reconnect, a notification published meanwhile is lost: every waiter re-reads.
+    this.wakeSubscription ??= subscribeAcrossReconnects(
+      wake.subscribe(),
+      this.wakeChannel(),
+      (message) => this.wakeLocal(message),
+      () => this.wakeAllLocal(),
+    ).then(
+      () => {},
+      () => {
+        this.wakeSubscription = undefined;
+      },
+    );
   }
 
   async begin(pending: Pending) {
@@ -72,6 +132,13 @@ export class RedisPendingResults<
       Buffer.from(this.kind.encode(result)).toString("base64"),
       String(this.kind.resultTtlSeconds ?? 30),
     ]);
-    return outcome === undefined || Number(outcome) === 1;
+    const accepted = outcome === undefined || Number(outcome) === 1;
+    if (accepted && this.wake) {
+      // Same-process waiters wake at once; the publish reaches waiters on other instances.
+      // Never block the result path on Redis.
+      this.wakeLocal(result.requestId);
+      this.redis.send("PUBLISH", [this.wakeChannel(), result.requestId]).catch(() => {});
+    }
+    return accepted;
   }
 }

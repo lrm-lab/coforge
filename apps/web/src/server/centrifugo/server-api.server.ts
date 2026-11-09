@@ -230,6 +230,31 @@ export const daemonControlChannel = (workspaceId: string, computerId: string) =>
   `daemon:${workspaceId}:${computerId}`;
 
 /**
+ * Whether a live daemon is subscribed to a Computer's control channel right now. The computer
+ * status cache can outlive an ungraceful disconnect by its TTL, so a query that publishes into
+ * the channel should confirm a subscriber exists first — with none, the publication is dropped
+ * unheard. A presence read that fails keeps the caller on its old path (fail open).
+ */
+export async function daemonChannelReachable(
+  api: Pick<CentrifugoConnections, "presence">,
+  workspaceId: string,
+  computerId: string,
+): Promise<boolean> {
+  try {
+    return (await api.presence(daemonControlChannel(workspaceId, computerId))).length > 0;
+  } catch {
+    console.warn(
+      JSON.stringify({
+        event: "daemon_channel:presence_unavailable",
+        workspace_id: workspaceId,
+        computer_id: computerId,
+      }),
+    );
+    return true;
+  }
+}
+
+/**
  * Makes a Computer's daemon connection for one Workspace reconnect now, so it meets whatever its
  * connect check now answers. The connection is found by the presence of its own control channel
  * (the `daemon` namespace keeps presence for this) and only that client is disconnected, with

@@ -4,7 +4,11 @@ import {
   type AgentSkillsListRequest,
   type AgentSkillsListResult,
 } from "@lrm/coforge-sdk/internal";
-import { AgentSkillsQuery, type SkillsAssignment } from "#src/server/agents/agent-skills.server";
+import {
+  AgentSkillsQuery,
+  skillsDaemonOnline,
+  type SkillsAssignment,
+} from "#src/server/agents/agent-skills.server";
 import { createAgentSkillsListResultMethod } from "#src/server/centrifugo/agent-skills-cache.server";
 
 test("Skills query binds the owner's assignment and rechecks it before returning metadata", async () => {
@@ -48,6 +52,7 @@ test("Skills query binds the owner's assignment and rechecks it before returning
           workspace: { status: "ok", entries: [], directories: [] },
         } satisfies AgentSkillsListResult;
       },
+      wait: async () => false,
       clear: async () => {
         cleared++;
       },
@@ -103,14 +108,16 @@ test.each(["ready", "offline", "timeout", "moved", "reconfigured", "wrong-result
               workspace: { status: "ok", entries: [], directories: [] },
             };
           },
+          wait: async (_requestId: string, timeoutMs: number) => {
+            now += timeoutMs;
+            return false;
+          },
         },
       },
       {
         now: () => now,
-        wait: async () => {
-          now += 100;
-        },
         timeoutMs: 200,
+        fallbackMs: 100,
       },
     );
     const response = await query.get({ userId: "owner", workspaceId: "workspace" }, "agent");
@@ -157,4 +164,100 @@ test("Skills result RPC trusts daemon claims rather than claimed payload scope",
     }),
   ).toBeInstanceOf(Uint8Array);
   expect(accepted).toBe(1);
+});
+
+test("Skills query wakes on a stored result and still bounds each wait slice", async () => {
+  let request: AgentSkillsListRequest | undefined;
+  let reads = 0;
+  const waits: { requestId: string; timeoutMs: number }[] = [];
+  const query = new AgentSkillsQuery(
+    {
+      findOwned: async () => ({ computerId: "computer", provider: "codex", revision: "one" }),
+      online: async () => true,
+      publish: async (value) => {
+        request = value;
+      },
+      results: {
+        begin: async () => {},
+        read: async () => {
+          reads++;
+          if (reads === 1) return undefined;
+          return {
+            ...request!,
+            scannedAtMs: 1,
+            global: { status: "ok", entries: [], directories: [] },
+            workspace: { status: "ok", entries: [], directories: [] },
+          };
+        },
+        wait: async (requestId, timeoutMs) => {
+          waits.push({ requestId, timeoutMs });
+          return true; // The stored result's notification woke the wait.
+        },
+        clear: async () => {},
+      },
+    },
+    { now: Date.now, timeoutMs: 5_000, fallbackMs: 1_000 },
+  );
+  const response = await query.get({ userId: "owner", workspaceId: "workspace" }, "agent");
+  expect(response.status).toBe("ready");
+  expect(waits).toEqual([{ requestId: request!.requestId, timeoutMs: 1_000 }]);
+});
+
+test("Skills query keeps its deadline when notifications never arrive", async () => {
+  let now = 0;
+  const waits: number[] = [];
+  const query = new AgentSkillsQuery(
+    {
+      findOwned: async () => ({ computerId: "computer", provider: "codex", revision: "one" }),
+      online: async () => true,
+      publish: async () => {},
+      results: {
+        begin: async () => {},
+        read: async () => undefined,
+        wait: async (_requestId, timeoutMs) => {
+          waits.push(timeoutMs);
+          now += timeoutMs;
+          return false;
+        },
+        clear: async () => {},
+      },
+    },
+    { now: () => now, timeoutMs: 2_500, fallbackMs: 1_000 },
+  );
+  expect(await query.get({ userId: "owner", workspaceId: "workspace" }, "agent")).toEqual({
+    status: "timeout",
+  });
+  // Slices shrink with the remaining deadline: 1000, 1000, then the 500 left.
+  expect(waits).toEqual([1_000, 1_000, 500]);
+});
+
+test("Skills daemon online needs the status cache and a live channel subscriber", async () => {
+  const scope = { workspaceId: "workspace", computerId: "computer" };
+  const clients = [{ client: "c", user: "u" }];
+  let presenceCalls = 0;
+  const api = {
+    presence: async () => {
+      presenceCalls++;
+      return clients;
+    },
+  };
+  const status = (online: boolean) => ({ get: async () => online });
+
+  // Cache says offline: presence is never asked, the answer is offline at once.
+  expect(await skillsDaemonOnline(api, status(false))(scope)).toBe(false);
+  expect(presenceCalls).toBe(0);
+
+  // Cache says online but nobody is subscribed: the publish would be dropped.
+  const emptyApi = { presence: async () => [] };
+  expect(await skillsDaemonOnline(emptyApi, status(true))(scope)).toBe(false);
+
+  // A presence read that fails keeps the old path: publish and let the timeout bound it.
+  const brokenApi = {
+    presence: async () => {
+      throw new Error("centrifugo unreachable");
+    },
+  };
+  expect(await skillsDaemonOnline(brokenApi, status(true))(scope)).toBe(true);
+
+  expect(await skillsDaemonOnline(api, status(true))(scope)).toBe(true);
 });

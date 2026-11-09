@@ -44,6 +44,10 @@ function fakeRedis() {
         for (const key of args) values.delete(key);
         return args.length;
       }
+      if (command === "PUBLISH") {
+        calls.push(["PUBLISH", ...args]);
+        return 0;
+      }
       // EVAL script numkeys pendingKey resultKey pendingValue resultValue
       const [script, numKeys, pendingKey, resultKey, pendingValue, resultValue] = args;
       calls.push(["EVAL", script!, numKeys!, pendingKey!, resultKey!]);
@@ -183,3 +187,87 @@ for (const { name, prefix, create, result, outOfScope } of cases) {
     expect(await store.read("request-1")).toEqual(result);
   });
 }
+
+// The Skills store is the one kind wired for wake-ups: `accept` publishes the requestId on
+// `<prefix>:wake` after the result lands, and `wait` resolves on it — locally at once, across
+// instances through the subscriber, and for every waiter after a reconnect gap.
+
+function fakeSubscriber() {
+  let onMessage: ((message: string) => void) | undefined;
+  const client = {
+    onconnect: null as (() => void) | null,
+    async subscribe(_channel: string, listener: (message: string) => void) {
+      onMessage = listener;
+      return "OK";
+    },
+    async send() {
+      return 1;
+    },
+    emit(message: string) {
+      onMessage?.(message);
+    },
+    reconnect() {
+      client.onconnect?.();
+    },
+  };
+  return client;
+}
+
+const WAKE_CHANNEL = "coforge:agent-skills:v1:wake";
+
+test("Skills wake: a stored result publishes its requestId and wakes the local waiter", async () => {
+  const redis = fakeRedis();
+  const subscriber = fakeSubscriber();
+  const store = new RedisAgentSkillsResults(redis as never, () => subscriber as never);
+  await store.begin({ request: skillsResult, userId: "user-1", revision: "rev-1" });
+
+  const waiting = store.wait("request-1", 5_000);
+  await store.accept(skillsResult);
+
+  expect(await waiting).toBe(true);
+  expect(redis.calls).toContainEqual(["PUBLISH", WAKE_CHANNEL, "request-1"]);
+});
+
+test("Skills wake: a notification wakes only its own request's waiters", async () => {
+  const redis = fakeRedis();
+  const subscriber = fakeSubscriber();
+  const store = new RedisAgentSkillsResults(redis as never, () => subscriber as never);
+
+  let firstDone = false;
+  const first = store.wait("request-1", 5_000).then((value) => {
+    firstDone = true;
+    return value;
+  });
+  const second = store.wait("request-2", 5_000);
+  await Bun.sleep(0);
+
+  subscriber.emit("request-2");
+  expect(await second).toBe(true);
+  await Bun.sleep(10);
+  expect(firstDone).toBe(false);
+
+  subscriber.emit("request-1");
+  expect(await first).toBe(true);
+});
+
+test("Skills wake: a reconnect gap wakes every waiter so it re-reads", async () => {
+  const redis = fakeRedis();
+  const subscriber = fakeSubscriber();
+  const store = new RedisAgentSkillsResults(redis as never, () => subscriber as never);
+
+  const first = store.wait("request-1", 5_000);
+  const second = store.wait("request-2", 5_000);
+  await Bun.sleep(0);
+
+  subscriber.reconnect();
+  expect(await first).toBe(true);
+  expect(await second).toBe(true);
+});
+
+test("Skills wake: a wait with no notification still ends at its bound", async () => {
+  const redis = fakeRedis();
+  const subscriber = fakeSubscriber();
+  const store = new RedisAgentSkillsResults(redis as never, () => subscriber as never);
+
+  expect(await store.wait("request-1", 20)).toBe(false);
+});

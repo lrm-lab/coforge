@@ -1,5 +1,5 @@
 import type { RedisClient } from "bun";
-import { openRedisClient } from "#src/server/redis-client.server";
+import { openRedisClient, type RedisSubscriber } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import {
   decodeAgentSkillsListResult,
@@ -19,20 +19,27 @@ export class RedisAgentSkillsResults
   extends RedisPendingResults<AgentSkillsListRequest, AgentSkillsListResult, PendingSkills>
   implements AgentSkillsResults
 {
-  constructor(redis: Pick<RedisClient, "get" | "set" | "send">) {
-    super(redis, {
-      prefix: "coforge:agent-skills:v1",
-      encode: encodeAgentSkillsListResult,
-      decode: decodeAgentSkillsListResult,
-      sameScope: sameSkillsScope,
-    });
+  constructor(redis: Pick<RedisClient, "get" | "set" | "send">, subscribe?: () => RedisSubscriber) {
+    super(
+      redis,
+      {
+        prefix: "coforge:agent-skills:v1",
+        encode: encodeAgentSkillsListResult,
+        decode: decodeAgentSkillsListResult,
+        sameScope: sameSkillsScope,
+      },
+      subscribe ? { subscribe } : undefined,
+    );
   }
 }
 
 let singleton: RedisAgentSkillsResults | undefined;
 export function getAgentSkillsResults() {
   if (!singleton) {
-    singleton = new RedisAgentSkillsResults(openRedisClient(redisUrlFor("Skills queries")));
+    const redisUrl = redisUrlFor("Skills queries");
+    singleton = new RedisAgentSkillsResults(openRedisClient(redisUrl), () =>
+      openRedisClient(redisUrl),
+    );
   }
   return singleton;
 }
