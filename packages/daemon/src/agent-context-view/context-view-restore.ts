@@ -1,7 +1,7 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { redactContextViewValue, type ContextViewRedactionCounts } from "./context-view-redaction";
 import { restoreClaude, restoreCodex } from "./context-view-restore-native";
-import { restorePi } from "./context-view-restore-captured";
+import { restoreKimi, restorePi } from "./context-view-restore-captured";
 import { CONTEXT_VIEW_PROVIDERS, type ContextViewRuntime } from "./context-view-providers";
 
 export type RestoredContextMessage = {
@@ -231,6 +231,7 @@ const RESTORE_READERS: Record<
   [RUNTIME_PROVIDER.CODEX]: restoreCodex,
   [RUNTIME_PROVIDER.PI]: restorePi,
   [RUNTIME_PROVIDER.COFORGE]: restorePi,
+  "kimi-sdk": restoreKimi,
 };
 
 export function restoreContextView(request: RestoreRequest): ContextViewRestoreResult {

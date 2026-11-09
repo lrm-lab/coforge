@@ -3,10 +3,9 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { claudeHistoryHost } from "#src/code-agent/claude-code/history-host";
 import { codexHistoryHost } from "#src/code-agent/codex/history-host";
 
-/** How the daemon reads one provider's request log back, keyed by the `RuntimeProvider` value an
- * Agent's launch config carries. An Agent's own `provider` therefore selects its reader; a
- * provider absent here is reported `unsupported_runtime` (task #739: the set used to be named
- * "claude"/"builtin"/"kimi-sdk", which no Agent config ever holds). */
+/** How the daemon reads one provider's request log back. RuntimeProvider values are used for
+ * launched Agents; `kimi-sdk` remains a context-view-only provider because its SDK transcript is
+ * still a supported Raft source even though CoForge has no Kimi RuntimeProvider. */
 export type ContextViewProviderReading = {
   /** A record marker that proves a file is this provider's request log. */
   marker: Buffer;
@@ -42,6 +41,12 @@ export const CONTEXT_VIEW_PROVIDERS = {
     marker: Buffer.from('{"type":"request",', "utf8"),
     source: "captured",
     sessionRoot: () => undefined,
+  },
+  "kimi-sdk": {
+    marker: Buffer.from('"type":"llm.request"', "utf8"),
+    source: "native",
+    sessionRoot: (envVars) =>
+      envVars.KIMI_CODE_HOME?.trim() || join(envVars.HOME || process.env.HOME || ".", ".kimi-code"),
   },
 } as const satisfies Record<string, ContextViewProviderReading>;
 

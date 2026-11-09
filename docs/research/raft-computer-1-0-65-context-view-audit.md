@@ -30,8 +30,7 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 3. **完整链路仍未验证。** 尚无 staging/browser E2E 覆盖：owner action → Server Function → Redis pending → Centrifugo daemon request → real Agent transcript/captured log → child restore → gzip HTTP upload → scoped result acceptance → browser render。现有 Web 测试是纯 principal helper，不能证明真实 auth、transport、Redis 或 provider 行为。Pi/Builtin indexed writer/restore 现在有 fixture 和 child 证据，但真实 provider E2E 仍为 **NOT VERIFIED**。
 
-4. **实现层面的可观测差异。** child 内部会先构造并 JSON encode view 再按 `maxBytes` 拒绝，父 daemon 还会再次序列化检查；这满足 bounded result，但与 Raft 在构造阶段更早截断的内存峰值仍可能不同。Pi capture barrier 对正常 request 已闭合 offset 竞态；indexed Pi 的 target fallback 已使用边界匹配并在下一 turn 停止扫描。Kimi 仍缺少 Raft SDK rebuild 和完整 send-record offset 截断。结果 envelope 现在携带 `source_bytes`、`verification`、`too_large_cause`、`response_found`、`digest_match`、`trigger_found`、恢复/脱敏计数、`view_bytes` 和 `failure_detail`；真实 provider 运行证据仍未验证。
-4. **实现层面的可观测差异。** child 内部会先构造并 JSON encode view 再按 `maxBytes` 拒绝，父 daemon 还会再次序列化检查；这满足 bounded result，但与 Raft 在构造阶段更早截断的内存峰值仍可能不同。Pi capture barrier 对正常 request 已闭合 offset 竞态；indexed Pi 的 target fallback 已使用边界匹配并在下一 turn 停止扫描。Kimi 仍缺少 Raft SDK rebuild 和完整 send-record offset 截断。request log 已接入 retention/off grace 清理，但仍位于 Agent session 目录，重启后不能从 index 恢复外部 log 路径。结果 envelope 现在携带 `source_bytes`、`verification`、`too_large_cause`、`response_found`、`digest_match`、`trigger_found`、恢复/脱敏计数、`view_bytes` 和 `failure_detail`；真实 provider 运行证据仍未验证。
+4. **实现层面的可观测差异。** child 内部会先构造并 JSON encode view 再按 `maxBytes` 拒绝，父 daemon 还会再次序列化检查；这满足 bounded result，但与 Raft 在构造阶段更早截断的内存峰值仍可能不同。Pi capture barrier 对正常 request 已闭合 offset 竞态；indexed Pi 的 target fallback 已使用边界匹配并在下一 turn 停止扫描。Kimi 现在有 context-view-only 的 wire reader、session index/tombstone lookup、tool/send-result projection 和 target-send 截断，但仍缺少 Raft SDK rebuild 与完整 send-record offset 语义。request log 已接入 retention/off grace 清理，但仍位于 Agent session 目录，重启后不能从 index 恢复外部 log 路径。结果 envelope 现在携带 `source_bytes`、`verification`、`too_large_cause`、`response_found`、`digest_match`、`trigger_found`、恢复/脱敏计数、`view_bytes` 和 `failure_detail`；真实 provider 运行证据仍未验证。
 
 ## 有意差异（不是缺陷）
 
@@ -41,7 +40,7 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 ## 发布前待办
 
-- 补一条真实 staging/browser E2E，并保留可复现 artifact。
 - 为 running Agent 的 launch/delivery/forget/report 时序补 runtime integration assertion。
-- 用 staging daemon 验证 server-side feature reload、重连收敛和 `trigger: server_features` 的真实链路。
 - 明确错误码映射（尤其 `expired`、`agent_moved`、`not_recorded`、`old_daemon`）并补跨层测试。
+
+真实 staging/browser/Redis/Centrifugo/provider E2E 按本次范围豁免；当前结论不把它们描述为已验证。

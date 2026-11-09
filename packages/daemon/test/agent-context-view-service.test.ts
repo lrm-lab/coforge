@@ -164,6 +164,7 @@ describe("the provider value an Agent's launch config carries", () => {
     [RUNTIME_PROVIDER.CODEX]: '{"type":"additional_tools"}',
     [RUNTIME_PROVIDER.PI]: '{"type":"request",}',
     [RUNTIME_PROVIDER.COFORGE]: '{"type":"request",}',
+    "kimi-sdk": '{"type":"llm.request"}',
   };
   test.each(Object.keys(markers))(
     "indexes a %s Agent's request log and reports it supported",
