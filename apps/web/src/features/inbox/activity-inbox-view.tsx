@@ -362,7 +362,9 @@ export function ActivityInboxView({
           !query.isPlaceholderData &&
           firstPage &&
           // Linear keeps "mark everything" out of the header (Frank, 11-09): one quiet "⋯",
-          // offered only while it has something to do.
+          // offered only while it has something to do. Both actions reach every row of the list,
+          // so Mentions, which shows only some of them, offers neither.
+          filter !== "mentions" &&
           (firstPage.unreadItemCount > 0 || (filter === "all" && items.length > 0)) && (
             <Dropdown.Root>
               <ButtonUtility
