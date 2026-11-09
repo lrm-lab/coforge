@@ -6,9 +6,11 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  rmSync,
   readFileSync,
   readdirSync,
   renameSync,
+  rmdirSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -20,6 +22,7 @@ export const AGENT_CONTEXT_VIEW_RETENTION_DAYS = 30;
 export const AGENT_CONTEXT_VIEW_OFF_GRACE_MS = 24 * 60 * 60 * 1000;
 export const AGENT_CONTEXT_INDEX_MAX_BYTES = 8 * 1024 * 1024;
 export const AGENT_CONTEXT_VIEW_REQUEST_LOG_MAX_BYTES = 128 * 1024 * 1024;
+export const AGENT_CONTEXT_VIEW_REQUEST_LOG_DIR_NAME = "pi-requests";
 export const CONTEXT_VIEW_READ_FLAGS =
   constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 export const CONTEXT_VIEW_APPEND_FLAGS =
@@ -79,9 +82,11 @@ function ownRegularFile(path: string): void {
 }
 
 export class ContextViewStore {
+  readonly #stateDirectory: string;
   readonly #directory: string;
   readonly #indexPath: string;
   readonly #offSincePath: string;
+  readonly #requestLogDirectory: string;
   readonly #now: () => number;
 
   constructor(
@@ -92,12 +97,14 @@ export class ContextViewStore {
   ) {
     if (!stateDirectory || !isSafePathScope(serverId) || !isSafePathScope(agentId))
       throw new Error("Invalid context view store scope");
+    this.#stateDirectory = stateDirectory;
     const stateInfo = lstatSync(stateDirectory, { throwIfNoEntry: false });
     if (stateInfo?.isSymbolicLink()) throw new Error("Context view state directory is a symlink");
     const serverDirectory = join(stateDirectory, "agent-context", escapePathIdentity(serverId));
     this.#directory = join(serverDirectory, escapePathIdentity(agentId));
     this.#indexPath = join(this.#directory, "index.jsonl");
     this.#offSincePath = join(this.#directory, "off-since");
+    this.#requestLogDirectory = join(this.#directory, AGENT_CONTEXT_VIEW_REQUEST_LOG_DIR_NAME);
     this.#now = now;
     ownDirectory(join(stateDirectory, "agent-context"), stateDirectory);
     ownDirectory(serverDirectory, stateDirectory);
@@ -136,6 +143,11 @@ export class ContextViewStore {
 
   get indexPath(): string {
     return this.#indexPath;
+  }
+
+  get requestLogDirectory(): string {
+    ownDirectory(this.#requestLogDirectory, this.#stateDirectory);
+    return this.#requestLogDirectory;
   }
 
   record(entry: ContextViewIndexEntry): void {
@@ -280,10 +292,18 @@ export class ContextViewStore {
     for (const name of readdirSync(this.#directory)) {
       if (name !== "off-since") {
         const path = join(this.#directory, name);
-        if (existsSync(path)) unlinkSync(path);
+        const info = lstatSync(path, { throwIfNoEntry: false });
+        if (!info) continue;
+        if (info.isSymbolicLink()) {
+          unlinkSync(path);
+          continue;
+        }
+        if (info.isDirectory()) rmSync(path, { recursive: true, force: true });
+        else unlinkSync(path);
       }
     }
     if (existsSync(this.#offSincePath)) unlinkSync(this.#offSincePath);
+    rmdirSync(this.#directory);
     return true;
   }
 
@@ -295,6 +315,41 @@ export class ContextViewStore {
         return false;
       unlinkSync(path);
       return true;
+    } catch {
+      return false;
+    }
+  }
+
+  static sweepRequestLogs(directory: string, cutoff: number): boolean {
+    try {
+      const info = lstatSync(directory);
+      if (!info.isDirectory() || info.isSymbolicLink()) return false;
+      let removed = false;
+      for (const name of readdirSync(directory)) {
+        if (!/^[A-Za-z0-9._-]{1,200}\.jsonl$/.test(name)) continue;
+        const path = join(directory, name);
+        const file = lstatSync(path, { throwIfNoEntry: false });
+        if (
+          file?.isFile() &&
+          !file.isSymbolicLink() &&
+          file.nlink === 1 &&
+          file.size <= AGENT_CONTEXT_VIEW_REQUEST_LOG_MAX_BYTES &&
+          file.mtimeMs < cutoff
+        ) {
+          unlinkSync(path);
+          removed = true;
+        }
+      }
+      return removed;
+    } catch {
+      return false;
+    }
+  }
+
+  sweepRequestLogs(cutoff: number): boolean {
+    try {
+      ownDirectory(this.#requestLogDirectory, this.#stateDirectory);
+      return ContextViewStore.sweepRequestLogs(this.#requestLogDirectory, cutoff);
     } catch {
       return false;
     }

@@ -138,6 +138,8 @@ type AgentSessionCommonOptions = Readonly<{
   instructions: string;
   sessionId?: string;
   sessionMode?: "create" | "resume";
+  /** Daemon-owned directory for captured Pi/Builtin request logs. */
+  contextViewRequestLogDirectory?: string;
   /** Acknowledged cloud persistence of the provider's actual session identity. */
   onSessionId?(sessionId: string, replacedSessionId?: string): Promise<void>;
   runtime?: AgentRuntimeConfig;

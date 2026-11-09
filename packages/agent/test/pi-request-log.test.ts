@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
-import { mkdtemp } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PiRequestLogWriter, piContextRequestDigest, piRequestDigest } from "../src/pi-request-log";
@@ -47,4 +46,14 @@ test("Pi indexed requests carry a base chain with a trimmed tail", async () => {
   expect(indexed[1]?.base).toBe(indexed[0]?.id);
   expect(indexed[1]?.keep).toBe(1);
   expect(indexed[1]?.tail).toHaveLength(1);
+});
+
+test("Pi request logs reject a symlinked parent directory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "coforge-pi-log-symlink-"));
+  const outside = await mkdtemp(join(tmpdir(), "coforge-pi-log-outside-"));
+  const linked = join(root, "linked");
+  await symlink(outside, linked);
+  const writer = new PiRequestLogWriter(join(linked, "session.jsonl"));
+  await writer.append({ type: "request", body: { messages: ["secret"] } });
+  expect(await lstat(join(outside, "session.jsonl")).catch(() => undefined)).toBeUndefined();
 });

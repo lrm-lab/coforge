@@ -26,6 +26,7 @@ export type AgentLaunchInput = Readonly<{
   agentWorkspaceDirectory: string;
   sessionId?: string;
   sessionMode?: AgentSessionOptions["sessionMode"];
+  contextViewRequestLogDirectory?: string;
   environment?: Readonly<Record<string, string>>;
   runtimeId?: string;
   onSessionId?: AgentSessionOptions["onSessionId"];
@@ -60,6 +61,7 @@ export async function prepareAgentLaunch(
     runtimeId,
     onSessionId,
     sessionMode,
+    contextViewRequestLogDirectory,
     assignedSkillPacks = [],
     identity,
   } = input;
@@ -115,6 +117,7 @@ export async function prepareAgentLaunch(
     }),
     sessionId,
     sessionMode,
+    contextViewRequestLogDirectory,
     onSessionId,
     // The provider reads this map too (adapter path lookups); it gets the same environment
     // the process will, without the names the shared rule refuses. An Agent with no stored

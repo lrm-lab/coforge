@@ -84,6 +84,7 @@ export class AgentProcessManager {
     createProvider: CodeAgentProviderFactory,
     resolveGitHooks: typeof resolveGitHookInjectionForLaunch = resolveGitHookInjectionForLaunch,
     private readonly conversationStore?: (agentId: string) => ConversationSessionStore,
+    private readonly contextViewRequestLogDirectory?: (agentId: string) => string,
   ) {
     this.#createProvider = createProvider;
     this.#resolveGitHooks = resolveGitHooks;
@@ -115,7 +116,13 @@ export class AgentProcessManager {
     } else if (this.#runtimes.has(agentId)) {
       throw new Error(`Agent runtime is already active: ${agentId}`);
     }
-    const launch: AgentLaunchInput = { config, ...options, agentId };
+    const requestLogDirectory = this.contextViewRequestLogDirectory?.(agentId);
+    const launch: AgentLaunchInput = {
+      config,
+      ...options,
+      agentId,
+      ...(requestLogDirectory ? { contextViewRequestLogDirectory: requestLogDirectory } : {}),
+    };
     const ports: AgentLaunchPreparationPorts = {
       createProvider: this.#createProvider,
       resolveGitHooks: this.#resolveGitHooks,

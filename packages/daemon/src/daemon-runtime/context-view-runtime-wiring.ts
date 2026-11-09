@@ -20,6 +20,7 @@ export type ContextViewRuntimeDeps = {
     | undefined;
   restartConfig(agentId: string): { config: { envVars?: Record<string, string> } } | undefined;
   workspaceRoot: string;
+  stateDirectory: string;
   reported(agentId: string): { sessionId?: string } | undefined;
 };
 
@@ -74,11 +75,17 @@ export function resolveContextViewProviderSource(
 }
 
 export async function contextViewTranscriptPath(
-  deps: Pick<ContextViewRuntimeDeps, "runtime" | "restartConfig" | "workspaceRoot" | "reported">,
+  deps: Pick<
+    ContextViewRuntimeDeps,
+    "runtime" | "restartConfig" | "workspaceRoot" | "stateDirectory" | "reported"
+  >,
   agentId: string,
 ): Promise<{ absolute: string; relative: string } | undefined> {
   const runtime = deps.runtime(agentId);
-  const local = contextViewTranscriptSource(runtime?.session, deps.workspaceRoot);
+  const local = contextViewTranscriptSource(runtime?.session, [
+    deps.workspaceRoot,
+    deps.stateDirectory,
+  ]);
   if (local) return local;
   const sessionId = deps.reported(agentId)?.sessionId;
   if (!sessionId || !runtime) return undefined;

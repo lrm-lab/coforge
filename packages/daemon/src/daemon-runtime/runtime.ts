@@ -7,8 +7,6 @@ import {
   type UsageSnapshot,
 } from "@lrm/coforge-anvil";
 import { OperatingSystemInfo } from "#src/platform/operating-system";
-import { FileConversationSessionStore } from "#src/persistence/conversation-session-store";
-import { escapePathIdentity } from "#src/persistence/path-scope";
 import { AgentInputDrain } from "./agent-input-drain";
 import { attachFreshSessionMemoryPort } from "./session-memory-hooks";
 import { rebindAgent } from "./agent-rebind";
@@ -27,10 +25,11 @@ import {
 } from "./runtime-agent-flows";
 import type { AgentProxy, LaunchRequest, SessionMode } from "./runtime-launch-types";
 import {
-  AgentProcessManager,
+  type AgentProcessManager,
   type CodeAgentProviderFactory,
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
+import { createAgentProcessManager } from "./agent-process-manager-factory";
 import { activityDraft } from "./activity-draft";
 import type { AgentRecoveryContext } from "./runtime-launch-intent";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
@@ -455,7 +454,7 @@ export class DaemonRuntime {
     transportFactory: DaemonConnectionClientFactory,
     agentProxy: AgentProxy | undefined,
     codeAgentDiscovery: CodeAgentDiscovery,
-    private readonly stateDirectory = ".coforge-daemon-state",
+    readonly stateDirectory = ".coforge-daemon-state",
     private readonly lifecycle: DaemonRuntimeLifecycle = {},
     private readonly computerVersion?: string,
     systemCleaner: Pick<
@@ -494,14 +493,12 @@ export class DaemonRuntime {
     this.#contextViewService.startMaintenance();
     this.#drafts = agentActivityDrafts(connection.workspaceId);
     this.#createProvider = createProvider;
-    this.#agentProcessManager = new AgentProcessManager(
+    this.#agentProcessManager = createAgentProcessManager({
       createProvider,
-      undefined,
-      (agentId) =>
-        new FileConversationSessionStore(
-          `${stateDirectory}/conversation-sessions/${escapePathIdentity(connection.workspaceId)}/${escapePathIdentity(agentId)}.json`,
-        ),
-    );
+      stateDirectory,
+      workspaceId: connection.workspaceId,
+      requestLogDirectory: (agentId) => this.#contextViewService.requestLogDirectory(agentId),
+    });
     this.#credentials = credentials;
     this.#transportFactory = transportFactory;
     this.#agentProxy = agentProxy;

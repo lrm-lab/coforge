@@ -1,5 +1,4 @@
 import { fstatSync, lstatSync, openSync, constants, closeSync, readSync } from "node:fs";
-import { relative } from "node:path";
 import { ContextViewStore, type ContextViewIndexEntry } from "./context-view-store";
 import {
   CONTEXT_VIEW_PROVIDERS,
@@ -60,7 +59,6 @@ export class AgentContextViewService {
   readonly #serverId: string;
   readonly #workspaceId: string;
   readonly #computerId: string;
-  readonly #workspaceRoot?: string;
   readonly #retentionDays: number;
   readonly #now: () => number;
   readonly #random: () => number;
@@ -68,7 +66,6 @@ export class AgentContextViewService {
   readonly #stores = new Map<string, ContextViewStore>();
   readonly #reported = new Map<string, string>();
   readonly #retainedSince = new Map<string, string>();
-  readonly #requestLogs = new Map<string, string>();
   readonly #availabilityFacts = new Map<
     string,
     { facts: ContextViewAgentFacts; enabled: boolean; lastReportedAt: number }
@@ -82,7 +79,6 @@ export class AgentContextViewService {
     this.#serverId = options.serverId;
     this.#workspaceId = options.workspaceId;
     this.#computerId = options.computerId;
-    this.#workspaceRoot = options.workspaceRoot;
     this.#retentionDays = options.retentionDays ?? 30;
     this.#now = options.now ?? Date.now;
     this.#random = options.random ?? Math.random;
@@ -90,7 +86,6 @@ export class AgentContextViewService {
   }
 
   onMessageCommitted(facts: ContextViewAgentFacts, messageId: string, enabled: boolean): void {
-    this.#rememberRequestLog(facts);
     if (!enabled) return;
     const runtime = contextViewRuntime(facts.runtime);
     if (!runtime) {
@@ -124,7 +119,6 @@ export class AgentContextViewService {
     trigger: ContextViewAvailability["trigger"] = "startup",
     force = false,
   ): void {
-    this.#rememberRequestLog(facts);
     this.#availabilityFacts.set(facts.agentId, {
       facts,
       enabled,
@@ -160,14 +154,8 @@ export class AgentContextViewService {
       store.compact(this.#retentionDays);
       const agentId = [...this.#stores.entries()].find(([, candidate]) => candidate === store)?.[0];
       const off = store.sweepOff(this.#now());
-      const requestLog = agentId ? this.#requestLogs.get(agentId) : undefined;
-      if (requestLog) {
-        if (off) ContextViewStore.removeRequestLog(requestLog);
-        else
-          ContextViewStore.sweepRequestLog(
-            requestLog,
-            this.#now() - this.#retentionDays * 24 * 60 * 60 * 1000,
-          );
+      if (agentId && !off) {
+        store.sweepRequestLogs(this.#now() - this.#retentionDays * 24 * 60 * 60 * 1000);
       }
     }
     const now = this.#now();
@@ -215,6 +203,10 @@ export class AgentContextViewService {
     return store.isOff() ? undefined : store.find(messageId);
   }
 
+  requestLogDirectory(agentId: string): string {
+    return this.#store(agentId).requestLogDirectory;
+  }
+
   #store(agentId: string): ContextViewStore {
     let store = this.#stores.get(agentId);
     if (!store) {
@@ -222,16 +214,6 @@ export class AgentContextViewService {
       this.#stores.set(agentId, store);
     }
     return store;
-  }
-
-  #rememberRequestLog(facts: ContextViewAgentFacts): void {
-    const path = facts.contextViewRequestLogPath;
-    if (!path) return;
-    if (this.#workspaceRoot) {
-      const relativePath = relative(this.#workspaceRoot, path);
-      if (!relativePath || relativePath.startsWith("..") || relativePath.includes("\0")) return;
-    }
-    this.#requestLogs.set(facts.agentId, path);
   }
 
   #report(

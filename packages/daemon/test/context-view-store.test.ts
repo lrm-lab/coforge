@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmdirSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -60,5 +67,16 @@ describe("ContextViewStore", () => {
     store.markOff(1_000);
     expect(ContextViewStore.removeRequestLog(log)).toBe(true);
     expect(store.sweepOff(1_000 + AGENT_CONTEXT_VIEW_OFF_GRACE_MS)).toBe(true);
+  });
+
+  test("uses a managed request-log directory and rejects a symlinked directory", () => {
+    const root = mkdtempSync(join(tmpdir(), "coforge-context-view-"));
+    const store = new ContextViewStore(root, "server-1", "agent-1", () => 1_000);
+    const directory = store.requestLogDirectory;
+    expect(directory).toBe(join(root, "agent-context", "server-1", "agent-1", "pi-requests"));
+    const outside = mkdtempSync(join(tmpdir(), "coforge-context-view-outside-"));
+    rmdirSync(directory);
+    symlinkSync(outside, directory);
+    expect(() => store.requestLogDirectory).toThrow("Context view directory is a symlink");
   });
 });

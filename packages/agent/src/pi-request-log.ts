@@ -1,6 +1,6 @@
 import { lstat, mkdir, open, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join, parse, resolve, sep } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
 /** Small serialized writer for the Pi/Builtin captured request log. */
@@ -32,7 +32,7 @@ export class PiRequestLogWriter {
   append(record: Record<string, unknown>): Promise<void> {
     this.#tail = this.#tail
       .then(async () => {
-        await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
+        await ensurePrivateDirectory(dirname(this.path));
         const existing = await lstat(this.path).catch(() => undefined);
         if (existing && (!existing.isFile() || existing.nlink > 1 || existing.isSymbolicLink()))
           return;
@@ -149,6 +149,36 @@ export class PiRequestLogWriter {
       })
       .catch(() => undefined);
     return this.#tail;
+  }
+}
+
+async function ensurePrivateDirectory(path: string): Promise<void> {
+  const absolute = resolve(path);
+  const root = parse(absolute).root;
+  const missing: string[] = [];
+  let current = absolute;
+  while (current !== root) {
+    const info = await lstat(current).catch(() => undefined);
+    if (info) {
+      if (info.isSymbolicLink() || !info.isDirectory())
+        throw new Error("Pi request log directory is unsafe");
+      break;
+    }
+    missing.push(current.slice(current.lastIndexOf(sep) + 1));
+    current = current.slice(0, current.lastIndexOf(sep)) || root;
+  }
+  for (const segment of missing.reverse()) {
+    current = join(current, segment);
+    const info = await lstat(current).catch(() => undefined);
+    if (!info) {
+      await mkdir(current, { mode: 0o700 });
+      const created = await lstat(current);
+      if (created.isSymbolicLink() || !created.isDirectory())
+        throw new Error("Pi request log directory is unsafe");
+      continue;
+    }
+    if (info.isSymbolicLink() || !info.isDirectory())
+      throw new Error("Pi request log directory is unsafe");
   }
 }
 

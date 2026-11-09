@@ -1,5 +1,10 @@
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import { getCoforgeAgentDir, getCoforgeSessionDir } from "@coforge/agent";
+import {
+  clearContextViewRequestLogDirectory,
+  getCoforgeAgentDir,
+  getCoforgeSessionDir,
+  registerContextViewRequestLogDirectory,
+} from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { ModelProviderSettingError, type CodeAgentProvider } from "@lrm/coforge-anvil";
 import { createPiAgentSession } from "@lrm/coforge-anvil/pi";
@@ -37,27 +42,36 @@ export class CoforgeProvider implements CodeAgentProvider {
       Bun.env.COFORGE_AGENT_PROXY_URL = environment.COFORGE_AGENT_PROXY_URL;
     if (environment.COFORGE_AGENT_CONTEXT)
       Bun.env.COFORGE_AGENT_CONTEXT = environment.COFORGE_AGENT_CONTEXT;
-    return createPiAgentSession(
-      {
-        cwd: options.agentWorkspaceDirectory,
-        agentId: options.agentId,
-        agentDir: getCoforgeAgentDir(options.agentWorkspaceDirectory),
-        sessionDir: getCoforgeSessionDir(options.agentWorkspaceDirectory),
-        sessionId: options.sessionId,
-        sessionMode: options.sessionMode,
-        modelProvider: runtime.modelProvider,
-        model: runtime.model,
-        reasoning: runtime.reasoning,
-        apiKey: providerConfig?.apiKey,
-        instructions: options.instructions,
-        environment,
-        toolProfile: runtime.toolProfile,
-        conversation: options.conversation,
-        memoryControlSession: options.memoryControlSession,
-        memoryOfferOnly: evalMemoryOfferOnly(),
-      },
-      async (...args) => options.onSessionId?.(...args),
-      piRuntimeHost,
-    );
+    if (options.contextViewRequestLogDirectory)
+      registerContextViewRequestLogDirectory(
+        getCoforgeSessionDir(options.agentWorkspaceDirectory),
+        options.contextViewRequestLogDirectory,
+      );
+    try {
+      return await createPiAgentSession(
+        {
+          cwd: options.agentWorkspaceDirectory,
+          agentId: options.agentId,
+          agentDir: getCoforgeAgentDir(options.agentWorkspaceDirectory),
+          sessionDir: getCoforgeSessionDir(options.agentWorkspaceDirectory),
+          sessionId: options.sessionId,
+          sessionMode: options.sessionMode,
+          modelProvider: runtime.modelProvider,
+          model: runtime.model,
+          reasoning: runtime.reasoning,
+          apiKey: providerConfig?.apiKey,
+          instructions: options.instructions,
+          environment,
+          toolProfile: runtime.toolProfile,
+          conversation: options.conversation,
+          memoryControlSession: options.memoryControlSession,
+          memoryOfferOnly: evalMemoryOfferOnly(),
+        },
+        async (...args) => options.onSessionId?.(...args),
+        piRuntimeHost,
+      );
+    } finally {
+      clearContextViewRequestLogDirectory(getCoforgeSessionDir(options.agentWorkspaceDirectory));
+    }
   }
 }
