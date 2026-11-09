@@ -28,6 +28,31 @@ type IndexedPiRequest = RecordValue & {
   sourceIndex: number;
 };
 
+function reportsMessage(value: unknown, messageId: string): boolean {
+  const escaped = messageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `Message ID:\\s*${escaped}(?![A-Za-z0-9_-])|["']messageId["']\\s*:\\s*["']${escaped}["']`,
+  ).test(typeof value === "string" ? value : JSON.stringify(value ?? ""));
+}
+
+function hasReportedResponse(
+  records: RecordValue[],
+  start: number,
+  sessionId: string,
+  messageId: string,
+): boolean {
+  for (const record of records.slice(start + 1)) {
+    if (record.type === "request" && typeof record.shapeHash === "string") return false;
+    if (
+      record.type === "response" &&
+      sessionMatches(record, sessionId) &&
+      reportsMessage(record.body ?? record, messageId)
+    )
+      return true;
+  }
+  return false;
+}
+
 function restorePiIndexed(
   records: RecordValue[],
   request: RestoreRequest,
@@ -119,7 +144,8 @@ function restorePiIndexed(
         "id" in entry &&
         sessionMatches(entry, request.sessionId) &&
         ((Array.isArray(entry.messageIds) && entry.messageIds.includes(request.messageId)) ||
-          JSON.stringify(entry).includes(request.messageId)),
+          reportsMessage(entry, request.messageId) ||
+          hasReportedResponse(records, entry.sourceIndex, request.sessionId, request.messageId)),
     );
   if (!candidate) return { ok: false, failure: "not_found" };
   const shape = shapes.get(candidate.shapeHash);
@@ -142,11 +168,12 @@ function restorePiIndexed(
   let trigger: { toolUseId: string } | undefined;
   for (const record of records.slice(candidate.sourceIndex + 1)) {
     if (record.type === "gap") return { ok: false, failure: "not_recorded" };
+    if (record.type === "request" && typeof record.shapeHash === "string") break;
     if (record.type !== "response" || !sessionMatches(record, request.sessionId)) continue;
     if (
       !(
         (Array.isArray(record.messageIds) && record.messageIds.includes(request.messageId)) ||
-        JSON.stringify(record).includes(request.messageId)
+        reportsMessage(record.body ?? record, request.messageId)
       )
     )
       continue;
