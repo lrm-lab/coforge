@@ -2,15 +2,13 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import {
-  PrismaUserPreferencesRepository,
-  UserPreferences,
-} from "#src/server/db/repositories/user-preferences.repositories.server";
+import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
+import { Experiments } from "#src/server/experiments/experiments.server";
 import { requireAiWorkbench } from "#src/server/pi-chat/ai-workbench.server";
 import { canUsePiChat } from "#src/server/pi-chat/pi-chat-production.server";
 
-/** Task #743: AI Workbench is a per-account switch, on until the person turns it off (Frank 11-09). */
-test("AI Workbench is on by default, refuses once turned off, and is per account", async () => {
+/** AI Workbench is a Workspace experiment: on until its owner or an admin turns it off (Frank 11-09). */
+test("AI Workbench follows the Workspace's switch: on by default, owner/admin only, per Workspace", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
   if (!connectionString)
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
@@ -23,71 +21,72 @@ test("AI Workbench is on by default, refuses once turned off, and is per account
       }),
     ),
   );
-  const workspace = await db.workspace.create({
-    data: {
-      slug: `wb-${suffix}`,
-      name: "Workbench switch",
-      members: {
-        create: [
-          { userId: alice!.id, role: "owner" },
-          { userId: bob!.id, role: "member" },
-        ],
-      },
-    },
-  });
-  const computers = await Promise.all(
-    [alice!, bob!].map((owner, index) =>
-      db.computer.create({
+  const [first, second] = await Promise.all(
+    ["a", "b"].map((name) =>
+      db.workspace.create({
         data: {
-          machineId: `wb-machine-${index}-${suffix}`,
-          name: `wb-computer-${index}-${suffix}`,
-          kind: "cloud",
-          ownerId: owner.id,
-          workspaces: { create: { workspaceId: workspace.id } },
+          slug: `wb-${name}-${suffix}`,
+          name: `Workbench ${name}`,
+          members: {
+            create: [
+              { userId: alice!.id, role: "owner" },
+              { userId: bob!.id, role: "member" },
+            ],
+          },
         },
       }),
     ),
   );
-  const refused = async (userId: string) => {
+  const computer = await db.computer.create({
+    data: {
+      machineId: `wb-machine-${suffix}`,
+      name: `wb-computer-${suffix}`,
+      kind: "cloud",
+      ownerId: bob!.id,
+      workspaces: { create: [{ workspaceId: first!.id }, { workspaceId: second!.id }] },
+    },
+  });
+  const experiments = new Experiments(new PrismaExperimentsRepository(db), async () => true);
+  const context = (workspace: typeof first) => ({
+    workspaceId: workspace!.id,
+    workspaceSlug: workspace!.slug,
+  });
+  const refused = async (workspace: typeof first) => {
     try {
-      await requireAiWorkbench(db, userId);
+      await requireAiWorkbench(db, workspace!.id);
     } catch (error) {
       return error instanceof AppError && error.code === "ACCESS_DENIED";
     }
     return false;
   };
-  const scope = (index: number, user: typeof alice) => ({
-    workspaceId: workspace.id,
-    computerId: computers[index]!.id,
-    userId: user!.id,
+  const scope = (workspace: typeof first) => ({
+    workspaceId: workspace!.id,
+    computerId: computer.id,
+    userId: bob!.id,
   });
   try {
-    const preferences = new UserPreferences(new PrismaUserPreferencesRepository(db));
+    // Never stored: on.
+    expect(await refused(first)).toBeFalse();
+    expect(await canUsePiChat(db, scope(first))).toBeTrue();
 
-    // A person with no preferences row, and a row that never chose, are both on.
-    expect((await preferences.read(alice!.id)).aiWorkbenchEnabled).toBeTrue();
-    expect(await refused(alice!.id)).toBeFalse();
-    await preferences.set(alice!.id, "Asia/Tokyo");
-    expect((await preferences.read(alice!.id)).aiWorkbenchEnabled).toBeTrue();
-    expect(await refused(alice!.id)).toBeFalse();
-    expect(await canUsePiChat(db, scope(0, alice))).toBeTrue();
+    // A member cannot switch it; nothing changes.
+    await expect(experiments.set(context(first), "member", "aiWorkbench", false)).rejects.toThrow();
+    expect(await refused(first)).toBeFalse();
 
-    // Turning it off for Alice refuses her at once and leaves Bob, in the same Workspace, on; the
-    // daemon's reply frames and the gateway share `canUsePiChat`.
-    expect(await preferences.setAiWorkbenchEnabled(alice!.id, false)).toBeFalse();
-    expect(await refused(alice!.id)).toBeTrue();
-    expect(await canUsePiChat(db, scope(0, alice))).toBeFalse();
-    expect(await refused(bob!.id)).toBeFalse();
-    expect(await canUsePiChat(db, scope(1, bob))).toBeTrue();
-    expect((await preferences.read(alice!.id)).timeZone).toBe("Asia/Tokyo");
+    // An admin turns it off for the Workspace: every entry refuses, the other Workspace stays on.
+    expect((await experiments.set(context(first), "admin", "aiWorkbench", false)).enabled).toBeFalse();
+    expect(await refused(first)).toBeTrue();
+    expect(await canUsePiChat(db, scope(first))).toBeFalse();
+    expect(await refused(second)).toBeFalse();
+    expect(await canUsePiChat(db, scope(second))).toBeTrue();
 
-    // Turning it back on lets her in again.
-    expect(await preferences.setAiWorkbenchEnabled(alice!.id, true)).toBeTrue();
-    expect(await refused(alice!.id)).toBeFalse();
-    expect(await canUsePiChat(db, scope(0, alice))).toBeTrue();
+    // Back on.
+    await experiments.set(context(first), "owner", "aiWorkbench", true);
+    expect(await refused(first)).toBeFalse();
+    expect(await canUsePiChat(db, scope(first))).toBeTrue();
   } finally {
-    await db.computer.deleteMany({ where: { id: { in: computers.map((c) => c.id) } } });
-    await db.workspace.delete({ where: { id: workspace.id } });
+    await db.computer.deleteMany({ where: { id: computer.id } });
+    await db.workspace.deleteMany({ where: { id: { in: [first!.id, second!.id] } } });
     await db.user.deleteMany({ where: { id: { in: [alice!.id, bob!.id] } } });
     await db.$disconnect();
   }
