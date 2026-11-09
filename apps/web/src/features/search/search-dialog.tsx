@@ -95,7 +95,9 @@ export function SearchDialog({
     if (!inBox && index < 0) return;
     if (event.key === "Enter" && inBox) {
       event.preventDefault();
-      options[0]?.click();
+      // Words not yet searched would open the previous results' first row: search them now.
+      if (text.trim() !== query) setQuery(text.trim());
+      else options[0]?.click();
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
       // From the box the first option already shows as chosen, so Down goes to the next.
@@ -104,7 +106,8 @@ export function SearchDialog({
       event.preventDefault();
       if (index === 0) box.current?.focus();
       else options[index - 1]?.focus();
-    } else if (!inBox && typing) {
+    } else if (!inBox && typing && event.key !== " ") {
+      // Space presses the focused option; any other character is typed into the box.
       box.current?.focus();
     }
   };
@@ -133,10 +136,7 @@ export function SearchDialog({
               onCompositionEnd={() => setComposing(false)}
             >
               <div className="flex items-center gap-3">
-                <SearchLg
-                  aria-hidden="true"
-                  className="size-5 shrink-0 text-brand-600 dark:text-brand-400"
-                />
+                <SearchLg aria-hidden="true" className="size-5 shrink-0 text-fg-brand-primary" />
                 <AriaInput
                   type="search"
                   aria-label={m.search_title()}
@@ -145,7 +145,7 @@ export function SearchDialog({
                   ref={box}
                   value={text}
                   onChange={(event) => setText(event.target.value)}
-                  className="w-full min-w-0 bg-transparent text-lg text-primary caret-brand-600 outline-hidden placeholder:text-placeholder [&::-webkit-search-cancel-button]:appearance-none"
+                  className="w-full min-w-0 bg-transparent text-lg text-primary caret-fg-brand-primary outline-hidden placeholder:text-placeholder [&::-webkit-search-cancel-button]:appearance-none"
                 />
                 <SearchFilterMenu
                   workspaceId={workspaceId}

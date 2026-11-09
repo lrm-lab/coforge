@@ -250,13 +250,14 @@ export function readableConversationWhere(workspaceId: string, reader: { userId:
 }
 
 /** A conversation a person may read, for a raw query over `"conversations" <alias>`: a channel by
- * `readableChannelSql`, a direct conversation only if they belong to it. */
+ * `readableChannelSql`, a direct conversation only while they are an active member of it. */
 export function readablePersonConversationSql(alias: string, workspaceId: string, userId: string) {
   const conversation = Prisma.raw(alias);
   return Prisma.sql`(${readableChannelSql(alias, workspaceId, { userId })}
     OR ${conversation}."directKey" IS NOT NULL AND EXISTS (
     SELECT 1 FROM "conversation_members" v
-    WHERE v."conversationId" = ${conversation}."id" AND v."userId" = ${userId}::uuid))`;
+    WHERE v."conversationId" = ${conversation}."id" AND v."userId" = ${userId}::uuid
+      AND v."leftAt" IS NULL))`;
 }
 
 /** `visibleChannelWhere` for a raw query over `"conversations" <alias>`; the alias is a
