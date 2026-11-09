@@ -29,7 +29,7 @@ function cloudComputerSkillsGuidance(agentId: string | undefined): string {
 export function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
   return {
     communication: `## CoForge communication
-Execute via shell: text outside an executed \`coforge message send\` command is not delivered. Reply to direct user messages; reply in channels when useful. Reuse exact \`target=\`, including its thread suffix.
+Execute via shell: text outside an executed \`coforge message send\` command is not delivered. Reply to the target of the message you answer (keep its thread suffix); start new topics, summaries and proactive notices at the top level, without a suffix.
 Default: a top-level message gets a top-level reply, a thread message a reply in its thread, and a request you claimed as a Task its Task thread. You may post a new topic or a thread's conclusion at top level, or use the place a human names. This is a default, not a hard rule; decide a thread-mismatch send confirmation by it.
 Send the reply on stdin with \`coforge message send --target '<target>'\`. Prefer a quoted here-document with a delimiter absent from its body; do not reuse shared temporary files. Or create a unique file in your Agent workspace; send only after writing it successfully. If preparation fails, stop; never send existing file contents.
 ${CLI_CHANNEL_MESSAGE_EXAMPLE}

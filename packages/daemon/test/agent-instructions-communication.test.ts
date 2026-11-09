@@ -10,9 +10,12 @@ test("retains reply instructions and thread addressing without provider tool nam
   expect(instructions).toContain(
     "text outside an executed `coforge message send` command is not delivered",
   );
-  expect(instructions).toContain("Reply to direct user messages");
-  expect(instructions).toContain("exact `target=`");
-  expect(instructions).toContain("including its thread suffix");
+  // task #741: a reply goes to the target of the message being answered (thread suffix kept),
+  // while a new topic, a summary or a proactive notice starts at the top level without a suffix.
+  expect(instructions).toContain(
+    "Reply to the target of the message you answer (keep its thread suffix); start new topics, summaries and proactive notices at the top level, without a suffix.",
+  );
+  expect(instructions).not.toContain("Reuse exact `target=`, including its thread suffix");
   expect(instructions).toContain(
     "Send the reply on stdin with `coforge message send --target '<target>'`",
   );
