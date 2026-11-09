@@ -7,6 +7,8 @@ import type { ConversationRealtime } from "#src/server/conversations/conversatio
 import { isAppError } from "#src/lib/app-error";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { addMembersReportingRefusals } from "#src/server/conversations/channel-member-additions.server";
+import { UserDirectConversations } from "#src/server/conversations/user-direct-conversations.server";
+import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 
 /**
  * Adding members from a channel's settings tries the whole batch in one write, then each picked
@@ -265,6 +267,58 @@ test.skipIf(!connectionString)(
         ),
       ).toBe("ACCESS_DENIED");
       expect(await activeMemberIds(db, team.id)).toEqual(before);
+    } finally {
+      await teardown(db, workspace.id, [creator.id, ada.id, outsider.id]);
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "a direct conversation's members cannot add a third person or Agent to it",
+  async () => {
+    const { db, channels, workspace, creator, ada, outsider, scout } = await setup();
+    const passThrough: MessageRequestIdempotency = { execute: (_scope, persist) => persist() };
+    try {
+      const { conversationId } = await new UserDirectConversations(db, passThrough).open(
+        workspace.id,
+        creator.id,
+        ada.id,
+      );
+      const dm = await db.conversation.findUniqueOrThrow({
+        where: { id: conversationId },
+        select: { channelName: true, directKey: true },
+      });
+      // A DM has no channel name, so the Agent CLI's `#channel` member-add cannot even name it.
+      expect(dm.channelName).toBeNull();
+      expect(dm.directKey).not.toBeNull();
+
+      // Both add-member entries look the target up as a channel: a DM id is a missing channel
+      // (NOT_FOUND) and nobody joins — the web settings view and `PublicChannels.addMembers`
+      // (the write the Agent path shares) refuse alike.
+      expect(
+        await appErrorCode(
+          channels.addMembers(workspace.id, { userId: creator.id }, conversationId, {
+            userIds: [outsider.id],
+            agentIds: [scout.id],
+          }),
+        ),
+      ).toBe("NOT_FOUND");
+      expect(
+        await appErrorCode(
+          addMembersReportingRefusals(
+            db,
+            channels,
+            workspace.id,
+            { userId: creator.id },
+            conversationId,
+            { userIds: [outsider.id], agentIds: [scout.id] },
+          ),
+        ),
+      ).toBe("NOT_FOUND");
+
+      expect((await activeMemberIds(db, conversationId)).sort()).toEqual(
+        [creator.id, ada.id].sort(),
+      );
     } finally {
       await teardown(db, workspace.id, [creator.id, ada.id, outsider.id]);
     }
