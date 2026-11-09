@@ -1,6 +1,6 @@
 import { beforeAll, expect, test } from "bun:test";
 import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
-import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
+import { AgentProcessCleanupError, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import { mkdtemp, readdir, rm, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -241,7 +241,8 @@ for (const ignoresTerm of [false, true]) {
       while (!line.includes("input-received")) line = (await lines.next()).value ?? "";
       const before = Date.now();
       await cleanupOwnedTree(tree, tree.child);
-      if (ignoresTerm) expect(Date.now() - before).toBeGreaterThanOrEqual(5_000);
+      if (ignoresTerm)
+        expect(Date.now() - before).toBeGreaterThanOrEqual(PROCESS_TREE_EXIT_GRACE_MS);
       else {
         expect(await tree.child.exited).toBe(0);
         expect((await lines.next()).value?.trim()).toBe("flushed");
@@ -307,8 +308,10 @@ test("terminal cleanup confirmation times out, reports failure and releases its 
     expect((await readLines(tree.child.stdout).next()).value).toBe("ready\n");
     const before = Date.now();
     await expect(tree.terminate(true)).rejects.toThrow(AgentProcessCleanupError);
-    expect(Date.now() - before).toBeGreaterThanOrEqual(5_000);
-    expect(Date.now() - before).toBeLessThan(10_000);
+    // The confirmation waits one grace for the forced kill before it gives up (task #726), then
+    // reports the failure; slack past it covers the poll and the job release.
+    expect(Date.now() - before).toBeGreaterThanOrEqual(PROCESS_TREE_EXIT_GRACE_MS);
+    expect(Date.now() - before).toBeLessThan(PROCESS_TREE_EXIT_GRACE_MS + 10_000);
     expect(await relayDirectories(prefix)).toEqual([]);
     expect(() => process.kill(tree.child.pid!, 0)).toThrow();
     await expect(tree.waitForExit(10)).rejects.toThrow(AgentProcessCleanupError);
@@ -317,4 +320,4 @@ test("terminal cleanup confirmation times out, reports failure and releases its 
     await stopLaunchdAgents(prefix, root);
     await rm(root, { recursive: true, force: true });
   }
-}, 20_000);
+}, 30_000);
