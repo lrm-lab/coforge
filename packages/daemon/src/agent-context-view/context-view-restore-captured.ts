@@ -13,6 +13,63 @@ function piRequestDigest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function sha256Text(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function reportsMessage(value: unknown, messageId: string): boolean {
+  const escaped = messageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`Message ID:\\s*${escaped}(?![A-Za-z0-9_-])`).test(
+    typeof value === "string" ? value : JSON.stringify(value ?? ""),
+  );
+}
+
+function kimiSendRecordIndex(
+  records: RecordValue[],
+  messageId: string,
+  indexOffset: number,
+): number | undefined {
+  const calls = new Map<string, { command: string; sourceIndex: number }>();
+  for (const [sourceIndex, record] of records.entries()) {
+    if (record.type !== "context.append_loop_event" || !isRecord(record.event)) continue;
+    const event = record.event;
+    if (event.type !== "tool.call") continue;
+    const id =
+      typeof event.toolCallId === "string"
+        ? event.toolCallId
+        : typeof event.id === "string"
+          ? event.id
+          : undefined;
+    if (!id) continue;
+    const args = parseToolInput(event.arguments ?? event.args);
+    calls.set(id, {
+      command:
+        isRecord(args) && typeof args.command === "string"
+          ? args.command
+          : typeof event.command === "string"
+            ? event.command
+            : "",
+      sourceIndex,
+    });
+  }
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record) continue;
+    if (record.type !== "context.append_loop_event" || !isRecord(record.event)) continue;
+    const event = record.event;
+    if (event.type !== "tool.result" || typeof event.toolCallId !== "string") continue;
+    if (!reportsMessage(event.output, messageId)) continue;
+    const call = calls.get(event.toolCallId);
+    if (!call) continue;
+    if (
+      /\b(?:raft|slock)\s+(?:message\s+send|task\s+reply)\b/.test(call.command) ||
+      (recordEnd(records[call.sourceIndex]!) ?? Number.MAX_SAFE_INTEGER) <= indexOffset
+    )
+      return index;
+  }
+  return undefined;
+}
+
 import {
   hasHashMismatch,
   hasMessageId,
@@ -21,6 +78,7 @@ import {
   message,
   parseToolInput,
   providerPayload,
+  recordEnd,
   sessionMatches,
   buildView,
 } from "./context-view-restore";
@@ -30,6 +88,49 @@ export function restoreKimi(
   request: RestoreRequest,
 ): ContextViewRestoreResult {
   if (records.length > 10_000) return { ok: false, failure: "too_large" };
+  const sendResultIndex = kimiSendRecordIndex(records, request.messageId, request.offset);
+  const latestLoopIndex = records.findLastIndex(
+    (record, index) =>
+      index <= (sendResultIndex ?? records.length) &&
+      record.type === "llm.request" &&
+      (record.kind === "loop" || record.kind === undefined),
+  );
+  const foldedMessages: RestoredContextMessage[] = [];
+  let foldedCompaction: RestoredContextView["compaction"] = { happened: false };
+  if (latestLoopIndex >= 0) {
+    for (const original of records.slice(0, latestLoopIndex + 1)) {
+      const record = providerPayload(original);
+      if (record.type === "context.clear") {
+        foldedMessages.length = 0;
+        foldedCompaction = { happened: false };
+      } else if (record.type === "context.apply_compaction") {
+        const summary =
+          typeof record.summary === "string"
+            ? record.summary
+            : typeof record.contextSummary === "string"
+              ? record.contextSummary
+              : typeof record.content === "string"
+                ? record.content
+                : null;
+        foldedMessages.length = 0;
+        foldedMessages.push(message("system", summary ?? ""));
+        foldedCompaction =
+          summary === null
+            ? { happened: true, summary: null }
+            : { happened: true, summary: { kind: "text", text: summary } };
+      } else if (record.type === "context.append_message" && isRecord(record.message)) {
+        const role =
+          record.message.role === "assistant" ||
+          record.message.role === "system" ||
+          record.message.role === "tool"
+            ? record.message.role
+            : "user";
+        foldedMessages.push(
+          message(role, record.message.content ?? record.message.parts ?? record.message.text),
+        );
+      }
+    }
+  }
   const messages: RestoredContextMessage[] = [];
   const toolNames = new Map<string, string>();
   const toolCommands = new Map<string, string>();
@@ -44,7 +145,7 @@ export function restoreKimi(
   let requestCount = 0;
   let responseCount = 0;
   const pendingTools = new Set<string>();
-  for (const original of records) {
+  for (const [index, original] of records.entries()) {
     if (hasNestedIdentityConflict(original)) return { ok: false, failure: "context_mismatch" };
     const record = providerPayload(original);
     if (!sessionMatches(record, request.sessionId))
@@ -56,9 +157,19 @@ export function restoreKimi(
         return { ok: false, failure: "context_mismatch" };
       lastSequence = sequence;
     }
-    if (record.type === "llm.request" && isRecord(record.request)) {
+    if (record.type === "llm.request" && index === latestLoopIndex) {
       requestCount += 1;
-      if (typeof record.request.model === "string") model = record.request.model;
+      messages.length = 0;
+      messages.push(...foldedMessages);
+      compaction = foldedCompaction;
+      const requestPayload = isRecord(record.request) ? record.request : record;
+      if (
+        typeof requestPayload.systemPrompt === "string" &&
+        typeof requestPayload.systemPromptHash === "string" &&
+        sha256Text(requestPayload.systemPrompt) !== requestPayload.systemPromptHash
+      )
+        return { ok: false, failure: "context_mismatch" };
+      if (typeof requestPayload.model === "string") model = requestPayload.model;
       else if (typeof record.model === "string") model = record.model;
       else if (typeof record.model_name === "string") model = record.model_name;
       if (typeof record.time === "number" && Number.isFinite(record.time))
@@ -67,12 +178,20 @@ export function restoreKimi(
         requestAt = new Date(record.time).toISOString();
       else if (typeof record.timestamp === "string" && !Number.isNaN(Date.parse(record.timestamp)))
         requestAt = new Date(record.timestamp).toISOString();
-      messages.push(message("user", record.request.messages));
+      if (foldedMessages.length === 0 && isRecord(record.request))
+        messages.push(message("user", record.request.messages));
+    } else if (record.type === "llm.request") {
+      continue;
+    } else if (record.type === "llm.response" && index < latestLoopIndex) {
+      continue;
     } else if (record.type === "llm.response") {
       if (requestCount === 0) return { ok: false, failure: "context_mismatch" };
       responseCount += 1;
       messages.push(message("assistant", record.content));
       if (sawTarget) responseFound = true;
+    } else if (record.type === "context.append_loop_event" && index < latestLoopIndex) {
+      // These events are folded into the prior context by the provider SDK. The bounded local
+      // replay keeps the request history projection and only replays events after the target loop.
     } else if (record.type === "context.append_loop_event" && isRecord(record.event)) {
       const event = record.event;
       if (event.type === "tool.call") {
@@ -126,10 +245,12 @@ export function restoreKimi(
             },
           ]),
         );
-        if (sawTarget) responseFound = true;
         if (
           id &&
-          /\b(?:raft|slock)\s+(?:message\s+send|task\s+reply)\b/.test(toolCommands.get(id) ?? "") &&
+          (index === sendResultIndex ||
+            /\b(?:raft|slock)\s+(?:message\s+send|task\s+reply)\b/.test(
+              toolCommands.get(id) ?? "",
+            )) &&
           new RegExp(
             `Message ID: ${request.messageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_-])`,
           ).test(output)
@@ -183,8 +304,7 @@ export function restoreKimi(
     }
     if (hasMessageId(record, request.messageId)) {
       sawTarget = true;
-      if (record.type === "llm.response" || record.type === "context.append_loop_event")
-        responseFound = true;
+      if (record.type === "llm.response") responseFound = true;
     }
     if (
       record.type === "unknown_future" ||
@@ -211,7 +331,7 @@ export function restoreKimi(
     }
     // Raft restores Kimi from the send record that reports this message; records from a
     // subsequent request belong to a later turn and must not leak into this view.
-    if (trigger) break;
+    if (trigger && (latestLoopIndex < 0 || index >= latestLoopIndex)) break;
   }
   if (responseCount > requestCount || pendingTools.size > 0)
     return { ok: false, failure: "context_mismatch" };
