@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
 import { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import { ContextViewStore } from "#src/agent-context-view/context-view-store";
 
@@ -147,6 +148,63 @@ describe("unsupported context view runtimes", () => {
       }),
       expect.objectContaining({
         runtime: "kimi-coding",
+        supported: false,
+        unsupportedReason: "unsupported_runtime",
+      }),
+    ]);
+  });
+});
+
+describe("the provider value an Agent's launch config carries", () => {
+  // task #739: the gate used to name its own runtimes ("claude", "builtin", "kimi-sdk"), which
+  // no Agent config ever holds — its `provider` is a RuntimeProvider value. Claude Code and the
+  // built-in Agent therefore reported unsupported_runtime forever.
+  const markers: Record<string, string> = {
+    [RUNTIME_PROVIDER.CLAUDE_CODE]: '{"type":"api-request"}',
+    [RUNTIME_PROVIDER.CODEX]: '{"type":"additional_tools"}',
+    [RUNTIME_PROVIDER.PI]: '{"type":"request",}',
+    [RUNTIME_PROVIDER.COFORGE]: '{"type":"request",}',
+  };
+  test.each(Object.keys(markers))(
+    "indexes a %s Agent's request log and reports it supported",
+    (provider) => {
+      const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
+      const transcript = join(root, "session.jsonl");
+      writeFileSync(transcript, markers[provider]!, "utf8");
+      const reports: Array<Record<string, unknown>> = [];
+      const service = new AgentContextViewService({
+        stateDirectory: root,
+        serverId: "server-1",
+        workspaceId: "workspace-1",
+        computerId: "computer-1",
+        reportAvailability: (value) => reports.push(value as Record<string, unknown>),
+      });
+      service.reportAvailability({
+        agentId: "agent-1",
+        runtime: provider,
+        sessionId: "session-1",
+        transcript: "session.jsonl",
+        transcriptPath: transcript,
+      });
+      expect(reports).toEqual([expect.objectContaining({ runtime: provider, supported: true })]);
+    },
+  );
+
+  const unsupported = RUNTIME_PROVIDER_VALUES.filter((provider) => markers[provider] === undefined);
+  test.each(unsupported)("reports %s as unsupported_runtime", (provider) => {
+    const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
+    const reports: Array<Record<string, unknown>> = [];
+    const service = new AgentContextViewService({
+      stateDirectory: root,
+      serverId: "server-1",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      reportAvailability: (value) => reports.push(value as Record<string, unknown>),
+    });
+    service.reportAvailability({ agentId: "agent-1", runtime: provider });
+    expect(reports).toEqual([
+      expect.objectContaining({
+        runtime: provider,
         supported: false,
         unsupportedReason: "unsupported_runtime",
       }),

@@ -1,4 +1,5 @@
 import { redactContextViewValue } from "./context-view-redaction";
+import { CONTEXT_VIEW_PROVIDERS } from "./context-view-providers";
 import type {
   RecordValue,
   RestoreRequest,
@@ -58,7 +59,7 @@ export function buildView(
     messageId: request.messageId,
     messages: redacted,
     source: {
-      kind: request.runtime === "pi" || request.runtime === "builtin" ? "captured" : "native",
+      kind: CONTEXT_VIEW_PROVIDERS[request.runtime].source,
       format,
     },
     ...(verification ? { verification } : {}),

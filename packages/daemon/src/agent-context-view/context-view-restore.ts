@@ -1,14 +1,15 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { redactContextViewValue, type ContextViewRedactionCounts } from "./context-view-redaction";
 import { restoreClaude, restoreCodex } from "./context-view-restore-native";
-import { restoreKimi, restorePi } from "./context-view-restore-captured";
+import { restorePi } from "./context-view-restore-captured";
+import { CONTEXT_VIEW_PROVIDERS, type ContextViewRuntime } from "./context-view-providers";
 
 export type RestoredContextMessage = {
   role: "system" | "user" | "assistant" | "tool";
   parts: unknown[];
 };
 export type RestoredContextView = {
-  runtime: "claude" | typeof RUNTIME_PROVIDER.CODEX | "kimi-sdk" | "pi" | "builtin";
+  runtime: ContextViewRuntime;
   sessionId: string;
   messageId: string;
   messages: RestoredContextMessage[];
@@ -197,7 +198,7 @@ export function buildView(
     messageId: request.messageId,
     messages: redacted,
     source: {
-      kind: request.runtime === "pi" || request.runtime === "builtin" ? "captured" : "native",
+      kind: CONTEXT_VIEW_PROVIDERS[request.runtime].source,
       format,
     },
     ...(verification ? { verification } : {}),
@@ -220,20 +221,22 @@ export type RestoreRequest = {
   maxBytes?: number;
 };
 
+/** How each supported provider's request log is decoded, keyed by the same `RuntimeProvider`
+ * value `CONTEXT_VIEW_PROVIDERS` uses. */
+const RESTORE_READERS: Record<
+  ContextViewRuntime,
+  (records: RecordValue[], request: RestoreRequest) => ContextViewRestoreResult
+> = {
+  [RUNTIME_PROVIDER.CLAUDE_CODE]: restoreClaude,
+  [RUNTIME_PROVIDER.CODEX]: restoreCodex,
+  [RUNTIME_PROVIDER.PI]: restorePi,
+  [RUNTIME_PROVIDER.COFORGE]: restorePi,
+};
+
 export function restoreContextView(request: RestoreRequest): ContextViewRestoreResult {
   const records = parseRecords(request.buffer, request.offset);
   if (records === "too_many")
     return { ok: false, failure: "too_large", tooLargeCause: "restore_limit" };
   if (!records) return { ok: false, failure: "read_failed" };
-  switch (request.runtime) {
-    case "claude":
-      return restoreClaude(records, request);
-    case RUNTIME_PROVIDER.CODEX:
-      return restoreCodex(records, request);
-    case "kimi-sdk":
-      return restoreKimi(records, request);
-    case "pi":
-    case "builtin":
-      return restorePi(records, request);
-  }
+  return RESTORE_READERS[request.runtime](records, request);
 }

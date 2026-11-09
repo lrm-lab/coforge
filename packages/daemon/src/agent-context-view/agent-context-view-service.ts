@@ -1,25 +1,14 @@
 import { fstatSync, lstatSync, openSync, constants, closeSync, readSync } from "node:fs";
 import { relative } from "node:path";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { ContextViewStore, type ContextViewIndexEntry } from "./context-view-store";
+import {
+  CONTEXT_VIEW_PROVIDERS,
+  contextViewRuntime,
+  type ContextViewRuntime,
+} from "./context-view-providers";
 
-export const CONTEXT_VIEW_SUPPORTED_RUNTIMES = [
-  "claude",
-  RUNTIME_PROVIDER.CODEX,
-  "kimi-sdk",
-  "pi",
-  "builtin",
-] as const;
 export const AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS = 24 * 60 * 60 * 1000;
-export type ContextViewRuntime = (typeof CONTEXT_VIEW_SUPPORTED_RUNTIMES)[number];
 const SUPPORT_SCAN_BYTES = 8 * 1024 * 1024;
-const SUPPORT_MARKERS: Record<ContextViewRuntime, Buffer> = {
-  claude: Buffer.from('"type":"api-request"', "utf8"),
-  codex: Buffer.from('"type":"additional_tools"', "utf8"),
-  "kimi-sdk": Buffer.from('"type":"llm.request"', "utf8"),
-  pi: Buffer.from('{"type":"request",', "utf8"),
-  builtin: Buffer.from('{"type":"request",', "utf8"),
-};
 
 export type ContextViewAvailability = {
   type: "agent:context_view_availability";
@@ -43,12 +32,6 @@ export type ContextViewAgentFacts = {
   transcriptPath?: string;
   contextViewRequestLogPath?: string;
 };
-
-function normalizeRuntime(value: string): ContextViewRuntime | undefined {
-  return (CONTEXT_VIEW_SUPPORTED_RUNTIMES as readonly string[]).includes(value)
-    ? (value as ContextViewRuntime)
-    : undefined;
-}
 
 type Options = {
   stateDirectory: string;
@@ -94,7 +77,7 @@ export class AgentContextViewService {
   onMessageCommitted(facts: ContextViewAgentFacts, messageId: string, enabled: boolean): void {
     this.#rememberRequestLog(facts);
     if (!enabled) return;
-    const runtime = normalizeRuntime(facts.runtime);
+    const runtime = contextViewRuntime(facts.runtime);
     if (!runtime) {
       this.#report(facts, facts.runtime, false, "unsupported_runtime", "message");
       return;
@@ -133,7 +116,7 @@ export class AgentContextViewService {
       lastReportedAt: this.#now(),
     });
     if (!enabled) return;
-    const runtime = normalizeRuntime(facts.runtime);
+    const runtime = contextViewRuntime(facts.runtime);
     if (!runtime) {
       this.#report(facts, facts.runtime, false, "unsupported_runtime", trigger, force);
     } else if (!facts.sessionId || !facts.transcript || !facts.transcriptPath) {
@@ -285,7 +268,7 @@ export class AgentContextViewService {
           if (count === 0) break;
           read += count;
         }
-        return buffer.subarray(0, read).includes(SUPPORT_MARKERS[runtime]);
+        return buffer.subarray(0, read).includes(CONTEXT_VIEW_PROVIDERS[runtime].marker);
       } finally {
         closeSync(fd);
       }

@@ -13,8 +13,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { escapePathIdentity, isSafePathScope } from "#src/persistence/path-scope";
+import { contextViewRuntime, type ContextViewRuntime } from "./context-view-providers";
 
 export const AGENT_CONTEXT_VIEW_RETENTION_DAYS = 30;
 export const AGENT_CONTEXT_VIEW_OFF_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -32,19 +32,19 @@ export const CONTEXT_VIEW_APPEND_FLAGS =
 export type ContextViewIndexEntry = {
   messageId: string;
   sentAt: string;
-  runtime: "claude" | typeof RUNTIME_PROVIDER.CODEX | "kimi-sdk" | "pi" | "builtin";
+  runtime: ContextViewRuntime;
   sessionId: string;
   transcript: string;
   offset: number;
 };
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
-const RUNTIMES = new Set(["claude", RUNTIME_PROVIDER.CODEX, "kimi-sdk", "pi", "builtin"]);
 
 function assertEntry(entry: ContextViewIndexEntry): void {
   if (!ID.test(entry.messageId) || !ID.test(entry.sessionId))
     throw new Error("Invalid context view identity");
-  if (!RUNTIMES.has(entry.runtime)) throw new Error("Invalid context view runtime");
+  if (contextViewRuntime(entry.runtime) === undefined)
+    throw new Error("Invalid context view runtime");
   if (
     !entry.transcript ||
     entry.transcript.startsWith("/") ||

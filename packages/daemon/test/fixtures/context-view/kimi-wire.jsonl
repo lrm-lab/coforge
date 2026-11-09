@@ -1,4 +1,0 @@
-{"type":"llm.request","sessionId":"s1","request":{"messages":"hello","message_id":"m1"}}
-{"type":"context.append_loop_event","sessionId":"s1","event":{"type":"tool.call","toolCallId":"call-1","name":"shell","arguments":"{\"command\":\"raft message send --id m1\"}"}}
-{"type":"context.append_loop_event","sessionId":"s1","event":{"type":"tool.result","toolCallId":"call-1","output":"Message ID: m1"}}
-{"type":"llm.response","sessionId":"s1","content":"world"}
