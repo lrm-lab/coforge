@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect } from "react";
+import { getLocale, setLocale } from "#src/paraglide/runtime";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, createFileRoute, notFound, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -134,6 +135,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       timeZone: preferences.timeZone,
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
+      language: preferences.language,
       aiWorkbenchEnabled: preferences.aiWorkbenchEnabled,
       tabOrders: memberSettings.tabOrders,
     };
@@ -154,6 +156,7 @@ function AppLayout() {
     timeZone,
     assumedPhone,
     timeFormat,
+    language,
     aiWorkbenchEnabled,
     tabOrders,
     onboarding,
@@ -172,6 +175,11 @@ function AppLayout() {
   useEffect(() => {
     void rememberQueryCache(queryClient);
   }, [queryClient, currentWorkspace.slug]);
+  // The language saved in Settings is the person's, on every page of the Workspace: an address
+  // in another language (a link someone shared) switches to it, rather than only Settings did.
+  useEffect(() => {
+    if (language && language !== getLocale()) setLocale(language);
+  }, [language]);
   const aiWorkbench = useAiWorkbenchEnabled(aiWorkbenchEnabled);
   useLastLocationMemory();
   useSearchShortcut(currentWorkspace.id, user.id);

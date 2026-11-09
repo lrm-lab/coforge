@@ -144,17 +144,12 @@ function SettingsPage() {
   const toast = useAppToast();
   const locale = savedLanguage ?? getLocale();
   const saveLanguage = useServerFn(saveLanguagePreference);
-  // The stored preference is the source of truth; the cookie/localStorage is only its cache.
-  useEffect(() => {
-    if (savedLanguage && savedLanguage !== getLocale()) setLocale(savedLanguage);
-  }, [savedLanguage]);
 
   async function changeLocale(next: Parameters<typeof setLocale>[0]) {
     await saveLanguage({ data: { language: next } });
-    // The stored preference is the source of truth: re-read it so `savedLanguage` stops
-    // shadowing the new locale, then set the cookie/localStorage cache.
+    // The stored preference is the source of truth: re-reading it has the Workspace layout switch
+    // the page to it, as it does on every page.
     await router.invalidate({ sync: true });
-    setLocale(next);
   }
 
   useEffect(() => {
