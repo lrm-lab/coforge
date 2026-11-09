@@ -22,12 +22,27 @@ export async function memoryAgentGate(
   db: PrismaClient,
   workspaceId: string,
 ): Promise<PrototypeGate> {
+  // A deployment with the prototype off never provisions, so the Workspace's own answer is not
+  // worth a read there: the gate is off whatever it says.
   if (!isOpenVikingPrototypeEnabled(Bun.env)) return memoryAgentGateFrom(false, false);
-  const workspaceEnabled = await new Experiments(
-    new PrismaExperimentsRepository(db),
-    isFeatureEnabled,
-  ).enabled("memoryAgent", { workspaceId });
-  return memoryAgentGateFrom(true, workspaceEnabled);
+  return memoryAgentGateFrom(true, await memoryAgentExperimentEnabled(db, workspaceId));
+}
+
+/**
+ * The Workspace's own answer alone, read even when the deployment's switch is off (task #6). It is
+ * what decides whether a channel or a Workspace gets the Agent at all: the master switch only
+ * decides whether that Agent's OpenViking profile is really provisioned, so a Workspace that
+ * switched the experiment on while the deployment is off is armed and plants its Agent, without
+ * memory behind it until the deployment catches up.
+ */
+export async function memoryAgentExperimentEnabled(
+  db: PrismaClient,
+  workspaceId: string,
+): Promise<boolean> {
+  return new Experiments(new PrismaExperimentsRepository(db), isFeatureEnabled).enabled(
+    "memoryAgent",
+    { workspaceId },
+  );
 }
 
 /** The same gate as a per-Workspace source, for the profile API and the admission sweep, which ask

@@ -8,7 +8,7 @@ import { RUNTIME_PROVIDER, deletedAgentName } from "@lrm/coforge-sdk/internal";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import { memoryAgentGate } from "./memory-agent-gate.server";
+import { memoryAgentExperimentEnabled, memoryAgentGate } from "./memory-agent-gate.server";
 import { isOpenVikingPrototypeEnabled } from "./prototype-gate";
 import {
   sanitizeWorkspaceMemoryFailure,
@@ -37,6 +37,11 @@ type MemoryDb = PrismaClient | Prisma.TransactionClient;
  * Creates the agent when the workspace has none and `memory` is free.
  * A taken handle leaves the channel without that member and does not touch the profile.
  * A unique-constraint race joins the agent the other transaction provisioned.
+ *
+ * `workspaceEnabled` is the Workspace's own answer to the experiment and the only switch that
+ * decides whether the Agent is planted and joins: a Workspace that said no gets neither (task #6).
+ * `gate` decides what its memory is — the deployment's master switch still has to be on for the
+ * profile to be provisioned.
  */
 export async function attachDefaultMemoryAgent(
   db: PrismaClient,
@@ -46,6 +51,7 @@ export async function attachDefaultMemoryAgent(
     actorUserId: string;
     now: Date;
     gate: PrototypeGate;
+    workspaceEnabled: boolean;
   },
 ): Promise<void> {
   try {
@@ -55,7 +61,7 @@ export async function attachDefaultMemoryAgent(
     try {
       await db.$transaction(async (tx) => {
         const existing = await liveMemoryAgentId(tx, input.workspaceId);
-        if (existing) await addUnmutedMember(tx, input, existing);
+        if (existing && input.workspaceEnabled) await addUnmutedMember(tx, input, existing);
       });
     } catch (retryError) {
       if (!isUniqueViolation(retryError)) throw retryError;
@@ -71,8 +77,12 @@ async function attachOnce(
     actorUserId: string;
     now: Date;
     gate: PrototypeGate;
+    workspaceEnabled: boolean;
   },
 ): Promise<void> {
+  // The Workspace answered no to the experiment: no Agent, no membership, and nothing to record
+  // — a Workspace that never asked for memory should not carry a profile row about it either.
+  if (!input.workspaceEnabled) return;
   const existing = await liveMemoryAgentId(tx, input.workspaceId);
   if (existing) {
     await addUnmutedMember(tx, input, existing);
@@ -116,6 +126,8 @@ export async function attachDefaultMemoryAgentToGeneral(
   /** The gate to provision under; the Workspace's own answer unless a caller is about to make it
    * one (`enableMemoryAgentForWorkspace`). */
   gate?: PrototypeGate,
+  /** Whether the Workspace offers the experiment; resolved here for the same callers. */
+  workspaceEnabled?: boolean,
 ): Promise<void> {
   const general = await db.conversation.findUnique({
     where: { workspaceId_channelName: { workspaceId, channelName: "general" } },
@@ -128,6 +140,7 @@ export async function attachDefaultMemoryAgentToGeneral(
     actorUserId,
     now: new Date(),
     gate: gate ?? (await memoryAgentGate(db, workspaceId)),
+    workspaceEnabled: workspaceEnabled ?? (await memoryAgentExperimentEnabled(db, workspaceId)),
   });
 }
 
@@ -146,7 +159,13 @@ export async function enableMemoryAgentForWorkspace(
 ): Promise<string | undefined> {
   if (!isOpenVikingPrototypeEnabled(Bun.env)) return undefined;
   const before = await liveMemoryAgentId(db, workspaceId);
-  await attachDefaultMemoryAgentToGeneral(db, workspaceId, actorUserId, { prototypeEnabled: true });
+  await attachDefaultMemoryAgentToGeneral(
+    db,
+    workspaceId,
+    actorUserId,
+    { prototypeEnabled: true },
+    true,
+  );
   const created = await liveMemoryAgentId(db, workspaceId);
   return before === null && created !== null ? created : undefined;
 }

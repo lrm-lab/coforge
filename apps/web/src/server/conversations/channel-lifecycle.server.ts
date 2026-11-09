@@ -12,7 +12,10 @@ import { deleteChannelRows } from "#src/server/db/repositories/channel-deletion.
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { getFileStorage, type BulkFileRemoval } from "#src/server/files/file-storage.server";
 import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
-import { memoryAgentGate } from "#src/server/workspace-memory/memory-agent-gate.server";
+import {
+  memoryAgentExperimentEnabled,
+  memoryAgentGate,
+} from "#src/server/workspace-memory/memory-agent-gate.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { findChannelById, memberChannel, type PublicChannelPorts } from "./channel-access.server";
@@ -88,6 +91,7 @@ export async function createUserChannel(
       actorUserId: userId,
       now: new Date(),
       gate: await memoryAgentGate(db, workspaceId),
+      workspaceEnabled: await memoryAgentExperimentEnabled(db, workspaceId),
     });
   await Promise.all([
     announceChannelCreated(realtime, {
