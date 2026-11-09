@@ -38,6 +38,9 @@ message AgentContextViewResult {
   optional uint32 redacted_media_count = 21;
   optional uint32 redacted_diagnostic_count = 22;
   optional uint32 view_bytes = 23;
+  optional uint64 source_bytes = 24;
+  string verification = 25;
+  string too_large_cause = 26;
 }
 
 message AgentContextViewAvailability {

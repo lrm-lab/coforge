@@ -29,6 +29,7 @@ function failure(
   request: AgentContextViewRequest,
   reason: AgentContextViewResult["reason"],
   detail?: string,
+  metadata: Pick<AgentContextViewResult, "sourceBytes" | "tooLargeCause"> = {},
 ): AgentContextViewResult {
   return {
     ...request,
@@ -38,6 +39,7 @@ function failure(
     createdAtMs: Date.now(),
     content: new Uint8Array(),
     encoding: "identity",
+    ...metadata,
   };
 }
 
@@ -145,7 +147,9 @@ export function subscribeContextViewQueries(
             : "read_failed";
       await sendResult(
         transport,
-        failure(request, reason, source.failure),
+        failure(request, reason, source.failure, {
+          ...(reason === "too_large" ? { tooLargeCause: "session_file" as const } : {}),
+        }),
         ports.agentApiKey?.(request.agentId),
       );
       return;
@@ -163,7 +167,10 @@ export function subscribeContextViewQueries(
       ? (() => {
           const content = new TextEncoder().encode(JSON.stringify(restored.view));
           return content.byteLength > Math.min(MAX_RESULT_BYTES, request.maxBytes)
-            ? failure(request, "too_large")
+            ? failure(request, "too_large", "view_over_max_bytes", {
+                sourceBytes: source.sourceBytes,
+                tooLargeCause: "request",
+              })
             : {
                 ...request,
                 status: "ok" as const,
@@ -178,9 +185,13 @@ export function subscribeContextViewQueries(
                 redactedMediaCount: restored.view.redactions.media,
                 redactedDiagnosticCount: restored.view.redactions.diagnostic,
                 viewBytes: content.byteLength,
+                sourceBytes: source.sourceBytes,
+                verification: restored.view.verification,
               };
         })()
-      : failure(request, restored.failure, restored.failure);
+      : failure(request, restored.failure, restored.failure, {
+          sourceBytes: source.sourceBytes,
+        });
     logger.info("Context view request finished", {
       event: "context_view:result",
       request_id: request.requestId,
@@ -188,7 +199,6 @@ export function subscribeContextViewQueries(
       runtime: entry.runtime,
       status: result.status,
       failure: result.reason,
-      source_bytes: source.sourceBytes,
       source: providerPath ? "provider" : "workspace_or_state_fallback",
       index_or_fallback: entry.transcript,
       response_found: restored.ok ? restored.view.responseFound === true : false,
@@ -196,6 +206,8 @@ export function subscribeContextViewQueries(
       redacted_media: restored.ok ? restored.view.redactions.media : 0,
       redacted_diagnostic: restored.ok ? restored.view.redactions.diagnostic : 0,
       view_bytes: result.status === "ok" ? result.content.byteLength : 0,
+      source_bytes: result.sourceBytes ?? source.sourceBytes,
+      verification: restored.ok ? restored.view.verification : undefined,
       message_count: restored.ok ? restored.view.messages.length : 0,
       unrestored_message_count: restored.ok ? (restored.view.unrestoredMessages ?? 0) : 0,
       trigger_found: restored.ok ? restored.view.trigger !== undefined : false,

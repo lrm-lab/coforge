@@ -35,6 +35,8 @@ const REASONS = new Set([
   "not_recorded",
 ]);
 const ENCODINGS = new Set(["identity", "gzip"]);
+const VERIFICATIONS = new Set(["verified", "count_matched"]);
+const TOO_LARGE_CAUSES = new Set(["session_file", "request", "restore_limit"]);
 
 export type AgentContextViewRequest = {
   protocolMajor: number;
@@ -62,6 +64,9 @@ export type AgentContextViewResult = AgentContextViewRequest & {
   redactedMediaCount?: number;
   redactedDiagnosticCount?: number;
   viewBytes?: number;
+  sourceBytes?: number;
+  verification?: "verified" | "count_matched";
+  tooLargeCause?: "session_file" | "request" | "restore_limit";
 };
 export type AgentContextViewAvailability = {
   protocolMajor: number;
@@ -126,6 +131,17 @@ function result(value: AgentContextViewResult): void {
   }
   if (value.viewBytes !== undefined && value.viewBytes > 32 * 1024 * 1024)
     throw new Error("Context view view bytes are too large");
+  if (
+    value.sourceBytes !== undefined &&
+    (!Number.isSafeInteger(value.sourceBytes) || value.sourceBytes < 0 || value.sourceBytes > 512 * 1024 * 1024)
+  )
+    throw new Error("Invalid context view source bytes");
+  if (value.verification !== undefined && !VERIFICATIONS.has(value.verification))
+    throw new Error("Invalid context view verification");
+  if (value.tooLargeCause !== undefined && !TOO_LARGE_CAUSES.has(value.tooLargeCause))
+    throw new Error("Invalid context view too-large cause");
+  if (value.tooLargeCause !== undefined && value.reason !== "too_large")
+    throw new Error("Unexpected context view too-large cause");
   if (!ENCODINGS.has(value.encoding)) throw new Error("Invalid context view encoding");
 }
 
@@ -164,6 +180,7 @@ export function encodeAgentContextViewResult(value: AgentContextViewResult): Uin
       messageType: RESULT_TYPE,
       maxBytes: value.maxBytes,
       createdAtMs: BigInt(value.createdAtMs),
+      sourceBytes: value.sourceBytes === undefined ? undefined : BigInt(value.sourceBytes),
     }),
   );
 }
@@ -193,6 +210,13 @@ export function decodeAgentContextViewResult(bytes: Uint8Array): AgentContextVie
     redactedMediaCount: value.redactedMediaCount,
     redactedDiagnosticCount: value.redactedDiagnosticCount,
     viewBytes: value.viewBytes,
+    sourceBytes: value.sourceBytes === undefined ? undefined : Number(value.sourceBytes),
+    verification: VERIFICATIONS.has(value.verification)
+      ? (value.verification as AgentContextViewResult["verification"])
+      : undefined,
+    tooLargeCause: TOO_LARGE_CAUSES.has(value.tooLargeCause)
+      ? (value.tooLargeCause as AgentContextViewResult["tooLargeCause"])
+      : undefined,
   };
   result(resultValue);
   return resultValue;

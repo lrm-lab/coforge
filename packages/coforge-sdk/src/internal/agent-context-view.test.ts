@@ -52,6 +52,8 @@ describe("agent context view wire codec", () => {
       redactedMediaCount: 1,
       redactedDiagnosticCount: 3,
       viewBytes: 7,
+      sourceBytes: 2048,
+      verification: "verified" as const,
       failureDetail: undefined,
     };
     expect(decodeAgentContextViewResult(encodeAgentContextViewResult(value))).toEqual(value);
@@ -81,6 +83,17 @@ describe("agent context view wire codec", () => {
         createdAtMs: 1,
         content: new Uint8Array(32 * 1024 * 1024 + 1),
         encoding: "identity",
+      }),
+    ).toThrow();
+    expect(() =>
+      encodeAgentContextViewResult({
+        ...request,
+        status: "failed",
+        reason: "read_failed",
+        createdAtMs: 1,
+        content: new Uint8Array(),
+        encoding: "identity",
+        tooLargeCause: "session_file",
       }),
     ).toThrow();
   });
