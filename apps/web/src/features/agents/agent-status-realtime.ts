@@ -15,6 +15,11 @@ import {
   type AgentStatusEvent,
 } from "./agent-status-channel";
 import {
+  decodeAgentControlEvent,
+  isAgentControlEvent,
+  recordAgentControlEvent,
+} from "./agent-control-realtime";
+import {
   missedBySubscribe,
   type StreamPosition,
   type StreamPositions,
@@ -419,6 +424,10 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
             setStatusOnlyDisplays((current) => dropStatusOnlyDisplay(current, snapshot.agentId));
           setVisibleAgents((current) => applyAgentDisplaySnapshot(current, snapshot, workspaceId));
         }
+      } else if (isAgentControlEvent(value)) {
+        // `agent.control.v1` feeds the control-phase store only; it never touches the status
+        // or display state this hook owns.
+        recordAgentControlEvent(decodeAgentControlEvent(value));
       } else {
         const event = decodeAgentStatusEvent(value);
         setVisibleAgents((current) => applyAgentStatusEvent(current, event));

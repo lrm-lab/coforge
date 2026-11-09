@@ -17,6 +17,7 @@ import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/men
 import { AgentTurnInterrupt } from "./agent-turn-interrupt.server";
 import { getAgentTurnInterruptResults } from "./agent-turn-interrupt-results.server";
 import { getAgentTurnInterruptCapabilityLease } from "./agent-turn-interrupt-capability.server";
+import { getAgentControlAcceptedCapabilityLease } from "./agent-control-accepted-capability.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 
 /** The `AgentControl` a signed-in user's Start, Stop, Restart and Reset go through. */
@@ -38,6 +39,8 @@ export function userAgentControl(db: PrismaClient) {
     conversations,
     mentions,
     createAgentIntroduction(db),
+    undefined,
+    getAgentControlAcceptedCapabilityLease(),
   );
 }
 

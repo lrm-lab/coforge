@@ -1,6 +1,7 @@
 import { AppError } from "#src/lib/app-error";
 import { errorType } from "#src/server/errors/error-type.server";
 import type { AgentControlAccess } from "./agent-control-access.server";
+import type { AgentControlEvents } from "./agent-control-events.server";
 import {
   agentControlRevision,
   current,
@@ -19,6 +20,8 @@ export class AgentControlOperations {
     private readonly access: AgentControlAccess,
     /** Settles the tracked mentions a person's Stop leaves undelivered. */
     private readonly mentions?: AgentControlMentions,
+    /** Publishes `agent.control.v1` for the operation this write begins. */
+    private readonly events?: AgentControlEvents,
   ) {}
 
   /** A person stopped the Agent: its pending tracked mentions will not be launched. The stop is
@@ -106,6 +109,20 @@ export class AgentControlOperations {
       await this.store.replace(agent, state, stoppedAt !== undefined ? { stoppedAt } : undefined)
     ) {
       if (stoppedAt) await this.settleStoppedMentions(agent, stoppedAt);
+      // The operation a newer request superseded ends here; the new one's pending event follows.
+      if (old && old.requestId !== requestId)
+        this.events?.publish(agent, {
+          agentId: agent.id,
+          requestId: old.requestId,
+          action: old.action,
+          phase: "superseded",
+        });
+      this.events?.publish(agent, {
+        agentId: agent.id,
+        requestId: state.requestId,
+        action: state.action,
+        phase: "pending",
+      });
       return state;
     }
 

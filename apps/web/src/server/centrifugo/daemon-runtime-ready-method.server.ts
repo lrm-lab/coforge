@@ -1,4 +1,5 @@
 import {
+  AGENT_CONTROL_ACCEPTED_CAPABILITY,
   AGENT_MIGRATION_CAPABILITY,
   decodeDaemonRuntimeReadyRequest,
   encodeDaemonRuntimeReadyResponse,
@@ -184,7 +185,13 @@ export const createDaemonRuntimeReadyMethod =
           ),
         );
       const version = await latestComputerVersion?.().catch(() => null);
-      return encodeDaemonRuntimeReadyResponse(version ? { latestComputerVersion: version } : {});
+      // This server takes the `accepted` Agent control phase; only a daemon that advertised
+      // `agent-control-accepted:v1` is told so — an older one ignores the field anyway, and a
+      // daemon that never claimed the phase is never asked for it.
+      return encodeDaemonRuntimeReadyResponse({
+        agentControlAccepted: request.capabilities?.includes(AGENT_CONTROL_ACCEPTED_CAPABILITY),
+        ...(version ? { latestComputerVersion: version } : {}),
+      });
     } catch (error) {
       console.error(
         JSON.stringify({

@@ -44,6 +44,7 @@ export function AgentProfileActionsMenu({
               id="restart"
               icon={RotateCcw}
               label={m.agent_control_restart_reset_tooltip()}
+              isDisabled={controls.controlInFlight}
             />
           </Dropdown.Menu>
         </Dropdown.Popover>

@@ -35,12 +35,8 @@ These rules apply to `src/features/agents/`.
   reads its own Agent with `select` and never receives the map. The query is read again on focus
   and reconnect, when an unknown Agent newer than the list appears, after a runtime or profile
   save, and on a visibility or directory change.
-- `agent-status-realtime.ts` consumes backend display snapshots from the
-  initial server response and the realtime status channel and accepts newer
-  revisions. At display expiry it refreshes from the backend and retries on
-  failure. It implements no reducer. It keeps the last snapshot when a refresh
-  fails; an unavailable initial snapshot with no prior value is unknown, not
-  offline.
+- `agent-status-realtime.ts` consumes backend display snapshots and status events, accepting newer revisions with no reducer; at display expiry it refreshes and retries, keeping the last snapshot — an unavailable initial one is unknown, not offline.
+  `agent-control-realtime.ts` decodes `agent.control.v1` into the per-Agent control-phase store `agent-runtime-controls.ts` reads for pending labels and disabled controls while an operation runs (task #584); a phase-only event never erases a same-request error, and pending entries lapse after `AGENT_CONTROL_PENDING_TTL_MS`.
 - Activity lives in the TanStack Query cache (`agent-activity-queries.ts`).
   Publications patch it with `setQueryData`; every (re)subscribe invalidates
   it; it refetches when the tab becomes visible or the network returns.

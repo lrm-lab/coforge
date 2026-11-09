@@ -115,3 +115,56 @@ test("daemon authentication is still rejected before the result is ever decoded"
     }),
   ).resolves.toEqual({ code: 401, message: "daemon authentication required" });
 });
+
+test("an accepted acknowledgement routes to control.accepted, never the result path", async () => {
+  const calls: string[] = [];
+  const control = {
+    result: async () => {
+      calls.push("result");
+    },
+    accepted: async () => {
+      calls.push("accepted");
+    },
+  };
+  const method = createAgentControlResultMethod(control);
+  const acceptedPayload = encodeAgentControlResult({
+    protocolMajor: 1,
+    requestId: "request-a",
+    workspaceId: "w",
+    computerId: "c",
+    agentId: "agent-a",
+    provider: "pi",
+    epoch: 3,
+    phase: "accepted",
+    sequence: 1,
+  });
+  await expect(method(acceptedPayload, metadata)).resolves.toEqual(new Uint8Array());
+  expect(calls).toEqual(["accepted"]);
+  // A terminal result still takes the ordinary path.
+  await expect(method(payload, metadata)).resolves.toEqual(new Uint8Array());
+  expect(calls).toEqual(["accepted", "result"]);
+});
+
+test("an accepted result is refused when the control seam cannot take it", async () => {
+  const control: Pick<AgentControl, "result"> = { result: async () => {} };
+  const method = createAgentControlResultMethod(control);
+  const acceptedPayload = encodeAgentControlResult({
+    protocolMajor: 1,
+    requestId: "request-a",
+    workspaceId: "w",
+    computerId: "c",
+    agentId: "agent-a",
+    provider: "pi",
+    epoch: 3,
+    phase: "accepted",
+    sequence: 1,
+  });
+  const capture = captureWarnings();
+  let response;
+  try {
+    response = await method(acceptedPayload, metadata);
+  } finally {
+    capture.restore();
+  }
+  expect(response).toEqual({ code: 403, message: "Agent control result is not authorized" });
+});

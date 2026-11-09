@@ -18,7 +18,7 @@ const KNOWN_REJECTION_REASONS = new Set([
 ]);
 
 export function createAgentControlResultMethod(
-  control: Pick<AgentControl, "result">,
+  control: Pick<AgentControl, "result"> & Partial<Pick<AgentControl, "accepted">>,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     if (
@@ -34,7 +34,14 @@ export function createAgentControlResultMethod(
       return { code: 403, message: "Agent control result is not authorized" };
     }
     try {
-      await control.result(metadata.principal, result);
+      // `accepted` is an acknowledgement, not a lifecycle result: it never reaches the
+      // operation state machine, only the waiter waiting on it (task #584).
+      if (result.phase === "accepted") {
+        if (!control.accepted) throw new Error("accepted control results unsupported");
+        await control.accepted(metadata.principal, result);
+      } else {
+        await control.result(metadata.principal, result);
+      }
       return new Uint8Array();
     } catch (error) {
       // A rejected result previously vanished as a bare 403; log it so a stuck control

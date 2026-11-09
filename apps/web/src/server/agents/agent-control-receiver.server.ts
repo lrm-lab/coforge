@@ -1,6 +1,7 @@
 import type { AgentControlResult } from "@lrm/coforge-sdk/internal";
-import type { AgentControlDriver } from "./agent-control-driver.server";
+import { agentControlAcceptedKey, type AgentControlDriver } from "./agent-control-driver.server";
 import type { AgentControlSignal } from "./agent-control-signal.server";
+import type { AgentControlEvents } from "./agent-control-events.server";
 import {
   commands,
   current,
@@ -38,6 +39,8 @@ export class AgentControlReceiver {
     /** Issues the tracked mentions again for a launch that started with its session. */
     private readonly mentions?: AgentControlMentions,
     private readonly stopReasons?: AgentStopReasonRecorder,
+    /** Publishes `agent.control.v1` for every phase transition this receiver sees. */
+    private readonly events?: AgentControlEvents,
   ) {}
 
   /**
@@ -83,6 +86,27 @@ export class AgentControlReceiver {
       return;
     throw new Error("Stale Agent launch");
   }
+  /**
+   * The Daemon's immediate `accepted` acknowledgement (task #584): it proves the command was
+   * received ahead of the serialized lifecycle queue, so an `execute()` waiter can return its
+   * pending view instead of blocking on the terminal result. Fenced exactly like a result —
+   * only the current scope's request id is recorded, and anything else is rejected.
+   */
+  async accepted(claim: { workspaceId: string; computerId: string }, result: AgentControlResult) {
+    const agent = await requireCurrentAgentScope(this.store, claim, result);
+    const state = agent.state;
+    this.events?.publish(agent, {
+      agentId: agent.id,
+      requestId: result.requestId,
+      action: state.action,
+      phase: "accepted",
+    });
+    // The request-scoped key is what an `execute()` waiter races against the Agent's own key;
+    // the Agent key still wakes every ordinary waiter, exactly like a result does.
+    await this.signal.notify(agentControlAcceptedKey(result.requestId)).catch(() => {});
+    await this.signal.notify(agent.id).catch(() => {});
+  }
+
   /** RPC ACK follows conditional persistence; never acquires the control waiter's lock. */
   async result(claim: { workspaceId: string; computerId: string }, result: AgentControlResult) {
     const agent = await requireCurrentAgentScope(this.store, claim, result);
@@ -153,14 +177,37 @@ export class AgentControlReceiver {
         computerId: claim.computerId,
         agentId: agent.id,
       });
+    let eventPhase: "pending" | "completed" | "failed" | "superseded" = "pending";
+    if (next.phase === "failed") eventPhase = "failed";
+    else if (next.phase === "completed") eventPhase = "completed";
     if (next.phase === "stopped" || next.phase === "workspace-reset") {
       // Publish failure stays silent so the waiter's fallback re-read republishes the phase.
       const advanced = await this.driver.advance(agent.id, next.requestId).then(
         () => true,
         () => false,
       );
-      if (!advanced) return;
+      if (advanced) {
+        // An intermediate step (a Restart's stop, a Full reset's clear) continues the chain;
+        // only the operation's own terminal state — or a newer request that superseded it —
+        // is the event's phase.
+        const settled = await this.store.get(agent.id).catch(() => undefined);
+        const settledState = settled?.state;
+        eventPhase =
+          settledState && settledState.requestId === next.requestId
+            ? settledState.phase === "completed" || settledState.phase === "failed"
+              ? settledState.phase
+              : "pending"
+            : "superseded";
+      }
     }
+    this.events?.publish(agent, {
+      agentId: agent.id,
+      requestId: next.requestId,
+      action: next.action,
+      phase: eventPhase,
+      ...(eventPhase === "failed" && next.errorCode ? { errorCode: next.errorCode } : {}),
+      ...(eventPhase === "failed" && result.errorDetail ? { detail: result.errorDetail } : {}),
+    });
     await this.signal.notify(agent.id).catch(() => {});
   }
 }

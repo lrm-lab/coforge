@@ -124,6 +124,7 @@ export function AgentProfileHeader({
               icon={RotateCcw}
               size="sm"
               className="hidden @lg/agent-header:inline-flex"
+              isDisabled={controls.controlInFlight}
               tooltip={m.agent_control_restart_reset_tooltip()}
               onClick={() => controls.openRestart("restart")}
             />
@@ -140,13 +141,21 @@ export function AgentProfileHeader({
       />
     </header>
   );
-  if (!controls?.startStopError) return header;
+  const statusLine = controls?.controlPendingLabel ?? controls?.controlFailureDetail;
+  if (!controls?.startStopError && !statusLine) return header;
   return (
     <>
       {header}
-      <p role="alert" className="px-5 pb-2 text-sm text-error-primary">
-        {controls.startStopError}
-      </p>
+      {statusLine && (
+        <p className="px-5 pb-2 text-sm text-tertiary" role="status">
+          {statusLine}
+        </p>
+      )}
+      {controls?.startStopError && (
+        <p role="alert" className="px-5 pb-2 text-sm text-error-primary">
+          {controls.startStopError}
+        </p>
+      )}
     </>
   );
 }

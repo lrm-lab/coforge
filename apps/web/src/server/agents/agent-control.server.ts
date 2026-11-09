@@ -11,6 +11,7 @@ import { AgentControlDriver } from "./agent-control-driver.server";
 import { AgentControlBatch } from "./agent-control-batch.server";
 import { AgentControlOperations } from "./agent-control-operations.server";
 import { AgentControlPublisher } from "./agent-control-publisher.server";
+import { AgentControlEvents } from "./agent-control-events.server";
 import {
   AgentControlReceiver,
   type AgentLaunchClaim,
@@ -19,6 +20,11 @@ import {
 import { errorType } from "#src/server/errors/error-type.server";
 
 export * from "./agent-control-types.server";
+
+/** The longest `execute()` waits for a Daemon's `accepted` acknowledgement or a terminal
+ * result before answering the pending view (task #584); a Daemon without the capability is
+ * not waited on at all. */
+export const AGENT_CONTROL_ACCEPTED_WAIT_MS = 2_000;
 
 import {
   type AgentControlRecoveryReader,
@@ -47,7 +53,9 @@ export class AgentControl {
 
   constructor(
     private readonly store: AgentControlStore,
-    api: Pick<CentrifugoServerApi, "publish">,
+    api: Pick<CentrifugoServerApi, "publish"> & {
+      publishJson?(channel: string, data: unknown): Promise<unknown>;
+    },
     private readonly runtimeLock: AgentRuntimeLock,
     private readonly timing: {
       timeoutMs: number;
@@ -71,10 +79,18 @@ export class AgentControl {
     /** Writes a settled failure's reason onto the Agent's display state; only the composition
      * that receives Daemon control results wires it. */
     stopReasons?: AgentStopReasonRecorder,
+    /** Whether the Agent's Computer Daemon takes the `accepted` control phase, per its last
+     * ready. Absent keeps `execute()`'s terminal-only wait; present, `execute()` returns on the
+     * acknowledgement or after `AGENT_CONTROL_ACCEPTED_WAIT_MS`, and a Daemon without the
+     * capability is answered pending right after its command is published. */
+    private readonly acceptedCapability?: {
+      supports(workspaceId: string, computerId: string): Promise<boolean>;
+    },
   ) {
     const clock = () => this.clock();
     this.#access = new AgentControlAccess(store);
-    this.#operations = new AgentControlOperations(store, this.#access, mentions);
+    const events = new AgentControlEvents(api);
+    this.#operations = new AgentControlOperations(store, this.#access, mentions, events);
     this.#publisher = new AgentControlPublisher(
       store,
       api,
@@ -84,7 +100,14 @@ export class AgentControl {
       introductions,
     );
     this.#driver = new AgentControlDriver(store, this.#publisher, signal, timing);
-    this.#receiver = new AgentControlReceiver(store, signal, this.#driver, mentions, stopReasons);
+    this.#receiver = new AgentControlReceiver(
+      store,
+      signal,
+      this.#driver,
+      mentions,
+      stopReasons,
+      events,
+    );
     this.#batch = new AgentControlBatch(
       runtimeLock,
       this.#access,
@@ -221,6 +244,7 @@ export class AgentControl {
           ? await this.#publisher.readRecovery(input.workspaceId, input.agentId)
           : undefined;
       let drivenRequestId = input.requestId;
+      let computerId: string | undefined;
       await this.runtimeLock.run(input.agentId, async () => {
         const agent = await this.#access.authorizedForExecute(
           input.userId,
@@ -228,6 +252,7 @@ export class AgentControl {
           input.agentId,
           input.action,
         );
+        computerId = agent.computerId;
         if (input.action !== "stop" && agent.migrating)
           throw new AppError("CONFLICT", { errorId: "agent-migrating" });
         // A Start that meets an Agent already starting joins that launch, it never issues
@@ -248,7 +273,26 @@ export class AgentControl {
         }
         await this.#operations.begin(agent, input.action, input.requestId, 1, stoppedAt);
       });
-      const result = await this.#driver.drive(input.agentId, drivenRequestId, recovery);
+      // Task #584: with the capability lease wired, `execute` waits only for the Daemon's
+      // `accepted` acknowledgement or a terminal result, bounded at
+      // `AGENT_CONTROL_ACCEPTED_WAIT_MS`; a Daemon that never advertised the capability is
+      // answered the pending view right after its command is published. Without the lease the
+      // wait stays terminal-only, exactly as before.
+      const driveOptions = this.acceptedCapability
+        ? computerId &&
+          (await this.acceptedCapability.supports(input.workspaceId, computerId).catch(() => false))
+          ? {
+              waitMs: Math.min(this.timing.timeoutMs, AGENT_CONTROL_ACCEPTED_WAIT_MS),
+              untilAccepted: true,
+            }
+          : { waitMs: 0 }
+        : undefined;
+      const result = await this.#driver.drive(
+        input.agentId,
+        drivenRequestId,
+        recovery,
+        driveOptions,
+      );
       finish(
         { phase: result.phase, outcome: result.phase },
         { action: result.action, requestId: result.requestId },
@@ -368,5 +412,9 @@ export class AgentControl {
   }
   result(claim: { workspaceId: string; computerId: string }, result: AgentControlResult) {
     return this.#receiver.result(claim, result);
+  }
+  /** The Daemon's `accepted` control acknowledgement; see `AgentControlReceiver.accepted`. */
+  accepted(claim: { workspaceId: string; computerId: string }, result: AgentControlResult) {
+    return this.#receiver.accepted(claim, result);
   }
 }

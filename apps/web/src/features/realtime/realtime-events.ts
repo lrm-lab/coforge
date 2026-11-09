@@ -35,6 +35,7 @@ export const REALTIME_EVENTS = {
   workspaceDeleted: "workspace.deleted.v1",
   workspaceFeaturesChanged: "workspace.features.changed.v1",
   agentChanged: "agent.changed.v1",
+  agentControl: "agent.control.v1",
   runtimeAuthLogin: "runtime-auth.login.v1",
   runtimeAuthLogout: "runtime-auth.logout.v1",
   runtimeAuthStatus: "runtime-auth.status.v1",

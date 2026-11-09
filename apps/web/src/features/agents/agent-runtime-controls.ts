@@ -4,6 +4,11 @@ import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { stopReasonCopy, stopReasonSentence } from "./agent-stop-reason";
+import {
+  agentControlInFlight,
+  agentControlPendingLabel,
+  useAgentControlState,
+} from "./agent-control-realtime";
 
 export type AgentControlRequest = {
   agentId: string;
@@ -47,6 +52,13 @@ export function useAgentRuntimeControls({
   computerOnline?: boolean;
   computerLabel?: string;
 }) {
+  // Task #584: `agent.control.v1` tells every viewer an operation was accepted and is still
+  // running — including the member who pressed it — so all controls disable and pending
+  // labels show for its whole lifetime, not only while `execute()` is in flight.
+  const controlState = useAgentControlState(agentId);
+  const controlInFlight = agentControlInFlight(controlState);
+  const controlPendingLabel = agentControlPendingLabel(controlState);
+  const controlFailureDetail = controlState?.phase === "failed" ? controlState.detail : undefined;
   const [restartSubmitError, setRestartSubmitError] = useState<string | null>(null);
   const [restartOpen, setRestartOpen] = useState(false);
   const [action, setAction] = useState<AgentRestartAction>("restart");
@@ -96,7 +108,7 @@ export function useAgentRuntimeControls({
   const [stopPending, guardStop] = useSubmitGuard();
   const [startStopError, setStartStopError] = useState<string | null>(null);
   const [startDeferred, setStartDeferred] = useState(false);
-  const startStopBusy = startPending || stopPending;
+  const startStopBusy = startPending || stopPending || controlInFlight;
 
   function submitStart() {
     setStartStopError(null);
@@ -134,6 +146,14 @@ export function useAgentRuntimeControls({
     startStopBusy,
     startStopError,
     startDeferred,
+    /** A control operation accepted by the Daemon is still running; callers disable every
+     * Start/Stop/Restart/Reset trigger on it. */
+    controlInFlight,
+    /** The localized "正在…" label for the running operation, when one is. */
+    controlPendingLabel,
+    /** The redacted provider/runtime failure detail the Daemon reported for a failed
+     * operation, when one arrived with the terminal event. */
+    controlFailureDetail,
     submitStart,
     stop,
     submitStop,

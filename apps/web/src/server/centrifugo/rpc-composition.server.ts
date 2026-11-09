@@ -89,6 +89,7 @@ import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-con
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { AgentControl } from "#src/server/agents/agent-control.server";
 import { getAgentControlSignal } from "#src/server/agents/agent-control-signal.server";
+import { getAgentControlAcceptedCapabilityLease } from "#src/server/agents/agent-control-accepted-capability.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
 import { createCentrifugoServerApi } from "./server-api.server";
 import {
@@ -244,6 +245,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         display: getAgentDisplay(),
         publishJson: (channel, data) => centrifugo.publishJson(channel, data),
       }),
+      getAgentControlAcceptedCapabilityLease(),
     );
     const sessionReceiver = new AgentSessionReceiver(
       controlStore,

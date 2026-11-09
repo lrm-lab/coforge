@@ -406,10 +406,16 @@ function AgentProfileTabBody({
             >
               {controls.isOnline ? m.agent_profile_action_stop() : m.agent_profile_action_start()}
             </Button>
+            {controls.controlPendingLabel && (
+              <p className="text-sm text-tertiary" role="status">
+                {controls.controlPendingLabel}
+              </p>
+            )}
             <Button
               color="secondary"
               className="w-full justify-center"
               iconLeading={RotateCcw}
+              isDisabled={controls.controlInFlight}
               onPress={() => controls.openRestart("restart")}
             >
               {m.agent_control_restart_reset_tooltip()}

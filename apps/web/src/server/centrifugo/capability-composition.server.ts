@@ -3,6 +3,7 @@ import { getAppRegistrationNoticeCapabilityLease } from "#src/server/apps/app-re
 import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
 import { getAppConfigCapabilityLease } from "#src/server/agent-app-configs/app-config-capability.server";
 import { getAgentTurnInterruptCapabilityLease } from "#src/server/agents/agent-turn-interrupt-capability.server";
+import { getAgentControlAcceptedCapabilityLease } from "#src/server/agents/agent-control-accepted-capability.server";
 import {
   getRuntimeAuthCapabilityLease,
   getRuntimeAuthStatusReadCapabilityLease,
@@ -26,6 +27,7 @@ export function daemonCapabilityLeases() {
     getAppConfigCapabilityLease(),
     getAppRegistrationNoticeCapabilityLease(),
     getAgentTurnInterruptCapabilityLease(),
+    getAgentControlAcceptedCapabilityLease(),
     getRuntimeAuthCapabilityLease(),
     getRuntimeAuthStatusReadCapabilityLease(),
     getKiroIdentityCenterCapabilityLease(),

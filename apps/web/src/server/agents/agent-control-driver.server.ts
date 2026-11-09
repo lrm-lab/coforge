@@ -12,6 +12,11 @@ import {
 import type { AgentControlPublisher } from "./agent-control-publisher.server";
 import type { AgentControlSignal } from "./agent-control-signal.server";
 
+/** The signal key the receiver notifies when the Daemon acknowledges one control request
+ * (`accepted:<requestId>`): scoped to the request so an unrelated wake on the Agent's own key
+ * can never pass for this operation's acknowledgement. */
+export const agentControlAcceptedKey = (requestId: string) => `accepted:${requestId}`;
+
 /** Moves an operation along its command chain and waits for the Daemon's receipts. */
 export class AgentControlDriver {
   constructor(
@@ -65,11 +70,18 @@ export class AgentControlDriver {
      * call this method itself makes. Chain transitions still go through `advance()`; the Start
      * that ends a Restart/Reset/Full reset reads its own recovery in `publishCurrent`. */
     recovery?: AgentRecoveryFields,
+    /** `execute()`'s bounded wait (task #584): `waitMs` replaces `timing.timeoutMs`, and
+     * `untilAccepted` ends the wait on the Daemon's `accepted` acknowledgement as well as on a
+     * terminal result. Absent keeps the terminal-only, `timeoutMs`-bounded wait. */
+    options?: { waitMs?: number; untilAccepted?: boolean },
   ): Promise<AgentControlView> {
-    const deadline = Date.now() + this.timing.timeoutMs;
+    const deadline = Date.now() + (options?.waitMs ?? this.timing.timeoutMs);
     let publishedPhase = "";
     // A signal means the ACK handler already advanced and published the next command.
     let signaled = false;
+    // The Daemon's `accepted` acknowledgement for THIS request arrived; the operation itself
+    // keeps running server-side, so the next state read answers the pending view.
+    let acceptedSeen = false;
     for (;;) {
       const agent = await this.store.get(agentId);
       const state = agent?.state;
@@ -81,6 +93,7 @@ export class AgentControlDriver {
         throw new Error("Agent operation scope changed");
       if (state.requestId !== requestId) return supersededView(state);
       if (terminal(state)) return view(state);
+      if (options?.untilAccepted && acceptedSeen) return view(state);
       if (state.phase === "stopped" || state.phase === "workspace-reset") {
         await this.advance(agentId, requestId);
         continue;
@@ -111,11 +124,27 @@ export class AgentControlDriver {
         continue;
       }
       if (Date.now() >= deadline) return view(state);
-      // Daemon ACKs wake the waiter; the fallback re-read bounds a lost signal.
-      signaled = await this.signal.wait(
-        agentId,
-        Math.min(this.timing.fallbackMs ?? 1_000, deadline - Date.now()),
-      );
+      const slice = Math.min(this.timing.fallbackMs ?? 1_000, deadline - Date.now());
+      if (options?.untilAccepted) {
+        // The acknowledgement and an ordinary state-change wake are different signals: only
+        // the request-scoped one ends the wait early. The slower key still wakes the loop for
+        // chain advancement and terminal results exactly as before, and its timeout keeps the
+        // `signaled` semantics the republish skip relies on.
+        const winner = await Promise.race([
+          this.signal.wait(agentId, slice).then((hit) => ({ kind: "agent" as const, hit })),
+          this.signal
+            .wait(agentControlAcceptedKey(requestId), slice)
+            .then((hit) => ({ kind: "accepted" as const, hit })),
+        ]);
+        if (winner.kind === "accepted" && winner.hit) {
+          acceptedSeen = true;
+          continue;
+        }
+        signaled = winner.kind === "agent" ? winner.hit : false;
+      } else {
+        // Daemon ACKs wake the waiter; the fallback re-read bounds a lost signal.
+        signaled = await this.signal.wait(agentId, slice);
+      }
     }
   }
 }
