@@ -186,7 +186,7 @@ describe("context view provider restore", () => {
       {
         type: "response_item",
         session_id: "s1",
-        message_id: "m1",
+        messageId: "m1",
         item: {
           type: "function_call",
           name: "shell",
@@ -407,6 +407,7 @@ describe("context view provider restore", () => {
       {
         type: "llm.request",
         sessionId: "s1",
+        message_id: "m1",
         time: "2026-11-09T00:00:00.000Z",
         model_name: "kimi-k2",
         request: { messages: [{ role: "user", content: "hello" }] },
@@ -415,6 +416,21 @@ describe("context view provider restore", () => {
         type: "usage.record",
         sessionId: "s1",
         usage: { inputTokens: 7, cache_read_input_tokens: 3 },
+      },
+      {
+        type: "context.append_loop_event",
+        sessionId: "s1",
+        event: {
+          type: "tool.call",
+          toolCallId: "call-1",
+          name: "shell",
+          arguments: '{"command":"raft message send --id m1"}',
+        },
+      },
+      {
+        type: "context.append_loop_event",
+        sessionId: "s1",
+        event: { type: "tool.result", toolCallId: "call-1", output: "Message ID: m1" },
       },
       { type: "llm.response", sessionId: "s1", content: "world" },
     ]);

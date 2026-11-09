@@ -68,7 +68,27 @@ describe("context view provider restore fixtures", () => {
               ]
             : runtime === "kimi-sdk"
               ? [
-                  { type: "llm.request", sessionId: "s1", request: { messages: "hello" } },
+                  {
+                    type: "llm.request",
+                    sessionId: "s1",
+                    messageId: "m1",
+                    request: { messages: "hello" },
+                  },
+                  {
+                    type: "context.append_loop_event",
+                    sessionId: "s1",
+                    event: {
+                      type: "tool.call",
+                      toolCallId: "call-1",
+                      name: "shell",
+                      arguments: '{"command":"raft message send --id m1"}',
+                    },
+                  },
+                  {
+                    type: "context.append_loop_event",
+                    sessionId: "s1",
+                    event: { type: "tool.result", toolCallId: "call-1", output: "Message ID: m1" },
+                  },
                   { type: "llm.response", sessionId: "s1", content: "world" },
                 ]
               : [
@@ -83,7 +103,7 @@ describe("context view provider restore fixtures", () => {
         offset: buffer(records).length,
       });
       expect(result.ok).toBe(true);
-      if (result.ok) expect(result.view.messages.length).toBe(2);
+      if (result.ok) expect(result.view.messages.length).toBe(runtime === "kimi-sdk" ? 4 : 2);
     },
   );
 });

@@ -5,6 +5,11 @@ import type {
   RestoredContextMessage,
   RestoredContextView,
 } from "./context-view-restore";
+import { createHash } from "node:crypto";
+
+function piRequestDigest(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
 import {
   hasHashMismatch,
   hasMessageId,
@@ -204,6 +209,7 @@ export function restoreKimi(
   }
   if (responseCount > requestCount || pendingTools.size > 0)
     return { ok: false, failure: "context_mismatch" };
+  if (requestCount === 0 || !sawTarget || !trigger) return { ok: false, failure: "not_found" };
   if (!messages.length) return { ok: false, failure: "not_found" };
   const built = buildView(request, messages, "kimi-wire", sawTarget ? "verified" : "count_matched");
   if (built.ok) {
@@ -363,6 +369,15 @@ export function restorePi(
     const priorHash = previousHash;
     if (typeof record.prevHash === "string" && record.prevHash !== priorHash)
       return { ok: false, failure: "context_mismatch" };
+    if (typeof record.hash === "string" && record.hash.length === 64) {
+      const { hash: _hash, ...withoutHash } = record;
+      if (piRequestDigest(withoutHash) !== record.hash)
+        return { ok: false, failure: "context_mismatch" };
+    }
+    if (record.type === "request" && record.digest !== undefined && isRecord(record.body)) {
+      if (typeof record.digest !== "string" || piRequestDigest(record.body) !== record.digest)
+        return { ok: false, failure: "context_mismatch" };
+    }
     if (typeof record.hash === "string") previousHash = record.hash;
     const api = record.api ?? (isRecord(record.body) ? record.body.api : undefined);
     if (api !== undefined && (typeof api !== "string" || !supportedApis.has(api)))

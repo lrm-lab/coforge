@@ -1,31 +1,54 @@
-import { lstat, mkdir, open } from "node:fs/promises";
+import { lstat, mkdir, open, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname } from "node:path";
+import { createHash } from "node:crypto";
 
 /** Small serialized writer for the Pi/Builtin captured request log. */
 export const PI_REQUEST_LOG_MAX_BYTES = 128 * 1024 * 1024;
+export function piRequestDigest(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
 export class PiRequestLogWriter {
   readonly path: string;
   #tail = Promise.resolve();
+  #lastHash: string | undefined;
+  #initialized = false;
 
   constructor(path: string) {
     this.path = path;
   }
 
   append(record: Record<string, unknown>): Promise<void> {
-    let line: string;
-    try {
-      line = `${JSON.stringify(record)}\n`;
-    } catch {
-      // Logging is observational and must never prevent a provider request.
-      return Promise.resolve();
-    }
     this.#tail = this.#tail
       .then(async () => {
         await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
         const existing = await lstat(this.path).catch(() => undefined);
         if (existing && (!existing.isFile() || existing.nlink > 1 || existing.isSymbolicLink()))
           return;
+        if (!this.#initialized) {
+          this.#initialized = true;
+          const existing = await readFile(this.path, "utf8").catch(() => "");
+          for (const line of existing.trimEnd().split("\n").reverse()) {
+            try {
+              const value = JSON.parse(line) as Record<string, unknown>;
+              if (typeof value.hash === "string") {
+                this.#lastHash = value.hash;
+                break;
+              }
+            } catch {
+              // Ignore a truncated tail; the append remains observational.
+            }
+          }
+        }
+        const chained = {
+          ...record,
+          ...(this.#lastHash ? { prevHash: this.#lastHash } : {}),
+          ...(record.type === "request" && record.body !== undefined
+            ? { digest: piRequestDigest(record.body) }
+            : {}),
+        };
+        const hash = piRequestDigest(chained);
+        const line = `${JSON.stringify({ ...chained, hash })}\n`;
         const handle = await open(
           this.path,
           constants.O_WRONLY |
@@ -44,6 +67,7 @@ export class PiRequestLogWriter {
           )
             return;
           await handle.write(line, undefined, "utf8");
+          this.#lastHash = hash;
         } finally {
           await handle.close();
         }
