@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import {
   parseRuntimeUnavailableCode,
   requireRuntimeProvider,
@@ -159,7 +159,7 @@ export class PrismaComputerRuntimeRepository implements ComputerRuntimeVisibilit
             workspaceId,
             computerId,
             provider: catalog.provider,
-            models: catalog.models,
+            models: catalog.models as Prisma.InputJsonValue,
             observedAt: catalog.observedAt,
           },
         });
