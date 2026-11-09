@@ -148,13 +148,11 @@ export function SearchEntityList({
  * A member has none: their username is not shown. */
 function entitySubtitle(entity: SearchEntity): string | undefined {
   switch (entity.kind) {
-    case "channel":
-      return undefined;
     case "computer":
       return entity.hostname;
     case "agent":
       return `@${entity.handle}`;
-    case "dm":
+    default:
       return undefined;
   }
 }

@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
-import { readableChannelSql } from "#src/server/conversations/channel-read-access.server";
-import { escapeLikeTerm } from "#src/lib/search-terms";
+import { readablePersonConversationSql } from "#src/server/conversations/channel-read-access.server";
+import { containsPattern } from "#src/lib/search-terms";
 
 export type MessageSearchSort = "relevance" | "recent";
 
@@ -33,11 +33,6 @@ export type MessageSearchCriteria = {
   limit: number;
   offset: number;
 };
-
-/** `ILIKE` treats `\`, `%` and `_` as syntax; escape them so every term matches literally. */
-export function containsPattern(term: string): string {
-  return `%${escapeLikeTerm(term)}%`;
-}
 
 /**
  * The `ILIKE` pattern for a body holding the whole query as one contiguous phrase, or null when
@@ -79,10 +74,7 @@ export async function findMessageSearchIds(
   const conditions: Prisma.Sql[] = [
     Prisma.sql`m."workspaceId" = ${criteria.workspaceId}::uuid`,
     // A channel is searched only by those who may read it (hidden and private ones included).
-    Prisma.sql`(${readableChannelSql("c", criteria.workspaceId, { userId: criteria.viewerUserId })}
-      OR c."directKey" IS NOT NULL AND EXISTS (
-      SELECT 1 FROM "conversation_members" v
-      WHERE v."conversationId" = c."id" AND v."userId" = ${criteria.viewerUserId}::uuid))`,
+    readablePersonConversationSql("c", criteria.workspaceId, criteria.viewerUserId),
     ...criteria.terms.map((term) => Prisma.sql`m."body" ILIKE ${containsPattern(term)}`),
   ];
   if (criteria.senderId) {

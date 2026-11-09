@@ -13,6 +13,11 @@ export function searchTerms(query: string): string[] {
   });
 }
 
+/** The `ILIKE` pattern of a text containing `term` literally. */
+export function containsPattern(term: string): string {
+  return `%${escapeLikeTerm(term)}%`;
+}
+
 /** `ILIKE` treats `\`, `%` and `_` as syntax; escape them so a term matches literally. */
 export function escapeLikeTerm(term: string): string {
   return term.replace(/[\\%_]/g, (character) => `\\${character}`);

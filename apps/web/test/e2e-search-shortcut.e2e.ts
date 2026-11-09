@@ -73,8 +73,7 @@ test("search opens over the page, walks by keyboard and lands on the message", a
   const dialog = `document.querySelector('[role="dialog"]')`;
   const box = `document.querySelector('[role="dialog"] input[type="search"]')`;
   /** Lets the dialog that just closed finish handing focus back, which it does a frame later. */
-  const settled = () =>
-    browser("eval", "new Promise((done) => setTimeout(done, 100))");
+  const settled = () => browser("eval", "new Promise((done) => setTimeout(done, 100))");
   const options = `[...document.querySelectorAll('[role="dialog"] [data-search-option]')]`;
   const hits = `document.querySelectorAll('[role="dialog"] ol li').length`;
 
