@@ -196,6 +196,14 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
         expect(composites[0]?.with?.bun, jobKey).toBe(
           jobKey === "release-installer-staging.yml build" ? "false" : undefined,
         );
+        // A composite site passing neither install-args nor install:"false"
+        // makes mise-action run a bare `mise install` — every tool in
+        // mise.toml from GitHub releases, the outage this task removes.
+        const compositeWith = composites[0]?.with ?? {};
+        expect(
+          compositeWith["install-args"] !== undefined || compositeWith.install === "false",
+          `${jobKey} composite install scope`,
+        ).toBe(true);
         // The cache, verify, and setup steps live inside the composite; none
         // may also appear inline, and a job checking out an older commit
         // cannot resolve the local action.
@@ -219,6 +227,14 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
         }
       }
       for (const [index, step] of steps.entries()) {
+        // Credential jobs name the tools they install. A bare `mise install`
+        // pulls every tool in mise.toml — node, actionlint, shellcheck — from
+        // GitHub releases on every run, the outage surface task #714 removes.
+        if (isCredential) {
+          expect(String(step.run ?? "").trim(), `${jobKey} bare mise install`).not.toBe(
+            "mise install",
+          );
+        }
         const action = uses(step);
         if (action === "actions/cache") {
           const path = String(step.with?.path ?? "");

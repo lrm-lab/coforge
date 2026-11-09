@@ -96,7 +96,7 @@ jobs:
           install: "false"
 
       - name: Install toolchain
-        run: mise install
+        run: mise install bun
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -238,7 +238,7 @@ jobs:
           install: false
 
       - name: Install toolchain
-        run: mise install
+        run: mise install bun
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

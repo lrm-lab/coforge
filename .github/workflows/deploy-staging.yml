@@ -117,7 +117,7 @@ jobs:
           install: "false"
 
       - name: Install toolchain
-        run: mise install
+        run: mise install bun
 
       - name: Validate Web Push key pair
         env:
