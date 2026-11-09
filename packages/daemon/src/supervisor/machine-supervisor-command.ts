@@ -217,10 +217,16 @@ export function runLifecycleCommand(
  * Workspace rather than the sum of their stops: one stop may spend 30 s on the process-tree ladder
  * (task #726), and bindings stopped one after another could outlast launchd's `ExitTimeOut` and be
  * killed mid-teardown. Each binding's stop touches only its own unit and adoption record, so running
- * them together is safe. A failing stop still rejects the shutdown, with the rest already begun.
+ * them together is safe. A failing stop does not cut the others short either: each Workspace
+ * finishes its own teardown, and the first failure is rethrown after that, so the shutdown never
+ * leaves a binding half-stopped for the process exit to interrupt.
  */
 export function stopEveryBinding(context: MachineCommandContext): Promise<void> {
   return context.serialize(async () => {
-    await Promise.all(context.bindings().map((binding) => context.stop(binding)));
+    const outcomes = await Promise.allSettled(
+      context.bindings().map((binding) => context.stop(binding)),
+    );
+    const failure = outcomes.find((outcome) => outcome.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
   });
 }

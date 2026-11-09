@@ -58,3 +58,26 @@ test("shutdown stops every Workspace even when one of them fails to stop", async
   await expect(supervisor.shutdown()).rejects.toThrow("unit would not stop");
   expect(stopped.sort()).toEqual(["a", "b"]);
 });
+
+test("shutdown reports a failure only after the slowest stop has finished", async () => {
+  // A rejection must not end the shutdown while another Workspace is still tearing down: the
+  // process would exit underneath it, which is exactly what stopping in parallel avoids.
+  const slowStopMs = 50;
+  let slowStopFinished = false;
+  const supervisor = new MachineSupervisor(
+    { load: async () => saved, save: async () => {} },
+    {
+      start: async (binding) => `instance-${binding.workspaceId}`,
+      stop: async (binding) => {
+        if (binding.workspaceId === "a") throw new Error("unit would not stop");
+        await Bun.sleep(slowStopMs);
+        slowStopFinished = true;
+      },
+      instance: async (binding) => `instance-${binding.workspaceId}`,
+    },
+  );
+  await supervisor.recover();
+
+  await expect(supervisor.shutdown()).rejects.toThrow("unit would not stop");
+  expect(slowStopFinished).toBe(true);
+});
