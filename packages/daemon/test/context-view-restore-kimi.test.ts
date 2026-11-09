@@ -23,6 +23,8 @@ test("projects Kimi wire tool calls and send results", () => {
       sessionId: "s1",
       event: { type: "tool.result", toolCallId: "call-1", output: "Message ID: m1" },
     },
+    { type: "llm.request", sessionId: "s1", request: { messages: "later" } },
+    { type: "llm.response", sessionId: "s1", content: "later response" },
   ]);
   const result = restoreContextView({
     runtime: "kimi-sdk",
@@ -36,5 +38,6 @@ test("projects Kimi wire tool calls and send results", () => {
     expect(result.view.responseFound).toBe(true);
     expect(result.view.trigger).toEqual({ toolUseId: "call-1" });
     expect(JSON.stringify(result.view.messages)).toContain("tool_result");
+    expect(JSON.stringify(result.view.messages)).not.toContain("later response");
   }
 });
