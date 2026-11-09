@@ -7,10 +7,10 @@ import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useAppToast } from "#src/components/ui/toast";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
+import { MemberRemovalDialog } from "./member-removal-dialog";
 import { InviteMemberDialog } from "./invite-member-dialog";
 import { canManageMembers } from "./workspace-roles";
 import { workspaceRoleLabel } from "./workspace-role-label";
@@ -36,7 +36,10 @@ export function WorkspaceMembersPanel(props: {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   // Kept after the dialog closes so its title does not empty while it fades out.
-  const [removeTarget, setRemoveTarget] = useState<{ userId: string; name: string }>();
+  const [removeTarget, setRemoveTarget] = useState<{
+    userId: string;
+    name: string;
+  }>();
   const updateRole = useServerFn(updateWorkspaceMemberRole);
   const remove = useServerFn(removeWorkspaceMember);
   const router = useRouter();
@@ -124,11 +127,17 @@ export function WorkspaceMembersPanel(props: {
                                 const nextRole = member.role === "admin" ? "member" : "admin";
                                 void run(() =>
                                   updateRole({
-                                    data: { userId: member.userId, role: nextRole },
+                                    data: {
+                                      userId: member.userId,
+                                      role: nextRole,
+                                    },
                                   }),
                                 );
                               } else if (key === "remove") {
-                                setRemoveTarget({ userId: member.userId, name: displayName });
+                                setRemoveTarget({
+                                  userId: member.userId,
+                                  name: displayName,
+                                });
                                 setRemoveOpen(true);
                               }
                             }}
@@ -166,13 +175,11 @@ export function WorkspaceMembersPanel(props: {
       </div>
 
       <InviteMemberDialog open={inviteOpen} onOpenChange={setInviteOpen} />
-      <ConfirmDialog
+      <MemberRemovalDialog
         open={removeOpen}
         onOpenChange={setRemoveOpen}
-        title={m.member_person_remove_confirm_title({ name: removeTarget?.name ?? "" })}
-        description={m.member_person_remove_confirm_description()}
-        confirmLabel={m.member_person_remove()}
-        errorMessage={m.workspace_members_action_failed()}
+        userId={removeTarget?.userId ?? ""}
+        name={removeTarget?.name ?? ""}
         onConfirm={async () => {
           if (!removeTarget) return;
           await remove({ data: { userId: removeTarget.userId } });

@@ -229,5 +229,65 @@
   "project_up_next": "Up next",
   "project_recently_done": "Recently done",
   "projects_all_tasks": "All tasks",
-  "projects_switch": "Switch Project"
+  "projects_switch": "Switch Project",
+  "departure_remove_computers": [
+    {
+      "declarations": [
+        "input name",
+        "input count",
+        "input names",
+        "local countPlural = count: plural"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Removing {name} disconnects {count} Computer from this Workspace: {names}.",
+        "countPlural=other": "Removing {name} disconnects {count} Computers from this Workspace: {names}."
+      }
+    }
+  ],
+  "departure_leave_computers": [
+    {
+      "declarations": ["input count", "input names", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Leaving disconnects the {count} Computer you attached from this Workspace: {names}.",
+        "countPlural=other": "Leaving disconnects the {count} Computers you attached from this Workspace: {names}."
+      }
+    }
+  ],
+  "departure_agents_offline": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} Agent on them goes offline too.",
+        "countPlural=other": "{count} Agents on them go offline too."
+      }
+    }
+  ],
+  "departure_agents_offline_named": [
+    {
+      "declarations": ["input count", "input names", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} Agent on them goes offline too: {names}.",
+        "countPlural=other": "{count} Agents on them go offline too: {names}."
+      }
+    }
+  ],
+  "departure_computers_more": [
+    {
+      "declarations": ["input names", "input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{names} and {count} other",
+        "countPlural=other": "{names} and {count} others"
+      }
+    }
+  ],
+  "departure_agents_more": "{names} and {count} more",
+  "departure_list_separator": ", ",
+  "departure_sentence_joiner": " ",
+  "departure_loading": "Checking which Computers this disconnects…",
+  "departure_failed": "Couldn't check which Computers this disconnects from this Workspace."
 }

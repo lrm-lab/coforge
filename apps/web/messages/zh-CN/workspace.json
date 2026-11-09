@@ -227,5 +227,15 @@
   "project_up_next": "接下来",
   "project_recently_done": "最近完成",
   "projects_all_tasks": "全部任务",
-  "projects_switch": "切换项目"
+  "projects_switch": "切换项目",
+  "departure_remove_computers": "移除 {name} 会让 {count} 台 Computer 与这个工作区断开连接：{names}。",
+  "departure_leave_computers": "离开后，你在这里接入的 {count} 台 Computer 会与这个工作区断开连接：{names}。",
+  "departure_agents_offline": "{count} 个 Agent 会一起离线。",
+  "departure_agents_offline_named": "{count} 个 Agent 会一起离线：{names}。",
+  "departure_computers_more": "{names}，还有 {count} 台",
+  "departure_agents_more": "{names}，还有 {count} 个",
+  "departure_list_separator": "、",
+  "departure_sentence_joiner": "",
+  "departure_loading": "正在确认会断开哪些 Computer…",
+  "departure_failed": "没能确认哪些 Computer 会与这个工作区断开连接。"
 }

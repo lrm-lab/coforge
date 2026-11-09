@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Heading, Text } from "react-aria-components";
 import { AlertCircle, XClose as X } from "@untitledui/icons";
 
@@ -17,6 +17,8 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
+  detail,
+  confirmDisabled = false,
   confirmLabel,
   pendingLabel,
   errorMessage,
@@ -27,6 +29,10 @@ export function ConfirmDialog({
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
+  /** Appended after the description, for what the change will also do. */
+  detail?: ReactNode;
+  /** Holds the confirm button while what `detail` reports is still unknown. */
+  confirmDisabled?: boolean;
   confirmLabel: string;
   /** What the confirm button says while the change runs ("Deleting…"); without it, `confirmLabel`. */
   pendingLabel?: string;
@@ -83,8 +89,9 @@ export function ConfirmDialog({
                   size="sm"
                   icon={AlertCircle}
                 />
-                <Text slot="description" className="text-sm text-secondary">
+                <Text slot="description" elementType="div" className="text-sm text-secondary">
                   {description}
+                  {detail}
                 </Text>
               </div>
               {error && (
@@ -99,6 +106,7 @@ export function ConfirmDialog({
                 <DialogAction
                   color={tone === "destructive" ? "primary-destructive" : "primary"}
                   isLoading={pending}
+                  isDisabled={confirmDisabled}
                   showTextWhileLoading
                   onPress={() => {
                     if (pending) return;

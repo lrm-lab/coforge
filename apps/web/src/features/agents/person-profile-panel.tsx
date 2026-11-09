@@ -12,7 +12,7 @@ import {
 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
-import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { MemberRemovalDialog } from "#src/features/workspaces/member-removal-dialog";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Button } from "#src/components/base/buttons/button";
 import {
@@ -349,13 +349,11 @@ function PersonProfileBody({
           >
             {m.member_person_remove()}
           </Button>
-          <ConfirmDialog
+          <MemberRemovalDialog
             open={removeOpen}
             onOpenChange={setRemoveOpen}
-            title={m.member_person_remove_confirm_title({ name: profile.displayName })}
-            description={m.member_person_remove_confirm_description()}
-            confirmLabel={m.member_person_remove()}
-            errorMessage={m.workspace_members_action_failed()}
+            userId={profile.id}
+            name={profile.displayName}
             onConfirm={remove}
           />
         </section>

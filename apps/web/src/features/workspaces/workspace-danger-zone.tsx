@@ -1,4 +1,4 @@
-import { useState, type FC, type ReactNode } from "react";
+import { useCallback, useState, type FC, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Text } from "react-aria-components";
@@ -12,7 +12,8 @@ import { SettingsCard, SettingsGroup } from "#src/components/settings-layout";
 import { SaveErrorMessage, saveErrorFrom, type SaveError } from "#src/components/save-error";
 import { isAppError, type AppError, type AppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
-import { leaveWorkspace } from "./members.functions";
+import { DepartureImpact, useDepartureImpact } from "./departure-impact-view";
+import { leaveWorkspace, previewWorkspaceLeave } from "./members.functions";
 import { canDeleteWorkspace } from "./workspace-roles";
 import { deleteWorkspace } from "./workspaces.functions";
 import {
@@ -22,7 +23,11 @@ import {
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 
-type DialogProps = { open: boolean; workspaceName: string; onClose: () => void };
+type DialogProps = {
+  open: boolean;
+  workspaceName: string;
+  onClose: () => void;
+};
 
 /**
  * Settings → Workspace profile → Danger zone: its owner deletes the Workspace, everyone else
@@ -131,7 +136,11 @@ function useWorkspaceDeparture({
       next = null;
     }
     try {
-      if (next) await navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug: next } });
+      if (next)
+        await navigate({
+          to: "/w/$workspaceSlug",
+          params: { workspaceSlug: next },
+        });
       else await navigate({ to: "/" });
     } finally {
       // Still here when the navigation failed: trying again finds them out already and goes to `/`.
@@ -145,6 +154,9 @@ function useWorkspaceDeparture({
 /** Confirms leaving; the write runs here so a failure stays inline. */
 function LeaveWorkspaceDialog({ open, workspaceName, onClose }: DialogProps) {
   const leave = useServerFn(leaveWorkspace);
+  const preview = useServerFn(previewWorkspaceLeave);
+  const load = useCallback(() => preview(), [preview]);
+  const impact = useDepartureImpact({ open, subject: "leave", load });
   const { busy, error, depart, clearError } = useWorkspaceDeparture({
     write: () => leave(),
     // No longer a member (removed meanwhile): they are out already.
@@ -161,6 +173,10 @@ function LeaveWorkspaceDialog({ open, workspaceName, onClose }: DialogProps) {
       busy={busy}
       title={m.settings_leave_workspace()}
       description={m.settings_leave_workspace_confirm({ name: workspaceName })}
+      detail={
+        <DepartureImpact state={impact.state} subject={{ kind: "leave" }} onRetry={impact.retry} />
+      }
+      isConfirmDisabled={impact.state.kind === "loading"}
       error={error}
       onClose={() => {
         clearError();
@@ -239,6 +255,7 @@ function DangerDialog({
   busy,
   title,
   description,
+  detail,
   error,
   onClose,
   confirmLabel,
@@ -250,6 +267,8 @@ function DangerDialog({
   busy: boolean;
   title: string;
   description: string;
+  /** Appended after the description. */
+  detail?: ReactNode;
   error: SaveError | null;
   onClose: () => void;
   confirmLabel: string;
@@ -278,8 +297,13 @@ function DangerDialog({
               }}
             >
               <DialogHeader title={title} onClose={busy ? undefined : close} />
-              <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
+              <Text
+                slot="description"
+                elementType="div"
+                className="mx-6 mt-4 block text-sm text-secondary"
+              >
                 {description}
+                {detail}
               </Text>
               {children}
               {error && (
