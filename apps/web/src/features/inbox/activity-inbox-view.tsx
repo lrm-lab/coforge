@@ -26,7 +26,6 @@ import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width
 import { useRefreshSidebarLists } from "#src/features/conversations/sidebar-lists";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
-import { useEndOfList } from "#src/lib/use-end-of-list";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
@@ -54,6 +53,7 @@ import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
 import { useActivityDays } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
+import { ActivityInboxLoadMore, ActivityInboxSectionHeading } from "./activity-inbox-list-parts";
 import { WaitingChoiceRow } from "./waiting-choice-row";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -456,70 +456,3 @@ type ActivitySection = {
   rows: ReactNode[];
   footer?: ReactNode;
 };
-
-/** A list section's label (Pinned, All conversations): a tertiary subheading on the rows' inset,
- * with the section's mark when it has one. */
-function ActivityInboxSectionHeading({
-  icon: Icon,
-  label,
-  count,
-  className,
-}: {
-  icon?: typeof Pin01;
-  label: string;
-  /** How many the section holds, after its label. */
-  count?: number;
-  className?: string;
-}) {
-  return (
-    <h2
-      className={cn(
-        "flex items-center gap-1.5 px-page pt-2 pb-1 text-sm font-medium text-tertiary",
-        className,
-      )}
-    >
-      {Icon && <Icon aria-hidden="true" className="size-3 shrink-0 text-fg-quaternary" />}
-      {label}
-      {count !== undefined && (
-        <span className="font-normal text-quaternary tabular-nums">
-          <span aria-hidden="true">· </span>
-          {count}
-        </span>
-      )}
-    </h2>
-  );
-}
-
-/**
- * Asks for the next page as the end of the list scrolls into view. A failed page stops asking and
- * offers a retry instead, so a broken request is never repeated in a loop.
- */
-function ActivityInboxLoadMore({
-  hasNextPage,
-  isFetchingNextPage,
-  failed,
-  fetchNextPage,
-}: {
-  hasNextPage: boolean;
-  isFetchingNextPage: boolean;
-  failed: boolean;
-  fetchNextPage: () => Promise<unknown>;
-}) {
-  const sentinel = useRef<HTMLDivElement>(null);
-  useEndOfList(sentinel, hasNextPage && !isFetchingNextPage && !failed, () => void fetchNextPage());
-  if (!hasNextPage) return null;
-  return (
-    <div ref={sentinel} className="flex items-center justify-center gap-2 py-3 text-xs">
-      {failed ? (
-        <>
-          <span className="text-error-primary">{m.activity_inbox_load_more_error()}</span>
-          <Button size="sm" color="link-gray" onClick={() => void fetchNextPage()}>
-            {m.activity_inbox_retry()}
-          </Button>
-        </>
-      ) : isFetchingNextPage ? (
-        <span className="text-tertiary">{m.activity_inbox_loading_more()}</span>
-      ) : null}
-    </div>
-  );
-}
