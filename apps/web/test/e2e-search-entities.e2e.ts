@@ -93,7 +93,9 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
   const othersAgentId = seededUuid("e2e-search-entities:others-agent");
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
+      // Other e2es leave the dev user in Workspaces of their own; the seed made the first one.
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { workspace: { createdAt: "asc" } },
       include: { workspace: { select: { slug: true } } },
     });
     workspacePath = `/en/w/${membership.workspace.slug}`;
