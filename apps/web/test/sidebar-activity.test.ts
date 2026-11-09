@@ -114,6 +114,34 @@ test("a channel message writes that row's last message, with no read", async () 
   });
 });
 
+test("a channel's thread reply leaves the row's last message alone, as its count does", async () => {
+  const sidebar = await sidebarWithChannels();
+  applyConversationActivityToRow(sidebar, activity({}), "viewer");
+  expect(
+    applyConversationActivityToRow(
+      sidebar,
+      activity({ messageId: "m2", sequence: 8, preview: "in a thread", threadRootId: "m1" }),
+      "viewer",
+    ),
+  ).toBe(true);
+  expect(sidebar.channels.get("general")?.lastMessage?.preview).toBe("a new line");
+});
+
+test("a DM's thread reply writes the DM row, which counts it", async () => {
+  const sidebar = await sidebarWithChannels();
+  applyConversationActivityToRow(
+    sidebar,
+    activity({
+      conversationId: "dm-grace",
+      kind: "direct",
+      preview: "a reply",
+      threadRootId: "m0",
+    }),
+    "viewer",
+  );
+  expect(sidebar.directs.get("dm-grace")?.lastMessagePreview).toBe("a reply");
+});
+
 test("the viewer's own message is marked as theirs, and still written", async () => {
   const sidebar = await sidebarWithChannels();
   applyConversationActivityToRow(sidebar, activity({ senderUserId: "viewer" }), "viewer");

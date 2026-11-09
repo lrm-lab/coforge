@@ -388,7 +388,7 @@ test("only its creator opens a DM with a private Agent", async () => {
   });
 });
 
-test("each DM's lastMessage is its newest top-level message: its time and one line of text, or null", async () => {
+test("each DM's lastMessage is its newest message, thread replies included: its time and one line of text, or null", async () => {
   const conversations = new DirectConversations(db);
   const ruth = await newMember("ruth");
   const withLin = await conversations.open(workspaceId, ruth.id, { userId: lin.id });
@@ -435,13 +435,17 @@ test("each DM's lastMessage is its newest top-level message: its time and one li
       handle: usernames[2]!,
     },
   });
-  // A thread reply newer than the last top-level message does not become the DM's last message.
-  await send(lin.id, withLin.conversationId, "a thread reply", first.id);
-  await send(grace.id, withGrace.conversationId, "hello there");
-
   expect(await lastOf(withLin.conversationId)).toEqual({
     createdAt: await createdAtOf(pinged.id),
     preview: `ping @${usernames[2]!}, see the notes`,
+  });
+  // A thread reply newer than the last top-level message becomes the DM's last message, as the
+  // DM's row counts it.
+  const reply = await send(lin.id, withLin.conversationId, "a thread reply", first.id);
+  await send(grace.id, withGrace.conversationId, "hello there");
+  expect(await lastOf(withLin.conversationId)).toEqual({
+    createdAt: await createdAtOf(reply.id),
+    preview: "a thread reply",
   });
   expect(await lastOf(withGrace.conversationId)).toEqual({
     createdAt: (

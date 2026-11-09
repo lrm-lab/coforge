@@ -7,7 +7,7 @@ import {
   channelPageQueryKey,
   sidebarChannelsQueryKey,
 } from "./conversation-query-keys";
-import type { ChatList } from "./conversation-unread";
+import { countsOnRow, type ChatList } from "./conversation-unread";
 import type { Sidebar } from "./sidebar-collections";
 import type { ConversationActivityEvent } from "./conversation-activity-event";
 
@@ -55,7 +55,8 @@ export function applyChannelSignalToLists(
 
 /**
  * Writes one message's `conversation.activity.v1` into the row it changes, with no read: the
- * channel row's last message (time, preview, sender) or the DM row's. False when the list cannot
+ * channel row's last message (time, preview, sender) or the DM row's, from the same messages the
+ * row counts (`countsOnRow`: a DM's thread replies, not a channel's). False when the list cannot
  * take it — not synced yet, a save is being retried (whose rollback would undo a direct write), or
  * the row is not in the list at all — and the caller re-reads that one list instead.
  */
@@ -68,6 +69,9 @@ export function applyConversationActivityToRow(
   const id = event.conversationId;
   if (event.kind === "channel") {
     if (sidebar.channels.status !== "ready" || !sidebar.channels.has(id)) return false;
+    // A channel's row shows its newest top-level message, as its count counts those alone
+    // (`countsOnRow`); a reply stays with its thread.
+    if (!countsOnRow(event)) return true;
     sidebar.channels.utils.writeUpdate({
       id,
       lastMessage: {

@@ -68,11 +68,17 @@ export async function humanReadStates(
     FROM "conversation_members" cm
     JOIN "conversations" c ON c."id" = cm."conversationId"
     CROSS JOIN LATERAL (
-      SELECT COUNT(*)::int AS "count"
-      FROM "messages" m
-      WHERE m."conversationId" = cm."conversationId"
-        AND ${ROW_MESSAGES_SQL}
-        AND ${HUMAN_UNREAD_BASE_SQL}
+      -- Two counts, of which each row runs one, rather than one count under an OR: a channel's
+      -- keeps the \`(conversationId, threadRootId, sequence)\` range that skips its thread replies,
+      -- a DM's takes \`(conversationId, sequence)\` (\`ROW_MESSAGES_SQL\` says the same in one line).
+      SELECT CASE WHEN c."directKey" IS NULL THEN (
+        SELECT COUNT(*) FROM "messages" m
+        WHERE m."conversationId" = cm."conversationId" AND m."threadRootId" IS NULL
+          AND ${HUMAN_UNREAD_BASE_SQL}
+      ) ELSE (
+        SELECT COUNT(*) FROM "messages" m
+        WHERE m."conversationId" = cm."conversationId" AND ${HUMAN_UNREAD_BASE_SQL}
+      ) END::int AS "count"
     ) unread
     WHERE cm."userId" = ${userId}::uuid
       AND cm."conversationId" = ANY(${[...conversationIds]}::uuid[])

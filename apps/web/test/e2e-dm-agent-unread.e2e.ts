@@ -331,7 +331,13 @@ test("5. an Agent's reply inside a thread badges the DM row; opening the DM read
     await Bun.sleep(200);
   }
   expect(readThrough).toBe(newest.sequence);
+  // Reading the DM leaves the thread itself unread: Activity still lists its reply as new.
+  await openPage("/activity", peer);
+  const listed = `/Thread root from the viewer\\s+1 new/.test(document.querySelector("[data-activity-list]")?.innerText ?? "")`;
+  await browser("wait", "--fn", listed, "--timeout", "15000");
+  await shot("5-activity-after-open");
   // A thread reply while the DM is open is read there and then: no badge comes back on leaving.
+  await openPage(`/dm/${peer.conversationId}`, peer);
   await agentSays(peer, "Thread reply while the DM is open", root.id);
   await Bun.sleep(1_500);
   await openPage(`/channel/${otherChannelId}`, peer);
