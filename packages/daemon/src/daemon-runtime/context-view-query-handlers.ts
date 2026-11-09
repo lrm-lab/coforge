@@ -18,7 +18,7 @@ const logger = getLogger(["coforge", "daemon", "context-view"]);
 type Ports = {
   connection: DaemonConfig;
   stateDirectory: string;
-  contextView: Pick<AgentContextViewService, "find">;
+  contextView: Pick<AgentContextViewService, "lookup">;
   resolveProviderSource?(agentId: string, entry: ContextViewIndexEntry): string | undefined;
   agentApiKey?(agentId: string): string | undefined;
   currentTransport(): DaemonConnectionClient;
@@ -86,21 +86,28 @@ export function subscribeContextViewQueries(
       request.computerId !== ports.connection.computerId
     )
       return;
-    const entry = ports.contextView.find(request.agentId, request.messageId);
-    if (!entry) {
+    const lookup = ports.contextView.lookup(request.agentId, request.messageId);
+    if (lookup.status !== "found") {
+      const reason =
+        lookup.status === "expired"
+          ? "expired"
+          : lookup.status === "not_recorded"
+            ? "not_recorded"
+            : "not_found";
       logger.info("Context view request unavailable", {
         event: "context_view:request",
         request_id: request.requestId,
         agent_id: request.agentId,
-        failure: "not_found",
+        failure: reason,
       });
       await sendResult(
         transport,
-        failure(request, "not_found"),
+        failure(request, reason),
         ports.agentApiKey?.(request.agentId),
       );
       return;
     }
+    const entry = lookup.entry;
     if (entry.sessionId !== request.sessionId) {
       logger.info("Context view request rejected", {
         event: "context_view:request",

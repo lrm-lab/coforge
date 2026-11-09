@@ -89,7 +89,7 @@ export type RuntimeStartupPorts = {
   scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse>;
   workspaceQueries: Pick<AgentWorkspaceQueries, "listSkills" | "listFiles" | "readFile" | "scan">;
   stateDirectory: string;
-  contextView: Pick<AgentContextViewService, "find">;
+  contextView: Pick<AgentContextViewService, "find" | "lookup">;
   agentApiKey(agentId: string): string | undefined;
   resolveProviderSource?(agentId: string, entry: ContextViewIndexEntry): string | undefined;
   deleteWorkspace(

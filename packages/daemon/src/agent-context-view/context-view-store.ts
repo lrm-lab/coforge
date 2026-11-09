@@ -36,6 +36,11 @@ export type ContextViewIndexEntry = {
   offset: number;
 };
 
+export type ContextViewLookup =
+  | { status: "found"; entry: ContextViewIndexEntry }
+  | { status: "expired" }
+  | { status: "not_recorded" };
+
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const RUNTIMES = new Set(["claude", "codex", "kimi-sdk", "pi", "builtin"]);
 
@@ -80,6 +85,7 @@ export class ContextViewStore {
   readonly #directory: string;
   readonly #indexPath: string;
   readonly #offSincePath: string;
+  readonly #expiredPath: string;
   readonly #now: () => number;
 
   constructor(
@@ -96,6 +102,7 @@ export class ContextViewStore {
     this.#directory = join(serverDirectory, escapePathIdentity(agentId));
     this.#indexPath = join(this.#directory, "index.jsonl");
     this.#offSincePath = join(this.#directory, "off-since");
+    this.#expiredPath = join(this.#directory, "expired.jsonl");
     this.#now = now;
     ownDirectory(join(stateDirectory, "agent-context"), stateDirectory);
     ownDirectory(serverDirectory, stateDirectory);
@@ -147,28 +154,38 @@ export class ContextViewStore {
   }
 
   find(messageId: string): ContextViewIndexEntry | undefined {
-    if (!ID.test(messageId) || !existsSync(this.#indexPath)) return undefined;
-    ownRegularFile(this.#indexPath);
-    const fd = openSync(this.#indexPath, CONTEXT_VIEW_READ_FLAGS);
-    try {
-      const info = fstatSync(fd);
-      if (!info.isFile() || info.nlink > 1 || info.size > AGENT_CONTEXT_INDEX_MAX_BYTES)
-        return undefined;
-    } finally {
-      closeSync(fd);
+    const lookup = this.lookup(messageId);
+    return lookup.status === "found" ? lookup.entry : undefined;
+  }
+
+  lookup(messageId: string): ContextViewLookup {
+    if (!ID.test(messageId)) return { status: "not_recorded" };
+    if (existsSync(this.#indexPath)) {
+      ownRegularFile(this.#indexPath);
+      const fd = openSync(this.#indexPath, CONTEXT_VIEW_READ_FLAGS);
+      try {
+        const info = fstatSync(fd);
+        if (!info.isFile() || info.nlink > 1 || info.size > AGENT_CONTEXT_INDEX_MAX_BYTES)
+          return { status: "not_recorded" };
+      } finally {
+        closeSync(fd);
+      }
+      const entry = this.#readFileSafely(this.#indexPath)
+        .split("\n")
+        .flatMap((line) => {
+          if (!line) return [];
+          try {
+            const value = JSON.parse(line) as ContextViewIndexEntry;
+            assertEntry(value);
+            return value.messageId === messageId ? [value] : [];
+          } catch {
+            return [];
+          }
+        })[0];
+      if (entry) return { status: "found", entry };
     }
-    return this.#readFileSafely(this.#indexPath)
-      .split("\n")
-      .flatMap((line) => {
-        if (!line) return [];
-        try {
-          const value = JSON.parse(line) as ContextViewIndexEntry;
-          assertEntry(value);
-          return value.messageId === messageId ? [value] : [];
-        } catch {
-          return [];
-        }
-      })[0];
+    if (this.#expiredIds().has(messageId)) return { status: "expired" };
+    return { status: "not_recorded" };
   }
 
   oldestSentAt(): string | undefined {
@@ -205,7 +222,7 @@ export class ContextViewStore {
     if (!existsSync(this.#indexPath)) return 0;
     ownRegularFile(this.#indexPath);
     const cutoff = this.#now() - retentionDays * 24 * 60 * 60 * 1000;
-    const parsed = this.#readFileSafely(this.#indexPath)
+    const allEntries = this.#readFileSafely(this.#indexPath)
       .split("\n")
       .flatMap((line) => {
         if (!line) return [];
@@ -217,13 +234,22 @@ export class ContextViewStore {
           return [];
         }
       })
-      .filter((entry) => Date.parse(entry.sentAt) >= cutoff);
-    const entries = parsed.sort(
+    const sortedEntries = allEntries.sort(
       (left, right) => Date.parse(left.sentAt) - Date.parse(right.sentAt),
     );
+    const retained = sortedEntries.filter((entry) => Date.parse(entry.sentAt) >= cutoff);
+    this.#markExpired(
+      sortedEntries.filter((entry) => !retained.includes(entry)).map((entry) => entry.messageId),
+    );
+    const entries = retained;
     const encoded = () =>
       entries.map((entry) => JSON.stringify(entry)).join("\n") + (entries.length ? "\n" : "");
-    while (Buffer.byteLength(encoded()) > AGENT_CONTEXT_INDEX_MAX_BYTES) entries.shift();
+    const evicted: string[] = [];
+    while (Buffer.byteLength(encoded()) > AGENT_CONTEXT_INDEX_MAX_BYTES) {
+      const removed = entries.shift();
+      if (removed) evicted.push(removed.messageId);
+    }
+    this.#markExpired(evicted);
     const temp = `${this.#indexPath}.tmp-${process.pid}`;
     const tempFd = openSync(temp, CONTEXT_VIEW_APPEND_FLAGS | (constants.O_EXCL ?? 0), 0o600);
     try {
@@ -261,8 +287,23 @@ export class ContextViewStore {
     if (!existsSync(this.#offSincePath)) return false;
     const offSince = Date.parse(this.#readFileSafely(this.#offSincePath));
     if (Number.isNaN(offSince) || now - offSince < AGENT_CONTEXT_VIEW_OFF_GRACE_MS) return false;
+    const ids = existsSync(this.#indexPath)
+      ? this.#readFileSafely(this.#indexPath)
+          .split("\n")
+          .flatMap((line) => {
+            if (!line) return [];
+            try {
+              const value = JSON.parse(line) as ContextViewIndexEntry;
+              assertEntry(value);
+              return [value.messageId];
+            } catch {
+              return [];
+            }
+          })
+      : [];
+    this.#markExpired(ids);
     for (const name of readdirSync(this.#directory)) {
-      if (name !== "off-since") {
+      if (name !== "off-since" && name !== "expired.jsonl") {
         const path = join(this.#directory, name);
         if (existsSync(path)) unlinkSync(path);
       }
@@ -281,5 +322,31 @@ export class ContextViewStore {
     } finally {
       closeSync(fd);
     }
+  }
+
+  #expiredIds(): Set<string> {
+    if (!existsSync(this.#expiredPath)) return new Set();
+    try {
+      return new Set(
+        this.#readFileSafely(this.#expiredPath)
+          .split("\n")
+          .flatMap((line) => (ID.test(line) ? [line] : [])),
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
+  #markExpired(ids: string[]): void {
+    if (!ids.length) return;
+    const merged = [...new Set([...this.#expiredIds(), ...ids])].slice(-10_000);
+    const temp = `${this.#expiredPath}.tmp-${process.pid}`;
+    const fd = openSync(temp, CONTEXT_VIEW_APPEND_FLAGS | (constants.O_EXCL ?? 0), 0o600);
+    try {
+      writeFileSync(fd, `${merged.join("\n")}\n`, "utf8");
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(temp, this.#expiredPath);
   }
 }
