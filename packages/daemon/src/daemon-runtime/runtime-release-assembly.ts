@@ -1,4 +1,4 @@
-import type { AgentActivity } from "@lrm/coforge-sdk/internal";
+import type { AgentActivity, AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { daemonIdleFacts } from "./agent-idle-facts";
 import type { ActivityDraft, BusyActivity } from "./agent-activity-publisher";
 import { RuntimeRelease } from "./runtime-release";
@@ -37,6 +37,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     explicitHold(agentId: string): DeliveryHoldReason | undefined;
     hasQueued(agentId: string): boolean;
     hasHeldAppItems(agentId: string): boolean;
+    discardPending(agentId: string): readonly AgentMessageDelivery[];
   };
   agentLaunches(): ReadonlyMap<string, unknown>;
   stopState(): {
@@ -81,6 +82,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     hasParkedWork: (agentId) =>
       input.deliveryQueue().hasQueued(agentId) || input.deliveryQueue().hasHeldAppItems(agentId),
     flushParked: (agentId) => input.releaseSurvivingHolds(agentId),
+    takeParked: (agentId) => input.deliveryQueue().discardPending(agentId),
     wake: (agentId, restart) => input.wakeAgent(agentId, restart),
     publish: (agentId, launch, ...draft) =>
       input.activityPublisher().publish(agentId, launch, input.activity(agentId, ...draft)),

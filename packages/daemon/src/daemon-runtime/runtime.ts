@@ -685,6 +685,7 @@ export class DaemonRuntime {
       collectSkillAgents: this.#collectSkillAgents,
       introducedAgents: this.#introducedAgents,
       messageAttention: this.#messageAttention,
+      runtimeRelease: this.#runtimeRelease,
       agentControl: this.#agentControl,
       agentSessions: this.#agentSessions,
       runtimeErrorHold: this.#runtimeErrorHold,
@@ -723,13 +724,8 @@ export class DaemonRuntime {
         this.#launchFailureActivity(agentId, provider, error),
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
       attachSessionMemory: attachFreshSessionMemoryPort(this.#memoryHooks),
-      relaunchResumed: (agentId, config, request) => {
-        void beginWakeLaunch(
-          agentId,
-          this.#startAgent(agentId, config, undefined, request),
-          this.#wakeLaunches,
-          this.#wakeLaunchFailures,
-        ).catch(() => {});
+      relaunchResumed: (agentId, restart, request) => {
+        void this.#wakeAgent(agentId, restart, request).catch(() => {});
       },
     });
     this.#startup = new RuntimeStartup({
@@ -1226,10 +1222,14 @@ export class DaemonRuntime {
     return this.#reportedSessions.get(agentId);
   }
 
-  #wakeAgent = (agentId: string, restart: WakeRestart): Promise<AgentRuntime> =>
+  #wakeAgent = (
+    agentId: string,
+    restart: WakeRestart,
+    request = wakeRequest(restart),
+  ): Promise<AgentRuntime> =>
     beginWakeLaunch(
       agentId,
-      this.#startAgent(agentId, restart.config, undefined, wakeRequest(restart)),
+      this.#startAgent(agentId, restart.config, undefined, request),
       this.#wakeLaunches,
       this.#wakeLaunchFailures,
     );

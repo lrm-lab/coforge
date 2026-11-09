@@ -10,7 +10,6 @@ import {
 function facts(overrides: Partial<ResumedEarlyCrashFacts> = {}): ResumedEarlyCrashFacts {
   return {
     resumedSessionId: "sess-1",
-    sessionModeCreate: false,
     uptimeMs: 2_000,
     modelOutputObserved: false,
     offline: false,
@@ -28,7 +27,6 @@ test("a resumed session that dies silently inside the window qualifies", () => {
 
 test("each non-qualifying close fact excludes the exit", () => {
   expect(isResumedEarlyCrashClose(facts({ resumedSessionId: undefined }))).toBe(false);
-  expect(isResumedEarlyCrashClose(facts({ sessionModeCreate: true }))).toBe(false);
   expect(isResumedEarlyCrashClose(facts({ uptimeMs: RESUMED_EARLY_CRASH_WINDOW_MS + 1 }))).toBe(
     false,
   );

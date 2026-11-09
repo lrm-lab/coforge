@@ -13,6 +13,7 @@ import { buildRuntimeCrashedActivity } from "#src/agent-runtime/runtime-error-ac
 import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
 import { ResumedEarlyCrashWatch, type ResumedEarlyCrashStreak } from "./resumed-early-crash";
+import { ProviderReplayWatch } from "./provider-replay-recovery";
 import { isBusyActivityDetailKind } from "./agent-activity-publisher";
 import { reportLaunchFailure } from "./agent-startup-failure";
 import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
@@ -44,6 +45,14 @@ export async function launchAgentProcess(
     resumedEarlyCrash: ResumedEarlyCrashStreak;
     /** The streak hit its threshold: invalidate the stale Session and cold-start fresh. */
     coldStartResumedSession(agentId: string, launch: ActivityLaunch, staleSessionId: string): void;
+    /** The provider rejected the stored Session's replay: end the runtime and cold-start fresh.
+     * Whether the Session was replaced. */
+    coldStartRejectedReplay(
+      agentId: string,
+      launch: ActivityLaunch,
+      staleSessionId: string,
+      started: LaunchRequest,
+    ): Promise<boolean>;
   },
   agentId: string,
   config: AgentRuntimeConfig,
@@ -127,6 +136,8 @@ export async function launchAgentProcess(
     // The session this launch asked to continue, kept before any report can overwrite the
     // reference: whether the provider actually continued it decides "fresh" below.
     const requestedSessionId = recycled ? undefined : reference.sessionId;
+    // The stored Session this launch continues, read before the first report rewrites `reference`.
+    const resumedSessionId = reference.sessionMode === "create" ? undefined : requestedSessionId;
     ports.contexts.noteSession(agentId, requestedSessionId, config.model);
     assertSessionNotSpent({
       agentId,
@@ -230,6 +241,12 @@ export async function launchAgentProcess(
       runtime,
       control,
     );
+    // A Session this launch created, recycled or had replaced has nothing stored to replace.
+    const replayWatch = new ProviderReplayWatch(resumedSessionId, {
+      memoryAgent: isMemoryAgentRuntime(config),
+      replacedSessionId: sessionIds.driverReplacedSessionId(),
+      reportedSessionId: sessionIds.reportedSessionId(),
+    });
     const unsubscribe = runtime.session.subscribe((event) => {
       progress.observe(event);
       toolCalls.observe(event);
@@ -252,6 +269,11 @@ export async function launchAgentProcess(
           : TURN_ACTIVITY_EVENT_TYPES.has(event.type);
       if (turnActivity && ports.reconcileIdleTurn(agentId, launch)) return;
       trajectory.accept(event);
+      // After the turn's own end has been observed: the failure keeps its Activity and holds.
+      if (isCurrent)
+        replayWatch.observe(event, agentId, (stored) =>
+          ports.coldStartRejectedReplay(agentId, launch, stored, request),
+        );
     });
     runtime.session.onExit((exit) => {
       ports.desktops.end(agentId);
@@ -328,9 +350,8 @@ export async function launchAgentProcess(
       // (resumed-early-crash.ts; Raft 1.0.63 `noteResumedEarlyCrashClose` + `repeated_early_crash`).
       earlyCrashWatch.close({
         agentId,
-        resumedSessionId: requestedSessionId,
+        resumedSessionId,
         staleSessionId: reference.sessionId ?? requestedSessionId,
-        sessionModeCreate: reference.sessionMode === "create",
         offline: launch.offlineError !== undefined,
         deliveryHold: ports.deliveryQueue.explicitHold(agentId) !== undefined,
         daemonStopping: ports.isStopping(),

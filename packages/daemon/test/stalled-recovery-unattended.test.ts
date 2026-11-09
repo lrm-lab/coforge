@@ -55,6 +55,7 @@ function release() {
     daemonIdleFacts: () => ({}) as never,
     hasParkedWork: () => false,
     flushParked: () => {},
+    takeParked: () => [],
     wake: async (_agentId, next) => {
       woken.push(next);
     },
@@ -216,6 +217,7 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     daemonIdleFacts: () => ({}) as never,
     hasParkedWork: () => false,
     flushParked: () => {},
+    takeParked: () => [],
     // The stalled launch stays current: no relaunch replaces it in this test.
     wake: async () => {},
     // As the daemon's runtime wires it.

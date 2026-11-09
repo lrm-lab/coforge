@@ -270,6 +270,10 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       /** Explicit provider HTTP response status; never inferred by an adapter. */
       httpStatus?: number;
       providerErrorReason?: string;
+      /** The failure proves the stored native Session cannot be continued (the provider rejected
+       * its replay): the daemon may invalidate it and cold-start a fresh one. Set only from the
+       * provider's own explicit signal, never inferred outside the adapter. */
+      sessionRecovery?: "provider_replay_rejected";
       providerLimit?: {
         kind: "quota_exhausted" | "window_limit" | "transient_rate_limit";
         resetsAt?: string;

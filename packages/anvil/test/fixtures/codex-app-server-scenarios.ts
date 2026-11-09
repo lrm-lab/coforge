@@ -267,9 +267,35 @@ function turnScenario(input: string | undefined, turnId: string): void {
     });
     say("Done");
   }
+  const failure = failedTurnError(input);
+  if (failure) {
+    write({
+      method: "turn/completed",
+      params: { threadId, turn: { id: turnId, status: "failed", error: failure } },
+    });
+    return;
+  }
   completeTurn(turnId, input === "interrupted-empty" ? "interrupted" : "completed");
   if (input === "token-usage-foreign")
     notify("thread/tokenUsage/updated", { turnId, tokenUsage: reading });
+}
+
+/** The error a turn started with `input` ends with, when the input names a failing turn. */
+function failedTurnError(input: string | undefined): Record<string, unknown> | undefined {
+  if (input === "replay-rejected-code")
+    return { message: "Bad request", code: "invalid_encrypted_content" };
+  if (input === "replay-rejected-text")
+    return { message: "Encrypted content could not be decrypted or parsed." };
+  // The real TurnError shape: no `code`, the API's text in additionalDetails.
+  if (input === "replay-rejected-details")
+    return {
+      message: "Turn failed",
+      codexErrorInfo: "badRequest",
+      additionalDetails: "Encrypted content could not be decrypted or parsed.",
+    };
+  if (input === "usage-limit")
+    return { message: "usage limit reached", code: "usageLimitExceeded" };
+  return undefined;
 }
 
 function completeTurn(turnId: string, status = "completed"): void {

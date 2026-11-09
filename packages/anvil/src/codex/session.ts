@@ -459,6 +459,7 @@ export class CodexAgentSession implements AgentSession {
           occurredAt: eventTime(record),
           providerErrorClass: failure.code ?? "CodexTurnError",
           providerErrorReason: "turn_failed",
+          ...(failure.sessionRecovery ? { sessionRecovery: failure.sessionRecovery } : {}),
         });
       }
       this.#emitAll(this.#signals.finish(record, status));

@@ -24,10 +24,9 @@ export const RESUMED_EARLY_CRASH_WINDOW_MS = 15_000;
 export const RESUMED_EARLY_CRASH_FALLBACK_THRESHOLD = 2;
 
 export type ResumedEarlyCrashFacts = Readonly<{
-  /** The stored Session this launch asked to resume; undefined for a fresh or recycled launch. */
+  /** The stored Session this launch asked to resume; undefined for a launch that created or
+   * recycled its Session, whatever id it carried. */
   resumedSessionId: string | undefined;
-  /** The launch created a fresh Session (`sessionMode: "create"`), whatever id it carried. */
-  sessionModeCreate: boolean;
   /** Milliseconds since the provider session start was requested. */
   uptimeMs: number;
   /** The provider produced text, thinking or a tool call during this launch. */
@@ -45,7 +44,6 @@ export type ResumedEarlyCrashFacts = Readonly<{
 export function isResumedEarlyCrashClose(facts: ResumedEarlyCrashFacts): boolean {
   return (
     facts.resumedSessionId !== undefined &&
-    !facts.sessionModeCreate &&
     facts.uptimeMs <= RESUMED_EARLY_CRASH_WINDOW_MS &&
     !facts.modelOutputObserved &&
     !facts.offline &&

@@ -6,6 +6,7 @@ import {
   type AgentActivityRuntimeError,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentSession } from "@lrm/coforge-anvil";
+import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import type { AgentRestartConfig, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
 import type { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
@@ -21,6 +22,7 @@ import {
   configApplyRuntimePlan,
   freshConfigRuntimePlan,
   stalledRuntimePlan,
+  type RuntimeEndPlan,
   type RuntimeReleasePlan,
 } from "./runtime-release-plans";
 import {
@@ -110,6 +112,8 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   hasParkedWork(agentId: string): boolean;
   /** The runtime stayed up: presents what was kept as it would at a turn's end. */
   flushParked(agentId: string): void;
+  /** Takes the deliveries kept for the Agent's next launch, for a launch that tells of them itself. */
+  takeParked(agentId: string): readonly AgentMessageDelivery[];
   /** Launches the Agent again from its remembered restart config. */
   wake(agentId: string, restart: WakeRestart): Promise<unknown>;
   /** Publishes an Activity for `launch`, its draft built from the rest as `activityDraft` does. */
@@ -295,16 +299,10 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     session: AgentSession,
     plan: RuntimeReleasePlan,
   ): Promise<boolean> {
-    this.#recovering.add(agentId);
-    try {
-      if (!(await this.#end(agentId, launch, session, plan))) return false;
-      // A Stop that arrived meanwhile wins, and its config, not the one read before, is current.
-      const current = this.#ports.restartConfig(agentId);
-      if (this.#ports.isStopping(agentId) || !current) return true;
-      if (plan.wake.onlyIfParked && !this.#ports.hasParkedWork(agentId)) return true;
+    return this.#endThen(agentId, launch, session, plan, async (current, join) => {
+      if (plan.wake.onlyIfParked && !this.#ports.hasParkedWork(agentId)) return;
       const sessionId = this.#ports.sessionId(agentId) ?? current.sessionId;
-      // From here a message joins the wake launch as any other does.
-      this.#recovering.delete(agentId);
+      join();
       const resumePrompt = plan.wake.resumePrompt;
       const next: WakeRestart = {
         ...current,
@@ -319,6 +317,58 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
         }),
       );
       if (plan.wake.awaited) await woken;
+    });
+  }
+
+  /** Ends a live runtime so a fresh Session replaces its stored one. Messages arriving meanwhile
+   * wait for the relaunch, and `replace` receives them, taken out of the queue: it starts the
+   * relaunch in the same turn of the event loop, and that launch must tell of them itself, because
+   * a recovery launch discards whatever waits. True only when `replace` ran: a runner hold,
+   * a migration or a running background task, a process that would not exit, a Stop that won, or a
+   * newer launch that took the Agent over (`launch` is no longer current) all leave the Session as
+   * it was. */
+  async endAndReplace(
+    agentId: string,
+    plan: RuntimeEndPlan,
+    replace: (parked: readonly AgentMessageDelivery[]) => void,
+  ): Promise<boolean> {
+    const launch = this.#ports.launch(agentId);
+    const session = this.#ports.runtime(agentId)?.session;
+    if (!launch || !session) return false;
+    // Work the restart would cut off waits for the next rejected turn: a runner hold or a
+    // migration owns the Agent, and a background task is still running.
+    const facts = this.#ports.daemonIdleFacts(agentId);
+    if (facts.runnerHold || facts.migrating || (launch.backgroundTasks?.count ?? 0) > 0)
+      return false;
+    let replaced = false;
+    await this.#endThen(agentId, launch, session, plan, (_, join) => {
+      // A Start made while the process was ending owns the Agent now; replacing under it would
+      // invalidate a Session it is using.
+      if (this.#ports.launch(agentId) !== launch) return;
+      join();
+      replace(this.#ports.takeParked(agentId));
+      replaced = true;
+    });
+    return replaced;
+  }
+
+  /** The order every restart of a live runtime keeps: messages wait while it ends, a Stop that
+   * arrived meanwhile wins, and the config read after the end, not before, is current.
+   * `proceed` runs once the runtime is gone, and calls `join` at the point from which a message
+   * joins the new launch as any other does. False when the process would not exit. */
+  async #endThen(
+    agentId: string,
+    launch: L,
+    session: AgentSession,
+    plan: RuntimeEndPlan,
+    proceed: (current: AgentRestartConfig, join: () => void) => void | Promise<void>,
+  ): Promise<boolean> {
+    this.#recovering.add(agentId);
+    try {
+      if (!(await this.#end(agentId, launch, session, plan))) return false;
+      const current = this.#ports.restartConfig(agentId);
+      if (this.#ports.isStopping(agentId) || !current) return true;
+      await proceed(current, () => this.#recovering.delete(agentId));
       return true;
     } finally {
       this.#recovering.delete(agentId);
@@ -331,11 +381,12 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     agentId: string,
     launch: L,
     session: AgentSession,
-    plan: RuntimeReleasePlan,
+    plan: RuntimeEndPlan,
   ): Promise<boolean> {
     // Before `stopping`, which mutes everything but stopped/interrupted/error Activity.
-    this.#ports.publish(agentId, launch, plan.announce.detailKind, "info", plan.announce.text);
-    plan.log();
+    if (plan.announce)
+      this.#ports.publish(agentId, launch, plan.announce.detailKind, "info", plan.announce.text);
+    plan.log?.();
     launch.stopping = true;
     try {
       // Dispose can reject notices still waiting for provider acceptance. Hand their mentions
@@ -344,7 +395,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       await this.#ports.release(agentId, STALLED_RECOVERY_EXIT_TIMEOUT_MS);
       return true;
     } catch (error) {
-      launch.progress = undefined;
+      if (!plan.keepProgress) launch.progress = undefined;
       // A process that is still running gets its Activity back.
       const stillRunning = this.#ports.runtime(agentId)?.session === session;
       if (stillRunning) {

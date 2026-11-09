@@ -30,6 +30,14 @@ export type RuntimeReleasePlan = Readonly<{
   }>;
 }>;
 
+/** What ending a runtime needs: the announcement and log are optional, for an end whose relaunch
+ * narrates itself. */
+export type RuntimeEndPlan = Pick<RuntimeReleasePlan, "failure"> &
+  Partial<Pick<RuntimeReleasePlan, "announce" | "log">> & {
+    /** A runtime that would not exit keeps serving this launch, so it is still judged for a hang. */
+    keepProgress?: true;
+  };
+
 /** `resumePrompt` is the relaunch's first turn when no message waits for it. */
 export function stalledRuntimePlan(
   restart: AgentRestartConfig,
@@ -143,6 +151,24 @@ export function configApplyRuntimePlan(restart: AgentRestartConfig): RuntimeRele
         message: "Agent config apply relaunch failed",
         event: "agent.runtime.config_apply_wake_failed",
       },
+    },
+  };
+}
+
+/** Ends the runtime of a launch whose stored Session the provider rejected. Silent: the relaunch
+ * narrates the cold start itself (`session-invalidate-activity.ts`). */
+export function replayRejectedEndPlan(restart: AgentRestartConfig): RuntimeEndPlan {
+  const runtimeName = runtimeDisplayName(restart.config.provider);
+  return {
+    keepProgress: true,
+    log: () =>
+      logger.info("Agent runtime ended to replace a Session the provider rejected", {
+        event: "agent.runtime.replay_rejected_restart",
+      }),
+    failure: {
+      text: `Replacing the rejected ${runtimeName} session failed`,
+      message: "Agent rejected-replay restart failed",
+      event: "agent.runtime.replay_rejected_restart_failed",
     },
   };
 }

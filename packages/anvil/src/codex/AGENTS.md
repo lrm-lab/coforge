@@ -56,3 +56,4 @@
   (`RolloutLine` / `RolloutItemWire`, openai/codex main on 2026-10-28), not a stable API.
 - Context usage (`context-usage.ts`): `thread/tokenUsage/updated`'s `tokenUsage.last.totalTokens`
   against `modelContextWindow`, as Raft 1.0.59 reads it. Never `total`, which is cumulative.
+- A failed turn whose message or `additionalDetails` holds `invalid_encrypted_content`, or both `encrypted content` and `could not be decrypted or parsed` (any case), or whose `code` is `invalid_encrypted_content`, sets `sessionRecovery: "provider_replay_rejected"` on its `error` event (`turn-outcome.ts`, openai/codex#17541). Codex's `TurnError` has no `code` of its own (app-server schema 0.167.0); the API text is in `message`/`additionalDetails`. Match nothing wider (the bare phrase also names a gateway's header): the daemon invalidates the stored thread on it.

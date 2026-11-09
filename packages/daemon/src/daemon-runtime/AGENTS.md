@@ -72,6 +72,12 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   `noteResumedEarlyCrashClose`): a resume that exits silently inside 15 seconds counts, and the
   second consecutive close makes `runtime.ts` invalidate the Session (`repeated_early_crash`)
   and cold-start a fresh one through the ordinary launch gate.
+- `provider-replay-recovery.ts` owns the rejected-replay watch (a resumed Session's `error` event with
+  `sessionRecovery`, acted on after the failed turn ends, spent only once the Session was replaced) and
+  what the fresh Session carries: the rejected launch's own start input plus the unread summary
+  (the Agent's unread and deliveries parked while the runtime ends). `AgentLaunchCoordinator` ends the
+  runtime through `RuntimeRelease.endAndReplace` and cold-starts through the same path as the early
+  crash, with `LaunchRequest.recovery`.
 - `agent-launch-config.ts` owns the transport fallback for obtaining an Agent launch credential/config.
 - `agent-wake-control.ts` owns reused-wake identity reads and control-record wake ordering; an
   unavailable provider identity keeps the wake and preserves the last known identity.

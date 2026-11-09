@@ -57,6 +57,7 @@ function subject(
     daemonIdleFacts: () => ({}) as never,
     hasParkedWork: () => true,
     flushParked: () => {},
+    takeParked: () => [],
     wake: async () => {},
     publish: () => {},
     handBackMentions: async () => {},

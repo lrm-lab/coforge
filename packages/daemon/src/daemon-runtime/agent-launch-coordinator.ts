@@ -1,6 +1,10 @@
 import type { AgentRuntimeConfig, AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import type { AgentStopRegistry } from "./agent-stop-registry";
-import { AgentProcessManager, type AgentRuntime } from "#src/agent-runtime/agent-process-manager";
+import {
+  AgentProcessManager,
+  type AgentRestartConfig,
+  type AgentRuntime,
+} from "#src/agent-runtime/agent-process-manager";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
@@ -25,9 +29,12 @@ import {
   runtimeDisplayName,
   sessionInvalidateActivityText,
 } from "./session-invalidate-activity";
-import { type AgentActivity } from "@lrm/coforge-sdk/internal";
+import { type AgentActivity, type AgentSessionInvalidateReason } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { launchAgentProcess } from "./agent-launch-process";
+import { carriedStart, type CarriedStart } from "./provider-replay-recovery";
+import { replayRejectedEndPlan } from "./runtime-release-plans";
+import type { RuntimeRelease } from "./runtime-release";
 import { noteAgentRelaunchPending } from "./agent-launch-tags";
 import { getLogger } from "@logtape/logtape";
 import type { AgentSessionReport } from "@lrm/coforge-sdk/internal";
@@ -74,6 +81,7 @@ export type AgentLaunchCoordinatorPorts = {
   collectSkillAgents: Set<string>;
   introducedAgents: Set<string>;
   messageAttention: AgentMessageAttentionIndex;
+  runtimeRelease: Pick<RuntimeRelease<ActivityLaunch>, "endAndReplace">;
   agentControl: AgentControl;
   agentSessions: AgentSessions;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
@@ -126,7 +134,7 @@ export type AgentLaunchCoordinatorPorts = {
   attachSessionMemory: (agentId: string) => Promise<boolean>;
   /** A daemon-initiated relaunch after a process exit (the resumed-session cold start): the
    * ordinary launch gate with wake bookkeeping, fire-and-forget. */
-  relaunchResumed(agentId: string, config: AgentRuntimeConfig, request: LaunchRequest): void;
+  relaunchResumed(agentId: string, restart: AgentRestartConfig, request: LaunchRequest): void;
 };
 
 export class AgentLaunchCoordinator {
@@ -267,7 +275,9 @@ export class AgentLaunchCoordinator {
         idleNudge: this.idleNudge,
         resumedEarlyCrash: this.resumedEarlyCrash,
         coldStartResumedSession: (id, ended, stale) =>
-          this.#coldStartResumedSession(id, ended, stale),
+          this.#coldStartResumedSession(id, ended, stale, "repeated_early_crash"),
+        coldStartRejectedReplay: (id, running, stale, started) =>
+          this.#coldStartRejectedReplay(id, running, stale, started),
       },
       agentId,
       config,
@@ -281,11 +291,58 @@ export class AgentLaunchCoordinator {
     );
   }
 
-  /** A stored Session that crashed the runtime twice within seconds of every resume is corrupt
-   * in a way the provider cannot report: invalidate it and cold-start a fresh Session through
-   * the ordinary launch gate, so queued deliveries carry over and no later wake can pick the
-   * stale Session back up (resumed-early-crash.ts; Raft 1.0.63 `repeated_early_crash`). */
-  #coldStartResumedSession(agentId: string, launch: ActivityLaunch, staleSessionId: string): void {
+  /** The provider rejected the replay of the stored Session this launch resumed, and the failed
+   * turn has ended: end the live runtime through `RuntimeRelease`, then replace the Session as for
+   * an early crash. The fresh Session is told what the Agent never read, read before the exit
+   * clears it, what arrived while the runtime was ending, and what the launch was started with
+   * (provider-replay-recovery.ts).
+   * Whether the Session was replaced: when not, the watch stays armed for the next rejected turn. */
+  async #coldStartRejectedReplay(
+    agentId: string,
+    launch: ActivityLaunch,
+    staleSessionId: string,
+    started: LaunchRequest,
+  ): Promise<boolean> {
+    const { ports } = this;
+    const restart = ports.agentProcessManager.restartConfig(agentId);
+    if (
+      !restart ||
+      launch.stopping ||
+      ports.currentActivityLaunches.get(agentId) !== launch ||
+      ports.isStopping() ||
+      ports.stops.stopping(agentId)
+    )
+      return false;
+    const unread = ports.messageAttention.check(agentId);
+    return ports.runtimeRelease.endAndReplace(agentId, replayRejectedEndPlan(restart), (parked) => {
+      // The failure's backoff belongs to the process that earned it, and its error class (a status
+      // code makes it a provider API one) is not one a turn's end lifts: the fresh Session starts
+      // with no hold, as after a take-offline.
+      ports.deliveryQueue.endHoldForNextLaunch(agentId);
+      ports.runtimeErrorHold.forget(agentId);
+      this.#coldStartResumedSession(
+        agentId,
+        launch,
+        staleSessionId,
+        "provider_replay_rejected",
+        carriedStart(started, unread, parked),
+      );
+    });
+  }
+
+  /** A stored Session that cannot be continued: invalidate it and cold-start a fresh Session
+   * through the ordinary launch gate, so queued deliveries carry over and no later wake can pick
+   * the stale Session back up. Two early crashes of a resumed Session within seconds, which the
+   * provider cannot report as corrupt (resumed-early-crash.ts; Raft 1.0.63
+   * `repeated_early_crash`), and a provider that rejects its replay
+   * (provider-replay-recovery.ts) both come here, after the runtime is gone. */
+  #coldStartResumedSession(
+    agentId: string,
+    launch: ActivityLaunch,
+    staleSessionId: string,
+    reason: AgentSessionInvalidateReason,
+    carried?: CarriedStart,
+  ): void {
     const restart = this.ports.agentProcessManager.restartConfig(agentId);
     if (!restart || this.ports.isStopping() || this.ports.stops.stopping(agentId)) return;
     const reference = this.ports.sessions.sessionReference(agentId);
@@ -295,7 +352,7 @@ export class AgentLaunchCoordinator {
         provider: restart.config.provider,
         sessionId: staleSessionId,
         launchId: reference?.launchId ?? launch.launchId,
-        reason: "repeated_early_crash",
+        reason,
       }),
     );
     if (reference)
@@ -308,10 +365,11 @@ export class AgentLaunchCoordinator {
     // The exit that triggered this cold start must not sweep the strays the relaunch keeps
     // using; the mark clears when the new launch registers its tag token (task #673).
     noteAgentRelaunchPending(agentId);
-    this.ports.relaunchResumed(agentId, restart.config, {
+    this.ports.relaunchResumed(agentId, restart, {
       sessionMode: "create",
       replacedSessionId: staleSessionId,
-      invalidateReason: "repeated_early_crash",
+      invalidateReason: reason,
+      ...carried,
     });
   }
 }
