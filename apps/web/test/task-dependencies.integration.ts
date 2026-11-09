@@ -223,6 +223,48 @@ test("amending the blockers is checked against the revision and allowed to the o
   }
 });
 
+// task #524: a channel admin is not a dependency editor — only the Task's owner, its creator or
+// a Workspace owner/admin may amend `blockedBy`/`parent`, whatever `channelRole` says.
+test("a channel admin who is not the owner, creator or a manager cannot amend dependencies", async () => {
+  const { db, run, make, refusal, channel, one } = await setup();
+  try {
+    const [task, blocker] = await make("alice", 2);
+    const creatorMemberId = (
+      await db.task.findFirstOrThrow({
+        where: { conversationId: channel.id, number: task! },
+        select: { creatorMemberId: true },
+      })
+    ).creatorMemberId;
+    const seats = await db.conversationMember.findMany({
+      where: { conversationId: channel.id },
+      select: { id: true, userId: true, agentId: true },
+    });
+    const promoted = seats.filter(
+      (seat) =>
+        seat.id !== creatorMemberId &&
+        ((seat.userId !== null && seat.agentId === null) || seat.agentId === one.id),
+    );
+    expect(promoted).toHaveLength(2);
+    const updated = await db.conversationMember.updateMany({
+      where: { id: { in: promoted.map((seat) => seat.id) } },
+      data: { channelRole: "admin" },
+    });
+    expect(updated.count).toBe(2);
+    for (const who of ["bob", "one"] as const) {
+      const deniedBlocked = await refusal(
+        run(who, { operation: "amend", number: task!, blockedBy: [{ number: blocker! }] }),
+      );
+      expect(deniedBlocked.code).toBe("ACCESS_DENIED");
+      const deniedParent = await refusal(
+        run(who, { operation: "amend", number: task!, parent: { number: blocker! } }),
+      );
+      expect(deniedParent.code).toBe("ACCESS_DENIED");
+    }
+  } finally {
+    await db.$disconnect();
+  }
+});
+
 test("a sub-task tree node names only the blockers still open", async () => {
   const { db, run, make, show } = await setup();
   try {
