@@ -1,7 +1,14 @@
 // Copied from the official app-navigation/base-components/mobile-header.tsx template
 // (see docs/design/official-components.md §7), adapted so the drawer opens from each page's own
 // header instead of a separate app header: one 48px band per page on mobile.
-import { createContext, useContext, useEffect, useState, type PropsWithChildren } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type PropsWithChildren,
+} from "react";
 import { useRouter } from "@tanstack/react-router";
 import { X as CloseIcon, Menu02 } from "@untitledui/icons";
 import {
@@ -31,6 +38,12 @@ export const MobileDrawerProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => setOpen(false), [desktop]);
   return <MobileDrawerContext value={{ isOpen, setOpen }}>{children}</MobileDrawerContext>;
 };
+
+/** Closes the drawer from a link inside it that leads nowhere the router would report. */
+export function useCloseMobileDrawer() {
+  const setOpen = useContext(MobileDrawerContext)?.setOpen;
+  return useCallback(() => setOpen?.(false), [setOpen]);
+}
 
 export const MobileNavigationHeader = ({ children }: PropsWithChildren) => {
   const drawer = useContext(MobileDrawerContext);

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useOpenSearch } from "#src/features/search/search-dialog-context";
 import { useQuery } from "@tanstack/react-query";
 import { SearchLg, Settings01 as Settings } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
@@ -35,7 +35,6 @@ import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile
 import type { ConversationProps } from "./conversation-types";
 import type { ChannelNotificationLevel } from "./notification-levels";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 
 export type ChannelConversationView = Omit<DirectConversationView, "agent" | "messages"> & {
   name: string;
@@ -81,8 +80,7 @@ export function ChannelConversationHeader({
   const [ownSettingsOpen, setOwnSettingsOpen] = useState(false);
   // Which members page the panel opens on. Null is the settings themselves.
   const [membersStart, setMembersStart] = useState<ChannelMembersView | null>(null);
-  const navigate = useNavigate();
-  const workspaceSlug = useWorkspaceSlug();
+  const openSearch = useOpenSearch();
   const settingsOpen = controlledSettingsOpen ?? ownSettingsOpen;
   const setSettingsOpen = onSettingsOpenChange ?? setOwnSettingsOpen;
   const canInvite = Boolean(conversation.senderMemberId) && !conversation.archived;
@@ -114,10 +112,9 @@ export function ChannelConversationHeader({
               className={HEADER_ICON_CLASS}
               tooltip={m.search_this_channel()}
               onClick={() =>
-                void navigate({
-                  to: "/w/$workspaceSlug/search",
-                  params: { workspaceSlug },
-                  search: { channelId: conversation.conversationId, defer: "1" },
+                openSearch({
+                  filters: { channelId: conversation.conversationId },
+                  deferred: true,
                 })
               }
             />

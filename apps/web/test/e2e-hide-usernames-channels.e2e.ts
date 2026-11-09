@@ -6,7 +6,7 @@ import { hideUsernamesRun } from "./helpers/hide-usernames-e2e";
 
 /**
  * A channel's members page (roster and add view) lists people by their names and does not show,
- * or search by, their usernames. The Search page's From filter and its Frequently used direct
+ * or search by, their usernames. The Search dialog's From filter and its Frequently used direct
  * message name people the same way, while an Agent keeps its `@handle`. Settings and the Members
  * directory: `e2e-hide-usernames.e2e.ts`.
  *
@@ -148,7 +148,10 @@ test(
           },
         });
         const direct = await db.conversation.create({
-          data: { workspaceId, directKey: peopleDirectKey(DEV_BROWSER_USER.id, people[0]!.id) },
+          data: {
+            workspaceId,
+            directKey: peopleDirectKey(DEV_BROWSER_USER.id, people[0]!.id),
+          },
         });
         await db.conversationMember.createMany({
           data: [DEV_BROWSER_USER.id, people[0]!.id].map((userId) => ({
@@ -168,28 +171,42 @@ test(
           `localStorage.clear(); localStorage.setItem(${JSON.stringify(usageKey)}, ${JSON.stringify(JSON.stringify(usage))})`,
         );
         await browser("open", `${base}/search`);
-        const frequent = '[aria-labelledby="search-frequent-heading"] [data-search-entity]';
+        const frequent =
+          '[role="dialog"] [aria-labelledby="search-frequent-heading"] [data-search-entity]';
         await waitFor(`document.querySelectorAll(${JSON.stringify(frequent)}).length === 2`);
-        const cards = await evaluate<Record<string, string>>(
-          `Object.fromEntries([...document.querySelectorAll(${JSON.stringify(frequent)})].map((card) => [card.dataset.searchEntity, card.innerText]))`,
+        const rows = await evaluate<Record<string, string>>(
+          `Object.fromEntries([...document.querySelectorAll(${JSON.stringify(frequent)})].map((row) => [row.dataset.searchEntity, row.innerText]))`,
         );
-        const dmCard = cards[`dm:${direct.id}`] ?? "";
+        const dmRow = rows[`dm:${direct.id}`] ?? "";
         check(
-          "search home: a direct message card is named by the person",
-          dmCard.includes("Ada Lovelace"),
-        );
-        check(
-          "search home: a direct message card shows no username or @handle",
-          showsNoUsername(dmCard) && !dmCard.includes("@"),
+          "search home: a direct message row is named by the person",
+          dmRow.includes("Ada Lovelace"),
         );
         check(
-          "search home: an Agent card keeps its @handle",
-          (cards[`agent:${agent.id}`] ?? "").includes(`@${agentHandle}`),
+          "search home: a direct message row shows no username or @handle",
+          showsNoUsername(dmRow) && !dmRow.includes("@"),
+        );
+        check(
+          "search home: an Agent row keeps its @handle",
+          (rows[`agent:${agent.id}`] ?? "").includes(`@${agentHandle}`),
         );
         await shoot("search-home");
 
+        // A username typed into the search box names no person or place. The filters show once
+        // there is a query, so the same dialog serves the From filter below.
+        await browser("open", `${base}/search?q=zq7k`);
+        await waitFor(`document.querySelector('[role="dialog"]')?.innerText.includes("zq7k")`);
+        await waitFor(`!document.querySelector('[role="dialog"] [aria-busy="true"]')`);
+        const entityRows = await evaluate<string[]>(
+          `[...document.querySelectorAll('[role="dialog"] [data-search-entity]')].map((row) => row.dataset.searchEntity)`,
+        );
+        check(
+          "search: a username matches no person, direct message or place",
+          entityRows.length === 0,
+        );
+
         // The From filter lists people by name with no addon, and finds them by name only.
-        const fromChip = `[...document.querySelectorAll('[aria-label="Search filters"] button')].find((button) => button.textContent.trim().startsWith("From"))`;
+        const fromChip = `[...document.querySelectorAll('[role="dialog"] [aria-label="Search filters"] button')].find((button) => button.textContent.trim().startsWith("From"))`;
         await waitFor(hydrated(fromChip));
         await browser("eval", `${fromChip}.click()`);
         const fromField = 'input[placeholder="Find a person or Agent"]';
@@ -242,18 +259,6 @@ test(
           options.some((option) => option.includes("Hide Bot")),
         );
         await browser("press", "Escape");
-
-        // A username typed into the search box names no person or place.
-        await browser("open", `${base}/search?q=zq7k`);
-        await waitFor(`document.querySelector("main")?.innerText.includes("zq7k")`);
-        await waitFor(`!document.querySelector('[aria-busy="true"]')`);
-        const entityCards = await evaluate<string[]>(
-          `[...document.querySelectorAll("main [data-search-entity]")].map((card) => card.dataset.searchEntity)`,
-        );
-        check(
-          "search: a username matches no person, direct message or place",
-          entityCards.length === 0,
-        );
       },
     ),
   180_000,

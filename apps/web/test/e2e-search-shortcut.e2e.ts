@@ -7,10 +7,10 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
- * Reaching search: Cmd/Ctrl+K from any page reopens the last search (and on the search page puts
- * the caret back in the box, text selected), the rail's Search starts fresh, and a channel's
- * "Search this channel" opens search limited to that channel without searching until something
- * is typed.
+ * Search as a dialog over the current page: Cmd/Ctrl+K, the rail's Search and a channel's "Search
+ * this channel" open it without leaving the page; focus starts in the box, Up and Down walk the
+ * results, Enter opens one (a message lands on it, however old), Esc closes and returns focus. An
+ * old search address opens the dialog with its search.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser` (Chromium on macOS, so the
  * shortcut is Meta+K). Seeds are deterministic and reset on every run. Screenshots are written
@@ -32,7 +32,7 @@ function seededUuid(key: string): string {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 
-test("the shortcut reopens the last search and a channel searches itself", async () => {
+test("search opens over the page, walks by keyboard and lands on the message", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `search-shortcut-${process.pid}`;
   async function browser(...args: string[]) {
@@ -70,9 +70,10 @@ test("the shortcut reopens the last search and a channel searches itself", async
       }),
     ]);
   };
-  const param = (name: string) =>
-    `(new URLSearchParams(location.search).get(${JSON.stringify(name)}) ?? "")`;
-  const box = `document.querySelector('input[type="search"]')`;
+  const dialog = `document.querySelector('[role="dialog"]')`;
+  const box = `document.querySelector('[role="dialog"] input[type="search"]')`;
+  const options = `[...document.querySelectorAll('[role="dialog"] [data-search-option]')]`;
+  const hits = `document.querySelectorAll('[role="dialog"] ol li').length`;
 
   const channelA = seededUuid("e2e-search-shortcut:channel-a");
   const channelB = seededUuid("e2e-search-shortcut:channel-b");
@@ -121,75 +122,114 @@ test("the shortcut reopens the last search and a channel searches itself", async
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
-    // A search with a filter becomes the last search.
-    await browser("open", `${origin}${workspacePath}/search`);
+    // Many later messages, so the oldest is far outside what a channel opens on.
+    const oldWord = "最早样本";
+    const old = await db.message.create({
+      data: {
+        conversationId: channelB,
+        workspaceId,
+        senderMemberId: memberB.id,
+        body: oldWord,
+        sequence: 2,
+      },
+    });
+    await db.message.createMany({
+      data: Array.from({ length: 400 }, (_, index) => ({
+        conversationId: channelB,
+        workspaceId,
+        senderMemberId: memberB.id,
+        body: `filler ${index}`,
+        sequence: index + 3,
+      })),
+    });
+    const channelPath = `${workspacePath}/channel/${channelA}`;
+    const onChannelA = `[...document.querySelectorAll("h1")].some((h) => h.textContent === "#e2e-shortcut-a")`;
+
+    await browser("open", `${origin}${channelPath}`);
+    await waitFor(onChannelA);
     await browser("eval", "localStorage.clear()");
-    await browser(
-      "open",
-      `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}&range=7d`,
-    );
-    await waitFor(`document.querySelectorAll("main ol li").length === 2`);
-    // The box shows the shortcut.
-    expect(await evaluate<string>(`document.querySelector("main").innerText`)).toContain("⌘K");
 
-    // From another page, the shortcut reopens it.
-    await browser("open", `${origin}${workspacePath}/channel/${channelA}`);
-    await waitFor(
-      `[...document.querySelectorAll("h1")].some((h) => h.textContent === "#e2e-shortcut-a")`,
-    );
+    // The shortcut opens over the page, focus in the box; the page's address does not change.
     await browser("press", "Meta+k");
-    await waitFor(`location.pathname === "${workspacePath}/search"`);
-    await waitFor(`${param("q")} === ${JSON.stringify(phrase)} && ${param("range")} === "7d"`);
-    await waitFor(`${box}.value === ${JSON.stringify(phrase)}`);
-    // The reopened text is selected, ready to be typed over.
-    await waitFor(
-      `document.activeElement === ${box} && ${box}.selectionStart === 0 && ${box}.selectionEnd === ${phrase.length}`,
-    );
+    await waitFor(`${box} !== null && document.activeElement === ${box}`);
+    expect(await evaluate<string>("location.pathname")).toBe(channelPath);
+    await browser("screenshot", join(artifacts, "open.png"));
 
-    // On the search page it puts the caret back in the box with the text selected.
+    // Typing searches. Down walks the results with real focus, Up returns to the box.
+    await browser("fill", 'input[type="search"]', phrase);
+    await waitFor(`${hits} === 2`);
+    await browser("screenshot", join(artifacts, "results.png"));
+    await browser("press", "ArrowDown");
+    await waitFor(`document.activeElement === ${options}[1]`);
+    await browser("press", "ArrowUp");
+    await waitFor(`document.activeElement === ${options}[0]`);
+    await browser("press", "ArrowUp");
+    await waitFor(`document.activeElement === ${box}`);
+
+    // The shortcut while open puts the caret back with the text selected.
     await browser("eval", `${box}.blur()`);
     await browser("press", "Meta+k");
     await waitFor(
       `document.activeElement === ${box} && ${box}.selectionStart === 0 && ${box}.selectionEnd === ${phrase.length}`,
     );
 
-    // A stored last search with a value the page does not know keeps only what it knows.
-    const workspaceKey = `coforge:search-last:${workspaceId}:${DEV_BROWSER_USER.id}`;
-    await browser(
-      "eval",
-      `localStorage.setItem(${JSON.stringify(workspaceKey)}, JSON.stringify({ q: "kept", range: "forever", extra: "x" }))`,
-    );
-    await browser("open", `${origin}${workspacePath}/channel/${channelA}`);
-    await waitFor(
-      `[...document.querySelectorAll("h1")].some((h) => h.textContent === "#e2e-shortcut-a")`,
-    );
-    await browser("press", "Meta+k");
-    await waitFor(`location.pathname === "${workspacePath}/search" && ${param("q")} === "kept"`);
-    expect(await evaluate<string>("location.search")).toBe("?q=kept");
+    await browser("press", "Escape");
+    await waitFor(`${dialog} === null`);
 
-    // The rail's Search starts fresh.
-    await browser("click", `aside a[href="${workspacePath}/search"]`);
-    await waitFor(`location.search === "" && ${box}.value === ""`);
+    // Esc closes and hands focus back to where it was.
+    await browser("eval", `document.querySelector('[aria-label="Search this channel"]').focus()`);
+    await browser("press", "Meta+k");
+    await waitFor(`${box} !== null && document.activeElement === ${box}`);
+    await browser("press", "Escape");
+    await waitFor(
+      `${dialog} === null && document.activeElement === document.querySelector('[aria-label="Search this channel"]')`,
+    );
 
     // A channel's "Search this channel" limits search to it and waits for a query.
-    await browser("open", `${origin}${workspacePath}/channel/${channelA}`);
-    await waitFor(`document.querySelector('[aria-label="Search this channel"]') !== null`);
     await browser("click", '[aria-label="Search this channel"]');
     await waitFor(
-      `location.pathname === "${workspacePath}/search" && ${param("channelId")} === "${channelA}"`,
+      `[...document.querySelectorAll('[aria-label="Search filters"] button')].some((button) => button.textContent.includes("e2e-shortcut-a"))`,
     );
-    await waitFor(
-      `[...document.querySelectorAll('[aria-label="Search filters"] button')].some((button) => button.textContent.includes("#e2e-shortcut-a"))`,
-    );
-    expect(await evaluate<number>(`document.querySelectorAll("main ol li").length`)).toBe(0);
-    await browser("screenshot", join(artifacts, "channel-deferred.png"));
+    expect(await evaluate<number>(hits)).toBe(0);
     await browser("fill", 'input[type="search"]', phrase);
-    await waitFor(`document.querySelectorAll("main ol li").length === 1`);
+    await waitFor(`${hits} === 1`);
     expect(
       await evaluate<string>(
         `document.querySelector("[data-search-message-id]").dataset.searchMessageId`,
       ),
     ).toBe(inA.id);
+    await browser("press", "Escape");
+    await waitFor(`${dialog} === null`);
+
+    // The rail's Search opens the dialog fresh, staying on the page.
+    await browser("click", `aside a[href="${workspacePath}/search"]`);
+    await waitFor(`${box} !== null && ${box}.value === ""`);
+    expect(await evaluate<string>("location.pathname")).toBe(channelPath);
+    await browser("press", "Escape");
+    await waitFor(`${dialog} === null`);
+
+    // An old address opens the dialog with its search, over the Workspace.
+    await browser(
+      "open",
+      `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}&range=7d`,
+    );
+    await waitFor(`${box}?.value === ${JSON.stringify(phrase)} && ${hits} === 2`);
+    expect(await evaluate<string>("location.pathname")).not.toContain("/search");
+
+    // Enter on a far older message closes search and lands on it, on screen.
+    await browser("fill", 'input[type="search"]', oldWord);
+    await waitFor(
+      `${hits} === 1 && document.querySelector('[data-search-message-id="${old.id}"]') !== null`,
+    );
+    await waitFor(`document.activeElement === ${box}`);
+    await browser("press", "ArrowDown");
+    await browser("press", "ArrowUp");
+    await browser("press", "Enter");
+    await waitFor(`${dialog} === null && location.pathname.endsWith("/channel/${channelB}")`);
+    await waitFor(
+      `(() => { const row = [...document.querySelectorAll("main *")].find((el) => el.children.length === 0 && el.textContent === ${JSON.stringify(oldWord)}); if (!row) return false; const box = row.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight; })()`,
+    );
+    await browser("screenshot", join(artifacts, "landed.png"));
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation

@@ -13,7 +13,7 @@ import {
 } from "./search-memory";
 
 /**
- * The search page's remembered history and usage for one Workspace and viewer. Storage is the
+ * Search's remembered history and usage for one Workspace and viewer. Storage is the
  * source of truth: every change reads it afresh before writing, so two open search tabs never
  * overwrite each other, and a change made in another tab is picked up from its `storage` event.
  * `loaded` is false until the first read after mount (the server render has no storage).

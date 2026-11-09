@@ -58,11 +58,9 @@
   "search_clear_filters": "清除筛选",
   "search_no_matching_messages": "没有匹配的消息",
   "search_try_different_filters": "试试其他筛选组合。",
-  "search_entities_heading": "工作区内",
   "search_entity_channel": "群聊",
   "search_entity_computer": "电脑",
   "search_entity_agent": "Agent",
-  "search_entity_dm": "私聊",
   "search_no_messages_match": "没有匹配的消息。",
   "search_history_heading": "搜索历史",
   "search_history_clear": "清除",
@@ -70,9 +68,5 @@
   "search_frequent_heading": "常用",
   "search_frequent_empty": "你从搜索中打开过的群聊、Agent 和私聊会显示在这里。",
   "search_frequent_failed": "无法加载常用列表。",
-  "search_this_channel": "搜索此群聊",
-  "search_preview": "搜索预览",
-  "search_preview_failed": "无法加载这个会话。",
-  "search_back_to_results": "返回搜索结果",
-  "search_preview_loading": "正在加载会话…"
+  "search_this_channel": "搜索此群聊"
 }

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SearchLg, XClose } from "@untitledui/icons";
+import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -14,12 +15,12 @@ import {
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import { m } from "#src/paraglide/messages";
 import type { SearchEntity } from "./search-entities";
-import { ENTITY_CARD_CLASS, SearchEntityRow } from "./search-entity-list";
+import { SEARCH_HEADING_CLASS, SEARCH_ROW_CLASS, SearchEntityRow } from "./search-entity-list";
 import { frequentEntities, type RememberedEntity, type SearchUsage } from "./search-memory";
 import { searchDirectoryQuery } from "./search-queries";
 
 /**
- * The search page with nothing typed and no filter: the viewer's recent searches and the places
+ * The search dialog with nothing typed and no filter: the viewer's recent searches and the places
  * they open most from search, or a prompt when there are neither yet.
  */
 export function SearchHome({
@@ -50,7 +51,7 @@ export function SearchHome({
 
   if (history.length === 0 && frequent.entities.length === 0 && !frequent.failed) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="py-10">
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -65,29 +66,29 @@ export function SearchHome({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-page py-4">
+    <div className="flex flex-col gap-2 p-2">
       {history.length > 0 && (
-        <section aria-labelledby="search-history-heading" className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2">
-            <h2 id="search-history-heading" className="text-sm font-semibold text-secondary">
+        <section aria-labelledby="search-history-heading" className="flex flex-col">
+          <div className="flex items-center justify-between gap-2 pr-2">
+            <h2 id="search-history-heading" className={SEARCH_HEADING_CLASS}>
               {m.search_history_heading()}
             </h2>
             <Button size="sm" color="link-gray" onClick={onClearHistory}>
               {m.search_history_clear()}
             </Button>
           </div>
-          <ul className="flex flex-wrap gap-2">
+          <ul className="flex flex-col">
             {history.map((query) => (
-              <li key={query} className="flex items-center gap-0.5">
-                <Button
-                  size="sm"
-                  color="secondary"
+              <li key={query} className="flex items-center">
+                <AriaButton
                   data-search-history={query}
-                  className="max-w-[16rem]"
-                  onClick={() => onSearch(query)}
+                  data-search-option=""
+                  className={SEARCH_ROW_CLASS}
+                  onPress={() => onSearch(query)}
                 >
-                  <span className="truncate">{query}</span>
-                </Button>
+                  <SearchLg aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+                  <span className="truncate text-sm text-primary">{query}</span>
+                </AriaButton>
                 <ButtonUtility
                   icon={XClose}
                   size="xs"
@@ -101,31 +102,28 @@ export function SearchHome({
           </ul>
         </section>
       )}
-      <section aria-labelledby="search-frequent-heading" className="flex flex-col gap-2">
-        <h2 id="search-frequent-heading" className="text-sm font-semibold text-secondary">
+      <section aria-labelledby="search-frequent-heading" className="flex flex-col">
+        <h2 id="search-frequent-heading" className={SEARCH_HEADING_CLASS}>
           {m.search_frequent_heading()}
         </h2>
         {frequent.failed ? (
-          <p role="alert" className="text-sm text-error-primary">
+          <p role="alert" className="px-2 py-1 text-sm text-error-primary">
             {m.search_frequent_failed()}
           </p>
         ) : frequent.entities.length > 0 ? (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <ul className="flex flex-col">
             {frequent.entities.map((entity) => (
               <li key={`${entity.kind}:${entity.id}`}>
                 <SearchEntityRow
                   entity={entity}
                   display={displays.get(entity.id)}
-                  className={ENTITY_CARD_CLASS}
                   onOpen={() => onOpen(entity)}
                 />
               </li>
             ))}
           </ul>
         ) : (
-          <p className="rounded-xl border border-dashed border-secondary p-4 text-sm text-tertiary">
-            {m.search_frequent_empty()}
-          </p>
+          <p className="px-2 py-1 text-sm text-tertiary">{m.search_frequent_empty()}</p>
         )}
       </section>
     </div>

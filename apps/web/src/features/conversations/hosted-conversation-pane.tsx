@@ -51,7 +51,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   ref?: Ref<HTMLElement>;
 }) {
   const [failed, setFailed] = useState(false);
-  // Only a host with a list to go back to (Activity, Search) has a back arrow over the failure,
+  // Only a host with a list to go back to (Activity) has a back arrow over the failure,
   // in a bar shown only where the arrow is; below the width its list sits beside the pane from,
   // no divider.
   const list = useContext(ConversationListContext);

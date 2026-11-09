@@ -4,26 +4,22 @@ import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { Link } from "@tanstack/react-router";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
-import { Badge } from "#src/components/base/badges/badges";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
+import { Badge } from "#src/components/base/badges/badges";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { computerIcon } from "#src/features/computers/computer-identity";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { m } from "#src/paraglide/messages";
-import { useResultClick } from "./search-click";
 import type { SearchEntity } from "./search-entities";
-import { isPreviewed, useSearchPreview } from "./search-preview-context";
 
-/** A compact row in the matches list. */
-export const ENTITY_ROW_CLASS =
-  "flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 outline-focus-ring transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2";
+export const SEARCH_HEADING_CLASS = "px-2 py-1 text-xs text-tertiary";
 
-/** A card on the empty page's Frequently used grid. */
-export const ENTITY_CARD_CLASS =
-  "flex min-w-0 items-center gap-3 rounded-xl border border-secondary bg-primary p-3 outline-focus-ring transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2";
+/** A row in the dialog's lists; the first shows as chosen while the box has focus. */
+export const SEARCH_ROW_CLASS =
+  "flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-hidden transition-colors hover:bg-secondary focus-visible:bg-secondary group-has-[input:focus]/search:data-[search-first]:bg-secondary";
 
 /**
  * An entity as a link to where it opens: a channel itself; the viewer's own Agent its direct
@@ -34,15 +30,12 @@ export const ENTITY_CARD_CLASS =
 export function SearchEntityRow({
   entity,
   display,
-  className,
   onOpen,
 }: {
   entity: SearchEntity;
   display: AgentDisplaySnapshot | undefined;
-  className: string;
-  onOpen?: () => void;
+  onOpen: () => void;
 }) {
-  const { previewed, preview } = useSearchPreview();
   const workspaceSlug = useWorkspaceSlug();
   // The viewer's DM with an Agent they may message, once there is one, or with a member.
   const dmId =
@@ -51,25 +44,14 @@ export function SearchEntityRow({
       : entity.kind === "agent" && entity.canMessage
         ? entity.dmId
         : null;
-  // A channel or a DM previews; others just open.
-  const target =
-    entity.kind === "channel"
-      ? ({ kind: "channel", id: entity.id } as const)
-      : dmId
-        ? ({ kind: "dm", id: dmId } as const)
-        : undefined;
-  const onClick = useResultClick({
-    onPreview: preview && target ? () => preview(target) : undefined,
-    onOpened: () => onOpen?.(),
-  });
   const props = {
     // `relative` keeps an Agent's `sr-only` status text inside its row. Unpositioned, it escaped
-    // the page's scroll box and stretched the document.
-    className: `relative ${className} aria-[current=true]:bg-secondary`,
-    onClick,
-    "aria-current": target && isPreviewed(previewed, target) ? ("true" as const) : undefined,
+    // the dialog's scroll box and stretched the document.
+    className: `relative ${SEARCH_ROW_CLASS}`,
+    onClick: onOpen,
     // A middle click opens a new tab without a click event; it is still an open.
-    onAuxClick: (event: { button: number }) => event.button === 1 && onOpen?.(),
+    onAuxClick: (event: { button: number }) => event.button === 1 && onOpen(),
+    "data-search-option": "",
     "data-search-entity": `${entity.kind}:${entity.id}`,
     children: <EntityContent entity={entity} display={display} />,
   };
@@ -112,12 +94,9 @@ function EntityContent({
   return (
     <>
       <EntityMark entity={entity} display={display} />
-      <span className="min-w-0 truncate text-sm font-semibold text-primary">
+      <span className="min-w-0 truncate text-sm text-primary">
         {entity.kind === "channel" ? channelLabel(entity) : entity.name}
       </span>
-      <Badge size="sm" color="gray" type="modern" className="shrink-0">
-        {KIND_LABEL[entity.kind]()}
-      </Badge>
       {entity.kind === "channel" && entity.archived && (
         <Badge size="sm" color="gray" type="modern" className="shrink-0">
           {m.search_archived()}
@@ -128,12 +107,11 @@ function EntityContent({
   );
 }
 
-const KIND_LABEL: Record<SearchEntity["kind"], () => string> = {
-  channel: () => m.search_entity_channel(),
-  computer: () => m.search_entity_computer(),
-  agent: () => m.search_entity_agent(),
-  dm: () => m.search_entity_dm(),
-};
+const GROUPS = [
+  { kind: "channel", heading: () => m.search_entity_channel() },
+  { kind: "agent", heading: () => m.search_entity_agent() },
+  { kind: "computer", heading: () => m.search_entity_computer() },
+] as const;
 
 /** The channels, Computers and Agents a query names, listed above the messages. */
 export function SearchEntityList({
@@ -144,33 +122,34 @@ export function SearchEntityList({
   onOpen: (entity: SearchEntity) => void;
 }) {
   const displays = useAgentDisplays();
-  return (
-    <section aria-labelledby="search-entities-heading" className="flex flex-col gap-2 px-page pt-4">
-      <h2 id="search-entities-heading" className="text-sm font-semibold text-secondary">
-        {m.search_entities_heading()}
-      </h2>
-      <ul className="flex flex-col gap-1">
-        {entities.map((entity) => (
-          <li key={`${entity.kind}:${entity.id}`}>
-            <SearchEntityRow
-              entity={entity}
-              display={displays.get(entity.id)}
-              className={ENTITY_ROW_CLASS}
-              onOpen={() => onOpen(entity)}
-            />
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
+  return GROUPS.map(({ kind, heading }) => {
+    const rows = entities.filter((entity) => entity.kind === kind);
+    if (rows.length === 0) return null;
+    return (
+      <section key={kind} aria-label={heading()} className="flex flex-col px-2 pt-2">
+        <h2 className={SEARCH_HEADING_CLASS}>{heading()}</h2>
+        <ul className="flex flex-col">
+          {rows.map((entity) => (
+            <li key={`${entity.kind}:${entity.id}`}>
+              <SearchEntityRow
+                entity={entity}
+                display={displays.get(entity.id)}
+                onOpen={() => onOpen(entity)}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  });
 }
 
-/** The line after the name: what a channel is for, where a Computer runs, an Agent's `@handle`.
+/** The line after the name: where a Computer runs, an Agent's `@handle`.
  * A member has none: their username is not shown. */
 function entitySubtitle(entity: SearchEntity): string | undefined {
   switch (entity.kind) {
     case "channel":
-      return entity.description;
+      return undefined;
     case "computer":
       return entity.hostname;
     case "agent":

@@ -18,7 +18,10 @@ import { Button as AriaButton } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
-import { MobileDrawerProvider } from "#src/components/layout/sidebar/mobile-header";
+import {
+  MobileDrawerProvider,
+  useCloseMobileDrawer,
+} from "#src/components/layout/sidebar/mobile-header";
 import {
   SidebarExpanded,
   SidebarMobileDrawer,
@@ -40,7 +43,8 @@ import {
 import type { CreateWorkspaceInput } from "#src/features/workspaces/create-workspace-form";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
-import { workspacePath } from "#src/features/workspaces/workspace-url";
+import { useOpenSearch } from "#src/features/search/search-dialog-context";
+import { splitWorkspacePath, workspacePath } from "#src/features/workspaces/workspace-url";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 export type AppUser = {
@@ -133,6 +137,8 @@ function useNavItems(
  * this routes same-origin, unmodified clicks through the router instead. */
 function useSpaNavigation() {
   const router = useRouter();
+  const openSearch = useOpenSearch();
+  const closeDrawer = useCloseMobileDrawer();
   return useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
@@ -144,9 +150,25 @@ function useSpaNavigation() {
       const url = new URL(anchor.href, window.location.href);
       if (url.origin !== window.location.origin) return;
       event.preventDefault();
+      // Search is a dialog over the page, not a place to go.
+      if (splitWorkspacePath(url.pathname)?.rest === "/search") {
+        closeDrawer();
+        openSearch();
+        return;
+      }
       void router.navigate({ href: url.pathname + url.search + url.hash });
     },
-    [router],
+    [router, openSearch, closeDrawer],
+  );
+}
+
+/** Inside the drawer's provider, which its Search link closes. */
+function SidebarLinks({ children }: { children: React.ReactNode }) {
+  const onClickCapture = useSpaNavigation();
+  return (
+    <div onClickCapture={onClickCapture} className="contents">
+      {children}
+    </div>
   );
 }
 
@@ -207,7 +229,6 @@ export function AppShell({
       ? item.sections.includes(section)
       : pathname === item.bareHref || pathname.startsWith(`${item.bareHref}/`),
   )?.href;
-  const onSidebarClickCapture = useSpaNavigation();
   const workspaceSwitcher = (
     <WorkspaceSwitcher
       workspaces={workspaces}
@@ -239,7 +260,7 @@ export function AppShell({
           {/* Each sidebar is `fixed` + a spacer div reserving its width in flow;
           `contents` keeps that pair as direct flex items of this `lg:flex` shell. The drawer is
           mobile only; on desktop `sidebar-collapsed` on <html> picks the expanded one or the rail. */}
-          <div onClickCapture={onSidebarClickCapture} className="contents">
+          <SidebarLinks>
             <SidebarMobileDrawer
               activeUrl={activeUrl}
               items={navItems}
@@ -272,7 +293,7 @@ export function AppShell({
                 </div>
               }
             />
-          </div>
+          </SidebarLinks>
 
           {/* On desktop the content is one white card inset 8px from the sidebar's background; a page
             made of several panels (Chat) marks itself `data-panel-cards` and draws a card per panel. */}

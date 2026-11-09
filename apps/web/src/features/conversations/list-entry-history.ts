@@ -7,7 +7,7 @@ import type { ListBesideFrom } from "./conversation-list-button";
 
 /**
  * History for a page whose conversation (`open` in its URL) takes the place of its list below
- * `listBesideFrom` (Activity, Search): opening one from the list there pushes an entry, so a
+ * `listBesideFrom` (Activity): opening one from the list there pushes an entry, so a
  * phone's back gesture returns to the list, and closing it goes back to the list's entry, past
  * what the conversation pushed (a thread, a profile), rather than stacking a copy of the list.
  * `listParams` are the search params that are the list's own (its view, its query): an entry is

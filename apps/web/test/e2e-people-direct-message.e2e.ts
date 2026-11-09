@@ -11,8 +11,8 @@ import { peopleDirectKey } from "#src/features/conversations/direct-key";
  * A direct message between Workspace members. A collaborator's card on the Members page opens the
  * viewer's DM with them: its page names the member in the header with the Chat / Tasks / Files
  * tabs, takes a message, shows it again after a reload, and is read. The viewer's own card opens their DM
- * with themself, marked "(you)". A search result posted there names the member and previews that
- * DM beside the results; opening it makes the DM a frequently used place on the empty search page.
+ * with themself, marked "(you)". A search result posted there names the member and opens that DM
+ * at the message; opening it makes the DM a frequently used place in the empty search dialog.
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
  * against the dev database. It seeds one member and deletes what it created. Screenshots are
@@ -35,7 +35,9 @@ function seededUuid(key: string): string {
 }
 
 test("members open a direct message with each other, and with themselves", async () => {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const db = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: databaseUrl }),
+  });
   const session = `people-dm-${process.pid}`;
   async function browser(...args: string[]) {
     const child = Bun.spawn([browserPath!, "--session", session, ...args], {
@@ -62,7 +64,7 @@ test("members open a direct message with each other, and with themselves", async
         timer = setTimeout(() => {
           void browser(
             "eval",
-            `location.pathname + location.search + " | " + document.querySelector("main")?.innerText.slice(0, 600)`,
+            `location.pathname + location.search + " | " + (document.querySelector('[role="dialog"]') ?? document.querySelector("main"))?.innerText.slice(0, 600)`,
           )
             .catch((error: unknown) => String(error))
             .then((page) =>
@@ -72,8 +74,6 @@ test("members open a direct message with each other, and with themselves", async
       }),
     ]);
   };
-  const param = (name: string) =>
-    `(new URLSearchParams(location.search).get(${JSON.stringify(name)}) ?? "")`;
   /** The "Private chat" button on the Members page card of `name`. */
   const cardChat = (name: string) =>
     `[...([...document.querySelectorAll('[role="row"]')].find((card) => card.querySelector("h2")?.textContent.startsWith(${JSON.stringify(name)}))?.querySelectorAll("button") ?? [])].find((button) => button.textContent.trim() === "Private chat")`;
@@ -87,9 +87,9 @@ test("members open a direct message with each other, and with themselves", async
   /** The conversation's header: the one carrying the Chat / Tasks / Files tabs. */
   const conversationHeader = `[...document.querySelectorAll("main header")].find((header) => header.querySelector('[role="tab"]'))`;
   const headerName = `${conversationHeader}?.querySelector("h1")?.textContent.trim()`;
-  const PREVIEW = '[aria-label="Search preview"]';
-  /** A Frequently used card on the empty search page. */
-  const FREQUENT = '[aria-labelledby="search-frequent-heading"] [data-search-entity]';
+  /** A Frequently used row in the empty search dialog. */
+  const FREQUENT =
+    '[role="dialog"] [aria-labelledby="search-frequent-heading"] [data-search-entity]';
 
   const peerId = seededUuid("e2e-people-direct-message:peer");
   const peerName = "People Peer";
@@ -105,12 +105,20 @@ test("members open a direct message with each other, and with themselves", async
     });
     workspaceId = membership.workspaceId;
     const workspacePath = `/en/w/${membership.workspace.slug}`;
-    await db.conversation.deleteMany({ where: { workspaceId, directKey: dmKey } });
+    await db.conversation.deleteMany({
+      where: { workspaceId, directKey: dmKey },
+    });
     selfDmExisted =
-      (await db.conversation.count({ where: { workspaceId, directKey: selfKey } })) > 0;
+      (await db.conversation.count({
+        where: { workspaceId, directKey: selfKey },
+      })) > 0;
     await db.user.upsert({
       where: { id: peerId },
-      create: { id: peerId, username: "e2e-people-dm-peer", displayName: peerName },
+      create: {
+        id: peerId,
+        username: "e2e-people-dm-peer",
+        displayName: peerName,
+      },
       update: { displayName: peerName },
     });
     await db.workspaceMembership.upsert({
@@ -129,7 +137,9 @@ test("members open a direct message with each other, and with themselves", async
     await browser("screenshot", join(artifacts, "members.png"));
     await pressCardChat(peerName);
     await waitFor(`location.pathname.startsWith("${workspacePath}/dm/")`);
-    const dm = await db.conversation.findFirstOrThrow({ where: { workspaceId, directKey: dmKey } });
+    const dm = await db.conversation.findFirstOrThrow({
+      where: { workspaceId, directKey: dmKey },
+    });
     expect(await evaluate<string>("location.pathname")).toBe(`${workspacePath}/dm/${dm.id}`);
 
     // Its header names the member and carries the conversation tabs.
@@ -177,33 +187,32 @@ test("members open a direct message with each other, and with themselves", async
     expect(await evaluate<string>(`${conversationHeader}?.textContent`)).toContain("(you)");
     await browser("screenshot", join(artifacts, "self-dm.png"));
 
-    // A search result from the DM names the member it is with and previews that DM.
+    // A search result from the DM names the member it is with and opens that DM at the message.
     await browser("open", `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}`);
-    const row = `[data-search-message-id="${sent.id}"]`;
+    const row = `[role="dialog"] [data-search-message-id="${sent.id}"]`;
     await waitFor(`document.querySelector('${row}') !== null`);
     expect(await evaluate<string>(`document.querySelector('${row}').textContent`)).toContain(
       peerName,
     );
+    await browser("screenshot", join(artifacts, "search-result.png"));
     await browser("click", row);
-    await waitFor(`${param("open")} === "dm:${dm.id}" && ${param("msg")} === "${sent.id}"`);
     await waitFor(
-      `document.querySelector('${PREVIEW} header h1')?.textContent.startsWith(${JSON.stringify(peerName)})`,
+      `location.pathname === "${workspacePath}/dm/${dm.id}" && document.querySelector('[role="dialog"]') === null`,
     );
-    await waitFor(`document.querySelector('${PREVIEW} li[data-message-id="${sent.id}"]') !== null`);
-    await browser("screenshot", join(artifacts, "search-preview.png"));
+    await waitFor(`${headerName}?.startsWith(${JSON.stringify(peerName)})`);
+    await waitFor(`document.querySelector('li[data-message-id="${sent.id}"]') !== null`);
 
-    // Opening that result remembers the DM as a frequently used place: the empty search page
+    // Opening that result remembers the DM as a frequently used place: the empty search dialog
     // lists it under the member's name, and it opens the DM.
-    await browser("eval", "localStorage.clear()");
-    await browser("dblclick", row);
-    await waitFor(`location.pathname === "${workspacePath}/dm/${dm.id}"`);
     await browser("open", `${origin}${workspacePath}/search`);
     const frequentDm = `document.querySelector('${FREQUENT}[data-search-entity="dm:${dm.id}"]')`;
     await waitFor(`${frequentDm} !== null`);
     expect(await evaluate<string>(`${frequentDm}.textContent`)).toContain(peerName);
     await browser("screenshot", join(artifacts, "search-frequent.png"));
-    await browser("dblclick", `${FREQUENT}[data-search-entity="dm:${dm.id}"]`);
-    await waitFor(`location.pathname === "${workspacePath}/dm/${dm.id}"`);
+    await browser("click", `${FREQUENT}[data-search-entity="dm:${dm.id}"]`);
+    await waitFor(
+      `location.pathname === "${workspacePath}/dm/${dm.id}" && document.querySelector('[role="dialog"]') === null`,
+    );
   } finally {
     await browser("close").catch(() => undefined);
     if (workspaceId) {

@@ -16,7 +16,7 @@ import {
 } from "./conversation-list-width";
 
 /** The width the column shows, measured on the handle's parent (the column): less than the kept
- * one when the page caps it (Activity and Search give the conversation at least half the page), so
+ * one when the page caps it (Activity gives the conversation at least half the page), so
  * a drag or a key starts from what is seen. Its layout width, so a dialog still scaling in does
  * not skew it. */
 function shownWidth(column: ListColumn, handle: HTMLElement): number {

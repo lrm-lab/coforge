@@ -30,8 +30,8 @@ export const ConversationListContext = createContext<{
 } | null>(null);
 
 /**
- * The list controls of a page whose list stays mounted under its open conversation (Activity,
- * Search): nothing closes the list, and the back arrow closes the conversation (`onClose`).
+ * The list controls of a page whose list stays mounted under its open conversation (Activity):
+ * nothing closes the list, and the back arrow closes the conversation (`onClose`).
  */
 export function MountedListControls({
   listBesideFrom,

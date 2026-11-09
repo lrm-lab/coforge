@@ -60,11 +60,9 @@
   "search_clear_filters": "Clear all",
   "search_no_matching_messages": "No matching messages",
   "search_try_different_filters": "Try a different filter set.",
-  "search_entities_heading": "In this Workspace",
-  "search_entity_channel": "Channel",
-  "search_entity_computer": "Computer",
-  "search_entity_agent": "Agent",
-  "search_entity_dm": "Direct message",
+  "search_entity_channel": "Channels",
+  "search_entity_computer": "Computers",
+  "search_entity_agent": "Agents",
   "search_no_messages_match": "No messages match.",
   "search_history_heading": "Search history",
   "search_history_clear": "Clear",
@@ -72,9 +70,5 @@
   "search_frequent_heading": "Frequently used",
   "search_frequent_empty": "Channels, Agents and direct messages you open from search appear here.",
   "search_frequent_failed": "Could not load your frequently used places.",
-  "search_this_channel": "Search this channel",
-  "search_preview": "Search preview",
-  "search_preview_failed": "This conversation could not be loaded.",
-  "search_back_to_results": "Back to results",
-  "search_preview_loading": "Loading the conversation…"
+  "search_this_channel": "Search this channel"
 }
