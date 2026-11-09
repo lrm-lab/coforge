@@ -11,7 +11,8 @@ import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
  */
 
 /**
- * A top-level message `m` unread for the member row `cm`: someone else's message past the read
+ * A message `m` unread for the member row `cm` (callers pick which messages: a channel row's
+ * top-level ones, a DM row's all, `ROW_MESSAGES_SQL`): someone else's message past the read
  * cursor, or at or past the mark-as-unread marker. Written as one lower bound (`LEAST` ignores a
  * NULL marker, leaving the read cursor) so a per-conversation count is an index range on
  * `messages(conversationId, sequence)` over the unread tail, not a scan of every message. Every
@@ -21,8 +22,17 @@ export const HUMAN_UNREAD_BASE_SQL = Prisma.sql`m."sequence" > LEAST(cm."readThr
   AND m."senderMemberId" IS NOT NULL
   AND m."senderMemberId" <> cm."id"`;
 
-/** Where a person stands in one of their conversations: how many of its top-level messages are
- * unread for them (the badge, by the same rule `PublicChannels.list` counts every row's with), and
+/**
+ * The messages a conversation's sidebar row stands for, for a conversation `c` and its messages
+ * `m`: a channel's top-level messages, and every message of a direct conversation, thread replies
+ * included. In a DM the other side replying in a thread is still talking to you, so the row counts
+ * it (Slack notifies every thread reply in a one-to-one DM; Frank, 2026-11-09, task #734). A
+ * channel's thread replies stay with their thread and Activity.
+ */
+export const ROW_MESSAGES_SQL = Prisma.sql`(m."threadRootId" IS NULL OR c."directKey" IS NOT NULL)`;
+
+/** Where a person stands in one of their conversations: how many of the messages its row stands
+ * for (`ROW_MESSAGES_SQL`) are unread for them (the badge, by the same rule `PublicChannels.list` counts every row's with), and
  * their read cursor (`readThroughSequence`), which a read-cursor move announces. */
 export type HumanReadState = { unreadCount: number; readThroughSequence: number };
 export type HumanReadAdvance = HumanReadState & { memberId: string; readThroughAdvanced: boolean };
@@ -56,11 +66,12 @@ export async function humanReadStates(
     SELECT cm."conversationId" AS "conversationId", unread."count" AS "count",
       cm."readThroughSequence" AS "readThroughSequence"
     FROM "conversation_members" cm
+    JOIN "conversations" c ON c."id" = cm."conversationId"
     CROSS JOIN LATERAL (
       SELECT COUNT(*)::int AS "count"
       FROM "messages" m
       WHERE m."conversationId" = cm."conversationId"
-        AND m."threadRootId" IS NULL
+        AND ${ROW_MESSAGES_SQL}
         AND ${HUMAN_UNREAD_BASE_SQL}
     ) unread
     WHERE cm."userId" = ${userId}::uuid
@@ -200,8 +211,8 @@ export function markThreadDoneSql(
 }
 
 /**
- * Reads every conversation one person belongs to through its newest top-level message posted at
- * or before `before`, consuming mark-as-unread markers at or below that point. Touches only the
+ * Reads every conversation one person belongs to through the newest message its row stands for
+ * (`ROW_MESSAGES_SQL`) posted at or before `before`, consuming mark-as-unread markers at or below that point. Touches only the
  * rows that move, and returns each one's conversation, whether it is a channel and whether it is a task's own
  * conversation (hidden: no badge to move).
  */
@@ -215,7 +226,7 @@ export function markConversationsReadSql(workspaceId: string, userId: string, be
     FROM "conversations" c
     CROSS JOIN LATERAL (
       SELECT m."sequence" FROM "messages" m
-      WHERE m."conversationId" = c."id" AND m."threadRootId" IS NULL AND m."createdAt" <= ${before}
+      WHERE m."conversationId" = c."id" AND ${ROW_MESSAGES_SQL} AND m."createdAt" <= ${before}
       ORDER BY m."sequence" DESC LIMIT 1
     ) latest
     WHERE c."id" = cm."conversationId"

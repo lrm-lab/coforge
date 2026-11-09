@@ -14,9 +14,11 @@ import {
 
 /**
  * The recipients of one message's `conversation.activity.v1`: the people who may read it and whose
- * sidebar or Activity dot it may move. A channel's active human members; for a thread reply, the
- * thread's human followers instead (a reply never changes a row, and only a follower's Activity
- * lists the thread); for a direct conversation, the people already named by its signal scope.
+ * sidebar or Activity dot it may move. A channel's active human members; for a channel's thread
+ * reply, the thread's human followers instead (it never changes a row, and only a follower's
+ * Activity lists the thread); for a direct conversation, the people its signal scope names (both
+ * people, or the person in a DM with an Agent), thread replies included, since its row counts them and every thread in it is theirs
+ * (`ROW_MESSAGES_SQL`, task #734).
  *
  * The viewer's own message is in the list: their other tabs and devices must move the row too, and
  * the page is what ignores it for the badge.
@@ -25,6 +27,8 @@ async function activityRecipients(
   db: PrismaClient,
   message: ConversationRealtimeMessage,
 ): Promise<string[]> {
+  if (message.directUserIds) return [...new Set(message.directUserIds)];
+  if (message.userId) return [message.userId];
   if (message.threadRootId) {
     const followers = await db.threadFollow.findMany({
       where: { rootMessageId: message.threadRootId, conversationId: message.conversationId },
@@ -32,8 +36,6 @@ async function activityRecipients(
     });
     return [...new Set(followers.flatMap((row) => (row.member.userId ? [row.member.userId] : [])))];
   }
-  if (message.directUserIds) return [...new Set(message.directUserIds)];
-  if (message.userId) return [message.userId];
   const members = await db.conversationMember.findMany({
     where: { conversationId: message.conversationId, leftAt: null, userId: { not: null } },
     select: { userId: true },

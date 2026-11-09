@@ -79,11 +79,17 @@ export function countsForViewer(event: UnreadEventInput, viewerId: string | unde
   return (event.senderKind ?? "user") !== "system" && !isOwnMessage(event, viewerId);
 }
 
+/** Whether a message counts on its conversation's sidebar row: a channel's top-level messages,
+ * and every message of a direct conversation, thread replies included (the server's
+ * `ROW_MESSAGES_SQL`, task #734). */
+export function countsOnRow(event: Pick<UnreadEventInput, "threadRootId" | "kind">): boolean {
+  return !event.threadRootId || event.kind === "direct";
+}
+
 /**
- * Applies one `conversation.activity.v1` event to the sidebar's badges. Only a top-level message
- * in a not-currently-open conversation bumps one: a thread reply belongs to its thread target
- * (reading a thread never consumes the main conversation's unread), and the open conversation is
- * being read right now. A channel counts only while the viewer's channel list holds it; a direct
+ * Applies one `conversation.activity.v1` event to the sidebar's badges. Only a message its row
+ * stands for (`countsOnRow`) in a not-currently-open conversation bumps one: a channel's thread
+ * reply belongs to its thread target, and the open conversation is being read right now. A channel counts only while the viewer's channel list holds it; a direct
  * message counts even before its list has it, so a DM someone else started shows its badge at once.
  */
 export function applyUnreadEvent(
@@ -98,7 +104,7 @@ export function applyUnreadEvent(
   },
 ): UnreadCounts {
   if (event.conversationId === options.openConversationId) return current;
-  if (event.threadRootId) return current;
+  if (!countsOnRow(event)) return current;
   const key = event.conversationId;
   if ((event.kind ?? "channel") === "channel" && !options.conversations.has(key)) return current;
   const highWater = current[`${key}:seq`] ?? 0;
@@ -134,16 +140,16 @@ export function unknownAgentOf(
 /**
  * Which list a new message makes stale because the sidebar cannot write its row: one the viewer
  * closed, or a DM that started after the list was read. Such a message brings the chat in, so the
- * sidebar re-reads that one list. A listed chat, a thread reply and the viewer's own message never
- * do — the first two write their row from the event, and the server brings a closed chat back only
- * for someone else's message.
+ * sidebar re-reads that one list. A listed chat, a channel's thread reply and the viewer's own
+ * message never do — the first two write their row from the event, and the server brings a closed
+ * chat back only for someone else's message its row counts (`countsOnRow`).
  */
 export function closedConversationLists(
   event: UnreadEventInput,
   listed: ReadonlySet<string>,
   viewerId?: string,
 ): readonly ChatList[] {
-  if (event.threadRootId || listed.has(event.conversationId) || isOwnMessage(event, viewerId))
+  if (!countsOnRow(event) || listed.has(event.conversationId) || isOwnMessage(event, viewerId))
     return [];
   return event.kind === "direct" ? ["dms"] : ["channels"];
 }
@@ -312,7 +318,8 @@ export function sidebarRefreshQueue(read: (lists: ReadonlySet<ChatList>) => Prom
 /**
  * The highest top-level sequence in a loaded conversation page — the boundary "I have read
  * everything shown in the main pane". Thread replies never advance it. Shared by
- * the channel and DM routes so the two mark-read paths cannot drift.
+ * the channel and DM routes so the two mark-read paths cannot drift; a DM reads on through its
+ * shown threads' replies (`rowReadEnd`).
  */
 export function latestTopLevelSequence(
   messages: readonly { sequence: number; threadRootId?: string | null }[],
@@ -321,6 +328,26 @@ export function latestTopLevelSequence(
     (latest, message) => (message.threadRootId ? latest : Math.max(latest, message.sequence)),
     0,
   );
+}
+
+/**
+ * How far opening a conversation reads its row: a channel through its newest top-level message, a
+ * DM on through the newest reply of a thread it shows, since its row counts those replies too
+ * (`countsOnRow`). A reply arriving while the DM is open moves the end, so it is read at once
+ * rather than coming back as a badge once the viewer leaves.
+ */
+export function rowReadEnd(
+  page: {
+    messages: readonly { sequence: number; threadRootId?: string | null }[];
+    threads?: Readonly<Record<string, { lastReplySequence: number }>>;
+  },
+  direct: boolean,
+): number {
+  let end = latestTopLevelSequence(page.messages);
+  if (direct)
+    for (const summary of Object.values(page.threads ?? {}))
+      end = Math.max(end, summary.lastReplySequence);
+  return end;
 }
 
 /**

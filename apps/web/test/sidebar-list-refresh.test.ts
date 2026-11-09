@@ -34,7 +34,15 @@ test("a new top-level message in a chat the sidebar is not showing makes only th
     closedConversationLists({ ...message, conversationId: "dm-member", kind: "direct" }, listed),
   ).toEqual(["dms"]);
 
-  // Listed chats and thread replies do not: nothing new would appear in the list.
+  // A DM's thread reply counts on its row, so it brings a closed DM back too.
+  expect(
+    closedConversationLists(
+      { ...message, conversationId: "dm-closed", kind: "direct", threadRootId: "root-1" },
+      listed,
+    ),
+  ).toEqual(["dms"]);
+
+  // Listed chats and a channel's thread replies do not: nothing new would appear in the list.
   expect(closedConversationLists({ ...message, conversationId: "channel-1" }, listed)).toEqual([]);
   expect(
     closedConversationLists({ ...message, conversationId: "dm-listed", kind: "direct" }, listed),

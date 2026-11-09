@@ -212,7 +212,7 @@ test("a preference on anything but the viewer's own DM answers NOT_FOUND and cha
   ).toBe(0);
 });
 
-test("a closed DM comes back when someone other than the viewer posts a top-level message after the close", async () => {
+test("a closed DM comes back when someone other than the viewer posts after the close, in a thread too", async () => {
   const conversations = new DirectConversations(db);
   const mo = await newMember("mo");
   const { conversationId } = await conversations.open(workspaceId, mo.id, { userId: lin.id });
@@ -243,12 +243,12 @@ test("a closed DM comes back when someone other than the viewer posts a top-leve
   await conversations.setHidden(workspaceId, mo.id, conversationId, true);
   // A message reopens a closed DM only when it is newer than `hiddenAt`.
   await backdateClose(conversationId, mo.id);
-  // The viewer's own message and a reply in a thread leave it closed.
+  // The viewer's own message leaves it closed.
   await send(mo.id, "my own");
-  await send(lin.id, "a reply", root.id);
   expect(await closed()).toEqual([conversationId]);
 
-  await send(lin.id, "after the close");
+  // Someone else's message brings it back, a reply in a thread too: the row counts it.
+  await send(lin.id, "a reply", root.id);
   expect(await closed()).toEqual([]);
 
   // A member's DM with themself has no one else to bring it back.

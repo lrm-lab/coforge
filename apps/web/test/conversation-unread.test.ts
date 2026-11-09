@@ -8,6 +8,7 @@ import {
   replaceUnreadCounts,
   unreadIdsToKeep,
   latestTopLevelSequence,
+  rowReadEnd,
   persistReadCursor,
 } from "#src/features/conversations/conversation-unread";
 import {
@@ -155,13 +156,13 @@ describe("applyUnreadEvent", () => {
       ).toEqual({});
   });
 
-  test("never counts a thread reply in a DM", () => {
+  test("counts a thread reply in a DM, as its row does", () => {
     const next = applyUnreadEvent(
       {},
       { conversationId: "dm-conversation", sequence: 4, kind: "direct", threadRootId: "r1" },
       { conversations: new Set() },
     );
-    expect(next).toEqual({});
+    expect(next).toEqual({ "dm-conversation": 1, "dm-conversation:seq": 4 });
   });
 });
 
@@ -272,6 +273,21 @@ describe("latestTopLevelSequence", () => {
 
   test("is zero for an empty page", () => {
     expect(latestTopLevelSequence([])).toBe(0);
+  });
+});
+
+describe("rowReadEnd", () => {
+  const page = {
+    messages: [{ sequence: 3 }, { sequence: 5 }],
+    threads: { root: { lastReplySequence: 9 } },
+  };
+
+  test("reads a DM on through the newest reply of a thread it shows", () => {
+    expect(rowReadEnd(page, true)).toBe(9);
+  });
+
+  test("reads a channel through its newest top-level message", () => {
+    expect(rowReadEnd(page, false)).toBe(5);
   });
 });
 

@@ -21,7 +21,7 @@ import type { ConversationPageTarget } from "./conversation-page-loader";
 import type { ConversationPageSearch } from "./conversation-page-search";
 import type { DirectConversationView } from "./conversation-types";
 import { markOpenReadStale } from "./conversation-open-query";
-import { latestTopLevelSequence, persistReadCursor } from "./conversation-unread";
+import { persistReadCursor, rowReadEnd } from "./conversation-unread";
 import { markDirectConversationRead } from "./conversations.functions";
 import { DirectConversation, DirectConversationHeader } from "./direct-conversation";
 import {
@@ -249,6 +249,7 @@ function DirectConversationPageBody({
       page={page}
       taskView={taskView}
       isMember
+      direct
       readCursor={{
         key: `dm:${conversationId}`,
         advance: (throughSequence) =>
@@ -272,6 +273,8 @@ type ConversationPageBodyProps = {
   /** Whether the viewer is a member: only a member advances the read cursor, creates Tasks and
    * moves them. */
   isMember: boolean;
+  /** A direct conversation, whose row counts its thread replies too (`rowReadEnd`). */
+  direct?: boolean;
   /** The conversation's name on its Task board. */
   name: string;
   readCursor: { key: string; advance: (throughSequence: number) => Promise<unknown> };
@@ -324,6 +327,7 @@ function ConversationPageMain({
   page,
   taskView,
   isMember,
+  direct,
   name,
   readCursor,
   header,
@@ -345,15 +349,16 @@ function ConversationPageMain({
   const { showChat, showTasks, showFiles, openTask, openTaskThread, openMessage } =
     useConversationView(page.ensureLoaded);
 
-  // Opening the conversation clears its badge and advances the server cursor through the loaded
-  // top-level end. A thread shown alone leaves the conversation out of view, so it stays unread.
+  // Opening the conversation clears its badge and advances the server cursor through the end of
+  // what its row counts (`rowReadEnd`). A thread shown alone leaves the conversation out of view,
+  // so it stays unread.
   const markSeen = useMarkConversationSeen();
   const threadAlone = useStandaloneThread() !== null;
-  const topLevelEnd = latestTopLevelSequence(conversation.messages);
+  const readEnd = rowReadEnd(conversation, direct === true);
   useEffect(() => {
     if (threadAlone) return;
-    markSeen(unreadKey, topLevelEnd);
-  }, [markSeen, unreadKey, topLevelEnd, threadAlone]);
+    markSeen(unreadKey, readEnd);
+  }, [markSeen, unreadKey, readEnd, threadAlone]);
   // A conversation opened from Activity is read here, not by its row (task #358), so its first
   // read in each visit refreshes Activity's lists, and so does reading to the latest. Not every
   // message that arrives while it is open: that would refetch Activity's whole list per message.
@@ -385,12 +390,12 @@ function ConversationPageMain({
   // reads what it loaded once it is in front with focus and this conversation still open.
   const attended = usePageAttended();
   useEffect(() => {
-    if (!topLevelEnd || !isMember || threadAlone || !opened || !attended) return;
-    readThrough(topLevelEnd);
-  }, [readCursor.key, topLevelEnd, isMember, threadAlone, opened, attended]);
+    if (!readEnd || !isMember || threadAlone || !opened || !attended) return;
+    readThrough(readEnd);
+  }, [readCursor.key, readEnd, isMember, threadAlone, opened, attended]);
   const readLatest = (throughSequence: number) => {
     if (!isMember || !opened) return;
-    advance(throughSequence, `${readCursor.key}:latest`, true);
+    advance(Math.max(throughSequence, readEnd), `${readCursor.key}:latest`, true);
   };
   const { onOpenAgentProfile } = agentProfile;
 

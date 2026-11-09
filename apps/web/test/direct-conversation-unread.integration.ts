@@ -52,9 +52,9 @@ test("DM unread counts are keyed by conversation id and survive a zero count", a
     const root = await agentMessage("second");
     expect(await badges()).toEqual(counted(2));
 
-    // A thread reply never counts toward the DM's unread.
+    // A thread reply counts too: in a DM the other side replying in a thread is talking to you.
     await agentMessage("a reply", root!.id);
-    expect(await badges()).toEqual(counted(2));
+    expect(await badges()).toEqual(counted(3));
 
     // Alice's own message never counts for her.
     const aliceMember = await db.conversationMember.findUniqueOrThrow({
@@ -62,7 +62,7 @@ test("DM unread counts are keyed by conversation id and survive a zero count", a
       select: { id: true },
     });
     await conversations.sendMessage(conversation.id, aliceMember.id, alice.id, "my own");
-    expect(await badges()).toEqual(counted(2));
+    expect(await badges()).toEqual(counted(3));
 
     // markRead advances the cursor; a stale boundary cannot move it backwards, and an
     // over-eager one is clamped to the conversation's current end.
@@ -87,7 +87,7 @@ test("DM unread counts are keyed by conversation id and survive a zero count", a
   }
 });
 
-test("a closed DM with an Agent stays closed until the Agent posts a top-level message after the close", async () => {
+test("a closed DM with an Agent stays closed until the Agent posts after the close, in a thread too", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
   if (!connectionString)
     throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
@@ -120,17 +120,17 @@ test("a closed DM with an Agent stays closed until the Agent posts a top-level m
     await new DirectConversations(db).setHidden(workspace.id, alice.id, conversation.id, true);
     expect(await closed()).toEqual([conversation.id]);
 
-    // Alice's own message and an Agent thread reply leave it closed.
+    // Alice's own message leaves it closed.
     await Bun.sleep(2); // createdAt and hiddenAt are millisecond timestamps
     const aliceMember = await db.conversationMember.findUniqueOrThrow({
       where: { conversationId_userId: { conversationId: conversation.id, userId: alice.id } },
       select: { id: true },
     });
     await conversations.sendMessage(conversation.id, aliceMember.id, alice.id, "my own");
-    await agentMessage("a reply", root!.id);
     expect(await closed()).toEqual([conversation.id]);
 
-    await agentMessage("after the close");
+    // The Agent replying in a thread brings it back, as its row counts the reply.
+    await agentMessage("a reply", root!.id);
     expect(await closed()).toEqual([]);
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });

@@ -5,6 +5,7 @@ import {
 } from "#src/server/conversations/conversation-pins.server";
 import {
   HUMAN_UNREAD_BASE_SQL,
+  ROW_MESSAGES_SQL,
   markUnreadAnchor,
 } from "#src/server/conversations/human-unread.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -202,8 +203,8 @@ export class PrismaDirectConversationPreferences {
         orderBy: { sortOrder: "asc" },
         select: { conversationId: true, sortOrder: true },
       }),
-      // DMs the viewer closed that stay closed: a top-level message someone else posted after the
-      // close brings one back. `NOT EXISTS` stops at the first such message on the
+      // DMs the viewer closed that stay closed: a message someone else posted after the close,
+      // a thread reply too since the row counts it (`ROW_MESSAGES_SQL`), brings one back. `NOT EXISTS` stops at the first such message on the
       // `messages(conversationId, createdAt)` index instead of loading the DM's history.
       this.db.$queryRaw<{ conversationId: string }[]>`
         SELECT cm."conversationId" AS "conversationId"
@@ -219,7 +220,6 @@ export class PrismaDirectConversationPreferences {
           AND NOT EXISTS (
             SELECT 1 FROM "messages" m
             WHERE m."conversationId" = cm."conversationId"
-              AND m."threadRootId" IS NULL
               AND m."senderMemberId" IS NOT NULL
               AND m."senderMemberId" <> cm."id"
               AND m."createdAt" > cm."hiddenAt"
@@ -315,8 +315,8 @@ export class PrismaDirectConversationPreferences {
   }
 
   /**
-   * Unread per DM for the sidebar badges, by conversation id: other-authored top-level messages
-   * past the viewer's cursor, or from their mark-as-unread marker when that is lower. A fully read
+   * Unread per DM for the sidebar badges, by conversation id: other-authored messages, thread
+   * replies included (`ROW_MESSAGES_SQL`), past the viewer's cursor, or from their mark-as-unread marker when that is lower. A fully read
    * DM still has a row, so a later event can bump it live. The count is a LATERAL per membership
    * with a single lower bound, so it is an index range on `messages(conversationId, sequence)`
    * covering only the unread tail; a plain join (or an OR of the two bounds) lets the planner
@@ -332,7 +332,7 @@ export class PrismaDirectConversationPreferences {
         SELECT COUNT(*) AS "count"
         FROM "messages" m
         WHERE m."conversationId" = cm."conversationId"
-          AND m."threadRootId" IS NULL
+          AND ${ROW_MESSAGES_SQL}
           AND ${HUMAN_UNREAD_BASE_SQL}
       ) unread
       WHERE cm."userId" = ${userId}::uuid
