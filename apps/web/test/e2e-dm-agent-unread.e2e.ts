@@ -138,6 +138,31 @@ test("5. an Agent's reply inside a thread badges the DM row; opening the DM read
   await shot("5-read-after-open");
 }, 180_000);
 
+test("9. QA's staging flow: the Agent replies in its own message's thread; opening that thread reads it, past a reload", async () => {
+  const peer = await newPeer("own-thread");
+  await browser("set", "viewport", "1440", "900");
+  const root = await agentSays(peer, "Agent root for a thread");
+  // The viewer reads the root, as QA had: only the thread's reply is new afterwards.
+  await openPage(`/dm/${peer.conversationId}`, peer);
+  await openPage(`/channel/${state.otherChannelId}`, peer);
+  await expectBadge(peer, 0);
+  await agentSays(peer, "Agent reply in its own thread", root.id);
+  await expectBadge(peer, 1);
+  await openPage(`/channel/${state.otherChannelId}`, peer);
+  await expectBadge(peer, 1);
+  await shot("9-own-thread-badge");
+  // Opening the thread (its address, as QA did) reads it: after a reload its summary has no
+  // unread count left.
+  await openPage(`/dm/${peer.conversationId}?threadRootId=${root.id}`, peer);
+  await openPage(`/dm/${peer.conversationId}`, peer);
+  const summary = `[...document.querySelectorAll("button, a")].find((el) => /^1 reply/.test(el.textContent?.trim() ?? ""))?.textContent ?? ""`;
+  await browser("wait", "--fn", `${summary}.length > 0`, "--timeout", "15000");
+  expect(JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${summary})`)))).not.toContain(
+    "unread",
+  );
+  await shot("9-thread-read-after-reload");
+}, 180_000);
+
 test("6. no badge while the DM is open; once left, the next reply badges it", async () => {
   const peer = await newPeer("open");
   await browser("set", "viewport", "1440", "900");
