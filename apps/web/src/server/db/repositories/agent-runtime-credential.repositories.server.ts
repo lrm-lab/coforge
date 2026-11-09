@@ -2,6 +2,8 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import type { AgentRuntimeCredentialRepository } from "#src/server/agents/agent-runtime-credentials.server";
 import type { AgentEnvironmentRepository } from "#src/server/agents/agent-environment.server";
+import type { ControlFence } from "#src/server/agents/agent-config-plan.server";
+import { updateAgentRow } from "./agent-config-fence.repositories.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 
 export class PrismaAgentRuntimeCredentialRepository
@@ -25,10 +27,17 @@ export class PrismaAgentRuntimeCredentialRepository
   async updateRuntimeConfig(
     agentId: string,
     runtimeConfig: Parameters<AgentRuntimeCredentialRepository["updateRuntimeConfig"]>[1],
+    fence?: ControlFence,
   ) {
-    await this.db.agent.update({
-      where: { id: agentId },
-      data: { runtimeConfig },
-    });
+    const row = await updateAgentRow(
+      this.db,
+      agentId,
+      { runtimeConfig, runtimeConfigRevision: { increment: 1 } },
+      fence,
+    );
+    return {
+      runtimeConfig: parseAgentRuntimeConfig(row.runtimeConfig),
+      runtimeConfigRevision: row.runtimeConfigRevision,
+    };
   }
 }

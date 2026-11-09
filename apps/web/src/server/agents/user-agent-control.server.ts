@@ -11,7 +11,10 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
 import { createAgentIntroduction } from "#src/server/db/repositories/agent-introduction.repositories.server";
-import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
+import {
+  PrismaAgentSessionRepository,
+  createAgentSessions,
+} from "#src/server/db/repositories/agent-session.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { AgentTurnInterrupt } from "./agent-turn-interrupt.server";
@@ -19,6 +22,7 @@ import { getAgentTurnInterruptResults } from "./agent-turn-interrupt-results.ser
 import { getAgentTurnInterruptCapabilityLease } from "./agent-turn-interrupt-capability.server";
 import { getAgentControlAcceptedCapabilityLease } from "./agent-control-accepted-capability.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
+import { AgentConfigApply, createAgentConfigPush } from "./agent-config-apply.server";
 
 /** The `AgentControl` a signed-in user's Start, Stop, Restart and Reset go through. */
 export function userAgentControl(db: PrismaClient) {
@@ -70,6 +74,15 @@ export function userAgentRuntimeControl(db: PrismaClient, agents: PrismaAgentRep
       undefined,
       createAgentIntroduction(db),
     ),
+  );
+}
+
+/** Sends a running Agent's new runtime configuration to its Daemon instead of restarting it. */
+export function userAgentConfigApply(db: PrismaClient) {
+  return new AgentConfigApply(
+    createAgentConfigPush(createCentrifugoServerApi()),
+    new PrismaAgentControlStore(db),
+    new PrismaAgentSessionRepository(db),
   );
 }
 

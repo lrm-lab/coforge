@@ -255,6 +255,7 @@ export class WorkspaceAssistants {
         data: {
           computerId: input.computerId,
           runtimeConfig: withEnvironment(latest.runtimeConfig),
+          runtimeConfigRevision: { increment: 1 },
         },
       });
       if (written.count === 0)

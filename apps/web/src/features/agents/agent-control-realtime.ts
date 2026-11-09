@@ -145,18 +145,22 @@ export function subscribeAgentControl(agentId: string, listener: () => void): ()
 export function useAgentControlState(agentId: string): AgentControlState | undefined {
   return useSyncExternalStore(
     (listener) => subscribeAgentControl(agentId, listener),
-    () => {
-      const state = states.get(agentId);
-      if (
-        state &&
-        (state.phase === "accepted" || state.phase === "pending") &&
-        Date.now() - state.occurredAtMs > AGENT_CONTROL_PENDING_TTL_MS
-      )
-        return undefined;
-      return state;
-    },
+    () => latestAgentControlState(agentId),
     () => undefined,
   );
+}
+
+/** What `useAgentControlState` shows right now, for a handler that must judge the Agent at the
+ * moment it runs, not as it was when the handler was made. */
+export function latestAgentControlState(agentId: string): AgentControlState | undefined {
+  const state = states.get(agentId);
+  if (
+    state &&
+    (state.phase === "accepted" || state.phase === "pending") &&
+    Date.now() - state.occurredAtMs > AGENT_CONTROL_PENDING_TTL_MS
+  )
+    return undefined;
+  return state;
 }
 
 /** Whether the Agent has a control operation in flight, per the latest event. */

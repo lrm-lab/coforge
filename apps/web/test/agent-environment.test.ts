@@ -47,6 +47,7 @@ function fixture(
         events.push("write");
         if (options.writeFails) throw new Error("storage contains sensitive details");
         agent.runtimeConfig = config;
+        return { runtimeConfig: config };
       },
     },
     { getById: async (id) => (id === agent.id ? agent : undefined) },

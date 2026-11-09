@@ -7,6 +7,7 @@ import { stopReasonCopy, stopReasonSentence } from "./agent-stop-reason";
 import {
   agentControlInFlight,
   agentControlPendingLabel,
+  latestAgentControlState,
   useAgentControlState,
 } from "./agent-control-realtime";
 
@@ -91,17 +92,29 @@ export function useAgentRuntimeControls({
     setRestartOpen(true);
   }
 
-  function submitRestart() {
-    setRestartOpen(false);
+  function executeRestart(restartAction: AgentRestartAction, confirmed?: true) {
     setRestartSubmitError(null);
     void onExecute({
       agentId,
-      action,
+      action: restartAction,
       requestId: crypto.randomUUID(),
-      ...(destructive && { confirmed: true }),
+      ...(confirmed && { confirmed }),
     }).catch((cause: unknown) => {
       setRestartSubmitError(agentControlFailureMessage(cause));
     });
+  }
+
+  function submitRestart() {
+    setRestartOpen(false);
+    executeRestart(action, destructive ? true : undefined);
+  }
+
+  /** Restarts at once, with no dialog (the toast after a runtime config save offers it). The toast
+   * outlives the render that made it, so an operation that began since is read from the store at
+   * click time, as the Restart button's own gate would, and is never superseded. */
+  function restartNow() {
+    if (agentControlInFlight(latestAgentControlState(agentId))) return;
+    executeRestart("restart");
   }
 
   const [startPending, guardStart] = useSubmitGuard();
@@ -112,6 +125,7 @@ export function useAgentRuntimeControls({
 
   function submitStart() {
     setStartStopError(null);
+    setRestartSubmitError(null);
     setStartDeferred(false);
     void guardStart(async () => {
       try {
@@ -129,6 +143,7 @@ export function useAgentRuntimeControls({
    * runs at a time wherever it was pressed. Start undoes it, so it does not ask (Frank, 11-06). */
   async function stop() {
     setStartStopError(null);
+    setRestartSubmitError(null);
     setStartDeferred(false);
     await guardStop(() => onExecute({ agentId, action: "stop", requestId: crypto.randomUUID() }));
   }
@@ -170,6 +185,7 @@ export function useAgentRuntimeControls({
     restartSubmitError,
     openRestart,
     submitRestart,
+    restartNow,
   };
 }
 

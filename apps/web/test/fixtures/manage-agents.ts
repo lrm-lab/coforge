@@ -1,8 +1,10 @@
+import { ControlFenceLostError } from "#src/server/agents/agent-config-plan.server";
 import { ManageAgents } from "#src/server/agents/manage-agents.server";
 import type {
   AgentRecord,
   AgentRepository,
 } from "#src/server/db/repositories/agent.repositories.server";
+import { configApplyOf, type ConfigApplyOptions } from "./config-push";
 
 export function fixture(options?: {
   publishFails?: boolean;
@@ -10,12 +12,15 @@ export function fixture(options?: {
   unavailable?: boolean;
   encryptionFails?: boolean;
   createFails?: boolean;
+  /** The push wired in: `supported: false` is a Daemon without the capability; absent wires none. */
+  push?: ConfigApplyOptions;
 }) {
   const records: AgentRecord[] = [];
   const starts: unknown[] = [];
   const stops: unknown[] = [];
   const controls: string[] = [];
   const selections: Array<{ hasApiKey?: boolean }> = [];
+  const fences: unknown[] = [];
   const updates: Array<Parameters<AgentRepository["update"]>[1]> = [];
   const repository: AgentRepository = {
     getById: async (id) => records.find((agent) => agent.id === id),
@@ -38,14 +43,31 @@ export function fixture(options?: {
       records.push(record);
       return record;
     },
-    update: async (id, input) => {
+    update: async (id, input, fence) => {
+      if (fence) {
+        fences.push(fence);
+        if (options?.push?.fenceLost) throw new ControlFenceLostError();
+      }
       updates.push(input);
       controls.push("persist");
       const index = records.findIndex((agent) => agent.id === id);
-      records[index] = { ...records[index]!, ...input };
+      // The repository raises the revision in the same write as the config.
+      records[index] = {
+        ...records[index]!,
+        ...input,
+        ...(input.runtimeConfig
+          ? { runtimeConfigRevision: (records[index]!.runtimeConfigRevision ?? 0) + 1 }
+          : {}),
+      };
       return records[index]!;
     },
   };
+  const pushed = options?.push
+    ? configApplyOf(() => records[0], {
+        ...options.push,
+        onPublish: () => controls.push("push"),
+      })
+    : undefined;
   const agentManagement = new ManageAgents(
     repository,
     {
@@ -73,6 +95,17 @@ export function fixture(options?: {
         return { keyId: "v1", ciphertext: `encrypted:${apiKey}`, nonce: "nonce", hint: "••••1234" };
       },
     }),
+    pushed?.apply,
   );
-  return { agentManagement, records, starts, stops, controls, updates, selections };
+  return {
+    agentManagement,
+    records,
+    starts,
+    stops,
+    controls,
+    updates,
+    selections,
+    fences,
+    pushes: pushed?.intents ?? [],
+  };
 }

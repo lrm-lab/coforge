@@ -20,6 +20,7 @@ import type {
   AgentRecord,
   AgentRepository,
 } from "#src/server/db/repositories/agent.repositories.server";
+import { publishAgentConfig, type AgentConfigPush } from "./agent-config-apply.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
 import type { AgentControl, AgentControlStore } from "./agent-control.server";
 import type { AgentRecoveryContext } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -105,15 +106,25 @@ export class WorkspaceAgentRecovery {
     private readonly control?: AgentControl,
     /** `control`'s own store: the Agent is read through it once, here, and handed to `recover`. */
     private readonly controlAgents?: Pick<AgentControlStore, "get">,
+    /** Sends a running Agent the config sync its Daemon may have missed (Centrifugo publications
+     * are not durable), when the revision the Daemon reported on ready is behind the stored one. */
+    private readonly configPush?: AgentConfigPush,
   ) {}
 
   async recoverWorkspace(
     workspaceId: string,
     computerId: string,
     runningAgentIds: readonly string[],
+    /** The config revision the Daemon holds per Agent; an Agent absent from it counts as 0. */
+    appliedAgentConfigs: ReadonlyArray<{ agentId: string; revision: number }> = [],
   ) {
     const runningAgents = new Set(runningAgentIds);
+    const appliedRevisions = new Map(appliedAgentConfigs.map((e) => [e.agentId, e.revision]));
     const agents = await this.agents.listForComputer(workspaceId, computerId);
+    // Whether this Daemon takes a push is one fact per ready, not one per running Agent.
+    const push = (await this.configPush?.supports(workspaceId, computerId).catch(() => false))
+      ? this.configPush
+      : undefined;
     // A deleted Agent is never recovered — but if the Daemon still reports one running
     // (its Stop never reached an offline Daemon, or its result was lost), reconcile with a Stop.
     // Deleted Agents are listed separately because `listForComputer` only returns live ones.
@@ -142,7 +153,14 @@ export class WorkspaceAgentRecovery {
       agents.map((listedAgent) =>
         this.runtimeLock.run(listedAgent.id, async () => {
           try {
-            await this.#recoverListedAgent(listedAgent, workspaceId, computerId, runningAgents);
+            await this.#recoverListedAgent(
+              listedAgent,
+              workspaceId,
+              computerId,
+              runningAgents,
+              appliedRevisions,
+              push,
+            );
           } catch (error) {
             console.warn(
               JSON.stringify({
@@ -164,6 +182,9 @@ export class WorkspaceAgentRecovery {
     workspaceId: string,
     computerId: string,
     runningAgents: ReadonlySet<string>,
+    appliedRevisions: ReadonlyMap<string, number>,
+    /** Present when the Daemon takes an `AgentConfigSync`. */
+    configPush: AgentConfigPush | undefined,
   ) {
     const agent = await this.agents.getById(listedAgent.id);
     if (!agent || agent.workspaceId !== workspaceId || agent.computerId !== computerId) return;
@@ -187,6 +208,9 @@ export class WorkspaceAgentRecovery {
         computerId,
         agentId: agent.id,
       });
+      const stored = agent.runtimeConfigRevision ?? 0;
+      if (configPush && stored > 0 && stored > (appliedRevisions.get(agent.id) ?? 0))
+        await publishAgentConfig(configPush, agent);
       return;
     }
     const recovery = await this.conversations.readAgentRecoveryContext(workspaceId, agent.id);

@@ -12,6 +12,7 @@ import {
 } from "#src/features/agents/agents.functions";
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
 import { AgentRuntimeCredentialDialog } from "#src/features/agents/agent-runtime-credential-dialog";
+import type { AgentRuntimeSaveOutcome } from "#src/features/agents/agent-runtime-save-notice";
 import { useInvalidateAgentProfile } from "./agent-profile-queries";
 
 type AgentProfile = NonNullable<Awaited<ReturnType<typeof getAgentProfile>>>;
@@ -23,10 +24,13 @@ export function AgentRuntimeCredentialSection({
   agentId,
   runtimeConfig,
   runtimeCredential,
+  notifySaved,
 }: {
   agentId: string;
   runtimeConfig: AgentProfile["runtimeConfig"];
   runtimeCredential: AgentProfile["runtimeCredential"];
+  /** `useAgentRuntimeSaveNotice`: the toast a save or delete earns. */
+  notifySaved: (outcome: AgentRuntimeSaveOutcome | undefined) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, guard] = useSubmitGuard();
@@ -72,9 +76,10 @@ export function AgentRuntimeCredentialSection({
             guard(async () => {
               setError("");
               try {
-                await saveCredential({ data: { agentId, apiKey } });
+                const outcome = await saveCredential({ data: { agentId, apiKey } });
                 setOpen(false);
                 await invalidate();
+                notifySaved(outcome);
               } catch {
                 setError(m.agent_runtime_save_error());
               }
@@ -86,9 +91,10 @@ export function AgentRuntimeCredentialSection({
                   guard(async () => {
                     setError("");
                     try {
-                      await deleteCredential({ data: agentId });
+                      const outcome = await deleteCredential({ data: agentId });
                       setOpen(false);
                       await invalidate();
+                      notifySaved(outcome);
                     } catch {
                       setError(m.agent_runtime_delete_error());
                     }

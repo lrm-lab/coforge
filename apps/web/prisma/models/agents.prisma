@@ -23,6 +23,10 @@ model Agent {
   ownerId                   String                     @db.Uuid
   computerId                String?                    @db.Uuid
   runtimeConfig             Json
+  /// The per-Agent order of runtime config changes (runtime selection, environment, runtime
+  /// credential): every such write raises it by one. A Daemon uses it to drop an out-of-date
+  /// `AgentConfigSync`; `controlState.configRevision` is a content hash and cannot order.
+  runtimeConfigRevision     Int                        @default(0)
   /// Runtime launch fencing only; provider-native identity lives in AgentSession.
   runtimeSession            Json?
   /// Current control request and fencing only, not Session history or a job queue.

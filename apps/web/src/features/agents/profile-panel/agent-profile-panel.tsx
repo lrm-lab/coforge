@@ -33,6 +33,11 @@ import {
 import { AgentArchiveSection } from "./agent-archive-section";
 import { AgentMigrationSection } from "./agent-migration-section";
 import { AgentRuntimeCredentialSection } from "./agent-runtime-credential-section";
+import {
+  combineRuntimeSaveOutcomes,
+  useAgentRuntimeSaveNotice,
+  type AgentRuntimeSaveOutcome,
+} from "#src/features/agents/agent-runtime-save-notice";
 import { AgentProfileConfirmationDialogs } from "./agent-profile-confirmation-dialogs";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { agentModelsQueryKey } from "#src/features/agents/agent-models";
@@ -180,6 +185,7 @@ export function AgentProfilePanel({
     },
   });
 
+  const notifyRuntimeSaved = useAgentRuntimeSaveNotice(agentId, controls, !deleted);
   const update = useServerFn(updateAgent);
   const pickMascot = useServerFn(setAgentMascot);
   const updateRole = useServerFn(updateAgentRole);
@@ -214,8 +220,10 @@ export function AgentProfilePanel({
       if (!profile) return;
       setRuntimeFormError("");
       try {
+        let runtimeOutcome: AgentRuntimeSaveOutcome | undefined;
+        let environmentOutcome: AgentRuntimeSaveOutcome | undefined;
         if (changed.runtime)
-          await update({
+          runtimeOutcome = await update({
             data: updateAgentInputFromForm(form, {
               agentId: profile.id,
               computerId: profile.computer?.id,
@@ -224,7 +232,7 @@ export function AgentProfilePanel({
             }),
           });
         if (changed.environment && profile.ownedByCurrentUser)
-          await saveEnvironment({
+          environmentOutcome = await saveEnvironment({
             data: { agentId: profile.id, envVars: parseAgentEnvironmentFromForm(form) },
           });
         setRuntimeEditing(false);
@@ -236,6 +244,7 @@ export function AgentProfilePanel({
             queryKey: ["agent-runtime-computers", profile.id, profile.computerId ?? "none"],
           }),
         ]);
+        notifyRuntimeSaved(combineRuntimeSaveOutcomes(runtimeOutcome, environmentOutcome));
       } catch (cause) {
         setRuntimeFormError(agentUpdateErrorMessage(cause));
       }
@@ -397,6 +406,7 @@ export function AgentProfilePanel({
                   agentId={agentId}
                   runtimeConfig={profile.runtimeConfig}
                   runtimeCredential={profile.runtimeCredential}
+                  notifySaved={notifyRuntimeSaved}
                 />
               ) : null
             }

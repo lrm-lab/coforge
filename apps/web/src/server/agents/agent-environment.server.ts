@@ -13,6 +13,12 @@ import type { AgentRuntimeConfig, EncryptedAgentEnvironment } from "./agent-runt
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
 import { assertAgentLive, assertNotAppBot } from "./active-agent.server";
 import { agentStartIntent, agentStopIntent } from "./manage-agents.server";
+import {
+  AgentConfigApply,
+  type AgentRestartOutcome,
+  type UpdatedRuntimeConfig,
+} from "./agent-config-apply.server";
+import { ControlFenceLostError, type ControlFence } from "./agent-config-plan.server";
 
 const KEY_ID = "v1";
 const NONCE_BYTES = 12;
@@ -26,7 +32,12 @@ export type AgentEnvironmentRepository = {
     workspaceId: string,
     ownerId: string,
   ): Promise<{ runtimeConfig: AgentRuntimeConfig | undefined } | undefined>;
-  updateRuntimeConfig(agentId: string, runtimeConfig: AgentRuntimeConfig): Promise<void>;
+  /** With a `fence`, a config push: also re-fences the control state in the same transaction. */
+  updateRuntimeConfig(
+    agentId: string,
+    runtimeConfig: AgentRuntimeConfig,
+    fence?: ControlFence,
+  ): Promise<UpdatedRuntimeConfig>;
 };
 
 type AgentLookup = { getById(agentId: string): Promise<AgentRecord | undefined> };
@@ -42,6 +53,8 @@ export class AgentEnvironment {
     private readonly runtimeControl: RuntimeControl,
     private readonly runtimeLock: AgentRuntimeLock,
     private readonly encryptionKey: Uint8Array<ArrayBuffer>,
+    /** Pushes a running Agent's new environment instead of restarting it; the default restarts. */
+    private readonly configApply = new AgentConfigApply(),
   ) {
     if (encryptionKey.byteLength !== 32)
       throw new Error("Agent environment encryption key must be 32 bytes");
@@ -56,7 +69,7 @@ export class AgentEnvironment {
     principal: Principal,
     agentId: string,
     input: Record<string, string>,
-  ): Promise<{ restart: "published" | "deferred" }> {
+  ): Promise<{ restart: Exclude<AgentRestartOutcome, "not-required"> }> {
     return this.runtimeLock.run(agentId, async () => {
       const agent = await this.agents.getById(agentId);
       if (agent) assertNotAppBot(agent);
@@ -76,8 +89,20 @@ export class AgentEnvironment {
         ? { ...withoutEnvironment, environment: await this.#encrypt(agentId, envVars) }
         : withoutEnvironment;
       // A stopped Agent has nothing running under the old environment; persist without
-      // the stop -> ... -> start dance.
-      if (agent.stoppedAt) {
+      // the stop -> ... -> start dance. A running Agent on a Daemon that takes a config push keeps
+      // its process: the environment is fetched at its next launch, and the push only advances
+      // the revision the Daemon holds. A control state that moved since the plan falls back to
+      // the restart below.
+      const attempt = await this.configApply.tryPush(agent, { changed: true }, async (fence) => {
+        try {
+          return await this.repository.updateRuntimeConfig(agentId, nextConfig, fence);
+        } catch (error) {
+          if (error instanceof ControlFenceLostError) throw error;
+          throw new Error("Agent environment could not be saved");
+        }
+      });
+      if (attempt.plan === "push") return { restart: attempt.restart };
+      if (attempt.plan === "deferred") {
         await this.repository.updateRuntimeConfig(agentId, nextConfig);
         return { restart: "deferred" };
       }

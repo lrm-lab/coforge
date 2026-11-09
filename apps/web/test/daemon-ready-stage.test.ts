@@ -95,6 +95,25 @@ test("a ready that completes still answers with bytes, not a stage", async () =>
   expect(await method(readyPayload(), { principal: principal() })).toBeInstanceOf(Uint8Array);
 });
 
+test("the config revisions a daemon reports on ready reach Agent recovery", async () => {
+  const received: unknown[] = [];
+  const method = createDaemonRuntimeReadyMethod({
+    recovery: {
+      recoverWorkspace: async (_workspaceId, _computerId, _running, applied) => {
+        received.push(applied);
+      },
+    },
+  });
+  const payload = encodeDaemonRuntimeReadyRequest({
+    ...decodeDaemonRuntimeReadyRequest(readyPayload()),
+    appliedAgentConfigs: [{ agentId: "agent-running", revision: 3 }],
+  });
+
+  await method(payload, { principal: principal() });
+
+  expect(received).toEqual([[{ agentId: "agent-running", revision: 3 }]]);
+});
+
 test("a daemon that runs migrations is leased again on ready; a failure there does not fail the ready", async () => {
   const reissued: string[] = [];
   const method = (fail: boolean) =>

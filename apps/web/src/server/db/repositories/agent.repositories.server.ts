@@ -17,6 +17,8 @@ import {
 } from "#src/server/agents/agent-runtime-config.server";
 import { AGENT_VISIBILITY, type AgentVisibility } from "#src/features/agents/agent-visibility";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import type { ControlFence } from "#src/server/agents/agent-config-plan.server";
+import { updateAgentRow } from "./agent-config-fence.repositories.server";
 
 export type { AgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 
@@ -32,6 +34,9 @@ export type AgentRecord = {
   /** `undefined` when the stored row's config cannot be read — one bad row never fails a read
    * (the readers then show no runtime); only a write-path caller may treat it as required. */
   runtimeConfig: AgentRuntimeConfig | undefined;
+  /** The per-Agent order of runtime config changes (`Agent.runtimeConfigRevision`); a row read
+   * through `mapAgent` always carries it, and absent reads as 0 (never changed). */
+  runtimeConfigRevision?: number;
   /** Set when a user stopped this Agent; undefined/null means not stopped. Config,
    * credential and environment mutations read this to skip the stop→…→start dance. */
   stoppedAt?: Date | null;
@@ -63,6 +68,7 @@ function mapAgent(agent: {
   ownerId: string;
   computerId: string | null;
   runtimeConfig: unknown;
+  runtimeConfigRevision?: number;
   runtimeSession?: unknown;
   stoppedAt?: Date | null;
   deletedAt?: Date | null;
@@ -82,6 +88,7 @@ function mapAgent(agent: {
     description: description ?? "",
     ...(computerId ? { computerId } : {}),
     runtimeConfig,
+    runtimeConfigRevision: agent.runtimeConfigRevision ?? 0,
     stoppedAt: agent.stoppedAt ?? null,
     deletedAt: agent.deletedAt ?? null,
     // A real row's column is `NOT NULL DEFAULT 'public'`, so `agent.visibility` is always a real
@@ -115,11 +122,14 @@ export interface AgentRepository {
   listOwnedInWorkspace(workspaceId: string, ownerId: string): Promise<AgentRecord[]>;
   /** `introductionDueAt` is set only by a person's create (`ManageAgents.create`). */
   create(input: AgentCreateInput): Promise<AgentRecord>;
-  /** `name` (the @mention username) is fixed at creation and is never part of an update. */
+  /** `name` (the @mention username) is fixed at creation and is never part of an update. With a
+   * `fence` the write is a config push: it also re-fences the control state in the same
+   * transaction, or throws `ControlFenceLostError` having written nothing. */
   update(
     id: string,
     input: Pick<AgentRecord, "displayName" | "description"> &
       Partial<Pick<AgentRecord, "runtimeConfig" | "computerId">>,
+    fence?: ControlFence,
   ): Promise<AgentRecord>;
 }
 
@@ -228,9 +238,16 @@ export class PrismaAgentRepository implements AgentRepository {
     id: string,
     input: Pick<AgentRecord, "displayName" | "description"> &
       Partial<Pick<AgentRecord, "runtimeConfig" | "computerId">>,
+    fence?: ControlFence,
   ) {
+    // Every write of the runtime config raises its revision in the same statement, so a Daemon
+    // can order the pushes it receives (`Agent.runtimeConfigRevision`).
+    const data = {
+      ...input,
+      ...(input.runtimeConfig ? { runtimeConfigRevision: { increment: 1 } } : {}),
+    };
     if (!appNotificationsPossible())
-      return mapAgent(await this.db.agent.update({ where: { id }, data: input }));
+      return mapAgent(await updateAgentRow(this.db, id, data, fence));
     return mapAgent(
       await this.db.$transaction(async (tx) => {
         const before = await attemptAppNotification(tx, () =>
@@ -239,7 +256,7 @@ export class PrismaAgentRepository implements AgentRepository {
             select: { displayName: true, description: true, runtimeConfig: true },
           }),
         );
-        const row = await tx.agent.update({ where: { id }, data: input });
+        const row = await updateAgentRow(tx, id, data, fence);
         if (before) {
           await recordAgentProfileUpdated(tx, row.workspaceId, id, [
             ...(before.displayName !== row.displayName ? (["display_name"] as const) : []),

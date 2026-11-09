@@ -3,7 +3,7 @@ import { PrismaAgentRepository } from "#src/server/db/repositories/agent.reposit
 import { PrismaAgentRuntimeCredentialRepository } from "#src/server/db/repositories/agent-runtime-credential.repositories.server";
 import { ManageAgents } from "./manage-agents.server";
 import { getAgentRuntimeLock } from "./agent-runtime-lock.server";
-import { userAgentRuntimeControl } from "./user-agent-control.server";
+import { userAgentConfigApply, userAgentRuntimeControl } from "./user-agent-control.server";
 import {
   computerCanRunAgent,
   computerRuntimeRefusal,
@@ -30,6 +30,7 @@ export function manageAgents(db: Database) {
     },
     runtimeLock,
     () => runtimeCredentials(db, true),
+    userAgentConfigApply(db),
   );
   return agentManagement;
 }

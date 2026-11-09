@@ -12,7 +12,7 @@ type AgentRuntimeCredentialPrincipal = { workspaceId: string; userId: string };
 type AgentLookup = {
   getById(agentId: string): Promise<AgentRecord | undefined>;
 };
-type CredentialMutation = Pick<AgentRuntimeCredentials, "save" | "delete">;
+type CredentialMutation = Pick<AgentRuntimeCredentials, "save" | "delete" | "summary">;
 type AgentRuntimeControl = {
   start(intent: AgentStartIntent, userId: string): Promise<void>;
   stop(intent: AgentStopIntent, userId: string): Promise<void>;
@@ -34,7 +34,7 @@ export class ChangeAgentRuntimeCredential {
     result: AgentRuntimeCredentialSummary;
     restart: "published" | "deferred";
   }> {
-    return this.#restartAroundMutation(principal, agentId, () =>
+    return this.#restartAroundMutation<AgentRuntimeCredentialSummary>(principal, agentId, () =>
       this.credentials.save(principal, agentId, apiKey),
     );
   }
@@ -42,18 +42,28 @@ export class ChangeAgentRuntimeCredential {
   delete(
     principal: AgentRuntimeCredentialPrincipal,
     agentId: string,
-  ): Promise<{ result: { deleted: true }; restart: "published" | "deferred" }> {
-    return this.#restartAroundMutation(principal, agentId, async () => {
-      await this.credentials.delete(principal, agentId);
-      return { deleted: true as const };
-    });
+  ): Promise<{ result: { deleted: true }; restart: "published" | "deferred" | "not-required" }> {
+    return this.#restartAroundMutation<{ deleted: true }, "not-required">(
+      principal,
+      agentId,
+      async () => {
+        await this.credentials.delete(principal, agentId);
+        return { deleted: true as const };
+      },
+      // No stored key: nothing changes, so the Agent is not restarted either.
+      {
+        when: async () => (await this.credentials.summary(principal, agentId)) === null,
+        result: { deleted: true as const },
+      },
+    );
   }
 
-  async #restartAroundMutation<T>(
+  async #restartAroundMutation<T, Unchanged extends "not-required" = never>(
     principal: AgentRuntimeCredentialPrincipal,
     agentId: string,
     mutation: () => Promise<T>,
-  ) {
+    nothingToChange?: { when: () => Promise<boolean>; result: T },
+  ): Promise<{ result: T; restart: "published" | "deferred" | Unchanged }> {
     return this.runtimeLock.run(agentId, async () => {
       const agent = await this.agents.getById(agentId);
       if (agent) assertNotAppBot(agent);
@@ -65,8 +75,12 @@ export class ChangeAgentRuntimeCredential {
         throw new Error("Agent is not authorized");
       // A deleted Agent has no runtime credential to edit, and no restart either.
       assertAgentLive(agent);
-      // A stopped Agent has nothing running to protect from the old credential; persist
-      // without the stop -> ... -> start dance.
+      if (nothingToChange && (await nothingToChange.when()))
+        return { result: nothingToChange.result, restart: "not-required" as Unchanged };
+      // A credential change is the exception to the idle config sync: a deleted or rotated key
+      // must stop being used at once, not whenever the Agent next idles. A stopped Agent has
+      // nothing running to protect from the old credential; persist without the
+      // stop -> ... -> start dance.
       if (agent.stoppedAt) {
         const stoppedResult = await mutation();
         return { result: stoppedResult, restart: "deferred" as const };

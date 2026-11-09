@@ -22,6 +22,7 @@ export type DaemonRuntimeReadyPorts = {
       workspaceId: string,
       computerId: string,
       runningAgentIds: readonly string[],
+      appliedAgentConfigs?: ReadonlyArray<{ agentId: string; revision: number }>,
     ): Promise<void>;
   };
   restarts?: ComputerRestartStore;
@@ -132,6 +133,7 @@ export const createDaemonRuntimeReadyMethod =
         request.workspaceId,
         request.computerId,
         request.runningAgentIds,
+        request.appliedAgentConfigs,
       );
       stage = "reminder_recovery";
       if (request.capabilities?.includes("reminder:v1"))

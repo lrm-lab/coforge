@@ -187,7 +187,11 @@ function credentialFixture(deletedAt: Date | null) {
   const record = agentRecord(deletedAt);
   const credentialChange = new ChangeAgentRuntimeCredential(
     { getById: async () => record },
-    { save: async () => ({ providerId: "anthropic", hint: "" }), delete: async () => {} },
+    {
+      save: async () => ({ providerId: "anthropic", hint: "" }),
+      delete: async () => {},
+      summary: async () => ({ providerId: "anthropic", hint: "" }),
+    },
     {
       start: async () => {
         events.push("start");
@@ -209,6 +213,7 @@ function environmentFixture(deletedAt: Date | null) {
       findOwnedAgent: async () => ({ runtimeConfig: record.runtimeConfig }),
       updateRuntimeConfig: async () => {
         events.push("write");
+        return { runtimeConfig: record.runtimeConfig };
       },
     },
     { getById: async () => record },

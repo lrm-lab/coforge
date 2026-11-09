@@ -9,7 +9,7 @@ import {
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
 import { errorType } from "#src/server/errors/error-type.server";
-import { runtimeStartFields } from "./manage-agents.server";
+import { runtimeStartFields } from "./agent-runtime-config.server";
 import type { AgentIntroduction } from "./agent-introduction.server";
 import type { AgentSessions } from "./agent-sessions.server";
 import {
@@ -162,7 +162,7 @@ export class AgentControlPublisher {
       workspaceId: state.workspaceId,
       computerId: state.computerId,
       agentId: agent.id,
-      ...runtimeStartFields(agent.runtimeConfig),
+      ...runtimeStartFields(agent.runtimeConfig, agent.runtimeConfigRevision),
       controlEpoch: state.epoch,
       ...(launchId ? { launchId } : {}),
       ...(this.#subjectSessionByRequest.get(requestId)

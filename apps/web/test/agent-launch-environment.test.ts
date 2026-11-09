@@ -147,6 +147,7 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
       findOwnedAgent: async () => ({ runtimeConfig }),
       updateRuntimeConfig: async (_id, config) => {
         runtimeConfig = config;
+        return { runtimeConfig: config };
       },
     },
     {

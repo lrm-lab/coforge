@@ -133,9 +133,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   recovery. `controlOperationState` (`agent-control.server.ts`) and
   `isEligibleForTransientRetry` (`agent-control-types.server.ts`) are the one
   rule both apply; `recover` also supersedes a stale-scope pending operation.
-- `ManageAgents.update`, `ChangeAgentRuntimeCredential`, and
-  `AgentEnvironment.save` skip the stop → persist → start restart for a stopped
-  Agent and return `"deferred"`.
+- `ManageAgents.update` and `AgentEnvironment.save` plan through `AgentConfigApply`: a running Agent keeps its process and gets an `AgentConfigSync` after the write, only when `planAgentConfig` finds the fence; otherwise stop → persist → start. Every Start carries `agentConfigRevision`. A runtime credential save or delete always restarts (`ChangeAgentRuntimeCredential`): a leaked key must stop being used at once. Behaviour: [config apply](../../../../../docs/observability/agent-status-and-activity/config-apply.md).
 
 ## Sessions
 

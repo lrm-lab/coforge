@@ -18,8 +18,9 @@ import {
   publicAgentRuntimeConfig,
   readableRuntimeConfig,
   requiredRuntimeConfig,
-  type AgentRuntimeConfig,
+  runtimeStartFields,
 } from "./agent-runtime-config.server";
+import { AgentConfigApply } from "./agent-config-apply.server";
 import type { AgentRuntimeCredentials } from "./agent-runtime-credentials.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
 import {
@@ -100,6 +101,8 @@ export class ManageAgents {
     private readonly credentials?: () =>
       | Pick<AgentRuntimeCredentials, "encrypt">
       | Promise<Pick<AgentRuntimeCredentials, "encrypt">>,
+    /** Pushes a running Agent's new configuration instead of restarting it; the default restarts. */
+    private readonly configApply = new AgentConfigApply(),
   ) {}
 
   list(principal: AgentPrincipal) {
@@ -260,10 +263,30 @@ export class ManageAgents {
         });
       // A stopped Agent has nothing running under the old configuration, so config
       // changes persist without the stop -> ... -> start dance; a confirmed Stop would make a
-      // stopped Agent on an offline Computer uneditable. Moving Computers stops the process
-      // on the Computer it is leaving, even when the runtime selection itself is unchanged.
-      const stopped = Boolean(current.stoppedAt);
-      if ((runtimeChanged || computerChanged) && current.computerId && !stopped)
+      // stopped Agent on an offline Computer uneditable. A running Agent on a Daemon that takes a
+      // config push keeps its process and applies the change at its next idle. Moving Computers
+      // stops the process on the Computer it is leaving, even when the runtime selection itself
+      // is unchanged.
+      // The username (`name`) is fixed at creation and is never written here; only `displayName`
+      // is editable after creation.
+      const metadata = {
+        displayName: input.displayName?.trim() || current.displayName,
+        description: input.description.trim(),
+      };
+      const data =
+        runtimeChanged || computerChanged ? { ...metadata, computerId, runtimeConfig } : metadata;
+      const attempt = await this.configApply.tryPush(
+        current,
+        {
+          changed: runtimeChanged,
+          computerChanged,
+          providerChanged: currentConfig?.runtime !== runtimeConfig.runtime,
+        },
+        (fence) => this.agents.update(current.id, data, fence),
+      );
+      if (attempt.plan === "push")
+        return { agent: publicAgent(attempt.written), restart: attempt.restart };
+      if (attempt.plan === "restart" && current.computerId)
         await this.runtimeControl.stop(
           {
             protocolMajor: 1,
@@ -274,19 +297,11 @@ export class ManageAgents {
           },
           principal.userId,
         );
-      // The username (`name`) is fixed at creation and is never written here; only `displayName`
-      // is editable after creation.
-      const metadata = {
-        displayName: input.displayName?.trim() || current.displayName,
-        description: input.description.trim(),
-      };
-      const agent = await this.agents.update(
-        current.id,
-        runtimeChanged || computerChanged ? { ...metadata, computerId, runtimeConfig } : metadata,
-      );
-      if (!runtimeChanged && !computerChanged)
+      const agent = await this.agents.update(current.id, data);
+      if (attempt.plan === "not-required")
         return { agent: publicAgent(agent), restart: "not-required" as const };
-      if (stopped) return { agent: publicAgent(agent), restart: "deferred" as const };
+      if (attempt.plan === "deferred")
+        return { agent: publicAgent(agent), restart: "deferred" as const };
       try {
         await this.runtimeControl.start(agentStartIntent(agent, computerId), principal.userId);
         return { agent: publicAgent(agent), restart: "published" as const };
@@ -327,27 +342,14 @@ export function agentStopIntent(
 }
 
 export function agentStartIntent(
-  agent: Pick<AgentRecord, "id" | "workspaceId" | "computerId" | "runtimeConfig">,
+  agent: Pick<
+    AgentRecord,
+    "id" | "workspaceId" | "computerId" | "runtimeConfig" | "runtimeConfigRevision"
+  >,
   computerId?: string,
 ): AgentStartIntent {
   return {
     ...agentStopIntent(agent, computerId),
-    ...runtimeStartFields(requiredRuntimeConfig(agent)),
-  };
-}
-
-export function runtimeStartFields(config: AgentRuntimeConfig) {
-  const launchProviderConfig =
-    config.provider.kind === "coforge"
-      ? { kind: config.provider.kind, providerId: config.provider.providerId }
-      : config.provider;
-  return {
-    provider: config.runtime,
-    model: config.model,
-    modelProvider: config.modelProvider,
-    reasoning: config.reasoning,
-    providerConfig: launchProviderConfig,
-    // Absent means the ordinary tier; never send a `false` the daemon would have to read as one.
-    ...(config.fastMode ? { fastMode: true } : {}),
+    ...runtimeStartFields(requiredRuntimeConfig(agent), agent.runtimeConfigRevision),
   };
 }

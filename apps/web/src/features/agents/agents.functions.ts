@@ -25,7 +25,10 @@ import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { listArchivedAgents } from "#src/server/agents/archived-agents.server";
-import { userAgentRuntimeControl } from "#src/server/agents/user-agent-control.server";
+import {
+  userAgentConfigApply,
+  userAgentRuntimeControl,
+} from "#src/server/agents/user-agent-control.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
@@ -65,6 +68,7 @@ async function agentEnvironment(db: Database) {
     userAgentRuntimeControl(db, agents),
     getAgentRuntimeLock(),
     await readAgentRuntimeCredentialEncryptionKey(process.env),
+    userAgentConfigApply(db),
   );
 }
 

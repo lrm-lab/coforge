@@ -20,7 +20,9 @@ export type AgentRuntimeCredentialRepository = {
     workspaceId: string,
     ownerId: string,
   ): Promise<{ runtimeConfig: AgentRuntimeConfig | undefined } | undefined>;
-  updateRuntimeConfig(agentId: string, runtimeConfig: AgentRuntimeConfig): Promise<void>;
+  /** The Agent's `runtimeConfigRevision` rises with every write here: a credential change takes
+   * effect by restarting the Agent, never by an idle config sync. */
+  updateRuntimeConfig(agentId: string, runtimeConfig: AgentRuntimeConfig): Promise<unknown>;
 };
 
 export type AgentRuntimeCredentialSummary = {
@@ -98,7 +100,8 @@ export class AgentRuntimeCredentials {
 
   async delete(principal: AgentRuntimeCredentialPrincipal, agentId: string): Promise<void> {
     const runtimeConfig = await this.#ownedConfig(principal, agentId);
-    if (runtimeConfig.provider.kind !== "coforge") return;
+    // Nothing stored, nothing to delete: no write, so no revision bump.
+    if (runtimeConfig.provider.kind !== "coforge" || !runtimeConfig.provider.apiKey) return;
     const { apiKey: _apiKey, ...provider } = runtimeConfig.provider;
     await this.repository.updateRuntimeConfig(agentId, {
       ...runtimeConfig,

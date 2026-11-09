@@ -142,7 +142,8 @@ export function AgentProfileHeader({
     </header>
   );
   const statusLine = controls?.controlPendingLabel ?? controls?.controlFailureDetail;
-  if (!controls?.startStopError && !statusLine) return header;
+  const submitError = controls?.startStopError ?? controls?.restartSubmitError;
+  if (!submitError && !statusLine) return header;
   return (
     <>
       {header}
@@ -151,9 +152,9 @@ export function AgentProfileHeader({
           {statusLine}
         </p>
       )}
-      {controls?.startStopError && (
+      {submitError && (
         <p role="alert" className="px-5 pb-2 text-sm text-error-primary">
-          {controls.startStopError}
+          {submitError}
         </p>
       )}
     </>

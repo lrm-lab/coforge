@@ -1,6 +1,7 @@
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { WorkspaceAgentRecovery } from "#src/server/agents/agent-runtime-control.server";
+import { createAgentConfigPush } from "#src/server/agents/agent-config-apply.server";
 import { createDaemonRuntimeReadyMethod } from "#src/server/centrifugo/daemon-runtime-ready-method.server";
 import { getComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
@@ -53,6 +54,7 @@ export function daemonRuntimeReadyPorts(input: {
       input.sessions,
       input.control,
       input.controlStore,
+      createAgentConfigPush(centrifugo),
     ),
     restarts: getComputerRestartStore(),
     capabilities: input.capabilityLeases,

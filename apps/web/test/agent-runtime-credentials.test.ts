@@ -22,9 +22,12 @@ class MemoryAgentRuntimeCredentialRepository implements AgentRuntimeCredentialRe
     );
   }
 
+  writes = 0;
+
   updateRuntimeConfig(agentId: string, runtimeConfig: AgentRuntimeConfig) {
     const agent = this.agents.get(agentId);
     if (agent) agent.runtimeConfig = runtimeConfig;
+    this.writes += 1;
     return Promise.resolve();
   }
 }
@@ -64,6 +67,28 @@ describe("Agent runtime credentials", () => {
       kind: "coforge",
       providerId: "deepseek",
       apiKey: "sk-secret-value-1234",
+    });
+  });
+
+  test("deleting a key removes it, and deleting when none is stored writes nothing", async () => {
+    const repository = repositoryWith({
+      runtime: "pi",
+      provider: { kind: "coforge", providerId: "deepseek" },
+      model: "deepseek-chat",
+      modelProvider: "deepseek",
+      reasoning: "high",
+    });
+    const credentials = new AgentRuntimeCredentials(repository, encryptionKey);
+
+    await credentials.delete(principal, "agent-1");
+    expect(repository.writes).toBe(0);
+
+    await credentials.save(principal, "agent-1", "sk-secret-value-1234");
+    await credentials.delete(principal, "agent-1");
+    expect(repository.writes).toBe(2);
+    expect(repository.agents.get("agent-1")!.runtimeConfig.provider).toEqual({
+      kind: "coforge",
+      providerId: "deepseek",
     });
   });
 

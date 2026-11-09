@@ -11,6 +11,8 @@ function fixture(options?: {
   mutationFails?: boolean;
   startFails?: boolean;
   stopped?: boolean;
+  /** No API key is stored, so there is nothing to delete. */
+  noKey?: boolean;
 }) {
   const events: string[] = [];
   const starts: unknown[] = [];
@@ -56,6 +58,7 @@ function fixture(options?: {
         events.push("delete");
         if (options?.mutationFails) throw new Error("credential persistence failed");
       },
+      summary: async () => (options?.noKey ? null : { providerId: "anthropic", hint: "••••1234" }),
     },
     {
       stop: async () => {
@@ -206,5 +209,25 @@ describe("ChangeAgentRuntimeCredential", () => {
       providerId: "anthropic",
       hint: "••••1234",
     });
+  });
+
+  test("deleting a key restarts the Agent at once even on a Daemon that takes config syncs", async () => {
+    const { credentialChange, events } = fixture();
+
+    const result = await credentialChange.delete(principal, "agent-1");
+
+    expect(events).toEqual(["stop", "delete", "start"]);
+    expect(result.restart).toBe("published");
+  });
+
+  test("deleting when no key is stored changes nothing: no stop, no write, no start, not-required", async () => {
+    for (const stopped of [false, true]) {
+      const { credentialChange, events } = fixture({ noKey: true, stopped });
+
+      const result = await credentialChange.delete(principal, "agent-1");
+
+      expect(events).toEqual([]);
+      expect(result).toEqual({ result: { deleted: true }, restart: "not-required" });
+    }
   });
 });

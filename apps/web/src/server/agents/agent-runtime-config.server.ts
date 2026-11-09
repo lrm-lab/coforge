@@ -192,3 +192,25 @@ export function readableRuntimeConfig(
     return undefined;
   }
 }
+
+/**
+ * The runtime fields a Start launches with. `agentConfigRevision` is the Agent's
+ * `runtimeConfigRevision`; every Start carries it so the Daemon holds the revision the server last
+ * pushed, and it is omitted only while it is 0 (never changed), which the wire cannot carry.
+ */
+export function runtimeStartFields(config: AgentRuntimeConfig, agentConfigRevision = 0) {
+  const launchProviderConfig =
+    config.provider.kind === "coforge"
+      ? { kind: config.provider.kind, providerId: config.provider.providerId }
+      : config.provider;
+  return {
+    provider: config.runtime,
+    model: config.model,
+    modelProvider: config.modelProvider,
+    reasoning: config.reasoning,
+    providerConfig: launchProviderConfig,
+    // Absent means the ordinary tier; never send a `false` the daemon would have to read as one.
+    ...(config.fastMode ? { fastMode: true } : {}),
+    ...(agentConfigRevision > 0 ? { agentConfigRevision } : {}),
+  };
+}

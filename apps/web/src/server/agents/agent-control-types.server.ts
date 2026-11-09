@@ -102,6 +102,8 @@ export type AgentControlAgent = {
   visibility: string;
   systemKind?: string | null;
   runtimeConfig: AgentRuntimeConfig;
+  /** `Agent.runtimeConfigRevision`; every Start carries it. Absent reads as 0. */
+  runtimeConfigRevision?: number;
   /** Opaque persisted representation used only for compare-and-swap. */
   storedRuntimeConfig?: unknown;
   storedRuntimeSession?: unknown;
