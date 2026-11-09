@@ -18,6 +18,7 @@ import { escapePathIdentity, isSafePathScope } from "#src/persistence/path-scope
 export const AGENT_CONTEXT_VIEW_RETENTION_DAYS = 30;
 export const AGENT_CONTEXT_VIEW_OFF_GRACE_MS = 24 * 60 * 60 * 1000;
 export const AGENT_CONTEXT_INDEX_MAX_BYTES = 8 * 1024 * 1024;
+export const AGENT_CONTEXT_VIEW_REQUEST_LOG_MAX_BYTES = 128 * 1024 * 1024;
 export const CONTEXT_VIEW_READ_FLAGS =
   constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 export const CONTEXT_VIEW_APPEND_FLAGS =
@@ -115,6 +116,20 @@ export class ContextViewStore {
       return info.isDirectory() && !info.isSymbolicLink();
     } catch {
       return false;
+    }
+  }
+
+  static agentIds(stateDirectory: string, serverId: string): string[] {
+    if (!stateDirectory || !isSafePathScope(serverId)) return [];
+    const directory = join(stateDirectory, "agent-context", escapePathIdentity(serverId));
+    try {
+      const info = lstatSync(directory);
+      if (!info.isDirectory() || info.isSymbolicLink()) return [];
+      return readdirSync(directory, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+        .map((entry) => entry.name);
+    } catch {
+      return [];
     }
   }
 
@@ -269,6 +284,30 @@ export class ContextViewStore {
     }
     if (existsSync(this.#offSincePath)) unlinkSync(this.#offSincePath);
     return true;
+  }
+
+  static sweepRequestLog(path: string, cutoff: number): boolean {
+    try {
+      const info = lstatSync(path);
+      if (!info.isFile() || info.isSymbolicLink() || info.nlink > 1) return false;
+      if (info.size > AGENT_CONTEXT_VIEW_REQUEST_LOG_MAX_BYTES || info.mtimeMs >= cutoff)
+        return false;
+      unlinkSync(path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  static removeRequestLog(path: string): boolean {
+    try {
+      const info = lstatSync(path);
+      if (!info.isFile() || info.isSymbolicLink() || info.nlink > 1) return false;
+      unlinkSync(path);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   #readFileSafely(path: string): string {

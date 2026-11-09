@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, symlinkSync } from "node:fs";
+import { mkdtempSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -46,5 +46,19 @@ describe("ContextViewStore", () => {
     const unsafe = join(root, "unsafe");
     symlinkSync(root, unsafe);
     expect(() => new ContextViewStore(unsafe, "server-1", "agent-1")).toThrow();
+  });
+
+  test("sweeps a private captured request log by retention and grace", () => {
+    const root = mkdtempSync(join(tmpdir(), "coforge-context-view-"));
+    const log = join(root, "pi-requests.jsonl");
+    writeFileSync(log, '{"type":"request"}\n', "utf8");
+    utimesSync(log, new Date(1), new Date(1));
+    expect(ContextViewStore.sweepRequestLog(log, 2_000)).toBe(true);
+    writeFileSync(log, '{"type":"request"}\n', "utf8");
+    const store = new ContextViewStore(root, "server-1", "agent-1", () => 1_000);
+    store.record(entry);
+    store.markOff(1_000);
+    expect(ContextViewStore.removeRequestLog(log)).toBe(true);
+    expect(store.sweepOff(1_000 + AGENT_CONTEXT_VIEW_OFF_GRACE_MS)).toBe(true);
   });
 });

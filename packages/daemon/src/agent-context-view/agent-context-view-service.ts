@@ -1,4 +1,5 @@
 import { fstatSync, lstatSync, openSync, constants, closeSync, readSync } from "node:fs";
+import { relative } from "node:path";
 import { ContextViewStore, type ContextViewIndexEntry } from "./context-view-store";
 
 export const CONTEXT_VIEW_SUPPORTED_RUNTIMES = [
@@ -38,6 +39,7 @@ export type ContextViewAgentFacts = {
   sessionId?: string;
   transcript?: string;
   transcriptPath?: string;
+  contextViewRequestLogPath?: string;
 };
 
 function normalizeRuntime(value: string): ContextViewRuntime | undefined {
@@ -51,6 +53,7 @@ type Options = {
   serverId: string;
   workspaceId: string;
   computerId: string;
+  workspaceRoot?: string;
   retentionDays?: number;
   now?: () => number;
   reportAvailability?: (availability: ContextViewAvailability) => void;
@@ -61,12 +64,14 @@ export class AgentContextViewService {
   readonly #serverId: string;
   readonly #workspaceId: string;
   readonly #computerId: string;
+  readonly #workspaceRoot?: string;
   readonly #retentionDays: number;
   readonly #now: () => number;
   readonly #reportAvailability?: Options["reportAvailability"];
   readonly #stores = new Map<string, ContextViewStore>();
   readonly #reported = new Map<string, string>();
   readonly #retainedSince = new Map<string, string>();
+  readonly #requestLogs = new Map<string, string>();
   #maintenance?: ReturnType<typeof setInterval>;
 
   constructor(options: Options) {
@@ -74,12 +79,14 @@ export class AgentContextViewService {
     this.#serverId = options.serverId;
     this.#workspaceId = options.workspaceId;
     this.#computerId = options.computerId;
+    this.#workspaceRoot = options.workspaceRoot;
     this.#retentionDays = options.retentionDays ?? 30;
     this.#now = options.now ?? Date.now;
     this.#reportAvailability = options.reportAvailability;
   }
 
   onMessageCommitted(facts: ContextViewAgentFacts, messageId: string, enabled: boolean): void {
+    this.#rememberRequestLog(facts);
     if (!enabled) return;
     const runtime = normalizeRuntime(facts.runtime);
     if (!runtime) {
@@ -112,6 +119,7 @@ export class AgentContextViewService {
     enabled = true,
     trigger: ContextViewAvailability["trigger"] = "startup",
   ): void {
+    this.#rememberRequestLog(facts);
     if (!enabled) return;
     const runtime = normalizeRuntime(facts.runtime);
     if (!runtime) {
@@ -136,9 +144,21 @@ export class AgentContextViewService {
   }
 
   compactAndSweep(): void {
+    for (const agentId of ContextViewStore.agentIds(this.#stateDirectory, this.#serverId))
+      this.#store(agentId);
     for (const store of this.#stores.values()) {
       store.compact(this.#retentionDays);
-      store.sweepOff(this.#now());
+      const agentId = [...this.#stores.entries()].find(([, candidate]) => candidate === store)?.[0];
+      const off = store.sweepOff(this.#now());
+      const requestLog = agentId ? this.#requestLogs.get(agentId) : undefined;
+      if (requestLog) {
+        if (off) ContextViewStore.removeRequestLog(requestLog);
+        else
+          ContextViewStore.sweepRequestLog(
+            requestLog,
+            this.#now() - this.#retentionDays * 24 * 60 * 60 * 1000,
+          );
+      }
     }
   }
 
@@ -169,6 +189,16 @@ export class AgentContextViewService {
     return store;
   }
 
+  #rememberRequestLog(facts: ContextViewAgentFacts): void {
+    const path = facts.contextViewRequestLogPath;
+    if (!path) return;
+    if (this.#workspaceRoot) {
+      const relativePath = relative(this.#workspaceRoot, path);
+      if (!relativePath || relativePath.startsWith("..") || relativePath.includes("\0")) return;
+    }
+    this.#requestLogs.set(facts.agentId, path);
+  }
+
   #report(
     facts: ContextViewAgentFacts,
     runtime: string,
@@ -178,9 +208,8 @@ export class AgentContextViewService {
   ): void {
     const retainedSince =
       (supported ? this.#store(facts.agentId).oldestSentAt() : undefined) ??
-      this.#retainedSince.get(facts.agentId) ??
-      new Date(this.#now()).toISOString();
-    if (supported) this.#retainedSince.set(facts.agentId, retainedSince);
+      this.#retainedSince.get(facts.agentId);
+    if (supported && retainedSince) this.#retainedSince.set(facts.agentId, retainedSince);
     const availability: ContextViewAvailability = {
       type: "agent:context_view_availability",
       protocolMajor: 1,
@@ -191,7 +220,7 @@ export class AgentContextViewService {
       retentionDays: this.#retentionDays,
       supported,
       trigger,
-      ...(supported ? { retainedSince } : { unsupportedReason }),
+      ...(supported ? (retainedSince ? { retainedSince } : {}) : { unsupportedReason }),
     };
     const encoded = JSON.stringify(availability);
     if (this.#reported.get(facts.agentId) === encoded) return;

@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
+import { ContextViewStore } from "#src/agent-context-view/context-view-store";
 
 test("indexes a committed message at the native transcript size and reports availability once", () => {
   const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
@@ -73,6 +74,31 @@ test("does not create unknown agent state and hides moved agent data after disab
   );
   service.disable("agent-1");
   expect(service.find("agent-1", "message-1")).toBeUndefined();
+});
+
+test("startup maintenance enumerates disk stores and compacts old entries", () => {
+  const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
+  const log = join(root, "pi-requests.jsonl");
+  writeFileSync(log, '{"type":"request"}\n', "utf8");
+  const service = new AgentContextViewService({
+    stateDirectory: root,
+    workspaceRoot: root,
+    serverId: "server-1",
+    workspaceId: "workspace-1",
+    computerId: "computer-1",
+    now: () => 31 * 24 * 60 * 60 * 1000,
+  });
+  const store = new ContextViewStore(root, "server-1", "agent-1", () => 31 * 24 * 60 * 60 * 1000);
+  store.record({
+    messageId: "message-1",
+    sentAt: new Date(0).toISOString(),
+    runtime: "pi",
+    sessionId: "session-1",
+    transcript: "pi-requests.jsonl",
+    offset: 1,
+  });
+  service.compactAndSweep();
+  expect(readFileSync(store.indexPath, "utf8")).toBe("");
 });
 
 describe("unsupported context view runtimes", () => {

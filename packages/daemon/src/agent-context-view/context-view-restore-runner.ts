@@ -58,7 +58,10 @@ export function decodeContextViewRestoreChildResult(raw: string): ContextViewRes
   )
     return {
       ok: false,
-      failure: header.bytes > CONTEXT_VIEW_RESTORE_RESULT_MAX_BYTES ? "read_failed" : "read_failed",
+      failure: header.bytes > CONTEXT_VIEW_RESTORE_RESULT_MAX_BYTES ? "too_large" : "read_failed",
+      ...(header.bytes > CONTEXT_VIEW_RESTORE_RESULT_MAX_BYTES
+        ? { tooLargeCause: "request" as const }
+        : {}),
     };
   try {
     const result = JSON.parse(payload) as ContextViewRestoreResult;
@@ -148,7 +151,7 @@ export async function runContextViewRestoreInChild(
       Buffer.byteLength(raw, "utf8") >
       CONTEXT_VIEW_RESTORE_RESULT_MAX_BYTES + CONTEXT_VIEW_RESTORE_HEADER_MAX_BYTES
     )
-      return { ok: false, failure: "read_failed" };
+      return { ok: false, failure: "too_large", tooLargeCause: "request" };
     const result = decodeContextViewRestoreChildResult(raw);
     if (result.ok && process.memoryUsage().rss > CONTEXT_VIEW_RESTORE_RSS_MAX_BYTES)
       return { ok: false, failure: "too_large", tooLargeCause: "restore_limit" };

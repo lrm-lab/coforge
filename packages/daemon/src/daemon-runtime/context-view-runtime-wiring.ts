@@ -23,6 +23,15 @@ export type ContextViewRuntimeDeps = {
   reported(agentId: string): { sessionId?: string } | undefined;
 };
 
+function requestLogPath(
+  runtime: ReturnType<ContextViewRuntimeDeps["runtime"]>,
+): string | undefined {
+  const session = runtime?.session;
+  if (!session || typeof session !== "object") return undefined;
+  const path = (session as { contextViewRequestLogPath?: unknown }).contextViewRequestLogPath;
+  return typeof path === "string" ? path : undefined;
+}
+
 export function setContextViewMessageIds(
   session: Pick<AgentSession, "setContextViewMessageId" | "setContextViewMessageIds">,
   messageIds: readonly string[],
@@ -92,6 +101,7 @@ export function commitContextViewMessage(
     ...(transcriptPath
       ? { transcript: transcriptPath.relative, transcriptPath: transcriptPath.absolute }
       : {}),
+    ...(requestLogPath(runtime) ? { contextViewRequestLogPath: requestLogPath(runtime) } : {}),
   };
   deps.service.onMessageCommitted(facts, message.messageId, deps.enabled.get(agentId) === true);
 }
@@ -102,12 +112,14 @@ export async function reportContextViewAvailability(
   trigger: "startup" | "server_features" = "startup",
 ): Promise<void> {
   const path = await contextViewTranscriptPath(deps, report.agentId);
+  const runtime = deps.runtime(report.agentId);
   deps.service.reportAvailability(
     {
       agentId: report.agentId,
       runtime: report.provider,
       sessionId: report.sessionId,
       ...(path ? { transcript: path.relative, transcriptPath: path.absolute } : {}),
+      ...(requestLogPath(runtime) ? { contextViewRequestLogPath: requestLogPath(runtime) } : {}),
     },
     deps.enabled.get(report.agentId) === true,
     trigger,
