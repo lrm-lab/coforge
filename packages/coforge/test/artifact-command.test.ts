@@ -51,6 +51,25 @@ test("each artifact command parses into its own request", () => {
     command: "artifact",
     request: { operation: "list" },
   });
+  const shared = parseArgs([
+    "artifact",
+    "share",
+    ID,
+    "a1",
+    "--to",
+    "#launch",
+    "--target",
+    "@ada",
+    "--note",
+    "Read this",
+  ]) as ArtifactInvocation;
+  expect(shared.request).toMatchObject({
+    operation: "share",
+    artifactIds: [ID, "a1"],
+    targets: ["#launch", "@ada"],
+    note: "Read this",
+  });
+  expect((shared.request as Extract<AgentArtifactRequest, { operation: "share" }>).requestId).toBeString();
 });
 
 test("create --kind html makes a web page, which needs its one-line description", () => {

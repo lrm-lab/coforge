@@ -11,6 +11,9 @@ import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { ArtifactPublicLinks } from "./artifact-public-links.server";
 import { artifactsEnabled } from "./artifact-access.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
+import type { ArtifactActor } from "./artifact-access.server";
+import type { ArtifactMessageCard } from "./artifact-reads.server";
+export type { ArtifactMessageCard } from "./artifact-reads.server";
 
 /** The artifact services of production: bytes in the private file bucket, each new version
  * announced over Centrifugo, the experiment read from the Workspace. */
@@ -85,4 +88,16 @@ export function productionArtifactSandbox(db: PrismaClient) {
         : null;
     },
   });
+}
+
+/** Batched live card projection for a page of browser messages. */
+export function artifactMessageCards(
+  db: PrismaClient,
+  input: {
+    workspaceId: string;
+    reader: ArtifactActor;
+    messages: readonly { body: string }[];
+  },
+): Promise<ArtifactMessageCard[][]> {
+  return productionArtifacts(db).artifacts.reads.messageCards(input);
 }

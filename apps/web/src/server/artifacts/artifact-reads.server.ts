@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
 import { AppError } from "#src/lib/app-error";
 import {
   artifactHomeAccess,
@@ -18,6 +19,22 @@ const HISTORY_PAGE = 50;
 /** Artifacts one list or one batch of cards shows at most. */
 const LIST_LIMIT = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type ArtifactMessageCard =
+  | {
+      kind: "artifact";
+      state: "open";
+      artifactId: string;
+      href: string;
+      title: string;
+      preview: string;
+      contentType: string;
+      version: number;
+      source: { conversationId?: string; agentId?: string; label: string };
+      canOpen: true;
+    }
+  | { kind: "artifact"; state: "forbidden"; artifactId: string; canOpen: false }
+  | { kind: "artifact"; state: "deleted"; artifactId: string; canOpen: false };
 
 /** What a card and a list row show of an artifact: never its content beyond the preview. */
 const CARD_SELECT = {
@@ -238,6 +255,112 @@ export class ArtifactReads {
       );
     }
     return ids.flatMap((id) => (kept.has(id) ? [kept.get(id)!] : []));
+  }
+
+  /**
+   * The live projections embedded in one browser message page. The three reads are deliberately
+   * fixed: artifact rows, the viewer's Workspace membership, and all referenced conversations.
+   * Access is then decided in memory so a page with twenty links does not create twenty reads.
+   */
+  async messageCards(input: {
+    workspaceId: string;
+    reader: ArtifactActor;
+    messages: readonly { body: string }[];
+  }): Promise<ArtifactMessageCard[][]> {
+    if (!(await this.enabled(input.workspaceId))) return input.messages.map(() => []);
+    const ids = [
+      ...new Set(input.messages.flatMap((message) => artifactIdsInBody(message.body, 100))),
+    ];
+    if (ids.length === 0) return input.messages.map(() => []);
+    const rows = await this.db.artifact.findMany({
+      where: { workspaceId: input.workspaceId, id: { in: ids } },
+      select: {
+        id: true,
+        title: true,
+        preview: true,
+        kind: true,
+        currentVersion: true,
+        homeKey: true,
+        access: true,
+        deletedAt: true,
+          authorAgentId: true,
+        workspace: { select: { slug: true } },
+      },
+    });
+    const homeConversationIds = rows.flatMap((row) =>
+      row.homeKey.startsWith("conversation:") ? [row.homeKey.slice("conversation:".length)] : [],
+    );
+    const [membership, conversations] = await Promise.all([
+      input.reader.userId
+        ? this.db.workspaceMembership.findUnique({
+            where: {
+              workspaceId_userId: { workspaceId: input.workspaceId, userId: input.reader.userId },
+            },
+            select: { userId: true },
+          })
+        : Promise.resolve(null),
+      this.db.conversation.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          id: { in: homeConversationIds },
+        },
+        select: {
+          id: true,
+          channelName: true,
+          visibility: true,
+          members: {
+            where: {
+              ...("userId" in input.reader ? { userId: input.reader.userId } : { agentId: input.reader.agentId }),
+              leftAt: null,
+            },
+            select: { id: true },
+          },
+        },
+      }),
+    ]);
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const byConversation = new Map(conversations.map((conversation) => [conversation.id, conversation]));
+    const member = membership !== null;
+    const cardFor = (id: string): ArtifactMessageCard => {
+      const row = byId.get(id);
+      if (!row || row.deletedAt !== null)
+        return {
+          kind: "artifact",
+          state: row?.deletedAt ? "deleted" : "forbidden",
+          artifactId: id,
+          canOpen: false,
+        };
+      const conversationId = row.homeKey.startsWith("conversation:")
+        ? row.homeKey.slice("conversation:".length)
+        : undefined;
+      const conversation = conversationId ? byConversation.get(conversationId) : undefined;
+      const homeRead =
+        row.homeKey === "workspace"
+          ? member
+          : conversation !== undefined &&
+            (conversation.channelName !== null
+              ? conversation.visibility === "public" || conversation.members.length > 0
+              : conversation.members.length > 0);
+      const canOpen = homeRead || (row.access === "workspace" && member);
+      if (!canOpen) return { kind: "artifact", state: "forbidden", artifactId: id, canOpen: false };
+      return {
+        kind: "artifact",
+        state: "open",
+        artifactId: id,
+        href: `/w/${row.workspace.slug}/artifacts/${id}`,
+        title: row.title,
+        preview: row.preview,
+        contentType: row.kind,
+        version: row.currentVersion,
+        source: conversationId
+          ? { conversationId, label: conversation?.channelName ? `#${conversation.channelName}` : "DM" }
+          : row.authorAgentId
+            ? { agentId: row.authorAgentId, label: "Agent" }
+            : { label: "Workspace" },
+        canOpen: true,
+      };
+    };
+    return input.messages.map((message) => artifactIdsInBody(message.body, 100).map(cardFor));
   }
 
   /** The authoring Agents' owners, for the batch's `canChange` answers: one lookup per batch. */

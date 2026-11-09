@@ -1,17 +1,19 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { decodeAgentArtifactRequest } from "@lrm/coforge-sdk/agent";
+import { createFileRoute } from "@tanstack/react-router";
 import { AppError } from "#src/lib/app-error";
 import {
   agentAuthMiddleware,
   agentErrorResponse,
 } from "#src/server/agents/agent-http-middleware.server";
-import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
-import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
-import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import {
   runAgentArtifactOperation,
   type AgentArtifactServices,
 } from "#src/server/artifacts/agent-artifacts.server";
+import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
+import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
+import { ArtifactShares } from "#src/server/artifacts/artifact-shares.server";
+import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
+import { agentMessagesPostDependencies } from "./messages";
 
 /**
  * `coforge artifact create|read|push|history|revert` (task #385): one operation per request, as
@@ -37,13 +39,24 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      POST: ({ request, context: { principal, db } }) =>
-        handleAgentArtifactPost(request, principal, {
+      POST: ({ request, context: { principal, db } }) => {
+        const messageDependencies = agentMessagesPostDependencies(db);
+        return handleAgentArtifactPost(request, principal, {
           db,
           ...productionArtifacts(db),
+          shares: new ArtifactShares(db, (workspaceId) => artifactsEnabled(db, workspaceId)),
+          send: ({ target, idempotencyKey, body }) =>
+            messageDependencies.sender.executeFromAgent({
+              workspaceId: principal.workspaceId,
+              agentId: principal.agentId,
+              target,
+              idempotencyKey,
+              body,
+            }),
           enabled: (workspaceId) => artifactsEnabled(db, workspaceId),
           webPages: (workspaceId) => isFeatureEnabled("artifact-web-pages", { workspaceId }),
-        }),
+        });
+      },
     },
   },
 });

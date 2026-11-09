@@ -41,6 +41,13 @@ export type AgentArtifactRequest =
       to: number;
       baseVersion: number;
       idempotencyKey: string;
+    }
+  | {
+      operation: "share";
+      artifactIds: string[];
+      targets: string[];
+      note?: string;
+      requestId: string;
     };
 
 const OPERATION_FIELDS = {
@@ -62,9 +69,20 @@ const OPERATION_FIELDS = {
     numbers: ["to", "baseVersion"],
     required: ["artifact", "idempotencyKey", "to", "baseVersion"],
   },
+  share: {
+    strings: ["note", "requestId"],
+    numbers: [],
+    arrays: ["artifactIds", "targets"],
+    required: ["artifactIds", "targets", "requestId"],
+  },
 } as const satisfies Record<
   AgentArtifactRequest["operation"],
-  { strings: readonly string[]; numbers: readonly string[]; required: readonly string[] }
+  {
+    strings: readonly string[];
+    numbers: readonly string[];
+    arrays?: readonly string[];
+    required: readonly string[];
+  }
 >;
 
 /**
@@ -85,6 +103,8 @@ export function decodeAgentArtifactRequest(value: unknown): AgentArtifactRequest
       if (typeof field !== "string") return null;
     } else if ((known.numbers as readonly string[]).includes(key)) {
       if (!Number.isSafeInteger(field) || (field as number) < 0) return null;
+    } else if ((known as { arrays?: readonly string[] }).arrays?.includes(key)) {
+      if (!Array.isArray(field) || !field.every((item) => typeof item === "string")) return null;
     } else return null;
     request[key] = field;
   }

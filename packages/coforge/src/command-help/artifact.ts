@@ -69,4 +69,14 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
     guidance: "Saves version --to's text and settings as a new version; nothing is rewritten.",
     example: "coforge artifact revert 0f8c…e1 --to 2 --base 5",
   },
+  "artifact share": {
+    syntax: "coforge artifact share <id>... --to <target>... [--note <text>] [--json]",
+    flags: [
+      "<id>...  one or more artifact ids",
+      "--to  the channel or DM target; repeat for more targets",
+      "--note  an optional note above the live artifact links",
+    ],
+    guidance:
+      "Posts an ordinary message containing live artifact links. Sharing does not grant access; each reader is checked against the artifact's existing access tier.",
+  },
 };
