@@ -113,28 +113,69 @@ export const USAGE_STALE_AFTER_MS = SCAN_RESULT_STALE_AFTER_MS;
  * `USAGE_STALE_AFTER_MS`. */
 export const FAILED_USAGE_STALE_AFTER_MS = 2 * 60_000;
 
+/** Lua that deletes the scan record at `key` when it belongs to the scan named by `scanId` (a Lua
+ * expression), or is not a record at all. A result from an older scan never ends a newer one. */
+const endOwnScan = (key: string, scanId: string) => `
+local scan = redis.call("GET", ${key})
+if scan then
+  local ok, record = pcall(cjson.decode, scan)
+  if not ok or type(record) ~= "table" or record.scanId == ${scanId} then
+    redis.call("DEL", ${key})
+  end
+end`;
+
 /**
  * A successful scan is one atomic fact across three keys: the reading, the attempt that produced
- * it, and the in-flight marker it ends. ARGV: the reading, the attempt, then their TTL; KEYS: the
- * reading, the attempt, then the scan.
+ * it, and the in-flight marker it ends. ARGV: the reading, the attempt, their TTL, then the scan
+ * id; KEYS: the reading, the attempt, then the scan.
  */
 const PUT_SUCCESS = `
 redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[3])
 redis.call("SET", KEYS[2], ARGV[2], "EX", ARGV[3])
-redis.call("DEL", KEYS[3])
+${endOwnScan("KEYS[3]", "ARGV[4]")}
 return 1
 `;
 
-/** A failed attempt records only itself and ends its scan; the last reading is left untouched.
- * ARGV: the attempt, then its TTL; KEYS: the attempt, then the scan. */
+/** A failed attempt records only itself and ends its own scan; the last reading is left untouched.
+ * ARGV: the attempt, its TTL, then the scan id; KEYS: the attempt, then the scan. */
 const PUT_ATTEMPT = `
 redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2])
-redis.call("DEL", KEYS[2])
+${endOwnScan("KEYS[2]", "ARGV[3]")}
+return 1
+`;
+
+/** Claims the scan record unless a pending scan stands, and answers the standing record. A record
+ * that is not a pending scan (`readScanResult` would not call it in flight) is replaced. ARGV: the
+ * record, then its lifetime; KEYS: the scan. One script, so two callers cannot both claim. */
+const CLAIM_SCAN = `
+if redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2], "NX") then return nil end
+local standing = redis.call("GET", KEYS[1])
+local ok, record = pcall(cjson.decode, standing)
+if ok and type(record) == "table" and record.status == "pending" and type(record.scanId) == "string" then
+  return standing
+end
+redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2])
+return nil
+`;
+
+/** Ends the scan record when it is the named scan's own. ARGV: the scan id; KEYS: the scan. */
+const RELEASE_SCAN = `${endOwnScan("KEYS[1]", "ARGV[1]")}
 return 1
 `;
 
 export interface UsageCache {
-  putScan(record: UsageScanRecord): Promise<void>;
+  /**
+   * Records a scan about to be asked for, unless one is already in flight for the same
+   * (Workspace, Computer, provider), and answers the id of the scan in flight: the record's own
+   * when it was recorded. The record expires by itself; a result ends it
+   * (`putResult`), and so does `releaseScan`.
+   */
+  claimScan(record: UsageScanRecord): Promise<string>;
+  /** Ends the scan in flight when it is `scanId`'s own: the caller's, that never got to run. */
+  releaseScan(key: UsageCacheKey, scanId: string): Promise<void>;
+  /** Ends whichever scan is in flight, because what it reads no longer holds: a runtime's login
+   * changed, or a reset credit was spent. */
+  endScan(key: UsageCacheKey): Promise<void>;
   putResult(record: UsageResultRecord): Promise<void>;
   read(key: UsageCacheKey): Promise<UsageReadResult>;
 }
@@ -156,9 +197,25 @@ export class RedisUsageCache implements UsageCache {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async putScan(record: UsageScanRecord) {
-    const keys = scanResultKeys(this.scopeKey(record));
-    await this.redis.set(keys.scan, JSON.stringify(record), "EX", this.scanTtlSeconds);
+  async claimScan(record: UsageScanRecord) {
+    const standing = await this.redis.eval(
+      CLAIM_SCAN,
+      1,
+      scanResultKeys(this.scopeKey(record)).scan,
+      JSON.stringify(record),
+      this.scanTtlSeconds,
+    );
+    return typeof standing === "string"
+      ? (parseJson<{ scanId: string }>(standing)?.scanId ?? record.scanId)
+      : record.scanId;
+  }
+
+  async releaseScan(key: UsageCacheKey, scanId: string) {
+    await this.redis.eval(RELEASE_SCAN, 1, scanResultKeys(this.scopeKey(key)).scan, scanId);
+  }
+
+  async endScan(key: UsageCacheKey) {
+    await this.redis.del(scanResultKeys(this.scopeKey(key)).scan);
   }
 
   async putResult(record: UsageResultRecord) {
@@ -181,6 +238,7 @@ export class RedisUsageCache implements UsageCache {
           occurredAt,
         }),
         this.resultTtlSeconds,
+        record.scanId,
       );
       return;
     }
@@ -198,6 +256,7 @@ export class RedisUsageCache implements UsageCache {
         occurredAt,
       }),
       this.resultTtlSeconds,
+      record.scanId,
     );
   }
 

@@ -11,11 +11,15 @@ import { decodeUsageSnapshot } from "./usage-snapshot-decode.server";
  * on it. The usage the Computer read afterwards goes to the usage cache the popover reads, before
  * the outcome becomes visible and even when that page has stopped waiting; a reading the server
  * cannot trust, or a cache that fails, is dropped without costing the outcome.
+ *
+ * A usage scan in flight began before the credit was spent and would read the old count. It is
+ * ended here, with or without a reading, before the outcome is visible: the scan the page asks for
+ * once it knows the outcome then never joins one that started earlier.
  */
 export function createDaemonRuntimeResetCreditConsumeResultMethod(
   dependencies: {
     results?: Pick<RedisResetCreditResults, "accept">;
-    usageCache?: Pick<UsageCache, "putResult">;
+    usageCache?: Pick<UsageCache, "putResult" | "endScan">;
   } = {},
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
@@ -30,8 +34,9 @@ export function createDaemonRuntimeResetCreditConsumeResultMethod(
     const { snapshotJson: _snapshot, ...outcome } = response;
     // The reading first: the page re-reads usage the moment it learns the outcome, so the outcome
     // must not be visible before the usage it comes with. A cache failure never costs the outcome.
+    const usageCache = dependencies.usageCache ?? getUsageCache();
     if (snapshot)
-      await (dependencies.usageCache ?? getUsageCache())
+      await usageCache
         .putResult({
           workspaceId: response.workspaceId,
           computerId: response.computerId,
@@ -42,6 +47,13 @@ export function createDaemonRuntimeResetCreditConsumeResultMethod(
           collectedAt: snapshot.collectedAt ?? new Date().toISOString(),
         })
         .catch(() => undefined);
+    await usageCache
+      .endScan({
+        workspaceId: response.workspaceId,
+        computerId: response.computerId,
+        provider: response.provider,
+      })
+      .catch(() => undefined);
     await (dependencies.results ?? getResetCreditResults()).accept(outcome);
     console.info(
       JSON.stringify({

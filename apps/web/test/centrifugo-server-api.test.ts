@@ -199,30 +199,86 @@ test("rejects a Centrifugo command error returned with HTTP 200", async () => {
   ).rejects.toThrow("Centrifugo publish failed (102)");
 });
 
+const usageTarget = {
+  workspaceId: "workspace-1",
+  computerId: "computer-1",
+  provider: "codex" as const,
+};
+
+/** A usage cache that records its claims and releases; `inFlight` is the scan already running. */
+function scanCache(inFlight?: string) {
+  const events: string[] = [];
+  const cache = {
+    async claimScan(record: { scanId: string }) {
+      events.push(`claim:${record.scanId}`);
+      return inFlight ?? record.scanId;
+    },
+    async releaseScan(_key: unknown, scanId: string) {
+      events.push(`release:${scanId}`);
+    },
+    async endScan() {},
+    async putResult() {},
+    async read() {
+      return { state: "missing" as const };
+    },
+  };
+  return { cache, events };
+}
+
 test("directs a runtime usage scan to the selected Computer's Daemon", async () => {
   let publication: { channel: string; data: Uint8Array } | undefined;
-  await createUsageScan(
+  const { cache, events } = scanCache();
+  const scanId = await createUsageScan(
     {
       async publish(channel, data) {
         publication = { channel, data };
       },
     },
-    { workspaceId: "workspace-1", computerId: "computer-1", provider: "codex" },
-    {
-      async putScan() {},
-      async putResult() {},
-      async read() {
-        return { state: "missing" as const };
-      },
-    },
+    usageTarget,
+    cache,
   );
 
   expect(publication?.channel).toBe("daemon:workspace-1:computer-1");
   expect(decodeDaemonRuntimeUsageScanRequest(publication!.data)).toMatchObject({
+    requestId: scanId,
     workspaceId: "workspace-1",
     computerId: "computer-1",
     provider: "codex",
   });
+  expect(events).toEqual([`claim:${scanId}`]);
+});
+
+test("a usage scan already in flight for the runtime is joined, not published again", async () => {
+  const published: string[] = [];
+  const { cache, events } = scanCache("scan-running");
+  const scanId = await createUsageScan(
+    { publish: async (channel) => void published.push(channel) },
+    usageTarget,
+    cache,
+  );
+
+  expect(scanId).toBe("scan-running");
+  expect(published).toEqual([]);
+  expect(events).toHaveLength(1);
+});
+
+test("a usage scan that could not be published frees the runtime for the next attempt", async () => {
+  const { cache, events } = scanCache();
+  await expect(
+    createUsageScan(
+      {
+        async publish() {
+          throw new Error("centrifugo is down");
+        },
+      },
+      usageTarget,
+      cache,
+    ),
+  ).rejects.toThrow("centrifugo is down");
+
+  const claimed = events[0]!.slice("claim:".length);
+  // Only its own claim is released, so a scan another caller claimed since stays.
+  expect(events).toEqual([`claim:${claimed}`, `release:${claimed}`]);
 });
 
 test("abandons a Centrifugo call that never answers at its deadline, aborting the request", async () => {

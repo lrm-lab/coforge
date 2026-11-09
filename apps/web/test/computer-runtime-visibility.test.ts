@@ -127,25 +127,6 @@ describe("ComputerRuntimeVisibility", () => {
     ).toMatchObject({ unavailableCode: "start_failed" });
   });
 
-  test("publication does not grant owner-only runtime management", async () => {
-    const { visibility } = fixture();
-
-    expect(
-      await visibility.isOwner(
-        { userId: "user-2", workspaceId: "workspace-1" },
-        "computer-2",
-        "claude-code",
-      ),
-    ).toBe(true);
-    expect(
-      await visibility.isOwner(
-        { userId: "user-3", workspaceId: "workspace-1" },
-        "computer-2",
-        "claude-code",
-      ),
-    ).toBe(false);
-  });
-
   test("ownedRuntime returns the row itself to its owner, and undefined to anyone else", async () => {
     const { visibility } = fixture();
 

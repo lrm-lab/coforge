@@ -30,7 +30,7 @@ These rules apply to `src/features/computers/`.
 - `runtime-reset-credit-action.tsx` — the runtime popover's "Use reset · N" button and its confirm dialog (outside the popover, like the sign-out dialog); takes the count and an `onConsume(idempotencyKey)` as props
 - `reset-credit-attempt.ts` — the reset attempt's idempotency key per Computer + provider + account label (`sessionStorage`, memory fallback); expires 10 minutes after it was made, cleared only on a settled outcome, kept after `unknown`, a refusal or a thrown failure. The dialog treats `already_redeemed` like `reset` (toast, close); any other settled answer shows its message and turns Confirm off (`ConfirmDialog`'s `confirmDisabled`)
 - `poll-for-answer.ts` — the shared wait for a started request: asks until the answer is not pending, asks again after a read that failed, and ends as the caller's give-up value at the deadline or when the caller's signal aborts (unmount). The reset credit (`reset-credit-poll.ts`) and the Agent form's Command Code efforts (`features/agents/use-command-code-efforts.ts`, with `command-code-effort.functions.ts`: from 250 ms, doubling to 1.5 s, 45 s deadline, ends with no efforts) both poll through it; a Server Function that waits on a Computer longer than about eight seconds must be split into start and read the same way
-- `use-reset-credit-consume.ts` — the dialog's `onConsume`: starts with `consumeResetCredit`, then polls `readResetCredit` (`reset-credit-poll.ts`: every 1.5 s, read failures asked again, 100 s deadline or unmount ends as `unknown` so the key is kept); resolves to the refusal (`forbidden`, `offline`, `needs_upgrade`) as a value, which the dialog shows without touching the attempt's key (a thrown failure keeps it too), and re-reads the popover's usage after a settled answer, scanning it as Refresh does when the cache holds no reading from that attempt (`usageCarriesAttempt`)
+- `use-reset-credit-consume.ts` — the dialog's `onConsume`: starts with `consumeResetCredit`, then polls `readResetCredit` (`reset-credit-poll.ts`: every 1.5 s, read failures asked again, 100 s deadline or unmount ends as `unknown` so the key is kept); resolves to the refusal (`forbidden`, `offline`, `needs_upgrade`) as a value, which the dialog shows without touching the attempt's key (a thrown failure keeps it too), and re-reads the popover's usage after a settled answer, scanning it as Refresh does when the cache holds no reading from that attempt (`usageCarriesAttempt`); Refresh joins a scan already running, and the server ends any scan that began before the spend, so this scan is always a later one
 
 - `computer-layout.tsx` owns Computer list/detail selection, the return
   control, list scroll retention, and the empty state, following the same
@@ -53,9 +53,12 @@ These rules apply to `src/features/computers/`.
 - The reset credit button (Codex only) sits immediately left of Sign Out in the `accountAction`
   cluster of `computer-runtimes.tsx`. `RuntimeUsage` hands `accountAction` the usage snapshot it
   read, so the count (`resetCreditsAvailable`) and the account label come from the popover's own
-  reading, which only the Computer's owner can read, so only the owner sees the button; the server
-  authority is the wider `canManage` (`server/computers/AGENTS.md`). The dialog is a third `AuthDialog` kind, rendered outside
-  the popover with parent-held state; the count and label it names are fixed when it opens.
+  reading. That reading, the usage popover (`showUsage` is `canSignIn`) and the button all follow
+  the server's `canManage`: the Computer's owner and Workspace owners and admins
+  (`server/computers/AGENTS.md`); a plain member sees none of them. Anyone but the Computer's
+  owner reads only the fields the popover draws, never the credit balance. The dialog is a third
+  `AuthDialog` kind, rendered outside the popover with parent-held state; the count and label it
+  names are fixed when it opens.
 - A cloud Computer belongs to the account: one default, started when first
   sign-in creates the personal Workspace and again when another Workspace is
   created, and ensured once more when the Computers page opens. That start also

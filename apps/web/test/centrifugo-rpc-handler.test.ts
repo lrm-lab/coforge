@@ -694,12 +694,9 @@ describe("CentrifugoRpcHandler", () => {
   test("stores an available Daemon usage result as available", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const snapshot = {
@@ -740,12 +737,9 @@ describe("CentrifugoRpcHandler", () => {
   test("preserves the official quota description and all three groups alongside legacy windows", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const weekly = {
@@ -826,12 +820,9 @@ describe("CentrifugoRpcHandler", () => {
   test("preserves an official unknown window without inventing its duration or absent fields", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const snapshot = {
@@ -877,12 +868,9 @@ describe("CentrifugoRpcHandler", () => {
   ])("rejects an official bucket with %s without writing the cache", async (_case, fields) => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const payload = encodeDaemonRuntimeUsageScanResponse({
@@ -916,12 +904,9 @@ describe("CentrifugoRpcHandler", () => {
   test("an un-upgraded Computer's older window vocabulary still ingests, normalized", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const snapshot = {
@@ -982,12 +967,9 @@ describe("CentrifugoRpcHandler", () => {
   test("a snapshot's own collectedAt becomes the stored result's collectedAt", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const snapshot = { provider: "codex", collectedAt: "2026-09-16T12:00:00.000Z" };
@@ -1009,12 +991,9 @@ describe("CentrifugoRpcHandler", () => {
   test("an old Daemon's snapshot without collectedAt still gets a result timestamp", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const payload = encodeDaemonRuntimeUsageScanResponse({
@@ -1042,13 +1021,13 @@ describe("CentrifugoRpcHandler", () => {
     "rejects a Daemon usage snapshot whose collectedAt/accountLabel %s",
     async (_case, snapshot) => {
       const records: unknown[] = [];
+      const released: unknown[] = [];
       const method = createDaemonRuntimeUsageScanResultMethod({
-        async putScan() {},
+        async releaseScan(key, scanId) {
+          released.push([key.computerId, scanId]);
+        },
         async putResult(record) {
           records.push(record);
-        },
-        async read() {
-          return { state: "missing" };
         },
       });
       const payload = encodeDaemonRuntimeUsageScanResponse({
@@ -1067,18 +1046,17 @@ describe("CentrifugoRpcHandler", () => {
         message: "invalid usage scan result",
       });
       expect(records).toEqual([]);
+      // The scan is over though its reading is refused: a Refresh must not join it.
+      expect(released).toEqual([["computer-1", "usage-rejected"]]);
     },
   );
 
   test("accepts a masked accountLabel that keeps only the first characters of the local part", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const snapshot = { provider: "codex", accountLabel: "me****@gmail.com" };
@@ -1100,12 +1078,9 @@ describe("CentrifugoRpcHandler", () => {
   test("preserves numeric credits and rejects invalid credit amounts at the usage boundary", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const send = (creditUsage: unknown, includePrimary = true) =>
@@ -1160,12 +1135,9 @@ describe("CentrifugoRpcHandler", () => {
   test("rejects an invalid Daemon usage snapshot", async () => {
     const records: unknown[] = [];
     const method = createDaemonRuntimeUsageScanResultMethod({
-      async putScan() {},
+      async releaseScan() {},
       async putResult(record) {
         records.push(record);
-      },
-      async read() {
-        return { state: "missing" };
       },
     });
     const payload = encodeDaemonRuntimeUsageScanResponse({

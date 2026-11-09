@@ -274,18 +274,31 @@ export async function reconnectDaemon(
   );
 }
 export { AGENT_START_METHOD };
-export function createUsageScan(
+/**
+ * Asks a Computer to scan one runtime's usage and returns the id its result will arrive under.
+ * While a scan for the same (Workspace, Computer, provider) is in flight, that scan's id is
+ * returned and nothing is published: the Computer runs the provider CLI once, and everyone who
+ * asked reads the one answer. The claim is atomic and expires with the pending lifetime; a result
+ * ends it, and so does a publish that failed.
+ */
+export async function createUsageScan(
   api: Pick<CentrifugoServerApi, "publish">,
   input: { workspaceId: string; computerId: string; provider: RuntimeProvider },
   cache: UsageCache = getUsageCache(),
 ): Promise<string> {
   const requestId = crypto.randomUUID();
-  return (async () => {
-    await cache.putScan({ ...input, scanId: requestId, status: "pending" });
+  const scanId = await cache.claimScan({ ...input, scanId: requestId, status: "pending" });
+  if (scanId !== requestId) return scanId;
+  try {
     await api.publish(
       daemonControlChannel(input.workspaceId, input.computerId),
       encodeDaemonRuntimeUsageScanRequest({ protocolMajor: 1, requestId, ...input }),
     );
-    return requestId;
-  })();
+  } catch (error) {
+    // Nothing was asked of the Computer, so the next attempt must not wait out the claim. A scan
+    // another caller claimed since stays: only this scan's own record is released.
+    await cache.releaseScan(input, requestId).catch(() => undefined);
+    throw error;
+  }
+  return requestId;
 }

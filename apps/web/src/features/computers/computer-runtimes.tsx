@@ -43,10 +43,10 @@ type AuthDialog =
 
 /**
  * A Computer's runtimes as Raft lays them out: one chip each, opening that runtime's popover on a
- * press. The owner's popover carries usage and the Public switch; anyone else's opens only for a
- * runtime with a login state, to show that state and, for Workspace owners and admins, the account.
- * Those who may sign a runtime in or out (the server's rule: the Computer's owner, or a Workspace
- * owner or admin) get Sign in or Sign out there too.
+ * press. Those who may sign a runtime in or out (the server's rule: the Computer's owner, or a
+ * Workspace owner or admin) get its usage, the account and Sign in or Sign out; only the owner also
+ * gets the Public switch. Anyone else's popover opens only for a runtime with a login state, to
+ * show that state alone.
  */
 export function ComputerRuntimeList({
   computer,
@@ -210,7 +210,7 @@ export function ComputerRuntimeList({
                 runtime={runtime}
                 computerOnline={computer.online}
                 timeZone={timeZone}
-                showUsage={computer.ownedByCurrentUser && !unusableReason}
+                showUsage={canSignIn && !unusableReason}
                 auth={unusableReason ? undefined : auth}
                 account={unusableReason ? undefined : account}
                 notice={unusableReason}

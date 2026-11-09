@@ -5,10 +5,11 @@ import {
   type RuntimeAuthProvider,
   type RuntimeAuthStatus,
 } from "@lrm/coforge-anvil";
-import type { RuntimeAuthReportedState } from "@lrm/coforge-sdk/internal";
+import type { RuntimeAuthReportedState, RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { runtimeAuthChannel } from "#src/features/computers/runtime-auth-realtime";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import type { UsageCache } from "#src/server/centrifugo/usage-cache.server";
 import type { RuntimeAuthSignal } from "./runtime-auth.server";
 
 /**
@@ -117,7 +118,19 @@ export function runtimeAuthView(
 
 /** Writes a Computer's report unless the stored one was collected later. */
 export class PrismaComputerRuntimeAuthStore {
-  constructor(private readonly db: Pick<PrismaClient, "$executeRaw">) {}
+  constructor(private readonly db: Pick<PrismaClient, "$executeRaw" | "computer">) {}
+
+  /** The report now stored, as it was written, or `null` when none is (or the Computer is gone). */
+  async read(computerId: string): Promise<StoredRuntimeAuth | null> {
+    const computer = await this.db.computer.findUnique({
+      where: { id: computerId },
+      select: { runtimeAuth: true },
+    });
+    const column = computer?.runtimeAuth as Partial<StoredRuntimeAuth> | null | undefined;
+    return column && typeof column.runtimes === "object" && column.runtimes !== null
+      ? (column as StoredRuntimeAuth)
+      : null;
+  }
 
   /** `false` when the stored report is newer (or the Computer is gone), so nothing changed. */
   async record(computerId: string, auth: StoredRuntimeAuth): Promise<boolean> {
@@ -128,6 +141,53 @@ export class PrismaComputerRuntimeAuthStore {
           OR ("runtimeAuth"->>'collectedAtMs')::bigint < ${auth.collectedAtMs})`;
     return updated > 0;
   }
+}
+
+/**
+ * The providers whose login differs between the stored report and a new one: signed in or out,
+ * unavailable for another reason, or signed in as another account. A report that only restates the
+ * login (a newer time, another plan label) changes none. Without a stored report every provider
+ * in the new one counts.
+ */
+export function changedLoginProviders(
+  before: StoredRuntimeAuth | null,
+  after: StoredRuntimeAuth,
+): string[] {
+  const login = (value: unknown) => {
+    const { state, unavailableReason, account } = (value ?? {}) as {
+      state?: unknown;
+      unavailableReason?: unknown;
+      account?: { maskedLabel?: unknown };
+    };
+    return JSON.stringify([state, unavailableReason, account?.maskedLabel]);
+  };
+  return Object.entries(after.runtimes)
+    .filter(([provider, status]) => login(before?.runtimes[provider]) !== login(status))
+    .map(([provider]) => provider);
+}
+
+/**
+ * Ends the usage scans running for a Computer's runtimes in every Workspace it is connected to.
+ * What a scan reads belongs to the login it started under, so a login that changed must not be
+ * followed by a scan that joins the old one and reports it signed out.
+ */
+export function runtimeAuthScanEnder(
+  db: { workspaceComputer: Pick<PrismaClient["workspaceComputer"], "findMany"> },
+  cache: Pick<UsageCache, "endScan">,
+) {
+  return async (computerId: string, providers: string[]) => {
+    const links = await db.workspaceComputer.findMany({
+      where: { computerId },
+      select: { workspaceId: true },
+    });
+    await Promise.all(
+      links.flatMap(({ workspaceId }) =>
+        providers.map((provider) =>
+          cache.endScan({ workspaceId, computerId, provider: provider as RuntimeProvider }),
+        ),
+      ),
+    );
+  };
 }
 
 /**

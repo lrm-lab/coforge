@@ -24,9 +24,15 @@ function fakeRedis() {
       calls.push(`del:${keys.join(",")}`);
       return removed;
     },
-    // PUT_SUCCESS writes three keys (reading, attempt, scan); PUT_ATTEMPT writes two (attempt,
-    // scan). KEYS come first, then ARGV.
+    // The cache's scripts, told apart by what they take. Their Lua is run against a real Redis in
+    // `usage-cache-redis.test.ts`; here a claim sets an absent scan record and a result ends it.
     async eval(_script: string, numberOfKeys: number, ...keysAndArgs: Array<string | number>) {
+      calls.push(`eval:${numberOfKeys}`);
+      if (numberOfKeys === 1) {
+        if (!values.has(String(keysAndArgs[0])))
+          values.set(String(keysAndArgs[0]), String(keysAndArgs[1]));
+        return null;
+      }
       if (numberOfKeys === 3) {
         values.set(String(keysAndArgs[0]), String(keysAndArgs[3]));
         values.set(String(keysAndArgs[1]), String(keysAndArgs[4]));
@@ -35,7 +41,6 @@ function fakeRedis() {
         values.set(String(keysAndArgs[0]), String(keysAndArgs[2]));
         values.delete(String(keysAndArgs[1]));
       }
-      calls.push(`eval:${numberOfKeys}`);
       return 1;
     },
   };
@@ -102,7 +107,7 @@ test("starting a new scan never erases the previous reading", async () => {
     snapshot: { provider: "codex", planType: "pro" },
     collectedAt: "2026-09-17T00:00:00Z",
   });
-  await cache.putScan({ ...key, scanId: "scan-2", status: "pending" });
+  await cache.claimScan({ ...key, scanId: "scan-2", status: "pending" });
 
   const read = await cache.read(key);
   expect(read.result?.scanId).toBe("scan-1");
@@ -113,7 +118,7 @@ test("starting a new scan never erases the previous reading", async () => {
 test("a completed scan clears its own pending marker so it stops reporting as pending", async () => {
   const redis = fakeRedis();
   const { cache } = clockCache(redis);
-  await cache.putScan({ ...key, scanId: "scan-1", status: "pending" });
+  await cache.claimScan({ ...key, scanId: "scan-1", status: "pending" });
   expect((await cache.read(key)).pendingScanId).toBe("scan-1");
 
   await cache.putResult({
@@ -150,7 +155,7 @@ test("an old Daemon's reading without its own collectedAt still carries the serv
 test("a successful scan writes the reading, its attempt and clears the pending marker in one call", async () => {
   const redis = fakeRedis();
   const { cache } = clockCache(redis);
-  await cache.putScan({ ...key, scanId: "scan-1", status: "pending" });
+  await cache.claimScan({ ...key, scanId: "scan-1", status: "pending" });
   redis.calls.length = 0;
 
   await cache.putResult({
@@ -179,7 +184,7 @@ test("a failed scan keeps a reading older than 30 minutes and does not re-scan w
   // The success is now long past its 30-minute window. A failed attempt must not leave the entry
   // permanently stale (which every page load would re-scan): freshness follows the attempt.
   advance(40 * 60_000);
-  await cache.putScan({ ...key, scanId: "scan-2", status: "pending" });
+  await cache.claimScan({ ...key, scanId: "scan-2", status: "pending" });
   await cache.putResult({
     ...key,
     scanId: "scan-2",

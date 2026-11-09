@@ -4,9 +4,9 @@ import { readUsage, scanUsage } from "./computer-usage.functions";
 import { waitForUsageScanResult } from "./usage-poll";
 
 /**
- * Asks a Computer for a fresh usage snapshot and waits for that scan's own result — the
- * previously cached result (if any) stays readable through `readUsage` the whole time, so this
- * never blanks a caller's display while the scan is in flight.
+ * Asks a Computer for a fresh usage snapshot and waits for that scan's own result (or for the read
+ * that shows it ended without one) — the previously cached result (if any) stays readable through
+ * `readUsage` the whole time, so this never blanks a caller's display while the scan is in flight.
  */
 export function scanRuntimeUsage(computerId: string, provider: RuntimeProvider) {
   return (async () => {

@@ -119,10 +119,6 @@ export class ComputerRuntimeVisibility {
     return runtime?.ownerId === principal.userId ? runtime : undefined;
   }
 
-  async isOwner(principal: RuntimePrincipal, computerId: string, provider: RuntimeProvider) {
-    return Boolean(await this.ownedRuntime(principal, computerId, provider));
-  }
-
   async setPublic(principal: RuntimePrincipal, runtimeId: string, isPublic: boolean) {
     const runtime = await this.runtimes.findByIdInWorkspace(principal.workspaceId, runtimeId);
     if (!runtime || runtime.ownerId !== principal.userId)

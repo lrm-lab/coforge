@@ -22,7 +22,7 @@ import type {
   RuntimeAuthStore,
 } from "./runtime-auth-store.server";
 
-type Principal = { userId: string; workspaceId: string };
+export type Principal = { userId: string; workspaceId: string };
 
 export interface RuntimeAuthAuthorization {
   /** The Computer's owner, or an owner or admin of a Workspace the Computer is connected to. */

@@ -8,9 +8,12 @@ import {
 } from "@lrm/coforge-sdk/internal";
 
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { getUsageCache } from "./usage-cache.server";
 import {
   PrismaComputerRuntimeAuthStore,
+  changedLoginProviders,
   runtimeAuthChangeAnnouncer,
+  runtimeAuthScanEnder,
   storedRuntimeAuth,
 } from "#src/server/computers/computer-runtime-auth.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
@@ -28,12 +31,16 @@ import { machineStatusMethods } from "./machine-status-receiver.server";
 /**
  * A Computer's runtime login report (`daemon:v1:runtime_auth:status_report`). Only the connection's own
  * Computer may report; each status is sanitized again before it is stored, and a report older
- * than the stored one is accepted and dropped. A stored one is announced to whoever may be showing
- * the Computer; a lost announcement waits for their next read and does not fail the report.
+ * than the stored one is accepted and dropped. A stored one that changed a runtime's login ends that
+ * runtime's running usage scans, then is announced to whoever may be showing the Computer: the
+ * page that learns of a sign-in scans next, and must not join a scan that began before it. A report
+ * that restates the login ends nothing. A lost announcement waits for their next read, and
+ * neither it nor a scan that could not be ended fails the report.
  */
 export function createRuntimeAuthReportMethod(
-  store: Pick<PrismaComputerRuntimeAuthStore, "record">,
+  store: Pick<PrismaComputerRuntimeAuthStore, "read" | "record">,
   announce: (computerId: string) => Promise<void>,
+  endScans: (computerId: string, providers: string[]) => Promise<void>,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const rejection = rejectNonDaemonPrincipal(metadata.principal);
@@ -55,14 +62,21 @@ export function createRuntimeAuthReportMethod(
     } catch {
       return { code: 400, message: "invalid runtime auth status report" };
     }
+    // Read ahead of the write. An earlier report that cannot be read counts every runtime as changed:
+    // an extra scan ended costs one more scan, a missed one a wrong state for minutes.
+    const before = await store.read(report.computerId).catch(() => null);
     let stored: boolean;
     try {
       stored = await store.record(report.computerId, auth);
     } catch {
       return { code: 503, message: "runtime auth status report was not recorded" };
     }
-    // The daemon does not wait on it: the report is stored either way.
-    if (stored) void announce(report.computerId).catch(() => {});
+    if (stored) {
+      const changed = changedLoginProviders(before, auth);
+      if (changed.length > 0) await endScans(report.computerId, changed).catch(() => {});
+      // The daemon does not wait on it: the report is stored either way.
+      void announce(report.computerId).catch(() => {});
+    }
     return new Uint8Array();
   };
 }
@@ -122,6 +136,8 @@ export function computerRuntimeMethods(
       ? createRuntimeAuthReportMethod(
           new PrismaComputerRuntimeAuthStore(db),
           runtimeAuthChangeAnnouncer(db, createCentrifugoServerApi()),
+          (computerId, providers) =>
+            runtimeAuthScanEnder(db, getUsageCache())(computerId, providers),
         )
       : unavailable,
     ...machineStatusMethods(db),

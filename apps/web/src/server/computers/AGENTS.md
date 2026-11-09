@@ -88,9 +88,8 @@ These rules apply to `src/server/computers/`.
 
 - `runtime-reset-credit.server.ts` spends one Codex rate-limit reset credit on a Computer for the
   usage popover. The server authority is `PrismaRuntimeAuthAuthorization.canManage` (the
-  Computer's owner, or a Workspace owner or admin), stricter than a usage scan because it spends
-  the owner's credit. The popover shows the button only to the Computer's owner, because usage is
-  readable only by its owner; do not widen the button to admins without widening that read.
+  Computer's owner, or a Workspace owner or admin), the same rule that lets them read and scan the
+  usage that shows the button (`runtime-usage-access.server.ts`).
   - `start` never waits: production closes a request idle for about ten seconds and the Computer
     can take up to about 90, so the page polls `read`. Refusals are values, in this order:
     `forbidden`, `offline`, `needs_upgrade` (the `runtime-usage:reset-credit:v1` lease).
@@ -105,6 +104,30 @@ These rules apply to `src/server/computers/`.
     never logged.
   - The usage the Computer read afterwards is stored from the result RPC under the request id,
     before the outcome is readable; a page that finds another scan id in the cache scans itself.
+    The result RPC also ends any usage scan in flight, with or without a reading, so that scan
+    never joins one that began before the spend and reads the old count.
+- `runtime-usage-access.server.ts` is the gate for reading and scanning one runtime's usage
+  (`readUsage` / `scanUsage`): `canManage`, on a runtime the Computer reported. Usage carries the
+  account and plan, so never read the usage cache outside it for a viewer.
+  - Another member's default cloud Computer is refused to everyone but its owner
+    (`defaultCloudComputerHiddenFromViewer`, the Computer list's own rule), though `canManage`
+    still says yes to an admin who holds its id: sign-in and the reset credit
+    (`runtime-auth.server.ts`, `runtime-reset-credit.server.ts`) check `canManage` alone and still
+    reach it by API, though no page offers them.
+  - Only the Computer's owner (the runtime row's `ownerId`) reads the cached reading whole. Anyone
+    else gets `drawnReading`: the fields the popover draws, named one by one, so a field a newer
+    Computer reports reaches them only once the popover draws it and it is added there. The credit
+    balance, `lastAttemptAt` and the snapshot's own `collectedAt` never go, and a failure's
+    `message` only as the one line the popover compares it with.
+  - The snapshot reaches a browser only through `readUsage`: `scanUsage` returns the scan id,
+    `readResetCredit` the outcome, and the reset reading goes to the usage cache.
+  - A scan already in flight for the runtime is joined, not started again
+    (`createUsageScan`, `../centrifugo/AGENTS.md`). The id it hands back reads nothing by itself:
+    `readUsage` is keyed by the caller's own authorized Workspace, Computer and runtime.
+- A login report that changes a runtime's login (signed in or out, another account) ends that
+  runtime's running usage scans in every Workspace the Computer is in (`runtimeAuthScanEnder`),
+  after storing it and before announcing it, so the scan a page starts once it learns of a
+  sign-in never joins one that began before it. A report that restates the login ends nothing.
 - `command-code-effort-read.server.ts` reads one Command Code model's reasoning efforts from a
   Computer for the Agent form. The Computer can take about 30 seconds and production closes a
   request idle for about ten, so it is two calls like the reset credit: `start` publishes and

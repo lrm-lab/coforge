@@ -11,6 +11,7 @@ import {
 } from "#src/features/computers/runtime-auth-realtime";
 import {
   runtimeAuthChangeAnnouncer,
+  runtimeAuthScanEnder,
   type StoredRuntimeAuth,
 } from "#src/server/computers/computer-runtime-auth.server";
 
@@ -38,16 +39,24 @@ const report = (overrides: Partial<RuntimeAuthStatusReport> = {}) =>
     ...overrides,
   });
 
-function recorder(result = true) {
+/** What the Computer's stored report was before this one: `previous`, or nothing yet. */
+function recorder(result = true, previous: StoredRuntimeAuth | null = null) {
   const calls: [string, StoredRuntimeAuth][] = [];
-  const announced: string[] = [];
+  const events: string[] = [];
+  const ended: [string, string[]][] = [];
   return {
     calls,
-    announced,
+    events,
+    ended,
     announce: async (computerId: string) => {
-      announced.push(computerId);
+      events.push(`announce:${computerId}`);
+    },
+    end: async (computerId: string, providers: string[]) => {
+      events.push("end");
+      ended.push([computerId, providers]);
     },
     store: {
+      read: async () => previous,
       record: async (computerId: string, auth: StoredRuntimeAuth) => {
         calls.push([computerId, auth]);
         return result;
@@ -57,8 +66,8 @@ function recorder(result = true) {
 }
 
 test("stores the connection's Computer's report, keyed by provider", async () => {
-  const { calls, store, announce } = recorder();
-  const method = createRuntimeAuthReportMethod(store, announce);
+  const { calls, store, announce, end } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce, end);
 
   expect(await method(report(), { principal: principal() })).toBeInstanceOf(Uint8Array);
   expect(calls).toEqual([
@@ -80,8 +89,8 @@ test("stores the connection's Computer's report, keyed by provider", async () =>
 });
 
 test("sanitizes again on receipt: an unmasked label is dropped, an unknown provider is retained", async () => {
-  const { calls, store, announce } = recorder();
-  const method = createRuntimeAuthReportMethod(store, announce);
+  const { calls, store, announce, end } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce, end);
 
   await method(
     report({
@@ -103,33 +112,37 @@ test("sanitizes again on receipt: an unmasked label is dropped, an unknown provi
 });
 
 test("an older report than the stored one is accepted and ignored", async () => {
-  const { store, announce, announced } = recorder(false);
-  const method = createRuntimeAuthReportMethod(store, announce);
+  const { store, announce, end, events } = recorder(false);
+  const method = createRuntimeAuthReportMethod(store, announce, end);
 
   expect(await method(report(), { principal: principal() })).toBeInstanceOf(Uint8Array);
-  expect(announced).toEqual([]);
+  expect(events).toEqual([]);
 });
 
 test("a stored report is announced, so an open Computer page shows a sign-in without a reload", async () => {
-  const { store, announce, announced } = recorder();
-  const method = createRuntimeAuthReportMethod(store, announce);
+  const { store, announce, end, events } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce, end);
 
   expect(await method(report(), { principal: principal() })).toBeInstanceOf(Uint8Array);
-  expect(announced).toEqual(["computer-1"]);
+  expect(events.at(-1)).toBe("announce:computer-1");
 });
 
 test("a lost announcement still answers the report as stored", async () => {
-  const { store } = recorder();
-  const method = createRuntimeAuthReportMethod(store, async () => {
-    throw new Error("Centrifugo is down");
-  });
+  const { store, end } = recorder();
+  const method = createRuntimeAuthReportMethod(
+    store,
+    async () => {
+      throw new Error("Centrifugo is down");
+    },
+    end,
+  );
 
   expect(await method(report(), { principal: principal() })).toBeInstanceOf(Uint8Array);
 });
 
 test("refuses a malformed report, another Computer's, or an Agent's", async () => {
-  const { calls, store, announce } = recorder();
-  const method = createRuntimeAuthReportMethod(store, announce);
+  const { calls, store, announce, end } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce, end);
 
   expect(await method(new Uint8Array([1, 2, 3]), { principal: principal() })).toMatchObject({
     code: 400,
@@ -146,10 +159,12 @@ test("refuses a malformed report, another Computer's, or an Agent's", async () =
 test("a report that could not be stored answers 503", async () => {
   const method = createRuntimeAuthReportMethod(
     {
+      read: async () => null,
       record: async () => {
         throw new Error("database is down");
       },
     },
+    async () => {},
     async () => {},
   );
 
@@ -160,8 +175,8 @@ test("a report that could not be stored answers 503", async () => {
 });
 
 test("a structurally invalid status report is refused before persistence", async () => {
-  const { calls, store, announce } = recorder();
-  const method = createRuntimeAuthReportMethod(store, announce);
+  const { calls, store, announce, end } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce, end);
   for (const runtimes of [
     [
       { provider: "codex", state: "unknown" as const },
@@ -177,8 +192,8 @@ test("a structurally invalid status report is refused before persistence", async
 });
 
 test("a report with one invalid provider still records the valid runtime", async () => {
-  const { calls, store, announce } = recorder();
-  const method = createRuntimeAuthReportMethod(store, announce);
+  const { calls, store, announce, end } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce, end);
   expect(
     await method(
       report({
@@ -191,6 +206,106 @@ test("a report with one invalid provider still records the valid runtime", async
     ),
   ).toBeInstanceOf(Uint8Array);
   expect(calls[0]?.[1].runtimes).toEqual({ kiro: { provider: "kiro", state: "logged_in" } });
+});
+
+const stored = (
+  runtimes: StoredRuntimeAuth["runtimes"],
+  collectedAtMs = 500,
+): StoredRuntimeAuth => ({
+  collectedAtMs,
+  runtimes,
+});
+const claudeIn = {
+  provider: "claude-code",
+  state: "logged_in",
+  account: { maskedLabel: "f***@example.com", planLabel: "Max" },
+} as const;
+const codexOut = { provider: "codex", state: "logged_out" } as const;
+
+test("a login that changed ends the scans of its runtimes before the page is told, and only those", async () => {
+  // Codex was signed in before this report signed it out; Claude Code is as it was.
+  const before = stored({
+    "claude-code": claudeIn,
+    codex: { provider: "codex", state: "logged_in" },
+  });
+  const { store, announce, end, events, ended } = recorder(true, before);
+  const method = createRuntimeAuthReportMethod(store, announce, end);
+
+  await method(report(), { principal: principal() });
+  expect(ended).toEqual([["computer-1", ["codex"]]]);
+  expect(events).toEqual(["end", "announce:computer-1"]);
+});
+
+test("a report that changes nothing, however new, leaves a running scan alone", async () => {
+  // The plan label is not the login: only the state and the account are.
+  const before = stored({
+    "claude-code": { ...claudeIn, account: { maskedLabel: "f***@example.com", planLabel: "Pro" } },
+    codex: codexOut,
+  });
+  const { store, announce, end, ended } = recorder(true, before);
+  const method = createRuntimeAuthReportMethod(store, announce, end);
+  await method(report({ collectedAtMs: 9_000 }), { principal: principal() });
+  expect(ended).toEqual([]);
+});
+
+test("a different account, a first report and an unreadable earlier one each end the scans they touch", async () => {
+  const other = stored({
+    "claude-code": { ...claudeIn, account: { maskedLabel: "g***@example.com" } },
+    codex: codexOut,
+  });
+  for (const [previous, providers] of [
+    [other, ["claude-code"]],
+    [null, ["claude-code", "codex"]],
+  ] as const) {
+    const { store, announce, end, ended } = recorder(true, previous);
+    await createRuntimeAuthReportMethod(
+      store,
+      announce,
+      end,
+    )(report(), {
+      principal: principal(),
+    });
+    expect(ended).toEqual([["computer-1", [...providers]]]);
+  }
+  const { store, announce, end, ended } = recorder();
+  store.read = async () => {
+    throw new Error("database is down");
+  };
+  await createRuntimeAuthReportMethod(store, announce, end)(report(), { principal: principal() });
+  expect(ended).toEqual([["computer-1", ["claude-code", "codex"]]]);
+});
+
+test("a scan that could not be ended never costs the report or the announcement", async () => {
+  const { store, announce, events } = recorder();
+  const method = createRuntimeAuthReportMethod(store, announce, async () => {
+    throw new Error("redis is down");
+  });
+  expect(await method(report(), { principal: principal() })).toBeInstanceOf(Uint8Array);
+  expect(events).toEqual(["announce:computer-1"]);
+});
+
+test("every Workspace the Computer is in loses its running scan of a changed runtime", async () => {
+  const ended: object[] = [];
+  const end = runtimeAuthScanEnder(
+    {
+      workspaceComputer: {
+        findMany: async (query: unknown) => {
+          expect(query).toEqual({
+            where: { computerId: "computer-1" },
+            select: { workspaceId: true },
+          });
+          return [{ workspaceId: "workspace-1" }, { workspaceId: "workspace-2" }];
+        },
+      },
+    } as never,
+    { endScan: async (key) => void ended.push(key) },
+  );
+
+  await end("computer-1", ["codex"]);
+  expect(ended).toEqual([
+    { workspaceId: "workspace-1", computerId: "computer-1", provider: "codex" },
+    { workspaceId: "workspace-2", computerId: "computer-1", provider: "codex" },
+  ]);
 });
 
 test("a change is announced once to every member of each Workspace the Computer is in", async () => {

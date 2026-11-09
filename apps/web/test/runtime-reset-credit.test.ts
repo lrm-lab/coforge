@@ -248,9 +248,10 @@ const reply = {
 const snapshot = { provider: "codex", health: "ok", resetCreditsAvailable: 1 };
 const encode = (value: object) => new TextEncoder().encode(JSON.stringify(value));
 
-function resultMethod(options: { cacheFails?: boolean } = {}) {
+function resultMethod(options: { cacheFails?: boolean; releaseFails?: boolean } = {}) {
   const accepted: DaemonRuntimeResetCreditConsumeResponse[] = [];
   const cached: UsageResultRecord[] = [];
+  const releases: object[] = [];
   const order: string[] = [];
   const method = createDaemonRuntimeResetCreditConsumeResultMethod({
     results: {
@@ -266,9 +267,14 @@ function resultMethod(options: { cacheFails?: boolean } = {}) {
         if (options.cacheFails) throw new Error("redis is down");
         cached.push(record);
       },
+      endScan: async (released) => {
+        order.push("release");
+        if (options.releaseFails) throw new Error("redis is down");
+        releases.push(released);
+      },
     },
   });
-  return { method, accepted, cached, order };
+  return { method, accepted, cached, order, releases };
 }
 
 test("the Computer's answer is stored for the waiting page and its usage lands in the usage cache first", async () => {
@@ -281,7 +287,7 @@ test("the Computer's answer is stored for the waiting page and its usage lands i
   ).toEqual(new Uint8Array());
   expect(accepted.map((response) => response.outcome)).toEqual(["reset"]);
   // The page re-reads usage as soon as it sees the outcome, so the reading is already there.
-  expect(order).toEqual(["usage", "outcome"]);
+  expect(order).toEqual(["usage", "release", "outcome"]);
   // The page waits on the outcome alone; the reading goes to the cache the popover reads.
   expect(accepted[0]!.snapshotJson).toBeUndefined();
   expect(cached).toHaveLength(1);
@@ -378,4 +384,29 @@ test("the reset credit count passes only as a whole number from 0 to 999", () =>
   expect(decodeUsageSnapshot(encode({ provider: "codex" }), "codex")).toEqual({
     provider: "codex",
   });
+});
+
+test("a scan started before the credit was spent is ended with the answer, whether or not a reading came with it", async () => {
+  const target = { workspaceId: "workspace-1", computerId: "computer-1", provider: "codex" };
+  // The page scans again when the cache holds no reading of this attempt, and that scan must not
+  // join one that began before the spend and would read the old count.
+  for (const snapshotJson of [undefined, encode({ ...snapshot, provider: "claude-code" })]) {
+    const { method, accepted, releases, order } = resultMethod();
+    await method(
+      encodeDaemonRuntimeResetCreditConsumeResponse({ ...reply, snapshotJson }),
+      metadata,
+    );
+    expect(releases).toEqual([target]);
+    expect(order.at(-2)).toBe("release");
+    expect(order.at(-1)).toBe("outcome");
+    expect(accepted).toHaveLength(1);
+  }
+});
+
+test("a scan that cannot be ended never costs the outcome", async () => {
+  const { method, accepted } = resultMethod({ releaseFails: true });
+  expect(await method(encodeDaemonRuntimeResetCreditConsumeResponse(reply), metadata)).toEqual(
+    new Uint8Array(),
+  );
+  expect(accepted.map((response) => response.outcome)).toEqual(["reset"]);
 });

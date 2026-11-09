@@ -9,6 +9,16 @@ mechanics only; domain rules stay in the owning `src/server/` module.
   reset-credit results; `resetCreditsAvailable` passes only as a whole number from 0 to 999 and is
   otherwise left out, without rejecting the reading. The reset credit result stores the outcome
   for the waiting page even when its snapshot is rejected.
+- A usage scan is claimed in the usage cache (`claimScan`, one atomic script that sets the record
+  only if no pending scan stands, expiring after the 60 second pending lifetime): while one is in
+  flight for the same (Workspace, Computer, provider), `createUsageScan` returns its id and
+  publishes nothing. Its own result ends it (a result for an older scan leaves a newer claim), as
+  does a result the server refuses and a publish that failed (`releaseScan`, by the scan's own id).
+  `endScan` ends whichever scan stands, because what it reads no longer holds: a reset credit
+  result, or a runtime login that changed (`../computers/AGENTS.md`). Keep every such path; a claim
+  that nothing ends blocks Refresh for 60 seconds. The page's poll gives up on a scan that is no
+  longer pending (`usage-poll.ts`). The scripts are tested against a real Redis
+  (`test/usage-cache-redis.test.ts`).
 - Fire-and-forget receivers (Session invalidate, context usage) answer 403 on
   any rejection. Keep that wire response unchanged; log a genuine failure with
   an allowlisted reason, as `agent_control:result_rejected` and

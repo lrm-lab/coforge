@@ -1,5 +1,6 @@
 import type { RuntimeAuthStatus } from "@lrm/coforge-anvil";
 import { m } from "#src/paraglide/messages";
+import { USAGE_READER_NOT_CONNECTED } from "./usage-reader-message";
 import type { UsageReadResult, UsageResultRecord } from "#src/server/centrifugo/usage-cache.server";
 
 /**
@@ -74,8 +75,6 @@ export function usageHealth(data: UsageReadResult | undefined): RuntimeStatus | 
   if (!status?.ok) return status;
   return { ok: true, label: m.computer_usage_health_ok() };
 }
-
-const USAGE_READER_NOT_CONNECTED = "Usage reader is not connected yet";
 
 /** The popover badge. A reader that is not connected, or a runtime that reports no usage, is not
  * the user's to fix: no badge, only the gray line `usageFailureDescription` gives. */

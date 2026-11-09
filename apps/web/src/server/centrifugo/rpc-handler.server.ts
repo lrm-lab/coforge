@@ -318,7 +318,7 @@ export function createDaemonRuntimeCodeAgentsUpdateMethod(inventory: {
 }
 
 export function createDaemonRuntimeUsageScanResultMethod(
-  usageCache?: UsageCache,
+  usageCache?: Pick<UsageCache, "putResult" | "releaseScan">,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const response = decodeDaemonRuntimeUsageScanResponse(payload);
@@ -329,9 +329,14 @@ export function createDaemonRuntimeUsageScanResultMethod(
     const snapshot = response.snapshotJson
       ? decodeUsageSnapshot(response.snapshotJson, response.provider)
       : undefined;
-    if (response.snapshotJson && !snapshot)
+    const cache = usageCache ?? getUsageCache();
+    if (response.snapshotJson && !snapshot) {
+      // The scan is over though its reading is refused: end it, or a Refresh would join it and
+      // wait for a result that is not coming.
+      await cache.releaseScan(response, response.requestId).catch(() => undefined);
       return { code: 400, message: "invalid usage scan result" };
-    await (usageCache ?? getUsageCache()).putResult({
+    }
+    await cache.putResult({
       workspaceId: response.workspaceId,
       computerId: response.computerId,
       provider: response.provider,
