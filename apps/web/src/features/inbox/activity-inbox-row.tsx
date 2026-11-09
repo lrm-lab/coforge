@@ -137,13 +137,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
       data-activity-row={item.key}
       className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
     >
-      {/* An unread row's dot sits in the page's left gutter, so every title keeps its column. */}
-      {unread && (
-        <span
-          aria-hidden="true"
-          className="absolute top-1/2 left-[calc(var(--page-gutter)/2)] size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-solid"
-        />
-      )}
       {/* The row is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
           can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
           navigation. Opening a row reads it, like opening the conversation does. */}
@@ -191,11 +184,19 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           <ActivityItemIcon item={item} />
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex min-w-0 items-center gap-2">
+              {/* Linear's row (Frank, 11-09): an unread row has one mark, this dot; a read row
+                  fades a step instead of the unread one going bold. */}
+              {unread && (
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 shrink-0 rounded-full bg-brand-solid"
+                />
+              )}
               <span
                 className={cn(
                   // A list dragged narrow keeps a few letters of the title beside its (shortened) marks.
                   "min-w-10 truncate text-md",
-                  unread ? "font-semibold text-primary" : "font-normal text-tertiary",
+                  unread ? "text-primary" : "text-tertiary",
                 )}
               >
                 {task ? (
@@ -216,7 +217,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
             </span>
             <span className={cn("truncate text-sm", unread ? "text-secondary" : "text-quaternary")}>
               {placeLabel && <>{placeLabel} · </>}
-              <span className={unread ? "font-medium text-primary" : undefined}>{sender}: </span>
+              {sender}:
               <Preview message={item.latest} />
             </span>
           </span>
@@ -321,7 +322,6 @@ export function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
  * number: "@" for "@you", "9" for "9 new", a Task without its owner. */
 const NARROW_SR_ONLY = "@max-[22rem]/activity-list:sr-only";
 const NARROW_HIDDEN = "@max-[22rem]/activity-list:hidden";
-const NARROW_ONLY = "hidden @max-[22rem]/activity-list:inline";
 
 /** The marks after a row's title: its Task, an unread mention, and how many messages are new. */
 function ActivityItemBadges({
@@ -367,13 +367,12 @@ function ActivityItemBadges({
         </Badge>
       )}
       {item.unreadCount > 0 && (
-        <span className="text-sm font-medium whitespace-nowrap text-brand-secondary tabular-nums">
-          <span className={NARROW_SR_ONLY}>
-            {m.activity_inbox_new({ count: item.unreadCount })}
-          </span>
-          <span aria-hidden="true" className={NARROW_ONLY}>
-            {item.unreadCount > 99 ? "99+" : item.unreadCount}
-          </span>
+        // A quiet grey number, as Linear's counts are: the dot already says "unread".
+        <span
+          className="text-xs whitespace-nowrap text-tertiary tabular-nums"
+          aria-label={m.activity_inbox_new({ count: item.unreadCount })}
+        >
+          {item.unreadCount > 99 ? "99+" : item.unreadCount}
         </span>
       )}
     </span>

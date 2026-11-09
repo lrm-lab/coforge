@@ -11,6 +11,7 @@
   "activity_inbox_waiting_fewer": "收起",
   "activity_inbox_waiting_task": "任务 #{number}",
   "activity_inbox_mark_all_read": "全部已读",
+  "activity_inbox_more_actions": "更多操作",
   "activity_inbox_mark_read": "标为已读",
   "activity_inbox_done": "标记为完成",
   "activity_inbox_menu_done": "完成",
@@ -44,5 +45,7 @@
   "activity_conversation_pane": "选中的会话",
   "activity_conversation_loading": "正在加载会话…",
   "activity_back_to_list": "返回动态",
-  "activity_conversation_failed": "无法加载这个会话。"
+  "activity_conversation_failed": "无法加载这个会话。",
+  "activity_bulk_mark_all_done": "全部完成",
+  "activity_bulk_marked_done": "已把 {count} 条标为完成"
 }

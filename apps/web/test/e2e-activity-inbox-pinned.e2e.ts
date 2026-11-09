@@ -64,16 +64,15 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     );
     // The channel's own row is under Pinned, and only there; its followed thread is below.
     const [pinnedRow] = await evaluate<string[]>(rowsIn(pinnedItems));
-    // The bare channel name, with the mention and new-message badges.
-    expect(pinnedRow).toContain("e2e-activity-pinned");
-    expect(pinnedRow).not.toContain("#e2e-activity-pinned");
+    // The channel's name in its first line, with the mention and new-message badges.
+    expect(pinnedRow).toContain("#e2e-activity-pinned");
     expect(pinnedRow).toContain("@you");
-    expect(pinnedRow).toContain("Activity Peer: ");
+    expect(pinnedRow).toContain("Activity Peer");
     expect(pinnedRow).toContain("E2E pinned hello");
     expect(pinnedRow).toContain("1 new");
     const [threadRow] = await evaluate<string[]>(rowsIn(rowItems));
     expect(threadRow).toContain("E2E pinned root");
-    expect(threadRow).toContain("#e2e-activity-pinned · ");
+    expect(threadRow).toContain("Thread in #e2e-activity-pinned");
     expect(threadRow).not.toContain("E2E pinned hello");
     // Pinned, its rows, then All conversations and the rest of the list.
     expect(
