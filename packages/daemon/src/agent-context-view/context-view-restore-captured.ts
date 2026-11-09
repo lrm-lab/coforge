@@ -6,6 +6,7 @@ import type {
   RestoredContextView,
 } from "./context-view-restore";
 import { createHash } from "node:crypto";
+import { restorePiIndexed } from "./context-view-restore-indexed-pi";
 import { piRequestMessages, piResponseParts } from "./context-view-pi-projection";
 
 function piRequestDigest(value: unknown): string {
@@ -228,6 +229,8 @@ export function restorePi(
   records: RecordValue[],
   request: RestoreRequest,
 ): ContextViewRestoreResult {
+  const indexed = restorePiIndexed(records, request);
+  if (indexed) return indexed;
   const messages: RestoredContextMessage[] = [];
   let previousHash: string | undefined;
   let sawTarget = false;
