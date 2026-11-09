@@ -46,6 +46,10 @@ describe("context view provider restore", () => {
   test("restores nested Codex rollout records and rejects rollback/hash mismatches", () => {
     const nested = buffer([
       { type: "session_meta", payload: { session_id: "s1" } },
+      {
+        type: "response_item",
+        payload: { session_id: "s1", item: { type: "additional_tools", tools: [] } },
+      },
       { type: "user_message", payload: { session_id: "s1", message: "hello", message_id: "m1" } },
       {
         type: "response_item",
@@ -119,6 +123,7 @@ describe("context view provider restore", () => {
 
   test("does not treat a longer message id as the requested target", () => {
     const rollout = buffer([
+      { type: "response_item", session_id: "s1", item: { type: "additional_tools", tools: [] } },
       { type: "user_message", session_id: "s1", message: "m10" },
       {
         type: "response_item",
@@ -176,6 +181,7 @@ describe("context view provider restore", () => {
 
   test("bounds Codex output at the target message and reports response/trigger", () => {
     const rollout = buffer([
+      { type: "response_item", session_id: "s1", item: { type: "additional_tools", tools: [] } },
       { type: "user_message", session_id: "s1", message: "target", message_id: "m1" },
       {
         type: "response_item",
@@ -223,6 +229,7 @@ describe("context view provider restore", () => {
 
   test("bounds Codex output at a response-item user boundary", () => {
     const rollout = buffer([
+      { type: "response_item", session_id: "s1", item: { type: "additional_tools", tools: [] } },
       { type: "user_message", session_id: "s1", message: "target", message_id: "m1" },
       {
         type: "response_item",

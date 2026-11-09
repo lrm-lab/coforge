@@ -210,7 +210,7 @@ export function restoreCodex(
       return { ok: false, failure: "newer_session_format" };
   }
   if (!messages.length) return { ok: false, failure: "not_found" };
-  if (sawTurnContext && !sawAdditionalTools) return { ok: false, failure: "unsupported_runtime" };
+  if (!sawAdditionalTools) return { ok: false, failure: "unsupported_runtime" };
   const built = buildView(
     request,
     messages,

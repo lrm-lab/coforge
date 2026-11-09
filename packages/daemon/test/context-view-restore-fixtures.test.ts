@@ -54,6 +54,11 @@ describe("context view provider restore fixtures", () => {
             })()
           : runtime === "codex"
             ? [
+                {
+                  type: "response_item",
+                  session_id: "s1",
+                  item: { type: "additional_tools", tools: [] },
+                },
                 { type: "user_message", session_id: "s1", message: "hello" },
                 {
                   type: "response_item",
