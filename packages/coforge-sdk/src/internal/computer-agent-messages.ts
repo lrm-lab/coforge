@@ -109,6 +109,7 @@ export type DaemonRuntimeReadyRequest = {
   capabilities?: string[];
   /** The locally persisted release selector, when this Computer supports channel-aware upgrades. */
   releaseChannel?: string;
+  appliedAgentConfigs?: Array<{ agentId: string; revision: number }>;
 };
 
 /** The server's answer to a daemon's ready: the release feed's newest Computer version, so a

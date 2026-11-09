@@ -16,6 +16,10 @@ export function encodeDaemonRuntimeReadyRequest(value: DaemonRuntimeReadyRequest
     create(DaemonRuntimeReadyRequestSchema, {
       ...value,
       startedAt: BigInt(value.startedAt),
+      appliedAgentConfigs: value.appliedAgentConfigs?.map((entry) => ({
+        ...entry,
+        revision: BigInt(entry.revision),
+      })),
     }),
   );
 }
@@ -39,6 +43,14 @@ export function decodeDaemonRuntimeReadyRequest(bytes: Uint8Array): DaemonRuntim
     recoveredUpgradeRequestIds: [...value.recoveredUpgradeRequestIds],
     ...(value.capabilities.length ? { capabilities: [...value.capabilities] } : {}),
     ...(value.releaseChannel ? { releaseChannel: value.releaseChannel } : {}),
+    ...(value.appliedAgentConfigs.length
+      ? {
+          appliedAgentConfigs: value.appliedAgentConfigs.map((entry) => ({
+            agentId: entry.agentId,
+            revision: Number(entry.revision),
+          })),
+        }
+      : {}),
   };
 }
 
