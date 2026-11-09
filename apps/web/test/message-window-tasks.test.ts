@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
 
-import {
-  messageWindowTasks,
-  taskNumberReads,
-} from "#src/features/tasks/conversation-tasks-collection";
+import { messageWindowTasks } from "#src/features/tasks/conversation-tasks-collection";
 
 /** The conversation the message windows below belong to. */
 const HERE = "66666666-6666-4666-8666-666666666666";
@@ -17,13 +14,13 @@ test("a message window asks for the Tasks from its first message on, and the Tas
   // At the live end the window has no upper bound: a message that arrives later is inside it.
   expect(messageWindowTasks(messages, false, HERE)).toEqual({
     sequenceFrom: 41,
-    numbers: [1, 3, 12],
+    reads: [{ key: "2.0", numbers: [1, 3, 12] }],
   });
   // A window pinned in history ends at its last message.
   expect(messageWindowTasks(messages, true, HERE)).toEqual({
     sequenceFrom: 41,
     sequenceTo: 47,
-    numbers: [1, 3, 12],
+    reads: [{ key: "2.0", numbers: [1, 3, 12] }],
   });
   expect(messageWindowTasks([], false, HERE)).toBeUndefined();
 });
@@ -36,7 +33,10 @@ test("another conversation's task tokens ask this conversation for no Task; its 
       body: `<@task:c:${other}:design:7>, <@task:d:${other}:ada:9>, <@task:c:${HERE}:here:5> and <@task:2>`,
     },
   ];
-  expect(messageWindowTasks(messages, false, HERE)).toEqual({ sequenceFrom: 41, numbers: [2, 5] });
+  expect(messageWindowTasks(messages, false, HERE)).toEqual({
+    sequenceFrom: 41,
+    reads: [{ key: "2.0", numbers: [2, 5] }],
+  });
 });
 
 test("the same messages ask for the same subset, so a realtime message with no reference reads nothing", () => {
@@ -45,21 +45,40 @@ test("the same messages ask for the same subset, so a realtime message with no r
   expect(messageWindowTasks(later, false, HERE)).toEqual(messageWindowTasks(first, false, HERE));
 });
 
-test("a window naming more Tasks than one read takes asks for them all, a read per block of numbers", () => {
+test("a window's named Tasks are read a stretch of messages at a time, however high the numbers", () => {
   // A busy channel's history: #1 to #250, then #682, #701 and #709 (task #coforge-ui:#26, where
-  // only the first 200 were read and the newest references showed as bare numbers).
-  const named = [...Array.from({ length: 250 }, (_, index) => index + 1), 682, 701, 709];
+  // only the first 200 were read and the newest references showed as bare numbers), and numbers
+  // scattered over 10,000 Tasks.
+  const named = [
+    ...Array.from({ length: 250 }, (_, index) => index + 1),
+    682,
+    701,
+    709,
+    4005,
+    9800,
+  ];
   const messages = named.map((number, index) => ({
     sequence: index + 1,
     body: `<@task:${number}>`,
   }));
   const window = messageWindowTasks(messages, false, HERE)!;
-  expect(window.numbers).toEqual(named);
-  const reads = taskNumberReads(window.numbers);
-  expect(reads.map((read) => read.numbers.length)).toEqual([200, 50, 3]);
-  expect(reads.flatMap((read) => read.numbers)).toEqual(named);
-  for (const read of reads) expect(read.numbers.length).toBeLessThanOrEqual(200);
-  // A block's read stays the same when another block gains a number.
-  const more = taskNumberReads([...window.numbers, 300]);
-  expect(more.find((read) => read.block === 0)).toEqual(reads.find((read) => read.block === 0));
+  // 255 messages make 13 stretches of 20 by sequence; scattered numbers add none.
+  expect(window.reads).toHaveLength(13);
+  expect(window.reads.flatMap((read) => read.numbers).sort((a, b) => a - b)).toEqual(named);
+  // One message naming more than a read takes is split.
+  const crowded = messageWindowTasks(
+    [{ sequence: 1, body: named.map((number) => `<@task:${number}>`).join(" ") }],
+    false,
+    HERE,
+  )!;
+  expect(crowded.reads.map((read) => read.numbers.length)).toEqual([200, 55]);
+  // A page of older messages and a new message add their own reads and leave the others as they were.
+  const paged = messageWindowTasks(
+    [{ sequence: 300, body: "<@task:9900>" }, ...messages.slice(100)],
+    false,
+    HERE,
+  )!;
+  const before = messageWindowTasks(messages.slice(100), false, HERE)!;
+  for (const read of before.reads) expect(paged.reads).toContainEqual(read);
+  expect(paged.reads).toHaveLength(before.reads.length + 1);
 });

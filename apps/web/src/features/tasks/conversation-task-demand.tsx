@@ -1,11 +1,7 @@
 import { memo, useMemo } from "react";
 import { and, gte, inArray, lte, useLiveQuery } from "@tanstack/react-db";
 
-import {
-  DEMAND_GC_TIME_MS,
-  messageWindowTasks,
-  taskNumberReads,
-} from "./conversation-tasks-collection";
+import { DEMAND_GC_TIME_MS, messageWindowTasks } from "./conversation-tasks-collection";
 import { useConversationTasksCollection } from "./use-conversation-tasks";
 
 /**
@@ -41,7 +37,9 @@ export function ConversationTaskDemand({
       conversationId={conversationId}
       sequenceFrom={readWindow ? window?.sequenceFrom : undefined}
       sequenceTo={window?.sequenceTo}
-      numbersKey={window?.numbers.join(",") ?? ""}
+      readsKey={
+        window?.reads.map((read) => `${read.key}:${read.numbers.join(",")}`).join(";") ?? ""
+      }
       openTaskNumber={openTaskNumber}
     />
   );
@@ -51,19 +49,26 @@ const TaskReads = memo(function TaskReads({
   conversationId,
   sequenceFrom,
   sequenceTo,
-  numbersKey,
+  readsKey,
   openTaskNumber,
 }: {
   conversationId: string;
   sequenceFrom: number | undefined;
   sequenceTo: number | undefined;
-  numbersKey: string;
+  /** `messageWindowTasks`' reads as one string, so equal reads render nothing new. */
+  readsKey: string;
   openTaskNumber: number | undefined;
 }) {
   const { collection } = useConversationTasksCollection(conversationId);
   const reads = useMemo(
-    () => taskNumberReads(numbersKey ? numbersKey.split(",").map(Number) : []),
-    [numbersKey],
+    () =>
+      readsKey
+        ? readsKey.split(";").map((read) => {
+            const [key, numbers] = read.split(":");
+            return { key: key!, numbersKey: numbers! };
+          })
+        : [],
+    [readsKey],
   );
   useLiveQuery({
     query: (q) =>
@@ -86,13 +91,9 @@ const TaskReads = memo(function TaskReads({
         : q.from({ task: collection }).where(({ task }) => inArray(task.number, [openTaskNumber])),
     gcTime: DEMAND_GC_TIME_MS,
   });
-  // The Tasks the bodies name, a read per block of numbers.
+  // The Tasks the bodies name, a read per stretch of messages.
   return reads.map((read) => (
-    <NumberRead
-      key={read.block}
-      conversationId={conversationId}
-      numbersKey={read.numbers.join(",")}
-    />
+    <NumberRead key={read.key} conversationId={conversationId} numbersKey={read.numbersKey} />
   ));
 });
 

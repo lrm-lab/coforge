@@ -14,6 +14,8 @@ import {
   type ConversationTask,
   type ConversationTaskSubset,
 } from "./conversation-task-subset";
+import { CONVERSATION_WINDOW_PAGE_SIZE } from "#src/lib/conversation-window";
+
 import { createAnnouncedTasks } from "./announced-tasks";
 import { isFinishedStatus } from "./finished-tasks";
 import { loadConversationTasks } from "./tasks.functions";
@@ -84,8 +86,14 @@ function referencedNumbers(message: { body: string }, conversationId: string) {
 /**
  * What a loaded message window asks of its conversation's Tasks: the Tasks of its messages, as the
  * range of their sequences (open at the live end, so a message that arrives later needs no read of
- * its own: its Task is announced), and the Tasks its bodies name by number. Undefined for no
- * messages. Equal windows ask equally, so the same Tasks are never read twice.
+ * its own: its Task is announced), and the Tasks its bodies name by number, in `reads`. Undefined
+ * for no messages. Equal windows ask equally, so the same Tasks are never read twice.
+ *
+ * The named Tasks are read a stretch of `MESSAGES_PER_READ` messages at a time (by sequence, so a
+ * stretch keeps its key as the window pages and as messages arrive), split again past
+ * `CONVERSATION_TASK_NUMBERS_MAX` numbers. How many reads a window takes depends on how many
+ * messages it holds, never on how high or scattered the numbers are; paging in reads only the new
+ * stretches, and a message naming no Task re-reads nothing.
  */
 export function messageWindowTasks(
   messages: readonly { sequence: number; body: string }[],
@@ -95,32 +103,34 @@ export function messageWindowTasks(
   if (messages.length === 0) return undefined;
   let sequenceFrom = Infinity;
   let sequenceTo = -Infinity;
-  const numbers = new Set<number>();
+  const stretches = new Map<number, Set<number>>();
   for (const message of messages) {
     sequenceFrom = Math.min(sequenceFrom, message.sequence);
     sequenceTo = Math.max(sequenceTo, message.sequence);
-    for (const number of referencedNumbers(message, conversationId)) numbers.add(number);
+    const numbers = referencedNumbers(message, conversationId);
+    if (numbers.length === 0) continue;
+    const stretch = Math.floor(message.sequence / MESSAGES_PER_READ);
+    const named = stretches.get(stretch) ?? new Set<number>();
+    for (const number of numbers) named.add(number);
+    stretches.set(stretch, named);
   }
-  return {
-    sequenceFrom,
-    ...(hasNewer && { sequenceTo }),
-    numbers: [...numbers].sort((left, right) => left - right),
-  };
+  const reads = [...stretches]
+    .sort(([left], [right]) => left - right)
+    .flatMap(([stretch, named]) => {
+      const numbers = [...named].sort((left, right) => left - right);
+      const parts = [];
+      for (let at = 0; at < numbers.length; at += CONVERSATION_TASK_NUMBERS_MAX)
+        parts.push({
+          key: `${stretch}.${at / CONVERSATION_TASK_NUMBERS_MAX}`,
+          numbers: numbers.slice(at, at + CONVERSATION_TASK_NUMBERS_MAX),
+        });
+      return parts;
+    });
+  return { sequenceFrom, ...(hasNewer && { sequenceTo }), reads };
 }
 
-/**
- * Those numbers in reads of at most `CONVERSATION_TASK_NUMBERS_MAX` each: one per block of numbers
- * (1-200, 201-400, ...), so a window naming more Tasks than one read takes reads them all (a busy
- * channel's history names hundreds), and a page that adds a number re-reads only its block.
- */
-export function taskNumberReads(numbers: readonly number[]) {
-  const blocks = new Map<number, number[]>();
-  for (const number of numbers) {
-    const block = Math.floor((number - 1) / CONVERSATION_TASK_NUMBERS_MAX);
-    blocks.set(block, [...(blocks.get(block) ?? []), number]);
-  }
-  return [...blocks].map(([block, inBlock]) => ({ block, numbers: inBlock }));
-}
+/** Messages whose named Tasks one read asks for: a page of the message window. */
+const MESSAGES_PER_READ = CONVERSATION_WINDOW_PAGE_SIZE;
 
 /** Task changes to apply: announced ones (`task.changed.v1`), or a command's own result. */
 export type TaskChanges = { tasks: readonly TaskView[]; deleted: readonly string[] };
