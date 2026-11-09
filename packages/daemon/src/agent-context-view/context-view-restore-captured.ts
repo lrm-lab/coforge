@@ -89,12 +89,21 @@ export function restoreKimi(
 ): ContextViewRestoreResult {
   if (records.length > 10_000) return { ok: false, failure: "too_large" };
   const sendResultIndex = kimiSendRecordIndex(records, request.messageId, request.offset);
-  const latestLoopIndex = records.findLastIndex(
-    (record, index) =>
-      index <= (sendResultIndex ?? records.length) &&
-      record.type === "llm.request" &&
-      (record.kind === "loop" || record.kind === undefined),
-  );
+  // A backward scan rather than `findLastIndex`: this module is compiled by `packages/computer`
+  // and `apps/web` too, whose tsconfigs hold `lib` at ES2022, where that method does not exist
+  // (task #717). The bound is the send result's own index, or the whole log when there is none.
+  const latestLoopLimit = Math.min(sendResultIndex ?? records.length - 1, records.length - 1);
+  let latestLoopIndex = -1;
+  for (let index = latestLoopLimit; index >= 0; index -= 1) {
+    const candidate = records[index];
+    if (
+      candidate?.type === "llm.request" &&
+      (candidate.kind === "loop" || candidate.kind === undefined)
+    ) {
+      latestLoopIndex = index;
+      break;
+    }
+  }
   const foldedMessages: RestoredContextMessage[] = [];
   let foldedCompaction: RestoredContextView["compaction"] = { happened: false };
   if (latestLoopIndex >= 0) {
