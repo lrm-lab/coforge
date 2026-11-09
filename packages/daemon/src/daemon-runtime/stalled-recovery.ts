@@ -1,4 +1,5 @@
 import { foldUntrustedLine, truncateCodePoints } from "@lrm/coforge-sdk/internal";
+import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import { processClockMs } from "#src/platform/process-tree";
 
 const LAST_STEP_MAX_CHARS = 200;
@@ -18,8 +19,11 @@ export const STALLED_RECOVERY_SILENCE_MS = 15 * 60_000;
 export const STALLED_RECOVERY_SILENCE_QUEUE_ONLY_MS = 60 * 60_000;
 
 /** How long a stalled provider gets to exit before its restart counts as failed: an in-process
- * provider's disposal waits on the very prompt that hangs. */
-export const STALLED_RECOVERY_EXIT_TIMEOUT_MS = 10_000;
+ * provider's disposal waits on the very prompt that hangs. Long enough for both rungs of the
+ * cleanup ladder — the polite stop's grace and the forced kill's, `PROCESS_TREE_EXIT_GRACE_MS`
+ * each — plus room for the kills themselves; a shorter deadline would fire before the forced
+ * kill and report a failure that the ladder was about to fix (task #726). */
+export const STALLED_RECOVERY_EXIT_TIMEOUT_MS = 2 * PROCESS_TREE_EXIT_GRACE_MS + 5_000;
 
 /**
  * One launch's provider progress: when the provider last reported any event. Only raw provider

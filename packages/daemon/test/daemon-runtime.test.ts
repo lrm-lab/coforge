@@ -8924,14 +8924,15 @@ describe("Agent delivery queue", () => {
         activities.push(activity),
       );
       try {
-        fake.emit({ type: "error", message: "connect ECONNRESET" });
-        fake.emit({ type: "error", message: "connect ECONNRESET" });
+        // A class the repeat fence still owns: the three transient classes are exempt (task #726).
+        fake.emit({ type: "error", message: "HTTP 403" });
+        fake.emit({ type: "error", message: "HTTP 403" });
         fake.emit(between);
-        fake.emit({ type: "error", message: "connect ECONNRESET" });
+        fake.emit({ type: "error", message: "HTTP 403" });
         expect(runtimeErrorReasons(activities)).toEqual([
-          "provider_connection_error",
-          "provider_connection_error",
-          outcome === "fenced" ? "runtime_error_fenced" : "provider_connection_error",
+          "provider_api_error",
+          "provider_api_error",
+          outcome === "fenced" ? "runtime_error_fenced" : "provider_api_error",
         ]);
       } finally {
         await runtime.stop();
@@ -8949,14 +8950,14 @@ describe("Agent delivery queue", () => {
           (activity) => activities.push(activity),
         );
         try {
-          fake.emit({ type: "error", message: "connect ECONNRESET" });
-          fake.emit({ type: "error", message: "connect ECONNRESET" });
+          fake.emit({ type: "error", message: "HTTP 403" });
+          fake.emit({ type: "error", message: "HTTP 403" });
           fake.emit({ type: "completed", status });
-          fake.emit({ type: "error", message: "connect ECONNRESET" });
+          fake.emit({ type: "error", message: "HTTP 403" });
           expect(runtimeErrorReasons(activities)).toEqual([
-            "provider_connection_error",
-            "provider_connection_error",
-            "provider_connection_error",
+            "provider_api_error",
+            "provider_api_error",
+            "provider_api_error",
           ]);
         } finally {
           await runtime.stop();
@@ -9042,7 +9043,7 @@ describe("Agent delivery queue", () => {
     );
 
     test.each([
-      ["classified", {}, "ProviderConnectionError", "provider_connection_error"],
+      ["classified", {}, "ProviderApiError", "provider_api_error"],
       [
         "provider class",
         {
@@ -9068,7 +9069,7 @@ describe("Agent delivery queue", () => {
           undefined,
           (activity) => activities.push(activity),
         );
-        const error = { type: "error", message: "connect ECONNRESET", ...hints } as const;
+        const error = { type: "error", message: "HTTP 403", ...hints } as const;
         jest.useFakeTimers();
         try {
           // The same failure repeating with no turn end or output in between: the first two
@@ -9079,8 +9080,8 @@ describe("Agent delivery queue", () => {
             agentId: "agent-a",
             detailKind: "runtime_error",
             level: "error",
-            detail: "connect ECONNRESET",
-            entries: [{ kind: "text", text: "Error: connect ECONNRESET" }],
+            detail: "HTTP 403",
+            entries: [{ kind: "text", text: "Error: HTTP 403" }],
             runtimeError: { errorClass, errorReason },
           });
           expect(initial!.runtimeError!.fingerprint).toMatch(/^[0-9a-f]{8}$/);
@@ -9095,7 +9096,7 @@ describe("Agent delivery queue", () => {
           const fenced = activities.find((activity) => activity.detailKind === "runtime_error");
           expect(fenced).toBeDefined();
           expect(fenced!.runtimeError?.errorReason).toBe("runtime_error_fenced");
-          const detail = `Runtime stopped after 3 repeated runtime errors with the same fingerprint (${initial!.runtimeError!.fingerprint}). Last error: connect ECONNRESET Restart after the runtime/tooling issue is fixed.`;
+          const detail = `Runtime stopped after 3 repeated runtime errors with the same fingerprint (${initial!.runtimeError!.fingerprint}). Last error: HTTP 403 Restart after the runtime/tooling issue is fixed.`;
           expect(fenced).toMatchObject({
             agentId: "agent-a",
             detailKind: "runtime_error",
@@ -9341,7 +9342,7 @@ describe("Agent delivery queue", () => {
       );
       try {
         for (let failure = 0; failure < 3; failure++)
-          fake.emit({ type: "error", message: "connect ECONNRESET" });
+          fake.emit({ type: "error", message: "HTTP 403" });
         await fake.disposed;
         await Bun.sleep(0);
         // A delivery finds no process: kept for the next launch — acknowledged, not rejected.

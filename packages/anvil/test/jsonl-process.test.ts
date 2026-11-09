@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
-import { type OwnedProcessTree } from "@lrm/coforge-anvil";
+import { PROCESS_TREE_EXIT_GRACE_MS, type OwnedProcessTree } from "@lrm/coforge-anvil";
 import { captureDaemonLogs } from "./fixtures/log-capture";
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
@@ -140,7 +140,7 @@ test("invalid child output permanently fails current and future requests", async
   }
 });
 
-test("dispose allows five seconds for graceful exit before force terminating the tree", async () => {
+test("dispose allows the grace for a graceful exit before force terminating the tree", async () => {
   const exited = Promise.withResolvers<number>();
   const signals: boolean[] = [];
   const waits: number[] = [];
@@ -178,7 +178,7 @@ test("dispose allows five seconds for graceful exit before force terminating the
   const process = new JsonlProcess(["unused"], tmpdir(), {}, { spawn: () => tree });
   await process.dispose();
   expect(signals).toEqual([false, true]);
-  expect(waits[0]).toBe(5_000);
+  expect(waits[0]).toBe(PROCESS_TREE_EXIT_GRACE_MS);
 });
 
 /** The stderr lines a process reports for `chunks`, once it has exited and drained. */

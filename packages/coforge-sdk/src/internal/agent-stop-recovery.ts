@@ -42,10 +42,12 @@ export const STOP_REASON_RECOVERY: Readonly<Record<string, StopRecovery>> = {
   billing_exhausted: RETRY,
   auth_failed: RETRY,
   model_config_error: RETRY,
-  provider_timeout: RETRY,
   runtime_failure: RETRY,
   stalled_restart_limit: RETRY,
   // Runtime failures the Daemon recovers from by itself.
+  // A provider that hung is killed and restarted, and the next turn may simply work: nothing
+  // here is a person's to clear (task #726).
+  provider_timeout: AUTOMATIC,
   rate_limited: AUTOMATIC,
   quota_exhausted: AUTOMATIC,
   not_found: AUTOMATIC,

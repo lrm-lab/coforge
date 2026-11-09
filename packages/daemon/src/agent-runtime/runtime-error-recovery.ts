@@ -44,6 +44,24 @@ export const QUOTA_RESET_BACKOFF_MAX_MS = 60 * 60_000;
 /** Consecutive same-fingerprint failures before the caller stops retrying that fingerprint. */
 export const RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD = 3;
 
+/**
+ * The classes the repeat fence never counts. A provider this machine cannot reach, that provider's
+ * own server error, and a rate limit all lift on their own: the delivery backoff already bounds
+ * how often they are retried, and going offline over one only hides a working Agent behind a
+ * person's Start (task #726, matching the reference Computer, which keeps retrying these). Every
+ * other class keeps the fence, and the ones that take an Agent offline by themselves — an
+ * exhausted balance, a plan that excludes the model, an auth refusal, a sticky model config —
+ * never reach either fence.
+ *
+ * A failure here is invisible to the streak rather than resetting it: an interleaved connection
+ * reset must not launder the two identical unexplained failures before it into a fresh start.
+ */
+export const RUNTIME_ERROR_FENCE_EXEMPT_CLASSES: ReadonlySet<RuntimeErrorClass> = new Set([
+  RUNTIME_ERROR_CLASS.PROVIDER_CONNECTION,
+  RUNTIME_ERROR_CLASS.PROVIDER_SERVER,
+  RUNTIME_ERROR_CLASS.RATE_LIMIT,
+]);
+
 export type RuntimeErrorDeliveryBackoffOptions = Readonly<{
   baseMs?: number;
   maxMs?: number;

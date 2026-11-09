@@ -75,5 +75,7 @@ export interface ProcessTreeSpawner {
   ): OwnedProcessTree;
 }
 
-/** How long each rung of process cleanup waits for the owned tree to exit. */
-export const PROCESS_TREE_EXIT_GRACE_MS = 5_000;
+/** How long each rung of process cleanup waits for the owned tree to exit, matching Raft's
+ * ten-second grace after the polite SIGTERM (task #726; it was five). A cleanup ladder therefore
+ * needs up to twice this, so any deadline wrapped around one must be longer. */
+export const PROCESS_TREE_EXIT_GRACE_MS = 10_000;

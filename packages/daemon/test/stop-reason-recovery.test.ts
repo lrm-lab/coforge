@@ -51,3 +51,8 @@ test("a launch failure no retry can fix waits for a person", () => {
   expect(STOP_REASON_RECOVERY.input_too_large).toBe(STOP_RECOVERY.RESET_SESSION);
   expect(STOP_REASON_RECOVERY.rate_limited).toBe(STOP_RECOVERY.AUTOMATIC);
 });
+
+test("a provider that hung needs no person: the Daemon kills it and the next turn may work", () => {
+  expect(STOP_REASON_RECOVERY.provider_timeout).toBe(STOP_RECOVERY.AUTOMATIC);
+  expect(stopNeedsPerson("provider_timeout")).toBe(false);
+});

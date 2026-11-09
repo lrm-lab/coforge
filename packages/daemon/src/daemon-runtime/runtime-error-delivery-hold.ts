@@ -11,6 +11,7 @@ import {
   type RuntimeErrorClassification,
 } from "#src/agent-runtime/runtime-error-classification";
 import {
+  RUNTIME_ERROR_FENCE_EXEMPT_CLASSES,
   RUNTIME_ERROR_RECOVERY_EFFECTS,
   RuntimeErrorDeliveryBackoff,
   RuntimeErrorFingerprintFence,
@@ -76,14 +77,20 @@ export class RuntimeErrorDeliveryHold {
    * backoff delay — unless its fingerprint has now repeated enough to trip the fence, whatever
    * its class. Returns the fence state on a trip so the caller takes the Agent offline with the
    * fence Activity that names what stopped retrying.
+   *
+   * A class in `RUNTIME_ERROR_FENCE_EXEMPT_CLASSES` is never fenced and leaves the streak alone:
+   * an unreachable provider, its server error and a rate limit are worth retrying for as long as
+   * they last (task #726).
    */
   noteFailure(
     agentId: string,
     classification: RuntimeErrorClassification,
     fingerprint: string,
   ): RuntimeErrorFingerprintFenceState | undefined {
-    const fence = this.#fence.note(agentId, fingerprint);
-    if (fence.fenced) {
+    const fence = RUNTIME_ERROR_FENCE_EXEMPT_CLASSES.has(classification.errorClass)
+      ? undefined
+      : this.#fence.note(agentId, fingerprint);
+    if (fence?.fenced) {
       this.#holdFenced(agentId);
       return fence;
     }
