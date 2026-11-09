@@ -27,10 +27,10 @@ model WeeklyReport {
   sourceTemplateId String?                @db.Uuid
   /// When kind=template, optional send-settings stream this format/overview belongs to.
   settingsId       String?                @db.Uuid
-  /// member | template
+  /// member | template (`weekly_reports_kind_check`)
   kind             String
   title            String
-  /// draft | submitted
+  /// draft | submitted (`weekly_reports_status_check`).
   status           String                 @default("draft")
   /// Author removed this row from「我的周报」. Submitted rows stay
   /// so the Leader parent still shows the copy that was already sent.
