@@ -283,7 +283,7 @@ export class ArtifactReads {
         homeKey: true,
         access: true,
         deletedAt: true,
-          authorAgentId: true,
+        authorAgentId: true,
         workspace: { select: { slug: true } },
       },
     });
@@ -310,7 +310,9 @@ export class ArtifactReads {
           visibility: true,
           members: {
             where: {
-              ...("userId" in input.reader ? { userId: input.reader.userId } : { agentId: input.reader.agentId }),
+              ...("userId" in input.reader
+                ? { userId: input.reader.userId }
+                : { agentId: input.reader.agentId }),
               leftAt: null,
             },
             select: { id: true },
@@ -319,7 +321,9 @@ export class ArtifactReads {
       }),
     ]);
     const byId = new Map(rows.map((row) => [row.id, row]));
-    const byConversation = new Map(conversations.map((conversation) => [conversation.id, conversation]));
+    const byConversation = new Map(
+      conversations.map((conversation) => [conversation.id, conversation]),
+    );
     const member = membership !== null;
     const cardFor = (id: string): ArtifactMessageCard => {
       const row = byId.get(id);
@@ -353,7 +357,10 @@ export class ArtifactReads {
         contentType: row.kind,
         version: row.currentVersion,
         source: conversationId
-          ? { conversationId, label: conversation?.channelName ? `#${conversation.channelName}` : "DM" }
+          ? {
+              conversationId,
+              label: conversation?.channelName ? `#${conversation.channelName}` : "DM",
+            }
           : row.authorAgentId
             ? { agentId: row.authorAgentId, label: "Agent" }
             : { label: "Workspace" },

@@ -88,10 +88,12 @@ test("a reader without the artifact's existing access gets a redacted card", asy
     },
   };
   const reads = new ArtifactReads(db as never, async () => true);
-  const [card] = (await reads.messageCards({
-    workspaceId: "workspace-1",
-    reader: { userId: "user-1" },
-    messages: [{ body: `/w/docs/artifacts/${id}` }],
-  }))[0]!;
+  const [card] = (
+    await reads.messageCards({
+      workspaceId: "workspace-1",
+      reader: { userId: "user-1" },
+      messages: [{ body: `/w/docs/artifacts/${id}` }],
+    })
+  )[0]!;
   expect(card).toEqual({ kind: "artifact", state: "forbidden", artifactId: id, canOpen: false });
 });

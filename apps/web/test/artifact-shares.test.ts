@@ -32,9 +32,7 @@ test("artifact share posts one live-link message per target with derived keys", 
 
   expect(result.outcome).toBe("success");
   expect(result.results).toHaveLength(2);
-  expect(sent[0]!.body).toBe(
-    `Please review\n\n/w/docs/artifacts/${ARTIFACT}`,
-  );
+  expect(sent[0]!.body).toBe(`Please review\n\n/w/docs/artifacts/${ARTIFACT}`);
   expect(sent[0]!.idempotencyKey).not.toBe(sent[1]!.idempotencyKey);
 });
 
