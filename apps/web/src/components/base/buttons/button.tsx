@@ -72,7 +72,7 @@ export const styles = sortCx({
         },
         tertiary: {
             root: [
-                "text-tertiary hover:bg-primary_hover hover:text-tertiary_hover data-loading:bg-primary_hover",
+                "text-tertiary hover:bg-primary_hover hover:text-tertiary_hover",
                 // Icon styles
                 "*:data-icon:text-fg-quaternary hover:*:data-icon:text-fg-quaternary_hover",
             ].join(" "),
@@ -113,7 +113,7 @@ export const styles = sortCx({
         },
         "tertiary-destructive": {
             root: [
-                "text-error-primary outline-error hover:bg-error-primary hover:text-error-primary_hover data-loading:bg-error-primary",
+                "text-error-primary outline-error hover:bg-error-primary hover:text-error-primary_hover",
                 // Icon styles
                 "*:data-icon:text-fg-error-secondary hover:*:data-icon:text-fg-error-primary",
             ].join(" "),
