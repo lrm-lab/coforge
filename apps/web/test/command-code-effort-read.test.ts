@@ -1,150 +1,149 @@
 import { expect, test } from "bun:test";
-import { encodeDaemonRuntimeCommandCodeEffortReadResponse } from "@lrm/coforge-sdk/internal";
+import {
+  encodeDaemonRuntimeCommandCodeEffortReadResponse,
+  type DaemonRuntimeCommandCodeEffortReadRequest,
+  type DaemonRuntimeCommandCodeEffortReadResponse,
+} from "@lrm/coforge-sdk/internal";
 import { createDaemonRuntimeCommandCodeEffortReadResultMethod } from "#src/server/centrifugo/command-code-effort-result.server";
 import { CommandCodeEffortRead } from "#src/server/computers/command-code-effort-read.server";
 
 const viewer = { userId: "user-1", workspaceId: "workspace-1" };
+const input = { computerId: "computer-1", modelId: "native-model" };
 
-function waiter(options: {
-  read: () => Promise<
-    | {
-        protocolMajor: number;
-        requestId: string;
-        workspaceId: string;
-        computerId: string;
-        accepted: boolean;
-        status: string;
-        efforts: string[];
-      }
-    | undefined
-  >;
-  now: () => number;
-  wait: () => Promise<void>;
-  publish?: () => Promise<void>;
-  begin?: () => Promise<void>;
-}) {
+type Answer = Partial<DaemonRuntimeCommandCodeEffortReadResponse>;
+
+/** A use case over a results store the test fills the way the Computer's result RPC would. */
+function useCase(
+  options: { allowed?: boolean; publishFails?: boolean; beginFails?: boolean } = {},
+) {
   const marks: string[] = [];
-  const reader = new CommandCodeEffortRead(
-    {
-      publish: async () => {
-        marks.push("publish");
-        await options.publish?.();
+  const published: DaemonRuntimeCommandCodeEffortReadRequest[] = [];
+  // What the Computer has answered so far, by request id.
+  const answers = new Map<string, DaemonRuntimeCommandCodeEffortReadResponse>();
+  const reader = new CommandCodeEffortRead({
+    authorize: async () => {
+      marks.push("authorize");
+      return options.allowed ?? true;
+    },
+    results: {
+      begin: async (pending) => {
+        expect(pending.revision).toBe("");
+        marks.push("begin");
+        if (options.beginFails) throw new Error("redis is down");
       },
-      results: {
-        begin: async (pending) => {
-          expect(pending.revision).toBe("");
-          marks.push("begin");
-          await options.begin?.();
-        },
-        read: async (requestId) => {
-          const result = await options.read();
-          return result ? { ...result, requestId } : undefined;
-        },
-        clear: async () => {
-          marks.push("clear");
-        },
+      read: async (requestId) => {
+        marks.push("read");
+        return answers.get(requestId);
       },
     },
-    { now: options.now, wait: options.wait, timeoutMs: 1_000 },
-  );
-  return { reader, marks };
-}
-
-test("a ready Command Code effort read drops default and keeps the other values", async () => {
-  let now = 0;
-  const { reader, marks } = waiter({
-    now: () => now,
-    wait: async () => {
-      now += 100;
+    publish: async (request) => {
+      marks.push("publish");
+      if (options.publishFails) throw new Error("centrifugo is down");
+      published.push(request);
     },
-    read: async () => ({
+  });
+  /** The Computer answers the request that was published last. */
+  const answer = (value: Answer = {}) => {
+    const request = published.at(-1)!;
+    answers.set(request.requestId, {
       protocolMajor: 1,
-      requestId: "filled-by-waiter",
-      workspaceId: "workspace-1",
-      computerId: "computer-1",
+      requestId: request.requestId,
+      workspaceId: request.workspaceId,
+      computerId: request.computerId,
       accepted: true,
       status: "ready",
-      efforts: ["default", "", "off", "high", "max"],
-    }),
+      efforts: ["off", "high"],
+      ...value,
+    });
+  };
+  /** Starts a read and returns where its answer is read. */
+  const start = async () => {
+    const started = await reader.start(viewer, input);
+    if (started.status !== "started") throw new Error("not started");
+    return { computerId: input.computerId, requestId: started.requestId };
+  };
+  return { reader, marks, published, answer, start };
+}
+
+test("starting publishes one read for the model and returns its request id without waiting", async () => {
+  const { reader, marks, published } = useCase();
+  const started = await reader.start(viewer, input);
+  expect(started).toEqual({ status: "started", requestId: published[0]!.requestId });
+  expect(published).toHaveLength(1);
+  expect(published[0]).toMatchObject({
+    protocolMajor: 1,
+    workspaceId: "workspace-1",
+    computerId: "computer-1",
+    modelId: "native-model",
   });
-  expect(await reader.execute(viewer, "computer-1", "native-model")).toEqual({
-    status: "ready",
-    efforts: ["off", "high", "max"],
-  });
-  expect(marks).toEqual(["begin", "publish", "clear"]);
+  // The request stays pending for the Computer's answer: starting never reads, clears or waits.
+  expect(marks).toEqual(["authorize", "begin", "publish"]);
 });
 
-test("a failed Command Code effort read stays failed instead of becoming an empty list", async () => {
-  let now = 0;
-  const { reader } = waiter({
-    now: () => now,
-    wait: async () => {
-      now += 100;
-    },
-    read: async () => ({
-      protocolMajor: 1,
-      requestId: "filled-by-waiter",
-      workspaceId: "workspace-1",
-      computerId: "computer-1",
-      accepted: false,
-      status: "failed",
-      efforts: ["high"],
-    }),
-  });
-  expect(await reader.execute(viewer, "computer-1", "native-model")).toEqual({ status: "failed" });
+test("a read before the Computer answers is pending and authorizes nobody", async () => {
+  const { reader, marks, start } = useCase();
+  const scope = await start();
+  marks.length = 0;
+  expect(await reader.read(viewer, scope)).toEqual({ status: "pending" });
+  expect(marks).toEqual(["read"]);
+});
+
+test("a ready answer drops default and keeps the other values, and can be read again", async () => {
+  const { reader, answer, start } = useCase();
+  const scope = await start();
+  answer({ efforts: ["default", "", "off", "high", "max"] });
+  const ready = { status: "ready" as const, efforts: ["off", "high", "max"] };
+  expect(await reader.read(viewer, scope)).toEqual(ready);
+  // A poll whose reply was lost on the way back asks again.
+  expect(await reader.read(viewer, scope)).toEqual(ready);
+});
+
+test("a failed answer stays failed instead of becoming an empty list", async () => {
+  const { reader, answer, start } = useCase();
+  const scope = await start();
+  answer({ accepted: false, status: "failed", efforts: ["high"] });
+  expect(await reader.read(viewer, scope)).toEqual({ status: "failed" });
 });
 
 test("an invisible Command Code runtime does not publish an effort read", async () => {
-  const marks: string[] = [];
-  const unauthorized = new CommandCodeEffortRead(
-    {
-      publish: async () => {
-        marks.push("publish");
-      },
-      authorize: async () => false,
-      results: {
-        begin: async () => {
-          marks.push("begin");
-        },
-        read: async () => undefined,
-        clear: async () => {
-          marks.push("clear");
-        },
-      },
-    },
-    { now: () => 0, wait: async () => {}, timeoutMs: 1_000 },
-  );
-  expect(await unauthorized.execute(viewer, "computer-1", "native-model")).toEqual({
-    status: "failed",
-  });
-  expect(marks).toEqual([]);
+  const { reader, marks } = useCase({ allowed: false });
+  expect(await reader.start(viewer, input)).toEqual({ status: "failed" });
+  expect(marks).toEqual(["authorize"]);
 });
 
-test("a Command Code effort read that does not answer in time is failed and still cleared", async () => {
-  let now = 0;
-  const { reader, marks } = waiter({
-    now: () => now,
-    wait: async () => {
-      now += 1_000;
-    },
-    read: async () => undefined,
-    publish: async () => {
-      throw new Error("publish failed once");
-    },
+test("a store that cannot record the request, or a publish that fails, is a failed start", async () => {
+  const noStore = useCase({ beginFails: true });
+  expect(await noStore.reader.start(viewer, input)).toEqual({ status: "failed" });
+  expect(noStore.marks).toEqual(["authorize", "begin"]);
+  const noPublish = useCase({ publishFails: true });
+  expect(await noPublish.reader.start(viewer, input)).toEqual({ status: "failed" });
+  expect(noPublish.marks).toEqual(["authorize", "begin", "publish"]);
+});
+
+test("a request id reaches nothing outside the caller's Workspace and Computer", async () => {
+  const { reader, answer, start } = useCase();
+  const { requestId } = await start();
+  answer();
+  expect(await reader.read(viewer, { computerId: "computer-2", requestId })).toEqual({
+    status: "pending",
   });
-  expect(await reader.execute(viewer, "computer-1", "native-model")).toEqual({ status: "failed" });
-  expect(marks).toEqual(["begin", "publish", "clear"]);
-  const timedOut = waiter({
-    now: () => now,
-    wait: async () => {
-      now += 1_000;
-    },
-    read: async () => undefined,
-  });
-  expect(await timedOut.reader.execute(viewer, "computer-1", "native-model")).toEqual({
-    status: "failed",
-  });
-  expect(timedOut.marks).toEqual(["begin", "publish", "clear"]);
+  expect(
+    await reader.read(
+      { userId: "user-2", workspaceId: "workspace-2" },
+      { computerId: "computer-1", requestId },
+    ),
+  ).toEqual({ status: "pending" });
+});
+
+test("an answer is returned only to who may still select the runtime", async () => {
+  const options = { allowed: true };
+  const { reader, marks, answer, start } = useCase(options);
+  const scope = await start();
+  answer();
+  marks.length = 0;
+  options.allowed = false;
+  expect(await reader.read(viewer, scope)).toEqual({ status: "failed" });
+  expect(marks).toEqual(["read", "authorize"]);
 });
 
 test("the effort result RPC stores this Computer's reply and refuses another Computer", async () => {

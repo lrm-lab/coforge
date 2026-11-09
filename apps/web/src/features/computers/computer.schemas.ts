@@ -79,8 +79,12 @@ const runtimeInput = z.object({
 });
 
 export const computerIdInputSchema = z.object({ computerId: z.string().min(1) });
-export const readCommandCodeEffortsInputSchema = computerIdInputSchema.extend({
+export const startCommandCodeEffortReadInputSchema = computerIdInputSchema.extend({
   modelId: z.string().trim().min(1).max(300),
+});
+/** The request a start returned; the answer is read with it, scoped to the Computer. */
+export const readCommandCodeEffortAnswerInputSchema = computerIdInputSchema.extend({
+  requestId: z.uuid(),
 });
 export const restartComputerInputSchema = z.object({
   computerId: z.string().min(1),

@@ -105,6 +105,14 @@ These rules apply to `src/server/computers/`.
     never logged.
   - The usage the Computer read afterwards is stored from the result RPC under the request id,
     before the outcome is readable; a page that finds another scan id in the cache scans itself.
+- `command-code-effort-read.server.ts` reads one Command Code model's reasoning efforts from a
+  Computer for the Agent form. The Computer can take about 30 seconds and production closes a
+  request idle for about ten, so it is two calls like the reset credit: `start` publishes and
+  returns a request id (or `failed`), `read` returns pending or the answer. Both need
+  `ComputerRuntimeVisibility.canSelect` for Command Code. `read` answers only a request that
+  names the caller's Workspace and Computer and authorizes only once an answer exists; the
+  answer expires on its own (30 seconds) so a lost reply can be asked for again. Every failure is
+  one value, `failed`; the read changes nothing, so a failed start is just tried again.
 - `computer-runtime-auth.server.ts` stores structurally validated status reports without a
   provider whitelist, so a newer daemon's report survives an older Web. Provider identifiers
   are 1–64 ASCII identifier characters, at most 32 unique entries, normalized JSON at most

@@ -5,6 +5,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   createCentrifugoServerApi,
   daemonControlChannel,
@@ -13,12 +14,36 @@ import { getCommandCodeEffortResults } from "#src/server/centrifugo/command-code
 import { CommandCodeEffortRead } from "#src/server/computers/command-code-effort-read.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
-import { readCommandCodeEffortsInputSchema } from "./computer.schemas";
+import {
+  readCommandCodeEffortAnswerInputSchema,
+  startCommandCodeEffortReadInputSchema,
+} from "./computer.schemas";
 
-/** Asks this Computer for one Command Code model's effort choices. */
-export const readCommandCodeReasoningEfforts = createServerFn({ method: "POST" })
+/** The read both Server Functions go through; the runtime must be selectable by the viewer. */
+function commandCodeEffortRead(db: PrismaClient) {
+  const visibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
+  return new CommandCodeEffortRead({
+    authorize: ({ userId, workspaceId }, computerId) =>
+      visibility.canSelect({ workspaceId, userId }, computerId, RUNTIME_PROVIDER.COMMAND_CODE),
+    results: getCommandCodeEffortResults(),
+    // Made on use: reading an answer needs neither the API nor its environment.
+    publish: async (request) => {
+      await createCentrifugoServerApi().publish(
+        daemonControlChannel(request.workspaceId, request.computerId),
+        encodeDaemonRuntimeCommandCodeEffortReadRequest(request),
+      );
+    },
+  });
+}
+
+/**
+ * Asks this Computer for one Command Code model's effort choices and returns at once with the
+ * request to poll: production closes a request idle for about ten seconds and the Computer can
+ * take about thirty. The answer is read with `readCommandCodeEffortAnswer`.
+ */
+export const startCommandCodeEffortRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(readCommandCodeEffortsInputSchema)
+  .validator(startCommandCodeEffortReadInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
     declareNoStore();
@@ -27,20 +52,17 @@ export const readCommandCodeReasoningEfforts = createServerFn({ method: "POST" }
       select: { computerId: true },
     });
     if (!connection) throw new Error("Computer is not available");
-    const api = createCentrifugoServerApi();
-    const visibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
-    return new CommandCodeEffortRead({
-      authorize: ({ userId, workspaceId: principalWorkspaceId }, computerId) =>
-        visibility.canSelect(
-          { workspaceId: principalWorkspaceId, userId },
-          computerId,
-          RUNTIME_PROVIDER.COMMAND_CODE,
-        ),
-      results: getCommandCodeEffortResults(),
-      publish: (request) =>
-        api.publish(
-          daemonControlChannel(workspaceId, data.computerId),
-          encodeDaemonRuntimeCommandCodeEffortReadRequest(request),
-        ),
-    }).execute({ userId: user.id, workspaceId }, data.computerId, data.modelId);
+    return commandCodeEffortRead(db).start({ userId: user.id, workspaceId }, data);
+  });
+
+/** The Computer's answer to a started read: pending, the efforts, or a failure. */
+export const readCommandCodeEffortAnswer = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(readCommandCodeEffortAnswerInputSchema)
+  .handler(async ({ context, data }) => {
+    declareNoStore();
+    return commandCodeEffortRead(context.db).read(
+      { userId: context.user.id, workspaceId: context.workspaceId },
+      data,
+    );
   });
