@@ -17,6 +17,7 @@ import { ClockTime } from "#src/components/ui/relative-time";
 import { ConversationBottomPin } from "#src/features/conversations/conversation-bottom-pin";
 import { cn } from "#src/lib/utils";
 import { getLocale } from "#src/paraglide/runtime";
+import { useActivityDays } from "#src/features/inbox/activity-inbox-days";
 import type { ActivityEntry } from "./agent-activity";
 import { ACTIVITY_MARKER_CLASS, ActivityMarker } from "./activity-marker";
 import { ModelResponseWait } from "./model-response-wait";
@@ -116,6 +117,8 @@ export function AgentActivityTimeline({
     reading.current = following.current ? undefined : readingRowOf(container, listRef.current);
   }
 
+  const days = useActivityDays(rows, (row) => new Date(row.observedAtMs));
+
   if (!rows.length) return emptyState;
 
   return (
@@ -129,46 +132,63 @@ export function AgentActivityTimeline({
       className="h-full overflow-y-auto"
     >
       <ol ref={listRef} aria-label="Activity timeline" className="list-none px-5 py-3">
-        {rows.map((row) => {
-          const observation = observations.get(row.key);
-          const entry = observation?.entry;
-          const entryIndex = observation?.index ?? -1;
-          const waiting =
-            entry?.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED &&
-            entry.detail === "Waiting for model response";
-          // This is elapsed history, never a source of current Agent state. Only the cloud
-          // display authorizes a live clock; missing history yields a label without timing.
-          const next = waiting
-            ? activity
-                .slice(0, entryIndex)
-                .reverse()
-                .find(
-                  (candidate) =>
-                    candidate.launchId === entry.launchId &&
-                    candidate.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED &&
-                    candidate.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.TOOL_END,
-                )
-            : undefined;
-          const expiresAt =
-            waiting &&
-            entryIndex === 0 &&
-            display?.activityKind === "working" &&
-            display.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED
-              ? (display.expiresAt ?? undefined)
+        {days.flatMap((day) => [
+          // Each day the log runs into is named above its first row, so an old run of entries
+          // never reads as happening now (none before hydration, when no day can be named yet).
+          ...(day.label === undefined
+            ? []
+            : [
+                <li
+                  key={`day:${day.key}`}
+                  data-activity-row={`day:${day.key}`}
+                  className="pt-3 pb-1 text-xs font-medium text-tertiary first:pt-0"
+                >
+                  <h3>{day.label}</h3>
+                </li>,
+              ]),
+          ...day.items.map((row, index) => {
+            const observation = observations.get(row.key);
+            const entry = observation?.entry;
+            const entryIndex = observation?.index ?? -1;
+            const waiting =
+              entry?.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED &&
+              entry.detail === "Waiting for model response";
+            // This is elapsed history, never a source of current Agent state. Only the cloud
+            // display authorizes a live clock; missing history yields a label without timing.
+            const next = waiting
+              ? activity
+                  .slice(0, entryIndex)
+                  .reverse()
+                  .find(
+                    (candidate) =>
+                      candidate.launchId === entry.launchId &&
+                      candidate.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED &&
+                      candidate.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.TOOL_END,
+                  )
               : undefined;
-          return (
-            <ActivityTimelineRow
-              key={row.key}
-              row={row}
-              timeZone={timeZone}
-              modelWait={
-                waiting
-                  ? { startedAtMs: entry.observedAtMs, endedAtMs: next?.observedAtMs, expiresAt }
-                  : undefined
-              }
-            />
-          );
-        })}
+            const expiresAt =
+              waiting &&
+              entryIndex === 0 &&
+              display?.activityKind === "working" &&
+              display.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED
+                ? (display.expiresAt ?? undefined)
+                : undefined;
+            return (
+              <ActivityTimelineRow
+                key={row.key}
+                row={row}
+                timeZone={timeZone}
+                modelWait={
+                  waiting
+                    ? { startedAtMs: entry.observedAtMs, endedAtMs: next?.observedAtMs, expiresAt }
+                    : undefined
+                }
+                first={index === 0}
+                last={index === day.items.length - 1}
+              />
+            );
+          }),
+        ])}
       </ol>
     </div>
   );
@@ -187,10 +207,15 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
   row,
   timeZone,
   modelWait,
+  first,
+  last,
 }: {
   row: PresentedActivityRow;
   timeZone: string | null;
   modelWait?: { startedAtMs: number; endedAtMs?: number; expiresAt?: number };
+  /** The day's first and last rows: the connector runs within a day, not across its heading. */
+  first: boolean;
+  last: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
@@ -215,11 +240,16 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
   const showDetailBelowLabel = !!row.detail && row.detailOnOwnLine;
   return (
     // The connector runs through the markers' centres (left-1 on a 0.5625rem column; py-1.5 plus
-    // the marker's offset puts each centre 1rem down), from the first marker to the last. The
+    // the marker's offset puts each centre 1rem down), from a day's first marker to its last. The
     // marker's ring in the panel's own background masks the line behind it.
     <li
       data-activity-row={row.key}
-      className="relative grid grid-cols-[0.5625rem_minmax(0,1fr)_auto] gap-x-3 py-1.5 font-mono before:absolute before:inset-y-0 before:left-1 before:border-l before:border-secondary first:before:top-4 last:before:bottom-auto last:before:h-4 only:before:hidden"
+      className={cn(
+        "relative grid grid-cols-[0.5625rem_minmax(0,1fr)_auto] gap-x-3 py-1.5 font-mono before:absolute before:inset-y-0 before:left-1 before:border-l before:border-secondary",
+        first && "before:top-4",
+        last && "before:bottom-auto before:h-4",
+        first && last && "before:hidden",
+      )}
       style={ROW_RENDER_COST}
     >
       <ActivityMarker
