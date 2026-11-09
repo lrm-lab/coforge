@@ -42,11 +42,7 @@ import { guardWorkspaceRunnerStart } from "#src/supervisor/workspace-runner-guar
 import { writeWorkspaceInstanceRecord } from "#src/supervisor/process-workspace-instance";
 import { holdWorkspaceDaemonLock } from "#src/supervisor/workspace-daemon-lock";
 import { requestWorkspaceUpgrade } from "#src/supervisor/request-workspace-upgrade";
-export { launchdJobs } from "#src/platform/launchd-job";
-export { stopWorkspaceAgentProcesses } from "#src/platform/linux-agent-processes";
 export { FileBindingStore } from "#src/supervisor/binding-store";
-export { workspaceLaunchdIdentity } from "#src/supervisor/launchd-workspace-instance";
-export { workspaceStateDirectory } from "#src/supervisor/workspace-instance";
 export {
   WORKSPACE_HEALTH_CRASH_WINDOW_MS,
   WORKSPACE_HEALTH_DEGRADED_THRESHOLD,
@@ -116,6 +112,7 @@ export {
   resolveDaemonExecutablePath,
 } from "#src/daemon-host/launcher";
 export * from "#src/platform/upgrade-public";
+export * from "#src/platform/workspace-process-public";
 export { resolveComputerInstallDirectory } from "#src/platform/computer-install-directory";
 export {
   acquireProcessLock,
