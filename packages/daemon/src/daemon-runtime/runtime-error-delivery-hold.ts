@@ -37,7 +37,7 @@ export type RuntimeErrorBackoffPersistence = Readonly<{
 
 export type RuntimeErrorDeliveryHoldPorts = Readonly<{
   /** Owns the explicit hold; this module only decides when it starts and ends. */
-  deliveryQueue: Pick<AgentDeliveryQueue, "hold" | "release" | "explicitHold">;
+  deliveryQueue: Pick<AgentDeliveryQueue, "hold" | "release" | "explicitHold" | "pending">;
   /** Attempts delivery of what a released hold gave back, never blocking the caller. */
   flush(agentId: string, held: AgentMessageDelivery[]): void;
   /** Where a backoff outlives the process; absent when the caller keeps it in memory only. */
@@ -118,6 +118,21 @@ export class RuntimeErrorDeliveryHold {
           : "runtime_error_backoff",
     });
     this.#scheduleRelease(agentId, backoff.untilMs);
+    // One line per step of the wait, so a run of retries is readable from the log alone: which
+    // rung this is, how long it waits and how much is queued behind it. Nothing of the messages.
+    logger.info("Held deliveries for a retrying runtime", {
+      event: "agent.runtime.delivery_held",
+      agent_id: agentId,
+      error_class: classification.errorClass,
+      attempt: backoff.attempts,
+      retry_in_ms: backoff.delayMs,
+      held: this.#ports.deliveryQueue.pending(agentId).length,
+      reason:
+        classification.errorClass === RUNTIME_ERROR_CLASS.RATE_LIMIT
+          ? "rate_limit_backoff"
+          : "runtime_error_backoff",
+      outcome: "held",
+    });
     return undefined;
   }
 

@@ -22,6 +22,7 @@ function harness() {
         return [];
       },
       explicitHold: (id) => held.get(id),
+      pending: () => [],
     },
     flush() {
       throw new Error("fenced deliveries must not be flushed");

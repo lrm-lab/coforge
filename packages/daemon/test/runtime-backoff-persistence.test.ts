@@ -71,6 +71,7 @@ function holdWith(records: Parameters<RuntimeErrorDeliveryHold["restore"]>[0]) {
         return [];
       },
       explicitHold: (agentId) => held.get(agentId) as never,
+      pending: () => [],
     },
     flush: () => {},
     store: {

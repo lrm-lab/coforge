@@ -5,6 +5,7 @@ import {
   type RuntimeErrorDeliveryHoldPorts,
 } from "#src/daemon-runtime/runtime-error-delivery-hold";
 import type { RuntimeErrorClassFence } from "#src/agent-runtime/runtime-error-recovery";
+import { captureDaemonLogs } from "./log-capture";
 
 /**
  * Raft keeps an Agent online through a provider it cannot reach, its own server error, and a rate
@@ -29,6 +30,7 @@ function harness() {
         return [];
       },
       explicitHold: (id) => held.get(id),
+      pending: () => [],
     },
     flush() {
       throw new Error("a fenced Agent's deliveries must not be flushed");
@@ -102,4 +104,47 @@ test("a transient repeat never resets the fence streak of a real one beside it",
   } finally {
     hold.disposeAll();
   }
+});
+
+/** The transient classes are exempt from the fence, so nothing but the log says how long a run of
+ * retries lasted: one line per step, with the wait and the queue behind it, and no wording (task
+ * #726, Raft's ruling on unbounded holding). */
+test("every backoff step logs its rung, its wait and the queue depth, never the mail", async () => {
+  const { records } = await captureDaemonLogs(async () => {
+    const hold = new RuntimeErrorDeliveryHold({
+      deliveryQueue: {
+        hold: () => {},
+        release: () => [],
+        explicitHold: () => undefined,
+        pending: () => [{ body: "the wording nobody may log" }, { body: "nor this" }] as never,
+      },
+      flush() {
+        throw new Error("a retrying Agent's deliveries are held, not flushed");
+      },
+    });
+    try {
+      const event = { type: "error", message: "429 Too Many Requests" } as const;
+      hold.noteRuntimeFailure("agent", {} as Launch, event, classifyRuntimeError(event));
+      hold.noteRuntimeFailure("agent", {} as Launch, event, classifyRuntimeError(event));
+    } finally {
+      hold.disposeAll();
+    }
+  });
+  const steps = records.filter(
+    (record) => record.properties.event === "agent.runtime.delivery_held",
+  );
+  expect(steps).toHaveLength(2);
+  expect(steps.map((step) => step.properties.attempt)).toEqual([1, 2]);
+  expect(steps.at(-1)!.properties).toMatchObject({
+    agent_id: "agent",
+    error_class: "RateLimitError",
+    held: 2,
+    reason: "rate_limit_backoff",
+    outcome: "held",
+  });
+  // The second rung waits longer than the first: the log shows the backoff growing.
+  expect(Number(steps[1]!.properties.retry_in_ms)).toBeGreaterThan(
+    Number(steps[0]!.properties.retry_in_ms),
+  );
+  expect(JSON.stringify(records)).not.toContain("wording");
 });

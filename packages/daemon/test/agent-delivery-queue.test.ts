@@ -1,6 +1,10 @@
 import { expect, setSystemTime, test } from "bun:test";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import { AgentDeliveryQueue } from "#src/daemon-runtime/agent-delivery-queue";
+import {
+  AGENT_DELIVERY_HOLD_LIMIT,
+  AgentDeliveryQueue,
+} from "#src/daemon-runtime/agent-delivery-queue";
+import { captureDaemonLogs } from "./log-capture";
 
 const delivery = (id: string): AgentMessageDelivery => ({
   protocolMajor: 1,
@@ -208,4 +212,38 @@ test("the queue measures how long the oldest held delivery has waited", () => {
   } finally {
     setSystemTime();
   }
+});
+
+/** Each held item carries the message's own text, so the queue is bounded the way the server's
+ * replay is bounded (task #726: the transient classes are exempt from the fence, so a provider
+ * that stays unreachable can grow this queue with nothing to stop it). */
+test("a queue past the limit drops its oldest and keeps the newest", async () => {
+  const { records } = await captureDaemonLogs(async (captured) => {
+    const queue = new AgentDeliveryQueue();
+    for (let index = 0; index <= AGENT_DELIVERY_HOLD_LIMIT; index += 1)
+      queue.enqueue("agent-1", delivery(`n${index}`));
+    expect(queue.pending("agent-1")).toHaveLength(AGENT_DELIVERY_HOLD_LIMIT);
+    // The first arrival is the one that went: the newest stay, and a fresh arrival is not lost.
+    expect(queue.pending("agent-1")[0]!.deliveryId).toBe("delivery-n1");
+    expect(queue.pending("agent-1").at(-1)!.deliveryId).toBe(
+      `delivery-n${AGENT_DELIVERY_HOLD_LIMIT}`,
+    );
+    expect(
+      captured.filter((record) => record.properties.event === "agent.runtime.delivery_dropped"),
+    ).toHaveLength(1);
+  });
+  const dropped = records.find(
+    (record) => record.properties.event === "agent.runtime.delivery_dropped",
+  );
+  expect(dropped?.properties).toMatchObject({
+    agent_id: "agent-1",
+    dropped: 1,
+    held: AGENT_DELIVERY_HOLD_LIMIT,
+    limit: AGENT_DELIVERY_HOLD_LIMIT,
+    reason: "hold_limit",
+    // Not lost: the row was never ACKed and comes back with the next resend.
+    outcome: "requeued_on_server",
+  });
+  // What is held is the Agent's mail: no wording of it reaches the log.
+  expect(JSON.stringify(records)).not.toContain("body");
 });
