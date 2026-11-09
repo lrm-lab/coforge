@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
@@ -277,6 +277,26 @@ test("preparing the live container environment clears its binding variables", as
   try {
     Object.assign(process.env, env);
     expect(await prepareContainerBinding(process.env, directory)).toBe(true);
+    for (const key of CONTAINER_BINDING_ENV_KEYS) expect(process.env[key]).toBeUndefined();
+  } finally {
+    if (savedCloudMarker === undefined) delete process.env.COFORGE_COMPUTER_CLOUD;
+    else process.env.COFORGE_COMPUTER_CLOUD = savedCloudMarker;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("a failed live container binding still clears its binding variables", async () => {
+  const directory = await stateDirectory();
+  const blockedState = join(directory, "blocked-state");
+  await writeFile(blockedState, "not a directory");
+  const savedCloudMarker = process.env.COFORGE_COMPUTER_CLOUD;
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  try {
+    Object.assign(process.env, env);
+    await expect(prepareContainerBinding(process.env, blockedState)).rejects.toThrow();
     for (const key of CONTAINER_BINDING_ENV_KEYS) expect(process.env[key]).toBeUndefined();
   } finally {
     if (savedCloudMarker === undefined) delete process.env.COFORGE_COMPUTER_CLOUD;

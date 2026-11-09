@@ -2,6 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
+import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
 import {
   validateWorkspaceEndpoint,
   type NativeProcessIdentity,
@@ -26,17 +27,7 @@ const RECORD_FILE = "process-instance.json";
 /** The name it had while only Windows used this class: a Windows install from before the rename
  * still has the file, so it is read as a fallback and removed on the next write. */
 const LEGACY_RECORD_FILE = "windows-instance.json";
-/** Keep this list aligned with Computer's container-binding-env.ts: these inputs belong only to
- * the Computer's cloud binding job and must not enter the Workspace Daemon process. */
-const CONTAINER_BINDING_ENV_KEYS = new Set([
-  "COFORGE_DAEMON_API_KEY",
-  "COFORGE_WORKSPACE_ID",
-  "COFORGE_COMPUTER_ID",
-  "COFORGE_SERVER_URL",
-  "COFORGE_WORKSPACE_SLUG",
-  "COFORGE_COMPUTER_NAME",
-  "COFORGE_REPLACE_CREDENTIAL",
-]);
+const CONTAINER_BINDING_ENV_KEY_SET = new Set<string>(CONTAINER_BINDING_ENV_KEYS);
 
 /**
  * Child-process per-Workspace containment for the MVP: one `__workspace-daemon` OS child per
@@ -74,7 +65,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
       ...Object.fromEntries(
         Object.entries(Bun.env).filter(
           (entry): entry is [string, string] =>
-            entry[1] !== undefined && !CONTAINER_BINDING_ENV_KEYS.has(entry[0]),
+            entry[1] !== undefined && !CONTAINER_BINDING_ENV_KEY_SET.has(entry[0]),
         ),
       ),
       COFORGE_DAEMON_HOME: this.config.stateDirectory,

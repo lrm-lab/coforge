@@ -37,6 +37,19 @@ export async function prepareContainerBinding(
   // marker so they never mistake the workspace for a desktop session.
   const liveEnvironment = env === process.env;
   if (liveEnvironment) process.env.COFORGE_COMPUTER_CLOUD = "1";
+  try {
+    return await persistContainerBinding(env, stateDirectory, expectedServerUrl, options);
+  } finally {
+    if (liveEnvironment) for (const key of CONTAINER_BINDING_ENV_KEYS) delete process.env[key];
+  }
+}
+
+async function persistContainerBinding(
+  env: Record<string, string | undefined>,
+  stateDirectory: string,
+  expectedServerUrl?: string,
+  options?: { seedOnly?: boolean },
+): Promise<boolean> {
   const daemonApiKey = text(env.COFORGE_DAEMON_API_KEY);
   const workspaceId = text(env.COFORGE_WORKSPACE_ID);
   const computerId = text(env.COFORGE_COMPUTER_ID);
@@ -84,7 +97,6 @@ export async function prepareContainerBinding(
   } else {
     await credentials.save(workspaceId, computerId, daemonApiKey);
   }
-  if (liveEnvironment) for (const key of CONTAINER_BINDING_ENV_KEYS) delete process.env[key];
   return true;
 }
 

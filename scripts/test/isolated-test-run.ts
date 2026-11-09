@@ -8,7 +8,7 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CONTAINER_BINDING_ENV_KEYS } from "@coforge/computer/src/host/container-binding-env";
+import { CONTAINER_BINDING_ENV_KEYS } from "@lrm/coforge-daemon/src/supervisor/container-binding-env";
 import { DAEMON_LAUNCH_ENV_KEYS } from "@lrm/coforge-daemon/src/code-agent/environment";
 import { AGENT_LAUNCH_TAG_ENV } from "@lrm/coforge-daemon/src/platform/agent-launch-tag";
 
