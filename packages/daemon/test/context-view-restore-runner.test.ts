@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { join } from "node:path";
 import {
   encodeContextViewRestoreChildResult,
   decodeContextViewRestoreChildResult,
@@ -45,7 +46,13 @@ test("runs the real restore mode in a Bun child", async () => {
   );
   const result = await runContextViewRestoreInChild(
     { runtime: "codex", sessionId: "s1", messageId: "m1", buffer, offset: buffer.length },
-    { command: [process.execPath, "packages/computer/src/main.ts", "__restore-context-view"] },
+    {
+      command: [
+        process.execPath,
+        join(import.meta.dir, "../../../packages/computer/src/main.ts"),
+        "__restore-context-view",
+      ],
+    },
   );
   expect(result.ok).toBe(true);
 });
