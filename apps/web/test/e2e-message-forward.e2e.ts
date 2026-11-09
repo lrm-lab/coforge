@@ -204,11 +204,11 @@ test("forwards a message with its attachment to a channel and a new DM, with a n
   await waitFor(bodyIncludes("Forwarded to 2 destinations"));
   await shot("1440-toast");
 
-  // "View in Chat" goes to the first destination, channel B.
+  // "View in chat" goes to the first destination, channel B.
   // The toast slides in; a pointer click lands where its button was a moment ago.
   await browser(
     "eval",
-    `[...document.querySelectorAll("[data-sonner-toast] button")].find((b) => b.textContent.trim() === "View in Chat").click()`,
+    `[...document.querySelectorAll("[data-sonner-toast] button")].find((b) => b.textContent.trim() === "View in chat").click()`,
   );
   await waitFor(`location.pathname.endsWith("/channel/${ids.b}")`);
   await waitFor(`document.querySelector("[data-forwarded-card]") !== null`);

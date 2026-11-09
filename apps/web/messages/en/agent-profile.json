@@ -1,5 +1,5 @@
 {
-  "agent_profile_edit_visibility": "Edit Visibility",
+  "agent_profile_edit_visibility": "Edit visibility",
   "agent_form_computer_locked": "This Agent already runs on a Computer; use Move to another Computer to change it.",
   "agent_profile_section_peer_dms": "Agent DMs",
   "agent_peer_dm_paused": "Paused",
@@ -8,8 +8,8 @@
   "agent_chat_channels_caption": "Channels",
   "agent_chat_channels_hint": "Channels where this agent can read or participate.",
   "agent_chat_channel_muted": "Muted",
-  "agent_chat_show_all": "Show All {count} Channels",
-  "agent_chat_show_fewer": "Show Fewer",
+  "agent_chat_show_all": "Show all {count} channels",
+  "agent_chat_show_fewer": "Show fewer",
   "agent_chat_dms_hint": "Direct conversations involving this agent.",
   "agent_chat_loading": "Loading chats…",
   "agent_chat_error": "Couldn't load this agent's chats.",
@@ -22,6 +22,6 @@
   "agent_peer_dm_badge": "Agent DM",
   "agent_peer_dm_no_messages": "No messages yet",
   "agent_peer_dm_activity_only": "Activity only",
-  "agent_peer_dm_activity_tooltip": "Agent DM Activity",
+  "agent_peer_dm_activity_tooltip": "Agent DM activity",
   "agent_profile_runtime_invalid": "The runtime configuration is invalid. Re-select a runtime."
 }

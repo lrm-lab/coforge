@@ -429,11 +429,11 @@ test("signing out removes what the browser kept", async () => {
 
   await browser("eval", `document.querySelector('button[aria-label^="Current user"]').click()`);
   await waitFor(
-    `[...document.querySelectorAll('[role="menuitem"]')].some((i) => i.textContent.trim() === "Sign Out")`,
+    `[...document.querySelectorAll('[role="menuitem"]')].some((i) => i.textContent.trim() === "Sign out")`,
   );
   await browser(
     "eval",
-    `[...document.querySelectorAll('[role="menuitem"]')].find((i) => i.textContent.trim() === "Sign Out").click()`,
+    `[...document.querySelectorAll('[role="menuitem"]')].find((i) => i.textContent.trim() === "Sign out").click()`,
   );
 
   // The proxy stands in for Authing at `/auth/logout`: a page of this origin that is not the app,

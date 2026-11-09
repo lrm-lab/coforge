@@ -205,7 +205,7 @@ export class PhaseBookkeeping {
       this.ports.activityDraft(
         agentId,
         "runtime_error",
-        "Context compaction failed repeatedly; reset the session from the Agent page (Reset Session & Restart).",
+        "Context compaction failed repeatedly; reset the session from the Agent page (Reset session & restart).",
       ),
     );
   }

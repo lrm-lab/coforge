@@ -72,7 +72,7 @@ const step = (body: string) =>
 const shot = (name: string) =>
   `await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity), undefined, { timeout: 5000 }); await page.waitForTimeout(200); await page.screenshot({ path: ${JSON.stringify(join(artifacts, `${name}.png`))} });`;
 /** The dialog's own Sign out, not the popover's that opened it. */
-const confirmSignOut = `await page.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Sign Out").click());`;
+const confirmSignOut = `await page.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Sign out").click());`;
 const waitText = (text: string) =>
   `await page.waitForFunction((text) => document.body.innerText.includes(text), ${JSON.stringify(text)}, { timeout: 15000 });`;
 
@@ -247,7 +247,7 @@ test("signing a runtime out names the Agents using it and shows a refusal before
   await step(`
     await page.keyboard.press("Escape");
     await page.click('li button[aria-label^="Codex CLI"]');
-    await page.click("loc=role:button[name='Sign Out']");
+    await page.click("loc=role:button[name='Sign out']");
     ${waitText("Sign out of Codex CLI?")}
     ${waitText("Signout Agent keep running")}
     ${shot("sign-out-confirm")}
@@ -281,7 +281,7 @@ test("Kiro enterprise form starts the shared device-code flow and explains an ex
   ${waitText("Sign in to Kiro with IAM Identity Center")}
   ${shot("kiro-enterprise-form-en")}
   await page.fill("loc=role:textbox[name*='Start URL']","https://example.awsapps.com/start");
-  await page.fill("loc=role:textbox[name*='AWS Region']","us-east-1");
+  await page.fill("loc=role:textbox[name*='AWS region']","us-east-1");
   await page.click("loc=role:button[name='Sign In']");
  `);
   const id = await currentLogin("kiro");

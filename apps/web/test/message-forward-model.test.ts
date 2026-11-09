@@ -104,7 +104,7 @@ test("a result closes the dialog only when every destination took it", () => {
   expect(none.kind === "none" && none.failed.get("a")).toBe("not_joined");
 });
 
-test("Try Again is offered only for a refusal another attempt may get past", () => {
+test("Try again is offered only for a refusal another attempt may get past", () => {
   expect(isRetryableForwardFailure("failed")).toBe(true);
   expect(isRetryableForwardFailure("not_joined")).toBe(true);
   expect(isRetryableForwardFailure("archived")).toBe(false);

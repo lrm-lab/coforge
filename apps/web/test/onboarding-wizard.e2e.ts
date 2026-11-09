@@ -175,7 +175,7 @@ test("a first sign-in lands in the setup wizard, and finishing or skipping it op
 
     await finisher.waitFor(dialogShows("takes it from here"));
     await finisher.browser("screenshot", join(artifacts, "step-4-handoff.png"));
-    await finisher.browser("eval", `${press("Let's Go")}.click()`);
+    await finisher.browser("eval", `${press("Let's go")}.click()`);
     await finisher.waitFor(`/\\/dm\\/[^/]+$/.test(location.pathname)`);
     await finisher.waitFor(`!document.querySelector('[role="dialog"]')`);
     const dm = await finisher.evaluate<string>(`location.pathname.split("/").pop()`);
@@ -199,7 +199,7 @@ test("a first sign-in lands in the setup wizard, and finishing or skipping it op
     // --- Skipping.
     const skipSlug = await firstSignIn(skipper, "skipper", origin);
     const skipperId = await userOf("skipper");
-    await skipper.browser("eval", `${press("Skip Setup")}.click()`);
+    await skipper.browser("eval", `${press("Skip setup")}.click()`);
     await skipper.waitFor(`/\\/dm\\/[^/]+$/.test(location.pathname)`);
     await skipper.waitFor(`!document.querySelector('[role="dialog"]')`);
     const skipWorkspace = await db.workspace.findUniqueOrThrow({ where: { slug: skipSlug } });

@@ -86,7 +86,6 @@
   &:where(blockquote p) {
     margin: 0;
     font-weight: 500;
-    font-style: italic;
 
     font-size: var(--text-xl);
     line-height: var(--text-xl--line-height);

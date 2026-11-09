@@ -67,7 +67,7 @@ const snapshot = (agentId: string, statusOnly: boolean): AgentDisplaySnapshot =>
   ...(statusOnly ? { statusOnly: true as const } : {}),
 });
 
-const panel = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]')`;
+const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
 /** The members-page row of the Agent named `displayName`, as a page expression. */
 const agentRow = (displayName: string) =>
   `[...${panel}.querySelectorAll("li")].find((row) => row.textContent.includes(${JSON.stringify(displayName)}))`;
@@ -193,12 +193,12 @@ test("a plain member's channel roster reads another member's Agent status, publi
   await browser("--init-script", pointerInit, "set", "viewport", "1440", "900");
   await browser("open", `${proxy.origin}/en/w/${workspaceSlug}/channel/${channelId}`);
   await waitFor(
-    `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
+    `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
     60_000,
   );
   // The settings' Members row: this channel's one human and two Agents.
   const membersRow = `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.includes("1 human · 2 agents"))`;
-  await browser("click", '[aria-label="Channel Details and Settings"]');
+  await browser("click", '[aria-label="Channel details and settings"]');
   await waitFor(`${panel} !== null`, 15_000);
   await waitFor(`${membersRow} !== undefined`, 15_000);
   await browser("eval", `${membersRow}.click()`);

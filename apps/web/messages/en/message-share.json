@@ -4,7 +4,7 @@
   "message_share_generating": "Generating image",
   "message_share_page_alt": "Image of the selected messages, page {page} of {total}",
   "message_share_failed": "The image could not be generated.",
-  "message_share_retry": "Try Again",
+  "message_share_retry": "Try again",
   "message_share_copy": "Copy this page",
   "message_share_copied": "Image copied.",
   "message_share_copy_failed": "This browser would not copy the image. Download it instead.",

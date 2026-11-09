@@ -94,12 +94,12 @@ test("a confirmation is centered on a phone", async () => {
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
       60_000,
     );
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
+    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel Details and Settings"]');
+      await browser("click", '[aria-label="Channel details and settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(
         () => true,
         () => false,
@@ -107,8 +107,8 @@ test("a confirmation is centered on a phone", async () => {
       if (opened) break;
       if (attempt === 5) throw new Error("the channel settings panel never opened");
     }
-    await waitFor(`${byText("button", "Delete Channel")} !== undefined`);
-    await clickText("button", "Delete Channel");
+    await waitFor(`${byText("button", "Delete channel")} !== undefined`);
+    await clickText("button", "Delete channel");
     await waitFor(`document.body.textContent.includes("permanently deleted")`);
     await browser("wait", "500");
     const raw = JSON.parse(

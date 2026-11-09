@@ -64,7 +64,7 @@ test("a long Agent name leaves the header's avatar whole", async () => {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
     await browser("open", `${origin}/en/w/${workspace.slug}/members`);
-    const open = `[...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Private Chat" && el.parentElement?.parentElement?.textContent.includes(${JSON.stringify(agent.name)}))`;
+    const open = `[...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Private chat" && el.parentElement?.parentElement?.textContent.includes(${JSON.stringify(agent.name)}))`;
     await browser("wait", "--fn", `${pageHydrated} && ${open} !== undefined`);
     // A click that lands before the page hydrates opens nothing; try again until the DM opens.
     for (let attempt = 0; ; attempt += 1) {

@@ -20,6 +20,6 @@
   "agent_reminders_weekday_fri": "Fri",
   "agent_reminders_weekday_sat": "Sat",
   "agent_reminders_weekday_sun": "Sun",
-  "agent_reminders_load_more": "Load More",
+  "agent_reminders_load_more": "Load more",
   "agent_reminders_empty_description": "This Agent hasn't scheduled any reminders. To set one, just tell it: “Remind me to follow up tomorrow.”"
 }

@@ -30,7 +30,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
   /** The shortcut as the page's platform spells it, for `press` and the tooltip. */
   const apple = () => evaluate<boolean>(`/Mac|iPhone|iPad|iPod/i.test(navigator.platform)`);
   const COLLAPSE = 'button[aria-label="Collapse sidebar"]';
-  const EXPAND = 'button[aria-label="Expand Sidebar"]';
+  const EXPAND = 'button[aria-label="Expand sidebar"]';
   /** Moves a real pointer onto a button, from off it, so its tooltip opens. The button can still
    * be moving (the rail's width transition, a late list row) between measuring and the move, so
    * each attempt confirms the point lands on the button before the tooltip wait relies on it. */
@@ -104,7 +104,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     // The collapse animates the rail's width; measuring the expand button mid-transition
     // puts the pointer where the button was, and no tooltip ever opens.
     await wait(`document.getAnimations().every((a) => a.playState !== "running")`);
-    expect(await tooltipAfterHover(EXPAND, "Expand Sidebar")).toBe(`Expand Sidebar${label}`);
+    expect(await tooltipAfterHover(EXPAND, "Expand sidebar")).toBe(`Expand sidebar${label}`);
     await browser("screenshot", join(artifacts, "expand-tooltip.png"));
     await browser("focus", "textarea");
     await browser("press", press);

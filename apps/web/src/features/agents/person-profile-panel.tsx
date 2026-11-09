@@ -333,7 +333,7 @@ function PersonProfileBody({
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-quaternary italic">{m.member_person_no_agents()}</p>
+          <p className="mt-2 text-sm text-quaternary">{m.member_person_no_agents()}</p>
         )}
       </section>
 

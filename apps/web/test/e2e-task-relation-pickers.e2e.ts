@@ -99,7 +99,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
           `${dialogs}.length === 1 && document.getAnimations().every((a) => a.playState !== "running")`,
         );
         await mark(
-          `${popup}?.querySelector('[aria-label^="More Actions for Task #${task}"]')`,
+          `${popup}?.querySelector('[aria-label^="More actions for task #${task}"]')`,
           "more",
         );
         await browser("click", '[data-e2e="more"]');
@@ -180,7 +180,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       );
       await shoot(`${label}-subtask-dialog`);
       await mark(
-        `[...document.querySelectorAll('[role="dialog"] button')].find((el) => el.textContent.trim() === "Create Task")`,
+        `[...document.querySelectorAll('[role="dialog"] button')].find((el) => el.textContent.trim() === "Create task")`,
         "create",
       );
       await browser("click", '[data-e2e="create"]');

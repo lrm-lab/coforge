@@ -51,15 +51,15 @@ test(
         // A channel's members page: the roster and the add view search names, not usernames.
         await browser("open", `${base}/channel/${channelId}`);
         await waitFor(
-          `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
+          `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
         );
-        const panel = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]')`;
+        const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
         const panelText = () => evaluate<string>(`${panel}?.innerText ?? ""`);
         const roster = `${panel}?.querySelector('input[placeholder="Search members…"]') != null`;
         // A click that lands before the page hydrates opens nothing; try again until the panel opens.
         await waitFor(pageHydrated);
         for (let attempt = 0; ; attempt += 1) {
-          await browser("click", '[aria-label="Channel Details and Settings"]');
+          await browser("click", '[aria-label="Channel details and settings"]');
           const opened = await waitFor(`${panel} !== null`).then(
             () => true,
             () => false,
@@ -106,9 +106,9 @@ test(
         await browser("fill", 'input[placeholder="Search members…"]', "");
         await browser(
           "eval",
-          `[...${panel}.querySelectorAll("button")].find((button) => button.textContent.trim() === "Add Member").click()`,
+          `[...${panel}.querySelectorAll("button")].find((button) => button.textContent.trim() === "Add member").click()`,
         );
-        await waitFor(`${panel}.innerText.includes("Add Selected (0)")`);
+        await waitFor(`${panel}.innerText.includes("Add selected (0)")`);
         await waitFor(`${panel}.innerText.includes("Lindy")`);
         text = await panelText();
         check("channel add view: lists the person by label", text.includes("Lindy"));

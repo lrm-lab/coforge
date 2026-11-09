@@ -61,8 +61,8 @@ test("a member creates a Task with themselves as owner and a label", async () =>
 
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?view=tasks`);
-    await browser("wait", "--fn", `${pageHydrated} && ${byText("button", "Create Task")} != null`);
-    await mark(byText("button", "Create Task"), "create-open");
+    await browser("wait", "--fn", `${pageHydrated} && ${byText("button", "Create task")} != null`);
+    await mark(byText("button", "Create task"), "create-open");
     await browser("click", '[data-e2e="create-open"]');
     await browser(
       "wait",
@@ -137,8 +137,8 @@ test("a member creates a Task with themselves as owner and a label", async () =>
     // On a phone, the same sheet: taken on oneself, it reads as started.
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?view=tasks`);
-    await browser("wait", "--fn", `${pageHydrated} && ${byText("button", "Create Task")} != null`);
-    await mark(byText("button", "Create Task"), "create-open");
+    await browser("wait", "--fn", `${pageHydrated} && ${byText("button", "Create task")} != null`);
+    await mark(byText("button", "Create task"), "create-open");
     await browser("click", '[data-e2e="create-open"]');
     await browser(
       "wait",

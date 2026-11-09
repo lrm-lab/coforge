@@ -108,7 +108,7 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     await evaluate(`(() => {
       const row = [...document.querySelectorAll(${pinnedItems})].find((item) =>
         item.textContent.includes("E2E pinned hello"));
-      row.querySelector('[aria-label="Mark as Done"]').click();
+      row.querySelector('[aria-label="Mark as done"]').click();
       return true;
     })()`);
     await browser(
@@ -155,7 +155,7 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
       const titles = [...document.querySelectorAll(${rowItems})]
         .filter((item) => /E2E pinned|e2e-activity-pinned/.test(item.textContent))
         .map((item) => Math.round(item.querySelector("a .truncate")?.getBoundingClientRect().width ?? 0));
-      const tabs = document.querySelector('[role="tablist"][aria-label="Filter Activity"]');
+      const tabs = document.querySelector('[role="tablist"][aria-label="Filter activity"]');
       const edge = document.querySelector('[role="separator"][aria-valuemin]').getBoundingClientRect().left;
       const tabsPastEdge = Math.round(Math.max(...[...tabs.querySelectorAll('[role="tab"]')].map((tab) => tab.getBoundingClientRect().right)) - edge);
       return { overflow: list.scrollWidth - list.clientWidth, titles, tabsPastEdge };

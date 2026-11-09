@@ -3,7 +3,7 @@
   "agent_control_stop_agent": "Stop Agent",
   "agent_turn_stalled": "The agent seems stuck",
   "agent_turn_stalled_hint": "This turn has stopped making progress. Messages may wait until it finishes or you stop the turn.",
-  "agent_turn_stop": "Stop Current Turn",
+  "agent_turn_stop": "Stop current turn",
   "agent_turn_stop_pending": "Stopping current turn…",
   "agent_turn_stop_interrupted": "Current turn stopped.",
   "agent_turn_stop_not_running": "There was no active turn to stop.",

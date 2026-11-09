@@ -1,6 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "agent_migration_action": "Move to Another Computer",
+  "agent_migration_action": "Move to another Computer",
   "agent_migration_dialog_title": "Move {name} to another Computer",
   "agent_migration_dialog_target_placeholder": "Choose a Computer",
   "agent_migration_dialog_target": "Computer",
@@ -10,7 +10,7 @@
   "agent_migration_dialog_stops": "The Agent stops here while it moves, and messages wait until it starts on the new Computer.",
   "agent_migration_submit": "Move",
   "agent_migration_submit_pending": "Starting the move…",
-  "agent_migration_cancel": "Cancel Move",
+  "agent_migration_cancel": "Cancel move",
   "agent_migration_status_stopping": "Moving to {computer}: stopping the Agent here",
   "agent_migration_status_uploading": "Moving to {computer}: packing and uploading its workspace",
   "agent_migration_status_placing": "Moving to {computer}: placing its workspace there",
@@ -39,12 +39,12 @@
   "agent_migration_step_done": "done",
   "agent_migration_step_pending": "not started",
   "agent_migration_step_current": "in progress",
-  "agent_migration_retry": "Move Again",
+  "agent_migration_retry": "Move again",
   "agent_migration_cancel_title": "Cancel the move?",
   "agent_migration_cancel_before_switch": "The Agent has not switched Computers yet, so it stays on its current Computer and starts again there. Both Computers clean up what the move left.",
   "agent_migration_cancel_after_switch": "The Agent has already switched to the new Computer, so it stays there. Canceling only cleans up what the move left.",
-  "agent_migration_cancel_keep": "Keep Moving",
-  "agent_migration_cancel_confirm": "Cancel Move",
+  "agent_migration_cancel_keep": "Keep moving",
+  "agent_migration_cancel_confirm": "Cancel move",
   "agent_migration_error_runtime_detecting": "{computer} is still detecting its runtimes. Try again in a moment.",
   "agent_migration_error_runtime_unconfirmed": "{computer} has not reported which runtimes it has yet. Start or restart CoForge Computer there and wait for it to detect them, or choose another Computer.",
   "agent_migration_error_runtime_missing": "{computer} does not support {runtime}. Install or enable {runtime} there, or choose another Computer.",
@@ -54,7 +54,7 @@
   "agent_migration_source_offline": "This Agent's Computer is offline. Connect it, then try again.",
   "agent_migration_target_outdated": "That Computer runs a CoForge Computer too old to receive Agents. Update CoForge Computer there, or choose another Computer.",
   "agent_migration_target_offline": "That Computer is offline. Connect it, or choose another Computer.",
-  "agent_migration_open_computer": "Open Computer Settings",
+  "agent_migration_open_computer": "Open Computer settings",
   "agent_migration_open_computers": "Open Computers",
-  "agent_migration_try_again": "Try Again"
+  "agent_migration_try_again": "Try again"
 }

@@ -17,12 +17,9 @@ primitives and the lint-exemption policy.
   adapters that implement React Aria render semantics; feature code uses
   components.
 - An official Tooltip `title` prop is not a native HTML `title` attribute.
-- English Tooltip titles use Title Case: every word capitalized except short
-  function words (a, an, the, and, but, or, nor, for, so, yet, as, at, by, in,
-  of, off, on, per, to, up, via, from, with, into) unless first; brand names keep
-  their own spelling; full-sentence hints stay sentence case. Change the message
-  source, never CSS; a key also shown as a button or body text gets a `_tooltip`
-  twin.
+- English buttons, labels and Tooltip titles use sentence case: only the first word is
+  capitalized; product terms (Agent, Computer, Workspace, AI Workbench) and brand names keep
+  their own spelling. Change the message source, never CSS.
 - A full-page state with no surrounding layout (the 404 page) uses the official
   `application/empty-state`; everything inside a page or panel uses `ui/empty.tsx`.
 - `ui/empty.tsx` supplies presentation only; the owning feature chooses the

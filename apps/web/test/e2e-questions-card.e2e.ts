@@ -8,7 +8,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 
 /**
  * An Agent's several questions on one card (task #515): it shows as its own card, not another
- * kind's ("Add Members" on staging), with each question's options to tick, the recommendation
+ * kind's ("Add members" on staging), with each question's options to tick, the recommendation
  * marked and an own-answer row. Submit stays off until every question has an answer, then sends
  * them all at once; answered, it is still a card, each question over its answer. Opt-in like the
  * other browser E2Es; the channel, Agent and card are seeded per run and removed after it.
@@ -165,7 +165,7 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
     await browser("wait", "--fn", `${pageHydrated} && ${cardText}.includes("Set up the webhook")`);
     // Its own card, never another kind's; one question at a time, every row's key in sight.
-    expect(await evaluate<boolean>(`${cardText}.includes("Add Members")`)).toBe(false);
+    expect(await evaluate<boolean>(`${cardText}.includes("Add members")`)).toBe(false);
     expect(await evaluate<number>(`${card}.querySelectorAll("[data-question]").length`)).toBe(1);
     expect(await evaluate<number>(`${current}.querySelectorAll("kbd").length`)).toBe(3);
     expect(await evaluate<boolean>(`${button("Skip")} != null`)).toBe(true);

@@ -86,7 +86,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry + 2);
     await browser("find", "role", "button", "click", "--name", "Back to chat");
     await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
-    await browser("find", "role", "button", "click", "--name", "Back to Activity");
+    await browser("find", "role", "button", "click", "--name", "Back to activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
     // A reload keeps that way back: the arrow still returns to the list's entry.
@@ -94,7 +94,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
     await browser("reload");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${pageHydrated}`);
-    await browser("find", "role", "button", "click", "--name", "Back to Activity");
+    await browser("find", "role", "button", "click", "--name", "Back to activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
     // So does leaving for another page in the app and coming back with Back: the arrow returns to
@@ -107,7 +107,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", `location.pathname === ${tasksPath}`);
     await browser("back");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
-    await browser("find", "role", "button", "click", "--name", "Back to Activity");
+    await browser("find", "role", "button", "click", "--name", "Back to activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
     // Without the Navigation API (before Safari 26.2 and Firefox 147) the arrow still returns to
@@ -123,7 +123,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", shownInPane(replyId));
     await browser("find", "role", "button", "click", "--name", "Back to chat");
     await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
-    await browser("find", "role", "button", "click", "--name", "Back to Activity");
+    await browser("find", "role", "button", "click", "--name", "Back to activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("history.state.__TSR_index")).toBe(listIndex);
     // A thread's row opens the thread alone.
@@ -147,7 +147,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     // The list is hidden, not removed: crossing `lg` does not remount it.
     await browser("wait", "--fn", `${listHidden} === true`);
     await browser("screenshot", join(artifacts, "phone-open.png"));
-    await browser("find", "role", "button", "click", "--name", "Back to Activity");
+    await browser("find", "role", "button", "click", "--name", "Back to activity");
     await browser(
       "wait",
       "--fn",

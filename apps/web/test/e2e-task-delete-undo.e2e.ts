@@ -50,7 +50,7 @@ test("a Task deleted from its popup comes back with Undo", async () => {
 
     await mkdir(artifacts, { recursive: true });
     const settled = `document.getAnimations().every((a) => a.playState !== "running")`;
-    const toast = `[...document.querySelectorAll("[data-sonner-toast]")].find((el) => el.textContent.includes("Deleted Task #${number}"))`;
+    const toast = `[...document.querySelectorAll("[data-sonner-toast]")].find((el) => el.textContent.includes("Deleted task #${number}"))`;
     const shoot = async (name: string) => {
       await browser("screenshot", join(artifacts, `${name}.png`));
       await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
@@ -65,7 +65,7 @@ test("a Task deleted from its popup comes back with Undo", async () => {
       await browser(
         "wait",
         "--fn",
-        `${pageHydrated} && document.querySelector('[role="dialog"] button[aria-label="More Actions for Task #${number}"]') != null`,
+        `${pageHydrated} && document.querySelector('[role="dialog"] button[aria-label="More actions for task #${number}"]') != null`,
       );
       // The popup is drawn again once its conversation has loaded, which can take a press made
       // just before: press until the menu is open.
@@ -73,17 +73,17 @@ test("a Task deleted from its popup comes back with Undo", async () => {
       for (let presses = 0; presses < 5 && !(await evaluate<boolean>(menuOpen)); presses++) {
         await browser(
           "click",
-          `[role="dialog"] button[aria-label="More Actions for Task #${number}"]`,
+          `[role="dialog"] button[aria-label="More actions for task #${number}"]`,
         );
         await browser("wait", "800");
       }
       await browser("wait", "--fn", menuOpen);
       await browser("click", `[role="menuitem"][data-key="delete"]`);
-      const confirm = `[...document.querySelectorAll('[role="alertdialog"], [role="dialog"]')].find((el) => el.textContent.includes("Delete Task #${number}?"))`;
+      const confirm = `[...document.querySelectorAll('[role="alertdialog"], [role="dialog"]')].find((el) => el.textContent.includes("Delete task #${number}?"))`;
       await browser("wait", "--fn", `${confirm} != null`);
       if (confirmShot) await shoot(confirmShot);
       await evaluate(
-        `([...${confirm}.querySelectorAll("button")].find((el) => el.textContent.trim() === "Delete Task").setAttribute("data-e2e-confirm", ""), true)`,
+        `([...${confirm}.querySelectorAll("button")].find((el) => el.textContent.trim() === "Delete task").setAttribute("data-e2e-confirm", ""), true)`,
       );
       await browser("click", "[data-e2e-confirm]");
       await browser("wait", "--fn", `${toast} != null`);

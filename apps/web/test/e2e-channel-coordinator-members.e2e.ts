@@ -41,7 +41,7 @@ const agents = {
   added: { id: "", displayName: "" },
 };
 
-const panel = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]')`;
+const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
 const picker = `button[aria-label^="Coordinator Agent:"]`;
 const pickerOptions = `[...document.querySelectorAll('[role^="menuitem"]')].map((item) => item.textContent ?? "")`;
 const panelHas = (text: string) => `${panel}?.textContent.includes(${JSON.stringify(text)})`;
@@ -170,10 +170,10 @@ test("the coordinator picker follows member changes without a page reload", asyn
   await browser("--init-script", pointerInit, "set", "viewport", "1440", "900");
   await browser("open", `${proxy.origin}/en/w/${workspaceSlug}/channel/${channelId}`);
   await waitFor(
-    `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
+    `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
     60_000,
   );
-  await browser("click", '[aria-label="Channel Details and Settings"]');
+  await browser("click", '[aria-label="Channel details and settings"]');
   await waitFor(`${panel} !== null`, 15_000);
   await waitFor(`${panel}?.querySelector('${picker}') != null`, 15_000);
 
@@ -187,14 +187,14 @@ test("the coordinator picker follows member changes without a page reload", asyn
   // Members → Add Member → pick the second Agent → confirm.
   await waitFor(`${membersRow} !== undefined`, 15_000);
   await browser("eval", `${membersRow}.click()`);
-  await clickText('[role="dialog"] button', "Add Member");
-  await waitFor(panelHas("Add Selected (0)"), 15_000);
+  await clickText('[role="dialog"] button', "Add member");
+  await waitFor(panelHas("Add selected (0)"), 15_000);
   await browser("fill", 'input[placeholder="Name"]', agents.added.displayName);
   const candidate = `[...document.querySelectorAll('[role="dialog"] label')].find((label) => label.textContent.includes(${JSON.stringify(agents.added.displayName)}))`;
   await waitFor(`${candidate} !== undefined`, 15_000);
   await browser("eval", `${candidate}.querySelector("input").click()`);
-  await waitFor(panelHas("Add Selected (1)"), 15_000);
-  await clickText('[role="dialog"] button', "Add Selected (1)");
+  await waitFor(panelHas("Add selected (1)"), 15_000);
+  await clickText('[role="dialog"] button', "Add selected (1)");
   await waitFor(panelHas(agents.added.displayName), 15_000);
 
   // Back to the settings: the picker now offers the added Agent, still without a reload.
@@ -213,8 +213,8 @@ test("the coordinator picker follows member changes without a page reload", asyn
     "eval",
     `document.querySelector('[aria-label="Remove ${agents.added.displayName}"]').click()`,
   );
-  await waitFor(`document.body.textContent.includes("Remove Member")`, 15_000);
-  await clickText('[role="dialog"] button', "Remove Member");
+  await waitFor(`document.body.textContent.includes("Remove member")`, 15_000);
+  await clickText('[role="dialog"] button', "Remove member");
   await waitFor(`!${panelHas(agents.added.displayName)}`, 15_000);
   await browser("eval", `document.querySelector('[aria-label="Back"]').click()`);
   await waitFor(`${panel}?.querySelector('${picker}') != null`, 15_000);

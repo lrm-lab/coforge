@@ -18,7 +18,7 @@ const { suffix, browser, evaluate, until } = fx;
  * and the composer, whether the two line up, the column's side room, and the room it had before
  * task #181's follow-up (10% of the pane, at most 104px). */
 const layout = `(() => {
-  const enable = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enable Notifications");
+  const enable = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enable notifications");
   const body = enable?.closest(".rounded-xl")?.querySelector("[class*=basis-]");
   if (!enable || !body) return null;
   const e = enable.getBoundingClientRect();
@@ -52,7 +52,7 @@ type Layout = {
   roomBefore: number;
   pane: number;
 } | null;
-const bannerShown = `[...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Enable Notifications")`;
+const bannerShown = `[...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Enable notifications")`;
 
 test("the banner's buttons move under its text when the pane narrows", async () => {
   await browser("set", "viewport", "1440", "900");
@@ -81,7 +81,7 @@ test("the banner's buttons move under its text when the pane narrows", async () 
   for (const pane of [440, 460, 550]) {
     await browser(
       "eval",
-      `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enable Notifications").closest(".rounded-xl").parentElement.parentElement.parentElement.style.width = "${pane}px"`,
+      `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enable notifications").closest(".rounded-xl").parentElement.parentElement.parentElement.style.width = "${pane}px"`,
     );
     const narrow = await evaluate<Layout>(layout);
     expect(narrow).toMatchObject({ beside: false, below: true, alignedWithComposer: true });

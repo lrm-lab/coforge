@@ -41,7 +41,7 @@ test("a new Agent's DM stays in the sidebar without a reload", async () => {
     await browser("find", "role", "textbox", "fill", name, "--name", "Username", "--exact");
     await browser("find", "role", "button", "click", "--name", "Runtime");
     await browser("find", "role", "option", "click", "--name", "Claude Code", "--exact");
-    await browser("find", "role", "button", "click", "--name", "Create and Chat", "--exact");
+    await browser("find", "role", "button", "click", "--name", "Create and chat", "--exact");
     await browser("wait", "--fn", `location.pathname.includes("/dm/")`);
 
     const dmId = await evaluate<string>(`location.pathname.split("/dm/")[1]`);

@@ -95,7 +95,7 @@ test("an existing Task is put under the open one, and one under another parent i
       const openPicker = async () => {
         await browser("wait", "--fn", `${dialogs}.length === 1 && ${settled}`);
         await mark(
-          `${popup}?.querySelector('[aria-label^="More Actions for Task #${task}"]')`,
+          `${popup}?.querySelector('[aria-label^="More actions for task #${task}"]')`,
           "more",
         );
         await browser("click", '[data-e2e="more"]');

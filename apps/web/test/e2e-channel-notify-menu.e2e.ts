@@ -99,12 +99,12 @@ test("a channel's notification level is chosen from its row menu and its setting
     // The settings panel: the same four, the current one shown, its line saying what it does.
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
     await browser("wait", "--fn", pageHydrated);
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
+    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; !(await evaluate<boolean>(panelOpen)); attempt += 1) {
       if (attempt === 5) throw new Error("the channel settings panel never opened");
       await evaluate(
-        `(document.querySelector('button[aria-label="Channel Details and Settings"]')?.click(), true)`,
+        `(document.querySelector('button[aria-label="Channel details and settings"]')?.click(), true)`,
       );
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }

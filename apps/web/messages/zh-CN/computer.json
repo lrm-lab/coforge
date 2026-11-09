@@ -244,7 +244,7 @@
   "computer_upgrade_confirm_title": "升级 {name}？",
   "computer_upgrade_confirm_runs_stop": "Daemon 重启时，正在进行中的 Agent 运行会停止。",
   "computer_upgrade_confirm_kept": "文件、Agent 工作目录和设置都会留在这台电脑上。",
-  "computer_upgrade_confirm_submit": "立即升级",
+  "computer_upgrade_confirm_submit": "升级",
   "computer_upgrade_offline": "这台 Computer 当前未连接；重新连接后即可升级",
   "computer_upgrade_identity_unknown": "这台 Computer 还没有上报当前运行的版本；请先重启它，再重试升级",
   "computer_upgrade_feed_unavailable": "无法读取发布源",

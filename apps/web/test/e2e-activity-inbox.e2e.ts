@@ -162,7 +162,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     // The Unread and Mentions tabs count rows: both seeded rows are unread, and the thread's
     // reply is an unread mention. Other rows of the dev user's inbox may add to both.
     // Activity's own tabs: an open conversation beside the list has tabs of its own.
-    const tabCounts = `Object.fromEntries([...document.querySelectorAll('[role="tablist"][aria-label="Filter Activity"] [role="tab"]')].map((tab) => [tab.textContent.replace(/[\\d+]/g, "").trim(), Number(tab.textContent.replace(/\\D/g, "")) || 0]))`;
+    const tabCounts = `Object.fromEntries([...document.querySelectorAll('[role="tablist"][aria-label="Filter activity"] [role="tab"]')].map((tab) => [tab.textContent.replace(/[\\d+]/g, "").trim(), Number(tab.textContent.replace(/\\D/g, "")) || 0]))`;
     const counts = await evaluate<Record<string, number>>(tabCounts);
     expect(Object.keys(counts)).toEqual(["All", "Unread", "Mentions"]);
     expect(counts.All).toBe(0);
@@ -185,11 +185,11 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     const menu = await evaluate<string[]>(
       `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`,
     );
-    expect(menu).toEqual(["Mark as Read", "Done", "Unfollow Thread"]);
+    expect(menu).toEqual(["Mark as read", "Done", "Unfollow thread"]);
     await browser("screenshot", join(artifacts, "row-menu.png"));
     await browser("press", "Escape");
     // Gone, not just closing: a menu still animating out keeps its items, and the next row's
-    // menu would otherwise find and press this one's "Mark as Read" (task #479).
+    // menu would otherwise find and press this one's "Mark as read" (task #479).
     const noMenu = `document.querySelectorAll('[role="menu"]').length === 0`;
     await browser("wait", "--fn", noMenu);
 
@@ -212,10 +212,10 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
         );
     // One line: a wait expression is passed to the browser CLI as a single argument.
     const channelRow = `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E activity unread")).textContent`;
-    await channelMenu("Mark as Read");
+    await channelMenu("Mark as read");
     await browser("wait", "--fn", `!${channelRow}.includes("1 new")`);
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);
-    await channelMenu("Mark as Unread");
+    await channelMenu("Mark as unread");
     await browser("wait", "--fn", `${channelRow}.includes("1 new")`);
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread}`);
     expect(await evaluate<boolean>(`!document.querySelector('[role="alert"]')`)).toBe(true);
@@ -223,7 +223,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await evaluate(`(() => {
       const row = [...document.querySelectorAll(${rowItems})].find((item) =>
         item.textContent.includes("E2E activity unread"));
-      row.querySelector('[aria-label="Mark as Done"]').click();
+      row.querySelector('[aria-label="Mark as done"]').click();
       return true;
     })()`);
     await browser("wait", "--fn", `${seededRows}.length === 1`);
@@ -276,7 +276,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     // Switching the list's view keeps the conversation open. Clicked through Activity's own
     // tablist: the open conversation has tabs too.
     const filterTab = (name: string) =>
-      evaluate(`[...document.querySelectorAll('[role="tablist"][aria-label="Filter Activity"] [role="tab"]')]
+      evaluate(`[...document.querySelectorAll('[role="tablist"][aria-label="Filter activity"] [role="tab"]')]
         .find((tab) => tab.textContent.replace(/[\\d+]/g, "").trim() === ${JSON.stringify(name)})
         .click() ?? true`);
     await filterTab("Mentions");
@@ -316,8 +316,8 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser("wait", "--fn", `${shownInPane(rootId)} && !(${profilePanel})`);
     expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
     // "View in channel" shows the channel in the pane in place of the thread, and reads it.
-    await browser("click", '[aria-label="Thread Actions"]');
-    await browser("find", "role", "menuitem", "click", "--name", "View in Channel");
+    await browser("click", '[aria-label="Thread actions"]');
+    await browser("find", "role", "menuitem", "click", "--name", "View in channel");
     await browser("wait", "--fn", `${openParam} === ${JSON.stringify(`channel:${channelId}`)}`);
     expect(await evaluate<boolean>(`location.search.includes("threadRootId")`)).toBe(false);
     expect(await evaluate<string>("location.hash")).toBe("");
@@ -338,7 +338,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       `${openParam} === ${JSON.stringify(`thread:channel:${channelId}`)}`,
     );
     await browser("wait", "--fn", inPane(replyId));
-    await browser("click", '[aria-label="Close Thread"]');
+    await browser("click", '[aria-label="Close thread"]');
     await browser("wait", "--fn", `${pane} === null && ${openParam} === null`);
 
     // A thread read to the end with no mention opens at its newest reply. Activity without an

@@ -74,7 +74,7 @@ function tab(session: string) {
 const channelHeader = `[...document.querySelectorAll("header")].find((header) => header.querySelector("h1")?.textContent.startsWith("#"))`;
 const sidebarHas = (name: string) =>
   `[...document.querySelectorAll("a")].some((link) => link.textContent.trim() === ${JSON.stringify(name)})`;
-const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
+const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
 
 test("another open tab follows a channel's rename, description and archive live", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
@@ -121,7 +121,7 @@ test("another open tab follows a channel's rename, description and archive live"
     // Rename and describe in the editor tab. The watcher subscribes as its page comes up, and a
     // change published before its subscription completes can be missed, so warm-up renames prove
     // the live path end to end before the assertions depend on it.
-    await editor.run("click", '[aria-label="Channel Details and Settings"]');
+    await editor.run("click", '[aria-label="Channel details and settings"]');
     await editor.waitFor(panelOpen);
     const saveName = async (name: string) => {
       await editor.run("fill", '[role="dialog"] input[type="text"]', name);
@@ -145,14 +145,14 @@ test("another open tab follows a channel's rename, description and archive live"
     // The watcher never reloads: its header and sidebar row follow. A description left the
     // header for the settings title, so the panel is where it is checked.
     await watcher.waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${renamed}"`);
-    await watcher.run("click", '[aria-label="Channel Details and Settings"]');
+    await watcher.run("click", '[aria-label="Channel details and settings"]');
     await watcher.waitFor(panelOpen);
     await watcher.waitFor(
       `[...document.querySelectorAll('[role="dialog"]')].some((dialog) => dialog.textContent.includes("Followed live"))`,
     );
     await watcher.run("press", "Escape");
     await watcher.waitFor(
-      `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') === null`,
+      `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') === null`,
     );
     await watcher.waitFor(sidebarHas(renamed));
     expect(await watcher.run("eval", sidebarHas(channelName))).toContain("false");
@@ -160,13 +160,13 @@ test("another open tab follows a channel's rename, description and archive live"
 
     // Archive in the editor tab: the watcher's composer turns into the archived notice and the
     // row leaves its sidebar.
-    await editor.clickText("button", "Archive Channel");
+    await editor.clickText("button", "Archive channel");
     // The confirm names the action too; take it from the confirm dialog, not the panel behind.
-    const confirmButton = '[role="dialog"]:not([aria-label="Channel Details and Settings"]) button';
+    const confirmButton = '[role="dialog"]:not([aria-label="Channel details and settings"]) button';
     await editor.waitFor(
-      `[...document.querySelectorAll(${JSON.stringify(confirmButton)})].some((button) => button.textContent.trim() === "Archive Channel")`,
+      `[...document.querySelectorAll(${JSON.stringify(confirmButton)})].some((button) => button.textContent.trim() === "Archive channel")`,
     );
-    await editor.clickText(confirmButton, "Archive Channel");
+    await editor.clickText(confirmButton, "Archive channel");
     await watcher.waitFor(`document.body.textContent.includes("This channel is archived.")`);
     await watcher.waitFor(`!${sidebarHas(renamed)}`);
     await watcher.run("screenshot", join(artifacts, "archived.png"));
@@ -175,7 +175,7 @@ test("another open tab follows a channel's rename, description and archive live"
     await editor.waitFor(`document.body.textContent.includes("This channel is archived.")`);
     await editor.clickText("button", "Unarchive");
     await editor.waitFor(panelOpen);
-    await editor.clickText("button", "Unarchive Channel");
+    await editor.clickText("button", "Unarchive channel");
     await watcher.waitFor(`!document.body.textContent.includes("This channel is archived.")`);
     await watcher.waitFor(sidebarHas(renamed));
   } catch (error) {

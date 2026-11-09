@@ -53,7 +53,7 @@
   "notif_pause_custom_invalid": "Pick a time within the next year.",
   "notif_section_this_device": "This device",
   "notif_this_device_none": "This browser doesn't get notifications.",
-  "notif_test_send": "Send Test Notification",
+  "notif_test_send": "Send test notification",
   "notif_test_delivered": "Delivered to this browser's push service. If it didn't appear, check that notifications for this site are allowed in your browser and system settings, and that Do Not Disturb is off.",
   "notif_test_not_delivered": "Not delivered: {reason}.",
   "notif_this_device_none_hint": "Turn on message notifications above and allow them in the browser."

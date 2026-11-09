@@ -125,8 +125,8 @@ test("a file opened before joining takes comments the moment it is opened after 
     await page.waitForFunction(() => document.body.innerText.includes("Join the original conversation to comment.") && document.querySelector('[role="dialog"] textarea')?.disabled, undefined, { timeout: 10000 });
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
-    await page.click("loc=role:button[name='Join Channel']");
-    await page.waitForFunction(() => ![...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Join Channel"), undefined, { timeout: 10000 });
+    await page.click("loc=role:button[name='Join channel']");
+    await page.waitForFunction(() => ![...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Join channel"), undefined, { timeout: 10000 });
     // Well inside the comments' 5-second refresh: the open itself must read the new answer.
     const opened = Date.now();
     await page.click(${JSON.stringify(preview)});

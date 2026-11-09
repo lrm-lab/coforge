@@ -255,7 +255,7 @@ export async function reportCollectSlotOutcome(
       userId: runMeta.userId,
       subjectType: "report",
       subjectId: runMeta.reportId,
-      body: `采集包 · ${label} 已就绪。`,
+      body: `采集包：${label} 已就绪。`,
     });
   } else if (input.outcome === "empty") {
     await recordSideChat(db).postAssistantCollectComment({

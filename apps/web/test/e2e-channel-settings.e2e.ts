@@ -63,16 +63,16 @@ test("the channel settings panel edits info, preferences, archive and membership
       ),
     ]);
   const channelHeader = `[...document.querySelectorAll("header")].find((header) => header.querySelector("h1")?.textContent.startsWith("#"))`;
-  const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
+  const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => element.textContent.trim() === ${JSON.stringify(text)})`;
   const clickText = (selector: string, text: string) =>
     browser("eval", `${byText(selector, text)}.click()`);
-  const confirmButton = '[role="dialog"]:not([aria-label="Channel Details and Settings"]) button';
+  const confirmButton = '[role="dialog"]:not([aria-label="Channel details and settings"]) button';
   async function openPanel() {
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel Details and Settings"]');
+      await browser("click", '[aria-label="Channel details and settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(
         () => true,
         () => false,
@@ -132,7 +132,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${channelId}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
       60_000,
     );
 
@@ -140,7 +140,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     const headerButtons = await evaluate<string[]>(
       `[...${channelHeader}.querySelectorAll("button")].map((button) => button.getAttribute("aria-label") ?? button.textContent.trim())`,
     );
-    expect(headerButtons).toContain("Channel Details and Settings");
+    expect(headerButtons).toContain("Channel details and settings");
     expect(headerButtons).not.toContain("Members");
 
     await openPanel();
@@ -149,7 +149,7 @@ test("the channel settings panel edits info, preferences, archive and membership
       `[...document.querySelectorAll('[role="dialog"] h3')].some((heading) => heading.textContent.startsWith("Members"))`,
     );
     const identity = await evaluate<{ title: string; text: string }>(`(() => {
-      const panel = document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]');
+      const panel = document.querySelector('[role="dialog"][aria-label="Channel details and settings"]');
       return { title: panel.querySelector("h2").textContent, text: panel.textContent };
     })()`);
     expect(identity.title).toBe(`#${channelName}`);
@@ -159,8 +159,8 @@ test("the channel settings panel edits info, preferences, archive and membership
       "Info",
       "Preferences",
       "Actions",
-      "Archive Channel",
-      "Leave Channel",
+      "Archive channel",
+      "Leave channel",
     ])
       expect(identity.text).toContain(label);
     await waitFor(`document.querySelector('[role="dialog"]').textContent.includes("1 human")`);
@@ -186,9 +186,9 @@ test("the channel settings panel edits info, preferences, archive and membership
     // Unsaved edits: Escape asks before closing; Discard closes and keeps the saved text.
     await browser("fill", '[role="dialog"] textarea', "Never saved");
     await browser("press", "Escape");
-    await waitFor(`${byText("h2", "Unsaved Changes")} !== undefined`);
+    await waitFor(`${byText("h2", "Unsaved changes")} !== undefined`);
     await browser("screenshot", join(artifacts, "unsaved-prompt.png"));
-    await clickText("button", "Discard Changes");
+    await clickText("button", "Discard changes");
     await waitFor(`!(${panelOpen})`);
     expect(
       (await db.conversation.findUniqueOrThrow({ where: { id: channelId } })).description,
@@ -212,10 +212,10 @@ test("the channel settings panel edits info, preferences, archive and membership
     expect(preferred.channelMuted).toBe(true);
 
     // Archive: confirm, the panel closes and an archived notice replaces the composer.
-    await clickText("button", "Archive Channel");
+    await clickText("button", "Archive channel");
     // The confirm names the action too; take it from the confirm dialog, not the panel behind.
-    await waitFor(`${byText(confirmButton, "Archive Channel")} !== undefined`);
-    await clickText(confirmButton, "Archive Channel");
+    await waitFor(`${byText(confirmButton, "Archive channel")} !== undefined`);
+    await clickText(confirmButton, "Archive channel");
     await waitFor(`document.body.textContent.includes("This channel is archived.")`);
     expect(await evaluate<boolean>(`document.querySelector("main textarea") === null`)).toBe(true);
     expect(
@@ -227,14 +227,14 @@ test("the channel settings panel edits info, preferences, archive and membership
     await clickText("button", "Unarchive");
     await waitFor(panelOpen);
     const archivedPanel = await evaluate<{ leave: boolean; nameDisabled: boolean }>(`(() => {
-      const panel = document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]');
+      const panel = document.querySelector('[role="dialog"][aria-label="Channel details and settings"]');
       return {
-        leave: panel.textContent.includes("Leave Channel"),
+        leave: panel.textContent.includes("Leave channel"),
         nameDisabled: panel.querySelector('input[type="text"]').disabled,
       };
     })()`);
     expect(archivedPanel).toEqual({ leave: false, nameDisabled: true });
-    await clickText("button", "Unarchive Channel");
+    await clickText("button", "Unarchive channel");
     await waitFor(`!document.body.textContent.includes("This channel is archived.")`);
     await browser("press", "Escape");
     await waitFor(`!(${panelOpen})`);
@@ -244,12 +244,12 @@ test("the channel settings panel edits info, preferences, archive and membership
 
     // Leave: confirm, the channel turns read-only with a Join button; rejoining restores it.
     await openPanel();
-    await clickText("button", "Leave Channel");
-    await waitFor(`${byText(confirmButton, "Leave Channel")} !== undefined`);
-    await clickText(confirmButton, "Leave Channel");
-    await waitFor(`${byText("button", "Join Channel")} !== undefined`);
+    await clickText("button", "Leave channel");
+    await waitFor(`${byText(confirmButton, "Leave channel")} !== undefined`);
+    await clickText(confirmButton, "Leave channel");
+    await waitFor(`${byText("button", "Join channel")} !== undefined`);
     expect((await viewerRow()).leftAt).not.toBeNull();
-    await clickText("button", "Join Channel");
+    await clickText("button", "Join channel");
     // The button reads "Joining…" while the join is in flight; the composer returns only once the
     // page has reloaded the viewer as a member.
     await waitFor(`document.querySelector("main textarea") !== null`);
@@ -259,12 +259,12 @@ test("the channel settings panel edits info, preferences, archive and membership
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}${workspacePath}/channel/${channelId}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
       60_000,
     );
     await openPanel();
     const phone = await evaluate<{ panelWidth: number; viewport: number }>(`(() => {
-      const panel = document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]');
+      const panel = document.querySelector('[role="dialog"][aria-label="Channel details and settings"]');
       return { panelWidth: panel.getBoundingClientRect().width, viewport: innerWidth };
     })()`);
     expect(phone.panelWidth).toBeLessThanOrEqual(phone.viewport);

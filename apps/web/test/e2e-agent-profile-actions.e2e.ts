@@ -58,7 +58,7 @@ test("a narrow profile keeps its actions in one menu", async () => {
     await browser("wait", "--fn", `${pageHydrated} && ${visible("More actions")}`);
     // Narrow: Message stays, and the menu holds the other two.
     expect(await evaluate<boolean>(visible("Message"))).toBe(true);
-    expect(await evaluate<boolean>(visible("Restart / Reset"))).toBe(false);
+    expect(await evaluate<boolean>(visible("Restart / reset"))).toBe(false);
     await shots("narrow");
     await browser("click", `button[aria-label="More actions"]`);
     await browser("wait", "--fn", `document.querySelector('[role="menu"]') !== null`);

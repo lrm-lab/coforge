@@ -194,7 +194,7 @@ export async function saveMessageInOtherTab(options: {
   await wait(pageHydrated);
   await wait(`document.querySelector('${row}') !== null`);
   await other.browser("eval", `document.querySelector('${row} [aria-label="More"]').click()`);
-  await wait(`${menuItemNamed("Save Message")} !== undefined`);
-  await other.browser("eval", `${menuItemNamed("Save Message")}.click()`);
+  await wait(`${menuItemNamed("Save message")} !== undefined`);
+  await other.browser("eval", `${menuItemNamed("Save message")}.click()`);
   await wait(`!document.querySelector('[role="menu"]')`);
 }

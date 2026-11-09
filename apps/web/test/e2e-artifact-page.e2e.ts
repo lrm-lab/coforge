@@ -381,11 +381,11 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await evaluate(`(window.dispatchEvent(new Event("visibilitychange")), true)`);
     await browser("wait", "--fn", text("Can't open this"));
     await press(button("Back to the Workspace"));
-    const keep = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Keep Editing")`;
+    const keep = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Keep editing")`;
     await browser("wait", "--fn", `${keep} != null`);
     await shoot("5-deleted-unsaved-leave");
     // The edits have nowhere to go: discarding them leaves.
-    const discard = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Discard Changes")`;
+    const discard = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Discard changes")`;
     await click(discard);
     await browser("wait", "--fn", `!location.pathname.includes("/artifacts/")`);
 

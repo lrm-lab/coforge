@@ -18,8 +18,8 @@ export function conversationRowMenuEnabled(channel: { joined: boolean }): boolea
 }
 
 /**
- * The menu's items in the mockup's order (#122): Mark as Unread, Pin and Mute as the everyday
- * actions, Close Chat last behind a separator (the separator is presentation, drawn before the last item).
+ * The menu's items in the mockup's order (#122): Mark as unread, Pin and Mute as the everyday
+ * actions, Close chat last behind a separator (the separator is presentation, drawn before the last item).
  * "Move to section" left the plan with its schema field. A channel offers its four notification
  * levels in a submenu where a DM offers Mute (task #401): a DM has only on and off.
  */

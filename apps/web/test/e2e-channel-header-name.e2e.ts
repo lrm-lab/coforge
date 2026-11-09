@@ -42,10 +42,10 @@ test("the channel name keeps its room and the description stays out of the heade
   async function evaluate<T>(expression: string): Promise<T> {
     return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
   }
-  const header = `document.querySelector('[aria-label="Channel Details and Settings"]')?.closest("header")`;
+  const header = `document.querySelector('[aria-label="Channel details and settings"]')?.closest("header")`;
   const measure = `(() => {
     const name = ${header}.querySelector("h1");
-    const actions = document.querySelector('[aria-label="Channel Details and Settings"]');
+    const actions = document.querySelector('[aria-label="Channel details and settings"]');
     return {
       nameWhole: name.scrollWidth <= name.clientWidth,
       descriptionShown: ${header}.textContent.includes("Questions and results"),

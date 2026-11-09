@@ -10,7 +10,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * A weekly report whose save fails says so, and offers to try again only where trying again can
  * help (task #710): the autosave of a member's report and the Save of a format. A refusal that
  * would come again, the report being gone, says so in words and keeps no retry; a dropped
- * connection keeps "Try Again". Seeds a draft report per test and removes it after. Screenshots,
+ * connection keeps "Try again". Seeds a draft report per test and removes it after. Screenshots,
  * light, dark and phone, are under `.amp/e2e/report-autosave-failure/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
@@ -106,7 +106,7 @@ test("a report that is gone says so, keeps no retry, and tells the text is still
   }
 }, 180_000);
 
-test("a dropped connection keeps Try Again, and the retry saves", async () => {
+test("a dropped connection keeps Try again, and the retry saves", async () => {
   const t = await seed("member", 3);
   try {
     await mkdir(artifacts, { recursive: true });

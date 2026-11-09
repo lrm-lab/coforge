@@ -137,7 +137,7 @@ test("a quota-exhausted Agent's status reads as a warning", async () => {
     await browser("open", page(locale, `/channel/${channel.id}`));
     if (width === "390") {
       // A phone's header has no avatars: the way in is the channel's settings.
-      const settings = `document.querySelector('header button[aria-label="Channel Details and Settings"], header button[aria-label="群聊详情与设置"]')`;
+      const settings = `document.querySelector('header button[aria-label="Channel details and settings"], header button[aria-label="群聊详情与设置"]')`;
       await until(`${pageHydrated} && ${settings} != null`);
       await press(settings);
       const strip = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => /Members|成员/.test((b.getAttribute("aria-label") ?? "") + b.textContent))`;

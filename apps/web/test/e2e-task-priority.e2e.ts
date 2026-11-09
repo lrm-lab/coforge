@@ -98,9 +98,9 @@ test("a Task's popup and the new Task form set its priority", async () => {
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && [...document.querySelectorAll("button")].some((el) => el.textContent.trim() === "Create Task")`,
+      `${pageHydrated} && [...document.querySelectorAll("button")].some((el) => el.textContent.trim() === "Create task")`,
     );
-    await browser("find", "role", "button", "click", "--name", "Create Task");
+    await browser("find", "role", "button", "click", "--name", "Create task");
     await browser("wait", "--fn", `document.querySelector('${trigger("No priority")}') != null`);
     await browser(
       "fill",

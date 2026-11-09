@@ -297,7 +297,7 @@ function ContactValue({
     <div className="flex min-w-0 flex-col gap-1">
       <dt className="text-sm font-semibold text-primary">{label}</dt>
       <dd className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 truncate font-mono text-sm text-primary">{value}</span>
+        <span className="min-w-0 truncate text-sm text-primary">{value}</span>
         {verified === true ? (
           <BadgeWithIcon type="pill-color" size="sm" color="success" iconLeading={Check}>
             {m.settings_contact_verified()}

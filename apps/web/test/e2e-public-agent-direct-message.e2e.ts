@@ -56,8 +56,8 @@ test("a DM with another member's public Agent is listed in the sidebar", async (
   };
   const suffix = `${process.pid}-${Date.now()}`;
   const agentName = `Shared helper ${suffix}`;
-  /** The "Private Chat" button on the Members page card of `name`. */
-  const cardChat = `[...([...document.querySelectorAll('[role="row"]')].find((card) => card.querySelector("h2")?.textContent.startsWith(${JSON.stringify(agentName)}))?.querySelectorAll("button") ?? [])].find((button) => button.textContent.trim() === "Private Chat")`;
+  /** The "Private chat" button on the Members page card of `name`. */
+  const cardChat = `[...([...document.querySelectorAll('[role="row"]')].find((card) => card.querySelector("h2")?.textContent.startsWith(${JSON.stringify(agentName)}))?.querySelectorAll("button") ?? [])].find((button) => button.textContent.trim() === "Private chat")`;
   /** Whether the sidebar lists a DM: its row card, named for the Agent. */
   const sidebarRow = (conversationId: string) =>
     `[...document.querySelectorAll('a[data-row-card][href$="/dm/${conversationId}"]')].some((row) => row.textContent.includes(${JSON.stringify(agentName)}))`;

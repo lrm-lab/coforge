@@ -8,7 +8,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 /**
  * Deleting a channel in a real browser, as a Workspace owner. The channel settings panel's Actions
  * end with a red "Delete channel"; its confirmation warns that the deletion is permanent and
- * confirms with a red "Delete Channel". Someone who lost their owner or admin role meanwhile is told why the
+ * confirms with a red "Delete channel". Someone who lost their owner or admin role meanwhile is told why the
  * delete was refused. Otherwise the viewer lands back in Chat, the channel has left the sidebar,
  * and it and its messages are gone from the database.
  *
@@ -51,8 +51,8 @@ test("an owner deletes a channel from its settings panel", async () => {
         setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
       ),
     ]);
-  // The confirm's button says "Delete Channel" like the panel's; take it from the confirm dialog.
-  const confirmButton = '[role="dialog"]:not([aria-label="Channel Details and Settings"]) button';
+  // The confirm's button says "Delete channel" like the panel's; take it from the confirm dialog.
+  const confirmButton = '[role="dialog"]:not([aria-label="Channel details and settings"]) button';
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((element) => element.textContent.trim() === ${JSON.stringify(text)}).at(-1)`;
   async function clickText(selector: string, text: string) {
@@ -99,14 +99,14 @@ test("an owner deletes a channel from its settings panel", async () => {
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
       60_000,
     );
     await waitFor(sidebarHasChannel);
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]') !== null`;
+    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel Details and Settings"]');
+      await browser("click", '[aria-label="Channel details and settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(
         () => true,
         () => false,
@@ -114,16 +114,16 @@ test("an owner deletes a channel from its settings panel", async () => {
       if (opened) break;
       if (attempt === 5) throw new Error("the channel settings panel never opened");
     }
-    await waitFor(`${byText("button", "Delete Channel")} !== undefined`);
+    await waitFor(`${byText("button", "Delete channel")} !== undefined`);
     await browser("screenshot", join(artifacts, "actions.png"));
 
-    await clickText("button", "Delete Channel");
+    await clickText("button", "Delete channel");
     await waitFor(`document.body.textContent.includes("permanently deleted")`);
     await browser("screenshot", join(artifacts, "confirm.png"));
 
     // Demoted while the dialog is open: the refusal names the reason and the channel stays.
     await db.workspaceMembership.update({ where: ownMembership, data: { role: "member" } });
-    await clickText(confirmButton, "Delete Channel");
+    await clickText(confirmButton, "Delete channel");
     await waitFor(
       `document.querySelector('[role="alert"]')?.textContent.includes("Only a Workspace owner or admin")`,
     );
@@ -131,7 +131,7 @@ test("an owner deletes a channel from its settings panel", async () => {
     expect(await db.conversation.findUnique({ where: { id: channel.id } })).not.toBeNull();
     await db.workspaceMembership.update({ where: ownMembership, data: { role: "owner" } });
 
-    await clickText(confirmButton, "Delete Channel");
+    await clickText(confirmButton, "Delete channel");
 
     await waitFor(`location.pathname !== "${workspacePath}/channel/${channel.id}"`);
     await waitFor(`!${sidebarHasChannel}`);

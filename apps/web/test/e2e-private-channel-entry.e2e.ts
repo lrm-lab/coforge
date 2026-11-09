@@ -46,7 +46,7 @@ test("a channel started private shows its lock, and its settings switch it publi
   const titles = `[...document.querySelectorAll("h1")]`;
   const lockedTitle = `${titles}.some((title) => Boolean(title.querySelector('svg[aria-label="Private"]')) && title.textContent.includes("${name}"))`;
   const settled = `!document.querySelector("[data-entering]")`;
-  const settingsButton = 'button[aria-label="Channel Details and Settings"]';
+  const settingsButton = 'button[aria-label="Channel details and settings"]';
   const waitFor = (condition: string) => browser("wait", "--fn", condition);
   /** The element of `selector` whose text matches, as a page expression. */
   const named = (selector: string, text: string, exact = true) =>
@@ -75,7 +75,7 @@ test("a channel started private shows its lock, and its settings switch it publi
     await browser("open", `${origin}${path}`);
     await waitFor(`${pageHydrated} && Boolean(document.querySelector('button[aria-label="New"]'))`);
     await browser("click", 'button[aria-label="New"]');
-    await click(named('[role="menuitem"]', "Create Channel", false));
+    await click(named('[role="menuitem"]', "Create channel", false));
     await waitFor(`Boolean(${dialog}?.querySelector('input[role="switch"]'))`);
   };
   /** The settings panel, scrolled to its visibility action. */
@@ -131,12 +131,12 @@ test("a channel started private shows its lock, and its settings switch it publi
     await browser("screenshot", join(artifacts, "2-private-channel.png"));
 
     // 2. Its settings make it public, once confirmed; the `#` is back.
-    await openSettingsAt("Change to Public Channel");
+    await openSettingsAt("Change to public channel");
     await browser("screenshot", join(artifacts, "3-settings-private.png"));
     await confirmSwitch(
-      "Change to Public Channel",
+      "Change to public channel",
       `Change #${name} to a public channel?`,
-      "Change to Public",
+      "Change to public",
       "4-confirm-public.png",
     );
     await waitFor(`${titles}.some((title) => title.textContent.trim() === "#${name}")`);
@@ -145,9 +145,9 @@ test("a channel started private shows its lock, and its settings switch it publi
     // 3. And private again.
     await browser("click", settingsButton);
     await confirmSwitch(
-      "Change to Private Channel",
+      "Change to private channel",
       `Change #${name} to a private channel?`,
-      "Change to Private",
+      "Change to private",
       "5-confirm-private.png",
     );
     await waitFor(lockedTitle);
@@ -161,7 +161,7 @@ test("a channel started private shows its lock, and its settings switch it publi
     await browser("open", `${origin}${workspacePath}/channel/${vaultId}`);
     await waitFor(`${pageHydrated} && ${lockedTitle}`);
     await browser("screenshot", join(artifacts, "7-phone-private-channel.png"));
-    await openSettingsAt("Change to Public Channel");
+    await openSettingsAt("Change to public channel");
     await browser("screenshot", join(artifacts, "8-phone-settings.png"));
     await browser("press", "Escape");
 

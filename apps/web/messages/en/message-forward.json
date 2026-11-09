@@ -6,9 +6,9 @@
   "message_forward_badge_several": "Forwarded",
   "message_forward_badge_several_count": " {count} messages",
   "message_forward_from_channel": "from #{name}",
-  "message_forward_from_channel_thread": "from #{name} · thread",
+  "message_forward_from_channel_thread": "from a thread in #{name}",
   "message_forward_from_dm": "from DM",
-  "message_forward_from_dm_thread": "from DM · thread",
+  "message_forward_from_dm_thread": "from a DM thread",
   "message_forward_open_source": "Open source message",
   "message_forward_preview": "Forwarded: {text}",
   "message_forward_search": "Search targets",
@@ -25,7 +25,7 @@
   "message_forward_join_failed": "Couldn't join {target}. Try again.",
   "message_forward_sent_to": "Forwarded to {target}.",
   "message_forward_sent_to_many": "Forwarded to {count} destinations",
-  "message_forward_view_in_chat": "View in Chat",
+  "message_forward_view_in_chat": "View in chat",
   "message_forward_partial": "Forwarded to {delivered} of {total} destinations. Try the remaining destinations.",
   "message_forward_none": [
     {
@@ -37,7 +37,7 @@
       }
     }
   ],
-  "message_forward_try_again": "Try Again",
+  "message_forward_try_again": "Try again",
   "message_forward_uncertain": "We couldn't confirm whether the forward finished. It's safe to try again.",
   "message_forward_source_gone": "This message is no longer available. Review the original conversation and try again.",
   "message_forward_not_forwardable": "This message can't be forwarded.",

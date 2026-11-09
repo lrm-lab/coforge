@@ -179,8 +179,8 @@ const lightbox = () =>
     return {
       title: dialog?.getAttribute("aria-label") ?? null,
       position: dialog?.querySelector('[data-lightbox-position] [aria-hidden]')?.textContent ?? null,
-      previous: arrow("Previous Image"),
-      next: arrow("Next Image"),
+      previous: arrow("Previous image"),
+      next: arrow("Next image"),
       thumbnails: dialog?.querySelectorAll("[data-lightbox-thumbnails] button").length ?? 0,
       current: dialog?.querySelector('button[aria-current="true"]')?.getAttribute("aria-label") ?? null,
     };
@@ -201,7 +201,7 @@ async function press(selector: string) {
   await browser("click", selector);
 }
 
-const NEXT = '[role="dialog"] button[aria-label="Next Image"]';
+const NEXT = '[role="dialog"] button[aria-label="Next image"]';
 
 test("a message's images page in one lightbox: arrows, keys and thumbnails, stopping at the ends", async () => {
   await browser("set", "viewport", "1440", "900");
@@ -237,7 +237,7 @@ test("a message's images page in one lightbox: arrows, keys and thumbnails, stop
   await browser("press", "ArrowRight");
   await browser("press", "ArrowLeft");
   await at("4 / 5");
-  await press('[role="dialog"] button[aria-label="Previous Image"]');
+  await press('[role="dialog"] button[aria-label="Previous image"]');
   await at("3 / 5");
 
   // Clicking Next until it is disabled leaves the lightbox in control: Escape still closes it.

@@ -61,18 +61,18 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await waitFor(`${byText(selector, text)} !== undefined`);
     await browser("eval", `${byText(selector, text)}.click()`);
   }
-  const panel = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]')`;
+  const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
   const panelHas = (text: string) => `${panel}?.textContent.includes(${JSON.stringify(text)})`;
   const agentForm = `[...document.querySelectorAll('[role="dialog"]')].find((dialog) => dialog.querySelector('input[name="name"]'))`;
 
   async function openPanel() {
     await waitFor(
-      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
       60_000,
     );
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel Details and Settings"]');
+      await browser("click", '[aria-label="Channel details and settings"]');
       const opened = await waitFor(`${panel} !== null`, 5_000).then(
         () => true,
         () => false,
@@ -90,7 +90,7 @@ test("the add view creates an Agent named by the search, and it joins the channe
     // re-render ahead of the picker, and one eval polls and picks inside the page, so the
     // option is clicked in the same tick it exists.
     await waitFor(
-      `${agentForm}.querySelector('button[aria-label="Refresh Model Catalog"]:not([disabled])') != null`,
+      `${agentForm}.querySelector('button[aria-label="Refresh model catalog"]:not([disabled])') != null`,
     );
     const picked = JSON.parse(
       await browser(
@@ -144,15 +144,15 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await waitFor(
-      `document.querySelector('[aria-label="Channel Details and Settings"]') !== null`,
+      `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
       60_000,
     );
     await openPanel();
 
     // "+" opens the add view, which always ends with the create entry.
-    await waitFor(`${panel}?.querySelector('[aria-label="Add Members"]') != null`);
-    await browser("eval", `${panel}.querySelector('[aria-label="Add Members"]').click()`);
-    await waitFor(panelHas("Add Selected (0)"));
+    await waitFor(`${panel}?.querySelector('[aria-label="Add members"]') != null`);
+    await browser("eval", `${panel}.querySelector('[aria-label="Add members"]').click()`);
+    await waitFor(panelHas("Add selected (0)"));
     await waitFor(panelHas("Create Agent"));
     expect(
       await evaluate<boolean>(
@@ -174,8 +174,8 @@ test("the add view creates an Agent named by the search, and it joins the channe
     );
     const form = await evaluate<{ name: string; visibilityDisabled: boolean }>(`(() => {
       const dialog = ${agentForm};
-      // The visibility is the "Make Private" option card's checkbox (4a4fc89db).
-      const makePrivate = [...dialog.querySelectorAll('input[type="checkbox"]')].find((input) => input.closest("label")?.textContent.includes("Make Private"));
+      // The visibility is the "Make private" option card's checkbox (4a4fc89db).
+      const makePrivate = [...dialog.querySelectorAll('input[type="checkbox"]')].find((input) => input.closest("label")?.textContent.includes("Make private"));
       return {
         name: dialog.querySelector('input[name="name"]').value,
         visibilityDisabled: makePrivate?.disabled === true,
@@ -218,8 +218,8 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await browser("screenshot", join(artifacts, "refused.png"));
     // The name typed is an edit, so Cancel asks first.
     await clickText(`[role="dialog"] button`, "Cancel");
-    await waitFor(`${byText(`[role="dialog"] button`, "Discard Changes")} !== undefined`);
-    await clickText(`[role="dialog"] button`, "Discard Changes");
+    await waitFor(`${byText(`[role="dialog"] button`, "Discard changes")} !== undefined`);
+    await clickText(`[role="dialog"] button`, "Discard changes");
     await waitFor(`${agentForm} === undefined`);
     expect(await db.agent.count({ where: { workspaceId, name: agentName } })).toBe(1);
 
@@ -230,8 +230,8 @@ test("the add view creates an Agent named by the search, and it joins the channe
     });
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await openPanel();
-    await waitFor(`${panel}?.querySelector('[aria-label="Add Members"]') != null`);
-    await browser("eval", `${panel}.querySelector('[aria-label="Add Members"]').click()`);
+    await waitFor(`${panel}?.querySelector('[aria-label="Add members"]') != null`);
+    await browser("eval", `${panel}.querySelector('[aria-label="Add members"]').click()`);
     await waitFor(panelHas("only a Workspace owner or admin can create Agents"));
     expect(
       await evaluate<boolean>(

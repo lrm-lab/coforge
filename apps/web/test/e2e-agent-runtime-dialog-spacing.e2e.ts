@@ -78,7 +78,7 @@ test("the runtime configuration dialog keeps its closed More close to the button
     const profile = `[...document.querySelectorAll("button")].find((b) => b.querySelector("h1"))`;
     await browser("wait", "--fn", `${pageHydrated} && ${profile} != null`);
     await press(profile);
-    const pencil = `document.querySelector('button[aria-label="Edit Runtime Configuration"]')`;
+    const pencil = `document.querySelector('button[aria-label="Edit runtime configuration"]')`;
     await browser("wait", "--fn", `${pencil} != null`);
     await press(pencil);
     await browser("wait", "--fn", `document.querySelector('[role="dialog"] form') != null`);

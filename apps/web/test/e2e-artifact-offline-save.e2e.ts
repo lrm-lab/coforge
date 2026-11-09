@@ -107,7 +107,7 @@ test("a document typed in offline says it could not save, and saves once back on
     const asks = `document.body.textContent.includes("This document has unsaved changes. Leaving loses them.")`;
     await until(() => page.evaluate<boolean>(asks), 10_000);
     await page.evaluate(
-      `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Keep Editing").click()`,
+      `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Keep editing").click()`,
     );
     await until(() => page.evaluate<boolean>(`!(${asks})`));
     expect(await page.evaluate<string>("location.pathname")).toEndWith(`/artifacts/${doc.id}`);

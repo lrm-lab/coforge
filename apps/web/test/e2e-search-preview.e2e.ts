@@ -173,7 +173,7 @@ test("a result previews beside the list and opens on a double click", async () =
       `[...document.querySelectorAll('${PREVIEW} [role="tab"]')].find((tab) => tab.textContent.trim() === "Tasks").click()`,
     );
     await waitFor(
-      `${param("view")} === "tasks" && location.pathname === "${workspacePath}/search" && [...document.querySelectorAll('${PREVIEW} button')].some((button) => button.textContent.trim() === "Create Task")`,
+      `${param("view")} === "tasks" && location.pathname === "${workspacePath}/search" && [...document.querySelectorAll('${PREVIEW} button')].some((button) => button.textContent.trim() === "Create task")`,
     );
     await browser("screenshot", join(artifacts, "tasks.png"));
     await browser(
@@ -212,10 +212,10 @@ test("a result previews beside the list and opens on a double click", async () =
       `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}&open=channel:${channelA}&msg=${saved!.id}&view=chat`,
     );
     await waitFor(`document.querySelector('${savedRow}') !== null`);
-    await waitFor(`document.querySelector('${savedRow} [aria-label^="Reply in Thread"]') !== null`);
+    await waitFor(`document.querySelector('${savedRow} [aria-label^="Reply in thread"]') !== null`);
     await browser(
       "eval",
-      `document.querySelector('${savedRow} [aria-label^="Reply in Thread"]').click()`,
+      `document.querySelector('${savedRow} [aria-label^="Reply in thread"]').click()`,
     );
     await waitFor(
       `${param("threadRootId")} === "${saved!.id}" && location.pathname === "${workspacePath}/search"`,
@@ -290,8 +290,8 @@ test("a result previews beside the list and opens on a double click", async () =
     };
     await browser("click", row(inB.id));
     await waitFor(`document.querySelector('${PREVIEW} li[data-message-id="${inB.id}"]') !== null`);
-    await toggleSave(PREVIEW, "Save Message");
-    await expectSave(PREVIEW, "Remove from Saved");
+    await toggleSave(PREVIEW, "Save message");
+    await expectSave(PREVIEW, "Remove from saved");
     // The save is fire-and-forget behind its optimistic row: let the Server Function commit
     // before the next navigation's Saved re-read, which would otherwise drop the row.
     await Bun.sleep(1_500);
@@ -303,10 +303,10 @@ test("a result previews beside the list and opens on a double click", async () =
     await waitFor(
       `(JSON.parse(localStorage.getItem(${JSON.stringify(usageKey)}) ?? "{}")["channel:${channelB}"] ?? []).length === ${opensBefore + 1}`,
     );
-    await toggleSave("main", "Remove from Saved");
-    await expectSave("main", "Save Message");
+    await toggleSave("main", "Remove from saved");
+    await expectSave("main", "Save message");
     await browser("back");
-    await expectSave(PREVIEW, "Save Message");
+    await expectSave(PREVIEW, "Save message");
 
     // A message saved in another tab shows saved here through the `saved.added.v1` viewer
     // event, which marks the Saved list stale and re-reads it.
@@ -327,8 +327,8 @@ test("a result previews beside the list and opens on a double click", async () =
       `document.querySelector('a[href="${workspacePath}/channel/${channelB}"]').click()`,
     );
     await waitFor(`location.pathname === "${workspacePath}/channel/${channelB}"`);
-    await toggleSave("main", "Remove from Saved");
-    await expectSave("main", "Save Message");
+    await toggleSave("main", "Remove from saved");
+    await expectSave("main", "Save message");
     await browser("back");
     await browser("back");
     await browser("back");

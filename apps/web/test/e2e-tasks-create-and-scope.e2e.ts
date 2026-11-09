@@ -133,7 +133,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     expect(
       await browser(
         "eval",
-        `document.querySelectorAll('[aria-label^="New task in"]').length === 0 && ${byText("button", "Create Task")} === undefined`,
+        `document.querySelectorAll('[aria-label^="New task in"]').length === 0 && ${byText("button", "Create task")} === undefined`,
       ),
     ).toContain("true");
     await browser("screenshot", join(artifacts, "tasks-page.png"));
@@ -142,7 +142,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}?view=tasks`);
     await waitFor(bodyHas(channelTitle), 60_000);
     for (let attempt = 0; ; attempt += 1) {
-      await browser("eval", `${byText("button", "Create Task")}?.click()`);
+      await browser("eval", `${byText("button", "Create task")}?.click()`);
       if (
         await waitFor(dialogOpen, 5_000).then(
           () => true,
@@ -154,7 +154,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     }
 
     // No title at all is refused in place.
-    await browser("eval", `${byText('[role="dialog"] button', "Create Task")}.click()`);
+    await browser("eval", `${byText('[role="dialog"] button', "Create task")}.click()`);
     await waitFor(
       `document.querySelector('[role="dialog"] [role="alert"]')?.textContent.includes("Add a title for the task.")`,
     );
@@ -189,7 +189,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
       await browser("screenshot", join(artifacts, `create-${theme}.png`));
     }
     await browser("eval", `document.documentElement.classList.remove("dark-mode")`);
-    await browser("eval", `${byText('[role="dialog"] button', "Create Task")}.click()`);
+    await browser("eval", `${byText('[role="dialog"] button', "Create task")}.click()`);
     await waitFor(`!(${dialogOpen})`);
     await waitFor(bodyHas(created[0]!));
     const rows = await db.task.findMany({
@@ -212,7 +212,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await waitFor(bodyHas(created[0]!), 60_000);
     for (let attempt = 0; !(await browser("eval", dialogOpen)).includes("true"); attempt += 1) {
       if (attempt === 10) throw new Error("the create dialog never opened on a phone");
-      await browser("eval", `${byText("button", "Create Task")}?.click()`);
+      await browser("eval", `${byText("button", "Create task")}?.click()`);
       await Bun.sleep(500);
     }
     await browser("fill", titleField, `Phone ${suffix}`);

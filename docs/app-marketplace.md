@@ -104,7 +104,7 @@ page and the editor's Private share link card.
   shows the logo through `/api/apps/share/<token>/logo` (without an image CDN), which checks the
   token on every read and is never cached, so revoking ends it; the viewer-based logo route still
   serves only listed apps and Workspaces with the app. An installed app that is not the Workspace's
-  own and not listed is labelled "Shared privately" in Installed, "From Marketplace" when listed.
+  own and not listed is labelled "Shared privately" in Installed, "From marketplace" when listed.
 
 ## Platform operators
 
@@ -152,7 +152,7 @@ email matches no person or more than one (`grantPlatformOperator`).
   name, logo, category, developer (the owner Workspace's name), install count and Installed. The
   detail shows description, homepage and callback domains, the Login with CoForge scopes, data groups
   and notification events, and, for an owner or admin, "Install to this Workspace". Installed lists
-  every app installed here (a Marketplace app marked "From Marketplace", with Uninstall in its
+  every app installed here (a Marketplace app marked "From marketplace", with Uninstall in its
   detail); My apps lists only the Workspace's own.
 - `/w/<slug>/app-review` lists the pending requests for an operator (name, publisher Workspace,
   category, homepage, login scopes, data groups, notification events, logo, request time) with

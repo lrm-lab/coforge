@@ -59,7 +59,7 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     experimentOn: () => true,
   });
   const titles: Record<string, string> = {
-    "task-labels": "Labels for Tasks",
+    "task-labels": "Labels for tasks",
   };
 
   // The drawer, the sidebar and the rail are all in the page; the one meant is the one on screen.
@@ -158,7 +158,7 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     await first.browser("wait", "--fn", `(${entry})?.getAttribute("aria-label") === "What's new"`);
     expect(await first.evaluate(dot)).toBe(true);
     await shoot(first, "desktop-3-rail");
-    await press(first, visible("Expand Sidebar"));
+    await press(first, visible("Expand sidebar"));
 
     // On a phone the row sits at the foot of the menu; the dialog comes up from the bottom.
     await first.browser("set", "viewport", "390", "844");

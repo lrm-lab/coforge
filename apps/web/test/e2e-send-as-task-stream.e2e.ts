@@ -8,7 +8,7 @@ import { PrismaExperimentsRepository } from "#src/server/experiments/experiments
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
- * Task #452: a message sent with "Send as Task" shows its Task in the channel stream, its number,
+ * Task #452: a message sent with "Send as task" shows its Task in the channel stream, its number,
  * status and owner, and the badge opens the Task, with the Workspace's task-conversations
  * experiment off (the message is the Task) and on (the Task is made from the message, as
  * production's Workspace has it). It shows at once (the Task announced) and after a reload (the
@@ -83,7 +83,7 @@ test("a message sent as a Task shows its Task in the stream, with task conversat
   const suffix = `${process.pid}-${Date.now()}`;
   const workspace = await db.workspace.create({
     data: {
-      name: "Send as Task",
+      name: "Send as task",
       slug: `send-as-task-${suffix}`,
       members: { create: [{ userId: DEV_BROWSER_USER.id, role: "owner" }] },
     },

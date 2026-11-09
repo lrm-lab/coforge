@@ -52,7 +52,7 @@ const expected = {
   },
 } as const;
 const labels = {
-  en: { remove: "Remove", leave: "Leave Workspace", retry: "Try Again" },
+  en: { remove: "Remove", leave: "Leave Workspace", retry: "Try again" },
   "zh-CN": { remove: "移除", leave: "离开工作区", retry: "重试" },
 } as const;
 
@@ -217,7 +217,7 @@ test("a departure's confirmation lists the Computers it disconnects", async () =
       }
     }
 
-    // The check under way holds Confirm; one that failed keeps it, and Try Again asks again.
+    // The check under way holds Confirm; one that failed keeps it, and Try again asks again.
     await browser("set", "viewport", "1440", "900");
     const base = `${origin}/en/w/${slugs.agents}`;
     await browser("open", `${base}/settings?section=members`);
@@ -247,7 +247,7 @@ test("a departure's confirmation lists the Computers it disconnects", async () =
     await shot("remove-failed-en-desktop");
 
     await serverFns("off");
-    await clickText("button", "Try Again");
+    await clickText("button", "Try again");
     await waitFor(`Boolean((${dialog})?.querySelector('[data-testid="departure-impact"]'))`);
     expect(await dialogText()).toContain(expected.agents.en.remove);
   } finally {

@@ -7,7 +7,7 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 
 /**
- * The prompt a form overlay raises when it is closed with unsaved edits: Keep Editing, Discard
+ * The prompt a form overlay raises when it is closed with unsaved edits: Keep editing, Discard
  * Changes and, when the caller can save in one obvious action, Save and Close. Without `onSave`
  * Discard is the row's one filled button; beside Save it stays outlined.
  */

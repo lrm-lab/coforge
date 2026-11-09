@@ -8,7 +8,7 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 export class RuntimeSessionNeedsResetError extends Error {
   constructor(agentId: string) {
     super(
-      `This session's context compaction failed repeatedly (agent ${agentId}). Reset the session from the Agent page (Reset Session & Restart).`,
+      `This session's context compaction failed repeatedly (agent ${agentId}). Reset the session from the Agent page (Reset session & restart).`,
     );
     this.name = "RuntimeSessionNeedsResetError";
   }

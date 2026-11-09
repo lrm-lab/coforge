@@ -1,6 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "handoff_title": "Take Over a Local Session",
+  "handoff_title": "Take over a local session",
   "handoff_computer": "Computer",
   "handoff_source": "Session source",
   "handoff_search_placeholder": "Search by id, folder, or content…",
@@ -31,7 +31,7 @@
   "handoff_briefing_done": "Done",
   "handoff_briefing_failed": "Agent {name} was created, but the briefing could not be sent. Resending sends only this briefing and never creates a second Agent; you can also talk to it in its DM.",
   "handoff_resend": "Resend briefing",
-  "handoff_submit": "Create Agent & Send Briefing",
+  "handoff_submit": "Create Agent & send briefing",
   "handoff_creating": "Creating…",
   "handoff_agent_description": "Handoff agent taking over a {tool} session in {cwd}.",
   "handoff_role_user": "User",

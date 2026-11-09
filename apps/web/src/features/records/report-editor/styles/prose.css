@@ -448,7 +448,6 @@
   padding-left: 0.75rem;
   margin: 0.625rem 0;
   color: var(--color-text-tertiary);
-  font-style: italic;
 }
 
 .rich-text-editor blockquote p {

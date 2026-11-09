@@ -25,7 +25,7 @@ import {
  * Workspace invite link. A signed-out visitor signs in, gives the display name a first sign-in
  * asks for, and comes back to the link to join; a wrong password says so under the form, stays on
  * the page and keeps the link; a username signs in like an email; a sign-in Authing accepts but
- * the profile read refuses says it failed; "Use another account" and "Sign Out" end the session,
+ * the profile read refuses says it failed; "Use another account" and "Sign out" end the session,
  * revoke Authing's token and land on the sign-in page; an account with no email address (a
  * phone-number sign-up) signs in like any other; the hosted sign-in and its callback are gone; the
  * client address the proxy reports reaches Authing, and repeated wrong passwords never lock an
@@ -150,9 +150,9 @@ test("signing in with an email and password, from a Workspace invite link", asyn
 
     // Signed out, the invite link offers to sign in, and signing in comes back to it to join.
     await browser("open", `${origin}/en${joinPath}`);
-    await waitFor(hydrated(button("Sign In to Join")));
+    await waitFor(hydrated(button("Sign in to join")));
     await browser("screenshot", join(artifacts, "1-signed-out-invite.png"));
-    await browser("eval", `${button("Sign In to Join")}.click()`);
+    await browser("eval", `${button("Sign in to join")}.click()`);
     await waitFor(onSignInHere);
     expect(await evaluate<string>(`new URL(location.href).searchParams.get("returnTo")`)).toBe(
       joinPath,
@@ -223,9 +223,9 @@ test("signing in with an email and password, from a Workspace invite link", asyn
     // "Use another account" signs out and comes back to sign-in for the same link; the other
     // account has not joined yet.
     await browser("open", `${origin}/en${joinPath}`);
-    await waitFor(hydrated(button("Use Another Account")));
+    await waitFor(hydrated(button("Use another account")));
     expect(await evaluate<boolean>(`!!${button(`Open ${name}`)}`)).toBe(true);
-    await browser("eval", `${button("Use Another Account")}.click()`);
+    await browser("eval", `${button("Use another account")}.click()`);
     await waitFor(onSignInHere);
     expect(await evaluate<string>(`new URL(location.href).searchParams.get("returnTo")`)).toBe(
       joinPath,
@@ -245,11 +245,11 @@ test("signing in with an email and password, from a Workspace invite link", asyn
     await waitFor(`document.body.innerText.includes("#general")`);
     await browser("eval", `document.querySelector('button[aria-label^="Current user"]').click()`);
     await waitFor(
-      `[...document.querySelectorAll('[role="menuitem"]')].some((i) => i.textContent.trim() === "Sign Out")`,
+      `[...document.querySelectorAll('[role="menuitem"]')].some((i) => i.textContent.trim() === "Sign out")`,
     );
     await browser(
       "eval",
-      `[...document.querySelectorAll('[role="menuitem"]')].find((i) => i.textContent.trim() === "Sign Out").click()`,
+      `[...document.querySelectorAll('[role="menuitem"]')].find((i) => i.textContent.trim() === "Sign out").click()`,
     );
     await waitFor(onSignInHere);
     expect(
@@ -277,7 +277,7 @@ test("signing in with an email and password, from a Workspace invite link", asyn
     await answerNameStep("Phone Only E2E", people["phone-only"].name);
     await waitFor(onJoinPageAs("Phone Only E2E"));
     expect(await evaluate<boolean>(`!!${button(`Join ${name}`)}`)).toBe(true);
-    expect(await evaluate<boolean>(`!!${button("Sign In to Join")}`)).toBe(false);
+    expect(await evaluate<boolean>(`!!${button("Sign in to join")}`)).toBe(false);
     expect(await evaluate<boolean>(`document.body.innerText.includes("@")`)).toBe(false);
     const phoneUser = await db.user.findUniqueOrThrow({
       where: { id: await userIdOf("phone-only") },
