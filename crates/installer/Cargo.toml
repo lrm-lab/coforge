@@ -9,7 +9,7 @@ description = "The CoForge Computer installer, released as its own native binary
 [dependencies]
 flate2 = "1"
 lexopt = "0.3"
-rusqlite = { version = "0.40.2", features = ["bundled"], default-features = false }
+rusqlite = { version = "0.41.0", features = ["bundled"], default-features = false }
 semver = { version = "1.0.28", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
