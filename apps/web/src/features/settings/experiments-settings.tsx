@@ -5,13 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
-import { Building07 } from "@untitledui/icons";
-import {
-  SettingsCard,
-  SettingsField,
-  SettingsGroup,
-  SettingsPage,
-} from "#src/components/settings-layout";
+import { SettingsCard, SettingsField, SettingsPage } from "#src/components/settings-layout";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
@@ -122,7 +116,7 @@ export function ExperimentsSettings({
     onError: () => queryClient.invalidateQueries({ queryKey: EXPERIMENTS_QUERY_KEY }),
   });
 
-  const workspaceBlock = experiments.isPending ? (
+  const content = experiments.isPending ? (
     <p className="text-sm text-tertiary">{m.experiments_loading()}</p>
   ) : !experiments.data ? (
     <div className="flex flex-col items-start gap-3">
@@ -173,13 +167,5 @@ export function ExperimentsSettings({
     )
   );
 
-  return (
-    <SettingsPage>
-      {workspaceBlock !== false && (
-        <SettingsGroup icon={Building07} label={m.settings_workspace_group()}>
-          {workspaceBlock}
-        </SettingsGroup>
-      )}
-    </SettingsPage>
-  );
+  return <SettingsPage>{content}</SettingsPage>;
 }
