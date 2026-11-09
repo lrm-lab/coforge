@@ -48,7 +48,7 @@ docker swarm init --advertise-addr <节点之间可达的地址>
 
 在管理节点使用带 `host` 子命令的 `coforge-computer`。五个值缺一不可，可以用环境变量，也可以用同名参数。设置里的「云电脑服务」在核对操作密码之后，可以下载一份在管理节点执行的安装脚本。脚本写入令牌和已绑定的节点密钥，页面上不显示这两项。操作密码是 Web 进程的 `COFORGE_CLOUD_SERVICE_PASSWORD`，6 到 200 个字符。没设这个变量时，这一页打不开。
 
-这台机器上如果已经有一份绑定到其他服务器的 Computer，不要用页面上的 `curl | sh` 升级它。安装器会换成这套环境的二进制，现有绑定对不上时监督进程退出（`Binding server does not match this daemon build`），然后回滚，`host` 不会启动。把 `host` 用的二进制放到单独目录。Staging 的具体步骤见 [在 staging 上启用云电脑](staging-bring-up.md)。
+这台机器上如果已经有一份绑定到其他服务器的 Computer，不要用页面上的 `curl | sh` 升级它。安装器会换成这套环境的二进制，现有绑定对不上时监督进程退出（`Binding server does not match this daemon build`），然后回滚，`host` 不会启动。把 `host` 用的二进制放到单独目录。Staging 的具体步骤见 [在 staging 上启用云电脑](staging-bring-up.md)。Production 见 [在 production 上启用云电脑](production-bring-up.md)。
 
 | 变量                       | 作用                                                         |
 | -------------------------- | ------------------------------------------------------------ |

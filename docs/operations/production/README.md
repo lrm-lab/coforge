@@ -91,6 +91,10 @@ Not yet enabled in production: OpenTelemetry tracing and Server-Timing.
 | `coforge_github_webhook_secret` | Optional: the GitHub App webhook secret (`openssl rand -hex 32`). |
 | `coforge_authing_webhook_secret` | Optional: the shared secret Authing sends as `x-authing-webhook-secret` on its `user:email-verified` webhook (`openssl rand -hex 32`, the same value entered in the Authing console). Absent or empty, `/api/authing/webhook` refuses every request. |
 | `coforge_commit_coauthor` | Optional: the Agent commit co-author, `Name <email>` of a regular GitHub user account ([runbook](github-connection.md)). Absent, Agent commits get no `Co-authored-by` trailer. |
+| `coforge_cloud_cluster_token` | Optional until cloud computers are enabled: shared Swarm cluster token (`openssl rand -hex 32`). Same plaintext as the manager host's `COFORGE_CLUSTER_TOKEN`. Empty leaves cloud computers off ([production bring-up](../cloud-swarm/production-bring-up.md)). |
+| `coforge_cloud_service_password` | Optional: unlock password for Settings → 云电脑服务 (6–200 chars). Absent, that page stays on the password prompt. |
+| `coforge_retained_cloud_image_ids` | Optional: protected cloud computer image IDs during retain-and-upgrade. |
+| `coforge_cloud_image_updates_paused` | Optional: `true` / `false` / empty. When `true`, hides generic cloud image replace. |
 
 Generate the VAPID pair once in a controlled operator environment and keep it
 in the approved secret store. Do not generate it on each host bootstrap.
@@ -122,8 +126,10 @@ redirects to HTTPS and HTTPS sends HSTS. The script validates the Compose file, 
 and the Caddyfile with their pinned images before recreating anything, runs
 the Prisma migration, and rolls back to the last healthy release on failure.
 
-The workflow never syncs secrets: the host's secrets directory is the source
-of truth, backed up in 1Password.
+Most secrets stay on the host (backed up in 1Password). Cloud-computer secrets
+`COFORGE_CLOUD_CLUSTER_TOKEN` and `COFORGE_CLOUD_SERVICE_PASSWORD` also live in
+the GitHub `production` Environment; each deploy refreshes only those two files
+on the host.
 
 ### GitHub `production` Environment
 
@@ -134,6 +140,14 @@ of truth, backed up in 1Password.
 | Variable | `DEPLOY_SSH_USER` | `deploy` |
 | Secret | `DEPLOY_SSH_KEY` | Private half of an ed25519 key used only for this deploy; its public half is in `~deploy/.ssh/authorized_keys` |
 | Secret | `DEPLOY_SSH_HOST_KEY` | The host's ed25519 public host key (`<type> <key>`) |
+| Secret | `COFORGE_CLOUD_CLUSTER_TOKEN` | Swarm cluster token; deploy writes `secrets/coforge_cloud_cluster_token` |
+| Secret | `COFORGE_CLOUD_SERVICE_PASSWORD` | Settings → 云电脑服务 unlock password; deploy writes `secrets/coforge_cloud_service_password` |
+
+## Cloud computers
+
+Swarm manager for production is the lab host `10.110.158.147` (Compose desktop
+upstream / `COFORGE_CLOUD_DESKTOP_ORIGIN`). Enablement steps:
+[`docs/operations/cloud-swarm/production-bring-up.md`](../cloud-swarm/production-bring-up.md).
 
 ## Not yet covered
 

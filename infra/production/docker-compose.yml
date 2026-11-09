@@ -34,6 +34,10 @@ services:
       # The deploy script refreshes this value from the Caddyfile so only a
       # Caddyfile change recreates this container (admin is off: no reload).
       COFORGE_CADDYFILE_SHA256: ${COFORGE_CADDYFILE_SHA256:?deploy script writes .env}
+      # Internal address of the Swarm desktop proxy on the production cloud
+      # computer manager (this lab host). Caddy reaches it after the web app
+      # allows the signed-in computer owner. Not a public listener.
+      COFORGE_DESKTOP_UPSTREAM: 10.110.158.147:6090
     ports:
       - "80:80"
       - "443:443"
@@ -105,6 +109,19 @@ services:
       # Web-page artifacts' sandbox origin (task #544): a coforge.cn subdomain until the
       # dedicated domain's filing clears; Caddy routes it to web like the app.
       COFORGE_ARTIFACT_SANDBOX_ORIGIN: https://usercontent.coforge.cn
+      # Browser address of this deployment's Swarm desktop proxy. The browser
+      # opens it directly. Production ECS cannot always reach that proxy, so this
+      # is not the site origin. The Open desktop button is absent when empty.
+      COFORGE_CLOUD_DESKTOP_ORIGIN: http://10.110.158.147:6090
+      # Shared secret for the one Swarm this deployment controls. The Web process
+      # stores only its hash. Plaintext arrives from the host secret file via
+      # remote-deploy.sh; an empty value refuses cloud computers.
+      COFORGE_CLOUD_CLUSTER_TOKEN: ${COFORGE_CLOUD_CLUSTER_TOKEN:-}
+      COFORGE_CLOUD_IMAGE_UPDATES_PAUSED: ${COFORGE_CLOUD_IMAGE_UPDATES_PAUSED:-false}
+      COFORGE_RETAINED_CLOUD_IMAGE_IDS: ${COFORGE_RETAINED_CLOUD_IMAGE_IDS:-}
+      # Optional unlock password for Settings → 云电脑服务 (bootstrap download).
+      # Absent: the page stays on the password prompt.
+      COFORGE_CLOUD_SERVICE_PASSWORD: ${COFORGE_CLOUD_SERVICE_PASSWORD:-}
       # SHA-256 of the release-catalog publish token (docs/release/release-notes.md). Not a
       # secret: the plaintext token lives only in the GitHub repository secret
       # COFORGE_RELEASE_CATALOG_TOKEN_PRODUCTION; without this value every publish answers 503.
