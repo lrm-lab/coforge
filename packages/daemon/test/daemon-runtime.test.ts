@@ -74,6 +74,11 @@ import {
 import type { LogRecord } from "@logtape/logtape";
 import { captureDaemonLogs } from "./log-capture";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
+import {
+  ackGate,
+  createDeliveryQueueHarness,
+  deliveryQueueSession,
+} from "./fixtures/delivery-queue";
 import { createMessageHarness } from "./fixtures/message-harness";
 import { messageRecord } from "./fixtures/message-record";
 
@@ -8647,150 +8652,23 @@ describe("DaemonRuntime", () => {
   });
 });
 
-/** A fake session whose `subscribe` listener the test drives directly, so it can
- * simulate a provider's busy/idle transitions (`progress` while a turn runs, `completed` at turn
- * end) without a real provider process. */
-function deliveryQueueSession() {
-  const listeners = new Set<(event: AgentRuntimeEvent) => void>();
-  const exitListeners = new Set<() => void>();
-  const notices: string[] = [];
-  const waiters: Array<{ length: number; resolve: () => void }> = [];
-  const disposed = Promise.withResolvers<void>();
-  return {
-    session: {
-      async sendMessage() {
-        // These tests exercise delivery after successful startup, not a provider still
-        // waiting for its first model event.
-        for (const listener of listeners) listener({ type: "completed", status: "completed" });
-      },
-      async notify(notice: string) {
-        notices.push(notice);
-        // Iterate backward while splicing so removing an earlier waiter never shifts a not-yet-
-        // visited one out from under the loop.
-        for (let index = waiters.length - 1; index >= 0; index--) {
-          const waiter = waiters[index]!;
-          if (notices.length >= waiter.length) {
-            waiters.splice(index, 1);
-            waiter.resolve();
-          }
-        }
-      },
-      subscribe(listener: (event: AgentRuntimeEvent) => void) {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-      async interrupt() {},
-      onExit(listener: () => void) {
-        exitListeners.add(listener);
-        return () => exitListeners.delete(listener);
-      },
-      async dispose() {
-        disposed.resolve();
-      },
-    } satisfies AgentSession,
-    notices,
-    /** Resolves once the runtime has asked this session to exit (process end observed). */
-    disposed: disposed.promise,
-    emit: (event: AgentRuntimeEvent) => {
-      for (const listener of listeners) listener(event);
-    },
-    /** Simulates the runtime process exiting unexpectedly (a crash), firing every `onExit`
-     * listener DaemonRuntime has registered across every launch that used this session. */
-    exit: () => {
-      for (const listener of exitListeners) listener();
-    },
-    /** Resolves once at least `length` notices have been sent — the observable completion of a
-     * fire-and-forget release, rather than a timer-based wait (docs/agents/testing.md). */
-    waitForNotices: (length: number) =>
-      notices.length >= length
-        ? Promise.resolve()
-        : new Promise<void>((resolve) => waiters.push({ length, resolve })),
-  };
-}
-
-/** Resolves once `sendAgentDeliveryAck` has recorded `count` deliveries — the observable
- * completion of a flush, rather than a timer-based wait (docs/agents/testing.md). */
-function ackGate(count: number) {
-  const acks: string[] = [];
-  let resolve!: () => void;
-  const done = new Promise<void>((r) => (resolve = r));
-  return {
-    acks,
-    done,
-    record(deliveryId: string) {
-      acks.push(deliveryId);
-      if (acks.length >= count) resolve();
-    },
-  };
-}
-
 describe("Agent delivery queue", () => {
-  async function deliveryQueueHarness(
+  function deliveryQueueHarness(
     provider: AgentRuntimeConfig["provider"],
     acks = ackGate(0),
     stateDirectory?: string,
     onActivity?: (activity: import("@lrm/coforge-sdk/internal").AgentActivity) => void,
     agentConfig: Partial<AgentRuntimeConfig> = {},
   ) {
-    const credentials = new InMemoryDaemonCredentialStore();
-    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-    const fake = deliveryQueueSession();
-    const statuses: import("@lrm/coforge-sdk/internal").AgentStatus[] = [];
-    const rejections: { reason: string }[] = [];
-    const runtime = new DaemonRuntime(
+    return createDeliveryQueueHarness({
       connection,
-      () => ({ provider, createAgentSession: async () => fake.session }),
-      credentials,
-      {
-        create: () => ({
-          async start() {},
-          async ready() {},
-          async stop() {},
-          async requestAgentApiKey() {
-            return `sk_agent_${"a".repeat(43)}`;
-          },
-          async revokeAgentApiKey() {},
-          async sendAgentDeliveryAck(ack) {
-            acks.record(ack.deliveryId);
-          },
-          async sendAgentDeliveryRejection(rejection) {
-            rejections.push(rejection);
-          },
-          sendAgentActivity(activity) {
-            onActivity?.(activity);
-          },
-          sendAgentStatus(status) {
-            statuses.push(status);
-          },
-        }),
-      },
-      undefined,
-      emptyCodeAgentDiscovery,
-      stateDirectory,
-    );
-    await runtime.start(connection);
-    await runtime.startAgent("agent-a", { ...config, provider, ...agentConfig });
-    return {
-      runtime,
-      fake,
+      config,
+      provider,
       acks,
-      statuses,
-      rejections,
-      deliver: (sequence: number) =>
-        runtime.handleAgentMessage({
-          protocolMajor: 1,
-          requestId: `request-${sequence}`,
-          messageId: `message-${sequence}`,
-          deliveryId: `delivery-${sequence}`,
-          sequence,
-          workspaceId: connection.workspaceId,
-          conversationId: "conversation-a",
-          agentId: "agent-a",
-          body: `body-${sequence}`,
-          method: "agent:v1:message:deliver",
-          target: "@ada",
-        }),
-    };
+      stateDirectory,
+      onActivity,
+      agentConfig,
+    });
   }
 
   test("a busy Kiro-mode Agent is delivered to immediately too, now that Kiro is steer mode", async () => {
