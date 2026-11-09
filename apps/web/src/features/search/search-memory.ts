@@ -1,8 +1,7 @@
 import { browserLocalStorage } from "#src/features/browser-local-storage";
-import { lastSearchSchema, type LastSearch } from "./search.schemas";
 
 /**
- * What the search page remembers in this browser, per Workspace and viewer: the searches that led
+ * What search remembers in this browser, per Workspace and viewer: the searches that led
  * somewhere (history) and the channels, Agents and direct messages with members opened from search
  * (usage, which ranks the "Frequently used" list). Device-local conveniences only, like the Chat
  * layout sizes; nothing is sent to the server. Every read and write tolerates storage that is
@@ -50,24 +49,6 @@ export function isSearchMemoryKey(key: string | null, workspaceId: string, userI
   );
 }
 
-function lastSearchKey(workspaceId: string, userId: string) {
-  return `coforge:search-last:${workspaceId}:${userId}`;
-}
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-/** The last search, parsed like the page's own URL: unknown fields and bad values are dropped. */
-export function readLastSearch(workspaceId: string, userId: string): LastSearch {
-  const stored = read(lastSearchKey(workspaceId, userId), isObject, {});
-  const parsed = lastSearchSchema.safeParse(stored);
-  return parsed.success ? parsed.data : {};
-}
-
-export function writeLastSearch(workspaceId: string, userId: string, search: LastSearch) {
-  write(lastSearchKey(workspaceId, userId), search);
-}
-
 function historyKey(workspaceId: string, userId: string) {
   return `coforge:search-history:${workspaceId}:${userId}`;
 }
@@ -90,7 +71,7 @@ function write(key: string, value: unknown) {
   try {
     browserLocalStorage()?.setItem(key, JSON.stringify(value));
   } catch {
-    // Storage is full or blocked: the page just remembers less.
+    // Storage is full or blocked: search just remembers less.
   }
 }
 

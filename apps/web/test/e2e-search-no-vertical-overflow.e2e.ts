@@ -6,8 +6,8 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
- * The search page keeps its scrolling inside its own list: the document never grows past the
- * viewport, neither on the empty page with a long Frequently used list on a phone, nor on a
+ * The search dialog keeps its scrolling inside its own list: the document never grows past the
+ * viewport, neither on the empty dialog with a long Frequently used list on a phone, nor on a
  * search whose matches include an Agent on a short window.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user in a
@@ -26,8 +26,10 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-overflow");
 
-test("search never scrolls the document, on its empty page or with results", async () => {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+test("search never scrolls the document, empty or with results", async () => {
+  const db = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: databaseUrl }),
+  });
   const session = `search-overflow-${process.pid}`;
   async function browser(...args: string[]) {
     const child = Bun.spawn([browserPath!, "--session", session, ...args], {
@@ -50,7 +52,7 @@ test("search never scrolls the document, on its empty page or with results", asy
       await browser(
         "eval",
         `(() => {
-          let list = document.querySelector('[data-search-entity^="agent:"]');
+          let list = document.querySelector('[role="dialog"] [data-search-entity^="agent:"]');
           while (list && getComputedStyle(list).overflowY !== "auto") list = list.parentElement;
           return {
             document: document.documentElement.scrollHeight - document.documentElement.clientHeight,
@@ -98,18 +100,17 @@ test("search never scrolls the document, on its empty page or with results", asy
     ]);
     const storageScope = `${workspaceId}:${DEV_BROWSER_USER.id}`;
 
-    await browser("set", "viewport", "390", "700");
+    await browser("set", "viewport", "390", "300");
     await browser("open", `${origin}${workspacePath}/search`);
     await browser(
       "eval",
-      `localStorage.setItem(${JSON.stringify(`coforge:search-usage:${storageScope}`)}, ${JSON.stringify(JSON.stringify(usage))});
-       localStorage.removeItem(${JSON.stringify(`coforge:search-last:${storageScope}`)});`,
+      `localStorage.setItem(${JSON.stringify(`coforge:search-usage:${storageScope}`)}, ${JSON.stringify(JSON.stringify(usage))})`,
     );
     await browser("open", `${origin}${workspacePath}/search`);
     await browser(
       "wait",
       "--fn",
-      `document.querySelectorAll('[aria-labelledby="search-frequent-heading"] [data-search-entity^="agent:"]').length === ${agents.length}`,
+      `document.querySelectorAll('[role="dialog"] [aria-labelledby="search-frequent-heading"] [data-search-entity^="agent:"]').length === ${agents.length}`,
     );
     await expectOnlyTheListScrolls();
     await mkdir(artifacts, { recursive: true });
@@ -120,7 +121,7 @@ test("search never scrolls the document, on its empty page or with results", asy
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('[data-search-entity^="agent:"]') !== null`,
+      `document.querySelector('[role="dialog"] [data-search-entity^="agent:"]') !== null`,
     );
     await expectOnlyTheListScrolls();
     await browser("screenshot", join(artifacts, "search-results-short.png"));

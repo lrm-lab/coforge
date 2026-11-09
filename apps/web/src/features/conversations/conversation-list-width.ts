@@ -26,8 +26,7 @@ export const CONVERSATION_LIST_COLUMN: ListColumn = {
   label: m.conversation_list_resize,
 };
 
-/** The list beside a conversation pane on Activity and Search (`w-list-column`), Raft's list
- * column: one width for both pages. */
+/** The list beside a conversation pane on Activity (`w-list-column`), Raft's list column. */
 export const LIST_COLUMN: ListColumn = {
   key: "coforge-list-column-width",
   property: "--list-column-width",

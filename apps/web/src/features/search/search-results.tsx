@@ -24,14 +24,13 @@ import { computerLabel } from "#src/features/computers/computer-identity";
 import { messagePlainText } from "#src/features/conversations/selection-copy";
 import { searchTerms } from "#src/lib/search-terms";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { ActorName, type NamedActor } from "#src/features/avatars/actor-name";
 import type { WorkspaceDirectory } from "#src/features/workspaces/workspaces.functions";
 import type { MessageSearchHit } from "#src/server/conversations/message-search.server";
 import { matchSearchEntities, type SearchEntity } from "./search-entities";
-import { SearchEntityList } from "./search-entity-list";
-import { useResultClick } from "./search-click";
+import { SEARCH_HEADING_CLASS, SEARCH_ROW_CLASS, SearchEntityList } from "./search-entity-list";
 import { searchExcerpt } from "./search-excerpt";
-import { isPreviewed, messagePreviewTarget, useSearchPreview } from "./search-preview-context";
 import { searchEntityKey, type SearchEntityKey } from "./search-memory";
 import { SearchMessageSender } from "./search-message-sender";
 import type { SearchFilters } from "./search-filters";
@@ -39,7 +38,7 @@ import { messageSearchQuery, searchDirectoryQuery } from "./search-queries";
 
 /**
  * The results of a committed search: the channels, Agents and Computers its query names, then its
- * messages, each opening where it was said (previewed on the search page, opened in Chat).
+ * messages, each opening where it was said.
  */
 export function SearchResults({
   workspaceId,
@@ -69,7 +68,7 @@ export function SearchResults({
     hits.length === 0 && !search.isPending && !search.isError && !entitiesPending;
   if (nothingMatched && entities.length === 0) {
     return (
-      <div className="flex min-h-0 flex-1 items-start justify-center px-6 pt-16">
+      <div className="flex items-start justify-center px-6 py-10">
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -93,7 +92,7 @@ export function SearchResults({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto" aria-busy={refreshing}>
+    <div className="pb-2" aria-busy={refreshing}>
       {entities.length > 0 && (
         <SearchEntityList
           entities={entities}
@@ -179,13 +178,9 @@ function MessageResults({
 }) {
   if (search.isPending) {
     return (
-      <div
-        role="status"
-        aria-label={m.search_searching()}
-        className="flex flex-col gap-2 px-page py-4"
-      >
+      <div role="status" aria-label={m.search_searching()} className="flex flex-col gap-2 p-3">
         {Array.from({ length: 5 }, (_, index) => (
-          <Skeleton key={index} className="h-[4.75rem] rounded-xl" />
+          <Skeleton key={index} className="h-14 rounded-lg" />
         ))}
       </div>
     );
@@ -193,7 +188,7 @@ function MessageResults({
 
   if (search.isError && hits.length === 0) {
     return (
-      <div role="alert" className="flex flex-col items-center gap-3 px-6 pt-16 text-center">
+      <div role="alert" className="flex flex-col items-center gap-3 px-6 py-10 text-center">
         <p className="text-sm font-semibold text-primary">{m.search_failed_title()}</p>
         <p className="max-w-sm text-sm text-tertiary">{m.search_failed_description()}</p>
         <Button size="sm" color="secondary" onClick={() => void search.refetch()}>
@@ -204,13 +199,13 @@ function MessageResults({
   }
 
   return (
-    <section aria-labelledby="search-messages-heading" className="flex flex-col gap-2 px-page py-4">
+    <section aria-labelledby="search-messages-heading" className="flex flex-col px-2 pt-2">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 id="search-messages-heading" className="text-sm font-semibold text-secondary">
+        <h2 id="search-messages-heading" className={SEARCH_HEADING_CLASS}>
           {m.search_messages_heading()}
         </h2>
         {hits.length > 0 && (
-          <span role="status" className="text-xs text-tertiary tabular-nums">
+          <span role="status" className="px-2 text-xs text-tertiary tabular-nums">
             {search.hasNextPage
               ? m.search_results_count_more({ count: hits.length })
               : m.search_results_count({ count: hits.length })}
@@ -218,7 +213,7 @@ function MessageResults({
         )}
       </div>
       {hits.length === 0 && (
-        <p className="flex flex-wrap items-center gap-x-2 text-sm text-tertiary">
+        <p className="flex flex-wrap items-center gap-x-2 px-2 py-1 text-sm text-tertiary">
           {m.search_no_messages_match()}
           <Button size="sm" color="link-gray" onClick={onClear}>
             {clearLabel}
@@ -226,7 +221,7 @@ function MessageResults({
         </p>
       )}
       {hits.length > 0 && (
-        <ol className="flex flex-col gap-2">
+        <ol className="flex flex-col">
           {hits.map((hit) => (
             <SearchResultRow
               key={hit.message.id}
@@ -247,7 +242,7 @@ function MessageResults({
         <Button
           size="sm"
           color="secondary"
-          className="self-center"
+          className="mt-2 self-center"
           isLoading={search.isFetchingNextPage}
           onClick={() => void search.fetchNextPage()}
         >
@@ -336,7 +331,6 @@ function SearchResultRow({
   onOpen: () => void;
 }) {
   const { conversation, message } = hit;
-  const { previewed, preview } = useSearchPreview();
   const workspaceSlug = useWorkspaceSlug();
   const directory = useQuery(searchDirectoryQuery(workspaceId)).data;
   const place = conversation.channelName ? (
@@ -359,22 +353,16 @@ function SearchResultRow({
       : message.forwarded?.[0]
         ? m.message_forward_preview({ text: message.forwarded[0].sourceBody })
         : (message.attachments[0]?.fileName ?? ""));
-  const target = messagePreviewTarget(conversation, message);
-  const onClick = useResultClick({
-    onPreview: preview && target ? () => preview(target) : undefined,
-    onOpened: onOpen,
-  });
-
   return (
     <li>
       <Link
         {...messageOpenTarget(workspaceSlug, conversation, message)}
         data-search-message-id={message.id}
-        aria-current={target && isPreviewed(previewed, target) ? "true" : undefined}
-        onClick={onClick}
+        data-search-option=""
+        onClick={onOpen}
         // A middle click opens a new tab without a click event; it is still an open.
         onAuxClick={(event) => event.button === 1 && onOpen()}
-        className="block rounded-xl border border-secondary bg-primary p-3 outline-focus-ring transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 aria-[current=true]:border-brand aria-[current=true]:bg-secondary"
+        className={cx(SEARCH_ROW_CLASS, "flex-col items-stretch gap-0.5")}
       >
         <div className="flex min-w-0 items-center gap-2 text-xs text-tertiary">
           <span className="truncate font-medium">{place}</span>
@@ -395,13 +383,10 @@ function SearchResultRow({
           />
           <RelativeTime value={message.createdAt} />
         </div>
-        <p className="mt-1 line-clamp-2 text-sm break-words text-secondary">
+        <p className="mt-0.5 line-clamp-2 text-sm break-words text-secondary">
           {searchExcerpt(text, terms).map((part, index) =>
             part.match ? (
-              <mark
-                key={index}
-                className="rounded-sm bg-utility-yellow-200 font-semibold text-primary"
-              >
+              <mark key={index} className="bg-transparent font-semibold text-primary">
                 {part.text}
               </mark>
             ) : (

@@ -13,8 +13,9 @@ import {
 } from "./helpers/browser-e2e";
 
 /**
- * The search page's filters in a real browser. From, Scope, Channel and Time narrow the results
- * and live in the URL, so a reload keeps them (chip labels included) and Back undoes a change.
+ * The search dialog's filters in a real browser. From, Scope, Channel and Time narrow the results,
+ * and each chip names its value. They live in the dialog only: an old `/search` address opens it
+ * with its filters set.
  * A Scope that contradicts the sender drops the sender, and a sender that contradicts the Scope
  * drops that part of it. Filters search on their own without a query; Sort needs a query and
  * Recent orders newest first. Clear all resets every filter but keeps the sort.
@@ -25,19 +26,23 @@ import {
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-filters");
 
-test("search filters narrow results, survive a reload, and clear together", async () => {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+test("search filters narrow results, name their values, and clear together", async () => {
+  const db = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: databaseUrl }),
+  });
   const session = `search-filters-${process.pid}`;
   const { browser, evaluate } = browserSession(browserPath, session);
   const waitFor = pageWaiter(browserPath)(session, browser);
   const find = (selector: string, predicate: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => ${predicate})`;
-  /** A filter chip: a button in the filter bar whose text starts with `prefix`. */
+  /** A filter chip: a button in the dialog's filter bar whose text starts with `prefix`. */
   const chip = (prefix: string) =>
     find(
-      '[aria-label="Search filters"] button',
+      '[role="dialog"] [aria-label="Search filters"] button',
       `element.textContent.trim().startsWith(${JSON.stringify(prefix)})`,
     );
+  /** The text a chip shows: the filter's name, or its chosen value. */
+  const chipText = (prefix: string) => `${chip(prefix)}?.textContent.trim()`;
   const option = (text: string) =>
     find(
       '[role="menuitemradio"], [role="menuitemcheckbox"], [role="menuitem"]',
@@ -49,34 +54,49 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     await waitFor(`${option(optionText)} !== undefined`);
     await browser("eval", `${option(optionText)}.click()`);
   }
-  const param = (name: string) =>
-    `new URLSearchParams(location.search).getAll(${JSON.stringify(name)}).join(",")`;
   const resultIds = () =>
     evaluate<string[]>(
-      `[...document.querySelectorAll("main ol li [data-search-message-id]")].map((row) => row.dataset.searchMessageId)`,
+      `[...document.querySelectorAll('[role="dialog"] ol li [data-search-message-id]')].map((row) => row.dataset.searchMessageId)`,
     );
+  /** Opens the dialog on an old search address; the box holds `phrase` once it is up. */
+  async function openSearch(filters = "") {
+    await browser(
+      "open",
+      `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}${filters}`,
+    );
+    await waitFor(
+      `document.querySelector('[role="dialog"] input[type="search"]')?.value === ${JSON.stringify(phrase)}`,
+    );
+  }
   /** Waits for a settled list of `count` rows; zero means the no-results state is showing. */
   const waitForResults = (count: number) =>
     waitFor(
       count === 0
-        ? `/No results for|No matching messages/.test(document.querySelector("main").textContent)`
-        : `!document.querySelector('[aria-busy="true"]') && document.querySelectorAll("main ol li [data-search-message-id]").length === ${count}`,
+        ? `/No results for|No matching messages/.test(document.querySelector('[role="dialog"]').textContent)`
+        : `!document.querySelector('[role="dialog"] [aria-busy="true"]') && document.querySelectorAll('[role="dialog"] ol li [data-search-message-id]').length === ${count}`,
     );
 
   const channelA = seededUuid("e2e-search-filters:channel-a");
   const channelB = seededUuid("e2e-search-filters:channel-b");
   const agentId = seededUuid("e2e-search-filters:agent");
   const phrase = "筛选样本";
+  /** Set once the dev user's Workspace is read. */
+  let workspacePath = "";
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
       include: { workspace: { select: { slug: true } } },
     });
-    const workspacePath = `/en/w/${membership.workspace.slug}`;
+    workspacePath = `/en/w/${membership.workspace.slug}`;
     const workspaceId = membership.workspaceId;
-    await db.conversation.deleteMany({ where: { id: { in: [channelA, channelB] } } });
     await db.conversation.deleteMany({
-      where: { workspaceId, channelName: { in: ["e2e-filter-a", "e2e-filter-b"] } },
+      where: { id: { in: [channelA, channelB] } },
+    });
+    await db.conversation.deleteMany({
+      where: {
+        workspaceId,
+        channelName: { in: ["e2e-filter-a", "e2e-filter-b"] },
+      },
     });
     await db.agent.upsert({
       where: { id: agentId },
@@ -98,12 +118,26 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     });
     await db.conversation.createMany({
       data: [
-        { id: channelA, workspaceId, channelName: "e2e-filter-a", description: "" },
-        { id: channelB, workspaceId, channelName: "e2e-filter-b", description: "" },
+        {
+          id: channelA,
+          workspaceId,
+          channelName: "e2e-filter-a",
+          description: "",
+        },
+        {
+          id: channelB,
+          workspaceId,
+          channelName: "e2e-filter-b",
+          description: "",
+        },
       ],
     });
     const human = await db.conversationMember.create({
-      data: { conversationId: channelA, workspaceId, userId: DEV_BROWSER_USER.id },
+      data: {
+        conversationId: channelA,
+        workspaceId,
+        userId: DEV_BROWSER_USER.id,
+      },
     });
     const botInA = await db.conversationMember.create({
       data: { conversationId: channelA, workspaceId, agentId },
@@ -158,46 +192,35 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     await mkdir(artifacts, { recursive: true });
 
     await browser("set", "viewport", "1440", "900");
-    await browser("open", `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}`);
+    await openSearch();
     await waitForResults(3);
     // Sorting applies to a query; the chip starts on Relevant, which ranks the long newest last.
     expect(await evaluate<boolean>(`${chip("Sort")}.disabled`)).toBe(false);
+    expect(await evaluate<string>(chipText("Sort"))).toBe("Sort: Relevant");
     expect((await resultIds()).at(-1)).toBe(humanToday.id);
 
-    // From: only the chosen sender, named on the chip, and kept by a reload.
+    // From: only the chosen sender, named on the chip.
     await pick("From", "Search Bot");
-    await waitFor(`${param("senderId")} === ${JSON.stringify(agentId)}`);
+    await waitFor(`${chipText("From")}?.startsWith("From: Search Bot")`);
     await waitForResults(2);
     expect((await resultIds()).sort()).toEqual([agentOld.id, agentInB.id].sort());
-    await browser("reload");
-    await waitFor(`${chip("From: Search Bot")} !== undefined`);
-    await waitForResults(2);
     await browser("screenshot", join(artifacts, "from.png"));
 
     // Scope Humans contradicts an Agent sender, so the sender goes.
     await pick("Scope", "Humans");
     await browser("eval", escapeOpenMenu);
     await waitFor(`document.querySelector('[role="menu"]') === null`);
-    await waitFor(`${param("scope")} === "humans" && ${param("senderId")} === ""`);
+    await waitFor(`${chipText("Scope")} === "Scope 1" && ${chipText("From")} === "From"`);
     await waitForResults(1);
     expect(await resultIds()).toEqual([humanToday.id]);
 
-    // Back undoes a filter change: the Agent sender returns and the scope goes.
-    await browser("back");
-    await waitFor(
-      `${param("scope")} === "" && ${param("senderId")} === ${JSON.stringify(agentId)}`,
-    );
-    await waitForResults(2);
-
     // An Agent sender contradicts a Humans-only scope, so that part of the scope goes.
-    await browser(
-      "open",
-      `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}&scope=mentioned,humans`,
-    );
+    await openSearch("&scope=mentioned,humans");
+    await waitFor(`${chipText("Scope")} === "Scope 2"`);
     await waitForResults(0);
     await pick("From", "Search Bot");
     await waitFor(
-      `${param("scope")} === "mentioned" && ${param("senderId")} === ${JSON.stringify(agentId)}`,
+      `${chipText("Scope")} === "Scope 1" && ${chipText("From")}?.startsWith("From: Search Bot")`,
     );
     await waitForResults(1);
     expect(await resultIds()).toEqual([agentOld.id]);
@@ -205,22 +228,20 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     // A sender the filters cannot name (gone from the Workspace) is dropped by a Humans-only
     // scope too, instead of leaving a search that can match nothing.
     const unknownSender = seededUuid("e2e-search-filters:unknown-sender");
-    await browser(
-      "open",
-      `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}&senderId=${unknownSender}`,
-    );
+    await openSearch(`&senderId=${unknownSender}`);
     await waitForResults(0);
     await pick("Scope", "Humans");
     await browser("eval", escapeOpenMenu);
     await waitFor(`document.querySelector('[role="menu"]') === null`);
-    await waitFor(`${param("scope")} === "humans" && ${param("senderId")} === ""`);
+    await waitFor(`${chipText("Scope")} === "Scope 1"`);
     await waitForResults(1);
+    expect(await resultIds()).toEqual([humanToday.id]);
 
     // Recent orders newest first; the sort is kept by Clear all, every filter goes.
     await pick("Sort", "Recent");
-    await waitFor(`${param("sort")} === "recent"`);
+    await waitFor(`${chipText("Sort")} === "Sort: Recent"`);
     await browser("eval", `${chip("Clear all")}.click()`);
-    await waitFor(`${param("scope")} === "" && ${param("sort")} === "recent"`);
+    await waitFor(`${chipText("Scope")} === "Scope" && ${chipText("Sort")} === "Sort: Recent"`);
     await waitForResults(3);
     expect(await resultIds()).toEqual([humanToday.id, agentInB.id, agentOld.id]);
 
@@ -228,29 +249,27 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     await pick("Scope", "@ Me");
     await browser("eval", escapeOpenMenu);
     await waitFor(`document.querySelector('[role="menu"]') === null`);
-    await waitFor(`${param("scope")} === "mentioned"`);
+    await waitFor(`${chipText("Scope")} === "Scope 1"`);
     await waitForResults(1);
     expect(await resultIds()).toEqual([agentOld.id]);
     await browser("eval", `${chip("Clear all")}.click()`);
 
     // Time: the last 7 days leave out the ten-day-old message; Today leaves out yesterday's.
     await pick("Time", "Last 7 days");
-    await waitFor(`${param("range")} === "7d"`);
+    await waitFor(`${chip("Last 7 days")} !== undefined`);
     await waitForResults(2);
     expect((await resultIds()).sort()).toEqual([humanToday.id, agentInB.id].sort());
     await pick("Last 7 days", "Today");
-    await waitFor(`${param("range")} === "today"`);
+    await waitFor(`${chip("Today")} !== undefined`);
     await waitForResults(1);
     expect(await resultIds()).toEqual([humanToday.id]);
 
-    // A reload keeps every filter and names it on its chip.
+    // Every filter is named on its chip.
     await pick("Scope", "Humans");
     await browser("eval", escapeOpenMenu);
     await waitFor(`document.querySelector('[role="menu"]') === null`);
-    await waitFor(`${param("scope")} === "humans"`);
-    await browser("reload");
     await waitFor(
-      `${chip("Scope 1")} !== undefined && ${chip("Today")} !== undefined && ${chip("Sort: Recent")} !== undefined`,
+      `${chipText("Scope")} === "Scope 1" && ${chip("Today")} !== undefined && ${chip("Sort: Recent")} !== undefined`,
     );
     await waitForResults(1);
     await browser("eval", `${chip("Clear all")}.click()`);
@@ -258,17 +277,18 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     // Channel, then no query: the filter alone searches, and Sort waits for a query.
     // The row shows the channel's mark (`#` or a lock) as an icon, not in its text.
     await pick("Channel", "e2e-filter-b");
-    await waitFor(`${param("channelId")} === ${JSON.stringify(channelB)}`);
+    await waitFor(
+      `${find('[role="dialog"] [aria-label="Search filters"] button', 'element.textContent.includes("e2e-filter-b")')} !== undefined`,
+    );
     await waitForResults(1);
     await browser(
       "eval",
       `(() => {
-        const input = document.querySelector('input[type="search"]');
+        const input = document.querySelector('[role="dialog"] input[type="search"]');
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "");
         input.dispatchEvent(new InputEvent("input", { bubbles: true }));
       })()`,
     );
-    await waitFor(`${param("q")} === ""`);
     await waitFor(`${chip("Sort")}.disabled === true`);
     await waitForResults(1);
     expect(await resultIds()).toEqual([agentInB.id]);

@@ -38,7 +38,7 @@ import { loadMemberWorkspaceSettings } from "#src/features/workspaces/member-set
 import { loadOnboardingWizard } from "#src/features/onboarding/onboarding-wizard.functions";
 import { PanelTabOrderProvider } from "#src/features/panel-tabs/panel-tab-order-context";
 import { useLastLocationMemory } from "#src/features/workspaces/use-last-location-memory";
-import { useSearchShortcut } from "#src/features/search/search-shortcut";
+import { SearchDialogHost } from "#src/features/search/search-dialog-host";
 import { useSidebarShortcut } from "#src/features/settings/sidebar-shortcut";
 import { markShownWorkspace, shownWorkspace } from "#src/features/workspaces/shown-workspace";
 import { LeaveDeletedWorkspace } from "#src/features/workspaces/leave-deleted-workspace";
@@ -191,7 +191,6 @@ function AppLayout() {
   }, [language]);
   const aiWorkbench = useAiWorkbenchEnabled(aiWorkbenchEnabled);
   useLastLocationMemory();
-  useSearchShortcut(currentWorkspace.id, user.id);
   useSidebarShortcut();
   const getRealtimeToken = useServerFn(getBrowserRealtimeConnectionToken);
   const getConnectionToken = useCallback(() => getRealtimeToken(), [getRealtimeToken]);
@@ -216,73 +215,79 @@ function AppLayout() {
                 agentStreamPositions={agentStreamPositions}
               >
                 <PanelTabOrderProvider workspaceId={currentWorkspace.id} orders={tabOrders}>
-                  {/* Every open page leaves a Workspace its owner deleted. */}
-                  <LeaveDeletedWorkspace workspaceId={currentWorkspace.id} />
-                  <ReferencedTasksRealtime workspaceId={currentWorkspace.id} userId={user.id} />
-                  {/* The server prunes dead web-push subscriptions (404/410), and nothing else ever
-            re-registers them — without this the phone stays silent until a manual toggle. */}
-                  <BrowserPushLifecycle
-                    enabled={notifications.enabled}
-                    publicKey={notifications.publicKey}
-                  />
-                  {/* While a tab is open, show the OS notification here instead of relying on
-                Web Push, which mainland-China staging/clients cannot reach for Chrome. */}
-                  <InPageNotifications
-                    enabled={notifications.enabled}
-                    viewerId={user.id}
+                  <SearchDialogHost
                     workspaceId={currentWorkspace.id}
-                  />
-                  {/* Says when the person is at this computer, so a phone's notifications can wait. */}
-                  <ComputerActivityReport enabled={notifications.enabled} />
-                  <ComputerUpgradeWatcher />
-                  {onboarding && (
-                    <Suspense fallback={null}>
-                      <OnboardingWizard
-                        workspaceId={currentWorkspace.id}
-                        workspaceSlug={currentWorkspace.slug}
-                        initial={onboarding}
-                      />
-                    </Suspense>
-                  )}
-                  <NotificationActivationContext
-                    value={{
-                      publicKey: notifications.publicKey,
-                      workspaceSlug: currentWorkspace.slug,
-                    }}
+                    viewerId={user.id}
+                    timeZone={timeZone}
                   >
-                    <AppShell
-                      user={{
-                        id: user.id,
-                        name: user.name,
-                        email: user.email,
-                        avatarUrl: user.avatarUrl,
+                    {/* Every open page leaves a Workspace its owner deleted. */}
+                    <LeaveDeletedWorkspace workspaceId={currentWorkspace.id} />
+                    <ReferencedTasksRealtime workspaceId={currentWorkspace.id} userId={user.id} />
+                    {/* The server prunes dead web-push subscriptions (404/410), and nothing else ever
+            re-registers them — without this the phone stays silent until a manual toggle. */}
+                    <BrowserPushLifecycle
+                      enabled={notifications.enabled}
+                      publicKey={notifications.publicKey}
+                    />
+                    {/* While a tab is open, show the OS notification here instead of relying on
+                Web Push, which mainland-China staging/clients cannot reach for Chrome. */}
+                    <InPageNotifications
+                      enabled={notifications.enabled}
+                      viewerId={user.id}
+                      workspaceId={currentWorkspace.id}
+                    />
+                    {/* Says when the person is at this computer, so a phone's notifications can wait. */}
+                    <ComputerActivityReport enabled={notifications.enabled} />
+                    <ComputerUpgradeWatcher />
+                    {onboarding && (
+                      <Suspense fallback={null}>
+                        <OnboardingWizard
+                          workspaceId={currentWorkspace.id}
+                          workspaceSlug={currentWorkspace.slug}
+                          initial={onboarding}
+                        />
+                      </Suspense>
+                    )}
+                    <NotificationActivationContext
+                      value={{
+                        publicKey: notifications.publicKey,
+                        workspaceSlug: currentWorkspace.slug,
                       }}
-                      workspaces={workspaces}
-                      currentWorkspace={currentWorkspace}
-                      recordsPreview={recordsPreview}
-                      aiWorkbench={aiWorkbench}
-                      canSeeUsageLimits={canSeeUsageLimits}
-                      onSelectWorkspace={async (slug) => {
-                        await navigate({
-                          to: "/w/$workspaceSlug",
-                          params: { workspaceSlug: slug },
-                        });
-                      }}
-                      onCreateWorkspace={createAndOpen}
-                      /** Like FirstWorkspacePage's link: a full browser navigation so the server route
-                       * can clear the session cookie and send the browser to Authing. `?returnTo`
-                       * carries this page back across the sign-out (the root route hands it to
-                       * `/login`) once the switch-account return step is in. */
-                      onSignOut={() => void signOut()}
                     >
-                      <Outlet />
-                      {otherTask && (
-                        <Suspense fallback={null}>
-                          <OtherTaskPopup task={otherTask} />
-                        </Suspense>
-                      )}
-                    </AppShell>
-                  </NotificationActivationContext>
+                      <AppShell
+                        user={{
+                          id: user.id,
+                          name: user.name,
+                          email: user.email,
+                          avatarUrl: user.avatarUrl,
+                        }}
+                        workspaces={workspaces}
+                        currentWorkspace={currentWorkspace}
+                        recordsPreview={recordsPreview}
+                        aiWorkbench={aiWorkbench}
+                        canSeeUsageLimits={canSeeUsageLimits}
+                        onSelectWorkspace={async (slug) => {
+                          await navigate({
+                            to: "/w/$workspaceSlug",
+                            params: { workspaceSlug: slug },
+                          });
+                        }}
+                        onCreateWorkspace={createAndOpen}
+                        /** Like FirstWorkspacePage's link: a full browser navigation so the server route
+                         * can clear the session cookie and send the browser to Authing. `?returnTo`
+                         * carries this page back across the sign-out (the root route hands it to
+                         * `/login`) once the switch-account return step is in. */
+                        onSignOut={() => void signOut()}
+                      >
+                        <Outlet />
+                        {otherTask && (
+                          <Suspense fallback={null}>
+                            <OtherTaskPopup task={otherTask} />
+                          </Suspense>
+                        )}
+                      </AppShell>
+                    </NotificationActivationContext>
+                  </SearchDialogHost>
                 </PanelTabOrderProvider>
               </WorkspaceAgentsProvider>
             </WorkspacePresenceProvider>

@@ -7,7 +7,7 @@ export type SearchScope = (typeof SEARCH_SCOPES)[number];
 export const SEARCH_RANGES = ["today", "7d", "30d"] as const;
 export type SearchRange = (typeof SEARCH_RANGES)[number];
 
-/** The filters the search page keeps in its URL, next to the query. */
+/** The filters that narrow a search. */
 export type SearchFilters = {
   senderId?: string;
   scope?: SearchScope[];

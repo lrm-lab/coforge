@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-import {
-  conversationPageSearchShape,
-  hostedConversationSearchShape,
-} from "#src/features/conversations/conversation-page-search";
 import { SEARCH_RANGES } from "./search-filters";
 
 /** Longest query the search box sends; longer text is cut, never rejected. */
@@ -32,40 +28,21 @@ export const messageSearchInputSchema = z.object({
 export type MessageSearchParams = z.input<typeof messageSearchInputSchema>;
 
 /**
- * The search page's URL fields. Each one falls back to absent when malformed, so a stale or
- * hand-edited address never breaks the page.
+ * An old search address's fields. Each one falls back to absent when malformed, so a stale or
+ * hand-edited address still opens search.
  */
-export const searchPageSearchSchema = z.object({
+export const searchQuerySchema = z.object({
   q: z
     .string()
     .transform((value) => value.slice(0, SEARCH_QUERY_MAX_LENGTH))
     .optional()
     .catch(undefined),
   senderId: z.uuid().optional().catch(undefined),
-  // Comma-separated (`scope=mentioned,humans`), so the address stays readable.
+  // Comma-separated (`scope=mentioned,humans`).
   scope: z.string().optional().catch(undefined),
   channelId: z.uuid().optional().catch(undefined),
   range: z.enum(SEARCH_RANGES).optional().catch(undefined),
   sort: z.literal("recent").optional().catch(undefined),
   // Set by "Search this channel": the filters wait for a query before searching.
   defer: z.literal("1").optional().catch(undefined),
-  // The result previewed beside the list.
-  ...hostedConversationSearchShape,
-  // The previewed conversation's tab, Task board view and what it has open, as Chat keeps them.
-  ...conversationPageSearchShape,
 });
-
-/** The search itself: its query, filters and `defer`, nothing of a preview. */
-export const searchQuerySchema = searchPageSearchSchema.pick({
-  q: true,
-  senderId: true,
-  scope: true,
-  channelId: true,
-  range: true,
-  sort: true,
-  defer: true,
-});
-
-/** The search Cmd/Ctrl+K reopens: the query and filters, without `defer`. */
-export const lastSearchSchema = searchQuerySchema.omit({ defer: true });
-export type LastSearch = z.output<typeof lastSearchSchema>;

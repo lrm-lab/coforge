@@ -8,11 +8,11 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 
 /**
- * Channels, Agents and Computers matching the query, closest match first, listed above the
- * messages. A leading `#`
+ * Channels, Agents and Computers matching the query, listed in the search dialog above the
+ * messages, grouped under their kind with the closest match first in each group. A leading `#`
  * keeps only channels and a leading `@` only Agents. A channel opens itself, the viewer's own
  * Agent opens their direct conversation with it once there is one, another member's Agent its
- * profile, and a Computer its page.
+ * profile, and a Computer its page; opening one closes the dialog.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Seeds are deterministic
  * and reset on every run; the Computer is seed-dev's "Mac Studio". Screenshots are written under
@@ -34,8 +34,10 @@ function seededUuid(key: string): string {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 
-test("the search page lists matching channels, Agents and Computers and opens them", async () => {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+test("the search dialog lists matching channels, Agents and Computers and opens them", async () => {
+  const db = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: databaseUrl }),
+  });
   const session = `search-entities-${process.pid}`;
   async function browser(...args: string[]) {
     const child = Bun.spawn([browserPath!, "--session", session, ...args], {
@@ -62,7 +64,7 @@ test("the search page lists matching channels, Agents and Computers and opens th
         timer = setTimeout(() => {
           void browser(
             "eval",
-            `location.pathname + location.search + " | " + document.querySelector("main")?.innerText`,
+            `location.pathname + " | " + (document.querySelector('[role="dialog"]') ?? document.querySelector("main"))?.innerText`,
           )
             .catch((error: unknown) => String(error))
             .then((page) =>
@@ -77,8 +79,13 @@ test("the search page lists matching channels, Agents and Computers and opens th
   async function searchFor(query: string, expected: string[]) {
     await browser("open", `${origin}${workspacePath}/search?q=${encodeURIComponent(query)}`);
     await waitFor(
-      `JSON.stringify([...document.querySelectorAll("[data-search-entity]")].map((row) => row.dataset.searchEntity)) === ${JSON.stringify(JSON.stringify(expected))}`,
+      `JSON.stringify([...document.querySelectorAll('[role="dialog"] [data-search-entity]')].map((row) => row.dataset.searchEntity)) === ${JSON.stringify(JSON.stringify(expected))}`,
     );
+  }
+  /** Opens a result by clicking its row, which closes the dialog. */
+  async function openResult(entity: string) {
+    await browser("click", `[role="dialog"] [data-search-entity="${entity}"]`);
+    await waitFor(`document.querySelector('[role="dialog"]') === null`);
   }
 
   const channelId = seededUuid("e2e-search-entities:channel");
@@ -92,9 +99,16 @@ test("the search page lists matching channels, Agents and Computers and opens th
     workspacePath = `/en/w/${membership.workspace.slug}`;
     const workspaceId = membership.workspaceId;
     await db.conversation.deleteMany({ where: { id: channelId } });
-    await db.conversation.deleteMany({ where: { workspaceId, channelName: "e2e-lighthouse" } });
+    await db.conversation.deleteMany({
+      where: { workspaceId, channelName: "e2e-lighthouse" },
+    });
     await db.conversation.create({
-      data: { id: channelId, workspaceId, channelName: "e2e-lighthouse", description: "Beacon" },
+      data: {
+        id: channelId,
+        workspaceId,
+        channelName: "e2e-lighthouse",
+        description: "Beacon",
+      },
     });
     await db.agent.upsert({
       where: { id: agentId },
@@ -148,23 +162,30 @@ test("the search page lists matching channels, Agents and Computers and opens th
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
-    // Closer matches first: "Lighthouse Bot" starts with the query, "#e2e-lighthouse" only
-    // contains it. Each row names its kind.
+    // Grouped under their kind: Channels, then Agents. Within the Agents the closer match is
+    // first. Each row names its place, with no kind label of its own.
     await searchFor("lighthouse", [
+      `channel:${channelId}`,
       `agent:${agentId}`,
       `agent:${othersAgentId}`,
-      `channel:${channelId}`,
     ]);
     // No message matches, so the Messages section says so under the matches.
     // Wait for it: the matches can show before the message search has answered.
-    await waitFor(`document.querySelector("main").innerText.includes("No messages match.")`);
-    const rows = await evaluate<string[]>(
-      `[...document.querySelectorAll("[data-search-entity]")].map((row) => row.textContent)`,
+    await waitFor(
+      `document.querySelector('[role="dialog"]').innerText.includes("No messages match.")`,
     );
-    expect(rows[0]).toContain("Lighthouse Bot");
-    expect(rows[0]).toContain("Agent");
-    expect(rows[2]).toContain("#e2e-lighthouse");
-    expect(rows[2]).toContain("Channel");
+    const groups = await evaluate<Record<string, string[]>>(
+      `Object.fromEntries([...document.querySelectorAll('[role="dialog"] section[aria-label]')].map((section) => [section.getAttribute("aria-label"), [...section.querySelectorAll("[data-search-entity]")].map((row) => row.dataset.searchEntity)]))`,
+    );
+    expect(groups).toEqual({
+      Channels: [`channel:${channelId}`],
+      Agents: [`agent:${agentId}`, `agent:${othersAgentId}`],
+    });
+    const rows = await evaluate<string[]>(
+      `[...document.querySelectorAll('[role="dialog"] [data-search-entity]')].map((row) => row.textContent)`,
+    );
+    expect(rows[0]).toContain("#e2e-lighthouse");
+    expect(rows[1]).toContain("Lighthouse Bot");
     await browser("screenshot", join(artifacts, "entities.png"));
 
     // `#` keeps channels only, `@` keeps Agents only.
@@ -174,31 +195,24 @@ test("the search page lists matching channels, Agents and Computers and opens th
     // A Computer matches by its name.
     await searchFor("mac studio", [`computer:${computer.id}`]);
 
-    // Opening: a channel opens itself, the viewer's own Agent their DM with it, a Computer its
-    // page.
-    await searchFor("lighthouse", [
-      `agent:${agentId}`,
-      `agent:${othersAgentId}`,
-      `channel:${channelId}`,
-    ]);
-    // A channel and the viewer's own Agent preview on a single click; a double click opens.
-    await browser("dblclick", `[data-search-entity="channel:${channelId}"]`);
+    // Opening closes the dialog and goes there: a channel opens itself, the viewer's own Agent
+    // their DM with it, a Computer its page. Each opens search afresh, as the dialog keeps
+    // nothing once it closes.
+    const lighthouse = [`channel:${channelId}`, `agent:${agentId}`, `agent:${othersAgentId}`];
+    await searchFor("lighthouse", lighthouse);
+    await openResult(`channel:${channelId}`);
     await waitFor(`location.pathname === "${workspacePath}/channel/${channelId}"`);
-    await browser("back");
-    await waitFor(`document.querySelector('[data-search-entity="agent:${agentId}"]') !== null`);
-    await browser("dblclick", `[data-search-entity="agent:${agentId}"]`);
+    await searchFor("lighthouse", lighthouse);
+    await openResult(`agent:${agentId}`);
     await waitFor(`location.pathname === "${workspacePath}/dm/${dmId}"`);
     // Another member's Agent opens its profile instead.
-    await browser("back");
-    await waitFor(
-      `document.querySelector('[data-search-entity="agent:${othersAgentId}"]') !== null`,
-    );
-    await browser("click", `[data-search-entity="agent:${othersAgentId}"]`);
+    await searchFor("lighthouse", lighthouse);
+    await openResult(`agent:${othersAgentId}`);
     await waitFor(
       `location.pathname === "${workspacePath}/members" && new URLSearchParams(location.search).get("profile") === "agent:${othersAgentId}"`,
     );
     await searchFor("mac studio", [`computer:${computer.id}`]);
-    await browser("click", `[data-search-entity="computer:${computer.id}"]`);
+    await openResult(`computer:${computer.id}`);
     await waitFor(`location.pathname === "${workspacePath}/computer/${computer.id}"`);
   } finally {
     await browser("close").catch(() => undefined);

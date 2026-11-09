@@ -1,31 +1,8 @@
-import { useEffect, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { useEffect, useEffectEvent } from "react";
 
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { splitWorkspacePath } from "#src/features/workspaces/workspace-url";
 import { isApplePlatform } from "#src/lib/platform";
-import { readLastSearch } from "./search-memory";
 
-/**
- * Where each search history entry was opened from, keyed by the entry's history key, so Back
- * and Forward into search keep their own origin. Entries reached from another search entry
- * (typing, a filter, a preview) inherit that entry's origin.
- */
-const searchOrigins = new Map<string, string>();
-let currentSearchOrigin: string | undefined;
-let lastPageOutsideSearch: string | undefined;
-
-/** Whether a de-localized pathname is a Workspace's search page (`/w/<slug>/search`). */
-function isSearchPath(pathname: string | undefined): boolean {
-  return pathname !== undefined && splitWorkspacePath(pathname)?.rest === "/search";
-}
-
-/** The page search was opened from, where Esc on the search page returns to. */
-export function lastPageBeforeSearch(): string | undefined {
-  return currentSearchOrigin;
-}
-
-/** Asks an open search page to put the caret back in its box. */
+/** Asks the open search dialog to put the caret back in its box. */
 export const SEARCH_FOCUS_EVENT = "coforge:search-focus";
 
 /**
@@ -42,58 +19,16 @@ function isSearchShortcut(event: KeyboardEvent) {
   return isApplePlatform() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
 }
 
-/** The shortcut as the search box shows it; `undefined` until the platform is known. */
-export function useSearchShortcutLabel(): string | undefined {
-  // Read after mount: the server render cannot know the viewer's platform.
-  const [label, setLabel] = useState<string>();
-  useEffect(() => setLabel(isApplePlatform() ? "⌘K" : "Ctrl+K"), []);
-  return label;
-}
-
-/**
- * Cmd/Ctrl+K from anywhere in the app, even while typing: on the search page it returns the caret
- * to the box, text selected; elsewhere it opens search with the viewer's last search in this
- * Workspace. The rail's Search entry opens a fresh search instead.
- */
-export function useSearchShortcut(workspaceId: string | undefined, userId: string) {
-  const router = useRouter();
-  const workspaceSlug = useWorkspaceSlug();
+/** Cmd/Ctrl+K from anywhere in the app, even while typing. */
+export function useSearchShortcut(onShortcut: () => void) {
+  const fire = useEffectEvent(onShortcut);
   useEffect(() => {
-    // Remember where each search entry was opened from, so leaving search goes back there
-    // whatever steps (filters, previews, a visit to a result and Back) were taken since.
-    let previousPath: string | undefined;
-    const remember = () => {
-      const { pathname, href, state } = router.state.location;
-      const key = (state as { __TSR_key?: string }).__TSR_key;
-      if (!isSearchPath(pathname)) {
-        lastPageOutsideSearch = href;
-      } else {
-        const known = key ? searchOrigins.get(key) : undefined;
-        currentSearchOrigin =
-          known ?? (isSearchPath(previousPath) ? currentSearchOrigin : lastPageOutsideSearch);
-        if (key && currentSearchOrigin) searchOrigins.set(key, currentSearchOrigin);
-      }
-      previousPath = pathname;
-    };
-    remember();
-    return router.subscribe("onResolved", remember);
-  }, [router]);
-  useEffect(() => {
-    if (!workspaceId) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!isSearchShortcut(event)) return;
       event.preventDefault();
-      if (isSearchPath(router.state.location.pathname)) {
-        document.dispatchEvent(new Event(SEARCH_FOCUS_EVENT));
-        return;
-      }
-      void router.navigate({
-        to: "/w/$workspaceSlug/search",
-        params: { workspaceSlug },
-        search: readLastSearch(workspaceId, userId),
-      });
+      fire();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [workspaceId, workspaceSlug, userId, router]);
+  }, []);
 }

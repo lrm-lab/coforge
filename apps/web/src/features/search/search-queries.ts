@@ -61,7 +61,7 @@ export const messageSearchQuery = (
     staleTime: 60_000,
   });
 
-/** The people, Agents, channels and Computers the page offers and names; channels in name
+/** The people, Agents, channels and Computers search offers and names; channels in name
  * order, from the Query Chat keeps every channel's name in (`channelNamesQuery`), so a page that
  * holds them already does not read them again. */
 export const searchDirectoryQuery = (workspaceId: string) =>

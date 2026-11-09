@@ -7,13 +7,14 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
- * The search page with nothing typed: the searches that led somewhere (Search history) and the
+ * The search dialog with nothing typed: the searches that led somewhere (Search history) and the
  * channels, Agents and direct messages with members opened from search (Frequently used), both kept
  * in this browser only.
  * Opening a message result records its query and its conversation; opening a match records the
  * typed text and the match. A repeated search moves to the front, whatever its case. A history
- * entry searches again; one can be removed, or all cleared. A frequently used card opens its
- * place.
+ * entry searches again; one can be removed, or all cleared. A frequently used row opens its
+ * place. The dialog keeps nothing but what the browser remembers, so each check opens it afresh
+ * from the old `/search` address.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Seeds are deterministic
  * and reset on every run. Screenshots are written under `.amp/e2e/search-home/`.
@@ -27,8 +28,10 @@ const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-home");
-/** A Frequently used card: an entity link inside that section. */
-const FREQUENT = '[aria-labelledby="search-frequent-heading"] [data-search-entity]';
+/** A Frequently used row: an entity link inside that section of the dialog. */
+const FREQUENT = '[role="dialog"] [aria-labelledby="search-frequent-heading"] [data-search-entity]';
+/** The dialog's search box. */
+const BOX = '[role="dialog"] input[type="search"]';
 
 /** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
 function seededUuid(key: string): string {
@@ -36,8 +39,10 @@ function seededUuid(key: string): string {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 
-test("the empty search page offers recent searches and frequently used places", async () => {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+test("the empty search dialog offers recent searches and frequently used places", async () => {
+  const db = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: databaseUrl }),
+  });
   const session = `search-home-${process.pid}`;
   async function browser(...args: string[]) {
     const child = Bun.spawn([browserPath!, "--session", session, ...args], {
@@ -64,7 +69,7 @@ test("the empty search page offers recent searches and frequently used places", 
         timer = setTimeout(() => {
           void browser(
             "eval",
-            `location.pathname + location.search + " | " + document.querySelector("main")?.innerText`,
+            `location.pathname + " | " + (document.querySelector('[role="dialog"]') ?? document.querySelector("main"))?.innerText`,
           )
             .catch((error: unknown) => String(error))
             .then((page) =>
@@ -76,20 +81,25 @@ test("the empty search page offers recent searches and frequently used places", 
   };
   const history = () =>
     evaluate<string[]>(
-      `[...document.querySelectorAll("[data-search-history]")].map((tag) => tag.dataset.searchHistory)`,
+      `[...document.querySelectorAll('[role="dialog"] [data-search-history]')].map((row) => row.dataset.searchHistory)`,
     );
   const frequent = () =>
     evaluate<string[]>(
-      `[...document.querySelectorAll(${JSON.stringify(FREQUENT)})].map((card) => card.dataset.searchEntity)`,
+      `[...document.querySelectorAll(${JSON.stringify(FREQUENT)})].map((row) => row.dataset.searchEntity)`,
     );
   /** The dev user's Workspace pages, `/en/w/<slug>`; set once its membership is read. */
   let workspacePath = "";
+  /** Opens the dialog on its history and frequent places: a fresh page load, over the Workspace. */
   async function openHome() {
     await browser("open", `${origin}${workspacePath}/search`);
-    await waitFor(`document.activeElement?.type === "search"`);
+    await waitFor(`document.activeElement === document.querySelector('${BOX}')`);
+    await waitFor(`!location.pathname.endsWith("/search")`);
   }
+  /** Opens the dialog with `query` already searched. */
   async function searchFor(query: string) {
     await browser("open", `${origin}${workspacePath}/search?q=${encodeURIComponent(query)}`);
+    await waitFor(`document.querySelector('${BOX}')?.value === ${JSON.stringify(query)}`);
+    await waitFor(`!location.pathname.endsWith("/search")`);
   }
 
   const channelA = seededUuid("e2e-search-home:channel-a");
@@ -102,18 +112,34 @@ test("the empty search page offers recent searches and frequently used places", 
     });
     workspacePath = `/en/w/${membership.workspace.slug}`;
     const workspaceId = membership.workspaceId;
-    await db.conversation.deleteMany({ where: { id: { in: [channelA, channelB] } } });
+    await db.conversation.deleteMany({
+      where: { id: { in: [channelA, channelB] } },
+    });
     await db.conversation.deleteMany({
       where: { workspaceId, channelName: { in: ["e2e-home-a", "e2e-home-b"] } },
     });
     await db.conversation.createMany({
       data: [
-        { id: channelA, workspaceId, channelName: "e2e-home-a", description: "" },
-        { id: channelB, workspaceId, channelName: "e2e-home-b", description: "" },
+        {
+          id: channelA,
+          workspaceId,
+          channelName: "e2e-home-a",
+          description: "",
+        },
+        {
+          id: channelB,
+          workspaceId,
+          channelName: "e2e-home-b",
+          description: "",
+        },
       ],
     });
     const author = await db.conversationMember.create({
-      data: { conversationId: channelA, workspaceId, userId: DEV_BROWSER_USER.id },
+      data: {
+        conversationId: channelA,
+        workspaceId,
+        userId: DEV_BROWSER_USER.id,
+      },
     });
     const message = await db.message.create({
       data: {
@@ -131,14 +157,19 @@ test("the empty search page offers recent searches and frequently used places", 
     await openHome();
     await browser("eval", "localStorage.clear()");
     await openHome();
+    await waitFor(
+      `document.querySelector('[role="dialog"]').innerText.includes("Search everything")`,
+    );
     expect(await history()).toEqual([]);
     expect(await frequent()).toEqual([]);
 
     // Opening a message result records its query and its channel.
     await searchFor(phrase);
     await waitFor(`document.querySelector('[data-search-message-id="${message.id}"]') !== null`);
-    await browser("dblclick", `[data-search-message-id="${message.id}"]`);
-    await waitFor(`location.pathname === "${workspacePath}/channel/${channelA}"`);
+    await browser("click", `[data-search-message-id="${message.id}"]`);
+    await waitFor(
+      `location.pathname === "${workspacePath}/channel/${channelA}" && document.querySelector('[role="dialog"]') === null`,
+    );
 
     // Opening a match records the typed text and the match; the same search in another case
     // replaces the older entry instead of adding one.
@@ -147,45 +178,55 @@ test("the empty search page offers recent searches and frequently used places", 
       await waitFor(
         `document.querySelector('[data-search-entity="channel:${channelB}"]') !== null`,
       );
-      await browser("dblclick", `[data-search-entity="channel:${channelB}"]`);
-      await waitFor(`location.pathname === "${workspacePath}/channel/${channelB}"`);
+      await browser("click", `[data-search-entity="channel:${channelB}"]`);
+      await waitFor(
+        `location.pathname === "${workspacePath}/channel/${channelB}" && document.querySelector('[role="dialog"]') === null`,
+      );
     }
 
-    // The empty page lists both, newest first; the channel opened twice ranks first. A reload
-    // keeps them: they live in this browser.
+    // The dialog lists both, newest first; the channel opened twice ranks first. Opening it again
+    // is a fresh page load, so what it lists lives in this browser.
     await openHome();
-    await waitFor(`document.querySelectorAll("[data-search-history]").length === 2`);
+    await waitFor(
+      `document.querySelectorAll('[role="dialog"] [data-search-history]').length === 2`,
+    );
     expect(await history()).toEqual(["e2e-home-b", phrase]);
     expect(await frequent()).toEqual([`channel:${channelB}`, `channel:${channelA}`]);
-    await browser("reload");
-    await waitFor(`document.querySelectorAll("[data-search-history]").length === 2`);
     await browser("screenshot", join(artifacts, "home.png"));
 
-    // A history entry searches again.
+    // A history entry searches again: its text fills the box and its message is listed.
     await browser("click", `[data-search-history="${phrase}"]`);
-    await waitFor(`new URLSearchParams(location.search).get("q") === "${phrase}"`);
+    await waitFor(`document.querySelector('${BOX}').value === "${phrase}"`);
     await waitFor(`document.querySelector('[data-search-message-id="${message.id}"]') !== null`);
 
-    // A frequently used card opens its place.
+    // A frequently used row opens its place.
     await openHome();
     await waitFor(
       `document.querySelector('${FREQUENT}[data-search-entity="channel:${channelA}"]') !== null`,
     );
-    await browser("dblclick", `${FREQUENT}[data-search-entity="channel:${channelA}"]`);
-    await waitFor(`location.pathname === "${workspacePath}/channel/${channelA}"`);
+    await browser("click", `${FREQUENT}[data-search-entity="channel:${channelA}"]`);
+    await waitFor(
+      `location.pathname === "${workspacePath}/channel/${channelA}" && document.querySelector('[role="dialog"]') === null`,
+    );
 
     // One entry can be removed, then the rest cleared; the frequently used places stay.
     await openHome();
-    await waitFor(`document.querySelectorAll("[data-search-history]").length === 2`);
-    await browser("click", `[aria-label="Remove “e2e-home-b” from Search History"]`);
-    await waitFor(`document.querySelectorAll("[data-search-history]").length === 1`);
+    await waitFor(
+      `document.querySelectorAll('[role="dialog"] [data-search-history]').length === 2`,
+    );
+    await browser("click", `[aria-label="Remove “e2e-home-b” from search history"]`);
+    await waitFor(
+      `document.querySelectorAll('[role="dialog"] [data-search-history]').length === 1`,
+    );
     await browser(
       "eval",
-      `[...document.querySelectorAll("button")].find((button) => button.textContent.trim() === "Clear").click()`,
+      `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.trim() === "Clear").click()`,
     );
-    await waitFor(`document.querySelectorAll("[data-search-history]").length === 0`);
+    await waitFor(
+      `document.querySelectorAll('[role="dialog"] [data-search-history]').length === 0`,
+    );
     expect((await frequent()).length).toBe(2);
-    await browser("reload");
+    await openHome();
     await waitFor(`document.querySelectorAll('${FREQUENT}').length === 2`);
     expect(await history()).toEqual([]);
   } finally {
@@ -198,7 +239,9 @@ test("the empty search page offers recent searches and frequently used places", 
 }, 240_000);
 
 test("frequently used shows ten usable places and keeps opens from a clock slightly ahead", async () => {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const db = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: databaseUrl }),
+  });
   const session = `search-frequent-${process.pid}`;
   async function browser(...args: string[]) {
     const child = Bun.spawn([browserPath!, "--session", session, ...args], {
@@ -257,15 +300,15 @@ test("frequently used shows ten usable places and keeps opens from a clock sligh
       `localStorage.clear(); localStorage.setItem(${JSON.stringify(usageKey)}, ${JSON.stringify(JSON.stringify(usage))})`,
     );
     await browser("open", `${origin}${workspacePath}/search`);
-    // The archived channel is left out and the next place fills its slot: ten cards, 1–10.
+    // The archived channel is left out and the next place fills its slot: ten rows, 1–10.
     await waitFor(`document.querySelectorAll(${JSON.stringify(FREQUENT)}).length === 10`);
-    const cards = await evaluate<string[]>(
-      `[...document.querySelectorAll(${JSON.stringify(FREQUENT)})].map((card) => card.dataset.searchEntity)`,
+    const rows = await evaluate<string[]>(
+      `[...document.querySelectorAll(${JSON.stringify(FREQUENT)})].map((row) => row.dataset.searchEntity)`,
     );
-    expect(cards).toEqual(ids.slice(1).map((id) => `channel:${id}`));
+    expect(rows).toEqual(ids.slice(1).map((id) => `channel:${id}`));
 
     // Opening another place keeps the open stamped slightly ahead.
-    await browser("dblclick", `${FREQUENT}[data-search-entity="channel:${ids[5]}"]`);
+    await browser("click", `${FREQUENT}[data-search-entity="channel:${ids[5]}"]`);
     await waitFor(`location.pathname === "${workspacePath}/channel/${ids[5]}"`);
     const stored = await evaluate<Record<string, number[]>>(
       `JSON.parse(localStorage.getItem(${JSON.stringify(usageKey)}))`,
