@@ -10,7 +10,8 @@ import { thrownMessage } from "@lrm/coforge-sdk/internal";
  * How long a lifecycle operation lets in-flight Agent work finish after the runner hold is
  * engaged. Past this bound the operation stops the daemon regardless: an Agent that will not
  * finish must not be able to pin a machine on an old version, or to block a restart. Without the
- * hold the effective grace period is the ~2s SIGTERM/SIGKILL ladder in `DaemonRuntime.stop()`.
+ * hold the effective grace period is the process-tree ladder in `DaemonRuntime.stop()`
+ * (`DAEMON_STOP_WORST_CASE_MS`: terminate, escalation and drain, ten seconds each).
  */
 export const RUNNER_HOLD_MS = 30_000;
 

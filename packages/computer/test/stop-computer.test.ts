@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { DAEMON_STOP_WAIT_MS } from "@lrm/coforge-daemon";
 import { CliError } from "#src/errors";
 import { stopComputer, type StopComputerHost } from "#src/cli/stop-computer";
 import { rejection } from "./rejection";
@@ -107,6 +108,35 @@ test("stop fails when the Coordinator still answers after its manager stopped it
   expect(error).toBeInstanceOf(CliError);
   expect((error as CliError).code).toBe("STOP_NOT_CONFIRMED");
   expect((error as CliError).message).toContain("still answering");
+});
+
+test("stop waits as long as the Daemon's own stop can take", async () => {
+  // A stop now spends up to the process-tree ladder's 30 s (task #726), so a caller that gave up
+  // at the old 10 s would report a stop that was still finishing as a failed one. The default has
+  // to be the Daemon's budget, not a number of this CLI's own.
+  let elapsed = 0;
+  const host = fakeHost({
+    async stop() {
+      host.calls.push("stop");
+    },
+  });
+
+  const error = await rejection(
+    stopComputer(
+      host,
+      { stdout: () => {} },
+      {
+        now: () => elapsed,
+        sleep: async (milliseconds: number) => {
+          elapsed += milliseconds;
+        },
+      },
+    ),
+  );
+
+  expect((error as CliError).code).toBe("STOP_NOT_CONFIRMED");
+  expect(elapsed).toBeGreaterThanOrEqual(DAEMON_STOP_WAIT_MS);
+  expect(elapsed).toBeLessThan(DAEMON_STOP_WAIT_MS + 1_000);
 });
 
 test("stop waits for a Coordinator that needs a moment to go", async () => {

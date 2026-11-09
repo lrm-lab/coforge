@@ -6,3 +6,8 @@ export { launchdJobs } from "#src/platform/launchd-job";
 export { stopWorkspaceAgentProcesses } from "#src/platform/linux-agent-processes";
 export { workspaceLaunchdIdentity } from "#src/supervisor/launchd-workspace-instance";
 export { workspaceStateDirectory } from "#src/supervisor/workspace-instance";
+export {
+  DAEMON_STOP_WAIT_MS,
+  DAEMON_STOP_WORST_CASE_MS,
+  LAUNCHD_EXIT_TIMEOUT_SECONDS,
+} from "#src/platform/daemon-stop-wait";

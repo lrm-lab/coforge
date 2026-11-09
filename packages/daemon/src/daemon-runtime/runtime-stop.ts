@@ -144,9 +144,10 @@ export class RuntimeStop {
    * The scheduler starts nothing new once stopped; this only lets the started work finish.
    *
    * The bound is `DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS`, the one teardown bound that fits the whole
-   * stop in the service manager's grace period (launchd: 5 s). This wait runs alongside the
-   * notice, so it never extends the stop past what the notice's own bound allows. The fire
-   * request's own timeout cannot be the bound:
+   * stop in the service manager's grace period (`LAUNCHD_EXIT_TIMEOUT_SECONDS`, 40 s since task
+   * #726 raised launchd's `ExitTimeOut`; launchd's default was 20 s and the plist said 2 s). This
+   * wait runs alongside the notice, so it never extends the stop past what the notice's own bound
+   * allows. The fire request's own timeout cannot be the bound:
    * centrifuge-js gives every RPC its default 5 s (`timeout`), which nothing here changes, and that
    * alone would use the whole grace period. A stop that gives up leaves the receipt written before
    * the fire in place, so the next daemon repeats the same request.

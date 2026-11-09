@@ -1,6 +1,7 @@
 // `coforge-computer stop`: the whole Computer down, through the manager that runs it.
 
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
+import { DAEMON_STOP_WAIT_MS } from "@lrm/coforge-daemon";
 import { CliError } from "#src/errors";
 
 /** Platform and local control seams used by `stopComputer`. `assertRestartable` is the hosts'
@@ -20,14 +21,15 @@ export type StopComputerHost = {
 export type StopComputerOptions = {
   /** Write one stable JSON result instead of the prose a person reads. */
   json?: boolean;
-  /** How long to wait for the Coordinator to stop answering, and the seams that wait runs on. */
+  /** How long to wait for the Coordinator to stop answering, and the seams that wait runs on.
+   * Defaults to the Daemon's own stop budget (`DAEMON_STOP_WAIT_MS`) rather than a number of its
+   * own: waiting less reported a stop that was still finishing as one that failed (task #726). */
   waitMs?: number;
   now?: () => number;
   sleep?: (milliseconds: number) => Promise<void>;
 };
 
 const STOP_POLL_MS = 100;
-const STOP_WAIT_MS = 10_000;
 
 /**
  * Stops this Computer: the Coordinator process and every Workspace runtime under it, through the
@@ -90,7 +92,7 @@ async function managedByServiceManager(host: StopComputerHost): Promise<unknown 
 async function confirmStopped(host: StopComputerHost, options: StopComputerOptions): Promise<void> {
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? Bun.sleep;
-  const deadline = now() + (options.waitMs ?? STOP_WAIT_MS);
+  const deadline = now() + (options.waitMs ?? DAEMON_STOP_WAIT_MS);
   while (await host.isRunning()) {
     if (now() >= deadline) {
       throw new CliError(
