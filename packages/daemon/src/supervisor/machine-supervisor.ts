@@ -9,6 +9,11 @@ import { answeredWithin, type RunnerHoldSnapshot } from "./runner-hold";
 import { WorkspaceParkedError } from "./workspace-health-journal";
 import { WorkspaceLifecycleSupersededError } from "./lifecycle-superseded-error";
 import { SerialQueue } from "./serial-queue";
+import {
+  runLifecycleCommand,
+  runWorkspaceCommand,
+  type MachineCommandContext,
+} from "./machine-supervisor-command";
 import { detachManagedBinding } from "./machine-supervisor-detach";
 import {
   appendRestartResult,
@@ -17,36 +22,34 @@ import {
   workspaceIdOf,
 } from "./machine-supervisor-bindings";
 
-export type RestartProgress = {
-  requestId: string;
-  phase: "stopping" | "starting";
-  previousInstanceId: string | null;
-};
-export type ManagedBinding = DaemonConfig & {
-  enabled: boolean;
-  restart?: RestartProgress;
-  restartResults?: RestartResult[];
-  /** Legacy cloud ready hints, never proof of a completed local operation. */
-  restartRequestIds?: string[];
-  upgradeRequestIds?: string[];
-  /** Pre-receipt dedupe list; FileBindingStore reopens these as pending operations. */
-  upgradeRequests?: { requestId: string; expectedVersion: string }[];
-  upgradeOperations?: UpgradeOperation[];
-  /** The last operator command that failed for this Workspace after it had already answered, so
-   * `coforge-computer status` can say so; cleared by the next one that succeeds. */
-  lastFailure?: LifecycleFailure;
-  /** `daemon:detach` (task #417): the server already answered once, so a retry finishes the
-   * local half alone — stop, unbind, delete the credential — without asking again. */
-  detachConfirmed?: boolean;
-  /** `daemon:detach`: the server answered `computer_key_revoked` (task #417). */
-  detachKeyRevoked?: boolean;
-};
-
 export {
   LIFECYCLE_FAILURE_OPERATIONS,
   UPGRADE_OPERATION_HISTORY,
   UPGRADE_OPERATION_PENDING_TTL_MS,
 } from "./machine-supervisor-operations";
+
+export {
+  type BindingStore,
+  type CommandAnswer,
+  type CommandOptions,
+  type CommandProgress,
+  type ManagedBinding,
+  type RestartHoldTuning,
+  type RestartProgress,
+  type WorkspaceProcesses,
+  WorkspaceRecoveryError,
+} from "./machine-supervisor-contracts";
+import type {
+  BindingStore,
+  CommandAnswer,
+  CommandOptions,
+  CommandProgress,
+  ManagedBinding,
+  RestartHoldTuning,
+  RestartProgress,
+  WorkspaceProcesses,
+} from "./machine-supervisor-contracts";
+import { WorkspaceRecoveryError } from "./machine-supervisor-contracts";
 export type {
   LifecycleFailure,
   PendingUpgradeSettlement,
@@ -88,67 +91,6 @@ import {
   type UpgradeOperationTerminal,
 } from "./machine-supervisor-operations";
 
-export class WorkspaceRecoveryError extends AggregateError {}
-export interface BindingStore {
-  load(): Promise<ManagedBinding[]>;
-  save(bindings: ManagedBinding[]): Promise<void>;
-}
-/**
- * An operator command's one deadline (epoch ms). It bounds when the command answers, not the work:
- * what is still under way at the deadline finishes in the serialized queue after the answer.
- */
-export type CommandOptions = { deadline?: number };
-/** Which targeted Workspaces an operator command finished starting, and which were still under
- * way (queued, holding, stopping, or starting) when its deadline came. */
-export type CommandAnswer = { started: string[]; pending: string[] };
-
-/** What one command has got through so far, read when its deadline answers before it finishes:
- * its targets are handled in order, so the first `done` of them are finished. */
-type CommandProgress = {
-  targets?: string[];
-  done: number;
-  started: string[];
-  refused?: WorkspaceParkedError;
-  superseded?: WorkspaceLifecycleSupersededError;
-  /** Ends a target's under-way mark once it has been handled. */
-  settle(workspaceId: string): void;
-};
-
-export interface WorkspaceProcesses {
-  /** Gives up with `signal.reason` once `signal` aborts (a stop or configure took over). */
-  start(binding: ManagedBinding, options?: { signal?: AbortSignal }): Promise<string>;
-  stop(binding: ManagedBinding): Promise<void>;
-  instance(binding: ManagedBinding): Promise<string | null>;
-  /**
-   * Asks one Workspace daemon to stop admitting new turns and reports which of its Agents are
-   * still busy. Optional: a `WorkspaceProcesses` that cannot reach its children simply restarts
-   * with today's behaviour.
-   */
-  hold?(binding: ManagedBinding, reason: RunnerHoldReason): Promise<RunnerHoldSnapshot>;
-  /** Lifts a hold on a daemon that, against expectations, survived: only called when the OS stop
-   * after a hold failed, so the still-running daemon does not sit held with nobody to lift it. */
-  release?(binding: ManagedBinding, reason: RunnerHoldReason): Promise<unknown>;
-  /** Clears this Workspace's crash/terminal health latch. Called only for an explicit operator
-   * `start`/`restart` through `command()` - never from automatic recovery on Coordinator startup,
-   * and never from `stop` - so an OS-level crash-loop restart (which never reaches `command()`)
-   * cannot clear its own latch. Optional: a `WorkspaceProcesses` with no health journal to clear
-   * simply never latches. */
-  clearHealth?(binding: ManagedBinding): Promise<void>;
-  /** Why the cloud refused this Workspace for good, if it did. A parked Workspace is never
-   * started by recovery, start, or restart; only `configure` (a rebind) lifts the park. */
-  parkedReason?(binding: ManagedBinding): Promise<DaemonConnectRejectionReason | undefined>;
-  clearParked?(binding: ManagedBinding): Promise<void>;
-}
-
-/** Test seam for the bounded restart hold; production takes every default. */
-export type RestartHoldTuning = {
-  holdMs?: number;
-  pollMs?: number;
-  now?: () => number;
-  sleep?: (milliseconds: number) => Promise<void>;
-};
-
-/** Serial machine mutations; a stopped binding remains registered and recoverable. */
 export class MachineSupervisor {
   #bindings: ManagedBinding[] = [];
   #instances = new Map<string, string>();
@@ -245,39 +187,7 @@ export class MachineSupervisor {
     requestId?: string,
     options: CommandOptions = {},
   ): Promise<CommandAnswer> {
-    const requested = this.#targets(operation, workspaceId).map(workspaceIdOf);
-    const sequence = operation === "stop" ? this.#supersede(requested, "stop") : ++this.#sequence;
-    const settle = this.#markUnderWay(operation === "stop" ? [] : requested);
-    const progress: CommandProgress = { done: 0, started: [], settle: settle.one };
-    // A stop is persisted before it answers, so a Coordinator that dies before the stop's turn
-    // comes back with the Workspace stopped, as the CLI was told.
-    const intent = operation === "stop" ? this.#persistStopIntent(requested, sequence) : undefined;
-    const work = this.#serialize(async () => {
-      await intent;
-      return this.#command(operation, workspaceId, requestId, sequence, progress);
-    }).finally(() => {
-      settle.all();
-      if (operation === "stop") this.#releaseStopIntents(requested, sequence);
-    });
-    const { deadline } = options;
-    if (deadline === undefined) return work;
-    const unhandled = () => (progress.targets ?? requested).slice(progress.done);
-    const answer = () =>
-      this.#answerBy(
-        deadline,
-        work,
-        () => {
-          if (progress.refused) throw progress.refused;
-          if (progress.superseded) throw progress.superseded;
-          return { started: [...progress.started], pending: unhandled() };
-        },
-        (error) => this.#failedAfterAnswer(operation, unhandled(), error),
-      );
-    if (!intent) return answer();
-    return intent.then(answer, (error: unknown) => {
-      work.catch(() => {});
-      throw error;
-    });
+    return runLifecycleCommand(this.#commandOps, operation, workspaceId, requestId, options);
   }
 
   /** Persists these Workspaces as stopped now, ahead of the stop's turn in the queue. */
@@ -337,11 +247,6 @@ export class MachineSupervisor {
     return trackWorkspaceWork(this.#inFlightOps, workspaceId, run);
   }
 
-  /** The Workspaces a command acts on: an unscoped restart leaves disabled bindings alone. */
-  #targets(operation: "start" | "stop" | "restart", workspaceId?: string): ManagedBinding[] {
-    return commandTargets(this.#inFlightOps, operation, workspaceId);
-  }
-
   async #command(
     operation: "start" | "stop" | "restart",
     workspaceId: string | undefined,
@@ -349,72 +254,14 @@ export class MachineSupervisor {
     sequence: number,
     progress: CommandProgress,
   ): Promise<CommandAnswer> {
-    await this.#refresh();
-    if (workspaceId && !this.#bindings.some((binding) => binding.workspaceId === workspaceId))
-      throw new Error("Workspace is not registered locally");
-    const targets = this.#targets(operation, workspaceId);
-    progress.targets = targets.map(workspaceIdOf);
-    for (let binding of targets) {
-      const id = binding.workspaceId;
-      if (operation === "stop") {
-        binding = await this.#saveBinding(stopped(binding));
-        await this.#stop(binding);
-        await this.#clearFailure(id);
-      } else {
-        // The other targets still start; the refusal names the parked one once they have.
-        const reason = await this.processes.parkedReason?.(binding);
-        if (reason) {
-          // A parked binding the operator stopped stays out of an unscoped start.
-          if (workspaceId || binding.enabled)
-            progress.refused ??= new WorkspaceParkedError(id, reason);
-        } else if ((this.#supersededAt.get(id)?.sequence ?? 0) > sequence) {
-          // A stop or configure requested after this command takes precedence.
-          const { by } = this.#supersededAt.get(id)!;
-          progress.superseded ??= new WorkspaceLifecycleSupersededError(id, by, operation);
-          // Record it like one taken over while running, so a replay neither runs nor re-enables.
-          if (
-            operation === "restart" &&
-            requestId &&
-            binding.restart?.requestId !== requestId &&
-            !binding.restartResults?.some((entry) => entry.requestId === requestId)
-          )
-            await this.#saveBinding({
-              ...binding,
-              restartResults: appendRestartResult(binding, {
-                requestId,
-                status: "cancelled",
-                by,
-              }),
-            });
-        } else {
-          try {
-            const current = binding;
-            if (
-              await this.#track(id, (signal) =>
-                this.#startForOperator(operation, current, requestId, signal),
-              )
-            )
-              progress.started.push(id);
-            await this.#clearFailure(id);
-          } catch (error) {
-            // It parked as it started (the cloud refused it at once): the rest still start.
-            if (error instanceof WorkspaceParkedError) progress.refused ??= error;
-            else if (error instanceof WorkspaceLifecycleSupersededError)
-              progress.superseded ??= new WorkspaceLifecycleSupersededError(
-                id,
-                error.by,
-                operation,
-              );
-            else throw error;
-          }
-        }
-      }
-      progress.done += 1;
-      progress.settle(id);
-    }
-    if (progress.refused) throw progress.refused;
-    if (progress.superseded) throw progress.superseded;
-    return { started: progress.started, pending: [] };
+    return runWorkspaceCommand(
+      this.#commandOps,
+      operation,
+      workspaceId,
+      requestId,
+      sequence,
+      progress,
+    );
   }
 
   /**
@@ -441,45 +288,6 @@ export class MachineSupervisor {
   }
 
   /** Resolves false for a restart this request already completed (nothing started). */
-  async #startForOperator(
-    operation: "start" | "restart",
-    binding: ManagedBinding,
-    requestId: string | undefined,
-    signal: AbortSignal,
-  ): Promise<boolean> {
-    // Reached only for "start" and "restart": an explicit operator lifecycle command, the one
-    // seam that is allowed to clear the health latch (see `WorkspaceProcesses.clearHealth`).
-    await this.processes.clearHealth?.(binding);
-    if (operation === "restart") {
-      const id = requestId ?? crypto.randomUUID();
-      const result = binding.restartResults?.find((entry) => entry.requestId === id);
-      if (result?.status === "cancelled")
-        throw new WorkspaceLifecycleSupersededError(
-          binding.workspaceId,
-          result.by ?? "stop",
-          "restart",
-        );
-      if (result) return false;
-      if (binding.restart && binding.restart.requestId !== id)
-        throw new Error(
-          `Workspace ${binding.workspaceId} has an unfinished restart. Run 'coforge-computer start --workspace ${binding.workspaceId}' to finish it, then restart again.`,
-        );
-      if (!binding.restart)
-        binding = await this.#saveBinding({
-          ...binding,
-          enabled: true,
-          restart: {
-            requestId: id,
-            phase: "stopping",
-            previousInstanceId: await this.processes.instance(binding),
-          },
-        });
-      await this.#advanceRestart(binding, signal);
-    } else if (binding.restart) await this.#advanceRestart(binding, signal);
-    else await this.#start(await this.#saveBinding({ ...binding, enabled: true }), signal);
-    return true;
-  }
-
   /**
    * Opens one upgrade operation. Returns whether this call is the one that must launch the
    * external job; a replay of the same request ID returns false. Operations are mutually
@@ -620,7 +428,36 @@ export class MachineSupervisor {
     );
   }
 
-  /** The upgrade operations' view of this Coordinator's serialized mutation context. */
+  /** One lifecycle command's view of this supervisor: the process seams and the mutation
+   * primitives the command pipeline in `machine-supervisor-command.ts` calls. */
+  get #commandOps(): MachineCommandContext {
+    return {
+      processes: this.processes,
+      refresh: () => this.#refresh(),
+      bindings: () => this.#bindings,
+      targets: (operation, workspaceId) =>
+        commandTargets(this.#inFlightOps, operation, workspaceId),
+      saveBinding: (binding) => this.#saveBinding(binding),
+      stop: (binding) => this.#stop(binding),
+      clearFailure: (workspaceId) => this.#clearFailure(workspaceId),
+      supersededBy: (workspaceId) => this.#supersededAt.get(workspaceId),
+      track: (workspaceId, run) => this.#track(workspaceId, run),
+      advanceRestart: (binding, signal) => this.#advanceRestart(binding, signal),
+      start: (binding, signal) => this.#start(binding, signal),
+      supersede: (workspaceIds, by) => this.#supersede(workspaceIds, by),
+      nextSequence: () => ++this.#sequence,
+      markUnderWay: (workspaceIds) => this.#markUnderWay(workspaceIds),
+      persistStopIntent: (workspaceIds, sequence) =>
+        this.#persistStopIntent(workspaceIds, sequence),
+      releaseStopIntents: (workspaceIds, sequence) =>
+        this.#releaseStopIntents(workspaceIds, sequence),
+      recordFailureAfterAnswer: (operation, workspaceIds, error) =>
+        this.#failedAfterAnswer(operation, workspaceIds, error),
+      serialize: (operation) => this.#serialize(operation),
+      answerBy: (deadline, work, early, late) => this.#answerBy(deadline, work, early, late),
+    };
+  }
+
   get #upgradeOps(): MachineUpgradeContext {
     return {
       refresh: () => this.#refresh(),
