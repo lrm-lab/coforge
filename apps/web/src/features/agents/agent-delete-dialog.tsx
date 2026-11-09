@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, XClose as X } from "@untitledui/icons";
+import { XClose as X } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -11,7 +11,6 @@ import {
   DialogCancel,
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
-import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { m } from "#src/paraglide/messages";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
@@ -80,7 +79,7 @@ export function AgentDeleteDialog({
                   slot="title"
                   className="min-w-0 text-xl font-semibold text-primary wrap-anywhere sm:text-display-xs"
                 >
-                  {m.agent_delete_dialog_title({ name: agentName })}
+                  {m.agent_delete_dialog_title()}
                 </Heading>
                 <ButtonUtility
                   aria-label={m.controls_close()}
@@ -95,18 +94,15 @@ export function AgentDeleteDialog({
                   view, so the confirmation can be typed and confirmed. Once it has scrolled, a rule
                   under the title shows the text above continues rather than starting mid-sentence. */}
               <div
-                className={`mt-4 min-h-0 flex-1 overflow-y-auto border-t pb-6 ${bodyScrolled ? "border-secondary" : "border-transparent"}`}
+                className={`mt-4 min-h-0 flex-1 overflow-y-auto border-t pb-2 ${bodyScrolled ? "border-secondary" : "border-transparent"}`}
                 onScroll={(event) => setBodyScrolled(event.currentTarget.scrollTop > 0)}
                 data-dialog-body
               >
-                <div className="mx-6 flex items-start gap-3">
-                  <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
-                  <Text slot="description" className="text-sm text-secondary">
-                    {m.agent_delete_dialog_description()}
-                  </Text>
-                </div>
-                <label className="grid gap-1 px-6 pt-5 text-sm font-medium">
-                  {m.agent_delete_confirm()}
+                <Text slot="description" className="block px-6 text-sm text-secondary">
+                  {m.agent_delete_dialog_description()}
+                </Text>
+                <label className="grid gap-1 px-6 pt-5 text-sm font-medium wrap-anywhere">
+                  {m.agent_delete_confirm({ name: agentName })}
                   <Input
                     size={controlSize}
                     autoFocus
@@ -114,7 +110,7 @@ export function AgentDeleteDialog({
                     onChange={setConfirmation}
                     placeholder={m.agent_delete_placeholder()}
                     isDisabled={deleting}
-                    aria-label={m.agent_delete_confirm()}
+                    aria-label={m.agent_delete_confirm({ name: agentName })}
                   />
                 </label>
                 {error && (

@@ -122,6 +122,9 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
     // A confirmation sits mid-screen, not on the bottom edge (task #21).
     expect(Math.abs((before.dialog[0] + before.dialog[1]) / 2 - 422)).toBeLessThan(40);
 
+    // The dialog has finished its entrance before it is photographed.
+    await browser("wait", "--fn", `document.getAnimations().length === 0`);
+    await browser("screenshot", join(artifacts, "keyboard-down.png"));
     // Keyboard up: React Aria and the overlay both follow `visualViewport`'s resize and scroll.
     await browser(
       "eval",
@@ -170,11 +173,11 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
     expect(after.confirm[0]).toBeGreaterThanOrEqual(after.field[1]);
     expect(after.confirm[1]).toBeLessThanOrEqual(bottom);
     expect(after.focused).toBe(true);
-    // Text scrolled up under the title gets a rule there, so it does not read as starting mid-sentence.
-    const edge = await evaluate<{ scrolled: boolean; rule: string }>(
-      `(() => { const body = document.querySelector("[data-agent-delete-dialog] [data-dialog-body]"); return { scrolled: body.scrollTop > 0, rule: getComputedStyle(body).borderTopColor }; })()`,
+    // The whole text fits above the keyboard: nothing scrolls under the title.
+    const body = await evaluate<{ scrollTop: number; overflow: number }>(
+      `(() => { const body = document.querySelector("[data-agent-delete-dialog] [data-dialog-body]"); return { scrollTop: body.scrollTop, overflow: body.scrollHeight - body.clientHeight }; })()`,
     );
-    if (edge.scrolled) expect(edge.rule).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    expect(body).toEqual({ scrollTop: 0, overflow: 0 });
   } finally {
     await browser("close").catch(() => {});
     if (createdAgent) await db.agent.deleteMany({ where: { id: createdAgent } }).catch(() => {});
