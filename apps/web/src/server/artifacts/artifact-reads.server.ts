@@ -304,11 +304,13 @@ export class ArtifactReads {
         where: {
           workspaceId: input.workspaceId,
           id: { in: homeConversationIds },
+          hiddenFromWorkspaceAt: null,
         },
         select: {
           id: true,
           channelName: true,
           visibility: true,
+          hiddenFromWorkspaceAt: true,
           members: {
             where: {
               ...("userId" in input.reader
@@ -343,6 +345,7 @@ export class ArtifactReads {
         row.homeKey === "workspace"
           ? member
           : conversation !== undefined &&
+            conversation.hiddenFromWorkspaceAt === null &&
             canReadConversationHome({
               channelName: conversation.channelName,
               visibility: conversation.visibility,

@@ -94,6 +94,7 @@ test("a reader without the artifact's existing access gets a redacted card", asy
           id: "private-1",
           channelName: "secret",
           visibility: "private",
+          hiddenFromWorkspaceAt: null,
           members: [],
         },
       ],
@@ -145,7 +146,13 @@ test("message cards do not reveal deletion to a reader without home access", asy
     workspaceMembership: { findUnique: async () => ({ userId: "user-1" }) },
     conversation: {
       findMany: async () => [
-        { id: "private-2", channelName: "secret", visibility: "private", members: [] },
+        {
+          id: "private-2",
+          channelName: "secret",
+          visibility: "private",
+          hiddenFromWorkspaceAt: null,
+          members: [],
+        },
       ],
     },
   };
@@ -189,4 +196,47 @@ test("a page without artifact links does not read the artifacts experiment", asy
     }),
   ).toEqual([[]]);
   expect(enabledCalls).toBe(0);
+});
+
+test("a hidden channel artifact stays forbidden in message cards", async () => {
+  const id = ids[3]!;
+  const db = {
+    artifact: {
+      findMany: async () => [
+        {
+          id,
+          title: "Hidden channel",
+          preview: "private",
+          kind: "markdown",
+          currentVersion: 1,
+          homeKey: "conversation:hidden-1",
+          access: "conversation",
+          deletedAt: null,
+          authorAgentId: null,
+          workspace: { slug: "docs" },
+        },
+      ],
+    },
+    workspaceMembership: { findUnique: async () => ({ userId: "user-1" }) },
+    conversation: {
+      findMany: async () => [
+        {
+          id: "hidden-1",
+          channelName: "general",
+          visibility: "public",
+          hiddenFromWorkspaceAt: new Date(),
+          members: [{ id: "member" }],
+        },
+      ],
+    },
+  };
+  const reads = new ArtifactReads(db as never, async () => true);
+  const [card] = (
+    await reads.messageCards({
+      workspaceId: "workspace-1",
+      reader: { userId: "user-1" },
+      messages: [{ body: `/w/docs/artifacts/${id}` }],
+    })
+  )[0]!;
+  expect(card).toEqual({ kind: "artifact", state: "forbidden", artifactId: id, canOpen: false });
 });
