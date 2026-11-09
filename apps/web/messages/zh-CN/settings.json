@@ -214,6 +214,6 @@
   "experiments_artifacts": "文档",
   "experiments_artifacts_description": "在对话里由人和 Agent 一起编辑、保留每个版本的文档。对整个工作区生效，包括所有 Agent。",
   "experiments_ai_workbench": "AI Workbench",
-  "experiments_ai_workbench_description": "侧边栏里在你的电脑上工作的 AI 对话。对整个工作区生效。",
+  "experiments_ai_workbench_description": "在侧边栏里和 AI 对话，让它在你的电脑上干活。对整个工作区生效。",
   "settings_labels": "标签"
 }
