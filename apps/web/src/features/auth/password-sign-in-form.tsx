@@ -87,7 +87,6 @@ export function PasswordSignInForm({
           placeholder={m.login_account_placeholder()}
           name="account"
           autoComplete="username"
-          autoFocus
           value={account}
           onChange={edit(setAccount)}
           isInvalid={problem === "invalid_credentials"}

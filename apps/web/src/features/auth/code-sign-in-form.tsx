@@ -78,7 +78,6 @@ export function CodeSignInForm({
           placeholder={kind === "email" ? m.login_email_placeholder() : m.login_phone_placeholder()}
           name="destination"
           autoComplete="username"
-          autoFocus
           value={destination}
           onChange={edit(setDestination)}
           isInvalid={problem === "invalid_destination"}

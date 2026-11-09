@@ -89,16 +89,35 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     // The homepage's logo, the selected tab in brand purple and the other grey, GitHub below the
     // submit button (full width) on this tab only.
     expect(
-      await evaluate<string>(`document.querySelector(".login-brand-logo")?.getAttribute("src")`),
+      await evaluate<string>(
+        `document.querySelector(".login-brand-logo img")?.getAttribute("src")`,
+      ),
     ).toBe("/login/homepage-logo.webp");
+    // Where the homepage puts its logo at 1440: 79 px in, centred in its 75 px bar, 170 px wide.
+    expect(
+      await evaluate<number[]>(
+        `(() => { const r = document.querySelector(".login-brand-logo").getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width)]; })()`,
+      ),
+    ).toEqual([79, 16, 170]);
     expect(await tabColor(codeTab)).toBe("rgb(93, 54, 220)");
     expect(await tabColor(passwordTab)).toBe("rgb(119, 125, 141)");
     expect(await evaluate<boolean>(`!!${button("Continue with GitHub")}`)).toBe(true);
     const phoneTitleTop = await titleTop();
-    // The phone field has the focus: 1px #C2B3F6 border and the two shadows.
-    const focused = await evaluate<{ border: string; shadow: string }>(
-      `(() => { const s = getComputedStyle(${fieldGroup(destinationFieldSelector)}); return { border: s.borderTopWidth + " " + s.borderTopColor, shadow: s.boxShadow }; })()`,
+    const fieldLook = () =>
+      evaluate<{ border: string; shadow: string }>(
+        `(() => { const s = getComputedStyle(${fieldGroup(destinationFieldSelector)}); return { border: s.borderTopWidth + " " + s.borderTopColor, shadow: s.boxShadow }; })()`,
+      );
+    // Nothing has the focus on arrival, so the phone field shows its resting look: 1px #E0E5F1.
+    const resting = await fieldLook();
+    expect(resting.border).toBe("1px rgb(224, 229, 241)");
+    expect(resting.shadow).not.toContain("0px 0px 0px 4px");
+    // Typing in it: 1px #C2B3F6 border and the two shadows.
+    await browser(
+      "eval",
+      `document.querySelector(${JSON.stringify(destinationFieldSelector)}).focus()`,
     );
+    await browser("wait", "200");
+    const focused = await fieldLook();
     expect(focused.border).toBe("1px rgb(194, 179, 246)");
     expect(focused.shadow).toContain("rgb(234, 228, 253) 0px 0px 0px 4px");
     expect(focused.shadow).toContain("0px 1px 2px");
@@ -166,8 +185,14 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     await setViewport(1440);
     await browser("hover", ".login-art");
     await browser("wait", "500");
-    // Only the inner door panel swings, not the arch behind it.
+    // Only the inner door panel swings, not the arch behind it, hinged on its right edge.
     expect(await style(".login-art__door", "transform")).not.toBe("none");
+    expect(await style(".login-art__door", "transformOrigin")).toMatch(/^[\d.]+px /);
+    expect(
+      await evaluate<boolean>(
+        `(() => { const d = document.querySelector(".login-art__door"); return parseFloat(getComputedStyle(d).transformOrigin) > d.offsetWidth * 0.99; })()`,
+      ),
+    ).toBe(true);
     expect(await style(".login-art__arch", "transform")).toBe("none");
     await browser("screenshot", join(artifacts, "arch-open-1440.png"));
     await browser("mouse", "move", "1200", "100");
