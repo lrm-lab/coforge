@@ -53,12 +53,14 @@ import {
   createAppConfigSnapshotMethod,
 } from "./rpc-handler.server";
 import { createDaemonRuntimeCommandCodeEffortReadResultMethod } from "./command-code-effort-result.server";
+import { createDaemonRuntimeResetCreditConsumeResultMethod } from "./reset-credit-result.server";
 import {
   DAEMON_RUNTIME_READY_METHOD,
   DAEMON_RUNTIME_SHUTDOWN_METHOD,
   DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD,
   DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD,
   DAEMON_RUNTIME_EFFORT_READ_RESULT_METHOD,
+  DAEMON_RUNTIME_RESET_CREDIT_RESULT_METHOD,
   COMPUTER_UPGRADE_RESULT_METHOD,
   DAEMON_CONNECTION_STATUS_METHOD,
   AGENT_STATUS_METHOD,
@@ -329,6 +331,8 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           createDaemonRuntimeProviderModelRefreshResultMethod(),
         [DAEMON_RUNTIME_EFFORT_READ_RESULT_METHOD]:
           createDaemonRuntimeCommandCodeEffortReadResultMethod(),
+        [DAEMON_RUNTIME_RESET_CREDIT_RESULT_METHOD]:
+          createDaemonRuntimeResetCreditConsumeResultMethod(),
         [COMPUTER_UPGRADE_RESULT_METHOD]:
           createComputerUpgradeResultMethod(getComputerUpgradeStore()),
         [AGENT_SKILLS_LIST_RESULT_METHOD]: createAgentSkillsListResultMethod(),
@@ -388,6 +392,8 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         createDaemonRuntimeProviderModelRefreshResultMethod(),
       [DAEMON_RUNTIME_EFFORT_READ_RESULT_METHOD]:
         createDaemonRuntimeCommandCodeEffortReadResultMethod(),
+      [DAEMON_RUNTIME_RESET_CREDIT_RESULT_METHOD]:
+        createDaemonRuntimeResetCreditConsumeResultMethod(),
       [COMPUTER_UPGRADE_RESULT_METHOD]: unavailableMethod,
       [AGENT_SKILLS_LIST_RESULT_METHOD]: unavailableMethod,
       [AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD]: unavailableMethod,

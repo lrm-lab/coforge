@@ -172,3 +172,22 @@ test("fails clearly when the Codex usage request times out", async () => {
     }),
   ).rejects.toThrow("Codex usage request timed out");
 });
+
+test("reports how many reset credits the account can spend, when that is a plausible count", async () => {
+  const directory = await scratchDirectory();
+  const read = (credits?: string) =>
+    readCodexUsage(directory, {
+      host: fixtureCodexHost,
+      command: [
+        process.execPath,
+        fixture,
+        ...(credits === undefined ? [] : [`usage-credits=${credits}`]),
+      ],
+    });
+  expect((await read("2"))?.resetCreditsAvailable).toBe(2);
+  expect((await read("0"))?.resetCreditsAvailable).toBe(0);
+  expect((await read("999"))?.resetCreditsAvailable).toBe(999);
+  for (const implausible of ["1000", "-1", "1.5", '"3"', "null"])
+    expect((await read(implausible))?.resetCreditsAvailable).toBeUndefined();
+  expect((await read())?.resetCreditsAvailable).toBeUndefined();
+});

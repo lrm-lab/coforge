@@ -14,6 +14,7 @@ import {
   AGENT_CONTEXT_VIEW_CAPABILITY,
   AGENT_CONTROL_ACCEPTED_CAPABILITY,
   AGENT_CONFIG_CAPABILITY,
+  RESET_CREDIT_CAPABILITY,
 } from "@lrm/coforge-sdk/internal";
 import { APP_REGISTRATION_NOTICE_CAPABILITY } from "@lrm/coforge-sdk/internal/app-registration-notice";
 import {
@@ -43,6 +44,7 @@ export function readyCapabilities(
     AGENT_CONTEXT_VIEW_CAPABILITY,
     AGENT_CONTROL_ACCEPTED_CAPABILITY,
     AGENT_CONFIG_CAPABILITY,
+    RESET_CREDIT_CAPABILITY,
     ...(runtimeAuth ? [RUNTIME_AUTH_CAPABILITY, RUNTIME_AUTH_STATUS_READ_CAPABILITY] : []),
     ...(runtimeAuth && kiroEnterpriseAuthSupported(platform)
       ? [KIRO_IDENTITY_CENTER_AUTH_CAPABILITY]

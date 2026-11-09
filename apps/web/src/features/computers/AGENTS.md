@@ -27,6 +27,9 @@ These rules apply to `src/features/computers/`.
 - `computer-detail-date.tsx` — connected-at calendar day in the viewer's zone
 - `computer-detail-header.tsx` — detail header band: identity, desktop, restart
 - `computer-detail-rows.tsx` — shared DetailGroup
+- `runtime-reset-credit-action.tsx` — the runtime popover's "Use reset · N" button and its confirm dialog (outside the popover, like the sign-out dialog); takes the count and an `onConsume(idempotencyKey)` as props
+- `reset-credit-attempt.ts` — the reset attempt's idempotency key per Computer + provider + account label (`sessionStorage`, memory fallback); expires 10 minutes after it was made, cleared only on a settled outcome, kept after `unknown`, a refusal or a thrown failure. The dialog treats `already_redeemed` like `reset` (toast, close); any other settled answer shows its message and turns Confirm off (`ConfirmDialog`'s `confirmDisabled`)
+- `use-reset-credit-consume.ts` — the dialog's `onConsume`: starts with `consumeResetCredit`, then polls `readResetCredit` (`reset-credit-poll.ts`: every 1.5 s, read failures asked again, 100 s deadline or unmount ends as `unknown` so the key is kept); resolves to the refusal (`forbidden`, `offline`, `needs_upgrade`) as a value, which the dialog shows without touching the attempt's key (a thrown failure keeps it too), and re-reads the popover's usage after a settled answer, scanning it as Refresh does when the cache holds no reading from that attempt (`usageCarriesAttempt`)
 
 - `computer-layout.tsx` owns Computer list/detail selection, the return
   control, list scroll retention, and the empty state, following the same
@@ -46,6 +49,12 @@ These rules apply to `src/features/computers/`.
 - A runtime's popover opens on a press, with a close button and Escape, as on
   Raft, on the Computer page and the Agent profile alike (`runtime-usage.tsx`).
   A quota reads as the share left.
+- The reset credit button (Codex only) sits immediately left of Sign Out in the `accountAction`
+  cluster of `computer-runtimes.tsx`. `RuntimeUsage` hands `accountAction` the usage snapshot it
+  read, so the count (`resetCreditsAvailable`) and the account label come from the popover's own
+  reading, which only the Computer's owner can read, so only the owner sees the button; the server
+  authority is the wider `canManage` (`server/computers/AGENTS.md`). The dialog is a third `AuthDialog` kind, rendered outside
+  the popover with parent-held state; the count and label it names are fixed when it opens.
 - A cloud Computer belongs to the account: one default, started when first
   sign-in creates the personal Workspace and again when another Workspace is
   created, and ensured once more when the Computers page opens. That start also

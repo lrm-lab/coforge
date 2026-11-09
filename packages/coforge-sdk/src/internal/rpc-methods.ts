@@ -40,6 +40,7 @@ export const RPC_METHODS = {
   daemonCodeAgentsUpdate: "daemon:v1:provider:inventory_update",
   daemonUsageScan: "daemon:v1:provider:usage_scan",
   daemonUsageScanResult: "daemon:v1:provider:usage_scan_result",
+  daemonResetCreditConsumeResult: "daemon:v1:provider:reset_credit_consume_result",
   daemonModelRefresh: "daemon:v1:provider:model_refresh",
   daemonModelRefreshResult: "daemon:v1:provider:model_refresh_result",
   daemonMachineDiskStatus: "daemon:v1:machine:disk_status",

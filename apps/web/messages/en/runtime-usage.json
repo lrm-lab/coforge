@@ -1,5 +1,21 @@
 {
   "computer_usage_percent_left": "{percent} left",
   "computer_usage_used_up": "Used up",
-  "computer_runtime_account_visibility": "Only this Computer's owner and Workspace owners and admins can see the account."
+  "computer_runtime_account_visibility": "Only this Computer's owner and Workspace owners and admins can see the account.",
+  "runtime_reset_credit_use": "Use a reset, {count} left",
+  "runtime_reset_credit_title": "Use a reset?",
+  "runtime_reset_credit_body": "{runtime} usage on {account} will be reset. {left} left afterwards.",
+  "runtime_reset_credit_body_last": "{runtime} usage on {account} will be reset. This is the last one.",
+  "runtime_reset_credit_confirm": "Use reset",
+  "runtime_reset_credit_retry": "Retry",
+  "runtime_reset_credit_pending": "Using…",
+  "runtime_reset_credit_done": "Usage reset",
+  "runtime_reset_credit_nothing_to_reset": "Nothing to reset: {runtime} is not at a limit. No reset credit was used.",
+  "runtime_reset_credit_no_credit": "This account has no reset credit left.",
+  "runtime_reset_credit_reauth_required": "Sign in to {runtime} again before using a reset.",
+  "runtime_reset_credit_unsupported": "{runtime} cannot use a reset credit from here.",
+  "runtime_reset_credit_unknown": "The reset could not be confirmed. Try again: it will not spend a second credit.",
+  "runtime_reset_credit_failed": "The reset could not be used. Try again.",
+  "runtime_reset_credit_forbidden": "Only this Computer's owner and Workspace owners and admins can use a reset.",
+  "runtime_reset_credit_needs_upgrade": "Upgrade this Computer to use a reset from here."
 }

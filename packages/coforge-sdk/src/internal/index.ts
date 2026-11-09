@@ -358,6 +358,7 @@ export {
 } from "./local-daemon";
 export * from "./runner-hold";
 export * from "./usage-scan";
+export * from "./reset-credit";
 export type {
   AgentMessageRecord,
   MessageTaskMetadata,

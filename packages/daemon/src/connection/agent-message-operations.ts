@@ -1,6 +1,6 @@
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import type { AgentSendReconciliationResponse } from "@lrm/coforge-sdk/agent";
-import type { AgentMessageRequest } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageRequest, AgentReminderOperationRequest } from "@lrm/coforge-sdk/internal";
 import { adaptAgentHistoryResponse } from "./agent-history-response";
 import {
   adaptAgentReactionResponse,
@@ -13,12 +13,13 @@ import type {
   AgentMessageTransportResponse,
   AgentSendReconciliationRequest,
 } from "./agent-http-clients";
-import { messageEndpoint } from "./daemon-endpoints";
+import { messageEndpoint, serverEndpoint } from "./daemon-endpoints";
 
 /** What an Agent's message operation needs from the connection that carries it. */
 export type AgentMessagePorts = {
   /** Refuses the operation while the connection is not up: each one needs the server. */
   assertConnected(): void;
+  connected: boolean;
   serverHttpUrl: string;
   /** Credentials for one Agent-scoped HTTP call: the Agent's own key plus the daemon key. */
   keys(agentApiKey: string): { agentApiKey: string; daemonApiKey: string };
@@ -152,4 +153,22 @@ export async function reconcileAgentSend(
     ...ports.keys(agentApiKey),
     request,
   });
+}
+
+export async function agentReminder(
+  ports: AgentMessagePorts,
+  request: AgentReminderOperationRequest,
+  agentApiKey: string,
+) {
+  if (!ports.connected || !ports.serverHttpUrl)
+    throw new Error("daemon connection is not connected");
+  if (!ports.client.requestReminder) throw new Error("Agent reminder HTTP client is unavailable");
+  const response = await ports.client.requestReminder({
+    url: serverEndpoint(ports.serverHttpUrl, "Agent reminder", agentApiRoutes.cloud.reminders.path),
+    ...ports.keys(agentApiKey),
+    request,
+  });
+  for (const field of ["idempotencyKey", "workspaceId", "computerId", "agentId"] as const)
+    if (response[field] !== request[field]) throw new Error("uncorrelated Agent reminder response");
+  return response;
 }

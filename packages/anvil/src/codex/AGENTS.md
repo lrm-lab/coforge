@@ -7,7 +7,14 @@
 - Session, usage, auth and catalog environment compositions are intentionally distinct.
   Evaluate each host callback at the original operation, preserving its receiver.
 - The native client identity is supplied explicitly. Session/catalog initialize with
-  experimentalApi false; auth/usage initialize with true.
+  experimentalApi false; auth/usage/reset-credit initialize with true.
+- `reset-credit.ts` spends a rate-limit reset credit (`account/rateLimitResetCredit/consume`, first
+  in Codex 0.141.0). Only a settled answer, or a refusal before the request could reach the backend
+  (below the version floor read from the app-server's `userAgent`, a non-subscription account, a
+  signed-out runtime, `-32601`), says anything but `unknown`; a timeout, a closed process or any
+  other error reply is `unknown`. The caller's key goes to Codex as given and no `creditId` is
+  sent. Neither the key nor the account is logged. `usage.ts` reads the count the same app-server
+  reports (`rateLimitResetCredits.availableCount`, 0 to 999, else absent).
 - Keep usage requests on withDeadline, preserving each 5000ms default, best-effort account
   lookup and finally disposal. Settled operations must not retain request timers.
 - Preserve auth status stdout/stderr classification, version floors, completion identity,

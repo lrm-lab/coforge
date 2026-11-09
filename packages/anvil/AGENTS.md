@@ -39,7 +39,7 @@
 | `src/kiro/`                  | Kiro ACP provider, native profile, events, version/catalog policy, enterprise auth and usage parsing with explicit host ports |
 | `src/opencode/`              | OpenCode ACP sessions, version policy, model catalog, and private instruction overlay                                        |
 | `src/cursor/`                | Cursor ACP session, composite model-id resolution, version policy and private rules injection                                 |
-| `src/codex/`                 | Codex sessions, native events, auth, usage, catalog and idle-recycle rollout reads through required host capabilities         |
+| `src/codex/`                 | Codex sessions, native events, auth, usage, reset credit, catalog, idle-recycle reads via required host capabilities          |
 | `src/devin/`                 | Devin ACP sessions, always-on rule injection, model/effort selects, auth status and login through host capabilities           |
 | `src/claude-code/`           | Claude sessions, native events, auth, usage, history and catalog through required host capabilities                           |
 | `src/inline-text.ts`         | Pure whitespace normalization for inline text projections                                                                     |

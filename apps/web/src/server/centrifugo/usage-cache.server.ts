@@ -54,6 +54,9 @@ export type UsageSnapshot = {
   /** Codex booleans, plus `balance` when that version's schema includes the string. */
   credits?: { hasCredits: boolean; unlimited: boolean; balance?: string };
   creditUsage?: { used: number; limit: number; overage: number };
+  /** Codex rate-limit reset credits the account can still spend, 0 to 999. Older Computers and
+   * other runtimes omit it. */
+  resetCreditsAvailable?: number;
   /** ISO instant the Computer actually observed this snapshot at. Older Computers omit it. */
   collectedAt?: string;
   /** The signed-in account, already masked on the Computer. Populated only when that provider's

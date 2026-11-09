@@ -41,6 +41,7 @@ import { RuntimeReadyWaitWatch } from "./runtime-ready-wait";
 import { subscribeRuntimeAuth } from "./runtime-auth-subscription";
 import { subscribeRuntimeReconnect } from "./runtime-reconnect";
 import { subscribeProviderScans } from "./provider-scan-handlers";
+import type { ResetCreditConsumeResult } from "./reset-credit-consume";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
 import { subscribeLocalSessionQueries } from "./local-session-query-handlers";
 import { subscribeComputerFileQueries } from "./computer-file-query-handlers";
@@ -87,6 +88,10 @@ export type RuntimeStartupPorts = {
     "reportRuntimes" | "refreshStaleCatalogs" | "refreshModels" | "readCommandCodeEfforts"
   >;
   scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse>;
+  consumeResetCredit(
+    provider: RuntimeProvider,
+    idempotencyKey: string,
+  ): Promise<ResetCreditConsumeResult>;
   workspaceQueries: Pick<AgentWorkspaceQueries, "listSkills" | "listFiles" | "readFile" | "scan">;
   stateDirectory: string;
   contextView: Pick<AgentContextViewService, "find">;
@@ -296,7 +301,10 @@ export class RuntimeStartup {
         this.#subscribe(unsubscribe);
       for (const unsubscribe of subscribeProviderScans(transport, {
         connection,
-        runtime: { scanUsage: (provider) => ports.scanUsage(provider) },
+        runtime: {
+          scanUsage: (provider) => ports.scanUsage(provider),
+          consumeResetCredit: (provider, key) => ports.consumeResetCredit(provider, key),
+        },
         currentTransport: () => ports.transport(),
         isStopping: () => ports.isStopping(),
         runtimeAuth: ports.runtimeAuth,

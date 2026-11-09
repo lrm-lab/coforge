@@ -17,7 +17,6 @@ import { AgentContexts } from "./agent-contexts";
 import { assemblePhaseBookkeeping } from "./phase-bookkeeping-wiring";
 import { type RuntimeEventObservationPorts } from "./runtime-event-observation";
 import {
-  canonicalAgentMessageTarget,
   launchEventObserver,
   handleAgentStart,
   handleAgentStop,
@@ -103,7 +102,7 @@ import { AgentStopCoordinator } from "./agent-stop-coordinator";
 import { AgentLaunchCoordinator } from "./agent-launch-coordinator";
 import { startAgent } from "./agent-start-coordinator";
 import { deleteWorkspace } from "./runtime-lifecycle-operations";
-import { upgradeLifecycleRequest } from "./runtime-upgrade-lifecycle";
+import { startupLifecycle } from "./runtime-upgrade-lifecycle";
 import { assertOwnIntent } from "./runtime-intent-validation";
 import { currentObservedUsage } from "./runtime-usage-observation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
@@ -163,6 +162,7 @@ import {
   type BusyAgentReport,
 } from "./agent-activity-publisher";
 import { assembleRuntimeErrorDeliveryHold } from "./assemble-runtime-error-hold";
+import { consumeResetCredit } from "./reset-credit-consume";
 import type { ActivityLaunch } from "./activity-launch";
 import { AgentOfflineResidency } from "./agent-offline-residency";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
@@ -800,6 +800,7 @@ export class DaemonRuntime {
       runtimeAuthFactory: this.runtimeAuthFactory,
       codeAgentInventory: this.#codeAgentInventory,
       scanUsage: (provider) => this.scanUsage(provider),
+      consumeResetCredit: (provider, key) => this.consumeResetCredit(provider, key),
       workspaceQueries: this.#workspaceQueries,
       stateDirectory: this.stateDirectory,
       contextView: this.#contextViewService,
@@ -812,17 +813,11 @@ export class DaemonRuntime {
           throw new Error("Pi chat connection unavailable");
         await this.#transport.sendPiChatFrame(frame);
       },
-      lifecycle: {
-        requestRestart: this.lifecycle.requestRestart,
-        requestUpgrade: upgradeLifecycleRequest(
-          this.lifecycle,
-          this.#upgradeResults,
-          this.#connection.workspaceId,
-        ),
-        connectionRefused: this.lifecycle.connectionRefused,
-        recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds,
-        recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds,
-      },
+      lifecycle: startupLifecycle(
+        this.lifecycle,
+        this.#upgradeResults,
+        this.#connection.workspaceId,
+      ),
       requestReminderSnapshot: (agentId) => this.#requestReminderSnapshot(agentId),
       resyncAppConfigs: () => this.#resyncAppConfigs(),
       activityPublisher: this.#activityPublisher,
@@ -837,16 +832,6 @@ export class DaemonRuntime {
       assertRunning: () => this.#assertRunning(),
       assertOwnIntent: (probe) => this.#assertOwnIntent(probe),
       agentIdForContext: (context) => agentIdForContext(this.#agentContexts, context),
-      canonicalAgentMessageTarget: (agentId, target, agentApiKey) =>
-        canonicalAgentMessageTarget(
-          {
-            workspaceId: this.#connection.workspaceId,
-            readMessage: this.#transport.agentMessage!.bind(this.#transport),
-          },
-          agentId,
-          target,
-          agentApiKey,
-        ),
       currentActivityLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
       activityPublisher: this.#activityPublisher,
       drafts: this.#drafts,
@@ -940,6 +925,21 @@ export class DaemonRuntime {
         observedUsage: (provider) => this.#currentObservedUsage(provider),
       },
       provider,
+    );
+  }
+
+  /** Spends a reset credit of the provider's account and reads its usage again. */
+  consumeResetCredit(provider: RuntimeProvider, idempotencyKey: string) {
+    return consumeResetCredit(
+      {
+        assertRunning: () => this.#assertRunning(),
+        workspaceRoot: this.#connection.workspaceRoot,
+        createProvider: (provider) => this.#createProvider(provider),
+        agents: this.#agentProcessManager,
+        hold: this.#runtimeErrorHold,
+      },
+      provider,
+      idempotencyKey,
     );
   }
 

@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { isValidReleaseVersion, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import {
+  isValidReleaseVersion,
+  RESET_CREDIT_IDEMPOTENCY_KEY,
+  RUNTIME_PROVIDER,
+} from "@lrm/coforge-sdk/internal";
 
 export type ComputerRestartStatus =
   | { requestId: string; status: "accepted"; expiresAt: string }
@@ -90,6 +94,12 @@ export const latestComputerVersionInputSchema = z.object({
 });
 export const readRestartStatusInputSchema = restartComputerInputSchema;
 export const scanUsageInputSchema = runtimeInput;
+/** The idempotency key is the page's one attempt; the same shape the Computer accepts. */
+export const consumeResetCreditInputSchema = runtimeInput.extend({
+  idempotencyKey: z.string().regex(RESET_CREDIT_IDEMPOTENCY_KEY),
+});
+/** The request a start returned; the answer is read with it, scoped to the Computer and runtime. */
+export const readResetCreditInputSchema = runtimeInput.extend({ requestId: z.uuid() });
 export const readUsageInputSchema = runtimeInput;
 export const refreshRuntimeCatalogInputSchema = computerIdInputSchema.extend({
   provider: z.enum(RUNTIME_PROVIDER).optional(),

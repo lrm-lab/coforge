@@ -8,8 +8,9 @@ import { codexReasoningSummary } from "./reasoning-summary";
 import { readCodexRecycleBriefing } from "./recycle-briefing";
 import { CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS, readCodexSessionResumeFacts } from "./session-rollout";
 import { readCodexUsage } from "./usage";
+import { consumeCodexResetCredit } from "./reset-credit";
 import type { CodexRuntimeHost } from "./host";
-import { RUNTIME_PROVIDER, utf8Encoder } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, utf8Encoder, type ResetCreditOutcome } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { assertSkillsLoaded, codexServiceTierState } from "./provider-support";
 
@@ -37,6 +38,17 @@ export class CodexProvider implements CodeAgentProvider {
       host: this.#host,
       command: this.#command,
       timeoutMs: options.timeoutMs,
+    });
+  }
+
+  async consumeResetCredit(options: {
+    workingDirectory: string;
+    idempotencyKey: string;
+  }): Promise<ResetCreditOutcome> {
+    return consumeCodexResetCredit(options.workingDirectory, {
+      host: this.#host,
+      command: this.#command,
+      idempotencyKey: options.idempotencyKey,
     });
   }
 

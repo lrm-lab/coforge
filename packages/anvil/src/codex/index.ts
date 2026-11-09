@@ -3,6 +3,7 @@ export * from "./provider";
 export * from "./auth";
 export * from "./catalog";
 export * from "./usage";
+export * from "./reset-credit";
 export * from "./item-events";
 export * from "./provider-support";
 export * from "./server-requests";

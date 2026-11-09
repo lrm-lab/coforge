@@ -86,6 +86,25 @@ These rules apply to `src/server/computers/`.
   a report for a login the Computer does not hold is a 403, and a store failure is a 503 so the
   daemon retries.
 
+- `runtime-reset-credit.server.ts` spends one Codex rate-limit reset credit on a Computer for the
+  usage popover. The server authority is `PrismaRuntimeAuthAuthorization.canManage` (the
+  Computer's owner, or a Workspace owner or admin), stricter than a usage scan because it spends
+  the owner's credit. The popover shows the button only to the Computer's owner, because usage is
+  readable only by its owner; do not widen the button to admins without widening that read.
+  - `start` never waits: production closes a request idle for about ten seconds and the Computer
+    can take up to about 90, so the page polls `read`. Refusals are values, in this order:
+    `forbidden`, `offline`, `needs_upgrade` (the `runtime-usage:reset-credit:v1` lease).
+  - `read` answers only a request that names the caller's Workspace, Computer and runtime and
+    passes `canManage`; until then it says pending without a database read.
+  - `unknown` means the credit may have been spent. Every path that cannot say otherwise ends
+    there, never in a refusal: no answer in time, a publish that failed (the request may have been
+    delivered), the page going away. The page keeps the attempt's idempotency key through
+    `unknown` so a retry cannot spend a second credit. Only a store that cannot record the request
+    throws, because nothing was sent.
+  - The idempotency key is validated here and at the schema, goes to the Computer as given, and is
+    never logged.
+  - The usage the Computer read afterwards is stored from the result RPC under the request id,
+    before the outcome is readable; a page that finds another scan id in the cache scans itself.
 - `computer-runtime-auth.server.ts` stores structurally validated status reports without a
   provider whitelist, so a newer daemon's report survives an older Web. Provider identifiers
   are 1–64 ASCII identifier characters, at most 32 unique entries, normalized JSON at most

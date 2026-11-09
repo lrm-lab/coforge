@@ -214,6 +214,23 @@ export class RuntimeErrorDeliveryHold {
     if (rateLimited ? effects.endsRateLimitBackoff : effects.endsBackoff) this.#endBackoff(agentId);
   }
 
+  /**
+   * The limit this Agent's rate-limit backoff waits for was just lifted (a reset credit was
+   * spent): ends that backoff now, through the same path an observed recovery takes, so the held
+   * deliveries are released and flushed and the persisted record and the release timer go with it.
+   * Reads the delivery queue's hold, not the in-memory streak, so it can end a backoff restored
+   * after a restart when it is asked about that Agent. Whether it is asked is the caller's:
+   * `releaseProviderAgents` finds Agents by their restart config's provider, and an Agent that
+   * has not been relaunched since the restart has none, so its restored backoff keeps waiting.
+   * A backoff for any other failure and a tripped fence's hold stay. Returns whether there was a
+   * rate-limit backoff to end.
+   */
+  releaseRateLimitBackoff(agentId: string): boolean {
+    if (this.#ports.deliveryQueue.explicitHold(agentId) !== "rate_limit_backoff") return false;
+    this.#endBackoff(agentId);
+    return true;
+  }
+
   /** A turn ended, whatever its status. It ends only an unclassified failure's backoff: a
    * classified one (a rate limit, a provider connection or server error) has a real delay to
    * honour, and a successful turn with no output ends it no more than a failed one does. */

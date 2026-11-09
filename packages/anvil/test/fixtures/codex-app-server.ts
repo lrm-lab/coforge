@@ -16,6 +16,11 @@ const expectedSession = process.argv
   ?.slice("expected-session=".length);
 const threadId = expectedSession && expectedSession !== "new" ? expectedSession : "thread-1";
 const usageClient = process.argv.some((argument) => argument.startsWith("usage"));
+/** `usage-version=<x.y.z>`: the Codex version the app-server's `userAgent` names, as the real one
+ * does (`<originator>/<version> (<os>; <arch>) <terminal>`). */
+const usageVersion = process.argv
+  .find((argument) => argument.startsWith("usage-version="))
+  ?.slice("usage-version=".length);
 const skillsDirectory = join(process.cwd(), ".agents", "skills");
 let skills: string[] = [];
 try {
@@ -59,7 +64,14 @@ function handle(request: Request): void {
       });
       return;
     }
-    write({ id: request.id, result: { userAgent: "fixture" } });
+    write({
+      id: request.id,
+      result: {
+        userAgent: usageVersion
+          ? `coforge-daemon-usage/${usageVersion} (Mac OS 14.0; arm64) fixture`
+          : "fixture",
+      },
+    });
     return;
   }
   if (request.method === "initialized") {

@@ -1,26 +1,35 @@
 import {
   DAEMON_RUNTIME_EFFORT_READ_RESULT_METHOD,
   DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD,
+  DAEMON_RUNTIME_RESET_CREDIT_RESULT_METHOD,
   DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD,
   decodeDaemonRuntimeCommandCodeEffortReadRequest,
   decodeDaemonRuntimeProviderModelRefreshRequest,
+  decodeDaemonRuntimeResetCreditConsumeRequest,
   decodeDaemonRuntimeUsageScanRequest,
   encodeDaemonRuntimeCommandCodeEffortReadResponse,
   encodeDaemonRuntimeProviderModelRefreshResponse,
+  encodeDaemonRuntimeResetCreditConsumeResponse,
   encodeDaemonRuntimeUsageScanResponse,
+  isResetCreditIdempotencyKey,
   type DaemonRuntimeCommandCodeEffortReadRequest,
   type DaemonRuntimeCommandCodeEffortReadResponse,
   type DaemonRuntimeProviderModelRefreshRequest,
   type DaemonRuntimeProviderModelRefreshResponse,
+  type DaemonRuntimeResetCreditConsumeRequest,
+  type DaemonRuntimeResetCreditConsumeResponse,
   type DaemonRuntimeUsageScanRequest,
   type DaemonRuntimeUsageScanResponse,
 } from "@lrm/coforge-sdk/internal";
 import { ListenerSlot } from "./listener-slot";
 
-/** Usage scan, model refresh, and Command Code effort read on the daemon control channel. */
+/** Usage scan, reset credit, model refresh, and Command Code effort read on the daemon control channel. */
 export class DaemonProviderPublications {
   readonly #usageScan = new ListenerSlot<
     (request: DaemonRuntimeUsageScanRequest) => Promise<void>
+  >();
+  readonly #resetCredit = new ListenerSlot<
+    (request: DaemonRuntimeResetCreditConsumeRequest) => Promise<void>
   >();
   readonly #modelRefresh = new ListenerSlot<
     (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>
@@ -33,6 +42,12 @@ export class DaemonProviderPublications {
 
   onUsageScan(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void {
     return this.#usageScan.set(callback);
+  }
+
+  onResetCreditConsume(
+    callback: (request: DaemonRuntimeResetCreditConsumeRequest) => Promise<void>,
+  ): () => void {
+    return this.#resetCredit.set(callback);
   }
 
   onProviderModelRefresh(
@@ -57,6 +72,12 @@ export class DaemonProviderPublications {
         void this.#usageScan.current?.(usage);
         return true;
       }) ||
+      // A key outside the boundary's shape is never handed to a provider.
+      this.#route(data, decodeDaemonRuntimeResetCreditConsumeRequest, (reset) => {
+        if (!owned(reset) || !isResetCreditIdempotencyKey(reset.idempotencyKey)) return false;
+        void this.#resetCredit.current?.(reset);
+        return true;
+      }) ||
       this.#route(data, decodeDaemonRuntimeProviderModelRefreshRequest, (refresh) => {
         if (!owned(refresh)) return false;
         void this.#modelRefresh.current?.(refresh);
@@ -74,6 +95,15 @@ export class DaemonProviderPublications {
     return this.rpc(
       DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD,
       encodeDaemonRuntimeUsageScanResponse(response),
+    );
+  }
+
+  sendResetCreditConsumeResult(
+    response: DaemonRuntimeResetCreditConsumeResponse,
+  ): Promise<unknown> {
+    return this.rpc(
+      DAEMON_RUNTIME_RESET_CREDIT_RESULT_METHOD,
+      encodeDaemonRuntimeResetCreditConsumeResponse(response),
     );
   }
 

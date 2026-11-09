@@ -33,7 +33,7 @@ import {
   type AccountState,
   type RuntimeStatus,
 } from "./runtime-usage-status";
-import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
+import type { UsageReadResult, UsageSnapshot } from "#src/server/centrifugo/usage-cache.server";
 
 export type Runtime = {
   provider: RuntimeProvider;
@@ -135,8 +135,12 @@ export function RuntimeUsage({
   auth?: RuntimeAuthStatus;
   /** The login state to name: `auth`'s, or `unreported` when the Computer is too old to send one. */
   account?: AccountState;
-  /** Signs the runtime in or out for the login state the popover shows, if the viewer may. */
-  accountAction?: (shown: AccountState | undefined) => ReactNode;
+  /** Signs the runtime in or out for the login state the popover shows, if the viewer may, and
+   * offers what its usage reading allows beside it (a reset credit). */
+  accountAction?: (
+    shown: AccountState | undefined,
+    snapshot: UsageSnapshot | undefined,
+  ) => ReactNode;
   /** A line under the version: why this runtime cannot be used, when it cannot. */
   notice?: ReactNode;
 }) {
@@ -207,7 +211,7 @@ export function RuntimeUsage({
               account={shown}
               footer={footer}
               actions={actions}
-              accountAction={accountAction?.(shown)}
+              accountAction={accountAction?.(shown, usageRead?.result?.snapshot)}
               notice={notice}
             />
           )}

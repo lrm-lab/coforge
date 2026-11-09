@@ -153,6 +153,35 @@ message DaemonRuntimeUsageScanResponse {
   string message_type = 10;
 }
 
+// Server -> daemon, on the daemon control channel beside `DaemonRuntimeUsageScanRequest`: spend one
+// of the signed-in Codex account's rate-limit reset credits. `idempotency_key` names one logical
+// attempt (`^[A-Za-z0-9_-]{16,128}$`); a retry after an unknown outcome carries the same key, so
+// the provider can tell it from a new attempt. The daemon never logs it.
+message DaemonRuntimeResetCreditConsumeRequest {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string provider = 5;
+  string idempotency_key = 6;
+  string message_type = 7;
+}
+
+// Daemon -> server RPC, method `daemon:v1:provider:reset_credit_consume_result`. `outcome` is one of
+// `reset`, `nothing_to_reset`, `no_credit`, `already_redeemed`, `reauth_required`, `unsupported`
+// or `unknown`; `unknown` means the credit may or may not have been spent. `snapshot_json` is the
+// usage re-read after the attempt, present only when that re-read succeeded.
+message DaemonRuntimeResetCreditConsumeResponse {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string provider = 5;
+  string outcome = 6;
+  bytes snapshot_json = 7;
+  string message_type = 8;
+}
+
 // Server -> daemon, on the daemon control channel like `DaemonRuntimeUsageScanRequest`: re-run
 // Code Agent model-catalog discovery now, so the browser's model selector can pick up a provider
 // config change without a daemon restart. The daemon re-reports through the ordinary

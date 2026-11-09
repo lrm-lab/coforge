@@ -1,4 +1,5 @@
 import type {
+  ResetCreditOutcome,
   RuntimeAuthAccount,
   RuntimeProvider,
   KiroIdentityCenterOptions,
@@ -40,6 +41,16 @@ export interface CodeAgentProvider {
     workingDirectory: string;
     timeoutMs?: number;
   }): Promise<UsageSnapshot | null>;
+  /**
+   * Spends one of the signed-in account's rate-limit reset credits; only Codex has them. The key
+   * names one logical attempt and a retry after `unknown` carries the same one. `unknown` is the
+   * only answer that leaves the attempt open: a timeout or a closed process may have spent the
+   * credit, so nothing but a settled answer says otherwise.
+   */
+  consumeResetCredit?(options: {
+    workingDirectory: string;
+    idempotencyKey: string;
+  }): Promise<ResetCreditOutcome>;
   /**
    * What the native session's own record says about it, for the idle-recycle decision: its last
    * activity and the context it last carried. `undefined` (or a missing field) means the record is

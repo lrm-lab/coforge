@@ -147,6 +147,8 @@ import {
   type DaemonRuntimeCodeAgentsUpdateRequest,
   type DaemonRuntimeUsageScanRequest,
   type DaemonRuntimeUsageScanResponse,
+  type DaemonRuntimeResetCreditConsumeRequest,
+  type DaemonRuntimeResetCreditConsumeResponse,
   type DaemonRuntimeProviderModelRefreshRequest,
   type DaemonRuntimeProviderModelRefreshResponse,
   type DaemonRuntimeCommandCodeEffortReadRequest,
@@ -211,6 +213,7 @@ import { AgentMigrationHttpClient } from "./agent-migration-http-client";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import {
   agentMessage,
+  agentReminder,
   reconcileAgentSend,
   type AgentMessagePorts,
 } from "./agent-message-operations";
@@ -638,6 +641,12 @@ export class DaemonConnection
     return this.#providerPublications.onUsageScan(callback);
   }
 
+  onResetCreditConsume(
+    callback: (request: DaemonRuntimeResetCreditConsumeRequest) => Promise<void>,
+  ): () => void {
+    return this.#providerPublications.onResetCreditConsume(callback);
+  }
+
   onProviderModelRefresh(
     callback: (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>,
   ): () => void {
@@ -876,6 +885,7 @@ export class DaemonConnection
   #agentMessagePorts(): AgentMessagePorts {
     return {
       assertConnected: () => this.#assertConnected(),
+      connected: this.#connected,
       serverHttpUrl: this.#serverHttpUrl,
       keys: (agentApiKey) => this.#agentKeys(agentApiKey),
       client: this.agentMessageHttpClient,
@@ -978,24 +988,7 @@ export class DaemonConnection
   }
 
   async agentReminder(request: AgentReminderOperationRequest, agentApiKey: string) {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error("daemon connection is not connected");
-    if (!this.agentMessageHttpClient.requestReminder)
-      throw new Error("Agent reminder HTTP client is unavailable");
-    const response = await this.agentMessageHttpClient.requestReminder({
-      url: serverEndpoint(
-        this.#serverHttpUrl,
-        "Agent reminder",
-        agentApiRoutes.cloud.reminders.path,
-      ),
-      agentApiKey,
-      daemonApiKey: this.#token,
-      request,
-    });
-    for (const field of ["idempotencyKey", "workspaceId", "computerId", "agentId"] as const)
-      if (response[field] !== request[field])
-        throw new Error("uncorrelated Agent reminder response");
-    return response;
+    return agentReminder(this.#agentMessagePorts(), request, agentApiKey);
   }
 
   async fireReminder(request: ReminderFireRequest): Promise<ReminderFireResponse> {
@@ -1464,6 +1457,10 @@ export class DaemonConnection
 
   sendUsageScanResult(response: DaemonRuntimeUsageScanResponse): Promise<void> {
     return this.#providerPublications.sendUsageScanResult(response).then(() => undefined);
+  }
+
+  sendResetCreditConsumeResult(response: DaemonRuntimeResetCreditConsumeResponse): Promise<void> {
+    return this.#providerPublications.sendResetCreditConsumeResult(response).then(() => undefined);
   }
 
   sendProviderModelRefreshResult(

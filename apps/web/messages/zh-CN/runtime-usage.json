@@ -1,5 +1,21 @@
 {
   "computer_usage_percent_left": "剩余 {percent}",
   "computer_usage_used_up": "已用完",
-  "computer_runtime_account_visibility": "只有这台 Computer 的主人和 Workspace 的 owner、admin 能看到账号。"
+  "computer_runtime_account_visibility": "只有这台 Computer 的主人和 Workspace 的 owner、admin 能看到账号。",
+  "runtime_reset_credit_use": "使用重置，剩余 {count} 次",
+  "runtime_reset_credit_title": "使用一次重置？",
+  "runtime_reset_credit_body": "{account} 的 {runtime} 用量会重置，之后还剩 {left} 次。",
+  "runtime_reset_credit_body_last": "{account} 的 {runtime} 用量会重置，这是最后一次。",
+  "runtime_reset_credit_confirm": "使用重置",
+  "runtime_reset_credit_retry": "重试",
+  "runtime_reset_credit_pending": "正在使用…",
+  "runtime_reset_credit_done": "用量已重置",
+  "runtime_reset_credit_nothing_to_reset": "没有需要重置的内容：{runtime} 还没有达到上限，没有消耗重置次数。",
+  "runtime_reset_credit_no_credit": "这个账号已没有可用的重置次数。",
+  "runtime_reset_credit_reauth_required": "请先重新登录 {runtime}，再使用重置。",
+  "runtime_reset_credit_unsupported": "{runtime} 暂不支持在这里使用重置。",
+  "runtime_reset_credit_unknown": "没能确认这次重置的结果。请重试，不会重复消耗。",
+  "runtime_reset_credit_failed": "没能使用重置，请重试。",
+  "runtime_reset_credit_forbidden": "只有这台 Computer 的主人和 Workspace 的 owner、admin 能使用重置。",
+  "runtime_reset_credit_needs_upgrade": "升级这台 Computer 后才能在这里使用重置。"
 }

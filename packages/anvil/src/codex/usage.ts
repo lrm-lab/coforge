@@ -10,7 +10,7 @@ import {
 
 import { openCodexAppServer } from "./app-server-session";
 import type { CodexUsageHost } from "./host";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { RESET_CREDITS_MAX, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 /** Reads Codex plan usage: talks to the app-server with the experimental API, reads the
  * signed-in account before the rate limits, reports only a masked label, and treats a
@@ -61,7 +61,7 @@ class UsageTimeoutError extends Error {
 
 /** An API-key or Bedrock account, or one with OpenAI auth disabled, has no plan windows — the
  * scan answers `unsupported` instead of an empty reading. */
-function isNonSubscription(account: Record<string, unknown> | undefined): boolean {
+export function isNonSubscription(account: Record<string, unknown> | undefined): boolean {
   const type = asRecord(account?.account)?.type;
   return type === "apiKey" || type === "amazonBedrock" || account?.requiresOpenaiAuth === false;
 }
@@ -87,6 +87,7 @@ function toSnapshot(
       ? credits.balance.trim()
       : undefined;
   const officialGroups = officialLimits(limits);
+  const resetCredits = resetCreditsAvailable(result);
   if (!primary && !secondary && officialGroups.length === 0) {
     // A signed-in subscription account that yields no usable window is an error; without an
     // account (an app-server predating `account/read`) keep the old `null` answer unless the
@@ -119,8 +120,21 @@ function toSnapshot(
         }
       : {}),
     ...(email ? { accountLabel: email } : {}),
+    ...(resetCredits !== undefined ? { resetCreditsAvailable: resetCredits } : {}),
     health: rateLimited ? "rate_limited" : "ok",
   };
+}
+
+/** `rateLimitResetCredits.availableCount`, a sibling of `rateLimits` in the read. Anything but a
+ * whole number from 0 to 999 is left out rather than shown. */
+function resetCreditsAvailable(result: Record<string, unknown> | undefined): number | undefined {
+  const count = asRecord(result?.rateLimitResetCredits)?.availableCount;
+  return typeof count === "number" &&
+    Number.isInteger(count) &&
+    count >= 0 &&
+    count <= RESET_CREDITS_MAX
+    ? count
+    : undefined;
 }
 
 /** The bucket's own name, else its `limitId` (`codex` renders as the provider name), else the

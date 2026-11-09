@@ -5,6 +5,10 @@ mechanics only; domain rules stay in the owning `src/server/` module.
 
 - Receivers authenticate the connection claims before applying any
   conditional Session or control update.
+- `usage-snapshot-decode.server.ts` checks a usage snapshot field by field for the usage-scan and
+  reset-credit results; `resetCreditsAvailable` passes only as a whole number from 0 to 999 and is
+  otherwise left out, without rejecting the reading. The reset credit result stores the outcome
+  for the waiting page even when its snapshot is rejected.
 - Fire-and-forget receivers (Session invalidate, context usage) answer 403 on
   any rejection. Keep that wire response unchanged; log a genuine failure with
   an allowlisted reason, as `agent_control:result_rejected` and

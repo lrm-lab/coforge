@@ -7,8 +7,9 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
 
 - `daemon-connection-client.ts` holds the transport contract; `daemon-connection.ts` implements it.
 - `agent-message-operations.ts` owns the Agent message HTTP operations (`check`, mute, thread
-  unfollow, resolve, reactions, read, search, send, send reconciliation); the connection supplies
-  its liveness check, server URL, credentials and HTTP client as ports.
+  unfollow, resolve, reactions, read, search, send, send reconciliation) and the reminder operation, which
+  rides the same HTTP client; the connection supplies its liveness check, server URL, credentials
+  and HTTP client as ports.
 - `daemon-status-refresh.ts` owns the two periodic status refreshes a live connection runs
   (active-Agent status replay and the Computer connection-status poll); the connection only
   supplies its collaborators.

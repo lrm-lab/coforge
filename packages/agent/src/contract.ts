@@ -102,6 +102,9 @@ export type UsageSnapshot = Readonly<{
   credits?: Readonly<{ hasCredits: boolean; unlimited: boolean; balance?: string }>;
   /** Included credits consumed, included limit, and separately billed overage. */
   creditUsage?: Readonly<{ used: number; limit: number; overage: number }>;
+  /** Rate-limit reset credits the signed-in account can still spend: a whole number from 0 to
+   * 999. Codex only, and absent when the runtime does not report it. */
+  resetCreditsAvailable?: number;
   /** When this snapshot was actually observed (ISO instant) — stamped centrally by
    * `DaemonRuntime.scanUsage`, never by an individual provider reader, so a snapshot reused from
    * a passively observed usage event carries the time it was observed rather than "now". Older

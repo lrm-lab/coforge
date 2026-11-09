@@ -55,6 +55,8 @@ import type {
   DaemonRuntimeCodeAgentsUpdateRequest,
   DaemonRuntimeUsageScanRequest,
   DaemonRuntimeUsageScanResponse,
+  DaemonRuntimeResetCreditConsumeRequest,
+  DaemonRuntimeResetCreditConsumeResponse,
   DaemonRuntimeProviderModelRefreshRequest,
   DaemonRuntimeProviderModelRefreshResponse,
   DaemonRuntimeCommandCodeEffortReadRequest,
@@ -172,6 +174,10 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   sendComputerFilePullResult?(result: ComputerFilePullResult): Promise<void>;
   onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;
   sendUsageScanResult?(response: DaemonRuntimeUsageScanResponse): Promise<void>;
+  onResetCreditConsume?(
+    callback: (request: DaemonRuntimeResetCreditConsumeRequest) => Promise<void>,
+  ): () => void;
+  sendResetCreditConsumeResult?(response: DaemonRuntimeResetCreditConsumeResponse): Promise<void>;
   onProviderModelRefresh?(
     callback: (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>,
   ): () => void;

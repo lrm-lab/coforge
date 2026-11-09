@@ -1,4 +1,9 @@
-import { isRecord, utf8Decoder, type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
+import {
+  RESET_CREDITS_MAX,
+  isRecord,
+  utf8Decoder,
+  type RuntimeMetadata,
+} from "@lrm/coforge-sdk/internal";
 import type { UsageSnapshot } from "./usage-cache.server";
 
 /** A usage snapshot as a Computer reports it: checked field by field, so one malformed field
@@ -58,6 +63,15 @@ export function decodeUsageSnapshot(
       ? { used: amounts.used, limit: amounts.limit, overage: amounts.overage }
       : undefined;
   if (snapshot.creditUsage !== undefined && (!creditUsage || !primary)) return undefined;
+  // Only a plausible count is shown; anything else is left out, and the reading stays.
+  const resetCredits = snapshot.resetCreditsAvailable;
+  const resetCreditsAvailable =
+    typeof resetCredits === "number" &&
+    Number.isInteger(resetCredits) &&
+    resetCredits >= 0 &&
+    resetCredits <= RESET_CREDITS_MAX
+      ? resetCredits
+      : undefined;
   const collectedAt = snapshot.collectedAt;
   if (
     collectedAt !== undefined &&
@@ -86,6 +100,7 @@ export function decodeUsageSnapshot(
     ...(officialDescription ? { officialDescription } : {}),
     ...(parsedCredits ? { credits: parsedCredits } : {}),
     ...(creditUsage ? { creditUsage } : {}),
+    ...(resetCreditsAvailable !== undefined ? { resetCreditsAvailable } : {}),
     ...(typeof collectedAt === "string" ? { collectedAt } : {}),
     ...(typeof accountLabel === "string" ? { accountLabel } : {}),
     ...(typeof health === "string" ? { health } : {}),

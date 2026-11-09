@@ -27,6 +27,7 @@ import type { AgentStopRegistry } from "./agent-stop-registry";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { stopFailureMessage } from "./agent-failure-presentation";
+import { canonicalAgentMessageTarget } from "./runtime-agent-flows";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -39,12 +40,6 @@ export type AgentOperationsPorts = {
   /** Refuses a probe another Computer or Workspace sent. */
   assertOwnIntent(probe: AgentActivityProbe): void;
   agentIdForContext(context: string): string;
-  /** The canonical target a spelled one belongs to, as a read already mapped it. */
-  canonicalAgentMessageTarget(
-    agentId: string,
-    target: string,
-    agentApiKey: string,
-  ): Promise<string>;
   currentActivityLaunch(agentId: string): ActivityLaunch | undefined;
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   drafts: ReturnType<typeof agentActivityDrafts>;
@@ -257,7 +252,15 @@ export class AgentOperations {
     const target = request.target
       ? ports.messageAttention.resolveTarget(
           agentId,
-          await ports.canonicalAgentMessageTarget(agentId, request.target, agentApiKey),
+          await canonicalAgentMessageTarget(
+            {
+              workspaceId: ports.connection.workspaceId,
+              readMessage: ports.transport().agentMessage!.bind(ports.transport()),
+            },
+            agentId,
+            request.target,
+            agentApiKey,
+          ),
         )
       : undefined;
     return ports.messageOperations.handle(agentId, request, target, agentApiKey);
