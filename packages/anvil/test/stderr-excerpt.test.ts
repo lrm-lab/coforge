@@ -17,6 +17,15 @@ test("a single line longer than the budget is still reported", () => {
   expect(newestLinesWithin(["x".repeat(40)], 10)).toBe("x".repeat(10));
 });
 
+test("a single line cut to the budget never splits a surrogate pair", () => {
+  // Astral characters take two UTF-16 units, so a cut inside one leaves a lone surrogate in a
+  // user-visible error message. One unit less keeps the character and stays within budget.
+  const line = "🙂".repeat(10);
+  const cut = newestLinesWithin([line], 5);
+  expect(cut).toBe("🙂🙂");
+  expect(cut.isWellFormed()).toBe(true);
+});
+
 test("no lines stay an empty excerpt", () => {
   expect(newestLinesWithin([], 10)).toBe("");
 });

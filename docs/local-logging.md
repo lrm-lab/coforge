@@ -97,7 +97,7 @@ LogTape levels 统一为 `debug`、`info`、`warning`、`error`、`fatal`。默�
 - tool input/output、文件内容、patch/diff 和 shell stdout；
 - Agent runtime process 的原始 stdout 或 stderr。
 
-Agent stdout 是 provider control channel，只能解析，不能复制到日志。Agent stderr 可能包含 provider 输出、路径或 secret，因此只记录 byte count、退出状态和经过 provider 归类的稳定 error code，不保存原文。
+Agent stdout 是 provider control channel，只能解析，不能复制到日志。Agent stderr 可能包含 provider 输出、路径或 secret，因此不保存原文：`code_agent.process.stderr` 只记录 `pid`、字节数、行数，外加一条经脱敏、上限 512 字符的最新诊断摘要（日志里要能区分"额度用尽"和"没登录"，只留字节数做不到）；provider 归类的稳定 `error_code` 随对应的运行错误事件记录，退出状态在 `code_agent.process.exited`。摘要之外的原话只剩两类，且都不是完整 stderr：`stderr_hint`——runtime 进程结束时取最后的 tail 至多 40 行（每行经 `scrubStderrHint` 脱敏并截到 200 字符，opencode 先滤掉 routine 行），catalog discovery 或 effort 探测失败时只取一行；以及用户可见的错误文本（`stderrExcerpt` 附着到错误消息上，由 daemon 脱敏和截断）。完整 stderr 不落日志。
 
 所有 sink 先经过 `redactByField()` 的默认敏感字段和 CoForge credential 字段，再经过 JWT、authorization header、signed URL 与 provider key 的 pattern redaction。redaction 是最后一道保护，不替代调用点的数据最小化。截断上限和恶意深层对象使用 LogTape 的 traversal limit；相关测试必须证明 secret 在 active/rotated file、fallback stderr 和 error stack 中都不存在。
 

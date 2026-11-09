@@ -345,40 +345,59 @@ async function stderrLog(lines: readonly string[]) {
   });
 }
 
-test("a stderr flood is logged as its head, an omitted count and its tail", async () => {
+test("stderr is logged as its byte count and one bounded summary, never verbatim", async () => {
   const secret = "sk-abcdef123456";
   const lines = Array.from({ length: 210 }, (_, index) => `flood line ${index + 1}`);
+  // One secret arrives long before the summary's window and one inside it: the first pins that
+  // the flood is dropped, the second that the summary is still redacted.
   lines[4] = `token=${secret}`;
-  lines[120] = `token=${secret}`;
+  lines[207] = `auth token=${secret} rejected`;
   const { result, records } = await stderrLog(lines);
   // Listeners still see every reported line; only the process log is bounded.
   expect(result).toEqual(lines);
   const logged = records.find((record) => record.properties.event === "code_agent.process.stderr");
   expect(logged?.properties.lines).toBe(210);
-  const kept = String(logged?.properties.stderr).split("\n");
-  expect(kept).toHaveLength(151);
-  expect(kept.slice(0, 100)).toEqual(
-    lines.slice(0, 100).map((line) => line.replace(`token=${secret}`, "token=[REDACTED]")),
+  // docs/local-logging.md §6: a runtime's stderr is never stored verbatim — it can carry
+  // credentials, paths and user content, and it is the retention window's largest consumer.
+  expect(logged?.properties).not.toHaveProperty("stderr");
+  // What is kept: the byte count and the newest line, which is the one that names the failure.
+  expect(logged?.properties.bytes).toBe(
+    lines.reduce((total, line) => total + Buffer.byteLength(`${line}\n`), 0),
   );
-  expect(kept[100]).toBe("[60 stderr lines omitted]");
-  expect(kept.slice(101)).toEqual(lines.slice(160));
+  const summary = String(logged?.properties.error_message);
+  expect(summary).toContain("auth token=[REDACTED] rejected");
+  expect(summary).toContain("flood line 210");
+  // Four diagnostic lines at most: the fifth-newest is gone, so the window cannot grow with a
+  // flood however short each line is.
+  expect(summary).not.toContain("flood line 206");
+  expect(summary.length).toBeLessThanOrEqual(512);
   expect(JSON.stringify(logged?.properties)).not.toContain(secret);
 });
 
-test("a stderr flood inside the head-and-tail budget keeps every line", async () => {
-  const lines = Array.from({ length: 140 }, (_, index) => `line ${index + 1}`);
-  const { records } = await stderrLog(lines);
-  const logged = records.find((record) => record.properties.event === "code_agent.process.stderr");
-  expect(String(logged?.properties.stderr).split("\n")).toEqual(lines);
+test("a multi-byte stderr summary is bounded in characters, not bytes", async () => {
+  const bmp = "認証に失敗しました".repeat(80);
+  const { records } = await stderrLog([bmp]);
+  const summary = String(
+    records.find((record) => record.properties.event === "code_agent.process.stderr")?.properties
+      .error_message,
+  );
+  expect(summary.length).toBeLessThanOrEqual(512);
+  expect(Buffer.byteLength(summary)).toBeGreaterThan(512);
+  // Truncated at a character boundary: no lone surrogate, nothing replaced.
+  expect(summary).toBe(bmp.slice(0, summary.length));
 });
 
-test("a stderr flood a few lines over the budget omits only the middle", async () => {
-  const lines = Array.from({ length: 160 }, (_, index) => `line ${index + 1}`);
-  const { records } = await stderrLog(lines);
-  const logged = records.find((record) => record.properties.event === "code_agent.process.stderr");
-  const kept = String(logged?.properties.stderr).split("\n");
-  expect(kept).toHaveLength(151);
-  expect(kept.slice(0, 100)).toEqual(lines.slice(0, 100));
-  expect(kept[100]).toBe("[10 stderr lines omitted]");
-  expect(kept.slice(101)).toEqual(lines.slice(110));
+test("a summary line of astral characters is cut between them, never inside one", async () => {
+  // 601 UTF-16 units, so the 512-unit budget forces a cut of a single line — the one path that
+  // slices a provider's own text rather than dropping whole lines — and the leading ASCII unit
+  // puts the cut inside a pair: 512 units would be half a character, 511 is whole characters.
+  const astral = `a${"🙂".repeat(300)}`;
+  const { records } = await stderrLog([astral]);
+  const summary = String(
+    records.find((record) => record.properties.event === "code_agent.process.stderr")?.properties
+      .error_message,
+  );
+  expect(summary.length).toBe(511);
+  expect(summary.isWellFormed()).toBe(true);
+  expect(astral.startsWith(summary)).toBe(true);
 });
