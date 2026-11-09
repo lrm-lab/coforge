@@ -18,9 +18,14 @@ import {
  * reasons are read from the files that write them, so a new `errorReason: "…"` there fails here
  * until it is classified.
  */
-const runtimeSources = ["runtime-error-rules.ts", "runtime-error-classification.ts"].map((file) =>
-  readFileSync(join(import.meta.dir, "../src/agent-runtime", file), "utf8"),
-);
+const runtimeSources = [
+  "agent-runtime/runtime-error-rules.ts",
+  "agent-runtime/runtime-error-classification.ts",
+  // The Activity builders write the reasons a *fence* or a crash ends an Agent with, which is the
+  // stop a person reads in the banner — the same table has to classify them (task #5).
+  "agent-runtime/runtime-error-activity.ts",
+  "daemon-runtime/runtime-event-observation.ts",
+].map((file) => readFileSync(join(import.meta.dir, "../src", file), "utf8"));
 const runtimeReasons = [
   ...new Set(
     runtimeSources.flatMap((source) =>
@@ -50,6 +55,13 @@ test("a launch failure no retry can fix waits for a person", () => {
     expect(stopNeedsPerson(reason)).toBe(true);
   expect(STOP_REASON_RECOVERY.input_too_large).toBe(STOP_RECOVERY.RESET_SESSION);
   expect(STOP_REASON_RECOVERY.rate_limited).toBe(STOP_RECOVERY.AUTOMATIC);
+});
+
+test("a stop only the fence or a crash explains still says what clears it", () => {
+  // The reference Computer ends the same fence with "Restart after the runtime/tooling issue is
+  // fixed", so a person clears it before Start: both of these read as `retry` (task #5).
+  expect(STOP_REASON_RECOVERY.runtime_error_fenced).toBe(STOP_RECOVERY.RETRY);
+  expect(STOP_REASON_RECOVERY.runtime_crashed).toBe(STOP_RECOVERY.RETRY);
 });
 
 test("a provider that hung needs no person: the Daemon kills it and the next turn may work", () => {

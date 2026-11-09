@@ -44,6 +44,11 @@ export const STOP_REASON_RECOVERY: Readonly<Record<string, StopRecovery>> = {
   model_config_error: RETRY,
   runtime_failure: RETRY,
   stalled_restart_limit: RETRY,
+  // A fence (the same failure repeating with no progress) or an unresolved crash leaves nothing to
+  // solve on this side: the reference Computer ends the fence with "Restart after the runtime/tooling
+  // issue is fixed", so the person clears that cause and starts the Agent again (task #5).
+  runtime_error_fenced: RETRY,
+  runtime_crashed: RETRY,
   // Runtime failures the Daemon recovers from by itself.
   // A provider that hung is killed and restarted, and the next turn may simply work: nothing
   // here is a person's to clear (task #726).
