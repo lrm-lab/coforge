@@ -78,6 +78,7 @@ import type {
   ReminderSync,
   AppConfigSnapshotRequest,
   AppConfigSync,
+  AgentServerFeatures,
   AgentMigrationCancel,
   AgentMigrationLease,
   TaskRequest,
@@ -206,6 +207,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   onAgentMessage?(callback: (message: AgentMessageDelivery) => void): () => void;
   onReminderSync?(callback: (sync: ReminderSync) => void): () => void;
   onAppConfigSync?(callback: (sync: AppConfigSync) => void): () => void;
+  onAgentServerFeatures?(callback: (features: AgentServerFeatures) => void): () => void;
   onAppRegistrationNotice?(callback: (notice: AppRegistrationNotice) => void): () => void;
   onAgentMigrationLease?(callback: (lease: ReceivedAgentMigrationLease) => void): () => void;
   onAgentMigrationCancel?(callback: (cancel: AgentMigrationCancel) => void): () => void;

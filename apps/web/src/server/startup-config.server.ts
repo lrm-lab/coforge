@@ -12,6 +12,7 @@ import {
 } from "#src/server/authorization-server/configuration.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
+import { installAgentServerFeaturesBroadcast } from "#src/server/feature-flags/agent-server-features-broadcast-composition.server";
 import {
   readFileDeliveryConfig,
   rememberFileDeliveryConfig,
@@ -84,6 +85,7 @@ async function installStartupConfig(config: Awaited<ReturnType<typeof readStartu
   rememberArtifactSandboxConfig(config.artifactSandbox);
   rememberAppWebhookKey(config.appWebhook.status === "ready" ? config.appWebhook.key : undefined);
   await installFeatureFlags(config.featureFlags);
+  installAgentServerFeaturesBroadcast();
 }
 
 function startupConfigSummary(config: Awaited<ReturnType<typeof readStartupConfig>>) {

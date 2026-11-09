@@ -73,6 +73,7 @@ export type AgentContextViewAvailability = {
   retentionDays: number;
   supported: boolean;
   unsupportedReason?: "unsupported_runtime" | "no_session";
+  trigger?: "startup" | "message" | "server_features";
 };
 
 function text(value: string, pattern: RegExp, label: string): void {
@@ -214,6 +215,11 @@ function validateAvailability(value: AgentContextViewAvailability): void {
     throw new Error("Invalid context view availability");
   if (!value.supported && value.unsupportedReason === undefined)
     throw new Error("Missing context view unsupported reason");
+  if (
+    value.trigger !== undefined &&
+    !new Set(["startup", "message", "server_features"]).has(value.trigger)
+  )
+    throw new Error("Invalid context view availability trigger");
 }
 
 export function encodeAgentContextViewAvailability(
@@ -246,6 +252,7 @@ export function decodeAgentContextViewAvailability(
     unsupportedReason: value.unsupportedReason
       ? (value.unsupportedReason as AgentContextViewAvailability["unsupportedReason"])
       : undefined,
+    trigger: value.trigger ? (value.trigger as AgentContextViewAvailability["trigger"]) : undefined,
   };
   validateAvailability(resultValue);
   return resultValue;

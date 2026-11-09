@@ -7,7 +7,7 @@ import {
   findProviderTranscript,
   resolveProviderTranscriptToken,
 } from "#src/agent-context-view/context-view-provider-locator";
-import type { AgentMessageDelivery, AgentSessionReport } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import type { AgentSession } from "@coforge/agent";
 
 export type ContextViewRuntimeDeps = {
@@ -98,7 +98,8 @@ export function commitContextViewMessage(
 
 export async function reportContextViewAvailability(
   deps: ContextViewRuntimeDeps,
-  report: AgentSessionReport,
+  report: { agentId: string; provider: string; sessionId: string },
+  trigger: "startup" | "server_features" = "startup",
 ): Promise<void> {
   const path = await contextViewTranscriptPath(deps, report.agentId);
   deps.service.reportAvailability(
@@ -109,5 +110,20 @@ export async function reportContextViewAvailability(
       ...(path ? { transcript: path.relative, transcriptPath: path.absolute } : {}),
     },
     deps.enabled.get(report.agentId) === true,
+    trigger,
+  );
+}
+
+export async function reportServerFeatureAvailability(
+  deps: ContextViewRuntimeDeps,
+  agentId: string,
+): Promise<void> {
+  const runtime = deps.runtime(agentId);
+  const session = deps.reported(agentId);
+  if (!runtime || !session?.sessionId) return;
+  await reportContextViewAvailability(
+    deps,
+    { agentId, provider: runtime.config.provider, sessionId: session.sessionId },
+    "server_features",
   );
 }

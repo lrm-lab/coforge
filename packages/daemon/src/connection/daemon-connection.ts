@@ -6,6 +6,8 @@ import type {
 } from "./daemon-connection-client";
 import {
   type AgentContextViewResult,
+  type AgentServerFeatures,
+  type AppConfigSync,
   type RuntimeAuthIntent,
   type RuntimeAuthLoginReport,
   type RuntimeAuthLogoutReport,
@@ -23,6 +25,8 @@ import {
   type AgentReplyIntent,
 } from "@lrm/coforge-sdk/internal/reply-intent";
 import { ListenerSlot } from "./listener-slot";
+import { ServerPublications } from "./server-publications";
+import { routePublication } from "./publication-routing";
 import {
   defaultDaemonConnectionTiming,
   type DaemonConnectionTiming,
@@ -179,7 +183,6 @@ import {
   decodeAppConfigSync,
   encodeAppConfigSnapshotRequest,
   type AppConfigSnapshotRequest,
-  type AppConfigSync,
   type AgentMigrationCancel,
   type TaskRequest,
   type TaskResponse,
@@ -298,7 +301,7 @@ export class DaemonConnection
   readonly #agentWorkspaceReset = new ListenerSlot<(request: AgentWorkspaceResetRequest) => void>();
   readonly #agentMessage = new ListenerSlot<(message: AgentMessageDelivery) => void>();
   readonly #reminderSync = new ListenerSlot<(sync: ReminderSync) => void>();
-  readonly #appConfigSync = new ListenerSlot<(sync: AppConfigSync) => void>();
+  readonly #serverPublications = new ServerPublications();
   readonly #appRegistrationNotice = new ListenerSlot<(notice: AppRegistrationNotice) => void>();
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
   readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
@@ -604,7 +607,11 @@ export class DaemonConnection
   }
 
   onAppConfigSync(callback: (sync: AppConfigSync) => void): () => void {
-    return this.#appConfigSync.set(callback);
+    return this.#serverPublications.onAppConfigSync(callback);
+  }
+
+  onAgentServerFeatures(callback: (features: AgentServerFeatures) => void): () => void {
+    return this.#serverPublications.onAgentServerFeatures(callback);
   }
 
   onAppRegistrationNotice(callback: (notice: AppRegistrationNotice) => void): () => void {
@@ -1358,22 +1365,6 @@ export class DaemonConnection
     return revokeAgentApiKey(this.#agentApiKeyEndpoint(), agentApiKey, scope);
   }
 
-  /**
-   * Decodes `data` as one publication kind and lets `accept` handle it. Returns whether the
-   * publication was consumed; a decode failure or a rejected `accept` moves on to the next kind.
-   */
-  #route<Value>(
-    data: Uint8Array,
-    decode: (data: Uint8Array) => Value,
-    accept: (value: Value) => boolean,
-  ) {
-    try {
-      return accept(decode(data));
-    } catch {
-      return false;
-    }
-  }
-
   #handleAgentPublication(data: Uint8Array, config: DaemonConnectionConfig): void {
     const { workspaceId, computerId } = config;
     const ownsDaemon = (value: { workspaceId: string; computerId?: string }) =>
@@ -1381,23 +1372,22 @@ export class DaemonConnection
     const handled =
       routeRuntimeAuthPublication(data, config, this.#runtimeAuthIntent.current) ||
       this.#queries.receive(data, config) ||
-      this.#route(data, decodeReminderSync, (sync) => {
+      routePublication(data, decodeReminderSync, (sync) => {
         if (sync.messageType !== REMINDER_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;
         this.#readyPublications.deliver(this.#reminderSync, sync);
         return true;
       }) ||
-      this.#route(data, decodeAppConfigSync, (sync) => {
-        // The decoder already refuses any other message type.
-        if (!ownsDaemon(sync)) return false;
-        this.#readyPublications.deliver(this.#appConfigSync, sync);
-        return true;
-      }) ||
-      this.#route(data, decodeAppRegistrationNotice, (notice) => {
+      this.#serverPublications.route(
+        data,
+        { workspaceId, computerId: config.computerId },
+        this.#readyPublications,
+      ) ||
+      routePublication(data, decodeAppRegistrationNotice, (notice) => {
         if (!ownsDaemon(notice)) return false;
         this.#readyPublications.deliver(this.#appRegistrationNotice, notice);
         return true;
       }) ||
-      this.#route(data, decodeAgentMigrationLease, (lease) => {
+      routePublication(data, decodeAgentMigrationLease, (lease) => {
         if (!ownsDaemon(lease)) return false;
         // The lease runs from its arrival here, so no clock is compared with the server's.
         this.#readyPublications.deliver(this.#agentMigrationLease, {
@@ -1406,12 +1396,12 @@ export class DaemonConnection
         });
         return true;
       }) ||
-      this.#route(data, decodeAgentMigrationCancel, (cancel) => {
+      routePublication(data, decodeAgentMigrationCancel, (cancel) => {
         if (!ownsDaemon(cancel)) return false;
         this.#readyPublications.deliver(this.#agentMigrationCancel, cancel);
         return true;
       }) ||
-      this.#route(data, decodeComputerUpgradeIntent, (upgrade) => {
+      routePublication(data, decodeComputerUpgradeIntent, (upgrade) => {
         const requestUpgrade = config.requestUpgrade;
         if (
           upgrade.protocolMajor !== 1 ||
@@ -1425,7 +1415,7 @@ export class DaemonConnection
         );
         return true;
       }) ||
-      this.#route(data, decodeComputerRestartIntent, (restart) => {
+      routePublication(data, decodeComputerRestartIntent, (restart) => {
         const requestRestart = config.requestRestart;
         if (
           restart.protocolMajor !== 1 ||
@@ -1439,18 +1429,18 @@ export class DaemonConnection
         );
         return true;
       }) ||
-      this.#route(data, decodeAgentWorkspaceResetRequest, (request) => {
+      routePublication(data, decodeAgentWorkspaceResetRequest, (request) => {
         if (request.workspaceId === workspaceId)
           this.#readyPublications.deliver(this.#agentWorkspaceReset, request);
         return true;
       }) ||
       this.#providerPublications.route(data, workspaceId) ||
-      this.#route(data, decodeAgentActivityProbe, (probe) => {
+      routePublication(data, decodeAgentActivityProbe, (probe) => {
         if (probe.protocolMajor !== 1 || !ownsDaemon(probe)) return false;
         this.#readyPublications.deliver(this.#agentActivityProbe, probe, "probe");
         return true;
       }) ||
-      this.#route(data, decodeAgentInboxPurge, (purge) => {
+      routePublication(data, decodeAgentInboxPurge, (purge) => {
         if (purge.protocolMajor !== 1 || !ownsDaemon(purge)) return false;
         this.#readyPublications.deliver(this.#agentInboxPurge, purge);
         return true;
@@ -1825,7 +1815,7 @@ export class DaemonConnection
       this.#agentWorkspaceReset,
       this.#agentMessage,
       this.#reminderSync,
-      this.#appConfigSync,
+      this.#serverPublications,
       this.#appRegistrationNotice,
       this.#agentMigrationLease,
       this.#agentMigrationCancel,

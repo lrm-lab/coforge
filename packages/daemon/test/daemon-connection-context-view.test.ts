@@ -39,3 +39,27 @@ test("context view result upload sends both daemon and Agent-scoped credentials"
   expect(calls[0]?.headers.get("x-coforge-agent-api-key")).toBe(`Bearer ${TEST_AGENT_API_KEY}`);
   expect(calls[0]?.headers.get("content-encoding")).toBe("gzip");
 });
+
+test("routes scoped server feature publications to the daemon listener", async () => {
+  const fake = fakeClient();
+  const transport = new DaemonConnection("wss://cloud.example", () => fake.client);
+  await transport.start("daemon-token", config);
+  const received: string[] = [];
+  transport.onAgentServerFeatures?.((features) => {
+    received.push(`${features.workspaceId}:${features.computerId}:${features.agentContextView}`);
+  });
+  const { encodeAgentServerFeatures } = await import("@lrm/coforge-sdk/internal");
+  fake.publish(
+    `daemon:${config.workspaceId}:${config.computerId}`,
+    encodeAgentServerFeatures({
+      protocolMajor: 1,
+      requestId: "flag_123",
+      workspaceId: config.workspaceId,
+      computerId: config.computerId,
+      revision: 1,
+      agentIds: ["agent-1"],
+      agentContextView: true,
+    }),
+  );
+  expect(received).toEqual([`${config.workspaceId}:${config.computerId}:true`]);
+});

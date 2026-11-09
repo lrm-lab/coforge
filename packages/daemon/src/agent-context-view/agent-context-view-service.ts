@@ -29,6 +29,7 @@ export type ContextViewAvailability = {
   retentionDays: number;
   supported: boolean;
   unsupportedReason?: "unsupported_runtime" | "no_session";
+  trigger?: "startup" | "message" | "server_features";
 };
 
 export type ContextViewAgentFacts = {
@@ -82,16 +83,16 @@ export class AgentContextViewService {
     if (!enabled) return;
     const runtime = normalizeRuntime(facts.runtime);
     if (!runtime) {
-      this.#report(facts, facts.runtime, false, "unsupported_runtime");
+      this.#report(facts, facts.runtime, false, "unsupported_runtime", "message");
       return;
     }
     if (!facts.sessionId || !facts.transcript || !facts.transcriptPath) {
-      this.#report(facts, runtime, false, "no_session");
+      this.#report(facts, runtime, false, "no_session", "message");
       return;
     }
     const offset = this.#safeFileSize(facts.transcriptPath);
     if (offset === undefined || !this.#hasSupportedTranscript(facts.transcriptPath, runtime)) {
-      this.#report(facts, runtime, false, "no_session");
+      this.#report(facts, runtime, false, "no_session", "message");
       return;
     }
     const entry: ContextViewIndexEntry = {
@@ -103,20 +104,24 @@ export class AgentContextViewService {
       offset,
     };
     this.#store(facts.agentId).record(entry);
-    this.#report(facts, runtime, true);
+    this.#report(facts, runtime, true, undefined, "message");
   }
 
-  reportAvailability(facts: ContextViewAgentFacts, enabled = true): void {
+  reportAvailability(
+    facts: ContextViewAgentFacts,
+    enabled = true,
+    trigger: ContextViewAvailability["trigger"] = "startup",
+  ): void {
     if (!enabled) return;
     const runtime = normalizeRuntime(facts.runtime);
     if (!runtime) {
-      this.#report(facts, facts.runtime, false, "unsupported_runtime");
+      this.#report(facts, facts.runtime, false, "unsupported_runtime", trigger);
     } else if (!facts.sessionId || !facts.transcript || !facts.transcriptPath) {
-      this.#report(facts, runtime, false, "no_session");
+      this.#report(facts, runtime, false, "no_session", trigger);
     } else if (!this.#hasSupportedTranscript(facts.transcriptPath, runtime)) {
-      this.#report(facts, runtime, false, "no_session");
+      this.#report(facts, runtime, false, "no_session", trigger);
     } else {
-      this.#report(facts, runtime, true);
+      this.#report(facts, runtime, true, undefined, trigger);
     }
   }
 
@@ -169,6 +174,7 @@ export class AgentContextViewService {
     runtime: string,
     supported: boolean,
     unsupportedReason?: "unsupported_runtime" | "no_session",
+    trigger: ContextViewAvailability["trigger"] = "startup",
   ): void {
     const retainedSince =
       (supported ? this.#store(facts.agentId).oldestSentAt() : undefined) ??
@@ -184,6 +190,7 @@ export class AgentContextViewService {
       runtime,
       retentionDays: this.#retentionDays,
       supported,
+      trigger,
       ...(supported ? { retainedSince } : { unsupportedReason }),
     };
     const encoded = JSON.stringify(availability);

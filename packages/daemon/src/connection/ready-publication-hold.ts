@@ -43,13 +43,16 @@ export class ReadyPublicationHold {
 
   /** Delivers a publication now, or holds it until the handshake is accepted; a held item replaces
    * its predecessor by `kind` and notices are capped. */
-  deliver<Value extends { agentId?: string }>(
-    slot: ListenerSlot<(value: Value) => void>,
-    value: Value,
-    kind?: HoldKind,
-  ): void {
+  deliver<Value>(slot: ListenerSlot<(value: Value) => void>, value: Value, kind?: HoldKind): void {
     // The common case: nothing is held, so nothing is allocated either.
-    if (this.add(value.agentId ?? "", () => slot.current?.(value), kind)) return;
+    const agentId =
+      typeof value === "object" &&
+      value !== null &&
+      "agentId" in value &&
+      typeof value.agentId === "string"
+        ? value.agentId
+        : "";
+    if (this.add(agentId, () => slot.current?.(value), kind)) return;
     slot.current?.(value);
   }
 

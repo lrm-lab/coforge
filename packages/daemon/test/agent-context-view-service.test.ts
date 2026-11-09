@@ -127,3 +127,21 @@ describe("unsupported context view runtimes", () => {
     ]);
   });
 });
+
+test("records the server feature trigger on a gate-on availability report", () => {
+  const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
+  const reports: unknown[] = [];
+  const service = new AgentContextViewService({
+    stateDirectory: root,
+    serverId: "server-1",
+    workspaceId: "workspace-1",
+    computerId: "computer-1",
+    reportAvailability: (value) => reports.push(value),
+  });
+  service.reportAvailability(
+    { agentId: "agent-1", runtime: "codex", sessionId: "session-1" },
+    true,
+    "server_features",
+  );
+  expect(reports).toEqual([expect.objectContaining({ trigger: "server_features" })]);
+});

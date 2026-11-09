@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+// Server to daemon: the current server-side feature value for the Agents on one Computer.
+message AgentServerFeatures {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  uint64 revision = 5;
+  repeated string agent_ids = 6;
+  optional bool agent_context_view = 7;
+  string message_type = 8;
+}

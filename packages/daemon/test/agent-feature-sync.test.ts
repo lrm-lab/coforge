@@ -201,3 +201,70 @@ test("a restart that fails leaves no notice for a prompt that did not change", a
   ).rejects.toThrow();
   expect(sync.noticePrefix("a")).toBe("");
 });
+
+test("server feature publication applies an explicit context-view value without restarting", () => {
+  const observed: Array<[string, Features | undefined]> = [];
+  const sync = new AgentFeatureSync({
+    live: () => true,
+    keep: () => {},
+    restart: async () => {
+      throw new Error("server feature publication must not restart");
+    },
+    observe: (agentId, features) => observed.push([agentId, features]),
+  });
+  sync.applyServerFeatures({
+    protocolMajor: 1,
+    requestId: "flag_123",
+    workspaceId: "w",
+    computerId: "c",
+    revision: 1,
+    agentIds: ["a", "b"],
+    agentContextView: false,
+  });
+  expect(observed).toEqual([
+    ["a", { agentContextView: false }],
+    ["b", { agentContextView: false }],
+  ]);
+});
+
+test("ignores duplicate and stale server feature revisions", () => {
+  const observed: boolean[] = [];
+  const sync = new AgentFeatureSync({
+    live: () => true,
+    keep: () => {},
+    restart: async () => {},
+    observe: (_agentId, features) => observed.push(features?.agentContextView === true),
+  });
+  const base = {
+    protocolMajor: 1 as const,
+    requestId: "flag_123",
+    workspaceId: "w",
+    computerId: "c",
+    agentIds: ["a"],
+  };
+  sync.applyServerFeatures({ ...base, revision: 2, agentContextView: true });
+  sync.applyServerFeatures({ ...base, revision: 2, agentContextView: false });
+  sync.applyServerFeatures({ ...base, revision: 1, agentContextView: false });
+  expect(observed).toEqual([true]);
+});
+
+test("server feature publication re-reports availability for a live Agent when enabled", async () => {
+  const reports: string[] = [];
+  const sync = new AgentFeatureSync({
+    live: () => true,
+    keep: () => {},
+    restart: async () => {},
+    reportAvailability: async (agentId) => void reports.push(agentId),
+  });
+  sync.applyServerFeatures({
+    protocolMajor: 1,
+    requestId: "flag_123",
+    workspaceId: "w",
+    computerId: "c",
+    revision: 1,
+    agentIds: ["a"],
+    agentContextView: true,
+  });
+  await Bun.sleep(0);
+  expect(reports).toEqual(["a"]);
+});

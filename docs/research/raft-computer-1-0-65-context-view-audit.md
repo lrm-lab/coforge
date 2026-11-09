@@ -24,7 +24,7 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 ## 已复核的功能差异与证据缺口
 
-1. **Feature wiring 已完成，但不是 Raft 的实时广播模型。** CoForge 现在有 launch identity gate 和 delivery gate 两路：显式值会同步并在变化时重启 live Agent，delivery 保留并在新 launch 前发送 notice；旧 server 缺字段不会被当成 off。Raft 还提供 `applyServerFlag(enabled, agentIds)`，可立即作用于所有 running agents。CoForge 没有等价的 server-feature broadcast；workspace flag 变化要等下一次 launch 或 delivery。当前没有 runtime integration assertion 证明完整 restart/forget/report 时序，只有 `packages/daemon/test/agent-feature-sync.test.ts` 的行为测试。
+1. **Feature wiring 现在包含实时广播。** CoForge 保留 launch identity 和 delivery 两路兼容语义，同时新增版本化 `AgentServerFeatures` publication：flag reload 按 workspace/computer 聚合 active Agents，在 capability lease 存在时经 daemon control channel 广播；daemon 校验 scope、ready 前缓冲、按 revision 去重、即时更新 gate，并在 live Agent gate-on 时以 `trigger: server_features` 重报 availability。旧 server 缺字段和旧 daemon 未知 publication 都保持 no-op。现有 focused tests 覆盖 codec、广播聚合/串行化、daemon route、revision 去重和 availability re-report；真实部署链路仍未验证。
 
 2. **错误码没有完全达到 Raft 的可诊断粒度。** Raft bundle 的 `AGENT_CONTEXT_VIEW_FAILURE_REASONS` 含 `offline`、`old_daemon`、`agent_moved`、`expired`、`not_recorded`、`media_removed`、`newer_session_format` 等。当前 daemon query 主要产生 `not_found`、`context_mismatch`、`too_large`、`read_failed` 与 restore failure；Web 现在会保留 daemon 的 `failed` 结果和 `reason`，但 Web 自己产生的 `unsupported`、`timeout`、`unavailable` 仍未细分为 Raft 的全部原因，且部分 daemon 生命周期状态仍未生成。
 
@@ -42,5 +42,5 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 - 补一条真实 staging/browser E2E，并保留可复现 artifact。
 - 为 running Agent 的 launch/delivery/forget/report 时序补 runtime integration assertion。
-- 决定是否需要 server-side `applyServerFlag` 等价广播；若需要，补协议/运行时设计后再实现。
+- 用 staging daemon 验证 server-side feature reload、重连收敛和 `trigger: server_features` 的真实链路。
 - 明确错误码映射（尤其 `expired`、`agent_moved`、`not_recorded`、`old_daemon`）并补跨层测试。

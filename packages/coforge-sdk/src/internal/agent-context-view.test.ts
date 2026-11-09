@@ -101,4 +101,20 @@ describe("agent context view wire codec", () => {
     );
     expect(() => encodeAgentContextViewAvailability({ ...value, supported: false })).toThrow();
   });
+
+  test("round trips the server feature availability trigger", () => {
+    const value = {
+      protocolMajor: 1,
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      agentId: "agent-1",
+      runtime: "codex",
+      retentionDays: 30,
+      supported: true,
+      trigger: "server_features" as const,
+    };
+    expect(decodeAgentContextViewAvailability(encodeAgentContextViewAvailability(value))).toEqual(
+      value,
+    );
+  });
 });

@@ -1,4 +1,5 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import type { AgentServerFeatures } from "@lrm/coforge-sdk/internal";
 
 /** Workspace features as a launch identity or a delivery envelope states them. A launch identity
  * states every switch it knows; a delivery may name only some — a switch it does not name is
@@ -51,6 +52,8 @@ export type AgentFeatureSyncPorts = Readonly<{
   keep(message: AgentMessageDelivery): void;
   /** Ends the session and launches it again from fresh launch config, awaiting that launch. */
   restart(agentId: string): Promise<void>;
+  /** Re-announces availability after a server-side gate turns the view on for a live Agent. */
+  reportAvailability?(agentId: string): Promise<void>;
   /** Publishes launch-time feature gates to other daemon subsystems. */
   observe?(agentId: string, features: WireFeatures["features"] | undefined): void;
 }>;
@@ -64,6 +67,7 @@ export type AgentFeatureSyncPorts = Readonly<{
 export class AgentFeatureSync {
   readonly #launched = new Map<string, WireFeatures["features"]>();
   readonly #notices = new Map<string, string>();
+  readonly #serverRevisions = new Map<string, number>();
 
   constructor(private readonly ports: AgentFeatureSyncPorts) {}
 
@@ -115,5 +119,21 @@ export class AgentFeatureSync {
   forget(agentId: string): void {
     this.#launched.delete(agentId);
     this.#notices.delete(agentId);
+  }
+
+  /** Applies a server-side feature flip immediately to the targeted running Agents. */
+  applyServerFeatures(sync: AgentServerFeatures): void {
+    const scope = `${sync.workspaceId}:${sync.computerId}`;
+    const previous = this.#serverRevisions.get(scope) ?? 0;
+    if (sync.revision <= previous) return;
+    this.#serverRevisions.set(scope, sync.revision);
+    for (const agentId of sync.agentIds) {
+      if (sync.agentContextView !== undefined)
+        this.ports.observe?.(agentId, {
+          agentContextView: sync.agentContextView,
+        });
+      if (sync.agentContextView === true && this.ports.live(agentId))
+        void this.ports.reportAvailability?.(agentId).catch(() => {});
+    }
   }
 }

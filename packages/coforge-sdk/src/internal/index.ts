@@ -34,6 +34,7 @@ export {
   decodeAgentContextViewAvailability,
   encodeAgentContextViewAvailability,
 } from "./agent-context-view";
+export * from "./agent-server-features";
 export type {
   AgentContextViewRequest,
   AgentContextViewResult,

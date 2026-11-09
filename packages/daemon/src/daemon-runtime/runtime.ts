@@ -139,10 +139,11 @@ import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentIdForContext, contextFor } from "./agent-context";
-import { cleanupUnconfirmed, buildLaunchFailureActivity } from "./agent-failure-presentation";
+import { cleanupUnconfirmed, buildLaunchFailureActivity } from "./launch-failure-activity";
 import { RuntimeRelease, wakeRequest, type WakeRestart } from "./runtime-release";
 import { beginWakeLaunch } from "./wake-launch";
 import { AgentFeatureSync } from "./agent-feature-sync";
+import { forgetAgent } from "./forget-agent";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
@@ -151,6 +152,7 @@ import {
   applyContextViewGate,
   deliverContextViewMessage,
   reportContextViewAvailability,
+  reportServerFeatureAvailability,
   resolveContextViewProviderSource,
 } from "./context-view-runtime-wiring";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
@@ -276,6 +278,7 @@ export class DaemonRuntime {
     keep: (m) => this.#exitedDelivery.keepForNextLaunch(m.agentId, m),
     restart: (agentId) => this.#runtimeRelease.restartForFreshConfig(agentId),
     observe: (agentId, features) => applyContextViewGate(this, agentId, features?.agentContextView),
+    reportAvailability: (agentId) => reportServerFeatureAvailability(this, agentId),
   });
   readonly #runtimeRelease: RuntimeRelease<ActivityLaunch> = assembleRuntimeRelease({
     launches: () => this.#currentActivityLaunches,
@@ -793,6 +796,7 @@ export class DaemonRuntime {
         connectionRefused: (reason) => this.lifecycle.connectionRefused?.(reason),
         applyReminderSync: (sync) => this.#reminders.apply(sync),
         applyAppConfigSync: (sync) => this.#appConfigs.apply(sync),
+        applyAgentServerFeatures: (sync) => this.#sync.applyServerFeatures(sync),
         acceptAppRegistrationNotice: (notice) =>
           acceptAppRegistrationNotice(notice, {
             isRunning: (agentId) => this.#readyRunningAgentIds().includes(agentId),
@@ -1341,38 +1345,30 @@ export class DaemonRuntime {
   #releaseTurnEndHolds = (agentId: string): void => releaseTurnEndHolds(this.#turnPorts(), agentId);
 
   /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
-  #forgetLocalAgent = (agentId: string): void => {
-    this.#contextViewEnabled.delete(agentId);
-    this.#contextViewService.disable(agentId);
-    this.#inboxCoordinator.forgetAgent(agentId, {
-      systemCleaner: this.systemCleaner,
-      offlineResidency: this.#offlineResidency,
-      messageAttention: this.#messageAttention,
-      consumedSeqs: this.#consumedSeqs,
-      featureSync: this.#sync,
-    });
-  };
+  #forgetLocalAgent = (agentId: string): void =>
+    forgetAgent(
+      agentId,
+      this.#contextViewEnabled,
+      this.#contextViewService,
+      this.#inboxCoordinator,
+      this.systemCleaner,
+      this.#offlineResidency,
+      this.#messageAttention,
+      this.#consumedSeqs,
+      this.#sync,
+    );
 
   #cleanupUnconfirmed = (agentId: string, error: unknown): boolean =>
     cleanupUnconfirmed(agentId, error, (id) => this.#agentProcessManager.isStopping(id));
 
   /** The error Activity for a launch that did not start; `agent-failure-presentation` builds it. */
-  #launchFailureActivity(
-    agentId: string,
-    provider: RuntimeProvider,
-    error: unknown,
-  ): ActivityDraft {
-    return buildLaunchFailureActivity(agentId, provider, error, this.#drafts, (id, err) =>
-      this.#cleanupUnconfirmed(id, err),
+  #launchFailureActivity = (agentId: string, provider: RuntimeProvider, error: unknown) =>
+    buildLaunchFailureActivity(agentId, provider, error, this.#drafts, (id) =>
+      this.#agentProcessManager.isStopping(id),
     );
-  }
 
-  async #revokeAgentApiKey(
-    agentId: string,
-    agentApiKey: string | undefined,
-    scope?: "all",
-  ): Promise<void> {
-    await revokeAgentApiKey(this.#transport, this.agentApiKeys, agentId, agentApiKey, scope);
+  get #revokeAgentApiKey() {
+    return revokeAgentApiKey.bind(undefined, this.#transport, this.agentApiKeys);
   }
 
   async agentMessage(
