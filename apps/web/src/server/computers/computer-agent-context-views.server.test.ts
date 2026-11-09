@@ -193,7 +193,13 @@ test("labels a missing daemon result as an old daemon", async () => {
       publish: async () => {},
       results: { begin: async () => {}, read: async () => undefined, clear: async () => {} },
     },
-    { now: () => now, wait: async () => { now = 30_000; }, timeoutMs: 30_000 },
+    {
+      now: () => now,
+      wait: async () => {
+        now = 30_000;
+      },
+      timeoutMs: 30_000,
+    },
   );
   await expect(
     service.view(

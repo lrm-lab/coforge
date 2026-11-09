@@ -10,7 +10,10 @@ import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 const TTL_SECONDS = 24 * 60 * 60;
 const PREFIX = "coforge:agent-context-view:availability";
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-type Redis = Pick<import("bun").RedisClient, "get" | "set">;
+type Redis = {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string, ...args: [mode: "EX", seconds: string] | []): Promise<unknown>;
+};
 
 export class AgentContextViewAvailabilityStore {
   constructor(private readonly redis: Redis) {}
@@ -32,8 +35,10 @@ export class AgentContextViewAvailabilityStore {
     try {
       const value = JSON.parse(raw) as Partial<AgentContextViewAvailability>;
       if (
-        value.type === "agent:context_view_availability" &&
         value.protocolMajor === 1 &&
+        typeof value.workspaceId === "string" &&
+        typeof value.computerId === "string" &&
+        typeof value.agentId === "string" &&
         ID.test(value.workspaceId) &&
         ID.test(value.computerId) &&
         ID.test(value.agentId) &&

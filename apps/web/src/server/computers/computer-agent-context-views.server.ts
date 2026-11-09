@@ -82,8 +82,7 @@ export class ComputerAgentContextViews {
       this.dependencies.supported({ ...scope, agentId: request.agentId, userId: viewer.userId }),
     ]);
     if (!online) return { status: "offline", reason: "offline" };
-    const support =
-      typeof supported === "boolean" ? { supported } : supported;
+    const support = typeof supported === "boolean" ? { supported } : supported;
     if (!support.supported)
       return { status: "unsupported", ...(support.reason ? { reason: support.reason } : {}) };
     try {

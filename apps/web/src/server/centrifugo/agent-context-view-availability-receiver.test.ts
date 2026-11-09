@@ -10,7 +10,6 @@ test("reads the provider availability reason instead of collapsing it to a boole
     },
   });
   await store.record({
-    type: "agent:context_view_availability",
     protocolMajor: 1,
     workspaceId: "w",
     computerId: "c",
@@ -34,7 +33,6 @@ test("treats missing and malformed availability as absent", async () => {
   });
   await expect(store.read("w", "c", "missing")).resolves.toBeUndefined();
   await store.record({
-    type: "agent:context_view_availability",
     protocolMajor: 1,
     workspaceId: "w",
     computerId: "c",

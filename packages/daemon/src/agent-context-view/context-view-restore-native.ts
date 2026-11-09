@@ -3,7 +3,6 @@ import type {
   RestoreRequest,
   ContextViewRestoreResult,
   RestoredContextMessage,
-  RestoredContextView,
 } from "./context-view-restore";
 import {
   buildView,
@@ -16,7 +15,6 @@ import {
   parseToolInput,
   providerPayload,
   sessionMatches,
-  textParts,
 } from "./context-view-restore";
 import { restoreClaudeSession } from "./claude-session-restore";
 

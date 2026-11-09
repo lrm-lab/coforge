@@ -1,5 +1,4 @@
 import { redactContextViewValue, type ContextViewRedactionCounts } from "./context-view-redaction";
-import { restoreClaudeSession } from "./claude-session-restore";
 import { restoreClaude, restoreCodex } from "./context-view-restore-native";
 import { restoreKimi, restorePi } from "./context-view-restore-captured";
 

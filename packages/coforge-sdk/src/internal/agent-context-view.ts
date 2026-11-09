@@ -133,7 +133,9 @@ function result(value: AgentContextViewResult): void {
     throw new Error("Context view view bytes are too large");
   if (
     value.sourceBytes !== undefined &&
-    (!Number.isSafeInteger(value.sourceBytes) || value.sourceBytes < 0 || value.sourceBytes > 512 * 1024 * 1024)
+    (!Number.isSafeInteger(value.sourceBytes) ||
+      value.sourceBytes < 0 ||
+      value.sourceBytes > 512 * 1024 * 1024)
   )
     throw new Error("Invalid context view source bytes");
   if (value.verification !== undefined && !VERIFICATIONS.has(value.verification))

@@ -6,7 +6,6 @@ import type {
   RestoredContextView,
 } from "./context-view-restore";
 import {
-  claudeViewParts,
   hasHashMismatch,
   hasMessageId,
   hasNestedIdentityConflict,
@@ -15,7 +14,6 @@ import {
   parseToolInput,
   providerPayload,
   sessionMatches,
-  textParts,
   buildView,
 } from "./context-view-restore";
 
