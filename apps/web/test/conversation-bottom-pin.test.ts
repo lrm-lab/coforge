@@ -179,3 +179,27 @@ test("a jump to a row that lands at the bottom follows the latest from there", (
   history.scrollHeight = 4084;
   expect(pin.beforeResize(history)).toBe(true);
 });
+
+/** A history whose window stops short of the conversation's end: its newer page's sentinel shows. */
+function shortWindow(scrollHeight: number, clientHeight: number) {
+  return Object.assign(fakeHistory({ scrollHeight, clientHeight }), {
+    querySelector: (selector: string) => (selector === "[data-newer-sentinel]" ? {} : null),
+  });
+}
+
+test("the bottom of a window that stops short of the end is not the latest (task #34)", () => {
+  const pin = new ConversationBottomPin();
+  // A link to a channel's second message: the window around it fits on screen, newer pages below.
+  const history = shortWindow(900, 577);
+  history.scrollTop = 900 - 577;
+  expect(pin.landed(history as never)).toBe(false);
+  expect(pin.scroll(history)).toBe(Number.POSITIVE_INFINITY);
+  // The newer page arrives below: nothing carries the reader down to it.
+  history.scrollHeight = 2400;
+  expect(pin.beforeResize(history)).toBe(false);
+  // An open position there scrolls the row into place but does not pin either.
+  const opened = new ConversationBottomPin();
+  const open = shortWindow(900, 577);
+  expect(opened.open(open as never, rowAt(800, open) as never)).toBe(false);
+  expect(opened.beforeResize(open)).toBe(false);
+});

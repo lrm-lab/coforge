@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import {
-  distanceFromBottom,
+  distanceFromEnd,
   FOLLOWING_DISTANCE_PX,
   type ConversationBottomPin,
 } from "./conversation-bottom-pin";
@@ -47,7 +47,7 @@ export function useHistoryResize({
       }
       // A pane that grew until the end is in view, or lost what overflowed it, sends no scroll
       // event when its scrollTop stays: this is the only news that the reader is at the latest.
-      if (!followingLatestRef.current && distanceFromBottom(history) <= FOLLOWING_DISTANCE_PX) {
+      if (!followingLatestRef.current && distanceFromEnd(history) <= FOLLOWING_DISTANCE_PX) {
         trackRef.current();
         return;
       }

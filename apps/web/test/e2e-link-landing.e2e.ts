@@ -80,7 +80,20 @@ test("a pasted reply link lands on the reply; a shared short id says so", async 
     // Two top-level messages sharing an eight-hex prefix, like #coforge's six `01a1b756…`.
     const sharedPrefix = "0e2e1a4d";
     const twins = [1, 2].map((n) => seededUuid(`e2e-link-landing:twin-${n}`, sharedPrefix));
+    // Two older top-level messages, far above the latest (QA, staging: a link to one stayed
+    // 1286px above the view): one inside the first page the channel loads, one beyond it.
+    const oldFar = seededUuid("e2e-link-landing:old-far");
+    const oldNear = seededUuid("e2e-link-landing:old-near");
+    const fillers = (from: number, count: number) =>
+      Array.from({ length: count }, (_, at) => ({
+        id: seededUuid(`e2e-link-landing:filler-${from + at}`),
+        body: `Link landing filler ${from + at + 1}`,
+      }));
     const rows = [
+      { id: oldFar, body: "Link landing old far" },
+      ...fillers(0, 60),
+      { id: oldNear, body: "Link landing old near" },
+      ...fillers(60, 25),
       ...twins.map((id, at) => ({ id, body: `Link landing twin ${at + 1}` })),
       { id: rootId, body: "Link landing root" },
       ...replyIds.map((id, at) => ({
@@ -106,7 +119,33 @@ test("a pasted reply link lands on the reply; a shared short id says so", async 
     await mkdir(artifacts, { recursive: true });
     const channelUrl = `${origin}${workspacePath}/channel/${channel.id}`;
 
-    await browser("set", "viewport", "1440", "900");
+    // The read of where the viewer's unread starts answers late, as on a slow network (QA,
+    // staging): the link's landing must hold once it settles. The script is a launch init script
+    // of the session, so it is carried by its first command.
+    const slowOpen = join(artifacts, "slow-open-read.js");
+    await Bun.write(
+      slowOpen,
+      `(() => {
+        if (window.__slowOpen !== undefined) return;
+        window.__slowOpen = 0;
+        const fetch = window.fetch.bind(window);
+        const isOpenRead = (input) => {
+          const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+          // Server function ids are hashes; the open read is the one whose data is a conversation id
+          // alone, or with a thread root.
+          const payload = decodeURIComponent(url);
+          return url.includes("_serverFn/") && /"k":\\["conversationId"(,"threadRootId")?\\]/.test(payload);
+        };
+        window.fetch = async (input, init) => {
+          const response = await fetch(input, init);
+          if (!isOpenRead(input)) return response;
+          window.__slowOpen += 1;
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+          return response;
+        };
+      })();`,
+    );
+    await browser("--init-script", slowOpen, "set", "viewport", "1440", "900");
     // A new tab, the whole link pasted: a notification's link names only the reply, a link from
     // an open thread names its root too. Either opens the thread on the reply, ringed.
     const replyLinks = {
@@ -143,6 +182,105 @@ test("a pasted reply link lands on the reply; a shared short id says so", async 
         hash: `#message-${target}`,
         inView: true,
         highlighted: true,
+      });
+    }
+
+    // A link to an older top-level message, in a fresh tab: loaded or not, the channel opens on
+    // it, ringed, instead of at the latest.
+    const oldLinks = [
+      ["old-far-query", oldFar, `${channelUrl}?view=chat&message=${oldFar}`],
+      ["old-near-query", oldNear, `${channelUrl}?view=chat&message=${oldNear}`],
+      ["old-near", oldNear, `${channelUrl}?view=chat#message-${oldNear}`],
+      ["old-far", oldFar, `${channelUrl}?view=chat#message-${oldFar}`],
+    ] as const;
+    for (const [name, id, link] of oldLinks) {
+      const place = `(() => {
+        const row = document.getElementById("message-${id}");
+        const box = row.getBoundingClientRect();
+        const history = row.closest("[data-scroll-restoration-id]").getBoundingClientRect();
+        return {
+          inView: box.top >= history.top && box.bottom <= history.bottom,
+          highlighted: getComputedStyle(row).boxShadow !== "none",
+        };
+      })()`;
+      await browser("open", link);
+      await browser("wait", "--fn", `document.getElementById("message-${id}") !== null`);
+      await browser("wait", "800");
+      const landed = await evaluate<{ inView: boolean; highlighted: boolean }>(place);
+      await browser("screenshot", join(artifacts, `${name}.png`));
+      expect({ name, ...landed }).toEqual({ name, inView: true, highlighted: true });
+      // It stays there once the late read has settled.
+      await browser("wait", "3500");
+      expect(await evaluate<number>("window.__slowOpen")).toBeGreaterThan(0);
+      expect((await evaluate<{ inView: boolean }>(place)).inView).toBe(true);
+    }
+
+    // Grace's case (task #46): a channel's second message, with 400 newer ones written in one
+    // statement after it, so the target sits at the very start of the channel's history.
+    const earlyChannelId = seededUuid("e2e-link-landing:early-channel");
+    await db.conversation.upsert({
+      where: { id: earlyChannelId },
+      update: { archivedAt: null },
+      create: {
+        id: earlyChannelId,
+        workspaceId: channel.workspaceId,
+        channelName: "e2e-link-landing-early",
+      },
+    });
+    await db.message.deleteMany({ where: { conversationId: earlyChannelId } });
+    const earlyViewer = await db.conversationMember.upsert({
+      where: {
+        conversationId_userId: { conversationId: earlyChannelId, userId: DEV_BROWSER_USER.id },
+      },
+      update: { leftAt: null, hiddenAt: null },
+      create: {
+        conversationId: earlyChannelId,
+        workspaceId: channel.workspaceId,
+        userId: DEV_BROWSER_USER.id,
+      },
+    });
+    const earliest = seededUuid("e2e-link-landing:early-target");
+    await db.message.createMany({
+      data: [
+        "Link landing early first",
+        "Link landing early target",
+        ...Array.from({ length: 400 }, (_, at) => `filler ${at + 1}`),
+      ].map((body, at) => ({
+        ...(at === 1 && { id: earliest }),
+        body,
+        sequence: at + 1,
+        senderMemberId: earlyViewer.id,
+        conversationId: earlyChannelId,
+        workspaceId: channel.workspaceId,
+      })),
+    });
+    const earlyUrl = `${origin}${workspacePath}/channel/${earlyChannelId}?view=chat`;
+    for (const [name, link] of [
+      ["early-query", `${earlyUrl}&message=${earliest}`],
+      ["early-hash", `${earlyUrl}#message-${earliest}`],
+    ] as const) {
+      await browser("open", link);
+      await browser("wait", "--fn", `document.getElementById("message-${earliest}") !== null`);
+      // It stays there: newer pages loading below must not carry the reader away from it.
+      await browser("wait", "3000");
+      const box = await evaluate<{
+        top: number;
+        bottom: number;
+        viewTop: number;
+        viewBottom: number;
+      }>(`(() => {
+        const row = document.getElementById("message-${earliest}").getBoundingClientRect();
+        const view = document.getElementById("message-${earliest}").closest("[data-scroll-restoration-id]").getBoundingClientRect();
+        return { top: row.top, bottom: row.bottom, viewTop: view.top, viewBottom: view.bottom };
+      })()`);
+      await browser("screenshot", join(artifacts, `${name}.png`));
+      expect({
+        name,
+        inView: box.top >= box.viewTop && box.bottom <= box.viewBottom,
+        box,
+      }).toMatchObject({
+        name,
+        inView: true,
       });
     }
 

@@ -5,5 +5,5 @@ import type { RefObject } from "react";
  * evicted tail. Nothing is shown for it — the reader reached the bottom and the tail is on its way.
  */
 export function NewerSentinel({ sentinelRef }: { sentinelRef: RefObject<HTMLDivElement | null> }) {
-  return <div ref={sentinelRef} aria-hidden="true" className="h-8" />;
+  return <div ref={sentinelRef} data-newer-sentinel aria-hidden="true" className="h-8" />;
 }

@@ -66,7 +66,10 @@ export class ConversationBottomPin {
     const offset =
       row.getBoundingClientRect().top - history.getBoundingClientRect().top + history.scrollTop;
     const top = Math.max(0, offset - ROW_TOP_GAP_PX);
-    if (top < history.scrollHeight - history.clientHeight - PIN_TOLERANCE_PX) {
+    if (
+      top < history.scrollHeight - history.clientHeight - PIN_TOLERANCE_PX ||
+      newerBelow(history)
+    ) {
       history.scrollTo({ top });
       return this.landed(history);
     }
@@ -83,12 +86,12 @@ export class ConversationBottomPin {
    */
   landed(history: HTMLDivElement): boolean {
     this.#leavingFrom = undefined;
-    if (distanceFromBottom(history) <= PIN_TOLERANCE_PX) {
+    if (distanceFromEnd(history) <= PIN_TOLERANCE_PX) {
       this.pin(history, "instant");
       return true;
     }
     this.#pinned = undefined;
-    this.#distance = distanceFromBottom(history);
+    this.#distance = distanceFromEnd(history);
     return false;
   }
 
@@ -129,7 +132,7 @@ export class ConversationBottomPin {
     )
       return undefined;
     this.#pinned = undefined;
-    this.#distance = distanceFromBottom(history);
+    this.#distance = distanceFromEnd(history);
     if (this.#leavingFrom !== undefined && history.scrollTop <= this.#leavingFrom)
       this.#leavingFrom = undefined;
     return this.#distance;
@@ -137,7 +140,7 @@ export class ConversationBottomPin {
 
   beforeResize(history: HistoryPosition): boolean {
     const wasAtBottom = this.#leavingFrom === undefined && this.#distance <= PIN_TOLERANCE_PX;
-    this.#distance = distanceFromBottom(history);
+    this.#distance = distanceFromEnd(history);
     return wasAtBottom;
   }
 }
@@ -167,6 +170,22 @@ function isEditing(target: EventTarget | null): boolean {
   return (
     !!element && (element.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(element.tagName))
   );
+}
+
+/**
+ * Whether a newer page is still to load below what the history holds: its sentinel
+ * (`NewerSentinel`) is rendered only then. A window read around an old message (a link, a jump, an
+ * old first unread) stops short of the conversation's end, so the bottom of that window is not the
+ * latest: following it would carry the reader down every newer page as it loads, away from the
+ * message they came for, until the window slides and drops it (task #34).
+ */
+function newerBelow(history: HistoryPosition): boolean {
+  return Boolean((history as Partial<Element>).querySelector?.("[data-newer-sentinel]"));
+}
+
+/** How far the reader stands from the conversation's end: endless while a newer page is to load. */
+export function distanceFromEnd(history: HistoryPosition): number {
+  return newerBelow(history) ? Number.POSITIVE_INFINITY : distanceFromBottom(history);
 }
 
 export function distanceFromBottom(history: HistoryPosition): number {
