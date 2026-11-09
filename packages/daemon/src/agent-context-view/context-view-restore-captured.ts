@@ -3,7 +3,6 @@ import type {
   RestoreRequest,
   ContextViewRestoreResult,
   RestoredContextMessage,
-  RestoredContextView,
 } from "./context-view-restore";
 import { createHash } from "node:crypto";
 import { restorePiIndexed } from "./context-view-restore-indexed-pi";

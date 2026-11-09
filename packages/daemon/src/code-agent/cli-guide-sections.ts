@@ -3,7 +3,6 @@ import {
   cloudComputerSharedSkillsDirectory,
   isCloudComputerSkillsEnabled,
 } from "@coforge/agent/cloud-computer-skills";
-import { CHANNEL_ARGUMENT_EXAMPLES } from "@lrm/coforge-sdk/agent";
 import type { CoforgeAgentPromptContext } from "./agent-instructions";
 
 export type CoforgeCliGuideOptions = Pick<
