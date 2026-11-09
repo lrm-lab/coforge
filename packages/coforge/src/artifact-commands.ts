@@ -204,7 +204,8 @@ function parseShareArgs(args: readonly string[]): ArtifactInvocation {
     } else throw invalidArgument(command, `Unexpected argument ${arg}`);
     index += 1;
   }
-  if (artifactIds.length === 0) throw invalidArgument(command, "Name at least one document: its id");
+  if (artifactIds.length === 0)
+    throw invalidArgument(command, "Name at least one document: its id");
   if (targets.length === 0) throw invalidArgument(command, "--to is required at least once");
   return {
     command: "artifact",

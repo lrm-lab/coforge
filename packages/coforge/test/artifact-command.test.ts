@@ -69,7 +69,9 @@ test("each artifact command parses into its own request", () => {
     targets: ["#launch", "@ada"],
     note: "Read this",
   });
-  expect((shared.request as Extract<AgentArtifactRequest, { operation: "share" }>).requestId).toBeString();
+  expect(
+    (shared.request as Extract<AgentArtifactRequest, { operation: "share" }>).requestId,
+  ).toBeString();
 });
 
 test("create --kind html makes a web page, which needs its one-line description", () => {
