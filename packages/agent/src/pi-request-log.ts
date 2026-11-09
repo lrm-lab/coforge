@@ -164,8 +164,23 @@ function indexedRequestRecords(
   const messagesKey = ["messages", "input", "contents"].find((key) => Array.isArray(body[key]));
   if (!messagesKey) return [];
   const messages = body[messagesKey] as unknown[];
+  const params: Record<string, unknown> = {};
   const shape: Record<string, unknown> = {};
-  const params = Object.fromEntries(Object.entries(body).filter(([key]) => key !== messagesKey));
+  for (const [key, value] of Object.entries(body)) {
+    if (key === messagesKey) continue;
+    if (isPiParam(value)) params[key] = value;
+    else shape[key] = value;
+  }
+  if (isRecord(shape.config)) {
+    const configShape: Record<string, unknown> = {};
+    const configParams: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(shape.config)) {
+      if (isPiParam(value)) configParams[key] = value;
+      else configShape[key] = value;
+    }
+    params.config = configParams;
+    shape.config = configShape;
+  }
   const shapeHash = piRequestDigest(shape);
   const blobs = messages.map((message) => ({
     hash: piRequestDigest(message),
@@ -199,6 +214,14 @@ function indexedRequestRecords(
     ...blobs.map((blob) => ({ type: "blob", ...blob })),
     request,
   ];
+}
+
+function isPiParam(value: unknown): value is string | number | boolean {
+  return (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    (typeof value === "string" && value.length <= 256)
+  );
 }
 
 /** Returns a JSON-safe Pi request body while preserving provider message shape. */

@@ -163,6 +163,11 @@ function restorePiIndexed(
   ]);
   if (!api || !supportedApis.has(api)) return { ok: false, failure: "unsupported_runtime" };
   const body = { ...shape.shape, ...candidate.params, [shape.messagesKey]: messages };
+  if (isRecord(shape.shape.config) || isRecord(candidate.params.config))
+    body.config = {
+      ...(isRecord(shape.shape.config) ? shape.shape.config : {}),
+      ...(isRecord(candidate.params.config) ? candidate.params.config : {}),
+    };
   const projected = piRequestMessages(body, api);
   let responseFound = false;
   let trigger: { toolUseId: string } | undefined;

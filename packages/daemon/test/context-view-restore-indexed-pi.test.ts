@@ -7,10 +7,12 @@ function buffer(records: unknown[]): Buffer {
 }
 
 test("verifies and restores Raft indexed Pi shape/blob/request records", () => {
-  const shape = {};
+  const shape = { config: { complex: { mode: "x" } } };
   const shapeHash = createHash("sha256").update(JSON.stringify(shape)).digest("hex");
   const messageHash = createHash("sha256").update(JSON.stringify("hello")).digest("hex");
-  const digest = createHash("sha256").update(`${shapeHash}\n{}\n${messageHash}`).digest("hex");
+  const digest = createHash("sha256")
+    .update(`${shapeHash}\n${JSON.stringify({ config: { temperature: 0.2 } })}\n${messageHash}`)
+    .digest("hex");
   const indexed = buffer([
     { type: "shape", hash: shapeHash, messagesKey: "messages", shape },
     { type: "blob", hash: messageHash, message: "hello" },
@@ -19,7 +21,7 @@ test("verifies and restores Raft indexed Pi shape/blob/request records", () => {
       id: "r1",
       sessionId: "s1",
       api: "openai-completions",
-      params: {},
+      params: { config: { temperature: 0.2 } },
       shapeHash,
       base: null,
       keep: 0,
