@@ -4,7 +4,7 @@ import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { MessageNavigationGroup } from "./message-navigation-group";
 
 /**
- * Along the composer's top edge, over the history's bottom padding: who is typing on the left, and
+ * Along the composer's top edge, over the history's bottom padding: the Agents' line on the left, and
  * the jump group anchored to the composer's top-right corner. The overlay repeats the composer's
  * column and side margins, so both sit right above the composer at any width rather than at the
  * far pane edge beside the scrollbar, and the line truncates before the group instead of running

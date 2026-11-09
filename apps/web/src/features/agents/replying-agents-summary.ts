@@ -45,8 +45,8 @@ export type ReplyingNames =
 
 /**
  * The names as a list for up to three Agents, as Raft writes it: "Atlas, Ben and Cam" (no serial
- * comma) and "Atlas，Ben，Cam". More than three name the first two and count the others; how that
- * reads is the message's ("Atlas, Ben and 2 other agents", "Atlas，Ben 等 4 个 Agent").
+ * comma) and "Atlas、Ben 和 Cam". More than three name the first two and count the others; how
+ * that reads is the message's ("Atlas, Ben and 2 other agents", "Atlas、Ben 等 4 个 Agent").
  */
 export function replyingNames(names: readonly string[], locale: string): ReplyingNames {
   if (names.length > MAX_NAMES_SPELLED)
@@ -60,11 +60,42 @@ export function replyingNames(names: readonly string[], locale: string): Replyin
   return {
     kind: "list",
     text: locale.startsWith("zh")
-      ? names.join("，")
+      ? chineseNameList(names)
       : // en-GB lists without the serial comma; en-US would add it.
         new Intl.ListFormat(locale === "en" ? "en-GB" : locale, { type: "conjunction" }).format(
           names,
         ),
     plural: names.length > 1,
+  };
+}
+
+/** `Intl.ListFormat` writes "A和B"; these names are mostly Latin, so 和 keeps its spaces. */
+function chineseNameList(names: readonly string[]): string {
+  return names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join("、")} 和 ${names.at(-1)}`;
+}
+
+/** What the line above a composer says, and the faces it draws. */
+export type AgentsLineSummary<T> = {
+  sentence: "typing" | "working" | "typing-and-working";
+  /** The working Agents that are not typing: counted, and listed after the typing ones. */
+  others: T[];
+  faces: T[];
+};
+
+/** The line for these Agents, or nothing when nobody is typing or working. */
+export function agentsLineSummary<T extends { id: string }>(
+  typing: readonly T[],
+  working: readonly T[],
+): AgentsLineSummary<T> | undefined {
+  const typingIds = new Set(typing.map((agent) => agent.id));
+  const others = working.filter((agent) => !typingIds.has(agent.id));
+  if (typing.length === 0 && others.length === 0) return undefined;
+  return {
+    sentence:
+      typing.length === 0 ? "working" : others.length === 0 ? "typing" : "typing-and-working",
+    others,
+    faces: [...typing, ...others].slice(0, MAX_REPLYING_FACES),
   };
 }

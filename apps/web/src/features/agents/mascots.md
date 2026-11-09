@@ -84,20 +84,29 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   holds the entries (see [reply intents](../../../../../docs/observability/reply-intent.md)), the
   line shows those for the open conversation's top level or the open thread's root, and
   `replying-agents-summary.ts` (pure) picks the Agents the roster knows and words the names as Raft
-  does: "Atlas, Ben and Cam" with no serial comma, "Atlas，Ben，Cam" in Chinese, and "正在输入"
-  with no ellipsis. Both lines are one component, as on Raft (task #210): up to three 16px moving
+  does: "Atlas, Ben and Cam" with no serial comma, "Atlas、Ben 和 Cam" in Chinese. Both lines share
+  `AgentFaces`, as on Raft (task #210): up to three 16px moving
   mascots overlapping by 5px (`AgentMascotView` in an `AvatarSticker`, acting out `working`), each
   sliding and fading in over 200ms on Raft's slide easing as it joins (`starting:`, the slide only
-  without reduced motion), then the sentence, which names everyone and carries no activity label; only the verb differs. Above the
-  composer the two sit in a pill, as Frank drew it: a hairline-bordered rounded capsule,
-  left-aligned. Everyone who can read the place sees it, whether or not they can write there. It overlays
+  without reduced motion), then the sentence, which names everyone and carries no activity label. Above the
+  composer it sits in a pill, as Frank drew it: a hairline-bordered rounded capsule,
+  left-aligned. Everyone who can read the place sees who is typing, whether or not they can write there. It overlays
   the history's bottom padding (`pb-9`, the pill and its gap) and shares that row with the jump
   group, so the newest message is never covered while the pane follows it (scrolled up, it covers
   that strip) and the sentence truncates before the group; it renders nothing (and reads no roster)
-  while nobody is replying. An Agent's own message arriving in that place ends one of its entries
+  while nobody is typing or working. An Agent's own message arriving in that place ends one of its entries
   ([reply intents](../../../../../docs/observability/reply-intent.md)). The pill eases in and out
-  (`replying-agents-line.css`) unless motion is reduced; the sentence is a polite `role="status"`
-  for screen readers, and no other state (reading, working) appears in it.
+  (`replying-agents-line.css`) unless motion is reduced.
+- In a channel's main stream the same pill also counts the channel's other Agents that are working
+  or thinking, anywhere and not only for this channel, as on Raft (`ChannelAgentsContext`, the Agents of
+  the channel's member directory, so absent for a non-member; `pickBusyAgents` over the live
+  Agents): "Atlas is typing, 2 others are working" (`agent_typing_and_working`), "3 agents working
+  here" with nobody typing (`agent_working_here`), and the ellipsis only on typing alone
+  (`agent_typing_alone`). The faces are the typing Agents first, then the others. A DM or a thread
+  pane shows typing only, in a plain pill. There the pill is a button opening `AgentListPopover`
+  upward, the typing Agents first ("typing"), then each other Agent with its current label; a row
+  opens its profile. A polite `role="status"` beside the line carries only who is typing, so a
+  screen reader is not told each change in who is working.
 - `ThreadReplyingLine` is the same line under a root's thread preview in the conversation's stream
   (never in a thread pane, which has its own), worded "is replying" (`agent_thread_replying_*`),
   for the Agents about to post in that root's thread; the Agent's reply arriving ends it, whether or

@@ -1,5 +1,9 @@
 import { useState, type ReactNode, type Ref } from "react";
-import { Dialog as AriaDialog, Popover as AriaPopover } from "react-aria-components";
+import {
+  Dialog as AriaDialog,
+  Popover as AriaPopover,
+  type PopoverProps as AriaPopoverProps,
+} from "react-aria-components";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -12,28 +16,30 @@ import type { AgentMascot } from "./agent-mascot";
 import { AgentMascotAvatar } from "./agent-mascot-avatar";
 
 /**
- * The popover a header control opens with a list of Agents (the thread's following Agents, the
- * chat list header's busy ones): its enter and exit motion, width, and a dialog labelled `label`.
- * `children` receives `close`, to close the popover when a row opens a profile. `dialogRef` reaches
- * the dialog, which a row that leaves the list can hand focus to.
+ * The popover a control opens with a list of Agents (the thread's following Agents, the chat list
+ * header's busy ones, those on the line above a composer): its enter and exit motion, width, and a
+ * dialog labelled `label`. `children` receives `close`, to close the popover when a row opens a
+ * profile. `dialogRef` reaches the dialog, which a row that leaves the list can hand focus to.
  */
 export function AgentListPopover({
   label,
   dialogRef,
+  placement = "bottom end",
   children,
 }: {
   label: string;
   dialogRef?: Ref<HTMLElement>;
+  placement?: AriaPopoverProps["placement"];
   children: (close: () => void) => ReactNode;
 }) {
   return (
     <AriaPopover
-      placement="bottom end"
+      placement={placement}
       offset={8}
       className={cn(
         "origin-(--trigger-anchor-point) overflow-hidden rounded-lg bg-primary shadow-lg ring-1 ring-secondary_alt will-change-transform",
         POPOVER_MOTION,
-        "w-[min(20rem,calc(100vw-2.5rem))]",
+        "w-[min(15rem,calc(100vw-2.5rem))]",
       )}
     >
       <AriaDialog ref={dialogRef} aria-label={label} className="outline-hidden">
@@ -45,16 +51,12 @@ export function AgentListPopover({
 
 /** The scrolling list of `AgentListRow`s inside an `AgentListPopover`. */
 export function AgentListRows({ children }: { children: ReactNode }) {
-  return (
-    <ul className="max-h-72 divide-y divide-secondary overflow-y-auto py-1 [scrollbar-width:thin]">
-      {children}
-    </ul>
-  );
+  return <ul className="max-h-72 overflow-y-auto py-1 [scrollbar-width:thin]">{children}</ul>;
 }
 
 /**
- * One Agent in an `AgentListPopover`: its avatar with status dot and name, with a muted `caption`
- * line under the name when given. With a `mascot` the avatar is the moving one, acting out
+ * One Agent in an `AgentListPopover`, on one line: its avatar with status dot and name, with a
+ * muted `caption` at the far end when given. With a `mascot` the avatar is the moving one, acting out
  * `display` and reacting to the pointer over the row; without one it stays the still picture.
  * With `onOpenProfile` the identity is a button that opens the Agent's profile; `action` is a
  * control after it (unfollow).
@@ -86,26 +88,25 @@ export function AgentListRow({
           mascot={mascot}
           name={name}
           display={display}
+          size="xs"
           cornerDot
           announced
           hovered={hovered}
         />
       ) : (
-        <AgentDisplayAvatar agentId={agentId} name={name} src={src} display={display} size="sm" />
+        <AgentDisplayAvatar agentId={agentId} name={name} src={src} display={display} size="xs" />
       )}
-      {caption ? (
-        <span className="flex min-w-0 flex-1 flex-col text-left">
-          <span className="truncate text-sm font-medium text-primary">{name}</span>
-          <span className="truncate text-xs font-normal text-tertiary">{caption}</span>
+      <span className="min-w-0 truncate text-sm font-medium text-primary">{name}</span>
+      {caption && (
+        <span className="ml-auto max-w-1/2 min-w-0 shrink-0 truncate text-xs font-normal text-tertiary">
+          {caption}
         </span>
-      ) : (
-        <span className="min-w-0 truncate text-sm font-medium text-primary">{name}</span>
       )}
     </>
   );
   return (
     <li
-      className="flex items-center gap-2 px-3 py-2"
+      className="flex items-center gap-2 px-3 py-1.5"
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
     >

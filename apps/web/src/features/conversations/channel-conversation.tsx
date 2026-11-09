@@ -30,6 +30,7 @@ import {
 } from "./direct-conversation";
 import type { ChannelSuggestion } from "./reference-completion";
 import { m } from "#src/paraglide/messages";
+import { ChannelAgentsContext } from "#src/features/agents/channel-agents-context";
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
 import type { ConversationProps } from "./conversation-types";
 import type { ChannelNotificationLevel } from "./notification-levels";
@@ -260,6 +261,17 @@ export function ChannelConversation({
     }),
     [conversation, freshMentionables, mentionOutsiders.data],
   );
+  const directory = conversationWithFreshDirectory.mentionables;
+  const conversationId = conversation.conversationId;
+  const channelAgents = useMemo(
+    () =>
+      directory && {
+        conversationId,
+        agentIds: directory.filter(({ kind }) => kind === "agent").map(({ id }) => id),
+        onOpenAgentProfile,
+      },
+    [directory, conversationId, onOpenAgentProfile],
+  );
   async function join() {
     setJoining(true);
     setError(false);
@@ -280,7 +292,7 @@ export function ChannelConversation({
   );
   const priv = isPrivateChannel(conversation);
   const Glyph = channelGlyph(conversation);
-  return (
+  const threaded = (
     <ThreadedConversation
       conversation={conversationWithFreshDirectory}
       conversationName={channelLabel(conversation)}
@@ -365,6 +377,7 @@ export function ChannelConversation({
       }
     />
   );
+  return <ChannelAgentsContext value={channelAgents}>{threaded}</ChannelAgentsContext>;
 }
 
 /** Replaces the composer of an archived channel: nobody posts or joins until it is unarchived.
