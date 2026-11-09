@@ -1,6 +1,6 @@
 # Raft 1.0.65 Context View 对齐审计
 
-审计对象：`/private/tmp/coforge-context-work`（`feat/agent-context-view` 工作树）。对照包：`/private/tmp/raft-research-current/sea/assets/computer.cjs`。本次复核只改本文档，不改源码；“已对齐”表示当前源码有直接证据，“未验证”表示还没有真实运行链路证据。
+审计对象：`/private/tmp/coforge-context-complete`（`feat/context-view-complete` 工作树）。对照包：`/private/tmp/raft-research-current/sea/assets/computer.cjs`。 “已对齐”表示当前源码有直接证据，“未验证”表示还没有真实运行链路证据。
 
 ## 版本与来源
 
@@ -26,7 +26,7 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 1. **Feature wiring 已完成，但不是 Raft 的实时广播模型。** CoForge 现在有 launch identity gate 和 delivery gate 两路：显式值会同步并在变化时重启 live Agent，delivery 保留并在新 launch 前发送 notice；旧 server 缺字段不会被当成 off。Raft 还提供 `applyServerFlag(enabled, agentIds)`，可立即作用于所有 running agents。CoForge 没有等价的 server-feature broadcast；workspace flag 变化要等下一次 launch 或 delivery。当前没有 runtime integration assertion 证明完整 restart/forget/report 时序，只有 `packages/daemon/test/agent-feature-sync.test.ts` 的行为测试。
 
-2. **错误码没有完全达到 Raft 的可诊断粒度。** Raft bundle 的 `AGENT_CONTEXT_VIEW_FAILURE_REASONS` 含 `offline`、`old_daemon`、`agent_moved`、`expired`、`not_recorded`、`media_removed`、`newer_session_format` 等。当前 daemon query 主要产生 `not_found`、`context_mismatch`、`too_large`、`read_failed` 与 restore failure；Web 主要产生 `offline`、`unsupported`、`timeout`、`unavailable`。protobuf 可承载更多 reason，但尚无证据证明每个状态从 daemon 到 Web 保真传递。
+2. **错误码没有完全达到 Raft 的可诊断粒度。** Raft bundle 的 `AGENT_CONTEXT_VIEW_FAILURE_REASONS` 含 `offline`、`old_daemon`、`agent_moved`、`expired`、`not_recorded`、`media_removed`、`newer_session_format` 等。当前 daemon query 主要产生 `not_found`、`context_mismatch`、`too_large`、`read_failed` 与 restore failure；Web 现在会保留 daemon 的 `failed` 结果和 `reason`，但 Web 自己产生的 `unsupported`、`timeout`、`unavailable` 仍未细分为 Raft 的全部原因，且部分 daemon 生命周期状态仍未生成。
 
 3. **完整链路仍未验证。** 尚无 staging/browser E2E 覆盖：owner action → Server Function → Redis pending → Centrifugo daemon request → real Agent transcript/captured log → child restore → gzip HTTP upload → scoped result acceptance → browser render。现有 Web 测试是纯 principal helper，不能证明真实 auth、transport、Redis 或 provider 行为。因此 Pi/Builtin 的 writer/source 实现已对齐，但真实 provider E2E 仍为 **NOT VERIFIED**。
 
