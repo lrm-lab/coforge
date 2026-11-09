@@ -104,6 +104,48 @@ test("normalizes a gzip result before exposing it to the viewer", async () => {
   }
 });
 
+test("preserves a daemon failure result and reason for the viewer", async () => {
+  let sentRequestId = "";
+  const request = {
+    computerId: "c",
+    agentId: "a",
+    messageId: "m",
+    sessionId: "s",
+    maxBytes: 1024,
+  };
+  const service = new ComputerAgentContextViews(
+    {
+      owned: async () => true,
+      online: async () => true,
+      supported: async () => true,
+      publish: async (value) => {
+        sentRequestId = value.requestId;
+      },
+      results: {
+        begin: async () => {},
+        read: async () => ({
+          protocolMajor: 1,
+          requestId: sentRequestId,
+          workspaceId: "w",
+          ...request,
+          status: "failed" as const,
+          reason: "media_removed",
+          createdAtMs: 1,
+          content: new Uint8Array(),
+          encoding: "identity" as const,
+        }),
+        clear: async () => {},
+      },
+    },
+    { now: () => 0, wait: async () => {}, timeoutMs: 1 },
+  );
+  const result = await service.view({ userId: "u", workspaceId: "w" }, request);
+  expect(result).toEqual({
+    status: "failed",
+    result: expect.objectContaining({ status: "failed", reason: "media_removed" }),
+  });
+});
+
 test("owner check rejects before contacting the Computer", async () => {
   let published = false;
   const service = new ComputerAgentContextViews({

@@ -3,6 +3,7 @@ import type { AgentContextViewRequest, AgentContextViewResult } from "@lrm/cofor
 export type AgentContextViewViewer = { userId: string; workspaceId: string };
 export type AgentContextViewResponse =
   | { status: "ready"; result: AgentContextViewResult }
+  | { status: "failed"; result: AgentContextViewResult }
   | { status: "offline" | "unsupported" | "timeout" | "unavailable" };
 
 export function sameAgentContextViewScope(
@@ -96,7 +97,9 @@ export class ComputerAgentContextViews {
               return { status: "unavailable" };
             }
           }
-          return { status: "ready", result };
+          return result.status === "failed"
+            ? { status: "failed", result }
+            : { status: "ready", result };
         }
         await this.timing.wait(100);
       }

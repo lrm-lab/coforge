@@ -38,6 +38,11 @@ export function AgentContextView({
             const result = await request({
               data: { computerId, agentId, messageId, sessionId, maxBytes },
             });
+            if (result.status === "failed") {
+              setState("failed");
+              setText(`Context unavailable: ${result.result.reason ?? "read_failed"}`);
+              return;
+            }
             if (result.status !== "ready") {
               setState("failed");
               setText(`Context unavailable: ${result.status}`);
