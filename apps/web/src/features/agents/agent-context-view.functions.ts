@@ -38,7 +38,9 @@ export const resolveAgentContextViewTarget = createServerFn({ method: "GET" })
       },
     });
     const sessionId = agent?.currentSession?.nativeSessionId;
-    if (!agent?.computerId || !sessionId) return { status: "unavailable" as const };
+    if (!agent?.computerId)
+      return { status: "unavailable" as const, reason: "no_computer" as const };
+    if (!sessionId) return { status: "unavailable" as const, reason: "not_recorded" as const };
     const delivery =
       (await db.agentMessageDelivery.findFirst({
         where: { workspaceId, agentId: agent.id, mentionSessionId: sessionId },
@@ -50,7 +52,7 @@ export const resolveAgentContextViewTarget = createServerFn({ method: "GET" })
         orderBy: [{ sequence: "desc" }, { createdAt: "desc" }],
         select: { messageId: true },
       }));
-    if (!delivery) return { status: "unavailable" as const };
+    if (!delivery) return { status: "unavailable" as const, reason: "not_recorded" as const };
     return {
       status: "ready" as const,
       computerId: agent.computerId,
