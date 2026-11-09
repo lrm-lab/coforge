@@ -61,19 +61,19 @@ function useStatusOnlyAgentDisplay(agentId: string): AgentDisplaySnapshot | unde
   return useSelector(useContext(StatusOnlyDisplaysContext), (displays) => displays.get(agentId));
 }
 
-/** Each live Agent's latest display by id, for avatars' status dots. An Agent with no full
- * display falls back to its status floor, so a private Agent the viewer cannot otherwise see
- * still answers online/working/offline where its name already renders. */
+/** Each live Agent's latest display by id — the viewer's roster and the others' (`isExtra`)
+ * alike, for avatars' status dots and member lists. An Agent with no full display falls back to
+ * its status floor, so a private Agent the viewer cannot otherwise see still answers
+ * online/working/offline where its name already renders. */
 export function useAgentDisplays(): Map<string, AgentDisplaySnapshot | undefined> {
   const agents = useSelector(useContext(LiveAgentStoreContext), (state) => state);
-  const roster = useMemo(() => agents.filter((agent) => !agent.isExtra), [agents]);
   const statusOnly = useSelector(useContext(StatusOnlyDisplaysContext), (displays) => displays);
   return useMemo(() => {
-    const displays = new Map(roster.map((agent) => [agent.id, agent.display]));
+    const displays = new Map(agents.map((agent) => [agent.id, agent.display]));
     for (const [agentId, display] of statusOnly)
       if (displays.get(agentId) === undefined) displays.set(agentId, display);
     return displays;
-  }, [roster, statusOnly]);
+  }, [agents, statusOnly]);
 }
 
 /**

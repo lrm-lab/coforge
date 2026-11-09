@@ -33,6 +33,7 @@ e2e-query-cache-persistence.e2e.ts 16
 e2e-message-forward.e2e.ts 16
 e2e-action-card-one-step.e2e.ts 15
 e2e-project-task-tree.e2e.ts 15
+e2e-channel-members-agent-status.e2e.ts 15
 e2e-choice-card-other.e2e.ts 14
 e2e-sidebar-agent-status.e2e.ts 14
 e2e-task-popup-profile.e2e.ts 14
