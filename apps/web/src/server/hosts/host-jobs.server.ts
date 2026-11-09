@@ -552,7 +552,9 @@ export function compareJobs(left: HostJobRecord, right: HostJobRecord): number {
 }
 
 function cloudComputerName(displayName: string, slot: CloudSlot): string {
-  return slot === "default" ? `${displayName}的默认云电脑` : `${displayName}的新建云电脑`;
+  return slot === "default"
+    ? `${displayName}'s Default Cloud Computer`
+    : `${displayName}'s New Cloud Computer`;
 }
 
 function active(computers: CloudComputer[]): CloudComputer[] {

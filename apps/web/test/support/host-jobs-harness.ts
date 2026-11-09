@@ -11,8 +11,8 @@ import { reconnectCloudHostJob } from "#src/server/hosts/host-jobs-cloud-reconne
 export const now = new Date("2026-09-30T06:00:00.000Z");
 export const daemonKey = `dk_${"b".repeat(43)}`;
 export const ownerDisplayName = "Ada Lovelace";
-export const defaultCloudName = `${ownerDisplayName}的默认云电脑`;
-export const extraCloudName = `${ownerDisplayName}的新建云电脑`;
+export const defaultCloudName = `${ownerDisplayName}'s Default Cloud Computer`;
+export const extraCloudName = `${ownerDisplayName}'s New Cloud Computer`;
 export const accounts = {
   displayName: async (userId: string) => (userId === "user-a" ? ownerDisplayName : undefined),
 };
