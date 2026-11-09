@@ -36,9 +36,8 @@ import { SEARCH_HEADING_CLASS, SEARCH_ROW_CLASS, SearchEntityList } from "./sear
 import { searchEntityKey, type SearchEntityKey } from "./search-memory";
 import { SearchMatches } from "./search-matches";
 import { SearchTaskList } from "./search-task-list";
-import { taskSearchQuery } from "./search-queries";
 import type { SearchFilters } from "./search-filters";
-import { messageSearchQuery, searchDirectoryQuery } from "./search-queries";
+import { messageSearchQuery, searchDirectoryQuery, taskSearchQuery } from "./search-queries";
 
 /**
  * The results of a committed search: the channels, Agents and Computers its query names, then its
@@ -63,14 +62,7 @@ export function SearchResults({
 }) {
   const search = useMessageSearch(workspaceId, query, filters, timeZone);
   const { entities, pending: entitiesPending } = useSearchEntities(workspaceId, query);
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const here = conversationAt(pathname);
-  const currentConversationId =
-    here && "channelId" in here ? here.channelId : here && "dmId" in here ? here.dmId : undefined;
-  const taskSearch = useQuery(
-    taskSearchQuery(workspaceId, query, filters.channelId, currentConversationId),
-  );
-  const tasks = taskSearch.data ?? [];
+  const { tasks, pending: tasksPending } = useSearchTasks(workspaceId, query, filters.channelId);
   const refreshing = search.isFetching && !search.isFetchingNextPage;
   const hits = search.data?.pages.flatMap((page) => page.results) ?? [];
   const terms = searchTerms(query);
@@ -78,7 +70,7 @@ export function SearchResults({
   // Nothing matched only once both the messages and the Workspace lists have loaded.
   const nothingMatched =
     hits.length === 0 && !search.isPending && !search.isError && !entitiesPending;
-  if (nothingMatched && entities.length === 0 && tasks.length === 0 && !taskSearch.isPending) {
+  if (nothingMatched && entities.length === 0 && tasks.length === 0 && !tasksPending) {
     return (
       <div className="flex items-start justify-center px-6 py-10">
         <Empty>
@@ -141,6 +133,18 @@ function useMessageSearch(
 }
 
 /** The channels, Computers and Agents the query names; none without a query. */
+function useSearchTasks(workspaceId: string, query: string, conversationId: string | undefined) {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const here = conversationAt(pathname);
+  const currentConversationId =
+    here && "channelId" in here ? here.channelId : here && "dmId" in here ? here.dmId : undefined;
+  const { data, isPending } = useQuery({
+    ...taskSearchQuery(workspaceId, query, conversationId, currentConversationId),
+    placeholderData: keepPreviousData,
+  });
+  return { tasks: data ?? [], pending: Boolean(query) && isPending };
+}
+
 function useSearchEntities(
   workspaceId: string,
   query: string,

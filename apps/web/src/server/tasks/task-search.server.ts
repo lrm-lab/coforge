@@ -1,8 +1,8 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
-import { searchTerms } from "#src/lib/search-terms";
-import { readableChannelSql } from "#src/server/conversations/channel-read-access.server";
-import { containsPattern } from "#src/server/db/repositories/message-search.repositories.server";
-import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
+import { containsPattern, searchTerms } from "#src/lib/search-terms";
+import { readablePersonConversationSql } from "#src/server/conversations/channel-read-access.server";
+import { BROWSER_MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
+import { readTaskText } from "./task-view.server";
 
 const TASK_SEARCH_LIMIT = 5;
 
@@ -21,28 +21,23 @@ export type TaskSearchInput = {
  * conversation's 46, and `#general:#46` the one in that channel; anything else matches the title.
  */
 function taskMatch(query: string): Prisma.Sql[] {
-  const reference = /^#([^\s:#]+):#(\d+)$/.exec(query);
+  const reference = /^#(?:([^\s:#]+):#)?(\d+)$/.exec(query);
   if (reference)
     return [
-      Prisma.sql`c."channelName" = ${reference[1]}`,
+      ...(reference[1] ? [Prisma.sql`c."channelName" = ${reference[1]}`] : []),
       Prisma.sql`t."number" = ${Number(reference[2])}`,
     ];
-  const number = /^#(\d+)$/.exec(query);
-  if (number) return [Prisma.sql`t."number" = ${Number(number[1])}`];
   return searchTerms(query).map((term) => Prisma.sql`t."title" ILIKE ${containsPattern(term)}`);
 }
 
 /** The Tasks a search finds, in the conversations the viewer may read, newest change first. */
 export async function searchTasks(db: PrismaClient, input: TaskSearchInput) {
-  await requireWorkspaceMember(db, input.workspaceId, input.userId);
   const match = taskMatch(input.query);
   if (match.length === 0) return [];
   const conditions = [
     Prisma.sql`t."workspaceId" = ${input.workspaceId}::uuid`,
-    Prisma.sql`(${readableChannelSql("c", input.workspaceId, { userId: input.userId })}
-      OR c."directKey" IS NOT NULL AND EXISTS (
-      SELECT 1 FROM "conversation_members" v
-      WHERE v."conversationId" = c."id" AND v."userId" = ${input.userId}::uuid))`,
+    Prisma.sql`t."deletedAt" IS NULL`,
+    readablePersonConversationSql("c", input.workspaceId, input.userId),
     ...match,
     ...(input.conversationId
       ? [Prisma.sql`t."conversationId" = ${input.conversationId}::uuid`]
@@ -66,7 +61,13 @@ export async function searchTasks(db: PrismaClient, input: TaskSearchInput) {
       title: true,
       status: true,
       conversation: { select: { id: true, channelName: true } },
+      message: { select: { mentions: BROWSER_MESSAGE_MENTIONS_SELECT } },
     },
   });
-  return tasks.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  return tasks
+    .sort((a, b) => order.get(a.id)! - order.get(b.id)!)
+    .map(({ message, ...task }) => ({
+      ...task,
+      title: readTaskText(task.title, "people", message?.mentions ?? []),
+    }));
 }
