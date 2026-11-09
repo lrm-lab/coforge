@@ -34,7 +34,7 @@ import {
 import { DaemonNoticePublications } from "./daemon-notice-publications";
 import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
-import { messageEndpoint, serverEndpoint } from "./daemon-endpoints";
+import { serverEndpoint } from "./daemon-endpoints";
 import { DaemonQueries } from "./daemon-queries";
 import { routeRuntimeAuthPublication } from "./runtime-auth-publication";
 import { DaemonConnectionWorkspaceBindings } from "./daemon-connection-workspace-bindings";
@@ -209,13 +209,11 @@ import { getLogger } from "@logtape/logtape";
 import { AGENT_RPC_TIMEOUT_MS, channelEndpointFor, sendAgentJson } from "./agent-http-wire";
 import { AgentMigrationHttpClient } from "./agent-migration-http-client";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
-import { adaptAgentHistoryResponse } from "./agent-history-response";
 import {
-  adaptAgentReactionResponse,
-  adaptAgentResolveResponse,
-  adaptAgentSearchResponse,
-  adaptAgentSendResponse,
-} from "./agent-message-adapters";
+  agentMessage,
+  reconcileAgentSend,
+  type AgentMessagePorts,
+} from "./agent-message-operations";
 import {
   agentApp,
   agentArtifact,
@@ -865,129 +863,23 @@ export class DaemonConnection
     request: AgentMessageRequest,
     agentApiKey: string,
   ): Promise<AgentMessageTransportResponse> {
-    this.#assertConnected();
-    const {
-      requestRead,
-      requestSearch,
-      requestSend,
-      requestResolve,
-      requestReaction,
-      requestEvents,
-      requestChannelMute,
-      requestThreadUnfollow,
-    } = this.agentMessageHttpClient;
-    if (request.operation === "check") {
-      if (!requestEvents) throw new Error("unsupported Agent message operation: check");
-      const url = messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.events.path);
-      const events = await requestEvents({ url, ...this.#agentKeys(agentApiKey), request });
-      return {
-        idempotencyKey: events.idempotencyKey,
-        accepted: true,
-        attentionCount: events.events.length,
-        messages: events.events,
-        messageId: "",
-        hasMore: events.hasMore,
-      };
-    }
-    if (request.operation === "mute" || request.operation === "unmute") {
-      if (!requestChannelMute)
-        throw new Error(`unsupported Agent message operation: ${request.operation}`);
-      const muted = request.operation === "mute";
-      const path = muted
-        ? agentApiRoutes.cloud.channels.mute.path(request.target)
-        : agentApiRoutes.cloud.channels.unmute.path(request.target);
-      const url = messageEndpoint(this.#serverHttpUrl, path);
-      const result = await requestChannelMute({
-        url,
-        ...this.#agentKeys(agentApiKey),
-        request: { ...request, muted },
-      });
-      return {
-        idempotencyKey: result.idempotencyKey,
-        accepted: true,
-        attentionCount: 0,
-        messages: [],
-        messageId: "",
-      };
-    }
-    if (request.operation === "thread-unfollow") {
-      if (!requestThreadUnfollow)
-        throw new Error("unsupported Agent message operation: thread-unfollow");
-      const url = messageEndpoint(
-        this.#serverHttpUrl,
-        agentApiRoutes.cloud.threads.unfollow.path(request.target),
-      );
-      const result = await requestThreadUnfollow({ url, ...this.#agentKeys(agentApiKey), request });
-      return {
-        idempotencyKey: result.idempotencyKey,
-        accepted: true,
-        attentionCount: 0,
-        messages: [],
-        messageId: "",
-      };
-    }
-    if (request.operation === "resolve") {
-      if (!requestResolve) throw new Error("unsupported Agent message operation: resolve");
-      const url = messageEndpoint(
-        this.#serverHttpUrl,
-        agentApiRoutes.cloud.messages.resolve.path(request.messageId ?? ""),
-      );
-      return adaptAgentResolveResponse(
-        await requestResolve({ url, ...this.#agentKeys(agentApiKey), request }),
-      );
-    }
-    if (request.operation === "react" || request.operation === "unreact") {
-      if (!requestReaction)
-        throw new Error(`unsupported Agent message operation: ${request.operation}`);
-      const url = messageEndpoint(
-        this.#serverHttpUrl,
-        agentApiRoutes.cloud.messages.reactions.path(request.messageId ?? ""),
-      );
-      const method =
-        request.operation === "react"
-          ? agentApiRoutes.cloud.messages.reactions.add.method
-          : agentApiRoutes.cloud.messages.reactions.remove.method;
-      return adaptAgentReactionResponse(
-        await requestReaction({ url, method, ...this.#agentKeys(agentApiKey), request }),
-      );
-    }
-    if (request.operation === "read") {
-      if (!requestRead) throw new Error("unsupported Agent message operation: read");
-      const url = messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.messages.list.path);
-      return adaptAgentHistoryResponse(
-        await requestRead({ url, ...this.#agentKeys(agentApiKey), request }),
-      );
-    }
-    if (request.operation === "search") {
-      if (!requestSearch) throw new Error("unsupported Agent message operation: search");
-      const url = messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.messages.search.path);
-      return adaptAgentSearchResponse(
-        await requestSearch({ url, ...this.#agentKeys(agentApiKey), request }),
-      );
-    }
-    if (request.operation === "send") {
-      if (!requestSend) throw new Error("unsupported Agent message operation: send");
-      const url = messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.messages.send.path);
-      return adaptAgentSendResponse(
-        await requestSend({ url, ...this.#agentKeys(agentApiKey), request }),
-      );
-    }
-    throw new Error(`unsupported Agent message operation: ${request.operation}`);
+    return agentMessage(this.#agentMessagePorts(), request, agentApiKey);
   }
 
   async reconcileAgentSend(
     request: AgentSendReconciliationRequest,
     agentApiKey: string,
   ): Promise<AgentSendReconciliationResponse> {
-    this.#assertConnected();
-    const { requestSendReconciliation } = this.agentMessageHttpClient;
-    if (!requestSendReconciliation)
-      throw new Error("unsupported Agent message operation: send reconciliation");
-    return requestSendReconciliation({
-      url: messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.messages.send.path),
-      ...this.#agentKeys(agentApiKey),
-      request,
-    });
+    return reconcileAgentSend(this.#agentMessagePorts(), request, agentApiKey);
+  }
+
+  #agentMessagePorts(): AgentMessagePorts {
+    return {
+      assertConnected: () => this.#assertConnected(),
+      serverHttpUrl: this.#serverHttpUrl,
+      keys: (agentApiKey) => this.#agentKeys(agentApiKey),
+      client: this.agentMessageHttpClient,
+    };
   }
 
   async workspaceInfo(

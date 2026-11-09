@@ -182,7 +182,8 @@ import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-in
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
-import { composeMessages, agentDeliveryRejection } from "./message-composition";
+import { composeMessages } from "./message-composition";
+import { assembleExitedDelivery } from "./assemble-exited-delivery";
 import { composeRuntimeServices } from "./runtime-services-composition";
 import { AgentOperations } from "./agent-operations";
 import { composeAgentControl } from "./agent-control-composition";
@@ -194,7 +195,7 @@ import {
 import type { UnrefTimerSchedule } from "./unref-timer";
 import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
-import { logAgentOperationFailure, logComputerUpdateNoticeFailure } from "./agent-failure-logs";
+import { logComputerUpdateNoticeFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
@@ -234,42 +235,21 @@ export class DaemonRuntime {
   #isWorking = (agentId: string): boolean => isWorking(this.#turnPorts(), agentId);
   #sendAgentStatus = (agentId: string, status: "active" | "inactive"): void =>
     sendAgentStatus(this.#statusReportPorts, agentId, status);
-  readonly #exitedDelivery = new AgentExitedDelivery({
-    hasRuntimeErrorHold: (agentId) => this.#deliveryQueue.explicitHold(agentId) !== undefined,
-    holdRuntimeErrorDelivery: (message) => this.#messageAttention.receive(message),
-    hasConsumed: (message) => this.#messageAttention.hasConsumed(message),
-    logConsumed: (message) => this.#messageAttention.logDecision(message, "consumed"),
-    acknowledge: (message) => this.#messageAttention.acknowledge(message),
-    acknowledgeCustody: (message) => this.#launchCustody.acknowledge(message),
-    restartConfig: (agentId) => this.#agentProcessManager.restartConfig(agentId),
-    startPending: (agentId) => this.#agentControl.startPending(agentId),
-    hasQueued: (agentId) => this.#deliveryQueue.hasQueued(agentId),
-    queueForNextLaunch: (agentId, m) => this.#deliveryQueue.enqueue(agentId, m),
-    wakeBlockedUntil: (agentId) =>
-      this.#wakeLaunchFailures.isBlocked(agentId)
-        ? this.#wakeLaunchFailures.blockedUntil(agentId)
-        : undefined,
-    enqueueInputDelivery: (agentId, message) =>
-      this.#launchCustody.enqueueDelivery(agentId, message),
-    wakeAgent: (agentId, restart) => this.#wakeAgent(agentId, restart),
-    offline: {
-      has: (agentId) => this.#offlineResidency.has(agentId),
-      restate: (agentId) => this.#offlineResidency.restate(agentId),
-    },
-    queuedInputDeliveries: (agentId) => this.#inputDrain.queuedDeliveries(agentId),
-    drainInputDeliveries: (agentId) => this.#inputDrain.drainDeliveries(agentId),
-    closeAgentInputQueue: (agentId, error) => this.#inputDrain.close(agentId, error),
-    dropMentionAsUnknown: (message) =>
-      this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
+  readonly #exitedDelivery: AgentExitedDelivery = assembleExitedDelivery({
+    deliveryQueue: this.#deliveryQueue,
+    wakeLaunchFailures: this.#wakeLaunchFailures,
     sendAgentStatus: this.#sendAgentStatus,
-    sendAgentDeliveryRejection: (message, reason) =>
-      this.#transport.sendAgentDeliveryRejection?.(agentDeliveryRejection(message, reason)) ??
-      Promise.resolve(),
-    hasSession: (agentId) => this.#agentProcessManager.session(agentId) !== undefined,
-    redeliver: (message) =>
-      void this.handleAgentMessage(message).catch((error) =>
-        logAgentOperationFailure(this.#connection.computerId, "message_delivery", message, error),
-      ),
+    messageAttention: () => this.#messageAttention,
+    launchCustody: () => this.#launchCustody,
+    agentProcessManager: () => this.#agentProcessManager,
+    agentControl: () => this.#agentControl,
+    offlineResidency: () => this.#offlineResidency,
+    inputDrain: () => this.#inputDrain,
+    mentionDeliveries: () => this.#mentionDeliveries,
+    transport: () => this.#transport,
+    computerId: () => this.#connection.computerId,
+    wakeAgent: (agentId, restart) => this.#wakeAgent(agentId, restart),
+    handleAgentMessage: (message) => this.handleAgentMessage(message),
   });
   /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
   readonly #wakeLaunches = new Set<string>();
