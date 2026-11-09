@@ -101,8 +101,11 @@ export function AgentDeleteDialog({
                 <Text slot="description" className="block px-6 text-sm text-secondary">
                   {m.agent_delete_dialog_description()}
                 </Text>
-                <label className="grid gap-1 px-6 pt-5 text-sm font-medium wrap-anywhere">
-                  {m.agent_delete_confirm({ name: agentName })}
+                <label className="grid gap-1 px-6 pt-5 text-sm font-medium text-secondary wrap-anywhere">
+                  <EmphasizedName
+                    text={m.agent_delete_confirm({ name: agentName })}
+                    name={agentName}
+                  />
                   <Input
                     size={controlSize}
                     autoFocus
@@ -139,5 +142,18 @@ export function AgentDeleteDialog({
         </Dialog>
       </Modal>
     </ModalOverlay>
+  );
+}
+
+/** The confirmation line with the name to type in bold, so it reads at a glance as the string to copy. */
+function EmphasizedName({ text, name }: { text: string; name: string }) {
+  const at = text.indexOf(name);
+  if (at < 0) return text;
+  return (
+    <span>
+      {text.slice(0, at)}
+      <strong className="font-semibold text-primary">{name}</strong>
+      {text.slice(at + name.length)}
+    </span>
   );
 }
