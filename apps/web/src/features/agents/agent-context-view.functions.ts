@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { declareNoStore } from "#src/features/no-store-response.server";
 import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { computerAgentContextViews } from "#src/server/computers/computer-agent-context-views-production.server";
@@ -21,6 +22,7 @@ export const requestAgentContextView = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(requestSchema)
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    declareNoStore();
     return computerAgentContextViews(db).view({ userId: user.id, workspaceId }, data);
   });
 
@@ -29,6 +31,7 @@ export const resolveAgentContextViewTarget = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ agentId: z.string().min(1) }))
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    declareNoStore();
     const agent = await db.agent.findFirst({
       where: { id: data.agentId, workspaceId, ownerId: user.id, deletedAt: null },
       select: {
