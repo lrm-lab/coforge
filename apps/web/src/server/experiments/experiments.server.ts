@@ -20,6 +20,9 @@ export const EXPERIMENTS = {
   drafts: { flag: null, defaultEnabled: true, reload: false },
   artifacts: { flag: null, defaultEnabled: false, reload: false },
   aiWorkbench: { flag: null, defaultEnabled: true, reload: false },
+  // The Memory Agent is on only when the deployment env flag is on and this is too (task #6):
+  // the default is the second switch's, the env flag stays the master one.
+  memoryAgent: { flag: null, defaultEnabled: false, reload: true },
 } as const satisfies Record<
   string,
   { flag: FeatureFlag | null; defaultEnabled: boolean; reload: boolean }

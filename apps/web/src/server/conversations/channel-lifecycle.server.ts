@@ -12,7 +12,7 @@ import { deleteChannelRows } from "#src/server/db/repositories/channel-deletion.
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { getFileStorage, type BulkFileRemoval } from "#src/server/files/file-storage.server";
 import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
-import { isOpenVikingPrototypeEnabled } from "#src/server/workspace-memory/prototype-gate";
+import { memoryAgentGate } from "#src/server/workspace-memory/memory-agent-gate.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { findChannelById, memberChannel, type PublicChannelPorts } from "./channel-access.server";
@@ -87,7 +87,7 @@ export async function createUserChannel(
       conversationId: created.id,
       actorUserId: userId,
       now: new Date(),
-      gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
+      gate: await memoryAgentGate(db, workspaceId),
     });
   await Promise.all([
     announceChannelCreated(realtime, {

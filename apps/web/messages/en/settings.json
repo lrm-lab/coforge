@@ -215,5 +215,7 @@
   "experiments_artifacts_description": "Versioned documents that people and Agents edit together in a conversation. Applies to the whole Workspace, Agents included.",
   "experiments_ai_workbench": "AI Workbench",
   "experiments_ai_workbench_description": "Chat with an AI in the sidebar and have it work on your Computer. Applies to the whole Workspace.",
+  "experiments_memory_agent": "Memory Agent",
+  "experiments_memory_agent_description": "A Workspace Agent that keeps long-term memory for the whole Workspace and answers questions from it. Applies to the whole Workspace; turning it off keeps its history and identity.",
   "settings_labels": "Labels"
 }

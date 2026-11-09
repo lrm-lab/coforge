@@ -14,7 +14,7 @@ import { createOpenVikingAdmittedDeliverySink } from "./ov-sink.server";
 import { createWorkspaceMemoryProfileReconciler } from "./reconciler";
 import { createWorkspaceMemoryProfiles } from "./profiles";
 import { createWorkspaceMemorySwitching } from "./switching";
-import { isOpenVikingPrototypeEnabled } from "./prototype-gate";
+import { memoryAgentGateSource } from "./memory-agent-gate.server";
 import { bindUnboundMemoryAgentComputer } from "./default-memory-agent.server";
 import {
   createProductionMemoryRuntimeProvisioner,
@@ -87,10 +87,8 @@ export function composeWorkspaceMemoryLifecycle(input: {
     mappedIdentities: identities,
     readiness: createPrototypeMemoryRuntimeReadiness(),
   });
-  const profileApi = createWorkspaceMemoryProfiles({
-    store: profiles,
-    gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
-  });
+  const gate = memoryAgentGateSource(input.db);
+  const profileApi = createWorkspaceMemoryProfiles({ store: profiles, gate });
   const reconciler = createWorkspaceMemoryProfileReconciler({ store: profiles, provisioner });
   const dispatcher = createAdmissionDispatcher({
     admission,
@@ -133,7 +131,7 @@ export function composeWorkspaceMemoryLifecycle(input: {
       lock: input.lock,
       now: input.now,
       quietAfterMs: WORKSPACE_MEMORY_QUIET_WINDOW_MS,
-      openVikingGate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
+      openVikingGate: gate,
       bindUnboundComputer: (workspaceId) => bindUnboundMemoryAgentComputer(input.db, workspaceId),
     }),
     switching,

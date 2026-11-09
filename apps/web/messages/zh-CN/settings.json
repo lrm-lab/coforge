@@ -215,5 +215,7 @@
   "experiments_artifacts_description": "在对话里由人和 Agent 一起编辑、保留每个版本的文档。对整个工作区生效，包括所有 Agent。",
   "experiments_ai_workbench": "AI Workbench",
   "experiments_ai_workbench_description": "在侧边栏里和 AI 对话，让它在你的电脑上干活。对整个工作区生效。",
+  "experiments_memory_agent": "Memory Agent",
+  "experiments_memory_agent_description": "为整个工作区维护长期记忆、并据此回答问题的 Agent。对整个工作区生效；关掉后它的身份和历史都会保留。",
   "settings_labels": "标签"
 }

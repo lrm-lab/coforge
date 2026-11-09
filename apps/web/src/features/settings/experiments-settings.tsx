@@ -43,6 +43,10 @@ const EXPERIMENT_TEXT: Record<
     name: () => m.experiments_ai_workbench(),
     description: () => m.experiments_ai_workbench_description(),
   },
+  memoryAgent: {
+    name: () => m.experiments_memory_agent(),
+    description: () => m.experiments_memory_agent_description(),
+  },
 };
 
 /** The Workspace's cache is cleared on a Workspace switch, so the key needs no Workspace id. */

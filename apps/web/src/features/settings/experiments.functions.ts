@@ -10,6 +10,10 @@ import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { announceFeaturesChanged } from "#src/server/experiments/features-signal.server";
 import { requireComputersForTaskConversations } from "#src/server/tasks/task-computer-gate.server";
+import {
+  enableMemoryAgentForWorkspace,
+  rollbackMemoryAgentEnable,
+} from "#src/server/workspace-memory/default-memory-agent.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
 const setExperimentInputSchema = z.object({
@@ -51,7 +55,23 @@ export const setExperiment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { experiments, workspace } = await experimentsFor(context.db, context.workspaceId);
     const role = await workspaceMemberRole(context.db, context.workspaceId, context.user.id);
-    const view = await experiments.set(workspace, role, data.key, data.enabled);
-    await announceFeaturesChanged(createCentrifugoServerApi(), context.workspaceId);
-    return view;
+    // The Memory Agent's own switch creates the Agent the switch is about (task #6). If storing the
+    // choice then fails, the creation goes with it: a Workspace must not be left with an Agent for
+    // an experiment it never switched on.
+    const created =
+      data.key === "memoryAgent" && data.enabled
+        ? await enableMemoryAgentForWorkspace(context.db, context.workspaceId, context.user.id)
+        : undefined;
+    try {
+      const view = await experiments.set(workspace, role, data.key, data.enabled);
+      await announceFeaturesChanged(createCentrifugoServerApi(), context.workspaceId);
+      return view;
+    } catch (error) {
+      if (created)
+        await rollbackMemoryAgentEnable(context.db, {
+          workspaceId: context.workspaceId,
+          agentId: created,
+        });
+      throw error;
+    }
   });

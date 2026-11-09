@@ -8,6 +8,7 @@ import { RUNTIME_PROVIDER, deletedAgentName } from "@lrm/coforge-sdk/internal";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { memoryAgentGate } from "./memory-agent-gate.server";
 import { isOpenVikingPrototypeEnabled } from "./prototype-gate";
 import {
   sanitizeWorkspaceMemoryFailure,
@@ -112,6 +113,9 @@ export async function attachDefaultMemoryAgentToGeneral(
   db: PrismaClient,
   workspaceId: string,
   actorUserId: string,
+  /** The gate to provision under; the Workspace's own answer unless a caller is about to make it
+   * one (`enableMemoryAgentForWorkspace`). */
+  gate?: PrototypeGate,
 ): Promise<void> {
   const general = await db.conversation.findUnique({
     where: { workspaceId_channelName: { workspaceId, channelName: "general" } },
@@ -123,8 +127,38 @@ export async function attachDefaultMemoryAgentToGeneral(
     conversationId: general.id,
     actorUserId,
     now: new Date(),
-    gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
+    gate: gate ?? (await memoryAgentGate(db, workspaceId)),
   });
+}
+
+/**
+ * The `memoryAgent` experiment switching on (task #6): creates the Agent and provisions it under
+ * the gate this enable is about to have. Nothing is created while the deployment's master switch
+ * is off — the experiment may be switched on there and simply arm the Workspace for later.
+ *
+ * Returns the Agent this call created, so a switch that could not be stored can remove it again;
+ * an Agent that was already there belongs to the Workspace and is never this call's to remove.
+ */
+export async function enableMemoryAgentForWorkspace(
+  db: PrismaClient,
+  workspaceId: string,
+  actorUserId: string,
+): Promise<string | undefined> {
+  if (!isOpenVikingPrototypeEnabled(Bun.env)) return undefined;
+  const before = await liveMemoryAgentId(db, workspaceId);
+  await attachDefaultMemoryAgentToGeneral(db, workspaceId, actorUserId, { prototypeEnabled: true });
+  const created = await liveMemoryAgentId(db, workspaceId);
+  return before === null && created !== null ? created : undefined;
+}
+
+/** Undoes that creation: the Agent goes, and so does a profile the same call provisioned, so the
+ * Workspace is back to having switched nothing on. */
+export async function rollbackMemoryAgentEnable(
+  db: PrismaClient,
+  input: { workspaceId: string; agentId: string },
+): Promise<void> {
+  await db.agent.deleteMany({ where: { id: input.agentId } });
+  await db.workspaceMemoryProfile.deleteMany({ where: { workspaceId: input.workspaceId } });
 }
 
 /**

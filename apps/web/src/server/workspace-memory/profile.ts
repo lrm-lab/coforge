@@ -48,6 +48,21 @@ export type PrototypeGate = {
   prototypeEnabled: boolean;
 };
 
+/**
+ * A gate that is the same for every Workspace, or one resolved per Workspace (task #6: the
+ * deployment's env flag and the Workspace's own experiment are two switches, and the second one
+ * belongs to the Workspace asking). Callers resolve it once per call, never hold it.
+ */
+export type PrototypeGateSource = PrototypeGate | ((workspaceId: string) => Promise<PrototypeGate>);
+
+export async function resolvePrototypeGate(
+  source: PrototypeGateSource | undefined,
+  workspaceId: string,
+): Promise<PrototypeGate> {
+  if (source === undefined) return { prototypeEnabled: false };
+  return typeof source === "function" ? source(workspaceId) : source;
+}
+
 export function createDefaultWorkspaceMemoryProfile(workspaceId: string): WorkspaceMemoryProfile {
   return {
     workspaceId,

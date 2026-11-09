@@ -3,8 +3,9 @@ import {
   applyWorkspaceMemoryCommand,
   createDefaultWorkspaceMemoryProfile,
   parseDesiredWorkspaceMemoryProfile,
+  resolvePrototypeGate,
   type ProfileCommandResult,
-  type PrototypeGate,
+  type PrototypeGateSource,
   type WorkspaceMemoryProfile,
 } from "./profile";
 import { saveProfileTransition, type WorkspaceMemoryProfileStore } from "./stores";
@@ -24,9 +25,9 @@ export type WorkspaceMemoryProfiles = {
 
 export function createWorkspaceMemoryProfiles(deps: {
   store: WorkspaceMemoryProfileStore;
-  gate?: PrototypeGate;
+  /** Resolved per call: the gate is the Workspace's own answer, not the deployment's alone. */
+  gate?: PrototypeGateSource;
 }): WorkspaceMemoryProfiles {
-  const gate = deps.gate ?? { prototypeEnabled: false };
   return {
     async get(workspaceId) {
       return (
@@ -55,7 +56,7 @@ export function createWorkspaceMemoryProfiles(deps: {
           at: input.at,
           afterMessageId: input.afterMessageId,
         },
-        gate,
+        await resolvePrototypeGate(deps.gate, input.workspaceId),
       );
       if (!applied.ok || applied.profile.generation === current.generation) {
         return applied;

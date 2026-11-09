@@ -9,7 +9,7 @@ import {
 } from "#src/features/conversations/channel-visibility";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
-import { isOpenVikingPrototypeEnabled } from "#src/server/workspace-memory/prototype-gate";
+import { memoryAgentGate } from "#src/server/workspace-memory/memory-agent-gate.server";
 import { AgentChannelManagementError } from "./agent-channel-management-error.server";
 import { normalizeChannelName } from "./agent-channel-targets.server";
 import { createChannel } from "./channel-creation.server";
@@ -93,7 +93,7 @@ export async function createAgentChannel(
       conversationId: channel.id,
       actorUserId: agent.ownerId,
       now: new Date(),
-      gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
+      gate: await memoryAgentGate(db, workspaceId),
     });
   await announceChannelCreated(realtime, {
     workspaceId,

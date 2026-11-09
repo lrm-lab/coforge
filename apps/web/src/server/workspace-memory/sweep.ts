@@ -16,7 +16,7 @@ import type {
 import type { WorkspaceMemoryProfileReconciler } from "./reconciler";
 import { saveProfileTransition, type WorkspaceMemoryProfileStore } from "./stores";
 import { retriedOpenVikingProfile } from "./default-memory-agent";
-import type { PrototypeGate } from "./profile";
+import { resolvePrototypeGate, type PrototypeGateSource } from "./profile";
 
 export const WORKSPACE_MEMORY_QUIET_WINDOW_MS = 15 * 60 * 1000;
 export const WORKSPACE_MEMORY_PENDING_REDRAIN_AFTER_MS = 10 * 60 * 1000;
@@ -43,8 +43,8 @@ export function createWorkspaceMemoryAdmissionSweep(deps: {
   onError?: (event: string, extra: Record<string, unknown>) => void;
   /** Binds an unbound Memory Agent once its owner has a Computer in the Workspace. */
   bindUnboundComputer?: (workspaceId: string) => Promise<void>;
-  /** When the prototype gate is open, retry a recorded `prototype_disabled` switch. */
-  openVikingGate?: PrototypeGate;
+  /** When the gate is open for that Workspace, retry a recorded `prototype_disabled` switch. */
+  openVikingGate?: PrototypeGateSource;
 }): WorkspaceMemoryAdmissionSweep {
   const now = deps.now ?? (() => new Date());
   const quietAfterMs = deps.quietAfterMs ?? WORKSPACE_MEMORY_QUIET_WINDOW_MS;
@@ -74,10 +74,11 @@ export function createWorkspaceMemoryAdmissionSweep(deps: {
             });
           }
           try {
-            if (deps.openVikingGate?.prototypeEnabled) {
+            const gate = await resolvePrototypeGate(deps.openVikingGate, workspaceId);
+            if (gate.prototypeEnabled) {
               const profile = await deps.profiles.get(workspaceId);
               if (profile) {
-                const retried = retriedOpenVikingProfile(profile, now(), deps.openVikingGate);
+                const retried = retriedOpenVikingProfile(profile, now(), gate);
                 if (retried) await saveProfileTransition(deps.profiles, profile, retried);
               }
             }
