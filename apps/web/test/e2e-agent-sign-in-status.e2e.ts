@@ -205,9 +205,11 @@ test("a signed-out runtime's Agent says so, and what to do", async () => {
     await until(`${banner}.includes(${JSON.stringify(logged)})`);
     await shots("profile-en-desktop");
     expect(await evaluate<string>(banner)).not.toContain("invalid api key");
-    // Stopped until a person acts, so the banner offers to start it again (task #731).
+    // Stopped until a person acts, so the banner offers to start it again (task #731); its
+    // Computer is offline here, so the button waits and says why instead of failing on press.
     const retry = `[...document.querySelectorAll(".bg-error-primary button")].find((b) => b.textContent.trim() === "Retry")`;
-    expect(await evaluate<boolean>(`${retry} != null && !${retry}.disabled`)).toBe(true);
+    expect(await evaluate<boolean>(`${retry} != null && ${retry}.disabled`)).toBe(true);
+    expect(await evaluate<string>(banner)).toContain("Computer offline");
     await browser("set", "viewport", "390", "844");
     await browser("open", page("en", `/dm/${direct.id}`));
     await until(`${pageHydrated} && ${profile} != null`);
@@ -222,7 +224,7 @@ test("a signed-out runtime's Agent says so, and what to do", async () => {
     await shots("profile-zh-CN-desktop");
     expect(
       await evaluate<boolean>(
-        `[...document.querySelectorAll(".bg-error-primary button")].some((b) => b.textContent.trim() === "重试")`,
+        `[...document.querySelectorAll(".bg-error-primary button")].some((b) => b.textContent.trim() === "重试") && document.querySelector(".bg-error-primary").textContent.includes("电脑离线")`,
       ),
     ).toBe(true);
     await browser("open", page("en", `/computer/${computer.id}`));

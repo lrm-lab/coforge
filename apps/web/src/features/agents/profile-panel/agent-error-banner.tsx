@@ -29,15 +29,15 @@ export function AgentErrorBanner({
   /** Opens the Activity tab; absent when the viewer cannot see it, and the diagnostics copy (which
    * reads the tab's feed) goes with it. */
   onViewLogs?: () => void;
-  /** Starts the Agent again (task #731): offered while it is stopped for a reason only a person
-   * clears, so whoever fixed the cause restarts it where they read it. */
+  /** Gets the Agent going again (task #731): offered while it is stopped for a reason only a
+   * person clears, so whoever fixed the cause restarts it where they read it. */
   retry?: AgentRetry;
 }) {
   // "Error: <detail>", the same label the DM header and the Activity log give this state.
   const status = agentDisplay(display);
   const label = status.alertText || status.label;
   // A stopped Agent waits for a person; one still running retries on its own.
-  const offerRetry = retry && !status.isOnline;
+  const recovery = retry && !status.isOnline ? status.recovery : undefined;
   const showLinks = !onActivityTab && onViewLogs;
   return (
     <div
@@ -61,18 +61,30 @@ export function AgentErrorBanner({
         )}
       >
         <span className="min-w-0 flex-1 text-sm break-words text-primary">{label}</span>
-        {(offerRetry || showLinks) && (
+        {(recovery || showLinks) && (
           <div className="-my-1 flex shrink-0 items-center gap-1">
-            {offerRetry && (
-              <Button
-                color="secondary"
-                size="sm"
-                isDisabled={retry.busy}
-                onPress={retry.onPress}
-                className="mr-1"
-              >
-                {retry.busy ? m.agent_control_start_pending() : m.agent_error_banner_retry()}
-              </Button>
+            {recovery && retry && (
+              <>
+                {/* A Start would only fail while the Computer is away: say why, before the press. */}
+                <Button
+                  color="secondary"
+                  size="sm"
+                  isDisabled={retry.busy || retry.computerOffline}
+                  onPress={recovery === "reset_session" ? retry.onResetSession : retry.onRetry}
+                >
+                  {recovery === "reset_session"
+                    ? m.agent_error_banner_reset_session()
+                    : retry.busy
+                      ? m.agent_control_start_pending()
+                      : m.agent_error_banner_retry()}
+                </Button>
+                {retry.computerOffline && (
+                  <span className="px-1.5 text-sm text-tertiary">
+                    {m.agent_error_banner_computer_offline()}
+                  </span>
+                )}
+                <span className="w-1" aria-hidden="true" />
+              </>
             )}
             {showLinks && <CopyDiagnosticsButton agent={agent} display={display} />}
             {/* Underlined at rest, not only on hover: a text link in a status line has to read as
@@ -94,5 +106,12 @@ export function AgentErrorBanner({
   );
 }
 
-/** The banner's Retry: the panel's Start (`useAgentRuntimeControls`), busy while any control runs. */
-export type AgentRetry = { onPress: () => void; busy: boolean };
+/** The banner's way back for a stop a person cleared (`agentDisplay().recovery`): the panel's
+ * Start, or its Reset session (`useAgentRuntimeControls`), busy while any control runs and not
+ * offered while the Agent's Computer is offline. */
+export type AgentRetry = {
+  onRetry: () => void;
+  onResetSession: () => void;
+  busy: boolean;
+  computerOffline: boolean;
+};

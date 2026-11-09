@@ -274,7 +274,12 @@ export function AgentProfilePanel({
           agent={diagnosticFacts}
           display={display}
           onActivityTab={tab === "activity"}
-          retry={{ onPress: controls.submitStart, busy: controls.startStopBusy }}
+          retry={{
+            onRetry: controls.submitStart,
+            onResetSession: () => controls.openRestart("reset-session"),
+            busy: controls.startStopBusy,
+            computerOffline: profile?.computer?.online === false,
+          }}
           onViewLogs={
             tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
           }

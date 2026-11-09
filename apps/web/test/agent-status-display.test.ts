@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
+import { STOP_REASON_RECOVERY, stopNeedsPerson } from "@lrm/coforge-sdk/internal";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
+import { STOP_REASON_COPY_KEYS } from "#src/features/agents/agent-stop-reason";
 import { m } from "#src/paraglide/messages";
 
 function display(overrides: Partial<AgentDisplaySnapshot> = {}): AgentDisplaySnapshot {
@@ -150,9 +152,39 @@ test("a runtime signed out with no sentence of its own shows the short word, nev
 });
 
 test("a reason nobody has to act on leaves the plain offline status", () => {
-  for (const stopReason of ["rate_limited", "runtime_start_failed", "toString", null]) {
+  for (const stopReason of ["rate_limited", "quota_exhausted", "toString", null]) {
     const view = agentDisplay(display({ activityKind: "offline", stopReason }));
     expect(view.label).toBe(m.agent_status_offline());
     expect(view.alert).toBeUndefined();
   }
+});
+
+test("every stop a person has to clear gets the banner and its way back, in the Daemon's words", () => {
+  const sentence = "The runtime cannot host this Agent's memory sessions.";
+  for (const [stopReason, recovery] of Object.entries(STOP_REASON_RECOVERY)) {
+    const view = agentDisplay(
+      display({ activityKind: "offline", stopReason, stopMessage: sentence }),
+    );
+    if (recovery === "automatic") {
+      expect(view.alert).toBeUndefined();
+      continue;
+    }
+    expect(view.alert).toBe(true);
+    expect(view.recovery).toBe(recovery);
+    expect(view.alertText).toBe(sentence);
+  }
+  // Too long to send: a fresh session, not another Start.
+  expect(
+    agentDisplay(display({ activityKind: "offline", stopReason: "input_too_large" })).recovery,
+  ).toBe("reset_session");
+  // A reason we have no words for, and no sentence came: the plain status word, nothing invented.
+  const bare = agentDisplay(
+    display({ activityKind: "offline", stopReason: "runtime_memory_unsupported" }),
+  );
+  expect(bare.alertText).toBe(m.agent_status_offline());
+  expect(bare.statusDetail).toBeUndefined();
+});
+
+test("our words exist only for stops a person has to clear", () => {
+  for (const reason of STOP_REASON_COPY_KEYS) expect(stopNeedsPerson(reason)).toBe(true);
 });

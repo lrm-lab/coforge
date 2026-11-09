@@ -9,10 +9,10 @@ const UNUSABLE = { label: m.agent_stop_unusable, detail: m.agent_stop_unusable_d
 const MODEL = { label: m.agent_stop_model, detail: m.agent_stop_model_detail };
 
 /**
- * The stop reasons only a person can clear (task #682): the launch failures a Start does not
- * retry (`NON_RETRYABLE_LAUNCH_FAILURE_REASONS` in the Daemon) and the runtime failures that take
- * a running Agent offline (`runtime-error-rules.ts`). A reason not listed here, transient or
- * unknown, leaves the plain status word.
+ * Our short word and next step for the stop reasons we have words for. Whether a stop needs a
+ * person at all is the SDK's `STOP_REASON_RECOVERY` (task #731), which classifies every reason the
+ * Daemon has; a reason it marks for a person and this table lacks still gets the banner, in the
+ * Daemon's own sentence.
  */
 const STOP_REASONS: Record<string, StopReasonCopy> = {
   billing_exhausted: {
@@ -35,6 +35,9 @@ const STOP_REASONS: Record<string, StopReasonCopy> = {
     detail: m.agent_stop_environment_detail,
   },
 };
+
+/** The reasons this table has words for (a test checks each one needs a person). */
+export const STOP_REASON_COPY_KEYS = Object.keys(STOP_REASONS);
 
 export function stopReasonCopy(reason: string | null | undefined): StopReasonCopy | undefined {
   return reason && Object.hasOwn(STOP_REASONS, reason) ? STOP_REASONS[reason] : undefined;

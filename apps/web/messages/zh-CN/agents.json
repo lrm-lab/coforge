@@ -295,6 +295,8 @@
   "agent_archive_delete_workspace_description": "会删除 {computer} 上该 Agent 工作区里的全部文件，无法恢复。资料页和消息仍然保留。",
   "agent_error_banner_view_logs": "查看日志",
   "agent_error_banner_retry": "重试",
+  "agent_error_banner_reset_session": "重置会话",
+  "agent_error_banner_computer_offline": "电脑离线",
   "agent_control_runtime_config_invalid": "运行配置无效，请在网页上重新选择运行时。",
   "agent_form_runtime_unavailable_not_connected": "这台 Computer 未连接——先让它上线再试。",
   "agent_form_runtime_unavailable_unconfirmed": "这台 Computer 还没有上报它的运行时——过一会再试。",

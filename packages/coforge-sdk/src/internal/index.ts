@@ -227,6 +227,7 @@ export type { ActivityTrajectoryEntry, ActivitySubagent } from "./activity-entri
 export { isActivityExitCode, isActivityToolOutcome } from "./activity-tool-outcome";
 export type { ActivityToolOutcome } from "./activity-tool-outcome";
 export * from "./runtime-error-action";
+export * from "./agent-stop-recovery";
 
 export type AgentMessageRequest = {
   idempotencyKey: string;
