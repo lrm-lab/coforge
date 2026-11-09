@@ -19,6 +19,8 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
+import type { AgentVisibilityViewer } from "#src/server/agents/agent-visibility.server";
+import type { DepartingMemberComputer } from "#src/server/computers/computer-membership.server";
 
 export type WorkspaceMemberRecord = {
   workspaceId: string;
@@ -57,6 +59,13 @@ export type WorkspaceMemberDirectoryStore = {
     revokedConversationIds: string[];
     computerIds: string[];
   }>;
+  /** The Computers ending this membership would disconnect, with the live Agents on them —
+   * the same set `removeMember` reports as `computerIds`, resolved for a confirmation dialog. */
+  departingMemberComputers(
+    workspaceId: string,
+    userId: string,
+    viewer: AgentVisibilityViewer,
+  ): Promise<DepartingMemberComputer[]>;
 };
 
 /** Who tells a departed member's Computers, after the commit, that their key is gone. */
@@ -127,6 +136,36 @@ export class WorkspaceMemberDirectory {
     const membership = await this.requireMembership(input.workspaceId, input.userId);
     assertCanLeaveWorkspace(membership.role);
     await this.removeFromWorkspace(input.workspaceId, input.userId);
+  }
+
+  /** The Computers removing `targetUserId` would disconnect, under the same authority
+   * `removeMember` enforces — the confirmation dialog's data source. */
+  async removalComputers(input: {
+    workspaceId: string;
+    actorUserId: string;
+    targetUserId: string;
+  }) {
+    const actor = await this.requireMembership(input.workspaceId, input.actorUserId);
+    const target = await this.store.findMembership(input.workspaceId, input.targetUserId);
+    if (!target) throw new AppError("NOT_FOUND");
+    assertCanRemoveMember(actor.role, target.role);
+    return this.store.departingMemberComputers(input.workspaceId, input.targetUserId, {
+      kind: "user",
+      userId: input.actorUserId,
+      role: actor.role,
+    });
+  }
+
+  /** The Computers the caller's own departure would disconnect, under the same authority
+   * `leave` enforces. */
+  async leaveComputers(input: { workspaceId: string; userId: string }) {
+    const membership = await this.requireMembership(input.workspaceId, input.userId);
+    assertCanLeaveWorkspace(membership.role);
+    return this.store.departingMemberComputers(input.workspaceId, input.userId, {
+      kind: "user",
+      userId: input.userId,
+      role: membership.role,
+    });
   }
 
   /** Removes the person, then tells the channels they were in that their member lists changed,

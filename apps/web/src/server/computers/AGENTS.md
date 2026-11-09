@@ -33,9 +33,12 @@ These rules apply to `src/server/computers/`.
   there: `unlinkDepartingMemberComputers` (`computer-membership.server.ts`)
   records and revokes the daemon keys they own in that Workspace, by owner, and
   removes their Computers' links to it, never touching another Workspace's.
-  Deleting a Computer row or its owner cascades the keys without a record:
-  those Computers get the ordinary retryable failure. Add a record there too
-  when such a delete path is built.
+  `previewDepartingMemberComputers` answers the same set for a confirmation
+  dialog before the departure, with each Computer's live Agents (names only
+  for Agents `viewer` may see; the count stays whole). Deleting a Computer row
+  or its owner cascades the keys without a record: those Computers get the
+  ordinary retryable failure. Add a record there too when such a delete path
+  is built.
 - A daemon key is valid only while its owner is a member of its Workspace:
   `verifyDaemonApiKey` (`server/auth/daemon-api-key.server.ts`) reads the key
   and that membership in one statement (`PrismaDaemonApiKeyRepository.findByHash`)

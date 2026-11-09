@@ -263,5 +263,16 @@ function memoryStore(): WorkspaceMemberDirectoryStore & {
         computerIds,
       };
     },
+    async departingMemberComputers(workspaceId, userId) {
+      return (computers.get(`${workspaceId}:${userId}`) ?? []).map((id) => ({
+        id,
+        name: id,
+        displayName: "",
+        kind: "local",
+        cloudSlot: null,
+        agentCount: 0,
+        agents: [],
+      }));
+    },
   };
 }

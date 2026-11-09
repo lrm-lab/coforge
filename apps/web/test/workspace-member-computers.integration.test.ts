@@ -10,7 +10,10 @@ import type { ConversationRealtime } from "#src/server/conversations/conversatio
 import { generalChannelForCreator } from "#src/server/conversations/general-channel.server";
 import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
 import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
-import { removeComputerFromWorkspace } from "#src/server/computers/computer-membership.server";
+import {
+  removeComputerFromWorkspace,
+  unlinkDepartingMemberComputers,
+} from "#src/server/computers/computer-membership.server";
 import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.server";
 import { PrismaWorkspaceMemberDirectoryStore } from "#src/server/workspaces/member-directory-store.server";
 import { WorkspaceMemberDirectory } from "#src/server/workspaces/member-directory.server";
@@ -229,6 +232,240 @@ test.skipIf(!connectionString)(
           select: { id: true },
         }),
       ).toEqual({ id: scope.bobComputer.id });
+    } finally {
+      await scope.teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "the removal preview lists exactly the Computers the removal disconnects, with their live Agents",
+  async () => {
+    const scope = await setup();
+    try {
+      const { db, workspace, other, bob, owner, bobComputer, ownerComputer } = scope;
+      const agent = (data: {
+        workspaceId: string;
+        ownerId: string;
+        name: string;
+        visibility?: string;
+        computerId?: string;
+        deletedAt?: Date;
+      }) =>
+        db.agent.create({
+          data: { displayName: data.name, runtimeConfig: {}, ...data },
+        });
+      // On Bob's Computer in this Workspace: a public Agent he owns, a private one the owner
+      // owns (counts, but only an elevated viewer may see its name), and an archived one (neither).
+      const publicAgent = await agent({
+        workspaceId: workspace.id,
+        ownerId: bob.id,
+        name: "bob-public",
+        computerId: bobComputer.id,
+      });
+      const hiddenAgent = await agent({
+        workspaceId: workspace.id,
+        ownerId: owner.id,
+        name: "owner-private",
+        visibility: "private",
+        computerId: bobComputer.id,
+      });
+      await agent({
+        workspaceId: workspace.id,
+        ownerId: bob.id,
+        name: "bob-archived",
+        computerId: bobComputer.id,
+        deletedAt: new Date(),
+      });
+      // Same Computer in the other Workspace, and the owner's Computer here: neither is Bob's
+      // departure from this Workspace.
+      await agent({
+        workspaceId: other.id,
+        ownerId: bob.id,
+        name: "bob-elsewhere",
+        computerId: bobComputer.id,
+      });
+      await agent({
+        workspaceId: workspace.id,
+        ownerId: owner.id,
+        name: "owner-agent",
+        computerId: ownerComputer.id,
+      });
+
+      const preview = await scope.directory.removalComputers({
+        workspaceId: workspace.id,
+        actorUserId: owner.id,
+        targetUserId: bob.id,
+      });
+      expect(preview.map((computer) => computer.id)).toEqual([bobComputer.id]);
+      expect(preview[0]).toMatchObject({ kind: "local", agentCount: 2 });
+      // The owner is elevated: both live Agents are named.
+      expect(preview[0]!.agents.map((row) => row.id).sort()).toEqual(
+        [publicAgent.id, hiddenAgent.id].sort(),
+      );
+
+      await scope.directory.removeMember({
+        workspaceId: workspace.id,
+        actorUserId: owner.id,
+        targetUserId: bob.id,
+      });
+      // The set the dialog showed is the set the departure disconnected.
+      expect(scope.reconnects).toEqual([
+        { workspaceId: workspace.id, computerIds: [bobComputer.id] },
+      ]);
+      expect([...scope.reconnects[0]!.computerIds].sort()).toEqual(
+        preview.map((computer) => computer.id).sort(),
+      );
+    } finally {
+      await scope.teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "the leave preview lists the same Computers the leave disconnects, naming only Agents the member may see",
+  async () => {
+    const scope = await setup();
+    try {
+      const { db, workspace, bob, owner, bobComputer } = scope;
+      const own = await db.agent.create({
+        data: {
+          workspaceId: workspace.id,
+          ownerId: bob.id,
+          name: "bob-own",
+          displayName: "bob-own",
+          visibility: "private",
+          computerId: bobComputer.id,
+          runtimeConfig: {},
+        },
+      });
+      await db.agent.create({
+        data: {
+          workspaceId: workspace.id,
+          ownerId: owner.id,
+          name: "owner-private",
+          displayName: "owner-private",
+          visibility: "private",
+          computerId: bobComputer.id,
+          runtimeConfig: {},
+        },
+      });
+
+      const preview = await scope.directory.leaveComputers({
+        workspaceId: workspace.id,
+        userId: bob.id,
+      });
+      expect(preview.map((computer) => computer.id)).toEqual([bobComputer.id]);
+      // Bob is an ordinary member: the owner's private Agent counts but is not named; his own
+      // private one is.
+      expect(preview[0]).toMatchObject({ agentCount: 2 });
+      expect(preview[0]!.agents.map((row) => row.id)).toEqual([own.id]);
+
+      await scope.directory.leave({ workspaceId: workspace.id, userId: bob.id });
+      expect(scope.reconnects).toEqual([
+        { workspaceId: workspace.id, computerIds: [bobComputer.id] },
+      ]);
+      expect([...scope.reconnects[0]!.computerIds].sort()).toEqual(
+        preview.map((computer) => computer.id).sort(),
+      );
+    } finally {
+      await scope.teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "departure previews enforce the same authority as the departure itself",
+  async () => {
+    const scope = await setup();
+    try {
+      const { db, workspace, bob, owner } = scope;
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const carol = await db.user.create({
+        data: { displayName: `mc-carol-${suffix}`, username: `mc-carol-${suffix}` },
+      });
+      await db.$transaction((tx) =>
+        admitWorkspaceMember(tx, { workspace, userId: carol.id, role: "member" }),
+      );
+
+      // An ordinary member cannot preview removing anyone.
+      await expect(
+        scope.directory.removalComputers({
+          workspaceId: workspace.id,
+          actorUserId: bob.id,
+          targetUserId: carol.id,
+        }),
+      ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+      // A non-member can preview nothing.
+      const outsider = await db.user.create({
+        data: { displayName: `mc-out-${suffix}`, username: `mc-out-${suffix}` },
+      });
+      await expect(
+        scope.directory.removalComputers({
+          workspaceId: workspace.id,
+          actorUserId: outsider.id,
+          targetUserId: bob.id,
+        }),
+      ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+      await expect(
+        scope.directory.leaveComputers({ workspaceId: workspace.id, userId: outsider.id }),
+      ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+      // The owner cannot be removed or leave.
+      await expect(
+        scope.directory.removalComputers({
+          workspaceId: workspace.id,
+          actorUserId: owner.id,
+          targetUserId: owner.id,
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      await expect(
+        scope.directory.leaveComputers({ workspaceId: workspace.id, userId: owner.id }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      // A member with no Computers previews an empty list.
+      await expect(
+        scope.directory.removalComputers({
+          workspaceId: workspace.id,
+          actorUserId: owner.id,
+          targetUserId: carol.id,
+        }),
+      ).resolves.toEqual([]);
+      await expect(
+        scope.directory.leaveComputers({ workspaceId: workspace.id, userId: carol.id }),
+      ).resolves.toEqual([]);
+      await db.user.delete({ where: { id: carol.id } });
+      await db.user.delete({ where: { id: outsider.id } });
+    } finally {
+      await scope.teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
+  "unlinking each Workspace's Computers through the seam revokes every key with its record (task #466 seam)",
+  async () => {
+    const scope = await setup();
+    try {
+      const { db, workspace, other, bob, keys, bobComputer } = scope;
+      // #466 has no deletion entry yet; this pins what it must do first: for every Workspace
+      // the person belongs to, `unlinkDepartingMemberComputers` runs before any User-row
+      // delete, so each live key gets its `computer_unlinked` record. A bare User delete
+      // cannot even run — `computers.ownerId` is Restrict — which is why the flow must go
+      // through this seam deliberately rather than rely on a cascade.
+      for (const workspaceId of [workspace.id, other.id]) {
+        await db.$transaction((tx) =>
+          unlinkDepartingMemberComputers(tx, { workspaceId, userId: bob.id }),
+        );
+      }
+
+      const revocations = new DaemonCredentialRevocations(db);
+      expect(await revocations.reasonFor(keys.bobHere.hash)).toBe("computer_unlinked");
+      expect(await revocations.reasonFor(keys.bobElsewhere.hash)).toBe("computer_unlinked");
+      expect(await db.daemonApiKey.count({ where: { ownerId: bob.id, revokedAt: null } })).toBe(0);
+      expect(await db.workspaceComputer.count({ where: { computerId: bobComputer.id } })).toBe(0);
+      // The Computer itself still stands: deleting it is the deletion flow's own decision.
+      expect(
+        await db.computer.findUnique({ where: { id: bobComputer.id }, select: { id: true } }),
+      ).toEqual({ id: bobComputer.id });
     } finally {
       await scope.teardown();
     }

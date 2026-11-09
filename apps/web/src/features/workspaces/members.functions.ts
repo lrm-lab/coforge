@@ -56,6 +56,28 @@ export const removeWorkspaceMember = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+/** The Computers removing this member would disconnect, for the confirmation dialog. */
+export const previewWorkspaceMemberRemoval = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(targetUserInputSchema)
+  .handler(async ({ data, context: { user, db, workspaceId } }) => ({
+    computers: await workspaceMemberDirectory(db).removalComputers({
+      workspaceId,
+      actorUserId: user.id,
+      targetUserId: data.userId,
+    }),
+  }));
+
+/** The Computers the caller's own departure would disconnect, for the leave confirmation. */
+export const previewWorkspaceLeave = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context: { user, db, workspaceId } }) => ({
+    computers: await workspaceMemberDirectory(db).leaveComputers({
+      workspaceId,
+      userId: user.id,
+    }),
+  }));
+
 /**
  * Takes the caller out of the Workspace the page URL names (not its owner: CONFLICT) and answers
  * which Workspace to open next, `null` when they are in none; `/` remembers that one from now on.

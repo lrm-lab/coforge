@@ -21,7 +21,12 @@ import {
   recordMemberRemoved,
   recordMemberRoleChanged,
 } from "#src/server/app-notifications/workspace-events.server";
-import { unlinkDepartingMemberComputers } from "#src/server/computers/computer-membership.server";
+import {
+  previewDepartingMemberComputers,
+  unlinkDepartingMemberComputers,
+  type DepartingMemberComputer,
+} from "#src/server/computers/computer-membership.server";
+import type { AgentVisibilityViewer } from "#src/server/agents/agent-visibility.server";
 import {
   ACTIVE_CHANNEL_MEMBER_WHERE,
   ACTIVE_MEMBER_WHERE,
@@ -144,6 +149,14 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
     });
     channelPeopleChanged(removed.leftChannelIds);
     return removed;
+  }
+
+  async departingMemberComputers(
+    workspaceId: string,
+    userId: string,
+    viewer: AgentVisibilityViewer,
+  ): Promise<DepartingMemberComputer[]> {
+    return previewDepartingMemberComputers(this.db, { workspaceId, userId, viewer });
   }
 }
 

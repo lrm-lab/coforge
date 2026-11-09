@@ -44,7 +44,11 @@ These rules apply to `src/server/workspaces/`.
   their Computers' links to it removed; their keys and links for every other
   Workspace stay. After the commit `WorkspaceMemberDirectory` reconnects those
   daemons, best effort, so each parks its binding now. A new path that ends a
-  membership goes through that store write.
+  membership goes through that store write. `removalComputers`/`leaveComputers`
+  preview the same Computer set for the confirmation dialogs, under the same
+  authority checks; account deletion (task #466) must run
+  `unlinkDepartingMemberComputers` for every Workspace before the User row
+  cascades, or the Computers never learn their binding is gone.
 - `create-workspace.server.ts` starts the account's default cloud computer for a
   Workspace, including after a Workspace is created, and binds that User's
   weekly-report assistant to it. A deployment without a cluster still returns
