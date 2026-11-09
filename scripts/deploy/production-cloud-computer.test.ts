@@ -10,7 +10,9 @@ describe("production cloud computer deploy wiring", () => {
     const webBlock = compose.slice(webStart, migrateStart);
     expect(webBlock).toContain("COFORGE_CLOUD_CLUSTER_TOKEN: ${COFORGE_CLOUD_CLUSTER_TOKEN:-}");
     expect(webBlock).toContain("COFORGE_CLOUD_DESKTOP_ORIGIN: http://10.110.158.147:6090");
-    expect(webBlock).toContain("COFORGE_CLOUD_SERVICE_PASSWORD: ${COFORGE_CLOUD_SERVICE_PASSWORD:-}");
+    expect(webBlock).toContain(
+      "COFORGE_CLOUD_SERVICE_PASSWORD: ${COFORGE_CLOUD_SERVICE_PASSWORD:-}",
+    );
 
     const caddy = await Bun.file(
       new URL("../../infra/production/caddy/Caddyfile", import.meta.url),
