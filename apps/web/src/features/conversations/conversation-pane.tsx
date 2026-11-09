@@ -5,7 +5,6 @@ import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { useStateWithRef } from "#src/hooks/use-state-with-ref";
 import { useAppToast } from "#src/components/ui/toast";
 import { useTimeZone } from "#src/lib/time-zone-context";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
@@ -25,15 +24,14 @@ import { streamState } from "./stream-state";
 import { ConversationComposerFooter } from "./conversation-composer-footer";
 import { ThreadPaneHeader } from "./thread-pane-header";
 import { makeReferenceBodyFormatter } from "./mention-text";
-import { MessageRow, dayLabel, groupsWithPrevious } from "./message-row";
-import { outboxContinuesRun, ownMessageReadState } from "./conversation-pane-layout";
+import { dayLabel } from "./message-row";
+import { outboxContinuesRun } from "./conversation-pane-layout";
 import { useMessageExpansion } from "./use-message-expansion";
 import { optimisticSavedEntry } from "./saved-messages-collection";
-import { OutboxMessageRow } from "./outbox-message-row";
-import { SystemMessageGroup } from "./system-message-group";
-import { groupSystemMessages, itemAnchor } from "./system-message-groups";
+import { groupSystemMessages } from "./system-message-groups";
 import { usePaneOutbox } from "./use-pane-outbox";
 import { ComposerEdgeOverlay } from "./composer-edge-overlay";
+import { ConversationMessageList } from "./conversation-message-list";
 import { NewerSentinel } from "./conversation-newer-sentinel";
 import { useOwnMessagesIndex } from "./own-messages-menu";
 import { useLoadedOwnMessages } from "./use-loaded-own-messages";
@@ -541,113 +539,37 @@ export function ConversationPane({
               // Every loaded row is rendered, in normal flow. Nothing here computes a row's position
               // or its height, so no measurement can shift a row under the reader and no scroll
               // correction is needed while you read; the scrollbar is the real content height.
-              <ol
-                ref={messageListRef}
-                className={cn("flex flex-col", threadMarker ? "pt-2" : "pt-6")}
-              >
-                {streamItems.map((item, index) => {
-                  // The item above's anchor.
-                  const before = streamItems[index - 1];
-                  // A thread's first reply opens under the replies marker, which stands in for the
-                  // day divider there; later day changes in the thread still get theirs.
-                  const opensThread = threadMarker && index === 0;
-                  const previous = before && itemAnchor(before);
-                  const first = itemAnchor(item);
-                  // The unread divider is anchored to the snapshot taken at open: once the
-                  // mark-read effect has advanced the cursor, the divider must not jump.
-                  const unreadStartsHere = openBoundary?.sequence === first.sequence;
-                  if (item.type === "systemGroup") {
-                    const groupOpen = item.messages.some((message) =>
-                      openedSystemMessages.has(message.id),
-                    );
-                    return (
-                      <SystemMessageGroup
-                        key={first.id}
-                        id={item.id}
-                        messages={item.messages}
-                        expanded={groupOpen}
-                        onToggleExpanded={toggleSystemGroup}
-                        dayChanged={
-                          !opensThread &&
-                          groupsWithPrevious(first, previous, false, false, dateLocale, timeZone)
-                            .dayChanged
-                        }
-                        unreadStartsHere={unreadStartsHere}
-                        dateLocale={dateLocale}
-                      >
-                        {groupOpen &&
-                          item.messages.map((message) => (
-                            <MessageRow
-                              conversationId={conversation.conversationId}
-                              key={message.id}
-                              message={message}
-                              own={false}
-                              dayChanged={false}
-                              grouped={false}
-                              highlighted={message.id === jumpHighlightId}
-                              expanded={false}
-                              onToggleExpanded={toggleExpandedMessage}
-                              collapsible={collapsible}
-                              dateLocale={dateLocale}
-                            />
-                          ))}
-                      </SystemMessageGroup>
-                    );
-                  }
-                  const message = item.message;
-                  const own = isOwn(message);
-                  const { dayChanged, grouped } = groupsWithPrevious(
-                    message,
-                    previous,
-                    own,
-                    previous ? isOwn(previous) : false,
-                    dateLocale,
-                    timeZone,
-                  );
-                  return (
-                    <MessageRow
-                      conversationId={conversation.conversationId}
-                      key={message.id}
-                      message={message}
-                      own={own}
-                      dayChanged={dayChanged && !opensThread}
-                      grouped={grouped}
-                      unreadStartsHere={unreadStartsHere}
-                      highlighted={message.id === jumpHighlightId}
-                      expanded={expandedMessages.has(message.id)}
-                      onToggleExpanded={toggleExpandedMessage}
-                      collapsible={collapsible}
-                      dateLocale={dateLocale}
-                      onOpenThread={openThread}
-                      showsTask={!root}
-                      onToggleReaction={toggleReaction}
-                      onToggleSave={onToggleSave}
-                      onOpenAgentProfile={openAgentProfile}
-                      onOpenPersonProfile={openPersonProfile}
-                      viewerId={conversation.viewerId}
-                      plainMentions={plainMentions}
-                      onOpenTask={openTaskReference}
-                      channelNames={channelNames}
-                      onQuoteSelection={canCompose ? quoteSelection : undefined}
-                      readState={ownMessageReadState(own, message.sequence, readTicks)}
-                    />
-                  );
-                })}
-                {shownOutbox.map((entry, index) => (
-                  <OutboxMessageRow
-                    key={entry.localId}
-                    entry={entry}
-                    grouped={index > 0 || outboxContinues}
-                    composerShown={canCompose}
-                    plainMentions={plainMentions}
-                    viewerId={conversation.viewerId}
-                    onOpenTask={openTaskReference}
-                    onRetry={() => outbox.retry(entry)}
-                    onEdit={() => outbox.edit(entry)}
-                    onDiscard={() => outbox.remove(entry)}
-                  />
-                ))}
-              </ol>
+              <ConversationMessageList
+                conversation={conversation}
+                root={root}
+                messageListRef={messageListRef}
+                threadMarker={threadMarker}
+                streamItems={streamItems}
+                openedSystemMessages={openedSystemMessages}
+                toggleSystemGroup={toggleSystemGroup}
+                openBoundary={openBoundary}
+                jumpHighlightId={jumpHighlightId}
+                expandedMessages={expandedMessages}
+                toggleExpandedMessage={toggleExpandedMessage}
+                collapsible={collapsible}
+                dateLocale={dateLocale}
+                timeZone={timeZone}
+                isOwn={isOwn}
+                openThread={openThread}
+                toggleReaction={toggleReaction}
+                onToggleSave={onToggleSave}
+                openAgentProfile={openAgentProfile}
+                openPersonProfile={openPersonProfile}
+                plainMentions={plainMentions}
+                openTaskReference={openTaskReference}
+                channelNames={channelNames}
+                canCompose={canCompose}
+                quoteSelection={quoteSelection}
+                readTicks={readTicks}
+                shownOutbox={shownOutbox}
+                outbox={outbox}
+                outboxContinues={outboxContinues}
+              />
             )}
             {!root && canCompose && (
               <WorkspaceAssistantWelcome
