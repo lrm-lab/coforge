@@ -205,7 +205,7 @@ export function ChannelConversation({
     }>;
     hasOlder: boolean;
   }>;
-  onLoadMessageAround?: (messageId: string) => Promise<void>;
+  onLoadMessageAround?: (messageId: string) => Promise<string>;
   onShowLatest?: () => Promise<void>;
   onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
   /** The main pane's own scroll reached the latest message; advances the conversation cursor. */

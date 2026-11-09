@@ -90,6 +90,7 @@
   "conversation_load_latest_failed": "最新的消息加载失败。",
   "conversation_history_load_error": "消息加载失败，请重试。",
   "conversation_message_gone": "这条消息已不存在",
+  "conversation_message_link_ambiguous": "这个链接对应多条消息，请使用完整链接",
   "conversation_drop_to_upload": "拖放以上传",
   "conversation_message_show_more": "展开全文",
   "conversation_message_show_less": "收起",

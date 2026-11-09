@@ -2,6 +2,8 @@ import {
   MENTION_HANDLE_MAX_LENGTH,
   MENTION_HANDLE_PATTERN,
   MENTION_SELECTORS_MAX_LENGTH,
+  MESSAGE_ANCHOR_SOURCE,
+  UUID_LIKE_SOURCE,
 } from "@lrm/coforge-sdk/internal";
 import { z } from "zod";
 
@@ -59,8 +61,16 @@ const conversationHistoryInputSchema = z.object({ conversationId: uuid });
 export const ownMessageIndexInputSchema = conversationHistoryInputSchema.extend({
   beforeSequence: z.number().int().positive().optional(),
 });
+/**
+ * The message a link names: a whole id, or the short id an Agent sees (`xxxxxxxx` or
+ * `xxxxxxxx-xxxx`). The read around it resolves a short one, and refuses it when more than one
+ * message starts with it (`AMBIGUOUS_TARGET`, #34).
+ */
+export const messageLinkIdSchema = z
+  .string()
+  .regex(new RegExp(`^(?:${UUID_LIKE_SOURCE}|${MESSAGE_ANCHOR_SOURCE})$`, "i"));
 export const conversationAroundInputSchema = conversationHistoryInputSchema.extend({
-  messageId: uuid,
+  messageId: messageLinkIdSchema,
 });
 /** Where the viewer's unread starts in a conversation, or in one thread of it (task #378). */
 export const conversationOpenInputSchema = conversationHistoryInputSchema.extend({

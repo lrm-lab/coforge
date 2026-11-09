@@ -48,7 +48,7 @@ export function useConversationSync({
   selected?: string;
   threadInView?: string;
   threadInViewSequence?: number;
-  onLoadMessageAround?: (messageId: string) => Promise<void>;
+  onLoadMessageAround?: (messageId: string) => Promise<string>;
   onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
   openThreadFromHash: (rootMessageId: string) => void;
   closeThread: () => void;

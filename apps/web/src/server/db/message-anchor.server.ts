@@ -1,4 +1,5 @@
-import { UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
+import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 
 /** What an anchor may be: six to twelve hex characters (the twelve-hex display form carries the
@@ -72,4 +73,29 @@ export function channelThreadRootsWhere(conversationId: string, anchors: readonl
 /** Whether a message id (as stored, lower-case) is one an anchor names. */
 export function messageIdMatchesAnchor(id: string, anchor: string): boolean {
   return id.toLowerCase().startsWith(anchor.toLowerCase());
+}
+
+const SHORT_MESSAGE_ID = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE})$`, "i");
+
+/**
+ * The message of one conversation a link names (#34): by its whole id, or by the short id an Agent
+ * sees (`xxxxxxxx` / `xxxxxxxx-xxxx`). A short id more than one message starts with is refused
+ * (`AMBIGUOUS_TARGET`) rather than guessed, so the page can say the link is ambiguous. `null` when
+ * nothing matches.
+ */
+export async function findLinkedMessage<S extends Prisma.MessageSelect>(
+  db: Pick<PrismaClient, "message">,
+  conversationId: string,
+  messageId: string,
+  select: S,
+) {
+  if (!SHORT_MESSAGE_ID.test(messageId))
+    return db.message.findFirst({ where: { id: messageId, conversationId }, select });
+  const matches = await db.message.findMany({
+    where: { id: messageAnchorWhere(messageId), conversationId },
+    take: 2,
+    select,
+  });
+  if (matches.length > 1) throw new AppError("AMBIGUOUS_TARGET");
+  return matches[0] ?? null;
 }

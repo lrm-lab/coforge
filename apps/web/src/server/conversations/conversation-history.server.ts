@@ -28,6 +28,7 @@ import {
 } from "#src/server/records/weekly-report-assistant-suggestion.server";
 import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
+import { findLinkedMessage } from "#src/server/db/message-anchor.server";
 
 /** Exported so projections that must render exactly like the message stream (the Saved list,
  * #120/#124) reuse this same row shape instead of growing a near-copy. */
@@ -367,9 +368,11 @@ export class ConversationHistory {
     // above — is the whole access decision. (The notification deep link only ever targeted the
     // viewer's own sends, which is where the old `sender: { userId }` came from; it made every
     // other-sender anchor a NOT_FOUND and the jump read as a history-load failure.)
-    const anchor = await this.db.message.findFirst({
-      where: { id: messageId, conversationId },
-      select: { id: true, sequence: true, threadRoot: { select: { id: true, sequence: true } } },
+    // A link may carry the short id an Agent sees (#34); one two messages share is refused.
+    const anchor = await findLinkedMessage(this.db, conversationId, messageId, {
+      id: true,
+      sequence: true,
+      threadRoot: { select: { id: true, sequence: true } },
     });
     if (!anchor) throw new AppError("NOT_FOUND");
     const center = anchor.threadRoot ?? anchor;
@@ -417,6 +420,7 @@ export class ConversationHistory {
       conversationId,
       hasOlder: beforeRows.length > beforeCount + 1,
       hasNewer: afterRows.length > afterCount,
+      anchorMessageId: anchor.id,
       anchorThreadRootId: anchor.threadRoot?.id,
       messages: await mapBrowserMessages(this.db, roots, workspaceId),
       threads,

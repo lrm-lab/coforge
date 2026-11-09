@@ -32,7 +32,7 @@ type ConversationThreadSearch = {
  * `useOpenAgentProfile`. Closing replaces in place and clears the hash so
  * neither becomes a Back stop, and a leftover hash cannot reopen the pane.
  * Hash-only deep links (notifications) write `threadRootId` with `replace`
- * so they do not add a second history entry on top of the landing URL.
+ * so they do not add a second history entry on top of the landing URL, and keep the hash.
  */
 export function useOpenConversationThread() {
   const router = useRouter();
@@ -66,6 +66,9 @@ export function useOpenConversationThread() {
         to: ".",
         replace: true,
         resetScroll: false,
+        // The hash is the reply the link lands on: the opening thread scrolls to it. A navigation
+        // without `hash` drops it, which left a pasted reply link at the thread's latest (#34).
+        hash: true,
         search: (previous: ConversationThreadSearch) =>
           conversationSearchWithThread(
             conversationSearchWithoutAgentProfile(previous),

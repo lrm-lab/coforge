@@ -1,3 +1,4 @@
+import { UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAppToast } from "#src/components/ui/toast";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -6,6 +7,8 @@ import { scrollToMessageRow, scrollTwice } from "./conversation-scroll-anchor";
 import type { ConversationBottomPin } from "./conversation-bottom-pin";
 import { positionJumpDecision } from "./conversation-thread-search";
 import { JUMP_HIGHLIGHT_MS } from "./message-jump-highlight";
+
+const UUID_LIKE = new RegExp(`^${UUID_LIKE_SOURCE}$`, "i");
 
 /**
  * Every way the pane lands on one message — a `#message-` hash, the Saved view's `?message=`
@@ -30,7 +33,8 @@ export function useMessageJump({
   revealSystemMessage: (messageId: string) => boolean;
   jumpMessage: string | undefined;
   onJumpMessageConsumed: (() => void) | undefined;
-  onLoadMessageAround: ((messageId: string) => Promise<void>) | undefined;
+  /** Reads the window around a message; resolves to its whole id (a link may name a short one). */
+  onLoadMessageAround: ((messageId: string) => Promise<string>) | undefined;
   setFollowingLatest: (following: boolean) => void;
   scrollToLatest: (behavior: ScrollBehavior) => void;
   bottomPin: ConversationBottomPin;
@@ -44,6 +48,7 @@ export function useMessageJump({
   useEffect(
     () => () => {
       toast.dismissShown(m.conversation_message_gone());
+      toast.dismissShown(m.conversation_message_link_ambiguous());
       toast.dismissShown(m.conversation_history_load_error());
     },
     [toast],
@@ -72,6 +77,9 @@ export function useMessageJump({
   const revealSystemMessageRef = useRef(revealSystemMessage);
   revealSystemMessageRef.current = revealSystemMessage;
 
+  // The hash a landing last highlighted: the anchor pass reruns as pages load, and re-scrolls, but
+  // flashes a row once per link.
+  const flashedAnchorRef = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     function scrollToMessageAnchor() {
       const anchor = window.location.hash.slice(1);
@@ -94,6 +102,12 @@ export function useMessageJump({
         setFollowingLatest(false);
         message.scrollIntoView({ block: "center" });
         landedOn(message);
+        // `:target` marks only a row that existed when the hash was set; a row the pane renders
+        // later (any thread a link opens) would land unmarked, so the landing flashes it by id.
+        if (flashedAnchorRef.current !== anchor) {
+          flashedAnchorRef.current = anchor;
+          flashMessageRow(anchor.slice("message-".length));
+        }
       };
       scroll();
       requestAnimationFrame(scroll);
@@ -124,14 +138,26 @@ export function useMessageJump({
     setFollowingLatest(false);
     if (!loaded) {
       if (!onLoadMessageAround) return;
-      pendingMessageIdRef.current = messageId;
+      // A short id (a link's, #34) is the read's to resolve: until it answers, no row is the one.
+      const whole = UUID_LIKE.test(messageId);
+      if (whole) pendingMessageIdRef.current = messageId;
       try {
-        await onLoadMessageAround(messageId);
+        const landed = await onLoadMessageAround(messageId);
+        if (!whole) {
+          // The window may already be drawn (land now) or not yet (the pending pass lands).
+          if (document.getElementById(`message-${landed}`)) {
+            scrollToMessageRow(landed, landedOn);
+            flashMessageRow(landed);
+          } else pendingMessageIdRef.current = landed;
+        }
       } catch (error) {
         pendingMessageIdRef.current = undefined;
         // A link to a message that is gone (deleted, or never in this conversation) cannot load
         // on a retry, so it says so instead of asking to try again.
         if (isAppErrorCode(error, "NOT_FOUND")) toast.notice(m.conversation_message_gone());
+        // A short id more than one message starts with: say so rather than pick one (#34).
+        else if (isAppErrorCode(error, "AMBIGUOUS_TARGET"))
+          toast.notice(m.conversation_message_link_ambiguous());
         else toast.error(m.conversation_history_load_error());
         // A conversation that was opening on the message opens at the latest instead.
         if (opening) {

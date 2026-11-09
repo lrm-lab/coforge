@@ -9,7 +9,11 @@ import type { ConversationPageTarget } from "./conversation-page-loader";
 import { CONVERSATION_TABS } from "./conversation-tabs";
 import { attachmentReviewSearchShape } from "./attachment-review-address";
 import { openTaskParamSchema } from "./conversation-thread-search";
+import { messageLinkIdSchema } from "./conversation.schemas";
 import { artifactSearchShape } from "#src/features/artifacts/artifact-search";
+
+/** Chat's `message` param, the message a link opens the conversation on (`messageLinkIdSchema`). */
+export const chatMessageParamSchema = messageLinkIdSchema.optional().catch(undefined);
 
 /**
  * A conversation page's address state wherever the page is shown: the tab, the Task board's view,

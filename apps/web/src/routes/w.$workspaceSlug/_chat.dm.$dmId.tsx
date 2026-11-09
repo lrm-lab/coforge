@@ -3,7 +3,10 @@ import { z } from "zod";
 import { redirectDocLink } from "#src/features/artifacts/artifact-search";
 import { ConversationLoadError } from "#src/features/conversations/conversation-load-error";
 import { ConversationPending } from "#src/features/conversations/conversation-pending";
-import { conversationPageSearchShape } from "#src/features/conversations/conversation-page-search";
+import {
+  chatMessageParamSchema,
+  conversationPageSearchShape,
+} from "#src/features/conversations/conversation-page-search";
 import {
   conversationPageLoaderDeps,
   loadConversationPage,
@@ -13,7 +16,7 @@ import { ConversationPage } from "#src/features/conversations/conversation-page"
 export const Route = createFileRoute("/w/$workspaceSlug/_chat/dm/$dmId")({
   validateSearch: z.object({
     ...conversationPageSearchShape,
-    message: z.uuid().optional().catch(undefined),
+    message: chatMessageParamSchema,
   }),
   // A document link opens beside the chat (Frank, 11-05); where artifacts are off, it is dropped.
   beforeLoad: ({ params, search, location }) =>

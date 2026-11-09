@@ -376,14 +376,16 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     },
   );
 
-  /** Replace the loaded history with a window around one message. */
-  const loadMessageAround = async (messageId: string) => {
+  /** Replace the loaded history with a window around one message, named by its whole or short id;
+   * resolves to its whole id. */
+  const loadMessageAround = async (messageId: string): Promise<string> => {
     const around = await queryClient.fetchQuery(conversationAroundQuery(conversationId, messageId));
     await windowReadSettled(queryClient, query.queryKey);
     setPages((pages) => ({
       pages: [{ ...pages.pages.at(-1)!, ...aroundWindow(around) }],
       pageParams: [undefined],
     }));
+    return around.anchorMessageId;
   };
 
   return {

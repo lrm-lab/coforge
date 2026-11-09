@@ -360,6 +360,59 @@ describe("ConversationHistory", () => {
     expect(queries.map((query) => query.where?.sequence)).toEqual([{ lte: 10 }, { gt: 10 }]);
     expect(page.anchorThreadRootId).toBe("root-10");
   });
+  test("an around read by a link's short id resolves it, and refuses one two messages share", async () => {
+    // #34: `?message=<8 hex>` names the message it starts, read as the id range it covers.
+    const anchorReads: object[] = [];
+    const db = (matches: { id: string; sequence: number; threadRoot: null }[]) =>
+      ({
+        workspaceMembership: { findUnique: async () => membership },
+        conversation: {
+          findFirst: async () => ({
+            directKey: null,
+            channelName: "engineering",
+            visibility: "public",
+            members: [],
+          }),
+        },
+        $queryRaw: async () => [],
+        message: {
+          findMany: async (input: { take?: number }) => {
+            if (input.take === 2) {
+              anchorReads.push(input);
+              return matches;
+            }
+            return [];
+          },
+        },
+      }) as unknown as PrismaClient;
+    const one = { id: "01a1b756-0000-7000-8000-000000000001", sequence: 10, threadRoot: null };
+    const two = { id: "01a1b756-0000-7000-8000-000000000002", sequence: 11, threadRoot: null };
+
+    const page = await new ConversationHistory(db([one])).loadAround(
+      "workspace-1",
+      "user-1",
+      "channel-conversation-1",
+      "01a1b756",
+    );
+    expect(page.anchorMessageId).toBe(one.id);
+    expect(anchorReads[0]).toMatchObject({
+      where: {
+        conversationId: "channel-conversation-1",
+        id: {
+          gte: "01a1b756-0000-0000-0000-000000000000",
+          lte: "01a1b756-ffff-ffff-ffff-ffffffffffff",
+        },
+      },
+    });
+    await expect(
+      new ConversationHistory(db([one, two])).loadAround(
+        "workspace-1",
+        "user-1",
+        "channel-conversation-1",
+        "01a1b756",
+      ),
+    ).rejects.toThrow("AMBIGUOUS_TARGET");
+  });
   test("a thread read in a DM between people names each reply's sender member", async () => {
     const reply = (id: string, sequence: number, memberId: string, userId: string) => ({
       id,

@@ -118,7 +118,7 @@ export type ConversationProps = {
     messages: OwnMessageIndexEntry[];
     hasOlder: boolean;
   }>;
-  onLoadMessageAround?: (messageId: string) => Promise<void>;
+  onLoadMessageAround?: (messageId: string) => Promise<string>;
   onShowLatest?: () => Promise<void>;
   /** Whether the main stream's viewport is following its newest row. A full refetch may replace
    * retained pages only while this is true; deliberate reading above the tail must stand. */
