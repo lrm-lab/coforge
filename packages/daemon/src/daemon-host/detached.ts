@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
+import { DAEMON_STOP_WAIT_MS } from "#src/platform/daemon-stop-wait";
 import { parseProcStat } from "#src/platform/linux-process-table";
 import { LocalDaemonLauncher } from "./launcher";
 import type {
@@ -26,7 +27,7 @@ const DETACHED_SPEC_FILE = "detached-service.json";
 const DETACHED_PID_FILE = "detached.pid";
 /** systemd's default `PATH` for a user service. */
 const DEFAULT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-const STOP_WAIT_MS = 15_000;
+const STOP_WAIT_MS = DAEMON_STOP_WAIT_MS;
 const POLL_MS = 50;
 
 /** systemd is present when its manager is running (`sd_booted`) and `systemctl` is on `PATH`;

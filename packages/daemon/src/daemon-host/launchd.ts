@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
 import { nativeCommandDiagnostic, type NativeCommandResult } from "#src/platform/native-command";
+import { DAEMON_STOP_WAIT_MS } from "#src/platform/daemon-stop-wait";
 import { escapeXmlText } from "@lrm/coforge-sdk/internal";
 import { LocalDaemonLauncher } from "./launcher";
 import type {
@@ -70,7 +71,7 @@ export class LaunchdDaemonHost implements DaemonLauncher {
     this.#target = `gui/${options.uid}/${options.label}`;
     this.#run = options.run ?? runCommand;
     this.#sleep = options.sleep ?? Bun.sleep;
-    this.#stopTimeoutMilliseconds = options.stopTimeoutMilliseconds ?? 15_000;
+    this.#stopTimeoutMilliseconds = options.stopTimeoutMilliseconds ?? DAEMON_STOP_WAIT_MS;
     this.#local = new LocalDaemonLauncher({
       executablePath: options.executablePath,
       socketPath: options.socketPath,
@@ -130,7 +131,7 @@ export class LaunchdDaemonHost implements DaemonLauncher {
   /** Boots the user agent out and waits for it to actually leave launchd. `bootout` returns as
    * soon as it has *asked* launchd to tear the job down, not once launchd has finished doing so —
    * launchd keeps answering `print` with the outgoing instance for a few seconds while it runs
-   * its own SIGTERM (grace) / SIGKILL (at 5 s) ladder. The dev.34→dev.35 upgrade incident this
+   * its own SIGTERM (grace) / SIGKILL (at the plist's `ExitTimeOut`) ladder. The dev.34→dev.35 upgrade incident this
    * fixes bootstrapped a replacement job during exactly that window, found the label still
    * "loaded" from the old instance's point of view, and skipped it — launchd then finished
    * removing the job with nothing left to start the new daemon. A caller must not

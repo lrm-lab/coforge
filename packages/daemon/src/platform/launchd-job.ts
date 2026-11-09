@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { getLogger } from "@logtape/logtape";
 
 import type { NativeProcessIdentity } from "#src/supervisor/workspace-instance";
+import { LAUNCHD_EXIT_TIMEOUT_SECONDS } from "./daemon-stop-wait";
 import { nativeCommandDiagnostic, type NativeCommandResult } from "./native-command";
 import { escapePlistValue } from "./xml-escape";
 
@@ -217,6 +218,6 @@ export function jobPlist(config: LaunchdJobConfig): string {
 ${config.restartOnFailure ? "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>" : ""}${throttle === undefined ? "" : `\n<key>ThrottleInterval</key><integer>${throttle}</integer>`}
 ${config.logPath ? `<key>StandardOutPath</key><string>${escapePlistValue(config.logPath)}</string>\n<key>StandardErrorPath</key><string>${escapePlistValue(config.logPath)}</string>` : ""}
 <key>AbandonProcessGroup</key><false/>
-<key>ExitTimeOut</key><integer>2</integer>
+<key>ExitTimeOut</key><integer>${LAUNCHD_EXIT_TIMEOUT_SECONDS}</integer>
 </dict></plist>\n`;
 }
