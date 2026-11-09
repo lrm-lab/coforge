@@ -32,6 +32,7 @@ import { loadWorkspaceAgents } from "#src/features/agents/workspace-agents.funct
 import { WorkspaceAgentsProvider } from "#src/features/agents/workspace-agents-realtime";
 import { WorkspacePresenceProvider } from "#src/features/workspaces/member-presence";
 import { getUserPreferences } from "#src/features/settings/settings.functions";
+import { loadAiWorkbenchOn } from "#src/features/pi-chat/pi-chat.functions";
 import { useAiWorkbenchEnabled } from "#src/features/settings/ai-workbench";
 import { loadMemberWorkspaceSettings } from "#src/features/workspaces/member-settings.functions";
 import { loadOnboardingWizard } from "#src/features/onboarding/onboarding-wizard.functions";
@@ -98,21 +99,29 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       });
   },
   loader: async ({ location, params, context }) => {
-    const [user, switcher, notifications, workspaceAgents, preferences, memberSettings] =
-      await Promise.all([
-        getUserProfile(),
-        loadWorkspaceSwitcher(),
-        getBrowserNotificationSettings(),
-        loadWorkspaceAgents(),
-        getUserPreferences(),
-        loadMemberWorkspaceSettings(),
-        // Shown at once from the cache, and read again in the background once older than its
-        // staleTime, as each run of this loader read it before (task #366).
-        context.queryClient.ensureQueryData({
-          ...recordsNavAttentionQuery(params.workspaceSlug),
-          revalidateIfStale: true,
-        }),
-      ]);
+    const [
+      user,
+      switcher,
+      notifications,
+      workspaceAgents,
+      preferences,
+      memberSettings,
+      aiWorkbenchEnabled,
+    ] = await Promise.all([
+      getUserProfile(),
+      loadWorkspaceSwitcher(),
+      getBrowserNotificationSettings(),
+      loadWorkspaceAgents(),
+      getUserPreferences(),
+      loadMemberWorkspaceSettings(),
+      loadAiWorkbenchOn(),
+      // Shown at once from the cache, and read again in the background once older than its
+      // staleTime, as each run of this loader read it before (task #366).
+      context.queryClient.ensureQueryData({
+        ...recordsNavAttentionQuery(params.workspaceSlug),
+        revalidateIfStale: true,
+      }),
+    ]);
     // A person who has not been asked for a display name is asked once, here for a session that
     // predates the step, and comes back to this page.
     if (!user.named) throw nameStepRedirect(location.href);
@@ -136,7 +145,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
       language: preferences.language,
-      aiWorkbenchEnabled: preferences.aiWorkbenchEnabled,
+      aiWorkbenchEnabled,
       tabOrders: memberSettings.tabOrders,
     };
   },

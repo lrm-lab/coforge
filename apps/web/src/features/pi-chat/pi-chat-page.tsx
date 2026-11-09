@@ -32,7 +32,7 @@ type Props = {
   select(computerId: string, sessionId?: string): void;
 };
 
-/** The Workbench, or one line saying it is off once the account's switch turns off. */
+/** The Workbench, or one line saying it is off once the Workspace's switch turns off. */
 export function PiChatPage(props: Props) {
   return useAiWorkbenchEnabled() ? <PiChatContent {...props} /> : <PiChatOff />;
 }

@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
   saveDateTimePreferencesInputSchema,
-  saveAiWorkbenchPreferenceInputSchema,
   saveLanguagePreferencesInputSchema,
 } from "./settings.schemas";
 
@@ -41,12 +40,4 @@ export const saveLanguagePreference = createServerFn({ method: "POST" })
   .validator(saveLanguagePreferencesInputSchema)
   .handler(({ data, context }) =>
     setLanguageAndRenameAssistants(requireDatabaseClient(), context.user.id, data.language),
-  );
-
-/** The Experiments page's AI Workbench switch: this account only, whatever the Workspace. */
-export const saveAiWorkbenchPreference = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(saveAiWorkbenchPreferenceInputSchema)
-  .handler(async ({ data, context }) =>
-    preferences().setAiWorkbenchEnabled(context.user.id, data.enabled),
   );

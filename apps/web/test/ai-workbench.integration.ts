@@ -74,7 +74,9 @@ test("AI Workbench follows the Workspace's switch: on by default, owner/admin on
     expect(await refused(first)).toBeFalse();
 
     // An admin turns it off for the Workspace: every entry refuses, the other Workspace stays on.
-    expect((await experiments.set(context(first), "admin", "aiWorkbench", false)).enabled).toBeFalse();
+    expect(
+      (await experiments.set(context(first), "admin", "aiWorkbench", false)).enabled,
+    ).toBeFalse();
     expect(await refused(first)).toBeTrue();
     expect(await canUsePiChat(db, scope(first))).toBeFalse();
     expect(await refused(second)).toBeFalse();

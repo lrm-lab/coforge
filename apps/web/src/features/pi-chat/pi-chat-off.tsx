@@ -2,7 +2,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { PageHeader } from "#src/components/layout/page-header";
 import { m } from "#src/paraglide/messages";
 
-/** Replaces the whole Workbench page while the account's switch is off. */
+/** Replaces the whole Workbench page while the Workspace's switch is off. */
 export function PiChatOff() {
   const { workspaceSlug } = useParams({ strict: false });
   return (

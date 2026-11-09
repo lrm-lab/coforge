@@ -213,6 +213,7 @@
   "experiments_drafts_description": "在任何会话里写了但没发出去的消息集中到一个页面，在「已保存」下面。草稿只存在各自设备上。",
   "experiments_artifacts": "文档",
   "experiments_artifacts_description": "在对话里由人和 Agent 一起编辑、保留每个版本的文档。对整个工作区生效，包括所有 Agent。",
-  "settings_labels": "标签",
-  "experiments_ai_workbench": "AI Workbench"
+  "experiments_ai_workbench": "AI Workbench",
+  "experiments_ai_workbench_description": "侧边栏里在你的电脑上工作的 AI 对话。对整个工作区生效。",
+  "settings_labels": "标签"
 }

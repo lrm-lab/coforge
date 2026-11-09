@@ -10,7 +10,3 @@ export const saveDateTimePreferencesInputSchema = z.object({
 export const saveLanguagePreferencesInputSchema = z.object({
   language: z.enum(["en", "zh-CN"]).nullable(),
 });
-
-export const saveAiWorkbenchPreferenceInputSchema = z.object({
-  enabled: z.boolean(),
-});

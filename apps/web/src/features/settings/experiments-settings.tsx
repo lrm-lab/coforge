@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
-import { Building07, UserCircle } from "@untitledui/icons";
+import { Building07 } from "@untitledui/icons";
 import {
   SettingsCard,
   SettingsField,
@@ -17,8 +18,7 @@ import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime
 import { decodeWorkspaceFeaturesChangedEvent } from "#src/features/workspaces/workspace-realtime";
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
-import { AI_WORKBENCH_QUERY_KEY, useAiWorkbenchEnabled } from "./ai-workbench";
-import { saveAiWorkbenchPreference } from "./settings.functions";
+import { AI_WORKBENCH_QUERY_KEY } from "./ai-workbench";
 import { getExperiments, setExperiment } from "./experiments.functions";
 
 type Experiment = Awaited<ReturnType<typeof getExperiments>>["experiments"][number];
@@ -38,6 +38,10 @@ const EXPERIMENT_TEXT: Record<
   artifacts: {
     name: () => m.experiments_artifacts(),
     description: () => m.experiments_artifacts_description(),
+  },
+  aiWorkbench: {
+    name: () => m.experiments_ai_workbench(),
+    description: () => m.experiments_ai_workbench_description(),
   },
 };
 
@@ -79,8 +83,8 @@ export function useWorkspaceExperiments() {
 }
 
 /**
- * Settings → Experiments, for every member: this account's own switches first (AI Workbench), then
- * the Workspace's, which only an owner or admin can change.
+ * Settings → Experiments, for every member: the Workspace's switches, which only an owner or admin
+ * can change.
  */
 export function ExperimentsSettings({
   experiments,
@@ -89,11 +93,17 @@ export function ExperimentsSettings({
 }) {
   const save = useServerFn(setExperiment);
   const queryClient = useQueryClient();
+  const router = useRouter();
   // The experiments switched since the page loaded: one that needs a reload offers it until then.
   const [changed, setChanged] = useState<ReadonlySet<Experiment["key"]>>(new Set());
   const toggle = useMutation({
     mutationFn: (change: { key: Experiment["key"]; enabled: boolean }) => save({ data: change }),
     onSuccess: (saved) => {
+      // The sidebar entry and the Workbench page follow the Workspace's switch at once.
+      if (saved.key === "aiWorkbench") {
+        queryClient.setQueryData(AI_WORKBENCH_QUERY_KEY, saved.enabled);
+        void router.invalidate();
+      }
       setChanged((keys) => new Set(keys).add(saved.key));
       queryClient.setQueryData(
         EXPERIMENTS_QUERY_KEY,
@@ -161,44 +171,11 @@ export function ExperimentsSettings({
 
   return (
     <SettingsPage>
-      <SettingsGroup icon={UserCircle} label={m.settings_personal_group()}>
-        <AiWorkbenchSetting />
-      </SettingsGroup>
       {workspaceBlock !== false && (
         <SettingsGroup icon={Building07} label={m.settings_workspace_group()}>
           {workspaceBlock}
         </SettingsGroup>
       )}
     </SettingsPage>
-  );
-}
-
-/** This account's AI Workbench switch. The sidebar reads the same query, so a change shows there
- * at once. */
-function AiWorkbenchSetting() {
-  const save = useServerFn(saveAiWorkbenchPreference);
-  const queryClient = useQueryClient();
-  const enabled = useAiWorkbenchEnabled();
-  const toggle = useMutation({
-    mutationFn: (next: boolean) => save({ data: { enabled: next } }),
-    onSuccess: (saved) => queryClient.setQueryData(AI_WORKBENCH_QUERY_KEY, saved),
-  });
-  return (
-    <SettingsCard>
-      <SettingsField inline label={m.experiments_ai_workbench()}>
-        <Toggle
-          size="md"
-          aria-label={m.experiments_ai_workbench()}
-          isSelected={toggle.isPending ? toggle.variables : enabled}
-          isDisabled={toggle.isPending}
-          onChange={(next) => toggle.mutate(next)}
-        />
-      </SettingsField>
-      {toggle.isError && (
-        <p role="alert" className="text-sm text-error-primary">
-          {m.experiments_save_error()}
-        </p>
-      )}
-    </SettingsCard>
   );
 }

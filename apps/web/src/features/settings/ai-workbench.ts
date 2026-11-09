@@ -1,16 +1,16 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 
-import { getUserPreferences } from "./settings.functions";
+import { loadAiWorkbenchOn } from "#src/features/pi-chat/pi-chat.functions";
 
-/** The account's AI Workbench switch. It belongs to the person, so the key has no Workspace id. */
+/** The Workspace's AI Workbench switch. The cache is cleared on a Workspace switch, so the key
+ * needs no Workspace id. */
 export const AI_WORKBENCH_QUERY_KEY = ["ai-workbench-enabled"] as const;
 
 async function readAiWorkbenchEnabled() {
-  return (await getUserPreferences()).aiWorkbenchEnabled;
+  return loadAiWorkbenchOn();
 }
 
-/** Preference changes publish no realtime event, so a tab or device that did not make the change
- * learns of it when its window regains focus. */
+/** A tab that did not make the change learns of it when its window regains focus. */
 export const aiWorkbenchQuery = {
   queryKey: AI_WORKBENCH_QUERY_KEY,
   queryFn: readAiWorkbenchEnabled,
@@ -18,7 +18,7 @@ export const aiWorkbenchQuery = {
   refetchOnWindowFocus: "always",
 } as const;
 
-/** The switch, seeded from what the page loaded; it is on until the person turns it off. */
+/** The switch, seeded from what the page loaded; it is on until the Workspace's owner or an admin turns it off. */
 export function useAiWorkbenchEnabled(initial?: boolean) {
   const { data } = useQuery({
     ...aiWorkbenchQuery,
