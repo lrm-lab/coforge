@@ -22,6 +22,17 @@ test("round trips bounded child result framing", () => {
   );
 });
 
+test("preserves the Raft too-large cause in child framing", () => {
+  const result = {
+    ok: false as const,
+    failure: "too_large" as const,
+    tooLargeCause: "restore_limit" as const,
+  };
+  expect(decodeContextViewRestoreChildResult(encodeContextViewRestoreChildResult(result))).toEqual(
+    result,
+  );
+});
+
 test("runs the real restore mode in a Bun child", async () => {
   const buffer = Buffer.from(
     JSON.stringify({ type: "user_message", session_id: "s1", message: "hello" }) + "\n",

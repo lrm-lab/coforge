@@ -39,16 +39,17 @@ export type ContextViewRestoreFailure =
   | "unsupported_runtime"
   | "newer_session_format"
   | "read_failed";
+export type ContextViewTooLargeCause = "session_file" | "request" | "restore_limit";
 export type ContextViewRestoreResult =
   | { ok: true; view: RestoredContextView }
-  | { ok: false; failure: ContextViewRestoreFailure };
+  | { ok: false; failure: ContextViewRestoreFailure; tooLargeCause?: ContextViewTooLargeCause };
 
 export type RecordValue = Record<string, unknown>;
 
 export function isRecord(value: unknown): value is RecordValue {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function parseRecords(buffer: Buffer, offset: number): RecordValue[] | null {
+function parseRecords(buffer: Buffer, offset: number): RecordValue[] | null | "too_many" {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > buffer.length) return null;
   const records: RecordValue[] = [];
   let start = 0;
@@ -63,7 +64,7 @@ function parseRecords(buffer: Buffer, offset: number): RecordValue[] | null {
         return null;
       }
     }
-    if (records.length > 10_000) return null;
+    if (records.length > 10_000) return "too_many";
     if (end < 0 || end >= offset) break;
     start = end + 1;
   }
@@ -203,7 +204,7 @@ export function buildView(
     redactions,
   };
   if (Buffer.byteLength(JSON.stringify(view), "utf8") > (request.maxBytes ?? 32 * 1024 * 1024))
-    return { ok: false, failure: "too_large" };
+    return { ok: false, failure: "too_large", tooLargeCause: "request" };
   return {
     ok: true,
     view,
@@ -221,6 +222,8 @@ export type RestoreRequest = {
 
 export function restoreContextView(request: RestoreRequest): ContextViewRestoreResult {
   const records = parseRecords(request.buffer, request.offset);
+  if (records === "too_many")
+    return { ok: false, failure: "too_large", tooLargeCause: "restore_limit" };
   if (!records) return { ok: false, failure: "read_failed" };
   switch (request.runtime) {
     case "claude":

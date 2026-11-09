@@ -86,7 +86,11 @@ export async function runContextViewRestoreChildMain(
     bytes += chunk.byteLength;
     if (bytes > CONTEXT_VIEW_RESTORE_INPUT_FRAME_MAX_BYTES) {
       process.stdout.write(
-        encodeContextViewRestoreChildResult({ ok: false, failure: "too_large" }),
+        encodeContextViewRestoreChildResult({
+          ok: false,
+          failure: "too_large",
+          tooLargeCause: "session_file",
+        }),
       );
       return;
     }
@@ -95,7 +99,11 @@ export async function runContextViewRestoreChildMain(
   const request = JSON.parse(Buffer.concat(chunks).toString("utf8")) as ChildRequest;
   const result =
     process.memoryUsage().rss > CONTEXT_VIEW_RESTORE_RSS_MAX_BYTES
-      ? { ok: false as const, failure: "too_large" as const }
+      ? {
+          ok: false as const,
+          failure: "too_large" as const,
+          tooLargeCause: "restore_limit" as const,
+        }
       : restorePayload(request);
   process.stdout.write(encodeContextViewRestoreChildResult(result));
 }
@@ -131,7 +139,7 @@ export async function runContextViewRestoreInChild(
     try {
       body = JSON.stringify(childRequest(request));
     } catch {
-      return { ok: false, failure: "too_large" };
+      return { ok: false, failure: "too_large", tooLargeCause: "session_file" };
     }
     await child.stdin.write(body);
     child.stdin.end();
@@ -143,7 +151,7 @@ export async function runContextViewRestoreInChild(
       return { ok: false, failure: "read_failed" };
     const result = decodeContextViewRestoreChildResult(raw);
     if (result.ok && process.memoryUsage().rss > CONTEXT_VIEW_RESTORE_RSS_MAX_BYTES)
-      return { ok: false, failure: "too_large" };
+      return { ok: false, failure: "too_large", tooLargeCause: "restore_limit" };
     return result;
   } catch {
     return { ok: false, failure: "read_failed" };

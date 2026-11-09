@@ -191,6 +191,9 @@ export function subscribeContextViewQueries(
         })()
       : failure(request, restored.failure, restored.failure, {
           sourceBytes: source.sourceBytes,
+          ...(restored.failure === "too_large" && restored.tooLargeCause
+            ? { tooLargeCause: restored.tooLargeCause }
+            : {}),
         });
     logger.info("Context view request finished", {
       event: "context_view:result",
