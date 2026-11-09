@@ -55,3 +55,51 @@ test("context view failures emit the same diagnostic result trace as successful 
     duration_ms: expect.any(Number),
   });
 });
+
+test("unexpected restore exceptions upload a read_failed result before tracing", async () => {
+  let receive: ((request: AgentContextViewRequest) => Promise<void>) | undefined;
+  const results: AgentContextViewResult[] = [];
+  const transport = {
+    onAgentContextView(callback: (request: AgentContextViewRequest) => Promise<void>) {
+      receive = callback;
+      return () => {};
+    },
+    async postAgentContextViewResult(result: AgentContextViewResult) {
+      results.push(result);
+    },
+  } as unknown as DaemonConnectionClient;
+
+  const { records } = await captureDaemonLogs(async () => {
+    subscribeContextViewQueries(transport, {
+      connection: {
+        workspaceId: request.workspaceId,
+        computerId: request.computerId,
+        workspaceRoot: "/tmp/workspace",
+      } as never,
+      stateDirectory: "/tmp/state",
+      contextView: {
+        find: () => {
+          throw new Error("restore exploded");
+        },
+      },
+      agentApiKey: () => "agent-key",
+      currentTransport: () => transport,
+      isStopping: () => false,
+    });
+    await receive?.(request);
+  });
+
+  expect(results[0]).toMatchObject({
+    status: "failed",
+    reason: "read_failed",
+    failureDetail: "exception",
+  });
+  expect(
+    records.find((record) => record.properties.event === "context_view:result")?.properties,
+  ).toMatchObject({
+    outcome: "failed",
+    failure_detail: "exception",
+    post_outcome: "accepted",
+    error_class: "Error",
+  });
+});

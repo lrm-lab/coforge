@@ -102,11 +102,20 @@ export function subscribeContextViewQueries(
       try {
         await answer(request);
       } catch (error) {
+        const result = failure(request, "read_failed", "exception");
+        const postOutcome = await sendResult(
+          transport,
+          result,
+          ports.agentApiKey?.(request.agentId),
+        );
         logRequestTrace(request, receivedAt, {
-          outcome: "failed",
-          failure_detail: "exception",
+          outcome: result.status,
+          failure_detail: result.failureDetail,
           error_class: error instanceof Error ? error.name : "unknown",
-          post_outcome: "skipped",
+          post_outcome: postOutcome,
+          status: result.status,
+          reason: result.reason,
+          failure: result.reason,
         });
       }
     });
