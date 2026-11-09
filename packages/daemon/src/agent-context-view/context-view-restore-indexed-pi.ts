@@ -3,7 +3,6 @@ import type {
   RecordValue,
   RestoreRequest,
   ContextViewRestoreResult,
-  RestoredContextMessage,
 } from "./context-view-restore";
 import { buildView, isRecord, message, sessionMatches } from "./context-view-restore-primitives";
 import { piRequestMessages, piResponseParts } from "./context-view-pi-projection";
