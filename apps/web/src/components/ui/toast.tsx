@@ -82,6 +82,15 @@ const appToast = {
   dismiss(title: string, key?: string) {
     toast.dismiss(successId(title, key));
   },
+  /** A plain notice, one per title: something did not go as asked, but nothing failed. */
+  notice(title: string) {
+    toast(title, { id: `notice:${title}` });
+  },
+  /** Takes a notice or error toast away, for one that belongs to a page the viewer left. */
+  dismissShown(title: string) {
+    toast.dismiss(`notice:${title}`);
+    toast.dismiss(`error:${title}`);
+  },
   // A toast only confirms that an action failed; an error reference belongs under an inline
   // failure, never in a toast.
   error(title: string) {

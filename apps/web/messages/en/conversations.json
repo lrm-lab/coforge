@@ -92,6 +92,7 @@
   "conversation_load_older_failed": "Older messages could not be loaded.",
   "conversation_load_latest_failed": "The newest messages could not be loaded.",
   "conversation_history_load_error": "Messages could not be loaded. Try again.",
+  "conversation_message_gone": "That message no longer exists",
   "conversation_drop_to_upload": "Drop to upload",
   "conversation_message_show_more": "Show More",
   "conversation_message_show_less": "Collapse",

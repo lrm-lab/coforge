@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAppToast } from "#src/components/ui/toast";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { scrollToMessageRow, scrollTwice } from "./conversation-scroll-anchor";
 import type { ConversationBottomPin } from "./conversation-bottom-pin";
@@ -38,6 +39,15 @@ export function useMessageJump({
   jumpHighlightId: string | undefined;
 } {
   const toast = useAppToast();
+  // What a jump told the viewer belongs to this conversation: leaving it takes the toast away, so
+  // it is never left over another page.
+  useEffect(
+    () => () => {
+      toast.dismissShown(m.conversation_message_gone());
+      toast.dismissShown(m.conversation_history_load_error());
+    },
+    [toast],
+  );
   const firstSequence = messages[0]?.sequence;
   const pendingMessageIdRef = useRef<string | undefined>(undefined);
   // The row a position jump just landed on, highlighted for a moment: `?message=` deliberately
@@ -117,9 +127,12 @@ export function useMessageJump({
       pendingMessageIdRef.current = messageId;
       try {
         await onLoadMessageAround(messageId);
-      } catch {
+      } catch (error) {
         pendingMessageIdRef.current = undefined;
-        toast.error(m.conversation_history_load_error());
+        // A link to a message that is gone (deleted, or never in this conversation) cannot load
+        // on a retry, so it says so instead of asking to try again.
+        if (isAppErrorCode(error, "NOT_FOUND")) toast.notice(m.conversation_message_gone());
+        else toast.error(m.conversation_history_load_error());
         // A conversation that was opening on the message opens at the latest instead.
         if (opening) {
           setFollowingLatest(true);
