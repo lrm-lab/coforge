@@ -30,8 +30,18 @@ test("search finds Tasks by title, by number across channels and by full referen
     if (!task) throw new Error("the dev seed's #product Task 3 is missing");
     await browser("open", `${origin}/en/w/${task.workspace.slug}/channel/${task.conversationId}`);
     await waitFor(pageHydrated, 60_000);
-    await browser("press", "Meta+k");
-    await waitFor(`document.querySelector('${box.replace(/'/g, "\\'")}') !== null`);
+    // Hydration finishes before the shortcut's listener is attached, and a press before it is
+    // lost: press again until the dialog answers instead of guessing how long that takes.
+    const opened = `document.querySelector('${box.replace(/'/g, "\\'")}') !== null`;
+    for (let attempt = 1; ; attempt++) {
+      await browser("press", "Meta+k");
+      try {
+        await waitFor(opened, 2_000);
+        break;
+      } catch (error) {
+        if (attempt === 15) throw error;
+      }
+    }
 
     await browser("fill", box, "#3");
     await waitFor(`${rows}.length >= 2`);

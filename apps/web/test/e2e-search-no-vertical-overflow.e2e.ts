@@ -113,6 +113,12 @@ test("search never scrolls the document, empty or with results", async () => {
       `document.querySelectorAll('[role="dialog"] [aria-labelledby="search-frequent-heading"] [data-search-entity^="agent:"]').length === ${agents.length}`,
     );
     await expectOnlyTheListScrolls();
+    // A phone has no Esc and no backdrop to tap: the dialog fills the screen and has a close button.
+    await browser(
+      "wait",
+      "--fn",
+      `(() => { const dialog = document.querySelector('[role="dialog"]'); const close = dialog?.querySelector('button[aria-label="Close"]'); return dialog !== null && Math.round(dialog.getBoundingClientRect().width) === innerWidth && close !== null && close.getBoundingClientRect().width > 0; })()`,
+    );
     await mkdir(artifacts, { recursive: true });
     await browser("screenshot", join(artifacts, "search-home-phone.png"));
 
