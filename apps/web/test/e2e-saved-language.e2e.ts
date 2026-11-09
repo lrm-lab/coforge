@@ -36,3 +36,33 @@ test("an English address opens in the saved Chinese on Members and on Settings",
   }
   expect(await fx.evaluate<string>("location.pathname")).toEndWith("/settings");
 }, 120_000);
+
+test("switching to English in Settings turns the page English at once, and it stays after a reload", async () => {
+  await fx.db.userPreference.upsert({
+    where: { userId: DEV_BROWSER_USER.id },
+    create: { userId: DEV_BROWSER_USER.id, language: "zh-CN" },
+    update: { language: "zh-CN" },
+  });
+  const zh = fx.workspacePath.replace(/^\/en\//, "/zh-CN/");
+  await fx.browser("open", `${fx.proxy.origin}${zh}/settings?section=language-region`);
+  const select = `document.querySelector('button[aria-label="界面语言"]')`;
+  await fx.until(`${select} !== null`, 30_000);
+  await fx.evaluate(`${select}.click()`);
+  const english = `[...document.querySelectorAll('[role="option"]')].find((el) => el.textContent.includes("English"))`;
+  await fx.until(`${english} !== undefined`, 10_000);
+  await fx.evaluate(`${english}.click()`);
+  const save = `[...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "保存" && !el.disabled)`;
+  await fx.until(`${save} !== undefined`, 10_000);
+  await fx.evaluate(`${save}.click()`);
+  const englishPage = `location.pathname.startsWith("/en/") && document.documentElement?.lang === "en"`;
+  await fx.until(englishPage, 30_000);
+  await fx.screenshot("settings-switched-en.png");
+  expect(
+    (await fx.db.userPreference.findUniqueOrThrow({ where: { userId: DEV_BROWSER_USER.id } }))
+      .language,
+  ).toBe("en");
+  await fx.browser("open", `${fx.proxy.origin}${fx.workspacePath}/members`);
+  await fx.until(`document.readyState === "complete"`, 30_000);
+  await Bun.sleep(2_000);
+  expect(await fx.evaluate<boolean>(englishPage)).toBe(true);
+}, 120_000);
