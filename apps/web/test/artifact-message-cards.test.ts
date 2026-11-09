@@ -21,7 +21,7 @@ test("a message page projects twenty artifact links with three batch reads", asy
           homeKey: "workspace",
           access: "conversation",
           deletedAt: null,
-          authorAgentId: null,
+          authorAgentId: "agent-secret",
           workspace: { slug: "docs" },
         }));
       },
