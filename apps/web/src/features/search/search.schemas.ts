@@ -8,6 +8,12 @@ export const SEARCH_QUERY_MAX_LENGTH = 200;
 /** Results per page; "Load more" asks for the next page at the current offset. */
 export const SEARCH_PAGE_SIZE = 20;
 
+export const taskSearchInputSchema = z.object({
+  query: z.string().max(SEARCH_QUERY_MAX_LENGTH),
+  conversationId: z.uuid().optional(),
+  currentConversationId: z.uuid().optional(),
+});
+
 /**
  * One page of Workspace message search. Every filter is optional and applies with or without a
  * query; `relevance` falls back to newest first when there is no query to rank against.

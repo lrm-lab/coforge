@@ -38,7 +38,7 @@ test("search filters narrow results, name their values, and clear together", asy
   /** A filter chip: a button in the dialog's filter bar whose text starts with `prefix`. */
   const chip = (prefix: string) =>
     find(
-      '[role="dialog"] [aria-label="Search filters"] button',
+      '[role="dialog"][aria-label="Search filters"] button',
       `element.textContent.trim().startsWith(${JSON.stringify(prefix)})`,
     );
   /** The text a chip shows: the filter's name, or its chosen value. */
@@ -67,6 +67,8 @@ test("search filters narrow results, name their values, and clear together", asy
     await waitFor(
       `document.querySelector('[role="dialog"] input[type="search"]')?.value === ${JSON.stringify(phrase)}`,
     );
+    await browser("click", '[aria-label="Filter results"]');
+    await waitFor(`${chipText("Sort")} !== undefined`);
   }
   /** Waits for a settled list of `count` rows; zero means the no-results state is showing. */
   const waitForResults = (count: number) =>

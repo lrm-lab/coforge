@@ -35,6 +35,11 @@
     }
   ],
   "search_filters": "Search filters",
+  "search_tasks": "Tasks",
+  "search_task_direct": "Direct message",
+  "search_filter_open": "Filter results",
+  "search_chip_sender": "Sent by {name}",
+  "search_chip_remove": "Remove filter {name}",
   "search_from": "From",
   "search_from_named": "From: {name}",
   "search_from_me": "Me",

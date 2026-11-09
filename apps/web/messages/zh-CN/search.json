@@ -33,6 +33,11 @@
     }
   ],
   "search_filters": "搜索筛选",
+  "search_tasks": "任务",
+  "search_task_direct": "私聊",
+  "search_filter_open": "筛选结果",
+  "search_chip_sender": "{name} 发送",
+  "search_chip_remove": "去掉筛选 {name}",
   "search_from": "发送者",
   "search_from_named": "发送者：{name}",
   "search_from_me": "我",
