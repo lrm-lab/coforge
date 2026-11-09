@@ -11,10 +11,75 @@ import {
   commitTaskChange,
   withoutAssignee,
 } from "./task-change.server";
-import { withNotices } from "./task-notice-posting.server";
+import { withNotices, type NoticeWriter, type PostedNotice } from "./task-notice-posting.server";
 import { signalTaskChange, publishAssignmentReceipt } from "./task-publication.server";
 import { BOUND_ASSIGNEE, receiptAssignee, assigneeMember } from "./task-assignees.server";
 import { indexedRequestId } from "./task-request-ids.server";
+import { assignmentQueueNotes } from "./task-queue.server";
+import { ownTaskScope } from "./task-list.server";
+import type { TaskReader, SelectedTask } from "./task-view.server";
+import type { Transaction } from "./task-board-ports.server";
+
+/**
+ * The assignment receipts of a write that gave Tasks an owner: one fixed-id notice in each
+ * Task's thread, its mention and its one delivery to an Agent assignee that is not the actor.
+ * Each carries the queue note `assign` gives it (task #716): a person's write is a direct
+ * instruction — "do it first", never a number; an Agent's or the system's names the Task's
+ * place in the assignee's queue. `receiptIds` aligns with `tasks`.
+ */
+export async function assignmentReceipts(
+  tx: Transaction,
+  notices: NoticeWriter,
+  reader: TaskReader,
+  scope: ConversationRef,
+  member: Member,
+  assignee: Member,
+  tasks: readonly SelectedTask[],
+  receiptIds: readonly string[],
+): Promise<PostedNotice[]> {
+  const queueNotes = assignee.agentId
+    ? await assignmentQueueNotes(
+        tx,
+        reader,
+        scope,
+        member,
+        assignee,
+        tasks,
+        ownTaskScope({ agentId: assignee.agentId }).conversations,
+      )
+    : undefined;
+  const receipts: PostedNotice[] = [];
+  for (const [index, task] of tasks.entries())
+    receipts.push(
+      await notices.receipt({
+        id: receiptIds[index]!,
+        task,
+        body: (quoted) => ({
+          body: noticeText.assigned(
+            noticeActor(member).displayName,
+            quoted,
+            assigneeMention(assignee),
+            queueNotes?.get(task.id),
+          ),
+          system: {
+            kind: "task.assigned",
+            params: {
+              actor: noticeActor(member),
+              task: quoted,
+              assignee: {
+                memberId: assignee.id,
+                handle: assigneeMention(assignee).slice(1),
+                displayName: assigneeMention(assignee).slice(1),
+              },
+            },
+          },
+        }),
+        assignee,
+        actor: member,
+      }),
+    );
+  return receipts;
+}
 
 export async function assignTask(
   ports: TaskBoardPorts,
@@ -68,36 +133,17 @@ export async function assignTask(
       }));
       return { task, changed: true, receipt: null, assigneeHandle: null };
     }
-    return {
-      task,
-      changed: true,
-      assigneeHandle: assigneeMention(owner),
-      receipt: await notices.receipt({
-        id: receiptId,
-        task,
-        body: (quoted) => ({
-          body: noticeText.assigned(
-            noticeActor(member).displayName,
-            quoted,
-            assigneeMention(owner),
-          ),
-          system: {
-            kind: "task.assigned",
-            params: {
-              actor: noticeActor(member),
-              task: quoted,
-              assignee: {
-                memberId: owner.id,
-                handle: assigneeMention(owner).slice(1),
-                displayName: assigneeMention(owner).slice(1),
-              },
-            },
-          },
-        }),
-        assignee: owner,
-        actor: member,
-      }),
-    };
+    const [posted] = await assignmentReceipts(
+      tx,
+      notices,
+      ports.reader,
+      conversation,
+      member,
+      owner,
+      [task],
+      [receiptId],
+    );
+    return { task, changed: true, assigneeHandle: assigneeMention(owner), receipt: posted };
   });
   const { task, receipt } = result;
   const view = task && (await taskViewOf(ports.db, ports.reader, task));

@@ -10,6 +10,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { readIdleTaskFacts, type IdleTaskFacts } from "./task-idle-reminder-facts.server";
 import { byPriority } from "./task-priority.server";
+import { ownTaskQueue, queueActionable } from "./task-queue.server";
 
 /**
  * The idle task reminder (`POST /api/agent/v1/tasks/idle-nudge`): when an Agent's Computer finds
@@ -77,15 +78,20 @@ function reasonFor(
   return null;
 }
 
-/** The reminder text an idle Agent is given, from the items and backlog it lists. */
+/** The reminder text an idle Agent is given, from the items and backlog it lists. A `#N`
+ * prefix is the Task's place in the Agent's queue (task #716); an item without one waits
+ * outside the queue — In Review or blocked — and is listed after it. */
 export function idleReminderText(items: AgentTaskIdleItem[], backlog: { ref: string }[]) {
+  const queued = items.some((item) => item.queuePosition !== undefined);
   return [
-    "[Idle task reminder] Open tasks assigned to you, highest priority first:",
+    "[Idle task reminder] Your task queue first, then what waits on others:",
     ...items.map(
       (item) =>
-        `- ${item.ref} [${item.status}] prio=${item.priority} "${item.title}" — ${item.why}`,
+        `- ${item.queuePosition === undefined ? "" : `#${item.queuePosition} `}${item.ref} [${item.status}] prio=${item.priority} "${item.title}" — ${item.why}`,
     ),
-    "Pick up the highest-priority one, or update a task's status if it is done or blocked. Read a task with `coforge task view '<ref>'`.",
+    queued
+      ? "Pick up the first queued task, or update a task's status if it is done or blocked. Read a task with `coforge task view '<ref>'`."
+      : "None of these can start yet — each waits outside your queue. Read a task with `coforge task view '<ref>'`.",
     ...(backlog.length > 0
       ? [`(${backlog.length} more: ${backlog.map((item) => item.ref).join(", ")})`]
       : []),
@@ -130,23 +136,37 @@ export async function idleNudge(
   });
   if (due.length === 0) return skip("no_change");
 
-  const ordered = byPriority(
-    due.map((entry) => ({ ...entry, priority: entry.task.priority })),
-    (left, right) =>
-      left.task.createdAt.getTime() - right.task.createdAt.getTime() ||
-      left.task.id.localeCompare(right.task.id),
-  );
+  // The queue orders what can start now; what waits outside it (In Review, a blocker) is still
+  // due for a reminder and follows in the priority order it always had.
+  const { positions } = ownTaskQueue(tasks);
+  const ordered = [
+    ...due
+      .filter((entry) => queueActionable(entry.task))
+      .sort((left, right) => positions.get(left.task.id)! - positions.get(right.task.id)!),
+    ...byPriority(
+      due
+        .filter((entry) => !queueActionable(entry.task))
+        .map((entry) => ({ ...entry, priority: entry.task.priority })),
+      (left, right) =>
+        left.task.createdAt.getTime() - right.task.createdAt.getTime() ||
+        left.task.id.localeCompare(right.task.id),
+    ),
+  ];
   const listed = ordered.slice(0, LISTED_ITEMS);
-  const items = listed.map(({ task, reason, why }) => ({
-    ref: task.ref,
-    taskNumber: task.taskNumber,
-    channel: task.channel,
-    title: task.title,
-    status: task.status,
-    priority: task.priority,
-    reason,
-    why,
-  }));
+  const items = listed.map(({ task, reason, why }) => {
+    const queuePosition = positions.get(task.id);
+    return {
+      ref: task.ref,
+      taskNumber: task.taskNumber,
+      channel: task.channel,
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+      reason,
+      why,
+      ...(queuePosition === undefined ? {} : { queuePosition }),
+    };
+  });
   const backlog = ordered
     .slice(LISTED_ITEMS)
     .map(({ task }) => ({ ref: task.ref, title: task.title }));

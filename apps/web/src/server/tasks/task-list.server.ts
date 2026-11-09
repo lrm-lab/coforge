@@ -16,6 +16,12 @@ import { NOT_BLOCKED_WHERE, showRelations } from "./task-relations.server";
 import { labelFilterWhere } from "./labels.server";
 import { byPriority } from "./task-priority.server";
 import {
+  compareQueueTasks,
+  ownTaskQueue,
+  readOwnQueueTasks,
+  type QueueTask,
+} from "./task-queue.server";
+import {
   CONVERSATION_KIND_WHERE,
   TASK_SCOPE_WHERE,
   UNFINISHED_TASK_STATUSES,
@@ -66,6 +72,30 @@ export function ownTaskScope(actor: { agentId: string } | { userId: string }): {
   };
 }
 
+const UNFINISHED = new Set<string>(UNFINISHED_TASK_STATUSES);
+
+/**
+ * The Tasks the queue numbers: every unfinished Task `actor` holds in `scope`, whether or not the
+ * list's own filters show them — a filtered list still reports each row's true queue rank. When
+ * the list's filters already cover the whole unfinished set its views are reused; otherwise the
+ * set is read again, lean (no discussion counts, no card fields the queue never reads).
+ */
+async function queueCandidates(
+  ports: TaskBoardPorts,
+  workspaceId: string,
+  actor: { agentId: string } | { userId: string },
+  scope: ReturnType<typeof ownTaskScope>,
+  command: TaskCommand,
+  shown: readonly QueueTask[],
+): Promise<QueueTask[]> {
+  const covers =
+    !command.statuses &&
+    !command.labels?.length &&
+    (command.status === undefined || command.status === "all");
+  if (covers) return shown.filter((task) => UNFINISHED.has(task.status));
+  return readOwnQueueTasks(ports.db, ports.reader, workspaceId, actor, scope.conversations);
+}
+
 /** An Agent's (or person's) own list: every Task they hold in the conversations they may read. */
 export async function listOwnTasks(
   ports: TaskBoardPorts,
@@ -105,23 +135,20 @@ export async function listOwnTasks(
     },
   });
   // Highest priority first; within a level, oldest first across conversations.
+  const ordered = (
+    await viewsWithCounts(ports.db, ports.reader, principal.workspaceId, tasks, (task, extras) => ({
+      ...taskView(task, ports.reader, extras),
+      channelRef: task.conversation.channelName
+        ? `#${task.conversation.channelName}`
+        : `@${task.conversation.members[0]!.user!.username}`,
+    }))
+  ).sort(compareQueueTasks);
+  const { queue } = ownTaskQueue(
+    await queueCandidates(ports, principal.workspaceId, actor, scope, command, ordered),
+  );
   return {
-    tasks: byPriority(
-      await viewsWithCounts(
-        ports.db,
-        ports.reader,
-        principal.workspaceId,
-        tasks,
-        (task, extras) => ({
-          ...taskView(task, ports.reader, extras),
-          channelRef: task.conversation.channelName
-            ? `#${task.conversation.channelName}`
-            : `@${task.conversation.members[0]!.user!.username}`,
-        }),
-      ),
-      (left, right) =>
-        left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-    ),
+    tasks: ordered,
+    queue: queue.map(({ task, position }) => ({ position, taskId: task.id })),
     coverage: scope.coverage,
     pagination: { mode: "complete", truncated: false },
   };

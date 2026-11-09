@@ -377,12 +377,21 @@ export type TaskListCoverage = {
 /** An Agent's own Task list is never cut short: every covered match is returned. */
 export type TaskListPagination = { mode: "complete"; truncated: false };
 
+/** One entry of an Agent's own-task queue: `position` is the Task's 1-based number in the
+ * whole queue (todo/in_progress, unblocked, highest priority first), `taskId` the Task it
+ * ranks. Positions count the full queue even when `tasks` is filtered, so a filtered row
+ * still shows its true rank. */
+export type TaskQueueEntry = { position: number; taskId: string };
+
 export type TaskResult = {
   tasks: TaskView[];
   /** Set only on an Agent's own (`mine`) list. */
   coverage?: TaskListCoverage;
   /** Set only on an Agent's own (`mine`) list. */
   pagination?: TaskListPagination;
+  /** Set only on an Agent's own (`mine`) list: its full task queue, whatever `tasks` filtered
+   * to. Absent from an older server. */
+  queue?: TaskQueueEntry[];
   claims?: TaskClaimResult[];
   history?: TaskHistoryEvent[];
   /** `show` only: the Tasks waiting for the shown one. */

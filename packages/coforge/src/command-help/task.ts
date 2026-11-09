@@ -16,7 +16,7 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
       "--following  the task conversations you follow, with their unread counts (no other flag combines with it)",
     ],
     guidance:
-      "Tasks are listed highest priority first (prio=urgent, high, medium, low, none), oldest first within a priority; --mine does so within each status section.",
+      "Tasks are listed highest priority first (prio=urgent, high, medium, low, none), oldest first within a priority. --mine leads with 'Your queue': the tasks that can start now (todo/in_progress, unblocked) numbered from 1; each row's queue=N is its place in the full queue even under --status or --label filters.",
     example: "coforge task list --mine",
   },
   "task show": {

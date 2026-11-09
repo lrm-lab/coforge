@@ -325,10 +325,15 @@ test("only the assignment receipt is delivered and pushed; no notice reaches a b
   const startedLine = `📌 Notice Agent assigned #${startedTask.number} "Started by me" to @${agent.name}`;
   expect(await noticesAfter(mark)).toEqual([
     { body: `📋 1 new task created: #${startedTask.number} "Started by me"`, thread: null },
-    { body: startedLine, thread: startedTask.messageId },
+    // An Agent's own assignment carries its queue note (task #716); earlier tests leave the
+    // Agent other queued Tasks, so the position is not pinned here.
+    { body: expect.stringContaining(startedLine), thread: startedTask.messageId },
   ]);
   expect(started.assignmentReceipts).toEqual([
-    expect.objectContaining({ state: "started", content: startedLine }),
+    expect.objectContaining({
+      state: "started",
+      content: expect.stringContaining(startedLine),
+    }),
   ]);
 
   // Reserved for someone else, it is the same assignment notice. The assignee reads as its
@@ -340,7 +345,7 @@ test("only the assignment receipt is delivered and pushed; no notice reaches a b
     assignee: agent.name,
   });
   const reservedTask = reserved.tasks[0]!;
-  const assignLine = `📌 Alice An assigned #${reservedTask.number} "Reserved" to @${agent.name}`;
+  const assignLine = `📌 Alice An assigned #${reservedTask.number} "Reserved" to @${agent.name} — do it first`;
   expect(await noticesAfter(mark)).toEqual([
     { body: `📋 1 new task created: #${reservedTask.number} "Reserved"`, thread: null },
     { body: assignLine, thread: reservedTask.messageId },

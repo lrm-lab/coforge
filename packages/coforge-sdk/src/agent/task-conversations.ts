@@ -186,6 +186,9 @@ export type AgentTaskIdleItem = {
   reason: AgentTaskIdleReason;
   /** Why, in English, as the text says it. */
   why: string;
+  /** The Task's 1-based number in the Agent's full task queue; absent when it waits outside
+   * the queue (In Review or blocked) or the server predates queue numbering. */
+  queuePosition?: number;
 };
 /** Response of `POST /api/agent/v1/tasks/idle-nudge`: with `send`, give the Agent `text`. */
 export type AgentTaskIdleNudgeResponse = {
@@ -236,7 +239,11 @@ function isIdleItem(value: unknown): value is AgentTaskIdleItem {
     TASK_PRIORITY_VALUES.has(value.priority) &&
     isString(value.reason) &&
     IDLE_REASONS.has(value.reason) &&
-    isString(value.why)
+    isString(value.why) &&
+    (value.queuePosition === undefined ||
+      (typeof value.queuePosition === "number" &&
+        Number.isInteger(value.queuePosition) &&
+        value.queuePosition >= 1))
   );
 }
 

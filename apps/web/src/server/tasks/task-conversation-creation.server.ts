@@ -32,6 +32,8 @@ import { announceNeighbours, announceTasks } from "./task-publication.server";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { linkCreatedTasks } from "./task-gates.server";
+import { assignmentQueueNotes } from "./task-queue.server";
+import { ownTaskScope } from "./task-list.server";
 import { parentTasksOf, taskViewsOf } from "./task-relations.server";
 import { postTaskNotice } from "./task-conversations.server";
 import { followTask } from "./task-discussion-store.server";
@@ -172,11 +174,47 @@ export async function createConversationTasks(
         source,
         labels,
         project,
+        // The assignee's notice waits for the new Tasks' relations: its queue note reads them.
+        deferAssignedNotice: true,
       });
       tasks.push(task);
       if (notice) notices.push(notice);
     }
     await linkCreatedTasks(tx, scope, member, tasks, command);
+    // The assignee's notice, one per Task, carries the queue note `assign` would give it
+    // (task #716): a person's create-and-assign is the same direct instruction. Each notice
+    // makes the task's conversation, so the task is read again to carry it.
+    if (assignee && assignee.id !== member.id) {
+      const queueNotes = assignee.agentId
+        ? await assignmentQueueNotes(
+            tx,
+            ports.reader,
+            scope,
+            member,
+            assignee,
+            tasks,
+            ownTaskScope({ agentId: assignee.agentId }).conversations,
+          )
+        : undefined;
+      for (const [index, task] of tasks.entries()) {
+        const queueNote = queueNotes?.get(task.id);
+        await postTaskNotice(tx, scope, task.id, {
+          body: `${actorHandle(member)} assigned you task #${task.number}: ${task.title}${queueNote ? ` — ${queueNote}` : ""}`,
+          system: {
+            kind: "task.assigned_you",
+            params: {
+              actor: noticeActor(member),
+              task: { taskId: task.id, number: task.number, title: task.title },
+            },
+          },
+          deliverToAgentId: assignee.agentId,
+        });
+        tasks[index] = await tx.task.findUniqueOrThrow({
+          where: { id: task.id },
+          select: taskSelection,
+        });
+      }
+    }
     return { tasks, created: true, notices };
   });
   if (result.created) {
@@ -247,6 +285,9 @@ export async function insertConversationTask(
     labels?: readonly LabelRow[];
     /** The Project the new Task is filed under; the conversation's unless it was chosen. */
     project?: TaskProjectRef | null;
+    /** Post the assignee's notice later, once the caller has linked the new Tasks' relations
+     * (their queue note reads them); the task then comes back unread for its new conversation. */
+    deferAssignedNotice?: boolean;
   },
 ) {
   const { assignee, source } = input;
@@ -298,7 +339,7 @@ export async function insertConversationTask(
   if (assignee?.agentId && started) await ensureTaskExecutionSession(tx, task, assignee.agentId);
   // The assignee's notice makes the task's conversation, so the task is read again to carry it.
   const assigned = assignee && assignee.id !== member.id;
-  if (assigned)
+  if (assigned && !input.deferAssignedNotice)
     await postTaskNotice(tx, scope, task.id, {
       body: `${actorHandle(member)} assigned you task #${task.number}: ${input.title}`,
       system: {
@@ -321,9 +362,10 @@ export async function insertConversationTask(
         )
       : undefined;
   return {
-    task: assigned
-      ? await tx.task.findUniqueOrThrow({ where: { id: task.id }, select: taskSelection })
-      : task,
+    task:
+      assigned && !input.deferAssignedNotice
+        ? await tx.task.findUniqueOrThrow({ where: { id: task.id }, select: taskSelection })
+        : task,
     notice,
   };
 }

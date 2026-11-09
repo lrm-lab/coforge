@@ -85,17 +85,27 @@ export function formatTaskBoard(
   return `## Task Board for ${target} (${result.tasks.length} tasks)\n\n${result.tasks.map(boardRow).join("\n")}`;
 }
 
-function ownRow(task: TaskView): string {
+function ownRow(task: TaskView, queuePosition?: number): string {
   const mark = departure(task.creator);
   const creator = ` by=@${task.creator.handle}${mark ? ` creator=${mark}` : ""}`;
   const title = foldUntrustedLine(task.title);
-  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}] ${priorityField(task)}${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)} ${title}`;
+  const queue = queuePosition === undefined ? "" : ` queue=${queuePosition}`;
+  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}] ${priorityField(task)}${queue}${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)} ${title}`;
+}
+
+/** One line of the queue section: its number, then enough of the Task to recognize it. */
+function queueRow(position: number, task: TaskView): string {
+  const title = foldUntrustedLine(task.title);
+  return `#${position} ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}] ${priorityField(task)} ${title}`;
 }
 
 /**
  * The Tasks assigned to this Agent across its conversations, grouped by status, as
  * `coforge task list --mine` prints them. The coverage and output lines repeat what the server
- * reported about the query; a field it did not send reads `unknown`.
+ * reported about the query; a field it did not send reads `unknown`. A server that numbers the
+ * Agent's queue (task #716) also gets a `Your queue` section in work order and a `queue=N`
+ * field on each queued row; positions count the whole queue even when `--status` or `--label`
+ * filtered the rows. An older server sends no `queue` and the list reads as it always did.
  */
 export function formatMyTaskList(result: TaskResult, status: TaskListStatus): string {
   const { tasks, coverage, pagination } = result;
@@ -113,13 +123,42 @@ export function formatMyTaskList(result: TaskResult, status: TaskListStatus): st
     `Output: showing ${tasks.length} of ${tasks.length} visible matches · mode=${pagination?.mode ?? "unknown"} · truncated=${pagination ? String(pagination.truncated) : "unknown"}`,
     "",
   ];
+  const queue = result.queue;
+  const queuePosition = new Map(
+    (queue ?? []).map((entry) => [entry.taskId, entry.position] as const),
+  );
+  const byId = new Map(tasks.map((task) => [task.id, task] as const));
+  const queueRows = (queue ?? []).flatMap((entry) => {
+    const task = byId.get(entry.taskId);
+    return task ? [queueRow(entry.position, task)] : [];
+  });
+  // The queue is the Agent's work order, not the filter's: it shows whenever the server sent
+  // one, even when no filtered row is queued — `(0 of N shown)` says the queue is still there.
+  const queueSection =
+    queue && queue.length > 0
+      ? [
+          `### Your queue${queueRows.length === queue.length ? "" : ` (${queueRows.length} of ${queue.length} shown)`}`,
+          ...queueRows,
+          "",
+        ]
+      : [];
   if (tasks.length === 0)
-    return [...header, "No tasks matched in the covered visible scope."].join("\n");
+    return [
+      ...header,
+      "No tasks matched in the covered visible scope.",
+      // The section's trailing blank separates it from status rows; with none, drop it.
+      ...(queueSection.length ? ["", ...queueSection.slice(0, -1)] : []),
+    ].join("\n");
   const sections = TASK_STATUSES.flatMap((section) => {
     const rows = tasks.filter((task) => task.status === section);
-    return rows.length ? [`### ${section} (${rows.length})`, ...rows.map(ownRow)] : [];
+    return rows.length
+      ? [
+          `### ${section} (${rows.length})`,
+          ...rows.map((task) => ownRow(task, queuePosition.get(task.id))),
+        ]
+      : [];
   });
-  return [...header, ...sections].join("\n");
+  return [...header, ...queueSection, ...sections].join("\n");
 }
 
 function assigneeField(task: TaskView): string {

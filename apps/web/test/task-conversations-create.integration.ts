@@ -134,6 +134,9 @@ test("with it on, create makes a task with no message in the channel, followed b
   });
   expect(notice.senderMemberId).toBeNull();
   expect(notice.deliveries.map((d) => d.agentId)).toEqual([agents.worker.id]);
+  // First in the worker's queue: numbered, with nobody ahead (task #716).
+  expect(notice.body).toContain("queue #1");
+  expect(notice.body).not.toContain("ahead");
   const history = await db.taskHistoryEvent.findMany({ where: { taskId: task.id } });
   expect(history.map((event) => event.eventType)).toEqual(["created", "assignee_changed"]);
 });
@@ -192,6 +195,36 @@ test("a source message from another channel is not found", async () => {
   await expect(
     run("maker", { operation: "create", title: "Leak", messageId: foreign.id }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
+});
+
+test("the assignee's queue note reads the new task's links: a blocked task gets none", async () => {
+  await experiment(true);
+  const blocker = await run("maker", { operation: "create", title: "Queue blocker" });
+  const blocked = await run("maker", {
+    operation: "create",
+    title: "Queue blocked",
+    assignee: `@${agents.worker.name}`,
+    blockedBy: [{ number: blocker.tasks[0]!.number }],
+  });
+  const blockedTask = await db.task.findUniqueOrThrow({
+    where: { id: blocked.tasks[0]!.id },
+  });
+  const notice = await db.message.findFirstOrThrow({
+    where: { conversation: { taskDiscussionOf: { id: blockedTask.id } } },
+  });
+  expect(notice.body).not.toContain("queue #");
+  expect(notice.body).not.toContain("do it first");
+  // An unblocked sibling still names its place and who is ahead.
+  const queued = await run("maker", {
+    operation: "create",
+    title: "Queue third",
+    assignee: `@${agents.worker.name}`,
+  });
+  const queuedTask = await db.task.findUniqueOrThrow({ where: { id: queued.tasks[0]!.id } });
+  const queuedNotice = await db.message.findFirstOrThrow({
+    where: { conversation: { taskDiscussionOf: { id: queuedTask.id } } },
+  });
+  expect(queuedNotice.body).toMatch(/queue #\d+ \(ahead: #\d+/);
 });
 
 test("a person keeps the message-based flow, and a source needs the experiment", async () => {

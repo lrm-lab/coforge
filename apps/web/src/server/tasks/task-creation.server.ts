@@ -17,7 +17,7 @@ import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
 } from "#src/server/conversations/sender-display.server";
-import { assigneeMention, noticeActor, noticeText } from "./task-notices.server";
+import { assigneeMention, noticeText } from "./task-notices.server";
 import { DUPLICATE_TASK_WINDOW_MS, normalizeTaskTitle } from "./task-command-validation.server";
 import { creationChanges, historyRows } from "./task-history.server";
 import {
@@ -40,6 +40,7 @@ import {
 } from "./task-publication.server";
 import { receiptAssignee, assigneeMember } from "./task-assignees.server";
 import { indexedRequestId } from "./task-request-ids.server";
+import { assignmentReceipts } from "./task-assignment.server";
 import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
 import { resolveNewTaskProject } from "./task-projects.server";
 import { resolveTaskParent } from "./task-relations-write.server";
@@ -377,37 +378,20 @@ export async function createTasks(
     });
     // The assignee's receipts, started or only reserved: one assignment notice in each Task's
     // thread, with its fixed id and its one delivery to an Agent assignee that is not the
-    // creator.
-    const receipts = [];
-    if (assignee)
-      for (const [index, task] of tasks.entries())
-        receipts.push(
-          await notices.receipt({
-            id: receiptIds[index]!,
-            task,
-            body: (subject) => ({
-              body: noticeText.assigned(
-                noticeActor(member).displayName,
-                subject,
-                assigneeMention(assignee),
-              ),
-              system: {
-                kind: "task.assigned",
-                params: {
-                  actor: noticeActor(member),
-                  task: subject,
-                  assignee: {
-                    memberId: assignee.id,
-                    handle: assigneeMention(assignee).slice(1),
-                    displayName: assigneeMention(assignee).slice(1),
-                  },
-                },
-              },
-            }),
-            assignee,
-            actor: member,
-          }),
-        );
+    // creator. Each carries the queue note `assign` would give it (task #716): a person's
+    // create-and-assign is the same direct instruction.
+    const receipts = assignee
+      ? await assignmentReceipts(
+          tx,
+          notices,
+          ports.reader,
+          scope,
+          member,
+          assignee,
+          tasks,
+          receiptIds,
+        )
+      : [];
     return {
       tasks,
       created: true,

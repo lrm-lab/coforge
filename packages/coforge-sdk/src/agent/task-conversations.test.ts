@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import { agentApiRoutes } from "./routes";
+import type { AgentTaskIdleItem } from "./task-conversations";
 import {
   decodeAgentTaskFollowResponse,
   decodeAgentTaskFollowingResponse,
+  decodeAgentTaskIdleNudgeResponse,
   decodeAgentTaskReplyResponse,
   decodeAgentTaskViewResponse,
   taskConversationHttpRequest,
@@ -66,6 +68,41 @@ test("decodes a task view, a reply, a follow change and the followed list", () =
     reason: "assigned",
   };
   expect(decodeAgentTaskFollowingResponse({ tasks: [row] })).toEqual({ tasks: [row] });
+});
+
+test("an idle-nudge item carries its queue place when the server numbers one (task #716)", () => {
+  const item: AgentTaskIdleItem = {
+    ref: "#general:#7",
+    taskNumber: 7,
+    channel: "#general",
+    title: "Fix it",
+    status: "todo",
+    priority: "high",
+    reason: "newly_assigned",
+    why: "newly assigned to you",
+  };
+  const response = { send: true, items: [item], backlog: [], text: "reminder" };
+  // A server that predates queue numbering sends no queuePosition; one that numbers sends it.
+  expect(decodeAgentTaskIdleNudgeResponse(response)).toEqual(response);
+  const queued = { ...item, queuePosition: 2 };
+  expect(decodeAgentTaskIdleNudgeResponse({ ...response, items: [queued] })).toEqual({
+    ...response,
+    items: [queued],
+  });
+  expect(() =>
+    decodeAgentTaskIdleNudgeResponse({
+      ...response,
+      items: [{ ...item, queuePosition: "2" }],
+    }),
+  ).toThrow("invalid Agent task idle-nudge response");
+  // Positions are 1-based integers; anything else is a broken server, not a reminder to pass on.
+  for (const queuePosition of [0, -1, 1.5, Number.NaN])
+    expect(() =>
+      decodeAgentTaskIdleNudgeResponse({
+        ...response,
+        items: [{ ...item, queuePosition }],
+      }),
+    ).toThrow("invalid Agent task idle-nudge response");
 });
 
 test("refuses responses of the wrong shape", () => {

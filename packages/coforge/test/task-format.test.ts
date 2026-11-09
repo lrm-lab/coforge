@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { TaskMember, TaskResult, TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskResult } from "@lrm/coforge-sdk/internal";
 import { formatClaimResults } from "#src/task-claim-format";
 import { taskRefForTarget } from "#src/task-ref";
 import {
@@ -15,44 +15,7 @@ import {
   formatTaskUnclaimed,
   formatTasksCreated,
 } from "#src/task-format";
-
-const person = (handle: string, fields: Partial<TaskMember> = {}): TaskMember => ({
-  memberId: `member-${handle}`,
-  kind: "user",
-  id: `user-${handle}`,
-  name: handle,
-  handle,
-  ...fields,
-});
-
-const task = (number: number, fields: Partial<TaskView> = {}): TaskView => ({
-  id: `${number}abcdef0-1111-2222-3333-444444444444`,
-  messageId: `${number}abcdef0-1111-2222-3333-444444444444`,
-  conversationId: "conversation",
-  number,
-  title: `Task ${number}`,
-  status: "todo",
-  revision: 1,
-  blockedBy: [],
-  blocked: false,
-  parent: null,
-  subtasks: null,
-  owner: null,
-  creator: person("ada"),
-  createdAt: "2026-09-23T05:00:00.000Z",
-  updatedAt: "2026-09-23T06:30:15.000Z",
-  requiresResourceReceipt: false,
-  resourceReceiptRecordedAt: null,
-  ...fields,
-});
-
-const coverage: TaskResult["coverage"] = {
-  status: "incomplete",
-  visibleConversationKinds: ["channel", "dm"],
-  includesArchived: true,
-  inaccessibleScope: "not_asserted",
-  reason: "Reads the channels and DMs this Agent is a member of now.",
-};
+import { coverage, person, task } from "./task-format-fixtures";
 
 test("A conversation's board lists each Task with its owner, creator, receipt and times", () => {
   const text = formatTaskBoard(
@@ -127,71 +90,6 @@ test("An empty board names the status it was filtered by", () => {
   expect(formatTaskBoard("#general", { tasks: [] }, "in_review")).toBe(
     "No in_review tasks in #general.",
   );
-});
-
-test("An Agent's own list groups its Tasks by status and states the coverage it was given", () => {
-  const text = formatMyTaskList(
-    {
-      tasks: [
-        task(7, { status: "in_progress", channelRef: "#general", title: "Ship\n  the   fix" }),
-        task(2, {
-          channelRef: "@ada",
-          creator: person("kiro", { kind: "agent", deleted: true }),
-          requiresResourceReceipt: true,
-        }),
-        task(9, {
-          status: "in_progress",
-          channelRef: "#ops",
-          creator: person("bob", { left: true }),
-        }),
-      ],
-      coverage,
-      pagination: { mode: "complete", truncated: false },
-    },
-    undefined,
-  );
-  expect(text).toBe(
-    [
-      "## My assigned tasks in this Workspace (unfinished)",
-      "",
-      "Coverage: incomplete · visible kinds=channel|dm · archived=included · inaccessible scope=not_asserted",
-      "Output: showing 3 of 3 visible matches · mode=complete · truncated=false",
-      "",
-      "### todo (1)",
-      "- @ada task #2 [todo] prio=none by=@kiro creator=deleted msg=2abcdef0-1111 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 2",
-      "### in_progress (2)",
-      "- #general task #7 [in_progress] prio=none by=@ada msg=7abcdef0-1111 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Ship the fix",
-      "- #ops task #9 [in_progress] prio=none by=@bob creator=left msg=9abcdef0-1111 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 9",
-    ].join("\n"),
-  );
-});
-
-test("An empty own list still states its coverage, and a missing field reads unknown", () => {
-  expect(
-    formatMyTaskList(
-      {
-        tasks: [],
-        coverage: { ...coverage, includesArchived: false },
-        pagination: { mode: "complete", truncated: false },
-      },
-      "done",
-    ),
-  ).toBe(
-    [
-      "## My assigned tasks in this Workspace (status=done)",
-      "",
-      "Coverage: incomplete · visible kinds=channel|dm · archived=not included · inaccessible scope=not_asserted",
-      "Output: showing 0 of 0 visible matches · mode=complete · truncated=false",
-      "",
-      "No tasks matched in the covered visible scope.",
-    ].join("\n"),
-  );
-  expect(formatMyTaskList({ tasks: [] }, "all").split("\n").slice(0, 4)).toEqual([
-    "## My assigned tasks in this Workspace (status=all)",
-    "",
-    "Coverage: unknown · visible kinds=unknown · archived=unknown · inaccessible scope=unknown",
-    "Output: showing 0 of 0 visible matches · mode=unknown · truncated=unknown",
-  ]);
 });
 
 test("A create receipt lists each new Task, each assignment receipt and each thread to follow up in", () => {
