@@ -179,7 +179,7 @@ import { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
 import { composeMessages } from "./message-composition";
 import { assembleExitedDelivery } from "./assemble-exited-delivery";
-import { composeRuntimeServices } from "./runtime-services-composition";
+import { composeRuntimeServices, migrationRoute } from "./runtime-services-composition";
 import { AgentOperations } from "./agent-operations";
 import { composeAgentControl } from "./agent-control-composition";
 import { UpgradeResultReporter } from "./upgrade-result-reporter";
@@ -760,13 +760,7 @@ export class DaemonRuntime {
             isRunning: (agentId) => this.#readyRunningAgentIds().includes(agentId),
             mint: (agentId, item) => this.mintAppItem(agentId, item),
           }).then(() => {}),
-        migration: this.#migrations
-          ? {
-              pruneLeftovers: () => this.#migrations!.pruneLeftovers(),
-              lease: (lease) => void this.#migrations!.lease(lease),
-              cancel: (cancel) => this.#migrations!.cancel(cancel),
-            }
-          : undefined,
+        migration: migrationRoute(this.#migrations),
       },
       agentControl: this.#agentControl,
       agentSessions: this.#agentSessions,
@@ -916,6 +910,9 @@ export class DaemonRuntime {
         createProvider: (provider) => this.#createProvider(provider),
         agents: this.#agentProcessManager,
         hold: this.#runtimeErrorHold,
+        launchRetries: this.#agentControl,
+        launchWaits: this.#offlineResidency,
+        wakeCooldowns: this.#wakeLaunchFailures,
       },
       provider,
       idempotencyKey,

@@ -29,7 +29,8 @@ export type LaunchAttemptFailurePorts = {
   error: unknown;
   failures: LaunchFailureBackoff;
   store: Pick<AgentRuntimeStateStore, "write">;
-  scheduleRetry(attempt: number, cooldownMs: number): void;
+  /** `quotaProvider` names the provider when the cooldown is its reported quota reset. */
+  scheduleRetry(attempt: number, cooldownMs: number, quotaProvider?: string): void;
   clearRetry(): void;
 };
 
@@ -63,7 +64,7 @@ export async function settleLaunchFailure(
       ...launchFailureLogFields(error),
     });
     await ports.store.write(intent.agentId, record);
-    ports.scheduleRetry(ports.attempt, waitMs);
+    ports.scheduleRetry(ports.attempt, waitMs, intent.provider);
     return undefined;
   }
   const failure = ports.failures.recordFailure(intent.agentId);

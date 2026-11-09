@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, expect, setSystemTime, test } from "bun:test";
 import { RUNTIME_PROVIDER, type ResetCreditOutcome } from "@lrm/coforge-sdk/internal";
-import {
-  consumeResetCredit,
-  releaseProviderAgents,
-} from "#src/daemon-runtime/reset-credit-consume";
+import { consumeResetCredit } from "#src/daemon-runtime/reset-credit-consume";
 
 const key = "0b8c1f3e-52d7-4a9c-9a4e-6f1d2c3b4a59";
 const snapshot = { provider: "codex", resetCreditsAvailable: 1 } as const;
@@ -50,17 +47,19 @@ function harness(
             },
           },
     agents: {
-      activeAgentIds: () => ["held"],
       restartConfig: () => ({ config: { provider: RUNTIME_PROVIDER.CODEX as string } }),
       session: () => ({}),
     },
     hold: {
-      releaseRateLimitBackoff: () => {
-        order.push(`release ${RUNTIME_PROVIDER.CODEX}`);
+      releaseRateLimitBackoffs: (provider: string) => {
+        order.push(`release ${provider}`);
         options.release?.();
-        return true;
+        return 1;
       },
     },
+    launchRetries: { endQuotaLaunchWaits: () => 0 },
+    launchWaits: { endLaunchWaits: () => 0 },
+    wakeCooldowns: { endRecoveryWaits: () => 0 },
   };
   return { ports, calls, order };
 }
@@ -77,7 +76,7 @@ test("sends the key as given from the Workspace root and answers with the fresh 
   });
 });
 
-test("after a reset the held Agents are released before the usage is read again", async () => {
+test("after a reset the provider's limit is lifted before the usage is read again", async () => {
   const { ports, order } = harness("reset");
   const result = await consumeResetCredit(ports, RUNTIME_PROVIDER.CODEX, key);
   expect(result.outcome).toBe("reset");
@@ -153,34 +152,4 @@ test("a Daemon that is not running leaves the attempt open", async () => {
     outcome: "unknown",
   });
   expect(calls).toEqual([]);
-});
-
-test("only this provider's Agents with a live session that wait out a rate limit are released", () => {
-  const released: string[] = [];
-  const providers: Record<string, string | undefined> = {
-    "codex-held": "codex",
-    "codex-free": "codex",
-    "claude-held": "claude-code",
-    unlaunched: undefined,
-    "codex-held-exited": "codex",
-  };
-  const count = releaseProviderAgents(
-    {
-      agents: {
-        activeAgentIds: () => Object.keys(providers),
-        restartConfig: (agentId) =>
-          providers[agentId] ? { config: { provider: providers[agentId] } } : undefined,
-        session: (agentId) => (agentId.endsWith("-exited") ? undefined : {}),
-      },
-      hold: {
-        releaseRateLimitBackoff: (agentId) => {
-          released.push(agentId);
-          return agentId.endsWith("-held");
-        },
-      },
-    },
-    RUNTIME_PROVIDER.CODEX,
-  );
-  expect(released).toEqual(["codex-held", "codex-free"]);
-  expect(count).toBe(1);
 });

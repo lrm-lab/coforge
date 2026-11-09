@@ -19,6 +19,7 @@ import {
   type RecoveredUpgradeResult,
   type UpgradeOperationsReading,
 } from "./upgrade-result-reporter";
+import type { RuntimePublicationSubscriptionPorts } from "./runtime-publication-subscriptions";
 import type { UnrefTimerSchedule } from "./unref-timer";
 import { CLEANER_APP_ID } from "@lrm/coforge-sdk/internal";
 
@@ -127,4 +128,18 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
     schedule: upgradeLifecycle.upgradeResultSchedule,
   });
   return { reminders, systemCleaner, appConfigs, migrations, upgradeResults };
+}
+
+/** The migration runner's operations as the publication subscriptions call them; absent when the
+ * transport offers no migration route. */
+export function migrationRoute(
+  migrations: AgentMigrationRunner | undefined,
+): RuntimePublicationSubscriptionPorts["migration"] {
+  return migrations
+    ? {
+        pruneLeftovers: () => migrations.pruneLeftovers(),
+        lease: (lease) => void migrations.lease(lease),
+        cancel: (cancel) => migrations.cancel(cancel),
+      }
+    : undefined;
 }

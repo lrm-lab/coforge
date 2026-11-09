@@ -23,6 +23,9 @@ export type PersistedRuntimeBackoff = Readonly<{
   agentId: string;
   untilMs: number;
   reason: PersistedBackoffReason;
+  /** The runtime provider whose failure raised the wait, so a restarted Daemon can tell whose
+   * limit it waits on before the Agent is relaunched. Absent in a record from before it was kept. */
+  provider?: string;
 }>;
 
 /** This OS process's lifetime, so a record written here is not restored by the same process: an
@@ -75,6 +78,7 @@ export class AgentRuntimeBackoffStore {
           owner?: unknown;
           untilMs?: unknown;
           reason?: unknown;
+          provider?: unknown;
         };
         // Written by this very process: its in-memory hold is the authority, not the file.
         if (value?.owner === this.owner) continue;
@@ -86,7 +90,15 @@ export class AgentRuntimeBackoffStore {
           (reason === "rate_limit_backoff" || reason === "runtime_error_backoff")
         ) {
           // A wait that ended while the Daemon was down is dropped, not restored.
-          if (untilMs > Date.now()) records.push({ agentId, untilMs, reason });
+          if (untilMs > Date.now())
+            records.push({
+              agentId,
+              untilMs,
+              reason,
+              ...(typeof value.provider === "string" && value.provider
+                ? { provider: value.provider }
+                : {}),
+            });
           else this.clear(agentId);
         } else void this.clear(agentId);
       } catch {
@@ -106,7 +118,7 @@ export class AgentRuntimeBackoffStore {
       const temporary = `${path}.tmp`;
       writeFileSync(
         temporary,
-        `${JSON.stringify({ version: 1, owner: this.owner, untilMs: state.untilMs, reason: state.reason })}\n`,
+        `${JSON.stringify({ version: 1, owner: this.owner, untilMs: state.untilMs, reason: state.reason, provider: state.provider })}\n`,
         { mode: 0o600 },
       );
       renameSync(temporary, path);

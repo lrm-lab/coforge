@@ -12,9 +12,14 @@ import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { settleLaunchFailure } from "./launch-attempt-failure";
 import type { AgentRuntimeRecord, AgentRuntimeState } from "./agent-runtime-state";
 import type { AgentSessions } from "./agent-session";
-import { replayAgentControlResults } from "./agent-control-replay";
+import {
+  carriesStartPrompt,
+  replayAgentControlResults,
+  withoutStartPrompts,
+} from "./agent-control-replay";
 import { LaunchFailureBackoff } from "./launch-failure-backoff";
 import { systemLaunchRetryScheduler, type LaunchRetryScheduler } from "./launch-retry-scheduler";
+import { LaunchRetryTimers } from "./launch-retry-timers";
 
 export type { LaunchRetryScheduler };
 
@@ -22,15 +27,6 @@ const logger = getLogger(["coforge", "daemon", "agent-control"]);
 
 /** Live phases a repair may rewrite: the record still claims the process is up or mid-transition. */
 const LIVE_PHASES = new Set<AgentRuntimeRecord["phase"]>(["running", "starting", "stopping"]);
-
-/** A Start's prompt turns (resume, introduction): only the Start that carries them delivers them. */
-function carriesStartPrompt(intent: AgentStartIntent): boolean {
-  return intent.resumePrompt !== undefined || intent.introductionPrompt !== undefined;
-}
-
-function withoutStartPrompts(intent: AgentStartIntent): AgentStartIntent {
-  return { ...intent, resumePrompt: undefined, introductionPrompt: undefined };
-}
 
 type Runtime = {
   running(agentId: string): boolean;
@@ -81,7 +77,7 @@ export class AgentControl {
    * rewriting that record. */
   readonly #launchFailures = new LaunchFailureBackoff();
   /** The one pending automatic launch retry per Agent, if any. */
-  readonly #launchRetries = new Map<string, unknown>();
+  readonly #launchRetries: LaunchRetryTimers;
   /** Start calls and launch retries currently running, per Agent. */
   readonly #startsRunning = new Map<string, number>();
   constructor(
@@ -89,8 +85,10 @@ export class AgentControl {
     private readonly state: AgentRuntimeState,
     private readonly sessions: AgentSessions,
     private readonly runtime: Runtime,
-    private readonly launchRetryScheduler: LaunchRetryScheduler = systemLaunchRetryScheduler,
-  ) {}
+    launchRetryScheduler: LaunchRetryScheduler = systemLaunchRetryScheduler,
+  ) {
+    this.#launchRetries = new LaunchRetryTimers(launchRetryScheduler);
+  }
   private get store() {
     return this.state.store;
   }
@@ -531,8 +529,8 @@ export class AgentControl {
         error: launchError,
         failures: this.#launchFailures,
         store: this.store,
-        scheduleRetry: (next, cooldownMs) =>
-          this.#scheduleLaunchRetry(intent, scope, launchId, next, cooldownMs),
+        scheduleRetry: (next, cooldownMs, quotaProvider) =>
+          this.#scheduleLaunchRetry(intent, scope, launchId, next, cooldownMs, quotaProvider),
         clearRetry: () => this.#clearLaunchRetry(intent.agentId),
       });
       if (failed) await this.runtime.result(failed).catch(() => {});
@@ -566,48 +564,54 @@ export class AgentControl {
     launchId: string,
     attempt: number,
     delayMs: number,
+    quotaProvider?: string,
   ): void {
     this.#clearLaunchRetry(intent.agentId);
-    const handle = this.launchRetryScheduler.schedule(() => {
-      this.#beginStartRun(intent.agentId);
-      this.#launchRetries.delete(intent.agentId);
-      void this.state
-        .run(intent.agentId, async () => {
-          const record = await this.store.read(intent.agentId);
-          if (
-            !record ||
-            record.phase !== "starting" ||
-            record.scope.epoch !== scope.epoch ||
-            record.launchId !== launchId
-          )
-            return;
-          if (this.runtime.running(intent.agentId)) {
-            // Something else brought the process up first (a rebind, or a wake through the
-            // runtime); adopt that success instead of spawning a second process.
-            this.#onLaunchSucceeded(intent.agentId);
-            return;
-          }
-          await this.#attemptStart(intent, scope, record, launchId, attempt);
-        })
-        .catch((error) => {
-          logger.error("Agent launch retry could not run", {
-            event: "agent_control:launch_retry_error",
-            agent_id: intent.agentId,
-            attempt,
-            error_code: diagnosticErrorCode(error),
-          });
-        })
-        .finally(() => this.#endStartRun(intent.agentId));
-    }, delayMs);
-    this.#launchRetries.set(intent.agentId, handle);
+    this.#launchRetries.arm(
+      intent.agentId,
+      () => {
+        this.#beginStartRun(intent.agentId);
+        this.#launchRetries.fired(intent.agentId);
+        void this.state
+          .run(intent.agentId, async () => {
+            const record = await this.store.read(intent.agentId);
+            if (
+              !record ||
+              record.phase !== "starting" ||
+              record.scope.epoch !== scope.epoch ||
+              record.launchId !== launchId
+            )
+              return;
+            if (this.runtime.running(intent.agentId)) {
+              // Something else brought the process up first (a rebind, or a wake through the
+              // runtime); adopt that success instead of spawning a second process.
+              this.#onLaunchSucceeded(intent.agentId);
+              return;
+            }
+            await this.#attemptStart(intent, scope, record, launchId, attempt);
+          })
+          .catch((error) => {
+            logger.error("Agent launch retry could not run", {
+              event: "agent_control:launch_retry_error",
+              agent_id: intent.agentId,
+              attempt,
+              error_code: diagnosticErrorCode(error),
+            });
+          })
+          .finally(() => this.#endStartRun(intent.agentId));
+      },
+      delayMs,
+      quotaProvider,
+    );
   }
 
   #clearLaunchRetry(agentId: string): void {
-    const handle = this.#launchRetries.get(agentId);
-    if (handle === undefined) return;
-    this.#launchRetries.delete(agentId);
-    this.launchRetryScheduler.cancel(handle);
-    this.#settleIfIdle(agentId);
+    if (this.#launchRetries.cancel(agentId)) this.#settleIfIdle(agentId);
+  }
+
+  /** `provider`'s limit was lifted: its launches waiting on the quota reset retry now. */
+  endQuotaLaunchWaits(provider: string): number {
+    return this.#launchRetries.endQuotaWaits(provider);
   }
 
   /** Drops every pending retry and every failure streak. Called on daemon shutdown: a pending
@@ -615,8 +619,7 @@ export class AgentControl {
    * control records (a retry this one died mid-cooldown left behind a repairable "starting"
    * record). */
   dispose(): void {
-    for (const handle of this.#launchRetries.values()) this.launchRetryScheduler.cancel(handle);
-    this.#launchRetries.clear();
+    this.#launchRetries.cancelAll();
     this.#launchFailures.clear();
   }
   /**

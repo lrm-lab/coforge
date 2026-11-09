@@ -12,7 +12,10 @@ import { AgentRuntimeBackoffStore } from "#src/persistence/agent-runtime-backoff
 export function assembleRuntimeErrorDeliveryHold(input: {
   /** A thunk: field initializers run before the runtime's own state directory is assigned. */
   stateDirectory(): string;
-  deliveryQueue: Pick<AgentDeliveryQueue, "hold" | "release" | "explicitHold" | "pending">;
+  deliveryQueue: Pick<
+    AgentDeliveryQueue,
+    "hold" | "release" | "endHoldForNextLaunch" | "explicitHold" | "pending"
+  >;
   flush(agentId: string, held: AgentMessageDelivery[]): void;
 }): RuntimeErrorDeliveryHold {
   const store = new AgentRuntimeBackoffStore(input.stateDirectory);

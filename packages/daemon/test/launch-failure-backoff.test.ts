@@ -77,3 +77,27 @@ test("clear forgets every agent", () => {
   backoff.clear();
   expect([backoff.attempts("a"), backoff.attempts("b")]).toEqual([0, 0]);
 });
+
+test("a cooldown that came from a named recovery time can be ended, a short backoff cannot", () => {
+  const backoff = new LaunchFailureBackoff();
+  const HOUR_MS = 60 * 60_000;
+  backoff.recordFailure("quota", 10_000, HOUR_MS);
+  backoff.recordFailure("other-account", 10_000, HOUR_MS);
+  backoff.recordFailure("short", 10_000);
+
+  expect(backoff.endRecoveryWaits((agentId) => agentId !== "other-account")).toBe(1);
+
+  expect(backoff.isBlocked("quota", 20_000)).toBe(false);
+  expect(backoff.attempts("quota")).toBe(0);
+  expect(backoff.isBlocked("other-account", 20_000)).toBe(true);
+  expect(backoff.isBlocked("short", 10_500)).toBe(true);
+});
+
+test("a short backoff after a recovery wait is no longer one", () => {
+  const backoff = new LaunchFailureBackoff();
+  backoff.recordFailure("a", 10_000, 60 * 60_000);
+  backoff.recordFailure("a", 20_000);
+
+  expect(backoff.endRecoveryWaits(() => true)).toBe(0);
+  expect(backoff.isBlocked("a", 20_500)).toBe(true);
+});

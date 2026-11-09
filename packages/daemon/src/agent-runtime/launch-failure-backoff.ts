@@ -47,7 +47,10 @@ export function launchFailureCooldownMs(
 }
 
 export class LaunchFailureBackoff {
-  readonly #failures = new Map<string, { attempts: number; untilMs: number }>();
+  readonly #failures = new Map<
+    string,
+    { attempts: number; untilMs: number; recoveryWait: boolean }
+  >();
 
   constructor(
     private readonly baseMs: number = LAUNCH_FAILURE_BACKOFF_BASE_MS,
@@ -66,13 +69,25 @@ export class LaunchFailureBackoff {
     cooldownMs?: number,
   ): LaunchFailureBackoffState {
     const attempts = this.attempts(agentId) + 1;
-    const cooldown =
-      cooldownMs !== undefined && Number.isFinite(cooldownMs) && cooldownMs > 0
-        ? cooldownMs
-        : launchFailureCooldownMs(attempts, this.baseMs, this.capMs);
+    const recoveryWait = cooldownMs !== undefined && Number.isFinite(cooldownMs) && cooldownMs > 0;
+    const cooldown = recoveryWait
+      ? cooldownMs
+      : launchFailureCooldownMs(attempts, this.baseMs, this.capMs);
     const untilMs = now + cooldown;
-    this.#failures.set(agentId, { attempts, untilMs });
+    this.#failures.set(agentId, { attempts, untilMs, recoveryWait });
     return { attempts, cooldownMs: cooldown, untilMs };
+  }
+
+  /**
+   * Ends the cooldowns that were a named recovery time (a provider's quota reset) for the Agents
+   * `belongs` accepts, forgetting their streaks; a short exponential backoff is not a wait on
+   * anything that can be lifted, so it stays. Returns how many ended.
+   */
+  endRecoveryWaits(belongs: (agentId: string) => boolean): number {
+    let ended = 0;
+    for (const [agentId, failure] of this.#failures)
+      if (failure.recoveryWait && belongs(agentId) && this.#failures.delete(agentId)) ended += 1;
+    return ended;
   }
 
   /** Clears the streak after a successful launch (or an explicit Stop). Returns how many

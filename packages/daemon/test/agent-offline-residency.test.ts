@@ -60,3 +60,43 @@ test("a launch that cannot name its provider restates without the field", () => 
   expect(activities).toHaveLength(1);
   expect(activities[0]!.runtimeProvider).toBeUndefined();
 });
+
+/** A launch of `provider` that threw with the given text, as the startup failure path reports it. */
+function launchThrew(provider: "codex" | "claude-code", text: string) {
+  const { value } = residency();
+  const launch: OfflineResidencyLaunch = {
+    launchId: "launch-1",
+    clientSeq: 0,
+    stopping: false,
+    provider,
+  };
+  value.thrownLaunchActivity(
+    AGENT,
+    launch,
+    provider,
+    { provider, model: "default" },
+    new Error(text),
+  );
+  return value;
+}
+
+const QUOTA_REACHED = "You've reached your weekly usage limit. Resets in 3h (3:45pm).";
+
+test("a lifted provider limit ends the launch wait that provider's quota caused", () => {
+  const value = launchThrew("codex", QUOTA_REACHED);
+  expect(value.hasLaunchWait(AGENT)).toBe(true);
+
+  expect(value.endLaunchWaits("claude-code")).toBe(0);
+  expect(value.hasLaunchWait(AGENT)).toBe(true);
+
+  expect(value.endLaunchWaits("codex")).toBe(1);
+  expect(value.hasLaunchWait(AGENT)).toBe(false);
+  expect(value.endLaunchWaits("codex")).toBe(0);
+});
+
+test("a launch that failed without a quota wait has none to end", () => {
+  const value = launchThrew("codex", "spawn blew up");
+
+  expect(value.hasLaunchWait(AGENT)).toBe(false);
+  expect(value.endLaunchWaits("codex")).toBe(0);
+});

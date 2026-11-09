@@ -26,6 +26,26 @@ test("a wake that names a recovery duration waits until then", async () => {
   expect(failures.attempts("agent-a")).toBe(1);
 });
 
+test("only a wake that waits on a recovery time leaves a cooldown a lifted limit can end", async () => {
+  const failures = new LaunchFailureBackoff();
+  await expect(
+    beginWakeLaunch(
+      "quota",
+      Promise.reject(new Error("You've reached your weekly usage limit. Resets in 3h (3:45pm).")),
+      new Set(),
+      failures,
+    ),
+  ).rejects.toThrow("Resets in 3h");
+  await expect(
+    beginWakeLaunch("plain", Promise.reject(new Error("spawn blew up")), new Set(), failures),
+  ).rejects.toThrow("spawn blew up");
+
+  expect(failures.endRecoveryWaits(() => true)).toBe(1);
+
+  expect(failures.isBlocked("quota")).toBe(false);
+  expect(failures.isBlocked("plain")).toBe(true);
+});
+
 test("a second quota wake waits the recovery time again", async () => {
   const failures = new LaunchFailureBackoff();
   const message = "You've hit your usage limit. try again in 5 hours.";

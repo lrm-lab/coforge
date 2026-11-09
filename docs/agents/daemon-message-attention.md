@@ -109,7 +109,7 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
 - `runtime-error-delivery-hold.ts` owns an Agent's delivery hold after
   mid-turn runtime errors — backoff, fingerprint fence (a trip is taken
   offline by `agent-offline-residency.ts`), the release timer (`runtime.ts`
-  only reports to it; `stop` disposes it). The backoff's end and reason are
+  only reports to it; `stop` disposes it). The backoff's end, reason and provider are
   also written to `agent-state/<agentId>/runtime-backoff.json`
   (`persistence/agent-runtime-backoff-store.ts`) and restored when the Daemon
   starts, so a usage limit outlives a restart; an expired record is dropped.

@@ -7,6 +7,7 @@ import {
   utf8Encoder,
 } from "@lrm/coforge-sdk/internal";
 import type { UsageSnapshot } from "@lrm/coforge-anvil";
+import { liftProviderLimit, type ProviderLimitLiftPorts } from "./provider-limit-lift";
 import { USAGE_SCAN_READ_TIMEOUT_MS } from "./runtime-agent-flows";
 import { stampedUsage } from "./usage-scan-response";
 
@@ -27,7 +28,7 @@ export type ResetCreditPorts = {
       timeoutMs: number;
     }): Promise<UsageSnapshot | null | undefined>;
   };
-} & ProviderAgentPorts;
+} & ProviderLimitLiftPorts;
 
 export type ResetCreditConsumeResult = {
   outcome: ResetCreditOutcome;
@@ -42,9 +43,9 @@ const REFUSALS: ReadonlySet<ResetCreditOutcome> = new Set(["unsupported", "reaut
  * Spends one reset credit of a provider's account, then reads its usage again so the page shows the
  * credits left. `unknown` is the answer to anything that leaves the credit possibly spent. A
  * `reset`, or an `already_redeemed` (an earlier attempt with this key spent the credit and its
- * reply was lost), ends the rate-limit backoff of this provider's Agents here, because the limit
- * they wait out was lifted. Only the Workspace child that took the request releases its own
- * Agents. The usage sent back is read from the adapter after the attempt; the Daemon's earlier
+ * reply was lost), lifts the provider's limit here (`liftProviderLimit`), because the waits it
+ * caused are over. Only the Workspace child that took the request lifts its own waits. The usage
+ * sent back is read from the adapter after the attempt; the Daemon's earlier
  * observation of the account, which a usage scan falls back to, still counts the spent credit, so
  * with no fresh read the answer carries none and the page reads again. The key goes to the provider as given and is never logged.
  */
@@ -65,18 +66,7 @@ export async function consumeResetCredit(
     provider,
     outcome,
   });
-  if (outcome === "reset" || outcome === "already_redeemed") {
-    // The outcome is already settled: a failure here must not lose its report.
-    try {
-      releaseProviderAgents(ports, provider);
-    } catch (error) {
-      logger.warning("Agents could not be released after a reset credit attempt", {
-        event: "daemon_runtime:reset_credit_release_failed",
-        provider,
-        error_code: diagnosticErrorCode(error),
-      });
-    }
-  }
+  if (outcome === "reset" || outcome === "already_redeemed") liftProviderLimit(ports, provider);
   if (REFUSALS.has(outcome)) return { outcome };
   const snapshot = await freshUsage(ports, provider);
   return snapshot ? { outcome, snapshotJson: snapshot } : { outcome };
@@ -121,45 +111,4 @@ async function attempt(
     });
     return "unknown";
   }
-}
-
-/** What finding the Agents of one provider needs from the runtime that owns them. */
-export type ProviderAgentPorts = {
-  /** The Agents this Daemon launched or can wake, and the launch each would restart from. */
-  agents: {
-    activeAgentIds(): string[];
-    restartConfig(agentId: string): { config: { provider: string } } | undefined;
-    /** Present while the Agent's process is up. */
-    session(agentId: string): unknown;
-  };
-  /** Owns the rate-limit backoff the release ends. */
-  hold: { releaseRateLimitBackoff(agentId: string): boolean };
-};
-
-/**
- * Ends the rate-limit backoff of every Agent that runs on `provider`, through the hold that owns
- * it. An Agent with no launch to read a provider from cannot be told apart, and keeps waiting; so
- * does one whose process has exited, because what its release would drain has no session to go
- * to and nothing would wake it: its hold and queue stay for its next launch. Returns how many were
- * waiting.
- */
-export function releaseProviderAgents(
-  ports: ProviderAgentPorts,
-  provider: RuntimeProvider,
-): number {
-  let released = 0;
-  for (const agentId of ports.agents.activeAgentIds())
-    if (
-      ports.agents.restartConfig(agentId)?.config.provider === provider &&
-      ports.agents.session(agentId) !== undefined &&
-      ports.hold.releaseRateLimitBackoff(agentId)
-    )
-      released += 1;
-  if (released > 0)
-    logger.info("Agents released from a rate-limit backoff", {
-      event: "daemon_runtime:reset_credit_released_agents",
-      provider,
-      agents: released,
-    });
-  return released;
 }

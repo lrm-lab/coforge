@@ -29,6 +29,7 @@ function harness() {
         held.delete(id);
         return [];
       },
+      endHoldForNextLaunch: (id) => void held.delete(id),
       explicitHold: (id) => held.get(id),
       pending: () => [],
     },
@@ -115,6 +116,7 @@ test("every backoff step logs its rung, its wait and the queue depth, never the 
       deliveryQueue: {
         hold: () => {},
         release: () => [],
+        endHoldForNextLaunch: () => {},
         explicitHold: () => undefined,
         pending: () => [{ body: "the wording nobody may log" }, { body: "nor this" }] as never,
       },

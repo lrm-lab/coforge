@@ -35,6 +35,35 @@ test("a recorded backoff survives a new store instance and is cleared when it en
   }
 });
 
+test("the provider a backoff waits on is recorded with it, and an old record without one still loads", async () => {
+  const state = await directory();
+  try {
+    const writer = new AgentRuntimeBackoffStore(() => state, "process-a");
+    const reader = new AgentRuntimeBackoffStore(() => state, "process-b");
+    const untilMs = Date.now() + HOUR_MS;
+    writer.save("agent-a", { untilMs, reason: "rate_limit_backoff", provider: "codex" });
+    writer.save("agent-b", { untilMs, reason: "rate_limit_backoff" });
+    // A record from before the provider was kept, and one whose provider is not a provider.
+    const agentState = join(state, "agent-state");
+    await Bun.write(
+      join(agentState, escapePathIdentity("agent-old"), "runtime-backoff.json"),
+      JSON.stringify({ version: 1, untilMs, reason: "rate_limit_backoff" }),
+    );
+    await Bun.write(
+      join(agentState, escapePathIdentity("agent-odd"), "runtime-backoff.json"),
+      JSON.stringify({ version: 1, untilMs, reason: "rate_limit_backoff", provider: 7 }),
+    );
+
+    const listed = new Map(reader.list().map((record) => [record.agentId, record]));
+    expect(listed.get("agent-a")?.provider).toBe("codex");
+    for (const agentId of ["agent-b", "agent-old", "agent-odd"]) {
+      expect(listed.get(agentId)).toEqual({ agentId, untilMs, reason: "rate_limit_backoff" });
+    }
+  } finally {
+    await rm(state, { recursive: true, force: true });
+  }
+});
+
 test("an expired record and a corrupt one are both dropped instead of holding anything", async () => {
   const state = await directory();
   try {
@@ -62,7 +91,7 @@ test("an expired record and a corrupt one are both dropped instead of holding an
 function holdWith(records: Parameters<RuntimeErrorDeliveryHold["restore"]>[0]) {
   const held = new Map<string, string>();
   const cleared: string[] = [];
-  const saved: Array<{ agentId: string; untilMs: number; reason: string }> = [];
+  const saved: Array<{ agentId: string; untilMs: number; reason: string; provider?: string }> = [];
   const hold = new RuntimeErrorDeliveryHold({
     deliveryQueue: {
       hold: (agentId, reason) => void held.set(agentId, reason),
@@ -70,6 +99,7 @@ function holdWith(records: Parameters<RuntimeErrorDeliveryHold["restore"]>[0]) {
         held.delete(agentId);
         return [];
       },
+      endHoldForNextLaunch: (agentId) => void held.delete(agentId),
       explicitHold: (agentId) => held.get(agentId) as never,
       pending: () => [],
     },

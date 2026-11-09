@@ -32,6 +32,7 @@ function manualScheduler() {
   return {
     scheduler,
     entries,
+    live,
     delays: () => entries.map((entry) => entry.delayMs),
     /** Fires the most recently armed retry and lets its `state.run` chain settle. */
     async fireLatest(): Promise<void> {
@@ -482,4 +483,73 @@ test("a Stop that cancels the armed retry settles the pending Start", async () =
 
   expect(h.control.startPending("a")).toBe(false);
   expect(h.settled).toEqual(["a"]);
+});
+
+const QUOTA_REACHED = "You've reached your weekly usage limit. Resets in 3h (3:45pm).";
+
+test("a lifted provider limit ends the quota wait of a launch now, with its Start pending throughout", async () => {
+  const h = harness(async (attempt) => {
+    if (attempt === 1) throw new Error(QUOTA_REACHED);
+    return { sessionId: "fresh", state: "empty" };
+  });
+  await h.control.start(startIntent);
+  expect(h.launches).toEqual([1]);
+
+  expect(h.control.endQuotaLaunchWaits("pi")).toBe(1);
+
+  // The three hours are not waited out: the armed timer is gone and the same attempt runs.
+  expect(h.timers.entries[0]?.cancelled).toBe(true);
+  expect(h.control.startPending("a")).toBe(true);
+  expect(h.settled).toEqual([]);
+  await settle();
+  expect(h.launches).toEqual([1, 2]);
+  expect(h.results.at(-1)).toMatchObject({ phase: "started" });
+  expect(h.record()?.phase).toBe("running");
+  expect(h.control.startPending("a")).toBe(false);
+  expect(h.control.endQuotaLaunchWaits("pi")).toBe(0);
+});
+
+test("a limit that was not lifted after all is waited out again", async () => {
+  const h = harness(async () => {
+    throw new Error(QUOTA_REACHED);
+  });
+  await h.control.start(startIntent);
+
+  expect(h.control.endQuotaLaunchWaits("pi")).toBe(1);
+  await settle();
+
+  expect(h.launches).toEqual([1, 2]);
+  expect(h.timers.live()).toHaveLength(1);
+  expect(h.timers.delays()[1] ?? 0).toBeGreaterThanOrEqual(3 * 60 * 60 * 1000 - 1_000);
+  expect(h.control.startPending("a")).toBe(true);
+});
+
+test("a lifted limit leaves another provider's quota wait and an ordinary backoff alone", async () => {
+  const quota = harness(async () => {
+    throw new Error(QUOTA_REACHED);
+  });
+  await quota.control.start(startIntent);
+  expect(quota.control.endQuotaLaunchWaits("codex")).toBe(0);
+  expect(quota.timers.live()).toHaveLength(1);
+
+  const backoff = harness(async () => {
+    throw new Error("spawn blew up");
+  });
+  await backoff.control.start(startIntent);
+  expect(backoff.control.endQuotaLaunchWaits("pi")).toBe(0);
+  expect(backoff.timers.live()).toHaveLength(1);
+  await settle();
+  expect(backoff.launches).toEqual([1]);
+});
+
+test("a disposed control has no quota wait left to end", async () => {
+  const h = harness(async () => {
+    throw new Error(QUOTA_REACHED);
+  });
+  await h.control.start(startIntent);
+  h.control.dispose();
+
+  expect(h.control.endQuotaLaunchWaits("pi")).toBe(0);
+  await settle();
+  expect(h.launches).toEqual([1]);
 });

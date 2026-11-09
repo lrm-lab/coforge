@@ -79,11 +79,11 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   happened and the next step (a runnable `coforge-computer` command or the
   Agent setting to change). Exception: a thrown launch whose text names a
   future quota recovery time (`recoveryWaitMs`) does not report `inactive`.
-  A managed Start retries the same attempt at that time. A message-triggered
-  wake does not arm that timer; its cooldown lasts until the same time, so
-  another delivery does not launch during the wait. The Activity is the quota
-  failure (including when it resets), not `LauncherError`. No recovery time
-  keeps the short backoff.
+  A managed Start retries the same attempt at that time, or at once when that provider's limit
+  is lifted (`launch-retry-timers.ts`). A message-triggered wake does not arm that timer; its
+  cooldown lasts until the same time or until the limit is lifted, so another delivery does not
+  launch during the wait. The Activity is the quota failure (including when it resets), not
+  `LauncherError`. No recovery time keeps the short backoff.
 - Decide the reason only from `hasErrorCode` against a typed launch error:
   an Error subclass whose `readonly code` is its reason, thrown where the
   cause is known (`AgentAuthorizationError` here, the spawner's

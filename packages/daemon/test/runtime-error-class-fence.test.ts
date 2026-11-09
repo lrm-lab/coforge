@@ -21,6 +21,7 @@ function harness() {
         held.delete(id);
         return [];
       },
+      endHoldForNextLaunch: (id) => void held.delete(id),
       explicitHold: (id) => held.get(id),
       pending: () => [],
     },

@@ -60,7 +60,7 @@ export class AgentOfflineResidency {
   readonly #records = new Map<string, { launch: OfflineResidencyLaunch; draft: ActivityDraft }>();
   /** A thrown launch named a future recovery time. Cleanup must not report the Agent inactive.
    * `forget` drops it, so a later explicit Stop still reports inactive. */
-  readonly #launchWaits = new Map<string, number>();
+  readonly #launchWaits = new Map<string, { untilMs: number; provider: RuntimeProvider }>();
 
   constructor(ports: AgentOfflineResidencyPorts) {
     this.#ports = ports;
@@ -95,8 +95,17 @@ export class AgentOfflineResidency {
 
   /** Whether a thrown launch is waiting on a recovery time that is still ahead. */
   hasLaunchWait(agentId: string, now = Date.now()): boolean {
-    const untilMs = this.#launchWaits.get(agentId);
+    const untilMs = this.#launchWaits.get(agentId)?.untilMs;
     return untilMs !== undefined && untilMs > now;
+  }
+
+  /** `provider`'s limit was lifted: the launch waits its quota caused end, so those Agents are
+   * no longer held back from reporting inactive. Returns how many ended. */
+  endLaunchWaits(provider: RuntimeProvider): number {
+    let ended = 0;
+    for (const [agentId, wait] of this.#launchWaits)
+      if (wait.provider === provider && this.#launchWaits.delete(agentId)) ended += 1;
+    return ended;
   }
 
   /** The visible Activity an offline-taking runtime failure reports: action-required wording
@@ -195,7 +204,7 @@ export class AgentOfflineResidency {
     const classification = classifyRuntimeErrorText(message);
     const waitMs = recoveryWaitMs(message);
     if (waitMs !== undefined) {
-      this.#launchWaits.set(agentId, Date.now() + waitMs);
+      this.#launchWaits.set(agentId, { untilMs: Date.now() + waitMs, provider: config.provider });
       return buildRuntimeErrorActivity(event, classification);
     }
     if (!classification.takesAgentOffline) return undefined;
