@@ -56,6 +56,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   actions,
   viewerId,
   current,
+  tabStop,
   onOpen,
   clock = false,
 }: {
@@ -65,6 +66,8 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   viewerId: string;
   /** This row stands for the conversation open beside the list. */
   current: boolean;
+  /** The list's one tab stop: the keyboard's selected row, which the arrow keys move. */
+  tabStop: boolean;
   /** Opens the row's conversation on the page. */
   onOpen: (target: HostedConversationTarget) => void;
   /** The row sits under its day's heading: it shows the time of day, not how long ago. */
@@ -130,7 +133,17 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   }
 
   return (
-    <li className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}>
+    <li
+      data-activity-row={item.key}
+      className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
+    >
+      {/* An unread row's dot sits in the page's left gutter, so every title keeps its column. */}
+      {unread && (
+        <span
+          aria-hidden="true"
+          className="absolute top-1/2 left-[calc(var(--page-gutter)/2)] size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-solid"
+        />
+      )}
       {/* The row is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
           can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
           navigation. Opening a row reads it, like opening the conversation does. */}
@@ -151,6 +164,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               <Link
                 {...props}
                 {...link}
+                tabIndex={tabStop ? 0 : -1}
                 onClick={(event) => {
                   // A plain click (or Enter) opens the row on the page, so neither `Link` nor
                   // React Aria navigates; a modified or middle click still opens Chat. React
@@ -169,7 +183,9 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           className={cn(
             ACTIVITY_ROW_LINK_CLASS,
             // The row's own hover, kept while the pointer is on its Done check (a sibling).
-            current ? "bg-chat-selected-bg" : "group-hover:bg-primary_hover",
+            current
+              ? "bg-chat-selected-bg"
+              : "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
           )}
         >
           <ActivityItemIcon item={item} />
@@ -178,8 +194,8 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               <span
                 className={cn(
                   // A list dragged narrow keeps a few letters of the title beside its (shortened) marks.
-                  "min-w-10 truncate text-md font-semibold",
-                  unread ? "text-primary" : "text-secondary",
+                  "min-w-10 truncate text-md",
+                  unread ? "font-semibold text-primary" : "font-normal text-tertiary",
                 )}
               >
                 {task ? (
@@ -198,9 +214,9 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                   row); a touch screen has no check, so the time stays. */}
               {time}
             </span>
-            <span className="truncate text-sm text-tertiary">
+            <span className={cn("truncate text-sm", unread ? "text-secondary" : "text-quaternary")}>
               {placeLabel && <>{placeLabel} · </>}
-              <span className="font-semibold text-secondary">{sender}: </span>
+              <span className={unread ? "font-medium text-primary" : undefined}>{sender}: </span>
               <Preview message={item.latest} />
             </span>
           </span>
@@ -248,7 +264,9 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
         size="xs"
         color="secondary"
         tooltip={m.activity_inbox_done()}
+        tooltipShortcut="E"
         aria-label={m.activity_inbox_done()}
+        tabIndex={tabStop ? 0 : -1}
         onClick={() => actions.done(item)}
         className={cn(
           "absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:hidden",
@@ -349,14 +367,14 @@ function ActivityItemBadges({
         </Badge>
       )}
       {item.unreadCount > 0 && (
-        <Badge type="color" size="sm" color="brand">
+        <span className="text-sm font-medium whitespace-nowrap text-brand-secondary tabular-nums">
           <span className={NARROW_SR_ONLY}>
             {m.activity_inbox_new({ count: item.unreadCount })}
           </span>
           <span aria-hidden="true" className={NARROW_ONLY}>
             {item.unreadCount > 99 ? "99+" : item.unreadCount}
           </span>
-        </Badge>
+        </span>
       )}
     </span>
   );

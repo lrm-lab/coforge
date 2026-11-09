@@ -27,6 +27,8 @@ export interface CommonProps {
     icon?: FC<{ className?: string }> | ReactNode;
     /** The tooltip to display when hovering over the button */
     tooltip?: string;
+    /** The key that does the same, shown as a keycap after the tooltip. */
+    tooltipShortcut?: string;
     /** The placement of the tooltip */
     tooltipPlacement?: Placement;
 }
@@ -52,6 +54,7 @@ export type Props = ButtonProps | LinkProps;
 
 export const ButtonUtility = ({
     tooltip,
+    tooltipShortcut,
     className,
     isDisabled,
     icon: Icon,
@@ -88,6 +91,7 @@ export const ButtonUtility = ({
     const content = (
         <Component
             aria-label={tooltip}
+            aria-keyshortcuts={tooltipShortcut}
             {...props}
             className={cx(
                 "group relative inline-flex h-max cursor-pointer items-center justify-center rounded-md p-1.5 outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
@@ -110,7 +114,21 @@ export const ButtonUtility = ({
 
     if (tooltip) {
         return (
-            <Tooltip title={tooltip} placement={tooltipPlacement} isDisabled={isDisabled} offset={size === "xs" ? 4 : 6}>
+            <Tooltip
+                title={
+                    tooltipShortcut ? (
+                        <>
+                            {tooltip}
+                            <kbd className="ml-2 rounded-xs px-1 font-sans text-xs font-medium text-tooltip-supporting-text ring-1 ring-current ring-inset">{tooltipShortcut}</kbd>
+                        </>
+                    ) : (
+                        tooltip
+                    )
+                }
+                placement={tooltipPlacement}
+                isDisabled={isDisabled}
+                offset={size === "xs" ? 4 : 6}
+            >
                 {content}
             </Tooltip>
         );

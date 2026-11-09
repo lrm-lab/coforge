@@ -54,6 +54,7 @@ import { ActivityInboxRow } from "./activity-inbox-row";
 import { useActivityDays } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
 import { ActivityInboxLoadMore, ActivityInboxSectionHeading } from "./activity-inbox-list-parts";
+import { useActivityListKeyboard } from "./use-activity-list-keyboard";
 import { WaitingChoiceRow } from "./waiting-choice-row";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -239,6 +240,11 @@ export function ActivityInboxView({
   }, [markAllRead, loadedAt, refresh]);
 
   const days = useActivityDays(items, (item) => item.latest.createdAt);
+  // The rows in the order they are laid out, which the keyboard walks.
+  const { tabStopKey, listProps } = useActivityListKeyboard(
+    useMemo(() => [...pinned, ...days.flatMap((day) => day.items)], [pinned, days]),
+    actions,
+  );
   // Not empty while the waiting cards are still being read: they may be all there is.
   const empty =
     items.length === 0 &&
@@ -253,6 +259,7 @@ export function ActivityInboxView({
       actions={actions}
       viewerId={user.id}
       current={item.key === currentKey}
+      tabStop={item.key === tabStopKey}
       onOpen={onOpen}
       clock={clock}
     />
@@ -381,6 +388,7 @@ export function ActivityInboxView({
       )}
       <div
         ref={listScroll}
+        {...listProps}
         className="@container/activity-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1"
       >
         {query.isError && empty ? (
