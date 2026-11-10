@@ -20,6 +20,7 @@ import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 type Drafts = ReturnType<typeof import("./agent-activity-drafts").agentActivityDrafts>;
+const DELIVERY_TURN_SETTLE_RETRY_MS = 300;
 
 export type RuntimeTurnPorts = {
   messageAttention: AgentMessageAttentionIndex;
@@ -93,6 +94,11 @@ export function showQuietTurn(
     ports.systemCleaner.onAgentWorkingToIdle(agentId);
     ports.idleNudge?.maybeAsk(agentId);
     void ports.configApply?.settle(agentId);
+    // A delivery accepted during this turn may remain pending for a short boundary grace period;
+    // give the consumption watch one more chance before the normal five-second retry.
+    const configApply = ports.configApply;
+    if (configApply)
+      setTimeout(() => void configApply.settle(agentId), DELIVERY_TURN_SETTLE_RETRY_MS).unref();
   }
 }
 

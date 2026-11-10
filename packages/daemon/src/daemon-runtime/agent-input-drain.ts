@@ -46,7 +46,7 @@ export type AgentInputDrainPorts = Readonly<{
   /** Presents what the Agent's launch kept: the deliveries held for it and the tracked mentions,
    * in one notice. */
   presentKept(agentId: string): Promise<void>;
-  deliveryConsumption?: Pick<DeliveryConsumptionWatch, "recordWrite">;
+  deliveryConsumption?: Pick<DeliveryConsumptionWatch, "recordWrite" | "cancelWrite">;
 }>;
 
 /**
@@ -227,6 +227,7 @@ export class AgentInputDrain {
       const item = queue.items.shift();
       if (!item) return;
       const responses = this.ports.launchFor(agentId)?.startup?.responses ?? 0;
+      let watchedDelivery: { launchId: string; generation: object; deliveryId: string } | undefined;
       try {
         if (
           item.kind === "startup" &&
@@ -238,15 +239,21 @@ export class AgentInputDrain {
           continue;
         }
         if (item.kind === "delivery") {
-          await this.ports.deliverMessage(agentId, item.message);
           const launch = this.ports.launchFor(agentId);
-          if (launch)
+          if (launch) {
+            watchedDelivery = {
+              launchId: launch.launchId,
+              generation: launch,
+              deliveryId: item.message.deliveryId,
+            };
             this.ports.deliveryConsumption?.recordWrite(
               agentId,
               launch.launchId,
               launch,
               item.message,
             );
+          }
+          await this.ports.deliverMessage(agentId, item.message);
           logger.info("Agent delivery indexed", {
             event: "agent.message.delivery_indexed",
             agent_id: agentId,
@@ -273,6 +280,13 @@ export class AgentInputDrain {
           item.told?.();
         }
       } catch (error) {
+        if (watchedDelivery)
+          this.ports.deliveryConsumption?.cancelWrite(
+            agentId,
+            watchedDelivery.launchId,
+            watchedDelivery.generation,
+            watchedDelivery.deliveryId,
+          );
         // A retired queue belongs to a runtime that ended: its failures never consult the launch
         // that replaced it.
         if (queue.keep) {

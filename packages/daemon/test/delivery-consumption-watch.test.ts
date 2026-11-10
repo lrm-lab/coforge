@@ -3,7 +3,7 @@ import { DeliveryConsumptionWatch } from "#src/daemon-runtime/delivery-consumpti
 
 const delivery = (deliveryId: string) => ({ deliveryId });
 
-test("tracks writes per launch and clears them on a matching runtime consumption signal", () => {
+test("tracks writes per launch and settles one delivery per matching runtime signal", () => {
   const watch = new DeliveryConsumptionWatch(() => 1234);
   const launch = {};
   watch.recordWrite("agent-1", "launch-1", launch, delivery("delivery-1"));
@@ -15,6 +15,8 @@ test("tracks writes per launch and clears them on a matching runtime consumption
     lastDeliveryId: "delivery-2",
   });
   watch.recordConsumption("agent-1", "launch-1", launch, "text-delta");
+  expect(watch.snapshot("agent-1")).toMatchObject({ pendingWrites: 1 });
+  watch.recordConsumption("agent-1", "launch-1", launch, "tool-start");
   expect(watch.snapshot("agent-1")).toBeUndefined();
 });
 
@@ -61,5 +63,19 @@ test("runtime events map to consumption or error settlement", () => {
     type: "error",
     message: "provider failed",
   });
+  expect(watch.snapshot("agent-1")).toBeUndefined();
+});
+
+test("a completed turn does not settle a delivery, and stale observations expire", () => {
+  let now = 1234;
+  const watch = new DeliveryConsumptionWatch(() => now);
+  const launch = {};
+  watch.recordWrite("agent-1", "launch-1", launch, delivery("delivery-1"));
+  watch.observeRuntimeEvent("agent-1", "launch-1", launch, {
+    type: "completed",
+    status: "completed",
+  });
+  expect(watch.snapshot("agent-1")).toMatchObject({ pendingWrites: 1 });
+  now += 30_001;
   expect(watch.snapshot("agent-1")).toBeUndefined();
 });
