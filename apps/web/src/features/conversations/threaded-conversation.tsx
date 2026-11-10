@@ -303,6 +303,9 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   const threadAlone = standaloneThread !== null;
   const threadClose = standaloneThread?.onClose ?? closeThread;
   const viewInConversation = standaloneThread?.onViewInConversation ?? showThreadRoot;
+  // Beside the chat, whose header names the conversation, the thread's title leaves that out.
+  const threadTitleContext =
+    wideViewport && !threadAlone && focus?.focused !== "thread" ? undefined : threadContext;
   // Outside the conversation's page only its Task popup shows; the panes stay unmounted.
   if (taskPopup) return taskLayer;
   const conversationMainPane = (
@@ -350,6 +353,8 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
             key={rootId}
             aria-label={m.conversation_thread()}
             hidden={!threadPaneVisible(rootId)}
+            // Marks the open thread for the conversation list, which a laptop hides beside it.
+            data-thread-open={threadPaneVisible(rootId) || undefined}
             className={cn(
               "min-h-0 min-w-0 flex-1 flex-col",
               threadPaneVisible(rootId) ? "flex" : "hidden",
@@ -358,7 +363,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
             <ThreadPane
               {...threadPaneProps(root)}
               onClose={threadClose}
-              threadContext={threadContext}
+              threadContext={threadTitleContext}
               onViewInConversation={() => viewInConversation(rootId)}
               threadFollow={threadFollow?.(rootId)}
               emptyState={{
@@ -375,6 +380,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         <section
           aria-label={m.conversation_thread()}
           hidden={!threadPaneVisible(selected)}
+          data-thread-open={threadPaneVisible(selected) || undefined}
           className={cn(
             "min-h-0 min-w-0 flex-1 flex-col",
             threadPaneVisible(selected) ? "flex" : "hidden",
@@ -382,7 +388,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         >
           <ThreadRootState
             load={selectedRootLoad}
-            context={threadContext}
+            context={threadTitleContext}
             onClose={threadClose}
             onRetry={() => void loadThreadRoot(selected)}
           />

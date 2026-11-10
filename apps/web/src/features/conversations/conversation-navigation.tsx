@@ -210,6 +210,9 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                   "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden",
                   LIST_COLUMN_CLASS,
                   showList ? "flex" : "hidden",
+                  // Beside the chat and a thread, a laptop has no room for the list as well; the
+                  // thread pane carries the marker. Its resize handle goes with it.
+                  "lg:max-xl:group-has-[[data-thread-open]]/chat:hidden",
                   // After `lg:flex`, so it wins.
                   "lg:group-data-[focus]/chat:hidden",
                 )}
