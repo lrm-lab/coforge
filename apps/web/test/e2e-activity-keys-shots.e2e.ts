@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import { rowItems } from "./helpers/activity-inbox-e2e";
 import { seedActivityKeys } from "./helpers/activity-keys-seed";
 
 /**
@@ -15,8 +16,6 @@ import { seedActivityKeys } from "./helpers/activity-keys-seed";
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-/** The list's rows, under whichever day heading they sit (the list is named by its day). */
-const rowItems = JSON.stringify("[data-activity-list] ol > li");
 const label = Bun.env.ACTIVITY_SHOT_LABEL ?? "after";
 const out = "/tmp/hp/activity";
 
