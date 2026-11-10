@@ -2,7 +2,7 @@ import { artifactCommandsHidden } from "./workspace-features";
 
 /** The `coforge artifact` synopsis segment of `CLI_USAGE`; `cliUsage` drops it when the
  * launch's features switched documents off (task #711). */
-const ARTIFACT_USAGE = "coforge artifact create|read|push|history|revert ... | ";
+const ARTIFACT_USAGE = "coforge artifact create|read|push|history|revert|share ... | ";
 
 /** CLI command synopsis and the shared Task-assignment permission guidance. */
 export const CLI_USAGE =

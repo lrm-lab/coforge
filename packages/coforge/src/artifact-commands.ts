@@ -33,13 +33,13 @@ type ArtifactRequestDraft =
   | Omit<Extract<AgentArtifactRequest, { operation: "push" }>, "idempotencyKey" | "text">
   | Omit<Extract<AgentArtifactRequest, { operation: "revert" }>, "idempotencyKey">
   | Omit<Extract<AgentArtifactRequest, { operation: "create" }>, "text" | "idempotencyKey">
-  | Extract<AgentArtifactRequest, { operation: "list" | "read" | "history" }>;
+  | Extract<AgentArtifactRequest, { operation: "list" | "read" | "history" | "share" }>;
 
 export type ArtifactTransport = {
   artifact?(request: AgentArtifactRequest): Promise<unknown>;
 };
 
-const OPERATIONS = ["create", "list", "read", "push", "history", "revert"] as const;
+const OPERATIONS = ["create", "list", "read", "push", "history", "revert", "share"] as const;
 type Operation = (typeof OPERATIONS)[number];
 
 /** Each operation's flags: `text` ones take a string, `count` ones a whole number. */
@@ -58,12 +58,14 @@ const FLAGS: Record<Operation, { text: string[]; count: string[]; positional: bo
   },
   history: { text: [], count: ["--before", "--limit"], positional: true },
   revert: { text: [], count: ["--to", "--base"], positional: true },
+  share: { text: ["--to", "--target", "--note"], count: [], positional: true },
 };
 
 export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
   const operation = args[0] as Operation;
   if (!OPERATIONS.includes(operation))
     throw invalidArgument("artifact", `Unknown artifact command ${args[0] ?? "(none)"}`);
+  if (operation === "share") return parseShareArgs(args);
   const command = `artifact ${operation}`;
   const flags = FLAGS[operation];
   const text: Record<string, string> = {};
@@ -177,6 +179,47 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
   }
 }
 
+function parseShareArgs(args: readonly string[]): ArtifactInvocation {
+  const command = "artifact share";
+  const artifactIds: string[] = [];
+  const targets: string[] = [];
+  let note: string | undefined;
+  let json = false;
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index]!;
+    if (arg === "--json") {
+      json = true;
+      continue;
+    }
+    if (!arg.startsWith("--")) {
+      artifactIds.push(arg);
+      continue;
+    }
+    const value = args[index + 1];
+    if (value === undefined) throw invalidArgument(command, `${arg} needs a value`);
+    if (arg === "--to" || arg === "--target") targets.push(value);
+    else if (arg === "--note") {
+      if (note !== undefined) throw invalidArgument(command, "--note is given twice");
+      note = value;
+    } else throw invalidArgument(command, `Unexpected argument ${arg}`);
+    index += 1;
+  }
+  if (artifactIds.length === 0)
+    throw invalidArgument(command, "Name at least one document: its id");
+  if (targets.length === 0) throw invalidArgument(command, "--to is required at least once");
+  return {
+    command: "artifact",
+    request: {
+      operation: "share",
+      artifactIds,
+      targets,
+      ...(note === undefined ? {} : { note }),
+      requestId: crypto.randomUUID(),
+    },
+    ...(json ? { json: true } : {}),
+  };
+}
+
 /** Reads the text, sends the operation, and says what came of it. */
 export async function runArtifact(
   invocation: ArtifactInvocation,
@@ -228,7 +271,28 @@ export async function runArtifact(
       }
       return json ? result : formatArtifactSave(request.artifact, base, answer).message;
     }
+    case "share":
+      return json ? result : formatArtifactShare(result as ArtifactShareAnswer);
   }
+}
+
+type ArtifactShareAnswer = {
+  outcome: string;
+  results: readonly {
+    target: string;
+    status: "success" | "failed";
+    error?: { code: string };
+  }[];
+};
+
+function formatArtifactShare(answer: ArtifactShareAnswer): string {
+  return answer.results
+    .map((result) =>
+      result.status === "success"
+        ? `Shared artifact with ${result.target}.`
+        : `Could not share artifact with ${result.target}: ${result.error?.code ?? "failed"}.`,
+    )
+    .join("\n");
 }
 
 async function readArtifactText(file: string): Promise<string> {
@@ -311,5 +375,7 @@ export async function artifactRequest(
 function mayHaveLanded(request: AgentArtifactRequest): string {
   return "artifact" in request
     ? `The change may have landed: read the document (coforge artifact read ${request.artifact}) before trying again.`
-    : "The document may have been made, and creating it again makes a second one: check the conversation's documents on the web page first.";
+    : "artifactIds" in request
+      ? "The artifact share may have landed: read the target conversation before trying again."
+      : "The document may have been made, and creating it again makes a second one: check the conversation's documents on the web page first.";
 }

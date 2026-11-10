@@ -42,6 +42,30 @@ test("an artifact request is one known operation with exactly its own fields", (
     null,
   ])
     expect(decodeAgentArtifactRequest(body)).toBeNull();
+
+  expect(
+    decodeAgentArtifactRequest({
+      operation: "share",
+      artifactIds: ["a", "b"],
+      targets: ["#launch", "@ada"],
+      note: "Read this",
+      requestId: "request-1",
+    }),
+  ).toEqual({
+    operation: "share",
+    artifactIds: ["a", "b"],
+    targets: ["#launch", "@ada"],
+    note: "Read this",
+    requestId: "request-1",
+  });
+  expect(
+    decodeAgentArtifactRequest({
+      operation: "share",
+      artifactIds: ["a", 1],
+      targets: ["#launch"],
+      requestId: "request-1",
+    }),
+  ).toBeNull();
 });
 
 test("the artifacts route is the same under proxy, local and cloud, with room for a document", () => {

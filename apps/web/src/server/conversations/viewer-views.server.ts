@@ -1,5 +1,9 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
 import type { ForwardedMessageView } from "#src/features/conversations/message-forward";
+import type { PrismaClient } from "#src/generated/prisma/client";
+import {
+  artifactMessageCards,
+  type ArtifactMessageCard,
+} from "#src/server/artifacts/artifact-composition.server";
 import { attachActionCardViews } from "./action-card-attach.server";
 import type { ActionCardView } from "./action-card-view.server";
 import { attachForwardedAccess } from "./message-forward-view.server";
@@ -10,20 +14,29 @@ import { attachForwardedAccess } from "./message-forward-view.server";
  * to them. Every page-shaped read of `mapBrowserMessage` rows ends in this.
  */
 export async function attachViewerViews<
-  T extends { id: string; forwarded?: ForwardedMessageView[] },
+  T extends { id: string; body: string; forwarded?: ForwardedMessageView[] },
 >(
   db: PrismaClient,
   workspaceId: string,
   viewerUserId: string,
   messages: readonly T[],
-): Promise<(T & { actionCard?: ActionCardView })[]> {
+): Promise<(T & { actionCard?: ActionCardView; artifactCards?: ArtifactMessageCard[] })[]> {
   const [settled, withCards] = await Promise.all([
     attachForwardedAccess(db, workspaceId, viewerUserId, messages),
     attachActionCardViews(db, workspaceId, viewerUserId, messages),
   ]);
+  const artifacts = await artifactMessageCards(db, {
+    workspaceId,
+    reader: { userId: viewerUserId },
+    messages,
+  });
   // Both keep the page's order, one message each.
   return settled.map((message, index) => {
     const actionCard = withCards[index]!.actionCard;
-    return actionCard ? { ...message, actionCard } : message;
+    return {
+      ...message,
+      ...(actionCard ? { actionCard } : {}),
+      ...(artifacts[index]?.length ? { artifactCards: artifacts[index] } : {}),
+    };
   });
 }

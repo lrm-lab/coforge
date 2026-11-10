@@ -9,6 +9,7 @@ import {
   visibleChannelIdByName,
 } from "#src/server/conversations/channel-read-access.server";
 import { artifactsDisabled } from "./artifact-access.server";
+import type { ArtifactShares } from "./artifact-shares.server";
 import type { ArtifactDocuments } from "./artifact-documents.server";
 import type { Artifacts } from "./artifacts.server";
 
@@ -17,6 +18,8 @@ export type AgentArtifactServices = {
   db: PrismaClient;
   artifacts: Pick<Artifacts, "history">;
   documents: Pick<ArtifactDocuments, "create" | "list" | "load" | "save" | "revert">;
+  shares?: Pick<ArtifactShares, "share">;
+  send?: Parameters<ArtifactShares["share"]>[0]["send"];
   enabled: (workspaceId: string) => Promise<boolean>;
   /** Whether the Workspace may have web pages made (the `artifact-web-pages` flag, task #490). */
   webPages: (workspaceId: string) => Promise<boolean>;
@@ -53,6 +56,12 @@ const RULES = {
     limit: historyLimit.optional(),
   }),
   revert: z.object({ artifact: id, to: version, baseVersion: version, idempotencyKey: id }),
+  share: z.object({
+    artifactIds: z.array(id).min(1).max(20),
+    targets: z.array(z.string().trim().min(1).max(200)).min(1).max(20),
+    note: note.optional(),
+    requestId: id,
+  }),
 } satisfies Record<AgentArtifactRequest["operation"], z.ZodType>;
 
 /**
@@ -128,6 +137,16 @@ export async function runAgentArtifactOperation(
     case "revert": {
       const { artifact, ...input } = parsed.data as z.infer<typeof RULES.revert>;
       return services.documents.revert({ ...scope, artifactId: artifact, ...input });
+    }
+    case "share": {
+      const input = parsed.data as z.infer<typeof RULES.share>;
+      if (!services.shares || !services.send) throw new Error("artifact sharing is unavailable");
+      return services.shares.share({
+        workspaceId,
+        actor: scope.actor,
+        ...input,
+        send: services.send,
+      });
     }
   }
 }
