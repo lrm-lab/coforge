@@ -4,6 +4,7 @@ import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panel
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
+import type { FocusedPanel } from "./conversation-focus-model";
 import { localLayoutStorage } from "./local-layout-storage";
 
 /**
@@ -22,6 +23,7 @@ export function ConversationSlotLayout({
   slot,
   split,
   mainShown = true,
+  focused,
 }: {
   main: ReactNode;
   side: ReactNode;
@@ -31,6 +33,9 @@ export function ConversationSlotLayout({
   split: boolean;
   /** False for a thread shown alone: the conversation is not mounted at all. */
   mainShown?: boolean;
+  /** The pane in full screen (task #75): the other and the separator hide, by attribute, which
+   * reaches the library's own wrapper. Sizes stay with the library, so leaving restores the split. */
+  focused?: FocusedPanel;
 }) {
   const layout = useDefaultLayout({
     id: "coforge-conversation",
@@ -59,6 +64,7 @@ export function ConversationSlotLayout({
         id="main"
         // Strings are percentages of the group; numbers would be pixels.
         minSize="40"
+        hidden={focused === "thread"}
         className="flex min-h-0 min-w-0 flex-col"
       >
         {main}
@@ -67,6 +73,7 @@ export function ConversationSlotLayout({
         <>
           <Separator
             aria-label={slot === "thread" ? m.conversation_thread() : m.agent_profile_resize()}
+            hidden={focused !== undefined}
             className="hidden w-px shrink-0 bg-border-secondary transition-colors hover:bg-brand-solid data-[separator=active]:bg-brand-solid md:block"
           />
           <Panel
@@ -74,6 +81,7 @@ export function ConversationSlotLayout({
             defaultSize="35"
             minSize="25"
             maxSize="60"
+            hidden={focused === "chat"}
             className="flex min-h-0 min-w-0 flex-col"
           >
             {side}

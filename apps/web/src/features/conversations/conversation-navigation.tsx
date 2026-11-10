@@ -9,6 +9,7 @@ import { ConnectionStatusPill } from "#src/features/realtime/connection-status-p
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
 import { ConversationListContext } from "./conversation-list-button";
+import { ConversationFocusContext, useConversationFocusState } from "./conversation-focus";
 import { ConversationListResizeHandle } from "./conversation-list-resize-handle";
 import { LIST_COLUMN_CLASS } from "./conversation-list-width";
 import { ConversationDirectory } from "./conversation-directory";
@@ -65,6 +66,13 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [browsing, setBrowsing] = useState(false);
   const [creating, setCreating] = useState(false);
+  // Held here, over the list and the chat both. Focus is for the layout it was set in: this
+  // conversation with this thread or profile beside it.
+  const slot = useRouterState({
+    select: ({ location: { search } }) =>
+      `${"threadRootId" in search ? search.threadRootId : ""}|${"profile" in search ? JSON.stringify(search.profile) : ""}`,
+  });
+  const focus = useConversationFocusState(`${pathname}|${slot}`, desktop);
   const create = useServerFn(createPublicChannel);
   const channel = useParams({
     from: "/w/$workspaceSlug/_chat/channel/$channelId",
@@ -189,89 +197,97 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   );
   return (
     <ConversationListContext value={listControls}>
-      <ConversationHostProvider channels={channelNames}>
-        <UnreadStoreContext value={unread.store}>
-          <main className="flex h-full min-w-0 flex-col bg-primary lg:flex-row">
-            <section
-              className={cx(
-                "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden",
-                LIST_COLUMN_CLASS,
-                showList ? "flex" : "hidden",
-              )}
+      <ConversationFocusContext value={focus}>
+        <ConversationHostProvider channels={channelNames}>
+          <UnreadStoreContext value={unread.store}>
+            <main
+              // The focused panel, for the list's CSS (`group-data-[focus]/chat`).
+              data-focus={focus.focused}
+              className="group/chat flex h-full min-w-0 flex-col bg-primary lg:flex-row"
             >
-              <PageHeader
-                heading={m.navigation_chat()}
-                meta={
-                  <>
-                    <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
-                    <ChatHeaderBusyAgents
-                      directs={directs}
-                      onConversationPage={Boolean(channel || openDm)}
-                    />
-                  </>
-                }
-                actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
-              />
-              {/* 0.75rem under the header rule. Saved's icon is centered in the 2.25rem
+              <section
+                className={cx(
+                  "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden",
+                  LIST_COLUMN_CLASS,
+                  showList ? "flex" : "hidden",
+                  // After `lg:flex`, so it wins.
+                  "lg:group-data-[focus]/chat:hidden",
+                )}
+              >
+                <PageHeader
+                  heading={m.navigation_chat()}
+                  meta={
+                    <>
+                      <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
+                      <ChatHeaderBusyAgents
+                        directs={directs}
+                        onConversationPage={Boolean(channel || openDm)}
+                      />
+                    </>
+                  }
+                  actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
+                />
+                {/* 0.75rem under the header rule. Saved's icon is centered in the 2.25rem
                   row and the bookmark path is inset another 0.125rem, so the rule
                   sits 1.5rem above the bookmark. Bottom padding stays 1rem. */}
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4">
-                <ConversationDirectory
-                  channels={visibleChannels}
-                  agents={agents}
-                  directRows={directs.rows}
-                  viewerId={viewerId}
-                  selectedChannelId={channel?.channelId}
-                  selectedDmId={openDm?.dmId}
-                  selectedSaved={pathname === workspacePath(workspaceSlug, "/saved")}
-                  selectedDrafts={pathname === workspacePath(workspaceSlug, "/drafts")}
-                />
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4">
+                  <ConversationDirectory
+                    channels={visibleChannels}
+                    agents={agents}
+                    directRows={directs.rows}
+                    viewerId={viewerId}
+                    selectedChannelId={channel?.channelId}
+                    selectedDmId={openDm?.dmId}
+                    selectedSaved={pathname === workspacePath(workspaceSlug, "/saved")}
+                    selectedDrafts={pathname === workspacePath(workspaceSlug, "/drafts")}
+                  />
+                </div>
+                <ConversationListResizeHandle />
+              </section>
+              <div
+                className={cx(
+                  "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:overflow-hidden",
+                  showList ? "hidden" : "flex",
+                )}
+              >
+                {children}
               </div>
-              <ConversationListResizeHandle />
-            </section>
-            <div
-              className={cx(
-                "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:overflow-hidden",
-                showList ? "hidden" : "flex",
-              )}
-            >
-              {children}
-            </div>
-          </main>
-          {creating && (
-            <CreateChannelDialog
-              open={creating}
-              onOpenChange={setCreating}
-              memberPicker
-              minMembers={2}
-              offersPrivate
-              onCreate={async (name, memberUserIds, memberAgentIds, visibility) => {
-                const created = await create({
-                  data: {
-                    name,
-                    visibility,
-                    userIds: memberUserIds ?? [],
-                    agentIds: memberAgentIds ?? [],
-                  },
-                });
-                // Only the channel list and names changed: re-read those. A failed re-read leaves
-                // the channel created, so it is reported as such rather than failing the create.
-                const sidebarRefreshed = await refreshSidebar(["channels", "channelNames"]).then(
-                  () => true,
-                  () => false,
-                );
-                return { ...created, sidebarRefreshed };
-              }}
-              onOpenChannel={(channelId) =>
-                router.navigate({
-                  to: "/w/$workspaceSlug/channel/$channelId",
-                  params: { workspaceSlug, channelId },
-                })
-              }
-            />
-          )}
-        </UnreadStoreContext>
-      </ConversationHostProvider>
+            </main>
+            {creating && (
+              <CreateChannelDialog
+                open={creating}
+                onOpenChange={setCreating}
+                memberPicker
+                minMembers={2}
+                offersPrivate
+                onCreate={async (name, memberUserIds, memberAgentIds, visibility) => {
+                  const created = await create({
+                    data: {
+                      name,
+                      visibility,
+                      userIds: memberUserIds ?? [],
+                      agentIds: memberAgentIds ?? [],
+                    },
+                  });
+                  // Only the channel list and names changed: re-read those. A failed re-read leaves
+                  // the channel created, so it is reported as such rather than failing the create.
+                  const sidebarRefreshed = await refreshSidebar(["channels", "channelNames"]).then(
+                    () => true,
+                    () => false,
+                  );
+                  return { ...created, sidebarRefreshed };
+                }}
+                onOpenChannel={(channelId) =>
+                  router.navigate({
+                    to: "/w/$workspaceSlug/channel/$channelId",
+                    params: { workspaceSlug, channelId },
+                  })
+                }
+              />
+            )}
+          </UnreadStoreContext>
+        </ConversationHostProvider>
+      </ConversationFocusContext>
     </ConversationListContext>
   );
 }

@@ -11,6 +11,7 @@ import { ChannelHeaderMemberCluster } from "./channel-header-people";
 import type { ChannelMembersView } from "./channel-members-page";
 import type { ChannelCapabilities } from "#src/server/conversations/channel-authority.server";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
+import { ConversationFocusButton } from "./conversation-focus-button";
 import { ConversationListButton } from "./conversation-list-button";
 import { ThreadFollowingAgents } from "./thread-following-agents";
 import {
@@ -124,6 +125,7 @@ export function ChannelConversationHeader({
               onOpenMembers={() => openPanel("members")}
               onAddMembers={() => openPanel("add")}
             />
+            <ConversationFocusButton />
             <ButtonUtility
               icon={Settings}
               size="sm"

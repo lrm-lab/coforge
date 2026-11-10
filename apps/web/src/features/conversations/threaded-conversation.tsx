@@ -32,6 +32,7 @@ import { NO_THREADS } from "./thread-summary-model";
 import { useThreadTailSequence } from "./thread-queries";
 import { ThreadRootState, type ThreadRootLoad } from "./thread-root-state";
 import { ConversationSlotLayout } from "./conversation-slot-layout";
+import { useConversationFocus } from "./conversation-focus";
 import { ConversationIdProvider } from "./conversation-id";
 import { ThreadStoreProvider, useConversationThreadStore } from "./thread-store";
 import { resolveConversationThreadRoot } from "./conversation-thread-search";
@@ -236,6 +237,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
   // Below `md` there is no room for a resizable split; see `ConversationSlotLayout`.
   const wideViewport = useBreakpoint("md");
+  const focus = useConversationFocus();
   // The thread in view is marked read: the task popup's when it is open, else the side pane's.
   const threadInView = openTaskRoot?.id ?? (detailVisible ? selected : undefined);
   const threadInViewSequence = useThreadTailSequence(conversation.conversationId, threadInView);
@@ -396,6 +398,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         slot={visibleSlot}
         split={wideViewport && !threadAlone}
         mainShown={!threadAlone}
+        focused={focus?.focused}
       />
       {taskLayer}
     </>

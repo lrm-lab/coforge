@@ -71,6 +71,7 @@ import {
   canManageAgent,
   useInvalidateAgentProfile,
 } from "./agent-profile-queries";
+import { OPEN_OVERLAY_SELECTOR } from "#src/features/conversations/conversation-focus-model";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -103,8 +104,7 @@ export function AgentProfilePanel({
     if (event.key !== "Escape" || event.defaultPrevented) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (target?.closest("input, textarea, [contenteditable=true]")) return;
-    if (document.querySelector("[role=dialog], [role=alertdialog], [role=listbox], [role=menu]"))
-      return;
+    if (document.querySelector(OPEN_OVERLAY_SELECTOR)) return;
     onClose();
   });
   useEffect(() => {
