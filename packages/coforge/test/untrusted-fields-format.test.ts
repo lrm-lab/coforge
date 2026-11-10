@@ -160,7 +160,6 @@ describe("a field someone else wrote cannot forge a message line", () => {
         displayName: evil,
         description: evil,
         computerName: evil,
-        model: evil,
       };
       shows(formatUserInfo({ user, memberships: [] } as never));
       shows(

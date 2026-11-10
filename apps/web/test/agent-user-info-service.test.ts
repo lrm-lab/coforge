@@ -181,12 +181,12 @@ test("user info: Agent target reports live status from the shared display projec
     name: "scout",
     displayName: "Scout",
     role: "member",
-    runtime: "claude-code",
-    model: "sonnet",
     computerName: "Alice's Mac",
     status: "online",
     isSelf: false,
   });
+  expect(outcome.body.user).not.toHaveProperty("runtime");
+  expect(outcome.body.user).not.toHaveProperty("model");
   expect(outcome.body.user).not.toHaveProperty("availability");
   displaySnapshots.delete("agent-scout");
 });

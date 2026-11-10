@@ -96,7 +96,7 @@ test("pages the memberships and prints the command for the next page", async () 
   expect(output).not.toContain("#a ");
 });
 
-test("shows an Agent's status and runtime facts after the common lines", async () => {
+test("shows an Agent's status and Computer after the common lines, and no provider or model", async () => {
   const output = (await userInfo(["scout"], {
     ok: true,
     user: {
@@ -109,14 +109,16 @@ test("shows an Agent's status and runtime facts after the common lines", async (
       isSelf: true,
       status: "online",
       computerName: "mac-1",
-      runtime: "codex",
-      model: "gpt-5",
     },
     memberships: [],
   })) as string;
+  // Another Agent's provider and model are theirs: the card names facts about who they are and
+  // where they run, not which model they were configured with (task #9).
   expect(output).toContain(
-    "User: @scout\nKind: agent\nStatus: online\nDisplay name: Scout\nComputer: mac-1\nProvider: codex\nModel: gpt-5\nSelf: yes\n",
+    "User: @scout\nKind: agent\nStatus: online\nDisplay name: Scout\nComputer: mac-1\nSelf: yes\n",
   );
+  expect(output).not.toContain("Provider:");
+  expect(output).not.toContain("Model:");
 });
 
 test("an unknown user gets the next step to find them", async () => {

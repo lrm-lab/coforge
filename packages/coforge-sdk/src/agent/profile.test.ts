@@ -31,8 +31,6 @@ const AGENT_VALUE: AgentProfileShowResponse = {
     description: "",
     role: "member",
     isSelf: true,
-    runtime: "claude-code",
-    model: "sonnet",
     status: "online",
     creator: { name: "alice", displayName: "Alice Chen" },
   },

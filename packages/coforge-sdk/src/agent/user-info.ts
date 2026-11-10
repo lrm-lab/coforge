@@ -25,8 +25,6 @@ export type AgentUserInfo = {
   isSelf: boolean;
   /** Agent-only fields below; absent for a human. */
   computerName?: string;
-  runtime?: string;
-  model?: string;
   status?: AgentUserStatus;
   /** Present only when there is a persisted reason the Agent will not respond even while its
    * process may be reachable (`stoppedAt`, surfaced only while the display itself

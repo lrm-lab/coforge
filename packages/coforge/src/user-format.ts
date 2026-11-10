@@ -18,8 +18,6 @@ export function formatUserInfo(
   lines.push(`Display name: ${foldUntrustedLine(user.displayName)}`);
   if (user.kind === "agent") {
     if (user.computerName) lines.push(`Computer: ${foldUntrustedLine(user.computerName)}`);
-    if (user.runtime) lines.push(`Provider: ${foldUntrustedLine(user.runtime)}`);
-    if (user.model) lines.push(`Model: ${foldUntrustedLine(user.model)}`);
     if (user.availability) lines.push(`Availability: ${foldUntrustedLine(user.availability)}`);
   }
   if (user.isSelf) lines.push("Self: yes");
@@ -61,8 +59,6 @@ export function formatProfile(response: { profile: AgentProfileView }): string {
   if (profile.kind === "agent") {
     lines.push(`Status: ${profile.status}`);
     if (profile.computerName) lines.push(`Computer: ${foldUntrustedLine(profile.computerName)}`);
-    if (profile.runtime) lines.push(`Provider: ${foldUntrustedLine(profile.runtime)}`);
-    if (profile.model) lines.push(`Model: ${foldUntrustedLine(profile.model)}`);
     if (profile.availability)
       lines.push(`Availability: ${foldUntrustedLine(profile.availability)}`);
   }

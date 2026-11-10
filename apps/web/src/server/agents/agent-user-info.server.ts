@@ -12,7 +12,6 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { getAgentDisplay } from "./agent-display.server";
-import { parseAgentRuntimeConfig } from "./agent-runtime-config.server";
 import {
   agentVisibilityViewerForActor,
   canSeeAgent,
@@ -121,8 +120,6 @@ export type ResolvedWorkspaceUser =
       role: string | null;
       computerId: string | null;
       computerName?: string;
-      runtime?: string;
-      model?: string;
       stoppedAt: Date | null;
       ownerId: string;
     };
@@ -152,7 +149,6 @@ export async function findWorkspaceUser(
       role: true,
       computerId: true,
       stoppedAt: true,
-      runtimeConfig: true,
       ownerId: true,
       visibility: true,
       systemKind: true,
@@ -161,15 +157,6 @@ export async function findWorkspaceUser(
   });
   if (agent) {
     if (!canSeeAgent(viewer, agent)) return AGENT_NOT_VISIBLE;
-    let runtime: string | undefined;
-    let model: string | undefined;
-    try {
-      const config = parseAgentRuntimeConfig(agent.runtimeConfig);
-      runtime = config.runtime || undefined;
-      model = config.model.trim() || undefined;
-    } catch {
-      // An unparsable runtime config never fails the lookup; it only omits these fields.
-    }
     const computerName = agent.computer?.displayName.trim() || agent.computer?.name.trim();
     return {
       kind: "agent",
@@ -182,8 +169,6 @@ export async function findWorkspaceUser(
       stoppedAt: agent.stoppedAt,
       ownerId: agent.ownerId,
       ...(computerName ? { computerName } : {}),
-      ...(runtime ? { runtime } : {}),
-      ...(model ? { model } : {}),
     };
   }
   const membership = await db.workspaceMembership.findFirst({
@@ -309,8 +294,6 @@ export async function resolveAgentUserInfo(
     role: target.role,
     isSelf: target.id === principal.agentId,
     ...(target.computerName ? { computerName: target.computerName } : {}),
-    ...(target.runtime ? { runtime: target.runtime } : {}),
-    ...(target.model ? { model: target.model } : {}),
     status,
     ...(availability ? { availability } : {}),
   };

@@ -120,8 +120,6 @@ async function buildProfileView(
     description: target.description,
     role: target.role,
     isSelf: target.id === principal.agentId,
-    runtime: target.runtime ?? "",
-    model: target.model ?? "",
     ...(target.computerName ? { computerName: target.computerName } : {}),
     status,
     ...(availability ? { availability } : {}),

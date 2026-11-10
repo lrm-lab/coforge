@@ -31,8 +31,6 @@ const AGENT_VALUE: AgentUserInfoResponse = {
     role: "member",
     isSelf: true,
     computerName: "Alice's Mac",
-    runtime: "claude-code",
-    model: "sonnet",
     status: "online",
   },
   memberships: [],

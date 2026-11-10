@@ -45,8 +45,6 @@ export type AgentProfileView =
       description: string;
       role: string | null;
       isSelf: boolean;
-      runtime: string;
-      model: string;
       computerName?: string;
       status: AgentUserStatus;
       availability?: string;
@@ -138,8 +136,6 @@ function isProfileView(value: unknown): value is AgentProfileView {
     return Array.isArray(candidate.createdAgents) && candidate.createdAgents.every(isCreatedAgent);
   if (candidate.kind === "agent")
     return (
-      typeof candidate.runtime === "string" &&
-      typeof candidate.model === "string" &&
       (candidate.status === "online" ||
         candidate.status === "offline" ||
         candidate.status === "unknown") &&

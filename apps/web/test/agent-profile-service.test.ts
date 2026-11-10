@@ -266,9 +266,12 @@ test("profile show: an Agent with an unreadable runtimeConfig still loads, flagg
     { workspaceId: WORKSPACE_ID, agentId: CALLER_AGENT_ID },
     "scout",
   );
-  // The flat profile the task discussion and Agent surfaces read: an unreadable config reads
-  // as no runtime, never a page-breaking throw.
-  expect(outcome).toMatchObject({ body: { profile: { runtime: "", model: "" } } });
+  // The profile card reads no runtime config at all (task #9), so an unreadable one cannot break
+  // it: the view simply carries none of its fields.
+  expect(outcome.status).toBe(200);
+  expect(outcome).not.toMatchObject({
+    body: { profile: expect.objectContaining({ runtime: "" }) },
+  });
 });
 
 test("profile show: a private target Agent invisible to the caller answers agent_not_visible", async () => {
