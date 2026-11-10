@@ -245,7 +245,7 @@ export class AgentInboxCoordinator {
     const session = this.ports.processManager.session(agentId);
     for (const { text, deliveryIds = [], conversation } of notices) {
       if (!session?.notify) {
-        void this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
+        this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
         continue;
       }
       // The tracked mentions it carries are drained once it is accepted, so it names them again.

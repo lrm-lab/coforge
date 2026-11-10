@@ -208,9 +208,10 @@ export class MentionDeliveryTracker {
    * with nothing left to tell the Agent and every re-issue would only be coalesced. One the current
    * session was told, or the Agent consumed, is drained; one whose notice the session reported lost
    * waits for that notice's redelivery; any other (told to a process that has since exited) is
-   * rejected.
+   * rejected. Every verdict is applied to the tracker's state in this one synchronous pass; the
+   * reports follow without being waited for, so none of them delays another's settlement.
    */
-  async settleTurnEnd(agentId: string, conversationId?: string): Promise<void> {
+  settleTurnEnd(agentId: string, conversationId?: string): void {
     const pending = this.#pending.get(agentId);
     if (!pending) return;
     for (const deliveryId of [...pending]) {
@@ -218,8 +219,8 @@ export class MentionDeliveryTracker {
       if (!tracked || tracked.undelivered) continue;
       const { message } = tracked;
       if (conversationId !== undefined && message.conversationId !== conversationId) continue;
-      if (this.ports.told(message) || this.ports.consumed(message)) await this.#drain(message);
-      else await this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+      if (this.ports.told(message) || this.ports.consumed(message)) void this.#drain(message);
+      else void this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
     }
   }
 
@@ -234,17 +235,14 @@ export class MentionDeliveryTracker {
   }
 
   /** The notice that carried these deliveries was delivered again after its turn ended: drained
-   * once the session accepted it, rejected when it did not. */
-  async settleRedelivery(
-    agentId: string,
-    deliveryIds: readonly string[],
-    accepted: boolean,
-  ): Promise<void> {
+   * once the session accepted it, rejected when it did not. As for a turn's end, the verdicts are
+   * applied now and their reports are not waited for. */
+  settleRedelivery(agentId: string, deliveryIds: readonly string[], accepted: boolean): void {
     for (const deliveryId of deliveryIds) {
       const tracked = this.#tracked.get(deliveryId);
       if (tracked?.message.agentId !== agentId || !tracked.undelivered) continue;
-      if (accepted) await this.#drain(tracked.message);
-      else await this.refuse(tracked.message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+      if (accepted) void this.#drain(tracked.message);
+      else void this.refuse(tracked.message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
     }
   }
 

@@ -50,6 +50,8 @@ export async function harness(
     noticeGate?: Promise<void>;
     /** Holds every launch after the first open until it settles. */
     launchGate?: Promise<void>;
+    /** Holds every delivery ACK open after it was sent, until it settles. */
+    ackGate?: Promise<void>;
   } = {},
 ) {
   const credentials = new InMemoryDaemonCredentialStore();
@@ -129,6 +131,7 @@ export async function harness(
             deliveryId: ack.deliveryId,
             ...(ack.mentionDelivery ? { mentionDelivery: ack.mentionDelivery } : {}),
           });
+          await options.ackGate;
         },
         async sendAgentDeliveryRejection(rejection) {
           record({ kind: "reject", deliveryId: rejection.deliveryId, reason: rejection.reason });

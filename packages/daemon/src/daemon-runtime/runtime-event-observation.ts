@@ -353,12 +353,13 @@ export function observeRuntimeEvent(
       ? (launch.crashDetail?.message ?? "Agent runtime failed.").slice(0, 2000)
       : undefined;
   ports.runtimeErrorHold.noteTurnEnd(agentId);
+  // Tracked mentions told during this turn end with it, decided before the release below can
+  // write the next notice.
+  if (!isMemoryAgentRuntime(config) || event.conversation)
+    ports.mentionDeliveries.settleTurnEnd(agentId, event.conversation?.conversationId);
   // Release whatever a queue_until_idle provider held while this turn ran, as one
   // coalesced notice for the next turn — never blocking this turn-end Activity on it.
   ports.releaseTurnEndHolds(agentId);
-  // Tracked mentions told during this turn end with it.
-  if (!isMemoryAgentRuntime(config) || event.conversation)
-    void ports.mentionDeliveries.settleTurnEnd(agentId, event.conversation?.conversationId);
   // A turn ending means a still-open compaction is done; report that before the turn's own
   // idle/failed/interrupted Activity.
   ports.phaseBookkeeping.inferCompactionFinished(agentId, launch, event.conversation, {

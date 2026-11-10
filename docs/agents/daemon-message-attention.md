@@ -92,7 +92,8 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   (another backoff, a refused notice, a process gone before it accepted the
   notice, an inbox purge). Told during a turn, it stays pending until the
   turn ends, then is drained if the current session was told it and
-  rejected otherwise; one named by `notice-undelivered` is settled instead by
+  rejected otherwise, every pending mention in one synchronous pass over the tracker's state (the
+  reports follow unawaited, so none delays another's settlement); one named by `notice-undelivered` is settled instead by
   the redelivery of that notice (drained once accepted). A runner hold queues it
   unacknowledged; one still queued for an Agent without a session when the
   hold lifts is refused. Nothing is reported when a process exits.
