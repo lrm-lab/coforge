@@ -176,11 +176,10 @@ export class AgentControlReceiver {
     // session report does. The result's reply does not wait for the re-send, which logs its own
     // failures (`MentionDeliveryReports`).
     if (result.phase === "started" && result.identity)
-      void this.mentions?.resendForCurrentSession({
-        workspaceId: agent.workspaceId,
-        computerId: claim.computerId,
-        agentId: agent.id,
-      });
+      void this.mentions?.resendForCurrentSession(
+        { workspaceId: agent.workspaceId, computerId: claim.computerId, agentId: agent.id },
+        { includeIssued: true },
+      );
     let eventPhase: "pending" | "completed" | "failed" | "superseded" = "pending";
     if (next.phase === "failed") eventPhase = "failed";
     else if (next.phase === "completed") eventPhase = "completed";

@@ -69,13 +69,13 @@ export class AgentSessionVerifyError extends Error {
 }
 
 /** The tracked mentions an Agent's newly accepted launch and session issue again
- * (`MentionDeliveryReports`). It never throws. */
+ * (`MentionDeliveryReports`); `includeIssued` sends those already issued for it too. It never
+ * throws. */
 export type AcceptedSessionMentions = {
-  resendForCurrentSession(scope: {
-    workspaceId: string;
-    computerId: string;
-    agentId: string;
-  }): Promise<void>;
+  resendForCurrentSession(
+    scope: { workspaceId: string; computerId: string; agentId: string },
+    options?: { includeIssued?: boolean },
+  ): Promise<void>;
 };
 
 /** Cloud owns selection; CAS fencing prevents a retired launch from changing it. */

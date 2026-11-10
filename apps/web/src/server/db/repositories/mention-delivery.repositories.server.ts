@@ -397,15 +397,6 @@ export class PrismaMentionDeliveryRepository {
     });
   }
 
-  /** A person stopped the Agent: its still-pending tracked mentions will not be launched. */
-  async settleStopped(input: { workspaceId: string; agentId: string; stoppedAt: Date }) {
-    await settlePendingNotLaunched(this.db, {
-      workspaceId: input.workspaceId,
-      agentId: input.agentId,
-      settledAt: input.stoppedAt,
-    });
-  }
-
   /** An ACK that echoes the delivery's current envelope: delivered, even after a Stop settled
    * it. */
   async settleDrained(key: MentionDeliveryReportKey, now: Date) {

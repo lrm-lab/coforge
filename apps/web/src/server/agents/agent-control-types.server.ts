@@ -130,18 +130,17 @@ export type AgentControlAgent = {
   // not part of the CAS fence.
 } & AgentIntroductionFacts;
 
-/** The tracked @mentions a control change affects: a person's Stop settles them as not launched,
- * and a launch that started with its session issues them again for it. */
-export type AgentControlMentions = AcceptedSessionMentions & {
-  settleStopped(input: { workspaceId: string; agentId: string; stoppedAt: Date }): Promise<void>;
-};
+/** The tracked @mentions a launch that started with its session issues again for it. (A person's
+ * Stop settles them inside `AgentControlStore.replace`, in the write that records the Stop.) */
+export type AgentControlMentions = AcceptedSessionMentions;
 
 /** get/replace both require current owner membership and Workspace–Computer assignment. */
 export interface AgentControlStore {
   get(agentId: string): Promise<AgentControlAgent | undefined>;
   /** Clear Session, when requested, commits in the same transaction as the next phase. Setting
    * `stoppedAt` writes the Agent's persisted stop/start intent in that same
-   * transaction; `undefined` leaves it unchanged. This flag is last-writer-wins, not part of the
+   * transaction, and a Stop (a `stoppedAt` set) settles the Agent's pending tracked mentions as
+   * not launched there too; `undefined` leaves it unchanged. This flag is last-writer-wins, not part of the
    * optimistic-concurrency fence `replace` already applies to `controlState`. */
   replace(
     before: AgentControlAgent,

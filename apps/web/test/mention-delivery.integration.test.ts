@@ -682,7 +682,6 @@ test.skipIf(!connectionString)(
         undefined,
         undefined,
         {
-          settleStopped: (input) => t.mentions.settleStopped(input),
           resendForCurrentSession: (scope) =>
             (resending = t.mentions.resendForCurrentSession(scope)),
         },

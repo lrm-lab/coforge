@@ -1,5 +1,4 @@
 import { AppError } from "#src/lib/app-error";
-import { errorType } from "#src/server/errors/error-type.server";
 import type { AgentControlAccess } from "./agent-control-access.server";
 import type { AgentControlEvents } from "./agent-control-events.server";
 import {
@@ -8,7 +7,6 @@ import {
   operationFence,
   type AgentControlAction,
   type AgentControlAgent,
-  type AgentControlMentions,
   type AgentControlState,
   type AgentControlStore,
 } from "./agent-control-types.server";
@@ -18,32 +16,10 @@ export class AgentControlOperations {
   constructor(
     private readonly store: AgentControlStore,
     private readonly access: AgentControlAccess,
-    /** Settles the tracked mentions a person's Stop leaves undelivered. */
-    private readonly mentions?: AgentControlMentions,
     /** Publishes `agent.control.v1` for the operation this write begins. */
     private readonly events?: AgentControlEvents,
   ) {}
 
-  /** A person stopped the Agent: its pending tracked mentions will not be launched. The stop is
-   * already recorded, so a failure here is logged and never fails it. */
-  private async settleStoppedMentions(agent: AgentControlAgent, stoppedAt: Date) {
-    try {
-      await this.mentions?.settleStopped({
-        workspaceId: agent.workspaceId,
-        agentId: agent.id,
-        stoppedAt,
-      });
-    } catch (error) {
-      console.warn(
-        JSON.stringify({
-          event: "agent_control:stopped_mentions_failed",
-          agent_id: agent.id,
-          workspace_id: agent.workspaceId,
-          error_type: errorType(error),
-        }),
-      );
-    }
-  }
   async begin(
     agent: AgentControlAgent,
     action: AgentControlAction,
@@ -108,7 +84,6 @@ export class AgentControlOperations {
     if (
       await this.store.replace(agent, state, stoppedAt !== undefined ? { stoppedAt } : undefined)
     ) {
-      if (stoppedAt) await this.settleStoppedMentions(agent, stoppedAt);
       // The operation a newer request superseded ends here; the new one's pending event follows.
       if (old && old.requestId !== requestId)
         this.events?.publish(agent, {

@@ -9,6 +9,7 @@ import type {
   AgentControlState,
   AgentControlStore,
 } from "#src/server/agents/agent-control.server";
+import { settlePendingNotLaunched } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 
 const stateSchema = z
@@ -242,6 +243,14 @@ export class PrismaAgentControlStore implements AgentControlStore {
         },
       });
       if (result.count !== 1) return false;
+      // The Stop and its mentions end together: no crash or database error between two writes can
+      // leave a stopped Agent's mention pending, which nothing re-issues to a stopped Agent.
+      if (options?.stoppedAt)
+        await settlePendingNotLaunched(tx, {
+          workspaceId: before.workspaceId,
+          agentId: before.id,
+          settledAt: options.stoppedAt,
+        });
       if (clearSession) {
         // Subject-scoped WeeklyReportAssistant sessions point at native provider sessions.
         // Resetting the runtime invalidates every one of those bindings; the next subject turn

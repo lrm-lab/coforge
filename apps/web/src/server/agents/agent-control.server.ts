@@ -70,8 +70,7 @@ export class AgentControl {
     /** Only consulted for a user-initiated `execute({action:"start"})`; Restart/Reset/Full reset
      * and the internal `recover`/`publishStart` paths are unchanged. */
     conversations?: AgentControlRecoveryReader,
-    /** Settles the tracked mentions a person's Stop leaves undelivered, and issues them again for
-     * a launch that started with its session. */
+    /** Issues the tracked mentions again for a launch that started with its session. */
     mentions?: AgentControlMentions,
     /** The introduction prompt a Start carries while the Agent owes its creator one, and whether
      * the Agent's Start is held until its owner's setup wizard is done. */
@@ -90,7 +89,7 @@ export class AgentControl {
     const clock = () => this.clock();
     this.#access = new AgentControlAccess(store);
     const events = new AgentControlEvents(api);
-    this.#operations = new AgentControlOperations(store, this.#access, mentions, events);
+    this.#operations = new AgentControlOperations(store, this.#access, events);
     this.#publisher = new AgentControlPublisher(
       store,
       api,

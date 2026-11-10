@@ -201,7 +201,6 @@ export class MentionDeliveryReports {
       | "answerReported"
       | "readPending"
       | "reissuePending"
-      | "settleStopped"
     >,
     private readonly publisher: Pick<CentrifugoServerApi, "publishBatch">,
     private readonly conversations: DeliveryConversations,
@@ -249,16 +248,16 @@ export class MentionDeliveryReports {
     );
   }
 
-  /** A person stopped the Agent: its pending tracked mentions will not be launched. */
-  async settleStopped(input: { workspaceId: string; agentId: string; stoppedAt: Date }) {
-    await this.repository.settleStopped(input);
-  }
-
   /** A launch's session was accepted as the Agent's current one: issues its pending mentions for
-   * it and sends the ones it issued. Never throws: a failure is logged. */
-  async resendForCurrentSession(scope: MentionAgentScope): Promise<void> {
+   * it and sends the ones it issued; `includeIssued` (a started result) re-sends those already
+   * issued for it, which a Daemon restarted mid-launch has forgotten. Never throws: a failure is
+   * logged. */
+  async resendForCurrentSession(
+    scope: MentionAgentScope,
+    options: { includeIssued?: boolean } = {},
+  ): Promise<void> {
     try {
-      const { reissued, tracked } = await this.reissuePending(scope);
+      const { reissued, tracked } = await this.reissuePending(scope, options.includeIssued);
       if (reissued.length) await this.sendTracked(scope, { deliveryIds: reissued }, tracked);
     } catch (error) {
       console.warn(
@@ -350,12 +349,17 @@ export class MentionDeliveryReports {
    * envelopes cleared instead, so the wake it is sent is not taken for an ACK that lost its
    * envelope; an Agent nothing may wake is left to its Stop.
    */
-  private async reissuePending(scope: MentionAgentScope): Promise<ReissuedMentions> {
+  private async reissuePending(
+    scope: MentionAgentScope,
+    includeIssued = false,
+  ): Promise<ReissuedMentions> {
     const read = await this.repository.readPending(scope.workspaceId, scope.agentId);
     if (!read || read.agent.computerId !== scope.computerId || !wakeable(read.agent))
       return NOTHING_REISSUED;
     const identity = currentIdentity(read.agent);
-    const stale = read.mentions.filter((mention) => !issuedFor(mention, identity));
+    const stale = includeIssued
+      ? read.mentions
+      : read.mentions.filter((mention) => !issuedFor(mention, identity));
     const issued = new Set(await this.repository.reissuePending(scope, stale, identity));
     const tracked: TrackedPushes = new Map();
     const taken = new Set<string>();
