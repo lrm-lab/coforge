@@ -50,6 +50,8 @@ export async function harness(
     noticeGate?: Promise<void>;
     /** Holds every launch after the first open until it settles. */
     launchGate?: Promise<void>;
+    /** The launches (1 is the first) whose session creation fails. */
+    failLaunches?: readonly number[];
     /** Holds every delivery ACK open after it was sent, until it settles. */
     ackGate?: Promise<void>;
   } = {},
@@ -79,6 +81,8 @@ export async function harness(
       provider: "pi",
       async createAgentSession(sessionOptions: AgentSessionOptions) {
         launches++;
+        if (options.failLaunches?.includes(launches))
+          throw new Error("the provider would not start");
         if (launches > 1 && options.launchGate) {
           launchStarted.resolve();
           await options.launchGate;

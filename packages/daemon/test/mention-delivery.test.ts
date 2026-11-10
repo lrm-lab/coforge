@@ -106,25 +106,6 @@ test("a running Agent that never reported its session refuses the mention as unk
   }
 });
 
-test("a mention for an Agent whose process exited is refused as unknown and wakes nothing", async () => {
-  const { runtime, frames, notices, envelope, deliver, exit, launches } = await harness();
-  try {
-    const mention = envelope(1);
-    exit();
-    await deliver(1, mention);
-
-    // An untracked delivery here would relaunch the Agent from its restart config; a tracked one
-    // names a launch that is gone, so the server decides what happens next.
-    expect(launches()).toBe(1);
-    expect(notices).toEqual([]);
-    expect(frames).toEqual([
-      { kind: "terminal", deliveryId: "delivery-1", code: "IDENTITY_UNKNOWN" },
-    ]);
-  } finally {
-    await runtime.stop();
-  }
-});
-
 test("stop settles a mention pending in a busy turn as rejected, never as drained", async () => {
   const h = await harness();
   try {

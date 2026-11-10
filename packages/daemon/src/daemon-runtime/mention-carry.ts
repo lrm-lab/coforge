@@ -37,24 +37,25 @@ export class MentionCarry {
    * newer envelope and is reported coalesced, or ACKed again once drained; `fromQueue` says the
    * mention was waiting in an ended runtime's input, which only moves it, so nothing is reported.
    */
-  hold(message: TrackedMentionDelivery, fromQueue = false): void {
+  hold(message: TrackedMentionDelivery, fromQueue = false): boolean {
     if (this.ports.consumed(message)) {
       void this.settle.drain(message);
-      return;
+      return false;
     }
     const existing = this.entries.get(message.deliveryId);
     if (existing) {
       if (
         existing.message.agentId !== message.agentId ||
         existing.message.messageId !== message.messageId
-      )
+      ) {
         void this.settle.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.INSTRUMENT_FAILED);
-      else if (!fromQueue) {
+        return false;
+      } else if (!fromQueue) {
         existing.message = message;
         if (existing.state === "drained") void this.reports.acknowledge(message);
         else this.reports.transition(message, "daemon_pending", "coalesced");
       }
-      return;
+      return existing.state !== "drained";
     }
     const remembered = this.ports.remembered?.(message.agentId);
     if (!remembered || !namesLaunch(remembered, message.mentionDelivery)) {
@@ -64,11 +65,12 @@ export class MentionCarry {
           ? MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_DRIFT
           : MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN,
       );
-      return;
+      return false;
     }
     this.entries.set(message, "received");
     this.entries.get(message.deliveryId)!.carried = "waiting";
     this.reports.transition(message, "daemon_received", "accepted");
+    return true;
   }
 
   /**
@@ -109,6 +111,18 @@ export class MentionCarry {
     for (const { message, state, inflight, carried } of this.entries.all())
       if (message.agentId === agentId && state === "received" && !inflight && !carried)
         void this.settle.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+  }
+
+  /** Whether any mention is kept for the Agent's next launch. */
+  hasCarried(agentId: string): boolean {
+    return this.entries.all().some((entry) => entry.message.agentId === agentId && entry.carried);
+  }
+
+  /** No launch is coming after all: the mentions kept for it are refused with `code`. */
+  refuseCarried(agentId: string, code: MentionDeliveryTerminalCode): void {
+    for (const entry of this.entries.all())
+      if (entry.message.agentId === agentId && entry.carried)
+        void this.settle.refuse(entry.message, code);
   }
 
   /** The mentions kept for the Agent's next launch that its input has not taken yet. */

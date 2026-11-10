@@ -16,6 +16,7 @@ import { recoveryHasContent } from "./runtime-launch-intent";
 import { withOwed } from "./provider-replay-recovery";
 import { agentStartupInput } from "#src/agent-runtime/agent-startup";
 import { AgentPreflightError } from "./agent-preflight-error";
+import { MENTION_DELIVERY_TERMINAL_CODES } from "@lrm/coforge-sdk/internal";
 
 export type AgentStartCoordinatorPorts = {
   assertRunning(): void;
@@ -53,6 +54,8 @@ export function startAgent(
         "AGENT_MIGRATING",
       );
   } catch (error) {
+    // No launch is coming for what was kept to be told by it.
+    ports.exitedDelivery.refuseKept(agentId, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
     return Promise.reject(error);
   }
   ports.requestAppConfigSnapshot(agentId);
@@ -216,7 +219,15 @@ export function startAgent(
         return runtime;
       },
       (error: unknown) => {
-        ports.exitedDelivery.keepInputDeliveriesForNextLaunch(agentId, error);
+        // A server Start that failed leaves the server to start the Agent again (unknown); a wake
+        // or restart that failed rejects the mentions it was woken for.
+        ports.exitedDelivery.keepInputDeliveriesForNextLaunch(
+          agentId,
+          error,
+          startRequest.fromStart
+            ? MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN
+            : MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
+        );
         ports.inputDrain.close(agentId, error);
         throw error;
       },

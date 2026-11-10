@@ -1,7 +1,13 @@
 import { getLogger } from "@logtape/logtape";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import type { AgentRestartConfig } from "#src/agent-runtime/agent-process-manager";
-import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
+import {
+  diagnosticErrorName,
+  MENTION_DELIVERY_TERMINAL_CODES,
+  type MentionDeliveryTerminalCode,
+} from "@lrm/coforge-sdk/internal";
+import type { TrackedMentionDelivery } from "./mention-delivery-tracker";
+import { scheduleUnrefTimer } from "./unref-timer";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -43,6 +49,12 @@ export type AgentExitedDeliveryPorts = Readonly<{
   dropMentionAsUnknown(message: AgentMessageDelivery): boolean;
   /** Keeps a tracked @mention for the launch that is coming; true when the delivery was one. */
   holdMention(message: AgentMessageDelivery): boolean;
+  /** Keeps a tracked @mention that arrived for an Agent with no process; true when it is kept. */
+  keepMention(message: AgentMessageDelivery): boolean;
+  /** Whether tracked @mentions are kept for the Agent's next launch. */
+  hasKeptMentions(agentId: string): boolean;
+  /** No launch is coming: the mentions kept for it are refused with `code`. */
+  refuseKeptMentions(agentId: string, code: MentionDeliveryTerminalCode): void;
   sendAgentStatus(agentId: string, status: "inactive"): void;
   sendAgentDeliveryRejection(message: AgentMessageDelivery, reason: "no_process"): Promise<void>;
   /** The Agent's session is registered (a pending-Start buffer releases only into one). */
@@ -62,9 +74,61 @@ export type AgentExitedDeliveryPorts = Readonly<{
 export class AgentExitedDelivery {
   readonly #ports: AgentExitedDeliveryPorts;
   readonly #startBuffers = new Map<string, AgentMessageDelivery[]>();
+  /** The wake each Agent waits on until its launch-failure cooldown ends: cancels it. */
+  readonly #cooldownWakes = new Map<string, () => void>();
 
   constructor(ports: AgentExitedDeliveryPorts) {
     this.#ports = ports;
+  }
+
+  /**
+   * A tracked @mention for an Agent with no process and no launch in flight. It is kept against the
+   * launch and session the Agent last reported and wakes the Agent, as an ordinary delivery does,
+   * the launch it starts telling the mention once. A wake that fails refuses it. With no identity to
+   * keep it for (stopped by a person, taken offline, never launched here, held by a backoff) it is
+   * refused as unknown, as before.
+   */
+  deliverMention(message: TrackedMentionDelivery): void {
+    const { agentId } = message;
+    const restart = this.#ports.restartConfig(agentId);
+    if (!restart || this.#ports.offline.has(agentId) || this.#ports.hasRuntimeErrorHold(agentId)) {
+      this.#ports.dropMentionAsUnknown(message);
+      return;
+    }
+    if (!this.#ports.keepMention(message)) return;
+    if (this.#ports.wakeBlockedUntil(agentId) !== undefined) this.#wakeAfterCooldown(agentId);
+    else this.#wakeForKept(agentId, restart);
+  }
+
+  #wakeForKept(agentId: string, restart: AgentRestartConfig): void {
+    // A launch that fails refuses the mentions kept for it (`startAgent`); the cooldown it starts
+    // is waited out for whatever still waits.
+    this.#ports.wakeAgent(agentId, restart).catch(() => this.#wakeAfterCooldown(agentId));
+  }
+
+  /** No launch is coming for the tracked @mentions kept for the Agent: each is refused with `code`. */
+  refuseKept(agentId: string, code: MentionDeliveryTerminalCode): void {
+    this.#ports.refuseKeptMentions(agentId, code);
+  }
+
+  /** Whatever waits for the Agent's next launch is not left waiting for a delivery to come: one
+   * wake is armed for the instant its launch-failure cooldown ends, when anything still waits. */
+  #wakeAfterCooldown(agentId: string): void {
+    const until = this.#ports.wakeBlockedUntil(agentId);
+    if (until === undefined || this.#cooldownWakes.has(agentId)) return;
+    this.#cooldownWakes.set(
+      agentId,
+      scheduleUnrefTimer(
+        async () => {
+          this.#cooldownWakes.delete(agentId);
+          const restart = this.#ports.restartConfig(agentId);
+          if (!restart || this.#ports.hasSession(agentId)) return;
+          if (this.#ports.hasQueued(agentId) || this.#ports.hasKeptMentions(agentId))
+            this.#wakeForKept(agentId, restart);
+        },
+        Math.max(1, until - Date.now()),
+      ),
+    );
   }
 
   /** A delivery for an Agent with no hold, session, or launch in flight. */
@@ -94,6 +158,7 @@ export class AgentExitedDelivery {
     const blockedUntil = this.#ports.wakeBlockedUntil(message.agentId);
     if (blockedUntil !== undefined) {
       this.keepForNextLaunch(message.agentId, message);
+      this.#wakeAfterCooldown(message.agentId);
       logger.info("Agent wake deferred by a launch-failure cooldown", {
         event: "agent.wake.cooldown_deferred",
         agent_id: message.agentId,
@@ -190,9 +255,15 @@ export class AgentExitedDelivery {
 
   /** A failed launch hands the deliveries still waiting in its input queue to
    * `AgentDeliveryGate`, acknowledging each as the daemon keeps it, so the next launch
-   * presents them. */
-  keepInputDeliveriesForNextLaunch(agentId: string, error: unknown): void {
+   * presents them. No launch is coming for a tracked @mention it kept: it is refused with
+   * `refusal`. */
+  keepInputDeliveriesForNextLaunch(
+    agentId: string,
+    error: unknown,
+    refusal: MentionDeliveryTerminalCode = MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN,
+  ): void {
     this.keepDeliveries(agentId, this.#ports.drainInputDeliveries(agentId), error);
+    this.#ports.refuseKeptMentions(agentId, refusal);
   }
 
   /** The same custody for deliveries the caller already took. Any other than a tracked mention is

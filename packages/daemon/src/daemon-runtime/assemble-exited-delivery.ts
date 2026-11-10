@@ -65,6 +65,11 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
     closeAgentInputQueue: (agentId, error) => ports.inputDrain().close(agentId, error),
     dropMentionAsUnknown: (message) =>
       ports.mentionDeliveries().drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
+    keepMention: (message) =>
+      isTrackedMention(message) && ports.mentionDeliveries().carry.hold(message),
+    hasKeptMentions: (agentId) => ports.mentionDeliveries().carry.hasCarried(agentId),
+    refuseKeptMentions: (agentId, code) =>
+      ports.mentionDeliveries().carry.refuseCarried(agentId, code),
     holdMention: (message) => {
       if (!isTrackedMention(message)) return false;
       ports.mentionDeliveries().carry.hold(message, true);

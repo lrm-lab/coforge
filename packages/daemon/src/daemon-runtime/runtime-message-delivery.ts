@@ -123,8 +123,12 @@ export function handleTrackedMention(
       ports.mentionDeliveries.carry.hold(message);
       return Promise.resolve();
     }
-    if (ports.stops.stopping(agentId) || !ports.agentProcessManager.session(agentId)) {
+    if (ports.stops.stopping(agentId)) {
       ports.mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
+      return Promise.resolve();
+    }
+    if (!ports.agentProcessManager.session(agentId)) {
+      ports.exitedDelivery.deliverMention(message);
       return Promise.resolve();
     }
   }

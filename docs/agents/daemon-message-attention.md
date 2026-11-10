@@ -83,11 +83,16 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   its envelope echoed, only once drained: already consumed (whatever launch the
   envelope names), or told to the launch and native session the daemon last
   reported, at a moment the Agent is idle or in a turn that has ended. It is
-  never becomes `no_process`, and is held (unacknowledged) only for a launch that is coming, never
-  to wake an Agent; otherwise
+  never becomes `no_process`. An Agent with no process but a restart config and a remembered launch
+  accepts it against that launch, keeps it unacknowledged and wakes the Agent as an untracked delivery
+  would (`AgentExitedDelivery.deliverMention`); a launch that fails refuses it `DELIVERY_REJECTED` (a
+  failed server Start, or a runtime error that takes the Agent offline, `IDENTITY_UNKNOWN`); while a
+  launch-failure cooldown runs, one timer wakes the Agent when it ends if anything still waits.
+  Otherwise
   the daemon reports a terminal error: `IDENTITY_DRIFT` (another Computer,
   launch or session), `INSTRUMENT_FAILED` (another message), `IDENTITY_UNKNOWN`
-  (no running session and no launch coming, including a pending server Start),
+  (no running session and nothing to relaunch from: stopped by a person, taken offline, held by a
+  backoff, or never launched here, including a pending server Start),
   `QUOTA_LIMITED` (rate-limit backoff), `UNSUPPORTED_DELIVERY_PATH` (a provider
   that takes notices only between turns, while busy), or `DELIVERY_REJECTED`
   (another backoff, a refused notice, a process gone before it accepted the
