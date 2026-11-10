@@ -1,9 +1,11 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { ForwardedMessageView } from "#src/features/conversations/message-forward";
 import type { MentionRef } from "#src/features/conversations/mention-text";
+import type { ForwardedSender } from "#src/features/conversations/message-forward";
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { canReadChannel } from "./channel-read-access.server";
 import type { ForwardSource } from "./message-forward-source.server";
+import { browserSenderAvatarUrl } from "./sender-display.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 
 /** The snapshot columns a browser message of a forward is built from, its originals in order. */
@@ -81,6 +83,123 @@ function browserForwardedOne(row: BrowserForwardRow): ForwardedMessageView {
  * name the forward stored, never its current one.
  */
 export async function attachForwardedAccess<T extends { forwarded?: ForwardedMessageView[] }>(
+  db: Pick<PrismaClient, "conversation" | "message" | "user" | "agent">,
+  workspaceId: string,
+  viewerUserId: string,
+  messages: readonly T[],
+): Promise<T[]> {
+  // Who may open each original decides how its sender is found, so access is settled first.
+  const settled = await settleForwardedAccess(db, workspaceId, viewerUserId, messages);
+  const senders = await forwardedSenders(db, workspaceId, settled);
+  if (!senders.size) return settled;
+  const withSender = (original: ForwardedMessageView): ForwardedMessageView => {
+    const sender =
+      (original.sourceAccessible &&
+        original.sourceMessageId &&
+        senders.get(`message:${original.sourceMessageId}`)) ||
+      senders.get(`handle:${original.sourceSenderHandle}`);
+    return sender ? { ...original, sourceSender: sender } : original;
+  };
+  return settled.map((message) =>
+    message.forwarded ? { ...message, forwarded: message.forwarded.map(withSender) } : message,
+  );
+}
+
+/**
+ * Who sent each forwarded original on the page, in one lookup each way: by the original when this
+ * viewer may open it (exact, whatever the sender has renamed to since), else by the handle the
+ * snapshot kept, among the Workspace's members and its Agents: an original the viewer cannot read
+ * tells them nothing the snapshot does not. A handle a member and an Agent share names neither, so
+ * the card draws an initial rather than the wrong face. Known limit: a deleted original's handle
+ * taken since by someone else shows that person's face. Keyed `message:<id>` and
+ * `handle:<handle>`.
+ */
+async function forwardedSenders(
+  db: Pick<PrismaClient, "message" | "user" | "agent">,
+  workspaceId: string,
+  messages: readonly { forwarded?: ForwardedMessageView[] }[],
+): Promise<Map<string, ForwardedSender>> {
+  const sourceMessageIds = new Set<string>();
+  const handles = new Set<string>();
+  for (const message of messages)
+    for (const original of message.forwarded ?? []) {
+      if (original.sourceAccessible && original.sourceMessageId)
+        sourceMessageIds.add(original.sourceMessageId);
+      handles.add(original.sourceSenderHandle);
+    }
+  const found = new Map<string, ForwardedSender>();
+  if (!handles.size) return found;
+  const senderOf = (sender: Parameters<typeof browserSenderAvatarUrl>[0]) =>
+    sender?.userId
+      ? {
+          kind: "user" as const,
+          id: sender.userId,
+          avatarUrl: browserSenderAvatarUrl(sender, workspaceId),
+        }
+      : sender?.agentId
+        ? {
+            kind: "agent" as const,
+            id: sender.agentId,
+            avatarUrl: browserSenderAvatarUrl(sender, workspaceId),
+          }
+        : undefined;
+  const [originals, people, agents] = await Promise.all([
+    sourceMessageIds.size
+      ? db.message.findMany({
+          where: { id: { in: [...sourceMessageIds] }, workspaceId },
+          select: {
+            id: true,
+            sender: {
+              select: {
+                userId: true,
+                agentId: true,
+                user: { select: { avatarObjectKey: true } },
+                agent: { select: { avatarMascot: true } },
+              },
+            },
+          },
+        })
+      : [],
+    db.user.findMany({
+      where: { username: { in: [...handles] }, memberships: { some: { workspaceId } } },
+      select: { id: true, username: true, avatarObjectKey: true },
+    }),
+    db.agent.findMany({
+      where: { name: { in: [...handles] }, workspaceId },
+      select: { id: true, name: true, avatarMascot: true },
+    }),
+  ]);
+  for (const original of originals) {
+    const sender = senderOf(original.sender);
+    if (sender) found.set(`message:${original.id}`, sender);
+  }
+  const agentHandles = new Set(agents.map((agent) => agent.name));
+  const personHandles = new Set(people.map((person) => person.username));
+  for (const person of people)
+    if (!agentHandles.has(person.username))
+      found.set(`handle:${person.username}`, {
+        kind: "user",
+        id: person.id,
+        avatarUrl: browserSenderAvatarUrl(
+          { userId: person.id, user: { avatarObjectKey: person.avatarObjectKey } },
+          workspaceId,
+        ),
+      });
+  for (const agent of agents)
+    if (!personHandles.has(agent.name))
+      found.set(`handle:${agent.name}`, {
+        kind: "agent",
+        id: agent.id,
+        avatarUrl: browserSenderAvatarUrl(
+          { agentId: agent.id, agent: { avatarMascot: agent.avatarMascot } },
+          workspaceId,
+        ),
+      });
+  return found;
+}
+
+/** `attachForwardedAccess`'s half that decides, per viewer, whether each original opens. */
+async function settleForwardedAccess<T extends { forwarded?: ForwardedMessageView[] }>(
   db: Pick<PrismaClient, "conversation">,
   workspaceId: string,
   viewerUserId: string,

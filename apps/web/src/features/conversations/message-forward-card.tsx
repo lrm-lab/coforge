@@ -1,6 +1,7 @@
 import { Link, useHydrated } from "@tanstack/react-router";
 import { FlipForward } from "@untitledui/icons";
 
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { formatMonthDayTime } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
@@ -105,7 +106,7 @@ export function ForwardedMessageCard({
   );
 }
 
-/** One original in the card: its author by handle and its moment, its words, its attachments. */
+/** One original in the card: its author's face, handle and moment, its words, its attachments. */
 function ForwardedOriginal({
   original,
   attachments,
@@ -122,37 +123,52 @@ function ForwardedOriginal({
     original.sourceRawBody === undefined
       ? undefined
       : attachmentMessageDisplayBody({ body: original.sourceRawBody, attachments });
+  const sender = original.sourceSender;
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      {/* As Raft draws it: the author by handle and the month, day and time, no picture; the
-          snapshot keeps no avatar, and the moment does not age the way the row's own time does. */}
-      <p className="flex min-w-0 items-center gap-1.5 text-xs">
-        <span className="min-w-0 truncate font-semibold text-secondary">
-          @{original.sourceSenderHandle}
-        </span>
-        <span aria-hidden="true" className="text-quaternary">
-          ·
-        </span>
-        <time
-          dateTime={original.sourceCreatedAt}
-          suppressHydrationWarning
-          className="shrink-0 text-tertiary tabular-nums"
-        >
-          {hydrated
-            ? formatMonthDayTime(original.sourceCreatedAt, null, getLocale(), timeFormat)
-            : ""}
-        </time>
-      </p>
-      {original.sourceRawBody !== undefined && original.sourceMentions
-        ? // The original's own words with their chips. A task it names is the source
-          // conversation's, so no conversation is in scope to read it from: it stays `task #N`.
-          rawBody && (
-            <ConversationIdProvider conversationId={undefined}>
-              <MessageBody body={rawBody} mentions={original.sourceMentions} />
-            </ConversationIdProvider>
-          )
-        : body && <p className="message-markdown whitespace-pre-wrap text-primary">{body}</p>}
-      <MessageAttachments attachments={attachments} />
+    <div className="flex min-w-0 gap-2.5">
+      {/* The author's face, as each row in the stream has one (Frank, 11-10): the server finds
+          who sent the original (`forwardedSenders`); a handle it cannot place gets an initial.
+          No presence dot: the card is a record of then, not who is around now. */}
+      <ActorAvatar
+        size="xs"
+        presence={false}
+        className="mt-px shrink-0"
+        name={original.sourceSenderHandle}
+        src={sender?.avatarUrl ?? null}
+        {...(sender?.kind === "agent" ? { agentId: sender.id } : {})}
+        {...(sender?.kind === "user" ? { userId: sender.id } : {})}
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        {/* As Raft draws it: the author by handle and the month, day and time; the moment does not
+          age the way the row's own time does. */}
+        <p className="flex min-w-0 items-center gap-1.5 text-xs">
+          <span className="min-w-0 truncate font-semibold text-secondary">
+            @{original.sourceSenderHandle}
+          </span>
+          <span aria-hidden="true" className="text-quaternary">
+            ·
+          </span>
+          <time
+            dateTime={original.sourceCreatedAt}
+            suppressHydrationWarning
+            className="shrink-0 text-tertiary tabular-nums"
+          >
+            {hydrated
+              ? formatMonthDayTime(original.sourceCreatedAt, null, getLocale(), timeFormat)
+              : ""}
+          </time>
+        </p>
+        {original.sourceRawBody !== undefined && original.sourceMentions
+          ? // The original's own words with their chips. A task it names is the source
+            // conversation's, so no conversation is in scope to read it from: it stays `task #N`.
+            rawBody && (
+              <ConversationIdProvider conversationId={undefined}>
+                <MessageBody body={rawBody} mentions={original.sourceMentions} />
+              </ConversationIdProvider>
+            )
+          : body && <p className="message-markdown whitespace-pre-wrap text-primary">{body}</p>}
+        <MessageAttachments attachments={attachments} />
+      </div>
     </div>
   );
 }
