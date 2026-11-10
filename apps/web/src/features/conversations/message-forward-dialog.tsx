@@ -15,6 +15,7 @@ const forwardCopy = (count: number): ShareDialogCopy => ({
   send: m.message_forward_send(),
   sendTo: (targets) => m.message_forward_send_to({ count: targets }),
   joinAndSend: m.message_forward_join_and_send(),
+  joinNotice: (channels) => m.message_forward_join_notice({ channels }),
   sentTo: (target) => m.message_forward_sent_to({ target }),
   sentToMany: (count) => m.message_forward_sent_to_many({ count }),
   partial: (delivered, total) => m.message_forward_partial({ delivered, total }),

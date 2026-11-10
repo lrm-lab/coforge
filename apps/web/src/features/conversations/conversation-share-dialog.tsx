@@ -14,6 +14,7 @@ import {
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import { joinPublicChannel } from "./channels.functions";
 import { openDirectConversation } from "./conversations.functions";
 import type { ForwardFailureCode, ForwardMessageResult, ForwardTarget } from "./message-forward";
@@ -43,6 +44,8 @@ export type ShareDialogCopy = {
   /** The button once targets are picked: "Forward to 2". */
   sendTo: (count: number) => string;
   joinAndSend: string;
+  /** Said over the note while sending will join channels first (the button is only an icon). */
+  joinNotice: (channels: string) => string;
   sentTo: (target: string) => string;
   sentToMany: (count: number) => string;
   partial: (delivered: number, total: number) => string;
@@ -309,6 +312,15 @@ export function ConversationShareDialog({
               sending={sending}
               onSend={() => void send()}
               notice={noticeView}
+              joinNotice={
+                unjoined.length > 0
+                  ? copy.joinNotice(
+                      new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(
+                        unjoined.map(forwardTargetLabel),
+                      ),
+                    )
+                  : undefined
+              }
             />
           </Dialog>
         </Modal>

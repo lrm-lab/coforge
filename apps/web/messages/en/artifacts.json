@@ -88,5 +88,6 @@
   "doc_send_gone": "This artifact is no longer available.",
   "doc_card_forbidden": "You don't have access to this artifact",
   "doc_card_deleted": "This artifact was deleted",
-  "doc_send_send_to": "Send to {count}"
+  "doc_send_send_to": "Send to {count}",
+  "doc_send_join_notice": "Sending joins {channels} first."
 }

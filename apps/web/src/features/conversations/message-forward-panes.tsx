@@ -202,6 +202,7 @@ export function ForwardComposer({
   sending,
   onSend,
   notice,
+  joinNotice,
 }: {
   summary: ReactNode;
   preview: ReactNode;
@@ -215,6 +216,8 @@ export function ForwardComposer({
   onSend: () => void;
   /** What the last press of send left to say: a failure, with its retry. */
   notice: ReactNode;
+  /** That sending joins channels first, in words: the send is an icon a phone cannot hover. */
+  joinNotice?: string;
 }) {
   // No `@` or `#` lists: a note is read where it lands, so it names no one here.
   const completion = useReferenceCompletion({
@@ -229,6 +232,7 @@ export function ForwardComposer({
     <div className="flex shrink-0 flex-col gap-3 border-t border-secondary px-4 pt-4 pb-[max(1rem,var(--spacing-safe-bottom))] sm:px-6 sm:pb-6">
       <WhatArrives summary={summary} preview={preview} />
       {notice}
+      {joinNotice && <p className="-mb-1 px-1 text-sm text-tertiary">{joinNotice}</p>}
       {/* A form, as under the messages: the send button submits it. */}
       <form
         className={cn(COMPOSER_BOX_CLASS, COMPOSER_FOCUS_CLASS)}

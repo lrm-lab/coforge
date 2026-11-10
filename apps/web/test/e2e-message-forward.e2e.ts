@@ -250,6 +250,8 @@ test("a channel the viewer has not joined says so on the button, then joins and 
   await pick(channelC, `#${channelC}`);
   await waitFor(bodyIncludes("Not joined"));
   await waitFor(`${sendButton("Join and forward")} !== undefined`);
+  // The send is an icon; the join is said in words over the note.
+  await waitFor(bodyIncludes(`Forwarding joins #${channelC} first.`));
   await shot("1440-join-warning");
   // Picking it alone changed nothing.
   expect(

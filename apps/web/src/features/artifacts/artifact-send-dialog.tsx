@@ -20,6 +20,7 @@ const sendCopy = (title: string): ShareDialogCopy => ({
   send: m.doc_send_send(),
   sendTo: (count) => m.doc_send_send_to({ count }),
   joinAndSend: m.doc_send_join_and_send(),
+  joinNotice: (channels) => m.doc_send_join_notice({ channels }),
   sentTo: (target) => m.doc_send_sent_to({ target }),
   sentToMany: (count) => m.doc_send_sent_to_many({ count }),
   partial: (delivered, total) => m.doc_send_partial({ delivered, total }),

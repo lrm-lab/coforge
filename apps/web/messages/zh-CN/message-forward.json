@@ -56,5 +56,6 @@
   "message_forward_title_one": "转发消息",
   "message_forward_title_several": "转发 {count} 条消息",
   "message_forward_summary_more": "+{count} 条",
-  "message_forward_limit": "一次最多选 {max} 个。"
+  "message_forward_limit": "一次最多选 {max} 个。",
+  "message_forward_join_notice": "转发时会先加入 {channels}。"
 }
