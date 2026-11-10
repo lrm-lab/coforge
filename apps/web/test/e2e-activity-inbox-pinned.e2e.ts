@@ -181,12 +181,14 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     );
     // Dragged to its narrowest, the list keeps each row's title (its marks shorten to "@" and
     // the count) and never scrolls sideways (task #399).
-    await evaluate(`(document.querySelector('[role="separator"][aria-valuemin]').focus(), true)`);
+    await evaluate(
+      `(document.querySelector('[data-activity-list] > [role="separator"]').focus(), true)`,
+    );
     await browser("press", "Home");
     await browser(
       "wait",
       "--fn",
-      `(() => { const s = document.querySelector('[role="separator"][aria-valuemin]'); return s.getAttribute("aria-valuenow") === s.getAttribute("aria-valuemin"); })()`,
+      `(() => { const s = document.querySelector('[data-activity-list] > [role="separator"]'); return s.getAttribute("aria-valuenow") === s.getAttribute("aria-valuemin"); })()`,
     );
     const narrowList = await evaluate<{
       overflow: number;
@@ -198,7 +200,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
         .filter((item) => /E2E pinned|e2e-activity-pinned/.test(item.textContent))
         .map((item) => Math.round(item.querySelector("a .truncate")?.getBoundingClientRect().width ?? 0));
       const tabs = document.querySelector('[role="tablist"][aria-label="Filter activity"]');
-      const edge = document.querySelector('[role="separator"][aria-valuemin]').getBoundingClientRect().left;
+      const edge = document.querySelector('[data-activity-list] > [role="separator"]').getBoundingClientRect().left;
       const tabsPastEdge = Math.round(Math.max(...[...tabs.querySelectorAll('[role="tab"]')].map((tab) => tab.getBoundingClientRect().right)) - edge);
       return { overflow: list.scrollWidth - list.clientWidth, titles, tabsPastEdge };
     })()`);
