@@ -32,7 +32,8 @@ export function MessageNavigationGroup({
       role="group"
       aria-label={m.conversation_message_navigation()}
       className={cn(
-        "pointer-events-auto mb-3 ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full border border-secondary bg-primary p-0.5 shadow-xs transition-opacity",
+        // The same height, border, fill, shadow and bottom as the Agents' pill beside it (task #57).
+        "pointer-events-auto mb-2 ml-auto inline-flex h-8 shrink-0 items-center gap-0.5 rounded-full border border-secondary bg-primary p-px shadow-xs transition-opacity",
         followingLatest &&
           !index.open &&
           "pointer-events-none opacity-0 group-hover/history:pointer-events-auto group-hover/history:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",

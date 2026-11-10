@@ -41,7 +41,7 @@ const GROUP_SEPARATOR = "|";
 const idsOf = (joined: string) => (joined ? joined.split(ID_SEPARATOR) : []);
 
 const PILL_CLASS =
-  "h-7 max-w-full rounded-full border border-secondary bg-primary pr-3 pl-1.5 text-xs text-tertiary shadow-xs";
+  "h-8 max-w-full rounded-full border border-secondary bg-primary pr-3 pl-1.5 text-xs text-tertiary shadow-xs";
 
 /**
  * The line at the foot of a conversation pane: which Agents are about to post in this place (the
@@ -250,7 +250,7 @@ function ComposerAgentsPill({
         onAnimationEnd={(event) => {
           if (leaving && event.target === event.currentTarget) onLeft();
         }}
-        className="replying-line mb-1.5 inline-flex max-w-full"
+        className="replying-line mb-2 inline-flex max-w-full"
       >
         {listsAgents ? (
           <AriaDialogTrigger>
