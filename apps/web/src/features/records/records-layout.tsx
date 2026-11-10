@@ -220,14 +220,11 @@ export function RecordsLayout({
 
   return (
     <FormatEditHintContext value={setFormatEditing}>
-      <main
-        data-panel-cards
-        className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
-      >
+      <main className="flex h-full min-w-0 flex-col bg-primary lg:flex-row">
         <nav
           aria-label={m.records_list_label()}
           className={cn(
-            "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary lg:flex lg:w-72 lg:flex-none lg:rounded-xl",
+            "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary lg:flex lg:w-72 lg:flex-none lg:border-r lg:border-secondary",
             listHidden ? "hidden" : "flex w-full",
           )}
         >
@@ -460,7 +457,7 @@ export function RecordsLayout({
 
         <section
           className={cn(
-            "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary lg:flex lg:rounded-xl",
+            "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary lg:flex",
             listHidden ? "flex" : "hidden",
           )}
         >

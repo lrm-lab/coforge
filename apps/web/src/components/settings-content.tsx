@@ -116,11 +116,11 @@ export function SettingsContent(props: SettingsContentProps) {
   }
 
   return (
-    <main data-panel-cards className="flex h-full min-w-0 bg-primary lg:gap-2 lg:bg-transparent">
+    <main className="flex h-full min-w-0 bg-primary">
       <nav
         aria-label={m.settings_title()}
         className={cn(
-          "min-w-0 flex-col overflow-hidden border-secondary bg-primary md:flex md:w-60 md:shrink-0 md:border-r lg:rounded-xl lg:border-r-0",
+          "min-w-0 flex-col overflow-hidden border-secondary bg-primary md:flex md:w-60 md:shrink-0 md:border-r",
           showList ? "flex w-full" : "hidden",
         )}
       >
@@ -143,7 +143,7 @@ export function SettingsContent(props: SettingsContentProps) {
       </nav>
       <section
         className={cn(
-          "@container/settings min-w-0 flex-1 flex-col overflow-hidden bg-primary md:flex lg:rounded-xl",
+          "@container/settings min-w-0 flex-1 flex-col overflow-hidden bg-primary md:flex",
           showList ? "hidden" : "flex",
         )}
       >

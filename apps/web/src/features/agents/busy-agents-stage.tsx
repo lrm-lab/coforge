@@ -6,7 +6,7 @@ import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 
 import type { BusyAgent } from "./busy-agents";
 import { waitingCount, type CastMember } from "./busy-agents-cast";
-import { BusyAgentsCount } from "./busy-agents-list";
+import { BusyAgentsMore } from "./busy-agents-list";
 import { mountMascot, newStageLive, useStageLoop, type StageLive } from "./busy-agents-stage-loop";
 import { AgentHoverCard } from "./agent-hover-card";
 import { AgentMascotView } from "./agent-mascot-view";
@@ -62,10 +62,10 @@ const sameIds = (a: ReadonlySet<string>, b: ReadonlySet<string>) =>
   a.size === b.size && [...a].every((id) => b.has(id));
 
 /**
- * The chat list header's stage: up to five of the busy Agents' mascots slide out from behind the
- * count, work and wander a while, and slide back in to make room for others. Each is the Agent's
- * avatar anywhere else: hovering peeks at its card, pressing opens its profile. The count opens
- * all of them. The cast is decided by `busy-agents-cast.ts`, the motion by
+ * The busy Agents' stage (the desktop top bar, the phone's Chat header): up to five mascots slide
+ * out from its end, work and wander a while, and slide back in to make room for others. Each is
+ * the Agent's avatar anywhere else: hovering peeks at its card, pressing opens its profile. While
+ * some wait off stage, a button at the end opens all of them. The cast is decided by `busy-agents-cast.ts`, the motion by
  * `busy-agents-motion.ts`, both run by `useStageLoop`, so React renders only when someone comes
  * on or goes off.
  */
@@ -120,9 +120,7 @@ export const BusyAgentsStage = memo(
             );
           })}
         </div>
-        {waiting > 0 && (
-          <BusyAgentsCount agents={busy} waiting={waiting} onOpenAgent={onOpenAgent} />
-        )}
+        {waiting > 0 && <BusyAgentsMore agents={busy} onOpenAgent={onOpenAgent} />}
       </div>
     );
   },
