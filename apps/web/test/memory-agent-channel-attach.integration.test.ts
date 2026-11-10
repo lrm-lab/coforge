@@ -5,6 +5,10 @@ import { createOwnedWorkspace } from "#src/server/db/repositories/workspace-slug
 import { createChannelWithMembers } from "#src/server/conversations/channel-lifecycle.server";
 import { provisionWorkspaceEnrollment } from "#src/server/workspaces/enrollment.server";
 import { memoryAgentGate } from "#src/server/workspace-memory/memory-agent-gate.server";
+import {
+  enableMemoryAgentForWorkspace,
+  rollbackMemoryAgentEnable,
+} from "#src/server/workspace-memory/default-memory-agent.server";
 
 /**
  * Task #6: the Workspace's own `memoryAgent` experiment decides whether a new public channel gets
@@ -226,6 +230,66 @@ test.skipIf(!connectionString)(
         where: { conversationId: general.id, agent: { name: "memory" } },
       }),
     ).toBeNull();
+    expect(
+      await db.workspaceMemoryAgent.findUnique({ where: { workspaceId: workspace.id } }),
+    ).toBeNull();
+    expect(
+      await db.workspaceMemoryProfile.findUnique({ where: { workspaceId: workspace.id } }),
+    ).toBeNull();
+  },
+);
+
+test.skipIf(!connectionString)(
+  "a failed switch takes the Agent it created with it, and leaves no residue",
+  async () => {
+    // Switching the experiment on creates the Agent before the choice is stored, so a failure
+    // storing the choice rolls that creation back (task #6). The rollback must delete the Agent the
+    // way the product deletes one — the `deletedAt` transition that also soft-leaves its channels —
+    // rather than dropping the row, which no read, key or membership path expects.
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const owner = await db.user.create({
+      data: { displayName: "rollback-owner", username: `memory-rollback-${suffix}` },
+    });
+    const workspace = await createOwnedWorkspace(
+      db,
+      { slug: `memory-rollback-${suffix}`, name: "Rollback", userId: owner.id },
+      { id: true },
+    );
+    createdWorkspaces.push(workspace.id);
+    createdUsers.push(owner.id);
+    await provisionWorkspaceEnrollment(db, workspace.id, owner.id);
+
+    const created = await enableMemoryAgentForWorkspace(db, workspace.id, owner.id);
+    expect(created).toBeString();
+    const agentId = created!;
+    const general = await db.conversation.findUniqueOrThrow({
+      where: { workspaceId_channelName: { workspaceId: workspace.id, channelName: "general" } },
+      select: { id: true },
+    });
+    expect(
+      await db.conversationMember.count({
+        where: { conversationId: general.id, agentId, leftAt: null },
+      }),
+    ).toBe(1);
+
+    await rollbackMemoryAgentEnable(db, {
+      workspaceId: workspace.id,
+      agentId,
+      deletedByUserId: owner.id,
+    });
+
+    // The Agent is deleted the way a person deleting one leaves it: marked, attributable, still
+    // readable for what it wrote.
+    expect(
+      await db.agent.findUniqueOrThrow({
+        where: { id: agentId },
+        select: { deletedAt: true, deletedByUserId: true },
+      }),
+    ).toEqual({ deletedAt: expect.any(Date), deletedByUserId: owner.id });
+    // And nothing still calls it a member of anything or the Workspace's Memory Agent.
+    expect(
+      await db.conversationMember.count({ where: { agentId, leftAt: null } }),
+    ).toBe(0);
     expect(
       await db.workspaceMemoryAgent.findUnique({ where: { workspaceId: workspace.id } }),
     ).toBeNull();
