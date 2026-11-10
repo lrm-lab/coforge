@@ -18,8 +18,8 @@ export type ActivityUnreadState = {
 
 export type ActivityUnreadContext = {
   viewerUserId: string;
-  /** The conversation or thread open in front of the viewer right now, as an item key. */
-  viewingKey?: string;
+  /** Whether the item is read on screen right now: its messages are read as they arrive. */
+  isViewing?: (key: string) => boolean;
 };
 
 export type ActivityUnreadMessage = Pick<
@@ -41,7 +41,7 @@ export type ActivityUnreadMessage = Pick<
 export function applyActivityMessage(
   state: ActivityUnreadState,
   message: ActivityUnreadMessage,
-  { viewerUserId, viewingKey }: ActivityUnreadContext,
+  { viewerUserId, isViewing }: ActivityUnreadContext,
 ): { state: ActivityUnreadState; reread: boolean; lights: boolean } {
   const ignored = { state, reread: false, lights: false };
   if (message.senderUserId === viewerUserId || message.sender.kind === "system") return ignored;
@@ -51,7 +51,7 @@ export function applyActivityMessage(
   const key = message.threadRootId
     ? `thread:${message.threadRootId}`
     : `conversation:${message.conversationId}`;
-  if (key === viewingKey) return ignored;
+  if (isViewing?.(key)) return ignored;
   const { unreadCount, unreadKeys = [] } = state;
   // An older server counts nothing: the dot alone. A key held, or a count at its cap (whose key
   // set may be incomplete), is counted already.

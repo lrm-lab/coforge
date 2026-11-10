@@ -29,6 +29,7 @@ import {
   type ActivityUnreadMessage,
   type ActivityUnreadState,
 } from "./activity-unread-count";
+import { isViewingItem } from "./viewing-items";
 
 /** Every cached page of every view shares this prefix, so one invalidation refreshes them all. */
 export const ACTIVITY_INBOX_QUERY_PREFIX = ["activity-inbox"] as const;
@@ -173,9 +174,8 @@ function readEarlier(answer: StreamRead, than: StreamRead) {
  * when the two places cannot be compared, the dot reads again. Any other `activity.changed.v1` (a
  * mention from outside the channel, a Task assignment) says nothing of which way it went, so it
  * re-reads.
- *
- * `viewingKey` (the conversation or thread open in front of the viewer, whose messages count for
- * nothing) is not given yet: nothing here knows which one is open.
+ * A message in the conversation or thread being read on screen (`isViewingItem`) counts for
+ * nothing: that page reads it as it arrives.
  */
 export function activityNavAttentionRealtime(
   queryClient: QueryClient,
@@ -222,7 +222,10 @@ export function activityNavAttentionRealtime(
         state,
         reread: needsRead,
         lights,
-      } = applyActivityMessage(current ?? { hasUnread: false }, message, { viewerUserId: userId });
+      } = applyActivityMessage(current ?? { hasUnread: false }, message, {
+        viewerUserId: userId,
+        isViewing: isViewingItem,
+      });
       if (needsRead) rereadThrottled();
       if (!lights) return;
       litBy = { position };
