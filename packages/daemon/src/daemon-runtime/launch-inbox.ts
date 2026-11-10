@@ -1,5 +1,6 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import type { CarriedStart } from "./provider-replay-recovery";
+import type { AgentInputQueue } from "./runtime-launch-intent";
 
 /**
  * Everything the daemon keeps for one Agent's next input, in one place: the deliveries held for
@@ -13,6 +14,8 @@ export class LaunchInbox {
   heldSince: number | undefined;
   /** What a cold start of a rejected Session did not finish telling the Agent. */
   owed: CarriedStart | undefined;
+  /** The input the launch drains in order: deliveries, prompts, the startup input, recovery. */
+  input: AgentInputQueue | undefined;
 
   /** Holds a delivery. A resend of one already held is the same delivery: it takes the earlier
    * entry's place, so the wait the oldest has put in is not restarted. */
@@ -33,9 +36,9 @@ export class LaunchInbox {
     return gone;
   }
 
-  /** Whether nothing is held and nothing is owed. */
+  /** Whether nothing is held, owed or queued as input. */
   get empty(): boolean {
-    return this.held.length === 0 && this.owed === undefined;
+    return this.held.length === 0 && this.owed === undefined && this.input === undefined;
   }
 }
 
@@ -60,6 +63,11 @@ export class LaunchInboxes {
   /** Drops the Agent's inbox once it is empty; call after anything that emptied it. */
   tidy(agentId: string): void {
     if (this.#inboxes.get(agentId)?.empty) this.#inboxes.delete(agentId);
+  }
+
+  /** Every Agent's input queue. */
+  inputs(): [string, AgentInputQueue][] {
+    return [...this.#inboxes].flatMap(([agentId, { input }]) => (input ? [[agentId, input]] : []));
   }
 
   /** Forgets what a cold start owed the Agent. */

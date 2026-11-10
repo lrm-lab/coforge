@@ -36,38 +36,41 @@ export type InputDrainCollaborators = {
 
 /** The input drain over the runtime's collaborators (`AgentInputDrain`). */
 export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDrain {
-  return new AgentInputDrain({
-    runnerHeld: ports.runnerHeld,
-    sessionFor: (agentId) => ports.processManager().session(agentId),
-    launchFor: (agentId) => ports.launches().get(agentId),
-    hasQueuedDeliveries: (agentId) => ports.deliveryQueue().hasQueued(agentId),
-    isLaunching: (agentId) => ports.agentLaunches().has(agentId),
-    isStopping: (agentId) => ports.stopState().stopping(agentId),
-    deliverMessage: (agentId, message) =>
-      deliverContextViewMessage(ports.contextView(), agentId, message, () =>
-        isTrackedMention(message)
-          ? ports.mentionDeliveries().deliver(message)
-          : ports.messageAttention().receive(message),
-      ),
-    runStartup: async (
-      agentId: string,
-      session: AgentSession,
-      launch: ActivityLaunch,
-      text: string,
-    ) => {
-      ports.launchCustody().noteStartupTurn(agentId);
-      await launch.startup?.run(session.sendMessage(text));
+  return new AgentInputDrain(
+    {
+      runnerHeld: ports.runnerHeld,
+      sessionFor: (agentId) => ports.processManager().session(agentId),
+      launchFor: (agentId) => ports.launches().get(agentId),
+      hasQueuedDeliveries: (agentId) => ports.deliveryQueue().hasQueued(agentId),
+      isLaunching: (agentId) => ports.agentLaunches().has(agentId),
+      isStopping: (agentId) => ports.stopState().stopping(agentId),
+      deliverMessage: (agentId, message) =>
+        deliverContextViewMessage(ports.contextView(), agentId, message, () =>
+          isTrackedMention(message)
+            ? ports.mentionDeliveries().deliver(message)
+            : ports.messageAttention().receive(message),
+        ),
+      runStartup: async (
+        agentId: string,
+        session: AgentSession,
+        launch: ActivityLaunch,
+        text: string,
+      ) => {
+        ports.launchCustody().noteStartupTurn(agentId);
+        await launch.startup?.run(session.sendMessage(text));
+      },
+      runPrompt: (agentId, text, introduction) =>
+        ports.launchCustody().runPromptTurn(agentId, text, introduction),
+      recoverAttention: (agentId, context) => ports.launchCustody().recover(agentId, context),
+      abandonLaunch: ports.abandonLaunch,
+      publishStartupError: (agentId, launch, message) =>
+        ports
+          .activityPublisher()
+          .publish(agentId, launch, ports.drafts().runtimeError(agentId, message)),
+      forgetIntroduced: (agentId) => ports.introducedAgents().delete(agentId),
+      dropMention: (message) =>
+        ports.mentionDeliveries().drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
     },
-    runPrompt: (agentId, text, introduction) =>
-      ports.launchCustody().runPromptTurn(agentId, text, introduction),
-    recoverAttention: (agentId, context) => ports.launchCustody().recover(agentId, context),
-    abandonLaunch: ports.abandonLaunch,
-    publishStartupError: (agentId, launch, message) =>
-      ports
-        .activityPublisher()
-        .publish(agentId, launch, ports.drafts().runtimeError(agentId, message)),
-    forgetIntroduced: (agentId) => ports.introducedAgents().delete(agentId),
-    dropMention: (message) =>
-      ports.mentionDeliveries().drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
-  });
+    ports.deliveryQueue().inboxes,
+  );
 }

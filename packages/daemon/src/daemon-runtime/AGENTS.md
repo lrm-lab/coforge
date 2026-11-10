@@ -37,6 +37,9 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `runtime-event-observation-ports.ts` declares the collaborators `runtime-event-observation.ts` reads (`RuntimeEventObservationPorts`) and the `Publish` signature it publishes through.
 - `runtime-release-plans.ts` builds the `RuntimeReleasePlan` that `runtime-release.ts` carries out: what a stalled-runtime, feature-change or cold-idle release announces, logs and wakes.
 - `runtime-lifecycle.ts` declares the restart, upgrade and refusal hooks the Computer lends one `DaemonRuntime` (`DaemonRuntimeLifecycle`); `runtime-connection-config.ts` declares the Workspace connection identity (`DaemonConfig`) it is constructed with.
+- `launch-inbox.ts` is the per-Agent store of the daemon's undelivered input: the deliveries `AgentDeliveryQueue` holds, the debt a cold start owes (`OwedRecovery`) and the input queue `AgentInputDrain` drains. It outlives launches and exists only while it holds something.
+- `assemble-input-drain.ts` builds the `AgentInputDrain` over the runtime's collaborators, each a thunk.
+- `agent-message-attention-recovery.ts` plans a recovery notice (validation, what is already read or notified, the wording); the index writes it.
 - `agent-input-drain.ts` owns each Agent's serialized input queue: enqueue is admission, one drain loop is the only consumer, and a closed queue settles its live drain. A new launch retires the queue (`startAgent`): the ended runtime's waiting deliveries go to `AgentDeliveryQueue` custody (tracked mentions handed back as unknown), its prompts carry over (an introduction always, a resume prompt only if the launch has none), and a retired loop's failures never touch the launch that replaced it. `agent-launch-custody.ts` owns what the daemon owes a launch at its boundary: delivery custody acknowledgment, the recovery pass that reconciles held state, and turn-open bookkeeping.
 - `agent-inbox-coordinator.ts` owns per-Agent Message/App Inbox state, app-item notices, and fallback notice release; `runtime.ts` supplies lifecycle and process ports.
 - `runtime-reconnect.ts` owns reconnect recovery subscriptions; `runtime.ts` supplies inventory, reminder, replay, and upgrade-report callbacks.
@@ -78,7 +81,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   (the Agent's unread and deliveries parked while the runtime ends, less the tracked @mentions
   `RuntimeRelease.endAndReplace` hands back, which the server issues again). `AgentLaunchCoordinator`
   ends the runtime through `endAndReplace` and cold-starts through the same path as the early crash.
-  What it carries is owed (`OwedRecovery`, held by `AgentLaunchCoordinator`) until a launch for the Agent
+  What it carries is owed (`OwedRecovery`, kept in the Agent's `LaunchInbox`) until a launch for the Agent
   has told it: `startAgent` merges it into the next launch that spawns a process and pays it after
   that launch's input is delivered. Only a Stop `AgentControl` accepted (`stopAccepted`; an unmanaged
   one in `handleAgentStop`), the Agent's delete and a whole-runtime stop drop it, never the stop

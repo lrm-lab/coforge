@@ -4,6 +4,7 @@ import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import type { ActivityLaunch } from "./activity-launch";
+import { LaunchInboxes } from "./launch-inbox";
 import {
   queueHasInputContent,
   type AgentInput,
@@ -46,26 +47,29 @@ export type AgentInputDrainPorts = Readonly<{
  * acked", and the server republishes after restart.
  */
 export class AgentInputDrain {
-  readonly #queues = new Map<string, AgentInputQueue>();
   /** Drains of retired queues, still finishing the item they were on. */
   readonly #retired = new Set<Promise<void>>();
 
-  constructor(private readonly ports: AgentInputDrainPorts) {}
+  /** The queues live in the Agents' inboxes. */
+  constructor(
+    private readonly ports: AgentInputDrainPorts,
+    private readonly inboxes = new LaunchInboxes(),
+  ) {}
 
   get(agentId: string): AgentInputQueue | undefined {
-    return this.#queues.get(agentId);
+    return this.inboxes.peek(agentId)?.input;
   }
 
   /** Every queue, for stop-all and reconnect drain-all sweeps. Callers copy the keys they need —
    * a drain finishing mid-iteration may delete its own entry. */
-  entries(): IterableIterator<[string, AgentInputQueue]> {
-    return this.#queues.entries();
+  entries(): [string, AgentInputQueue][] {
+    return this.inboxes.inputs();
   }
 
   /** The live drain promises, for a settle-all wait. */
   drains(): Promise<void>[] {
     return [
-      ...[...this.#queues.values()].flatMap((queue) => (queue.drain ? [queue.drain] : [])),
+      ...this.inboxes.inputs().flatMap(([, queue]) => (queue.drain ? [queue.drain] : [])),
       ...this.#retired,
     ];
   }
@@ -83,9 +87,9 @@ export class AgentInputDrain {
    * recovery) belonged to the ended session, and the new launch brings its own: they are settled.
    */
   retire(agentId: string, keep: (messages: AgentMessageDelivery[]) => void): AgentInput[] {
-    const queue = this.#queues.get(agentId);
+    const queue = this.get(agentId);
     if (!queue) return [];
-    this.#queues.delete(agentId);
+    this.#delete(agentId);
     const ended = queue.drain !== undefined;
     const waiting: AgentMessageDelivery[] = [];
     const carried: AgentInput[] = [];
@@ -117,35 +121,35 @@ export class AgentInputDrain {
       (item) => item.kind !== "prompt" || item.introduction || !ownResumePrompt,
     );
     for (const item of items) if (!carried.includes(item)) item.completion.resolve();
-    if (carried.length) this.#queues.set(agentId, { items: [...carried], closed: false });
+    if (carried.length) this.inboxes.of(agentId).input = { items: [...carried], closed: false };
   }
 
   enqueue(
     agentId: string,
     create: (completion: AgentInputCompletion) => AgentInput,
   ): Promise<void> {
-    const queue = this.#queues.get(agentId) ?? { items: [], closed: false };
+    const queue = this.get(agentId) ?? { items: [], closed: false };
     if (queue.closed) return Promise.reject(new Error(`Agent runtime is stopping: ${agentId}`));
     const completion = new Promise<void>((resolve, reject) => {
       queue.items.push(create({ resolve, reject }));
     });
-    this.#queues.set(agentId, queue);
+    this.inboxes.of(agentId).input = queue;
     return completion;
   }
 
   /** Delivery-kind messages still waiting in this Agent's queue (no removal). */
   queuedDeliveries(agentId: string): AgentMessageDelivery[] {
     return (
-      this.#queues
-        .get(agentId)
-        ?.items.flatMap((item) => (item.kind === "delivery" ? [item.message] : [])) ?? []
+      this.get(agentId)?.items.flatMap((item) =>
+        item.kind === "delivery" ? [item.message] : [],
+      ) ?? []
     );
   }
 
   /** Removes and returns the delivery-kind items still waiting, resolving each kept item's
    * completion — they are kept for the next launch, not failed. */
   drainDeliveries(agentId: string): AgentMessageDelivery[] {
-    const queue = this.#queues.get(agentId);
+    const queue = this.get(agentId);
     const kept: AgentMessageDelivery[] = [];
     if (!queue) return kept;
     queue.items = queue.items.filter((item) => {
@@ -162,17 +166,17 @@ export class AgentInputDrain {
     agentId: string,
     create: (completion: AgentInputCompletion) => AgentInput,
   ): Promise<void> {
-    const queue = this.#queues.get(agentId) ?? { items: [], closed: false };
+    const queue = this.get(agentId) ?? { items: [], closed: false };
     if (queue.closed) return Promise.reject(new Error(`Agent runtime is stopping: ${agentId}`));
     const completion = new Promise<void>((resolve, reject) => {
       queue.items.unshift(create({ resolve, reject }));
     });
-    this.#queues.set(agentId, queue);
+    this.inboxes.of(agentId).input = queue;
     return completion;
   }
 
   ensure(agentId: string): void {
-    const queue = this.#queues.get(agentId);
+    const queue = this.get(agentId);
     if (
       !queue ||
       queue.closed ||
@@ -184,7 +188,7 @@ export class AgentInputDrain {
     queue.drain = this.#drain(agentId, queue).finally(() => {
       queue.drain = undefined;
       if (queue.closed || !queue.items.length) {
-        if (this.#queues.get(agentId) === queue) this.#queues.delete(agentId);
+        if (this.get(agentId) === queue) this.#delete(agentId);
         return;
       }
       this.ensure(agentId);
@@ -292,13 +296,19 @@ export class AgentInputDrain {
 
   close(agentId: string, error: unknown): void {
     this.ports.forgetIntroduced(agentId);
-    const queue = this.#queues.get(agentId);
+    const queue = this.get(agentId);
     if (!queue) return;
     queue.closed = true;
     for (const item of queue.items.splice(0)) {
       if (item.kind === "delivery") this.ports.dropMention(item.message);
       item.completion.reject(error);
     }
-    if (!queue.drain) this.#queues.delete(agentId);
+    if (!queue.drain) this.#delete(agentId);
+  }
+
+  #delete(agentId: string): void {
+    const inbox = this.inboxes.peek(agentId);
+    if (inbox) inbox.input = undefined;
+    this.inboxes.tidy(agentId);
   }
 }
