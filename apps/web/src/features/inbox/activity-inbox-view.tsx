@@ -15,17 +15,9 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import {
-  Check,
-  CheckDone01,
-  DotsHorizontal,
-  MessageQuestionCircle,
-  Pin01,
-} from "@untitledui/icons";
+import { MessageQuestionCircle, Pin01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { PageHeader } from "#src/components/layout/page-header";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
@@ -60,6 +52,7 @@ import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
 import { useActivityDays } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
+import { ActivityInboxMoreActions } from "./activity-inbox-more-actions";
 import { ActivityInboxLoadMore, ActivityInboxSectionHeading } from "./activity-inbox-list-parts";
 import { useActivityListKeyboard, waitingRowKey } from "./use-activity-list-keyboard";
 import { useActivityBulkActions } from "./use-activity-bulk-actions";
@@ -373,39 +366,18 @@ export function ActivityInboxView({
         actions={
           !query.isPlaceholderData &&
           firstPage &&
-          // Linear keeps "mark everything" out of the header (Frank, 11-09): one quiet "⋯",
-          // offered only while it has something to do. Both actions reach every row of the list,
-          // so Mentions, which shows only some of them, offers neither.
-          filter !== "mentions" &&
-          (firstPage.unreadItemCount > 0 || (filter === "all" && items.length > 0)) && (
-            <Dropdown.Root>
-              <ButtonUtility
-                size="sm"
-                color="tertiary"
-                icon={DotsHorizontal}
-                tooltip={m.activity_inbox_more_actions()}
-              />
-              <Dropdown.Popover placement="bottom end" className="w-48">
-                <Dropdown.Menu aria-label={m.activity_inbox_more_actions()}>
-                  {firstPage.unreadItemCount > 0 && (
-                    <Dropdown.Item
-                      id="read-all"
-                      icon={CheckDone01}
-                      label={m.activity_inbox_mark_all_read()}
-                      onAction={readAll}
-                    />
-                  )}
-                  {filter === "all" && loadedAt !== undefined && items.length > 0 && (
-                    <Dropdown.Item
-                      id="done-all"
-                      icon={Check}
-                      label={m.activity_bulk_mark_all_done()}
-                      onAction={() => doneAll(loadedAt, items)}
-                    />
-                  )}
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </Dropdown.Root>
+          // Both actions reach every row of the list, so Mentions, which shows only some of them,
+          // offers neither.
+          filter !== "mentions" && (
+            <ActivityInboxMoreActions
+              unreadCount={firstPage.unreadItemCount}
+              onReadAll={readAll}
+              onDoneAll={
+                filter === "all" && loadedAt !== undefined && items.length > 0
+                  ? () => doneAll(loadedAt, items)
+                  : undefined
+              }
+            />
           )
         }
       />
