@@ -89,7 +89,7 @@ test("an existing Task is put under the open one, and one under another parent i
       const [task] = await create([name("Build the page")], epic);
       const [docs] = await create([name("Write the docs")]);
       const [login] = await create([name("Fix login")], old);
-      const popup = `${dialogs}.find((el) => el.textContent.includes(${JSON.stringify(name("Build the page"))}) && el.querySelector('[aria-label^="More Actions"]'))`;
+      const popup = `${dialogs}.find((el) => el.textContent.includes(${JSON.stringify(name("Build the page"))}) && el.querySelector('[aria-label^="More actions"]'))`;
       const item = (text: string) =>
         `${items}.find((el) => el.textContent.includes(${JSON.stringify(text)}))`;
       const openPicker = async () => {

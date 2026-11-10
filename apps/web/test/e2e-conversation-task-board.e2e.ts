@@ -163,7 +163,7 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
     // Moving the unowned To do Task to In progress claims it for the viewer.
     await browser(
       "eval",
-      `${cardOf(openTitle)}.querySelector('button[aria-label^="More Actions"]').click()`,
+      `${cardOf(openTitle)}.querySelector('button[aria-label^="More actions"]').click()`,
     );
     await waitFor(`${byText('[role="menuitem"]', "In progress")} !== undefined`);
     await browser("eval", `${byText('[role="menuitem"]', "In progress")}.click()`);

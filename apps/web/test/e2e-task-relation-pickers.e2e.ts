@@ -89,7 +89,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
         `Build the page ${label} ${tail}`,
       ]);
       const title = `Build the page ${label} ${tail}`;
-      const popup = `${dialogs}.find((el) => el.textContent.includes(${JSON.stringify(title)}) && el.querySelector('[aria-label^="More Actions"]'))`;
+      const popup = `${dialogs}.find((el) => el.textContent.includes(${JSON.stringify(title)}) && el.querySelector('[aria-label^="More actions"]'))`;
       const page = `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${task}`;
       const menu = async (item: string) => {
         // The last picker has closed and faded out, so nothing lies over the popup.
