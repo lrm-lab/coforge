@@ -41,7 +41,7 @@ import {
 import { AgentRuntimeProviderSelect } from "./agent-runtime-provider-select";
 import { useCommandCodeEfforts } from "./use-command-code-efforts";
 import { useRuntimeCatalogRefresh } from "./use-runtime-catalog-refresh";
-import { RuntimeRefreshFailure } from "./runtime-refresh-failure";
+import { RuntimeRefreshOutcome } from "./runtime-refresh-outcome";
 
 export * from "./agent-runtime-fields-state";
 
@@ -401,7 +401,7 @@ export function AgentRuntimeFields({
               />
             </div>
           </div>
-          {catalogRefresh.failure && <RuntimeRefreshFailure failure={catalogRefresh.failure} />}
+          {catalogRefresh.note && <RuntimeRefreshOutcome note={catalogRefresh.note} />}
         </>
       )}
       {piConfigured && customModelActive && (
