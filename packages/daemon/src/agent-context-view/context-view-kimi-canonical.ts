@@ -13,8 +13,10 @@ export type KimiCanonicalState = {
   systemPrompt: string;
 };
 
-const INTERRUPTED_TOOL_RESULT =
+const TOOL_EXECUTION_INTERRUPTED =
   "Tool execution was interrupted before its result was recorded. Do not assume the tool completed successfully.";
+const TOOL_RESULT_UNAVAILABLE =
+  "Tool result is not available in the current context. Do not assume the tool completed successfully.";
 
 function resetReplayState(state: KimiCanonicalState): void {
   state.openSteps.clear();
@@ -38,7 +40,7 @@ function closePendingToolResults(state: KimiCanonicalState): void {
   for (const toolCallId of state.pendingToolResultIds)
     state.messages.push({
       role: "tool",
-      content: [{ type: "text", text: INTERRUPTED_TOOL_RESULT }],
+      content: [{ type: "text", text: TOOL_EXECUTION_INTERRUPTED }],
       toolCallId,
       isError: true,
     });
@@ -258,7 +260,7 @@ function pairToolBlocks(messages: RecordValue[]): RecordValue[] {
         if (previous) {
           previous.result = {
             role: "tool",
-            content: [{ type: "text", text: INTERRUPTED_TOOL_RESULT }],
+            content: [{ type: "text", text: TOOL_RESULT_UNAVAILABLE }],
             toolCallId: call.id,
             isError: true,
           };
@@ -277,7 +279,7 @@ function pairToolBlocks(messages: RecordValue[]): RecordValue[] {
       out.push(
         pending.result ?? {
           role: "tool",
-          content: [{ type: "text", text: INTERRUPTED_TOOL_RESULT }],
+          content: [{ type: "text", text: TOOL_RESULT_UNAVAILABLE }],
           toolCallId: pending.id,
           isError: true,
         },

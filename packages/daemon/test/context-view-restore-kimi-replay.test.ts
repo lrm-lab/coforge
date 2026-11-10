@@ -146,7 +146,7 @@ test("folds Kimi step events and synthesizes an interrupted tool result", () => 
               content: [
                 {
                   type: "text",
-                  text: "Tool execution was interrupted before its result was recorded. Do not assume the tool completed successfully.",
+                  text: "Tool result is not available in the current context. Do not assume the tool completed successfully.",
                 },
               ],
               toolCallId: "call-1",
@@ -292,7 +292,7 @@ test("synthesizes the prior interrupted result for duplicate Kimi tool calls", (
             content: [
               {
                 type: "text",
-                text: "Tool execution was interrupted before its result was recorded. Do not assume the tool completed successfully.",
+                text: "Tool result is not available in the current context. Do not assume the tool completed successfully.",
               },
             ],
             toolCallId: "call-1",
@@ -304,7 +304,7 @@ test("synthesizes the prior interrupted result for duplicate Kimi tool calls", (
             content: [
               {
                 type: "text",
-                text: "Tool execution was interrupted before its result was recorded. Do not assume the tool completed successfully.",
+                text: "Tool result is not available in the current context. Do not assume the tool completed successfully.",
               },
             ],
             toolCallId: "call-1",
