@@ -81,24 +81,9 @@ export function activityPageSql(
   userId: string,
   options: { filter: ActivityInboxFilter; cursor?: ActivityInboxCursor; limit: number },
 ) {
-  const branches = [
-    conversationItemRowsSql(workspaceId, userId),
-    threadItemRowsSql(workspaceId, userId),
-    taskItemRowsSql(workspaceId, userId),
-    mentionNoticeRowsSql(workspaceId, userId),
-    commentNoticeRowsSql(workspaceId, userId),
-  ].map((branch) => Prisma.sql`SELECT ${ITEM_COLUMNS} FROM (${branch}) branch`);
-  // The All view's first page lists the viewer's pins, which `items` already limits to the same
-  // activity-past-Done rule as every row (Raft's Activity: Done takes a row out until something
-  // new arrives), so a Done pin leaves Pinned with the rest and returns with new activity.
-  const pins =
-    options.filter === "all" && !options.cursor
-      ? Prisma.sql`UNION ALL
-      SELECT TRUE AS "isPin", items.* FROM items WHERE items."pinOrder" IS NOT NULL`
-      : Prisma.empty;
   return Prisma.sql`
     WITH items AS MATERIALIZED (
-      ${Prisma.join(branches, " UNION ALL ")}
+      ${activityItemsSql(workspaceId, userId)}
     ), page AS (
       SELECT * FROM items
       WHERE items."pastDone" AND ${viewSql(options.filter)} AND ${afterSql(options.cursor)}
@@ -107,7 +92,7 @@ export function activityPageSql(
       LIMIT ${options.limit + 1}
     ), listed AS (
       SELECT FALSE AS "isPin", page.* FROM page
-      ${pins}
+      ${pinsSql(options.filter, options.cursor)}
     ), counts AS (
       SELECT
         (COUNT(*) FILTER (WHERE items."pastDone" AND items."hasUnread"))::int
@@ -159,4 +144,49 @@ export function activityPageSql(
       CASE WHEN listed."isPin" THEN listed."pinOrder" END,
       CASE WHEN listed."isPin" THEN listed."pinnedAt" END,
       listed."latestAt" DESC, listed."latestSequence" DESC, listed."key" COLLATE "C" DESC`;
+}
+
+/** The item branches shared by the Activity page and the nav attention count. */
+export function activityItemsSql(workspaceId: string, userId: string) {
+  const branches = [
+    conversationItemRowsSql(workspaceId, userId),
+    threadItemRowsSql(workspaceId, userId),
+    taskItemRowsSql(workspaceId, userId),
+    mentionNoticeRowsSql(workspaceId, userId),
+    commentNoticeRowsSql(workspaceId, userId),
+  ].map((branch) => Prisma.sql`SELECT ${ITEM_COLUMNS} FROM (${branch}) branch`);
+  return Prisma.join(branches, " UNION ALL ");
+}
+
+/** The All view's first page lists the viewer's pins apart from the page rows. */
+function pinsSql(filter: ActivityInboxFilter, cursor: ActivityInboxCursor | undefined) {
+  // The All view's first page lists the viewer's pins, which `items` already limits to the same
+  // activity-past-Done rule as every row (Raft's Activity: Done takes a row out until something
+  // new arrives), so a Done pin leaves Pinned with the rest and returns with new activity.
+  return filter === "all" && !cursor
+    ? Prisma.sql`UNION ALL
+      SELECT TRUE AS "isPin", items.* FROM items WHERE items."pinOrder" IS NOT NULL`
+    : Prisma.empty;
+}
+
+/** The capped nav count and the keys of the unread Activity items it counts. */
+export function activityNavAttentionSql(workspaceId: string, userId: string) {
+  return Prisma.sql`
+    WITH items AS MATERIALIZED (
+      ${activityItemsSql(workspaceId, userId)}
+    ), listed AS (
+      SELECT items."key", items."hasUnread", items."latestAt", items."latestSequence"
+      FROM items
+      WHERE items."pastDone" AND items."hasUnread"
+      ORDER BY items."latestAt" DESC, items."latestSequence" DESC, items."key" COLLATE "C" DESC
+      LIMIT 100
+    )
+    SELECT
+      COUNT(*)::int AS "unreadCount",
+      COALESCE(
+        ARRAY_AGG(listed."key" ORDER BY listed."latestAt" DESC, listed."latestSequence" DESC,
+          listed."key" COLLATE "C" DESC),
+        ARRAY[]::text[]
+      ) AS "unreadKeys"
+    FROM listed`;
 }

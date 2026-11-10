@@ -80,14 +80,38 @@ describe("conversation realtime", () => {
     expect(decodeActivityChangedEvent(changed)).toEqual(changed);
     const cleared = {
       ...changed,
-      attention: { hasUnread: false, streamPosition: { epoch: "e", offset: 7 } },
+      attention: {
+        hasUnread: false,
+        unreadCount: 0,
+        unreadKeys: [],
+        streamPosition: { epoch: "e", offset: 7 },
+      },
     };
     expect(decodeActivityChangedEvent(cleared)).toEqual(cleared);
     // Without Centrifugo's answer a write still says where the inbox stands, from no position.
-    expect(decodeActivityChangedEvent({ ...changed, attention: { hasUnread: true } })).toEqual({
+    expect(
+      decodeActivityChangedEvent({
+        ...changed,
+        attention: {
+          hasUnread: true,
+          unreadCount: 3,
+          unreadKeys: ["conversation:conversation-a", "thread:root-a"],
+        },
+      }),
+    ).toEqual({
       ...changed,
-      attention: { hasUnread: true },
+      attention: {
+        hasUnread: true,
+        unreadCount: 3,
+        unreadKeys: ["conversation:conversation-a", "thread:root-a"],
+      },
     });
+    expect(() =>
+      decodeActivityChangedEvent({
+        ...changed,
+        attention: { hasUnread: true, unreadCount: 101, unreadKeys: [] },
+      }),
+    ).toThrow();
     expect(() =>
       decodeActivityChangedEvent({ ...changed, attention: { hasUnread: "no" } }),
     ).toThrow();

@@ -193,7 +193,7 @@ export function activityNavAttentionRealtime(
       }));
     },
     onActivity: reread,
-    onAttention: ({ hasUnread, streamPosition }) => {
+    onAttention: ({ hasUnread, unreadCount, unreadKeys, streamPosition }) => {
       if (!hasUnread && litBy) {
         // The message that lit the dot here, next to the server's read: past it, it may be
         // missing from the answer and keeps the dot lit; where they cannot be compared, only a
@@ -208,6 +208,8 @@ export function activityNavAttentionRealtime(
       if (!hasUnread) litBy = undefined;
       queryClient.setQueryData<ActivityNavAttention>(queryKey, (current) => ({
         hasUnread,
+        unreadCount,
+        unreadKeys,
         streamPositions: streamPosition
           ? { [channel]: streamPosition }
           : (current?.streamPositions ?? {}),

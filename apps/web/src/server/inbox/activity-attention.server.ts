@@ -7,8 +7,13 @@ import {
 } from "#src/server/conversations/conversation-realtime.server";
 import { humanReadStates } from "#src/server/conversations/human-unread.server";
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
-import { navHasUnreadSql } from "./activity-inbox-items-sql.server";
-import { taskHasUnreadSql } from "./activity-inbox-task-items.server";
+import { activityNavAttentionSql } from "./activity-inbox-page-sql.server";
+
+export type ActivityNavAttention = {
+  hasUnread: boolean;
+  unreadCount?: number;
+  unreadKeys?: string[];
+};
 
 /** Whether the person has any unread activity: all the nav rail's Activity dot shows
  * (`navHasUnreadSql` says what it reads). The caller has checked they belong to the Workspace. */
@@ -16,11 +21,15 @@ export async function navHasUnread(
   db: Pick<PrismaClient, "$queryRaw">,
   workspaceId: string,
   userId: string,
-) {
-  const [{ hasUnread }] = await db.$queryRaw<[{ hasUnread: boolean }]>(
-    navHasUnreadSql(workspaceId, userId, taskHasUnreadSql(workspaceId, userId)),
-  );
-  return hasUnread;
+): Promise<ActivityNavAttention> {
+  const [{ unreadCount, unreadKeys }] = await db.$queryRaw<
+    [{ unreadCount: number; unreadKeys: string[] }]
+  >(activityNavAttentionSql(workspaceId, userId));
+  return {
+    hasUnread: unreadCount > 0,
+    unreadCount,
+    unreadKeys,
+  } satisfies ActivityNavAttention;
 }
 
 /**
@@ -40,14 +49,14 @@ export async function announceActivityAttention(
     async (port) => {
       if (!port.activityChanged) return;
       const channel = userConversationChannel(userId);
-      const { streamPositions, data: hasUnread } = await readAfterStreamPositions([channel], () =>
+      const { streamPositions, data: attention } = await readAfterStreamPositions([channel], () =>
         navHasUnread(db, workspaceId, userId),
       );
       const streamPosition = streamPositions[channel];
       await port.activityChanged({
         workspaceId,
         userId,
-        attention: { hasUnread, ...(streamPosition && { streamPosition }) },
+        attention: { ...attention, ...(streamPosition && { streamPosition }) },
       });
     },
     { name: "activity_changed", workspace_id: workspaceId },

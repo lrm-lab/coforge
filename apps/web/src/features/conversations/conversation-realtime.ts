@@ -196,6 +196,8 @@ export type ActivityAttention = z.infer<typeof activityAttention>;
 
 const activityAttention = z.object({
   hasUnread: z.boolean(),
+  unreadCount: z.number().int().min(0).max(100).optional(),
+  unreadKeys: z.array(z.string()).max(100).optional(),
   streamPosition: streamPositionSchema.optional(),
 });
 

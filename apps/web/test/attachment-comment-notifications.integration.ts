@@ -390,7 +390,7 @@ test("a comment on a DM attachment notifies the peer's inbox and the item opens 
       commentId: comment.id,
     });
     // And it lights the nav dot for the recipient.
-    await expect(inbox.navAttention(f.workspace.id, f.owner.id)).resolves.toEqual({
+    await expect(inbox.navAttention(f.workspace.id, f.owner.id)).resolves.toMatchObject({
       hasUnread: true,
     });
   } finally {

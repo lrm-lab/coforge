@@ -220,7 +220,7 @@ test("direct messages between members, and a member's with themself, are listed 
       ["direct", withSelf.conversationId, peopleAt(alice, "alice"), 0],
       ["thread", withBob.conversationId, bobPeer, 1],
     ]);
-    expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ hasUnread: true });
+    expect(await inbox.navAttention(workspace.id, alice.id)).toMatchObject({ hasUnread: true });
 
     // Done takes the DM and its thread out, the same as a channel's.
     const latest = await db.message.findFirstOrThrow({
@@ -246,7 +246,7 @@ test("direct messages between members, and a member's with themself, are listed 
         (item) => item.place.conversationId,
       ),
     ).toEqual([withSelf.conversationId]);
-    expect(await inbox.navAttention(workspace.id, alice.id)).toEqual({ hasUnread: false });
+    expect(await inbox.navAttention(workspace.id, alice.id)).toMatchObject({ hasUnread: false });
 
     // A member with a blank display name reads as the placeholder, never by their username.
     const withCarol = await openPeopleDirectConversation(db, workspace.id, alice.id, carol.id);

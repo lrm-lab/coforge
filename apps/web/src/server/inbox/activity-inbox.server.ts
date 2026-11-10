@@ -189,7 +189,7 @@ export class ActivityInbox {
    * (`navHasUnread`). */
   async navAttention(workspaceId: string, userId: string) {
     await this.authorize(workspaceId, userId);
-    return { hasUnread: await navHasUnread(this.db, workspaceId, userId) };
+    return navHasUnread(this.db, workspaceId, userId);
   }
 
   /** Reads or unreads a mention the viewer was notified of; it stays listed until Done. */

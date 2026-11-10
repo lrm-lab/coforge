@@ -51,7 +51,7 @@ export const taskItemListedSql = (mentionFirstId: Prisma.Sql) => Prisma.sql`${ta
 export function taskItemRowsSql(workspaceId: string, userId: string) {
   return Prisma.sql`
     SELECT
-      'task:' || cm."conversationId" AS "key",
+      'conversation:' || cm."conversationId" AS "key",
       'channel' AS "kind",
       cm."id" AS "memberId",
       cm."conversationId" AS "conversationId",

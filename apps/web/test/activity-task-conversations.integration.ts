@@ -93,11 +93,14 @@ test("a follower's Activity lists the task conversation, unread; the author's ow
     place: { kind: "channel", conversationId: boardId },
     unreadCount: 1,
   });
+  expect(item!.key).toBe(`conversation:${item!.task!.conversationId}`);
   expect(changed).toContain(people.follower.id);
   expect(changed).not.toContain(people.writer.id);
   const own = (await listed("writer"))[0];
   expect(own?.unreadCount ?? 0).toBe(0);
-  expect(await inbox.navAttention(workspaceId, people.follower.id)).toEqual({ hasUnread: true });
+  expect(await inbox.navAttention(workspaceId, people.follower.id)).toMatchObject({
+    hasUnread: true,
+  });
 });
 
 test("someone who does not follow it hears of it only when mentioned", async () => {
@@ -150,5 +153,7 @@ test("unfollowing removes it unless mentioned, and leaving the private board rem
   });
   expect(await listed("bystander")).toEqual([]);
   await expect(upload()).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-  expect(await inbox.navAttention(workspaceId, people.bystander.id)).toEqual({ hasUnread: false });
+  expect(await inbox.navAttention(workspaceId, people.bystander.id)).toMatchObject({
+    hasUnread: false,
+  });
 });

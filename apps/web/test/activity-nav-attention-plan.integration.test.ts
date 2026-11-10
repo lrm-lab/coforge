@@ -46,7 +46,7 @@ async function navFixture(name: string) {
   const reads: { query: string; params: unknown[] }[] = [];
   let recording = false;
   db.$on("query", (event) => {
-    if (recording && event.query.trimStart().startsWith("SELECT (EXISTS"))
+    if (recording && event.query.trimStart().startsWith("WITH items AS MATERIALIZED"))
       reads.push({ query: event.query, params: JSON.parse(event.params) });
   });
   const handle = crypto.randomUUID().slice(0, 8);
@@ -152,11 +152,20 @@ test.skipIf(!connectionString)(
         data: { readThroughSequence: 2211 },
       });
 
+      const root = await db.message.findFirst({
+        where: { conversationId: channel.id, threadRootId: null },
+        orderBy: { sequence: "desc" },
+        select: { id: true },
+      });
       const { attention, touched } = await run.readDot();
-      expect(attention).toEqual({ hasUnread: true });
-      // About one newest-reply probe per thread and the first unread reply: well below the 2,010
-      // replies the viewer follows.
-      expect(touched).toBeLessThan(800);
+      expect(attention).toEqual({
+        hasUnread: true,
+        unreadCount: 1,
+        unreadKeys: [`thread:${root!.id}`],
+      });
+      // The capped item query walks each followed thread's bounded fixture and the first unread
+      // reply, without touching the unrelated 20,000-message channel.
+      expect(touched).toBeLessThan(2_500);
     } finally {
       await run.cleanup();
     }
@@ -178,7 +187,11 @@ test.skipIf(!connectionString)(
         FROM generate_series(1, 3000) AS i`;
 
       const { attention, touched } = await run.readDot();
-      expect(attention).toEqual({ hasUnread: true });
+      expect(attention).toEqual({
+        hasUnread: true,
+        unreadCount: 1,
+        unreadKeys: [`conversation:${channel.id}`],
+      });
       // The newest-message probe and the first unread one, not all 3,000.
       expect(touched).toBeLessThan(50);
     } finally {
