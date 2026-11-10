@@ -33,6 +33,7 @@ import {
   type ArtifactPaneControls,
 } from "./artifact-page-header";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
+import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactShareDialog, shareIcon } from "./artifact-share-dialog";
 import { ArtifactPaneConfirms, type ArtifactConfirming } from "./artifact-pane-confirms";
 import { isWebPage, PaneFrame } from "./artifact-parts";
@@ -75,6 +76,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   const editor = useArtifactEditor(artifactId);
   const [confirming, setConfirming] = useState<ArtifactConfirming>(null);
   const [sharing, setSharing] = useState(false);
+  const [sendingTo, setSendingTo] = useState(false);
   /** Set once the artifact is gone, so leaving its page asks nothing. */
   const deleted = useRef(false);
   const leavePrompt = useArtifactLeaveGuard({
@@ -256,7 +258,20 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         link={link}
         onCopyLink={() => void copy(pageHref(), m.doc_link_copied())}
         onCopyPublicLink={(url) => void copy(url, m.doc_public_link_copied())}
+        onSend={() => {
+          setSharing(false);
+          access.dismiss();
+          link.dismiss();
+          setSendingTo(true);
+        }}
       />
+      {sendingTo && (
+        <ArtifactSendDialog
+          artifactId={artifactId}
+          title={title}
+          onClose={() => setSendingTo(false)}
+        />
+      )}
       <ArtifactPaneConfirms
         confirming={confirming}
         onDone={() => setConfirming(null)}

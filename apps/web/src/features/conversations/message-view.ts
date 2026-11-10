@@ -5,6 +5,7 @@ import type { ForwardedMessageView } from "./message-forward";
 import { GROUPING_WINDOW_MS } from "./conversation-pane-layout";
 import { dayLabel } from "./message-dividers";
 import type { ReactionSummary } from "./message-reactions";
+import type { ArtifactCardState } from "#src/features/artifacts/artifact-card";
 
 /** A message as a conversation's rows show it. */
 export type MessageView = {
@@ -48,6 +49,8 @@ export type MessageView = {
    * (one, or a selection of several). The message's own `body` is then the forwarder's note and
    * its `attachments` the card's. */
   forwarded?: ForwardedMessageView[];
+  /** How the read saw each artifact the body links to, for this reader (its card's state). */
+  artifactCards?: ArtifactCardState[];
   weeklyReportSuggestion?: WeeklyReportMessageSuggestion;
   weeklyReportDisplayBody?: string;
   /** Platform wake stored for the Agent. The conversation pane omits the row. */

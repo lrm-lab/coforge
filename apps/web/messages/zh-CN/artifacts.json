@@ -75,5 +75,17 @@
   "doc_share_lock_out": "改成只有这个会话里的人能看后，你自己也打不开了。",
   "doc_share_lock_out_confirm": "仍然更改",
   "doc_share_keep": "不改了",
-  "doc_share_locked_out": "现在只有它所在会话里的人能看“{title}”了。"
+  "doc_share_locked_out": "现在只有它所在会话里的人能看“{title}”了。",
+  "doc_send_action": "发送到…",
+  "doc_send_title": "发送“{title}”",
+  "doc_send_send": "发送",
+  "doc_send_join_and_send": "加入并发送",
+  "doc_send_sent_to": "已发送到 {target}。",
+  "doc_send_sent_to_many": "已发送到 {count} 个目标",
+  "doc_send_partial": "已发送到 {total} 个目标中的 {delivered} 个。请重试剩余的目标。",
+  "doc_send_none": "没能发送到所选目标。请检查后重试。",
+  "doc_send_uncertain": "无法确认是否已发送，可以放心重试。",
+  "doc_send_gone": "这份文档已不可用。",
+  "doc_card_forbidden": "你没有权限查看这份内容",
+  "doc_card_deleted": "这份文档已删除"
 }

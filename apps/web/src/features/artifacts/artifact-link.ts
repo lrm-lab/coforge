@@ -33,18 +33,27 @@ const TRAILING = /[.,;:!?]+$/;
  * A message body as it reads once its documents' cards show (task #385, #514): a line that is only
  * a document's link says nothing its card below does not, so it reads as nothing (a body of such
  * lines alone, as nothing at all); elsewhere a bare document link reads as the document's title,
- * still a link. `titles` holds the documents whose cards show; any other link, one the writer
- * already named (`[text](link)`, `<link>`), and one in code stay as written.
+ * still a link. `titles` holds the documents whose cards show; `placeholders` those whose card
+ * says only that the reader may not open it or that it was deleted: a line of one alone reads as
+ * nothing too, but it has no title to read as elsewhere. Any other link, one the writer already
+ * named (`[text](link)`, `<link>`), and one in code stay as written.
  */
-export function bodyWithArtifactTitles(body: string, titles: ReadonlyMap<string, string>): string {
-  if (titles.size === 0) return body;
+export function bodyWithArtifactTitles(
+  body: string,
+  titles: ReadonlyMap<string, string>,
+  placeholders: ReadonlySet<string> = new Set(),
+): string {
+  if (titles.size === 0 && placeholders.size === 0) return body;
+  const idOf = (link: string) => [...link.matchAll(DOC_PARAM)][0]?.[1]?.toLowerCase();
   const titleOf = (link: string) => {
-    const id = [...link.matchAll(DOC_PARAM)][0]?.[1]?.toLowerCase();
+    const id = idOf(link);
     return id === undefined ? undefined : titles.get(id);
   };
   const isCardLine = (line: string) => {
     const sole = line.trim();
-    return sole.match(APP_LINK)?.[0] === sole && titleOf(sole) !== undefined;
+    if (sole.match(APP_LINK)?.[0] !== sole) return false;
+    const id = idOf(sole);
+    return id !== undefined && (titles.has(id) || placeholders.has(id));
   };
   const titled = (text: string) =>
     text.replace(LINK_IN_TEXT, (whole, named: string | undefined, found: string, close) => {

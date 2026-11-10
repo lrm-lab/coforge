@@ -227,7 +227,7 @@ export const MessageRow = memo(function MessageRow({
   // Select mode (`message-selection.tsx`): only the conversation's own stream, which shows Tasks.
   const selection = useRowSelection({ message, conversationId, channelNames, inStream: showsTask });
   const writtenBody = attachmentMessageDisplayBody(message);
-  const displayBody = useBodyWithArtifactTitles(writtenBody);
+  const displayBody = useBodyWithArtifactTitles(writtenBody, message.artifactCards);
   // A system notice renders as one muted line, not a person talking (`SystemMessageRow`).
   if (message.senderKind === "system")
     return (
@@ -344,7 +344,7 @@ export const MessageRow = memo(function MessageRow({
                 collapsible={collapsible}
                 onToggleExpanded={() => onToggleExpanded(message.id)}
               />
-              <MessageArtifactCards body={message.body} />
+              <MessageArtifactCards body={message.body} states={message.artifactCards} />
               {message.weeklyReportSuggestion ? (
                 <WeeklyReportMessageCard
                   messageId={message.id}

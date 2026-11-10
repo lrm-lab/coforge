@@ -58,3 +58,14 @@ test("a sentence's last mark stays outside the link, and code and <link> stay as
   const angled = `See <${LINK}>`;
   expect(bodyWithArtifactTitles(angled, titles)).toBe(angled);
 });
+
+/** Artifacts task #2: a link whose card says only "no access" or "deleted" has no title to read as;
+ * alone on its line it reads as nothing beside that card, and inside a sentence as written. */
+test("a link with a placeholder card drops its own line but keeps its place in a sentence", () => {
+  const placeholders = new Set([ID]);
+  expect(bodyWithArtifactTitles(`Have a look\n\n${LINK}`, new Map(), placeholders)).toBe(
+    "Have a look",
+  );
+  const inline = `See ${LINK} first`;
+  expect(bodyWithArtifactTitles(inline, new Map(), placeholders)).toBe(inline);
+});

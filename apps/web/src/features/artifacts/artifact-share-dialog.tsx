@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Heading, Radio, RadioGroup } from "react-aria-components";
-import { Building02, Check, Copy01, Globe02, Lock01, XClose } from "@untitledui/icons";
+import { Building02, Check, Copy01, Globe02, Lock01, Send01, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -45,6 +45,7 @@ export function ArtifactShareDialog({
   link,
   onCopyLink,
   onCopyPublicLink,
+  onSend,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,6 +57,8 @@ export function ArtifactShareDialog({
   link: ArtifactLinkSharing;
   onCopyLink: () => void;
   onCopyPublicLink: (url: string) => void;
+  /** Opens the Send dialog (posting its link into channels and DMs); this one closes. */
+  onSend?: () => void;
 }) {
   const levels: { id: ArtifactAccess; label: string; detail: string }[] = [
     ...(homeKind === "workspace"
@@ -87,6 +90,7 @@ export function ArtifactShareDialog({
               link={link}
               onCopyLink={onCopyLink}
               onCopyPublicLink={onCopyPublicLink}
+              onSend={onSend}
               close={close}
             />
           )}
@@ -104,6 +108,7 @@ function ShareBody({
   link,
   onCopyLink,
   onCopyPublicLink,
+  onSend,
   close,
 }: {
   title: string;
@@ -112,6 +117,7 @@ function ShareBody({
   link: ArtifactLinkSharing;
   onCopyLink: () => void;
   onCopyPublicLink: (url: string) => void;
+  onSend?: () => void;
   close: () => void;
 }) {
   const { access, canChange, locksOut, pending, error } = state;
@@ -230,6 +236,11 @@ function ShareBody({
         <Button size={controlSize} color="secondary" iconLeading={Copy01} onClick={onCopyLink}>
           {m.doc_copy_link()}
         </Button>
+        {onSend && (
+          <Button size={controlSize} color="secondary" iconLeading={Send01} onClick={onSend}>
+            {m.doc_send_action()}
+          </Button>
+        )}
         <Button size={controlSize} color="primary" className="ml-auto" onClick={close}>
           {m.doc_share_done()}
         </Button>

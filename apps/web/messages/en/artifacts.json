@@ -75,5 +75,17 @@
   "doc_share_lock_out": "After this, only people in this conversation can see it, and you won't be able to open it yourself.",
   "doc_share_lock_out_confirm": "Change it",
   "doc_share_keep": "Keep it",
-  "doc_share_locked_out": "Only people in its conversation can see “{title}” now."
+  "doc_share_locked_out": "Only people in its conversation can see “{title}” now.",
+  "doc_send_action": "Send to…",
+  "doc_send_title": "Send “{title}”",
+  "doc_send_send": "Send",
+  "doc_send_join_and_send": "Join and send",
+  "doc_send_sent_to": "Sent to {target}.",
+  "doc_send_sent_to_many": "Sent to {count} destinations",
+  "doc_send_partial": "Sent to {delivered} of {total} destinations. Try the remaining destinations.",
+  "doc_send_none": "Couldn't send to the selected destinations. Review the selection and try again.",
+  "doc_send_uncertain": "We couldn't confirm whether it was sent. It's safe to try again.",
+  "doc_send_gone": "This document is no longer available.",
+  "doc_card_forbidden": "You don't have access to this document",
+  "doc_card_deleted": "This document was deleted"
 }
