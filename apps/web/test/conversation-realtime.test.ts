@@ -135,12 +135,14 @@ describe("conversation realtime", () => {
       attention: { hasUnread: true, unreadCount, unreadKeys },
     });
     expect(decodeActivityChangedEvent(withCount(100)).attention?.unreadCount).toBe(100);
-    expect(() => decodeActivityChangedEvent(withCount(101))).toThrow();
+    // Past the cap still decodes: the page shows 99+, and the announcement's read state survives.
+    expect(decodeActivityChangedEvent(withCount(101)).attention?.unreadCount).toBe(101);
+    expect(
+      decodeActivityChangedEvent(withCount(1, Array(101).fill("conversation:a"))).attention
+        ?.unreadKeys,
+    ).toHaveLength(101);
     expect(() => decodeActivityChangedEvent(withCount(-1))).toThrow();
     expect(() => decodeActivityChangedEvent(withCount(1.5))).toThrow();
-    expect(() =>
-      decodeActivityChangedEvent(withCount(1, Array(101).fill("conversation:a"))),
-    ).toThrow();
   });
 
   test("decodes the viewer's own channel events, which name only ids, the unread count and the read cursor", () => {

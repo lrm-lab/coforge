@@ -156,6 +156,14 @@ export const unreadCountCases: UnreadCountCase[] = [
     reread: false,
   },
   {
+    name: "a muted conversation's message the viewer is reading changes nothing and asks nothing",
+    before: noneUnread,
+    message: { conversationId: "channel-1", senderUserId: "ada", sender: person, muted: true },
+    viewingKey: "conversation:channel-1",
+    after: noneUnread,
+    reread: false,
+  },
+  {
     name: "a reply in the thread the viewer has open changes nothing",
     before: noneUnread,
     message: {

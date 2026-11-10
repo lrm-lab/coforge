@@ -1,5 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 
+import { ACTIVITY_UNREAD_COUNT_CAP } from "#src/features/inbox/activity-unread-count";
+
 /**
  * What the browser tab shows: its title (`label | workspace | CoForge`, as Raft's) and whether its
  * icon carries the unread dot. Both are set from effects, so nothing runs during SSR; the server
@@ -40,7 +42,7 @@ export function composeTabTitle({
 }) {
   const title = [label, workspaceName, PRODUCT_NAME].filter(Boolean).join(" | ");
   if (unreadCount === undefined || unreadCount < 1) return title;
-  return `(${unreadCount > 99 ? "99+" : unreadCount}) ${title}`;
+  return `(${unreadCount >= ACTIVITY_UNREAD_COUNT_CAP ? "99+" : unreadCount}) ${title}`;
 }
 
 // The pages that have registered a label, in mount order; the latest wins. A stack rather than one

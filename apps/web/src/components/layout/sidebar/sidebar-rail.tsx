@@ -3,6 +3,7 @@ import { Pressable } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
+import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
 // Adapted from Untitled's sidebar-slim.tsx (MIT; docs/design/official-components.md §7) —
@@ -31,7 +32,11 @@ function RailItem({ href, icon: Icon, label, current, badge, unreadCount }: Rail
       <Pressable>
         <a
           href={href}
-          aria-label={label}
+          aria-label={
+            unreadCount
+              ? `${label}, ${m.conversation_thread_unread({ count: unreadCount })}`
+              : label
+          }
           aria-current={current ? "page" : undefined}
           className="group mx-auto flex size-11 items-center justify-center rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
         >

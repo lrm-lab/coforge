@@ -45,7 +45,7 @@ export function useActivityInboxRealtime({
   onActivity: () => void;
   /** Where the inbox stands after a clearing write (`ActivityAttention`), at once and in place of
    * `onActivity`. */
-  onAttention?: (attention: ActivityAttention) => void;
+  onAttention?: (attention: ActivityAttention, workspaceId: string) => void;
   /** The channel became `subscribed`, and may have missed what was published before (see
    * `queryMissedBySubscribe`). */
   onSubscribed?: (recovery: SubscribedRecovery) => void;
@@ -98,7 +98,8 @@ export function useActivityInboxRealtime({
           return;
       }
       if (isActivityChanged && activityWorkspaceId !== workspaceId) return;
-      if (attention && onAttentionRef.current) return onAttentionRef.current(attention);
+      if (attention && onAttentionRef.current)
+        return onAttentionRef.current(attention, activityWorkspaceId ?? workspaceId);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => onActivityRef.current(), REFRESH_DELAY_MS);
     },
