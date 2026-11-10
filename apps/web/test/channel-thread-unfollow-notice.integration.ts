@@ -58,9 +58,13 @@ test("a thread unfollow leaves one record, out of the window and out of the Agen
     await repo.setAgentThreadFollowed(workspace.id, agent.id, target, false);
     const notices = await db.message.findMany({
       where: { conversationId: general.id, body: { startsWith: "@Helper unfollowed this thread" } },
-      select: { id: true },
+      select: { id: true, systemMessage: { select: { kind: true, params: true } } },
     });
     expect(notices).toHaveLength(1);
+    expect(notices[0]!.systemMessage).toEqual({
+      kind: "channel.agent_thread_unfollowed",
+      params: { agentId: agent.id, rootMessageId: root.id },
+    });
     // The record is in the window, but it is not something the Agent "has not read" — it wrote it
     // by leaving.
     expect(

@@ -1,4 +1,4 @@
-import type { Prisma } from "#src/generated/prisma/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 
@@ -22,7 +22,7 @@ import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
  * An Agent sender never wakes itself. Read after the send enrolls its thread followers.
  */
 export async function channelAgentRecipients(
-  tx: Prisma.TransactionClient,
+  tx: Pick<PrismaClient, "conversation" | "conversationMember">,
   message: {
     conversationId: string;
     threadRootId: string | undefined;
