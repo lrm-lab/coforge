@@ -1,13 +1,8 @@
-import {
-  AGENT_ACTIVITY_DETAIL_KIND,
-  encodeAgentActivity,
-  type AgentActivityDetailKind,
-  type DaemonShutdownReason,
-} from "@lrm/coforge-sdk/internal";
+import { AGENT_ACTIVITY_DETAIL_KIND, type DaemonShutdownReason } from "@lrm/coforge-sdk/internal";
 
 import type { TrustedAgentActivity } from "#src/server/db/repositories/agent-activity.repositories.server";
 import type { ComputerLifecycleMemory } from "#src/server/computers/computer-lifecycle-memory.server";
-import { agentActivityChannelFor } from "#src/features/agents/agent-activity";
+import { writeSelfLaunchActivities, type SelfLaunchRow } from "./self-launch-activity.server";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 
 type Scope = { workspaceId: string; computerId: string };
@@ -35,8 +30,7 @@ export type ComputerReturn = {
   recoveredRestartRequestIds: readonly string[];
 };
 
-/** A row says what happened by its kind alone; only a failed operation carries a detail. */
-type Row = { detailKind: AgentActivityDetailKind; detail: string; level: "info" | "error" };
+type Row = SelfLaunchRow;
 
 /**
  * Computer lifecycle in Agent Activity: one row in the Activity of every active Agent on the
@@ -135,44 +129,13 @@ export class ComputerLifecycleActivity {
   }
 
   async #write(scope: Scope, requestId: string, row: Row) {
-    const agents = await this.ports.agents(scope);
-    if (agents.length === 0) return;
-    const observedAtMs = (this.ports.now ?? Date.now)();
-    const activities = agents.map((agent) => ({
-      protocolMajor: 1,
+    await writeSelfLaunchActivities(this.ports, scope, {
+      event: "computer_lifecycle_activity.publish_failed",
       requestId,
-      workspaceId: scope.workspaceId,
-      agentId: agent.id,
-      ...row,
-      observedAtMs,
-      // A launch of its own: the row must never be ordered into, or end, an Agent's run.
       launchId: `computer-lifecycle:${requestId}`,
-      clientSeq: 1,
-    }));
-    await this.ports.record(
-      activities.map((activity) => ({ ...activity, computerId: scope.computerId })),
-    );
-    const published = await Promise.allSettled(
-      agents.map((agent, index) =>
-        this.ports.publish(
-          agentActivityChannelFor(scope.workspaceId, agent.id, agent.visibility),
-          encodeAgentActivity(activities[index]!),
-        ),
-      ),
-    );
-    published.forEach((result, index) => {
-      if (result.status === "fulfilled") return;
-      console.warn(
-        JSON.stringify({
-          event: "computer_lifecycle_activity.publish_failed",
-          outcome: "failed",
-          request_id: requestId,
-          workspace_id: scope.workspaceId,
-          computer_id: scope.computerId,
-          agent_id: agents[index]!.id,
-          error_type: result.reason instanceof Error ? result.reason.name : typeof result.reason,
-        }),
-      );
+      agents: await this.ports.agents(scope),
+      row,
+      observedAtMs: (this.ports.now ?? Date.now)(),
     });
   }
 }
