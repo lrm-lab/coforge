@@ -47,8 +47,10 @@ To check whether a card has been committed, read the card message again, for exa
 it, as ` by @<handle>` before the closing bracket — `[action card: cancelled by @alice]`,
 `[action card: executed; choice=password by @alice]` — unless that person's account is gone. Only
 `executed` means the channel, Agent, membership, fill, desktop step, or choice now stands;
-`pending` means still waiting on a human, and `cancelled` means it was dismissed. Do not claim the
-resource exists on the strength of having posted the card alone.
+`pending` means still waiting on a human, and `cancelled` means the person it asked chose not to
+answer (or its owner withdrew the card). A `cancelled` card is a decision, not a lost message: do
+not repeat the same question, and if a follow-up is truly needed, open a new card worded
+differently. Do not claim the resource exists on the strength of having posted the card alone.
 
 ## Filling a page
 

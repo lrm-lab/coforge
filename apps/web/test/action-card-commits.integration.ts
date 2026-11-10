@@ -288,10 +288,21 @@ test("cancel: the preparing Agent's owner and a Workspace admin may cancel; anot
         .state,
     ).toBe("pending");
 
-    // A second cancel on an already-cancelled card is CONFLICT.
+    // A second cancel by the same person is a no-op that keeps the first settle; by anyone else
+    // (or after an execution) it is CONFLICT. The client's undo window, a leave-page keepalive
+    // and a retry can all send the same cancel more than once (task #59).
+    await ctx.actionCards.cancel(
+      { workspaceId: ctx.workspace.id, actorUserId: ctx.dave.id },
+      byAdmin.messageId,
+    );
+    const settled = await ctx.db.actionCard.findUniqueOrThrow({
+      where: { messageId: byAdmin.messageId },
+      select: { state: true, committedByUserId: true },
+    });
+    expect(settled).toMatchObject({ state: "cancelled", committedByUserId: ctx.dave.id });
     await expectAppErrorCode(
       ctx.actionCards.cancel(
-        { workspaceId: ctx.workspace.id, actorUserId: ctx.dave.id },
+        { workspaceId: ctx.workspace.id, actorUserId: ctx.alice.id },
         byAdmin.messageId,
       ),
       "CONFLICT",

@@ -180,6 +180,9 @@ export async function actionCardViews(
     const payload = card.payload as ResolvedActionCardPayload;
     const state = effectiveActionCardState(card.state, card.expiresAt);
     const pending = state === "pending";
+    // The asked person may cancel their choice/questions card (to ignore it), as `cancel` allows.
+    const askedViewer =
+      (payload.type === "choice" || payload.type === "questions") && payload.to === viewerUserId;
     const base: ActionCardViewBase = {
       messageId: card.messageId,
       state,
@@ -191,7 +194,8 @@ export async function actionCardViews(
       committedAt: card.committedAt?.toISOString(),
       expiresAt: card.expiresAt?.toISOString(),
       canCommit: false,
-      canCancel: pending && (card.preparedByAgent.ownerId === viewerUserId || isAdminViewer),
+      canCancel:
+        pending && (card.preparedByAgent.ownerId === viewerUserId || isAdminViewer || askedViewer),
     };
     if (payload.type === "channel:create") {
       views.set(card.messageId, {

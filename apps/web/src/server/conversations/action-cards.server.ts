@@ -290,8 +290,11 @@ export class ActionCards {
     await this.markExecuted(messageId, card.conversationId, actorUserId, { agentId });
   }
 
-  /** Cancel: by the preparing Agent's owner (`Agent.ownerId`) or a Workspace owner/admin; an
-   * `app:grant_agent` card only by denying it (`AppGrantActionCards.deny`). */
+  /** Cancel: by the preparing Agent's owner (`Agent.ownerId`), a Workspace owner/admin, or the
+   * person the card asks (`payload.to` of a choice/questions card, who may ignore it); an
+   * `app:grant_agent` card only by denying it (`AppGrantActionCards.deny`). Cancelling again by
+   * the same person is a no-op — a leave-page keepalive and a retry can both send it — while a
+   * settle by anyone else (or an execution) is a `CONFLICT` the client reconciles from the view. */
   async cancel(
     principal: { workspaceId: string; actorUserId: string },
     messageId: string,
@@ -303,6 +306,8 @@ export class ActionCards {
         workspaceId: true,
         kind: true,
         state: true,
+        committedByUserId: true,
+        payload: true,
         preparedByAgent: { select: { ownerId: true } },
       },
     });
@@ -312,10 +317,19 @@ export class ActionCards {
       principal.actorUserId,
       card.conversationId,
     );
+    if (card.state === "cancelled") {
+      if (card.committedByUserId === principal.actorUserId) return;
+      throw new AppError("CONFLICT");
+    }
     if (card.state !== "pending") throw new AppError("CONFLICT");
+    const payload = card.payload as { type?: string; to?: string };
+    const asked =
+      payload.type === "choice" || payload.type === "questions" ? payload.to : undefined;
     const role = await safeWorkspaceRole(this.db, principal.workspaceId, principal.actorUserId);
     const canCancel =
-      card.preparedByAgent.ownerId === principal.actorUserId || (role ? isAdminLike(role) : false);
+      card.preparedByAgent.ownerId === principal.actorUserId ||
+      (role ? isAdminLike(role) : false) ||
+      (asked !== undefined && asked === principal.actorUserId);
     if (!canCancel) throw new AppError("ACCESS_DENIED");
     if (card.kind === APP_GRANT_AGENT_CARD_KIND) throw new AppError("INVALID_INPUT");
     await this.markCancelled(card.conversationId, messageId, principal.actorUserId);

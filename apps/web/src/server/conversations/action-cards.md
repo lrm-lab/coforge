@@ -14,8 +14,11 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   operation's own authorization (`PublicChannels.create`/`addMembers`, `createAgent` with
   `assertCanCreateAgents`, `AppAgentAccess.approve`), then marks the card `executed` with a
   conditional update; a double commit fails on that operation's uniqueness rule or is a no-op.
-- `ActionCards.cancel` (the preparing Agent's owner or a Workspace owner/admin) only moves `pending
-→ cancelled`; it refuses `app:grant_agent`, which `AppGrantActionCards.deny` cancels after `AppAgentAccess.deny`.
+- `ActionCards.cancel` (the preparing Agent's owner, a Workspace owner/admin, or the person a
+  `choice`/`questions` card asks — the asked person's dismissal) only moves `pending → cancelled`;
+  it refuses `app:grant_agent`, which `AppGrantActionCards.deny` cancels after `AppAgentAccess.deny`.
+  A re-cancel by the person who already cancelled it is a no-op (a keepalive and a retry can both
+  send it); a settle by anyone else, or on an executed card, is `CONFLICT`.
 - Card state changes publish the existing `ConversationRealtime.messageAvailable`; do not add a card-specific realtime channel.
 - A `page:fill` card stores field labels, optional selectors, and the Agent's computer id only.
   Commit types the submitted values into that Agent's browser through the desktop proxy (which
