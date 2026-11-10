@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { ChannelVisibility } from "./channel-visibility";
+import type { GroupAvatarMember } from "./group-avatar";
 import type { MentionRef } from "./mention-text";
 
 /** The longest note a forward carries: a message body's browser limit. */
@@ -96,6 +97,8 @@ export type ForwardTarget =
       conversationId: string;
       name: string;
       visibility: ChannelVisibility;
+      /** Who its group avatar shows, as the sidebar's row does. */
+      members: readonly GroupAvatarMember[];
       joined: boolean;
       canSend: boolean;
     }

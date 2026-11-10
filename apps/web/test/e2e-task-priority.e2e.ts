@@ -86,6 +86,13 @@ test("a Task's popup and the new Task form set its priority", async () => {
       "--fn",
       `${pageHydrated} && document.querySelector('${trigger("High")}') != null`,
     );
+    // The popup rises into place: a tap while it moves lands where the chip was (the skeleton's
+    // endless pulse aside).
+    await browser(
+      "wait",
+      "--fn",
+      `document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity)`,
+    );
     await browser("click", trigger("High"));
     // The phone's menu comes up as a sheet: wait for it before picking.
     await browser(

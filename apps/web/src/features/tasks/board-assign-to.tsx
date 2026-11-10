@@ -10,6 +10,7 @@ import {
 } from "#src/features/conversations/message-forward-model";
 import type { ForwardTarget } from "#src/features/conversations/message-forward";
 import { EntityPicker, Face, type PickerFace } from "#src/features/pickers/entity-picker";
+import { useLiveChannelRow } from "#src/features/conversations/sidebar-lists";
 import { m } from "#src/paraglide/messages";
 import { TaskFieldTrigger } from "./task-field-trigger";
 
@@ -19,13 +20,20 @@ const LIMIT = 50;
 const SEARCH_DEBOUNCE_MS = 250;
 
 function faceOf(target: ForwardTarget): PickerFace {
-  if (target.kind === "channel") return { kind: "channel", visibility: target.visibility };
+  if (target.kind === "channel")
+    return { kind: "channel", visibility: target.visibility, members: target.members };
   return {
     kind: "identity",
     name: target.name,
     src: target.avatarUrl,
     ...(target.kind === "person" ? { userId: target.userId } : { agentId: target.agentId }),
   };
+}
+
+/** A channel by its name beside its group avatar, as the sidebar lists it (no `#`); a person or an
+ * Agent as `@name`. */
+function targetName(target: ForwardTarget) {
+  return target.kind === "channel" ? target.name : forwardTargetLabel(target);
 }
 
 /** Everyone a new Task can go to, searched on the server: a Workspace can hold more than a list
@@ -65,9 +73,17 @@ export function BoardAssignTo({
   onChange: (target: ForwardTarget) => void;
 }) {
   // The list knows a channel's visibility; a default taken from the board does not.
-  const shown =
+  const listed =
     targets.find((each) => value && forwardTargetKey(each) === forwardTargetKey(value)) ?? value;
-  const label = shown ? forwardTargetLabel(shown) : m.task_board_create_assign_pick();
+  // A default the search has not listed yet takes its group avatar from the sidebar's row.
+  const sidebarMembers = useLiveChannelRow(
+    listed?.kind === "channel" ? listed.conversationId : "",
+  )?.members;
+  const shown =
+    listed?.kind === "channel" && listed.members.length === 0 && sidebarMembers
+      ? { ...listed, members: sidebarMembers }
+      : listed;
+  const label = shown ? targetName(shown) : m.task_board_create_assign_pick();
   return (
     <EntityPicker
       trigger={
@@ -93,7 +109,7 @@ export function BoardAssignTo({
         .filter((target) => target.canSend)
         .map((target) => ({
           id: forwardTargetKey(target),
-          label: forwardTargetLabel(target),
+          label: targetName(target),
           face: faceOf(target),
         }))}
       onSelect={(key) => {
