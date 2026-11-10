@@ -9,6 +9,7 @@
       "./messages/{locale}/usage-limits.json",
       "./messages/{locale}/system-notices.json",
       "./messages/{locale}/agents.json",
+      "./messages/{locale}/agent-form.json",
       "./messages/{locale}/agent-workspace.json",
       "./messages/{locale}/agent-migration.json",
       "./messages/{locale}/agent-reminders.json",
