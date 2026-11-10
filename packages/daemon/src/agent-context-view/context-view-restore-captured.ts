@@ -13,6 +13,7 @@ import {
   isNewerKimiWireRecord,
   projectKimiRequestMessages,
   prepareKimiCanonicalState,
+  responseAfterKimiRequest,
   validateKimiCanonicalRequest,
 } from "./context-view-kimi-canonical";
 
@@ -151,6 +152,7 @@ export function restoreKimi(
   const pendingTools = new Set<string>();
   const canonicalState = prepareKimiCanonicalState(records, latestLoopIndex);
   if (canonicalState.unsupportedChain) return { ok: false, failure: "read_failed" };
+  const canonicalContinuation = responseAfterKimiRequest(records, latestLoopIndex, canonicalState);
   for (const [index, original] of records.entries()) {
     if (hasNestedIdentityConflict(original)) return { ok: false, failure: "context_mismatch" };
     const record = providerPayload(original);
@@ -179,6 +181,8 @@ export function restoreKimi(
             kimiCanonicalViewMessage,
           ),
         );
+        if (canonicalContinuation)
+          messages.push(message("assistant", canonicalContinuation.content));
       }
       if (typeof requestPayload.model === "string") model = requestPayload.model;
       else if (typeof record.model === "string") model = record.model;
