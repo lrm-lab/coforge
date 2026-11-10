@@ -5,6 +5,7 @@ import type { AgentMessageAttentionIndex, MessageAttention } from "./agent-messa
 import { PENDING_WINDOW_LIMIT } from "./agent-message-attention-index-helpers";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import type { AgentRecoveryContext } from "./runtime-launch-intent";
+import { LaunchInboxes } from "./launch-inbox";
 import type { LaunchRequest } from "./runtime-launch-types";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -225,12 +226,12 @@ export function withOwed(
  * from the cloud's read boundary instead.
  */
 export class OwedRecovery {
-  readonly #owed = new Map<string, CarriedStart>();
+  constructor(private readonly inboxes = new LaunchInboxes()) {}
 
   /** Owes `carried`, on top of anything already owed. */
   owe(agentId: string, carried: CarriedStart): void {
-    const earlier = this.#owed.get(agentId);
-    this.#owed.set(agentId, earlier ? mergeCarried(carried, earlier) : carried);
+    const inbox = this.inboxes.of(agentId);
+    inbox.owed = inbox.owed ? mergeCarried(carried, inbox.owed) : carried;
   }
 
   /** What the Agent's next launch owes, if anything, and `paid` for that launch to call once it has
@@ -240,22 +241,22 @@ export class OwedRecovery {
     agentId: string,
     queued: readonly Pick<AgentMessageDelivery, "target">[],
   ): { carried: CarriedStart; paid(): void } | undefined {
-    const owed = this.#owed.get(agentId);
+    const owed = this.inboxes.peek(agentId)?.owed;
     if (!owed) return undefined;
     return {
       carried: carriedStart(owed, [], queued),
       // Only what this launch was handed: a newer debt stays owed.
       paid: () => {
-        if (this.#owed.get(agentId) === owed) this.#owed.delete(agentId);
+        if (this.inboxes.peek(agentId)?.owed === owed) this.inboxes.dropOwed(agentId);
       },
     };
   }
 
   drop(agentId: string): void {
-    this.#owed.delete(agentId);
+    this.inboxes.dropOwed(agentId);
   }
 
   clear(): void {
-    this.#owed.clear();
+    this.inboxes.clearOwed();
   }
 }

@@ -153,11 +153,12 @@ export class AgentLaunchCoordinator {
   /** Consecutive qualifying early crashes of a resumed Session, across this runtime's launches. */
   readonly resumedEarlyCrash = new ResumedEarlyCrashStreak();
   /** What a cold start of a rejected Session still owes the Agent's next launch. */
-  readonly #owed = new OwedRecovery();
+  readonly #owed: OwedRecovery;
   /** The task idle reminder's daemon side, built from this coordinator's own collaborators. */
   readonly idleNudge: TaskIdleNudge;
 
   constructor(readonly ports: AgentLaunchCoordinatorPorts) {
+    this.#owed = new OwedRecovery(ports.deliveryQueue.inboxes);
     this.idleNudge = new TaskIdleNudge({
       ask: async (agentId, request) => {
         const agentApiKey = this.ports.agentApiKeys.get(agentId);

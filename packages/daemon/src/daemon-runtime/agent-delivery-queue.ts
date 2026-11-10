@@ -1,6 +1,7 @@
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { AgentConversationScope } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { LaunchInboxes } from "./launch-inbox";
 
 /**
  * How a provider's session accepts a delivery notice while a turn is already in progress.
@@ -70,13 +71,9 @@ export const AGENT_DELIVERY_MODE: Readonly<Record<RuntimeProvider, AgentDelivery
 export class AgentDeliveryQueue {
   readonly #mode = new Map<string, AgentDeliveryMode>();
   readonly #busy = new Set<string>();
-  readonly #held = new Map<string, AgentMessageDelivery[]>();
-  /** When the oldest currently held delivery began waiting; the stall sweep's clock for a
-   * delivery whose turn never started. */
-  readonly #heldSince = new Map<string, number>();
   /** App-item ids held while busy (`DaemonRuntime#notifyAppItem`) — a separate,
-   * app-inbox-owned notice, not an `AgentMessageDelivery`; kept apart from `#held` so the two
-   * domains' storage never mixes. */
+   * app-inbox-owned notice, not an `AgentMessageDelivery`; kept apart from the held deliveries so
+   * the two domains' storage never mixes. */
   readonly #heldAppItems = new Map<string, Set<string>>();
   /** Fallback notice text held for redelivery after a `steer` provider's own busy-delivery
    * protocol accepted a notice (`notify` resolved) but later learned it never actually reached
@@ -88,6 +85,9 @@ export class AgentDeliveryQueue {
   /** An explicit hold from `hold()`, keyed by Agent, with its reason. Presence alone means
    * "held", regardless of busy/idle. */
   readonly #explicitHolds = new Map<string, DeliveryHoldReason>();
+
+  /** The held deliveries live in the Agent's inbox. */
+  constructor(readonly inboxes = new LaunchInboxes()) {}
 
   /** Records which delivery mode this Agent's current launch uses; call at every launch, since a
    * runtime config change (or a provider switch) can change it. */
@@ -145,30 +145,25 @@ export class AgentDeliveryQueue {
    * request it enqueues as it takes it; nothing is acknowledged from the queue.
    */
   enqueue(agentId: string, message: AgentMessageDelivery): void {
-    const list = this.#held.get(agentId) ?? [];
-    if (list.length === 0) this.#heldSince.set(agentId, Date.now());
-    const held = list.findIndex((entry) => entry.deliveryId === message.deliveryId);
-    if (held >= 0) list[held] = message;
-    else list.push(message);
-    this.#held.set(agentId, list);
+    this.inboxes.of(agentId).hold(message);
   }
 
   /** Everything currently held for the Agent, oldest first — read-only; for a later PR carrying
    * held deliveries into a relaunch. */
   pending(agentId: string): readonly AgentMessageDelivery[] {
-    return this.#held.get(agentId) ?? [];
+    return this.inboxes.peek(agentId)?.held ?? [];
   }
 
   /** For a later PR's stall-recovery trigger: true while this Agent has at least one held,
    * undelivered notice. */
   hasQueued(agentId: string): boolean {
-    return (this.#held.get(agentId)?.length ?? 0) > 0;
+    return (this.inboxes.peek(agentId)?.held.length ?? 0) > 0;
   }
 
   /** How long the Agent's oldest held delivery has waited, or undefined when none is held: a
    * delivery queued this moment has waited nothing, whatever the provider did before it. */
   queuedForMs(agentId: string): number | undefined {
-    const since = this.#heldSince.get(agentId);
+    const since = this.inboxes.peek(agentId)?.heldSince;
     return since === undefined ? undefined : Date.now() - since;
   }
 
@@ -204,16 +199,8 @@ export class AgentDeliveryQueue {
     agentId: string,
     dropped: (message: AgentMessageDelivery) => boolean,
   ): AgentMessageDelivery[] {
-    const list = this.#held.get(agentId);
-    if (!list) return [];
-    const gone: AgentMessageDelivery[] = [];
-    const kept: AgentMessageDelivery[] = [];
-    for (const message of list) (dropped(message) ? gone : kept).push(message);
-    if (kept.length) this.#held.set(agentId, kept);
-    else {
-      this.#held.delete(agentId);
-      this.#heldSince.delete(agentId);
-    }
+    const gone = this.inboxes.peek(agentId)?.takeHeldWhere(dropped) ?? [];
+    this.inboxes.tidy(agentId);
     return gone;
   }
 
@@ -295,17 +282,13 @@ export class AgentDeliveryQueue {
   clearAgent(agentId: string): void {
     this.#mode.delete(agentId);
     this.#busy.delete(agentId);
-    this.#held.delete(agentId);
-    this.#heldSince.delete(agentId);
+    this.#drain(agentId);
     this.#heldAppItems.delete(agentId);
     this.#heldFallbackNotices.delete(agentId);
     this.#explicitHolds.delete(agentId);
   }
 
   #drain(agentId: string): AgentMessageDelivery[] {
-    const list = this.#held.get(agentId) ?? [];
-    this.#held.delete(agentId);
-    this.#heldSince.delete(agentId);
-    return list;
+    return this.#discardWhere(agentId, () => true);
   }
 }
