@@ -357,3 +357,68 @@ test("a hit in a DM between members names the other member", async () => {
     await db.$disconnect();
   }
 });
+
+/**
+ * A member who left a direct conversation cannot open it any more (`DirectConversations.authorize`
+ * asks for a member that has not left), so search does not show its messages either; the member
+ * still in it finds them.
+ */
+test("a member who left a DM no longer finds its messages", async () => {
+  const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+  if (!connectionString)
+    throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
+
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const suffix = crypto.randomUUID();
+  const slug = `search-left-${suffix}`;
+  const usernames = ["alice", "bob"].map((name) => `search-left-${name}-${suffix}`);
+  try {
+    const [alice, bob] = await Promise.all(
+      usernames.map((username) => db.user.create({ data: { username, displayName: username } })),
+    );
+    const workspace = await db.workspace.create({ data: { slug, name: "Search left" } });
+    const workspaceId = workspace.id;
+    await db.workspaceMembership.createMany({
+      data: [alice!, bob!].map((user) => ({ workspaceId, userId: user.id, role: "member" })),
+    });
+    const dm = await db.conversation.create({
+      data: { workspaceId, directKey: peopleDirectKey(alice!.id, bob!.id) },
+    });
+    const [aliceInDm] = await Promise.all([
+      db.conversationMember.create({
+        data: { conversationId: dm.id, workspaceId, userId: alice!.id },
+      }),
+      db.conversationMember.create({
+        data: { conversationId: dm.id, workspaceId, userId: bob!.id, leftAt: new Date() },
+      }),
+    ]);
+    const message = await db.message.create({
+      data: {
+        conversationId: dm.id,
+        workspaceId,
+        senderMemberId: aliceInDm.id,
+        body: "left 交接 notes",
+        sequence: 1,
+      },
+    });
+
+    const hits = async (userId: string) =>
+      (
+        await searchMessages(db, {
+          workspaceId,
+          userId,
+          query: "交接",
+          sort: "recent",
+          limit: 20,
+          offset: 0,
+        })
+      ).results.map((hit) => hit.message.id);
+
+    expect(await hits(alice!.id)).toEqual([message.id]);
+    expect(await hits(bob!.id)).toEqual([]);
+  } finally {
+    await db.workspace.deleteMany({ where: { slug } });
+    await db.user.deleteMany({ where: { username: { in: usernames } } });
+    await db.$disconnect();
+  }
+});
