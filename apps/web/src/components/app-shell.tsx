@@ -61,14 +61,21 @@ export type AppUser = {
  * reaches the inbox (a mention from outside the channel, a Task assignment) re-reads the one
  * boolean (`activityNavAttentionRealtime`).
  */
-function useActivityAttention(user: AppUser) {
+function useActivityAttention(user: AppUser, workspaceId: string) {
   const queryClient = useQueryClient();
   const { onMessage, onActivity, onAttention, onSubscribed } = useMemo(
-    () => activityNavAttentionRealtime(queryClient, user.id),
-    [queryClient, user.id],
+    () => activityNavAttentionRealtime(queryClient, user.id, workspaceId),
+    [queryClient, user.id, workspaceId],
   );
-  useActivityInboxRealtime({ userId: user.id, onMessage, onActivity, onAttention, onSubscribed });
-  const query = useQuery(activityNavAttentionQuery());
+  useActivityInboxRealtime({
+    userId: user.id,
+    workspaceId,
+    onMessage,
+    onActivity,
+    onAttention,
+    onSubscribed,
+  });
+  const query = useQuery(activityNavAttentionQuery(workspaceId));
   return query.data?.hasUnread ?? false;
 }
 
@@ -214,7 +221,7 @@ export function AppShell({
     // Remembered within the Workspace, so it holds the path under `/w/<slug>`.
     rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${search}`);
   }, [workspaceId, base, pathname, searchStr]);
-  const hasActivityAttention = useActivityAttention(user);
+  const hasActivityAttention = useActivityAttention(user, workspaceId);
   const navItems = useNavItems(
     base,
     recordsPreview,

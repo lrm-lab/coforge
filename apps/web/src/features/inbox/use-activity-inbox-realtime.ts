@@ -29,6 +29,7 @@ const REFRESH_DELAY_MS = 300;
  */
 export function useActivityInboxRealtime({
   userId,
+  workspaceId,
   onMessage,
   onActivity,
   onAttention,
@@ -36,6 +37,8 @@ export function useActivityInboxRealtime({
   refreshOnPreferences = false,
 }: {
   userId: string;
+  /** Signals arrive on a user-wide channel, so only the current Workspace may affect this inbox. */
+  workspaceId: string;
   /** One message the viewer may read: not their own, not a system notice; `position` is where
    * it stands in the viewer's channel. */
   onMessage?: (event: ConversationActivityEvent, position: StreamPosition | undefined) => void;
@@ -71,6 +74,7 @@ export function useActivityInboxRealtime({
     (publication: RealtimePublication) => {
       const message = decodeConversationActivityEvent(publication.data);
       if (message) {
+        if (message.workspaceId !== workspaceId) return;
         // The server already sent it only to the people it concerns; the page still ignores its
         // own message and a system notice, exactly as the badge does.
         if (message.sender.kind !== "system" && message.senderUserId !== userId)
@@ -78,8 +82,13 @@ export function useActivityInboxRealtime({
         return;
       }
       let attention: ActivityAttention | undefined;
+      let activityWorkspaceId: string | undefined;
+      let isActivityChanged = false;
       try {
-        ({ attention } = decodeActivityChangedEvent(publication.data));
+        ({ attention, workspaceId: activityWorkspaceId } = decodeActivityChangedEvent(
+          publication.data,
+        ));
+        isActivityChanged = true;
       } catch {
         // Neither a message nor an Activity signal (the channels also carry other events): only a
         // pin or mute change the caller asked for refreshes.
@@ -88,11 +97,12 @@ export function useActivityInboxRealtime({
         if (event?.type !== "pref.changed.v1" || (event.name !== "pins" && event.name !== "muted"))
           return;
       }
+      if (isActivityChanged && activityWorkspaceId !== workspaceId) return;
       if (attention && onAttentionRef.current) return onAttentionRef.current(attention);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => onActivityRef.current(), REFRESH_DELAY_MS);
     },
-    [refreshOnPreferences, userId],
+    [refreshOnPreferences, userId, workspaceId],
   );
 
   useRealtimeSubscription({

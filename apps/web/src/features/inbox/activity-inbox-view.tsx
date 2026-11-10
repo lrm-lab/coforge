@@ -208,6 +208,7 @@ export function ActivityInboxView({
   );
   useActivityInboxRealtime({
     userId: user.id,
+    workspaceId,
     onMessage: refreshFirstPage,
     onActivity: () => {
       refreshLists();

@@ -140,9 +140,9 @@ export const waitingChoiceCardsQuery = (workspaceId: string) =>
  * query prefix, so every list refresh also refreshes the dot. An answer read from further back in
  * the viewer's channel than the one held never replaces it: a read begun before a write in another
  * tab ends after that write's announcement (`ActivityAttention`), and keeps it. */
-export const activityNavAttentionQuery = () =>
+export const activityNavAttentionQuery = (workspaceId: string) =>
   queryOptions({
-    queryKey: [...ACTIVITY_INBOX_QUERY_PREFIX, "nav-attention"],
+    queryKey: [...ACTIVITY_INBOX_QUERY_PREFIX, "nav-attention", workspaceId],
     queryFn: () => loadActivityNavAttention(),
     staleTime: 30_000,
     structuralSharing: (held: unknown, next: unknown) =>
@@ -169,13 +169,14 @@ function readEarlier(answer: StreamRead, than: StreamRead) {
 export function activityNavAttentionRealtime(
   queryClient: QueryClient,
   userId: string,
+  workspaceId: string,
 ): {
   onMessage: (event: unknown, position: StreamPosition | undefined) => void;
   onActivity: () => void;
   onAttention: (attention: ActivityAttention) => void;
   onSubscribed: (recovery: SubscribedRecovery) => void;
 } {
-  const queryKey = activityNavAttentionQuery().queryKey;
+  const queryKey = activityNavAttentionQuery(workspaceId).queryKey;
   const channel = userConversationChannel(userId);
   const reread = () => void queryClient.invalidateQueries({ queryKey });
   // The newest message that lit the dot here, by where it stands in the viewer's channel.
@@ -183,6 +184,8 @@ export function activityNavAttentionRealtime(
   return {
     // The read's stream positions stay: a message delivered here moved the dot without a read.
     onMessage: (event, position) => {
+      const eventWorkspaceId = (event as { workspaceId?: unknown } | undefined)?.workspaceId;
+      if (typeof eventWorkspaceId === "string" && eventWorkspaceId !== workspaceId) return;
       // A muted conversation's message counts on its own row only.
       if ((event as { muted?: true } | undefined)?.muted) return;
       litBy = { position };

@@ -10,6 +10,7 @@ import { dataBecomes, gatedRead, settle } from "./helpers/query-cache-harness";
 
 type Dot = { hasUnread: boolean; streamPositions: Record<string, StreamPosition> };
 const USER = "user-1";
+const WORKSPACE = "workspace-current";
 const CHANNEL = `chat:user:${USER}`;
 const at = (offset: number) => ({ [CHANNEL]: { epoch: "e", offset } });
 
@@ -20,9 +21,9 @@ const at = (offset: number) => ({ [CHANNEL]: { epoch: "e", offset } });
  * boolean; `onMessage` still lights it locally because a message can only add attention.
  */
 function mountedDot(queryClient: QueryClient, read: () => Promise<Dot>) {
-  const queryKey = activityNavAttentionQuery().queryKey;
+  const queryKey = activityNavAttentionQuery(WORKSPACE).queryKey;
   const observer = new QueryObserver(queryClient, {
-    ...activityNavAttentionQuery(),
+    ...activityNavAttentionQuery(WORKSPACE),
     queryFn: read,
   });
   const unsubscribe = observer.subscribe(() => {});
@@ -41,14 +42,14 @@ test("a message lights the nav dot without reading the server", async () => {
     return { hasUnread: false, streamPositions: at(4) };
   };
   // Fresh data keeps the mount below from fetching (staleTime is 30 s).
-  queryClient.setQueryData(activityNavAttentionQuery().queryKey, {
+  queryClient.setQueryData(activityNavAttentionQuery(WORKSPACE).queryKey, {
     hasUnread: false,
     streamPositions: at(4),
   });
   const dot = mountedDot(queryClient, read);
   try {
-    const { onMessage } = activityNavAttentionRealtime(queryClient, USER);
-    onMessage(undefined, { epoch: "e", offset: 5 });
+    const { onMessage } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
+    onMessage({ workspaceId: WORKSPACE }, { epoch: "e", offset: 5 });
     expect(dot.data()).toEqual({ hasUnread: true, streamPositions: at(4) });
     expect(reads).toBe(0);
   } finally {
@@ -56,15 +57,29 @@ test("a message lights the nav dot without reading the server", async () => {
   }
 });
 
-test("a message in a conversation the viewer muted leaves the nav dot dark (task #478)", () => {
+test("a message from another workspace leaves the nav dot dark", () => {
   const queryClient = new QueryClient();
-  queryClient.setQueryData(activityNavAttentionQuery().queryKey, {
+  queryClient.setQueryData(activityNavAttentionQuery(WORKSPACE).queryKey, {
     hasUnread: false,
     streamPositions: at(4),
   });
-  const { onMessage } = activityNavAttentionRealtime(queryClient, USER);
-  onMessage({ muted: true }, { epoch: "e", offset: 5 });
-  expect(queryClient.getQueryData<Dot>(activityNavAttentionQuery().queryKey)).toEqual({
+  const { onMessage } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
+  onMessage({ workspaceId: "workspace-other" }, { epoch: "e", offset: 5 });
+  expect(queryClient.getQueryData<Dot>(activityNavAttentionQuery(WORKSPACE).queryKey)).toEqual({
+    hasUnread: false,
+    streamPositions: at(4),
+  });
+});
+
+test("a message in a conversation the viewer muted leaves the nav dot dark (task #478)", () => {
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(activityNavAttentionQuery(WORKSPACE).queryKey, {
+    hasUnread: false,
+    streamPositions: at(4),
+  });
+  const { onMessage } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
+  onMessage({ workspaceId: WORKSPACE, muted: true }, { epoch: "e", offset: 5 });
+  expect(queryClient.getQueryData<Dot>(activityNavAttentionQuery(WORKSPACE).queryKey)).toEqual({
     hasUnread: false,
     streamPositions: at(4),
   });
@@ -76,7 +91,7 @@ test("an activity change re-reads the dot, so another tab's read-all un-lights t
   try {
     // The dot is lit and fresh: nothing refetches it on its own (staleTime is 30 s).
     queryClient.setQueryData(dot.queryKey, { hasUnread: true, streamPositions: {} });
-    const { onActivity } = activityNavAttentionRealtime(queryClient, USER);
+    const { onActivity } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
     onActivity();
     await dataBecomes<Dot>(queryClient, dot.queryKey, (d) => d.hasUnread === false);
     expect(dot.data()).toEqual({ hasUnread: false, streamPositions: {} });
@@ -94,7 +109,7 @@ const after = (offset: number) => ({ epoch: "e", offset });
 
 function litDot(queryClient: QueryClient, read: () => Promise<Dot>) {
   // Lit and fresh: nothing refetches it on its own (staleTime is 30 s).
-  queryClient.setQueryData(activityNavAttentionQuery().queryKey, {
+  queryClient.setQueryData(activityNavAttentionQuery(WORKSPACE).queryKey, {
     hasUnread: true,
     streamPositions: at(4),
   });
@@ -109,7 +124,7 @@ test("another tab's read-all clears the dot from the announcement, without a rea
     return { hasUnread: true, streamPositions: at(4) };
   });
   try {
-    activityNavAttentionRealtime(queryClient, USER).onAttention({
+    activityNavAttentionRealtime(queryClient, USER, WORKSPACE).onAttention({
       hasUnread: false,
       streamPosition: after(6),
     });
@@ -123,13 +138,13 @@ test("another tab's read-all clears the dot from the announcement, without a rea
 
 test("another tab's mark-unread lights the dot from the announcement", async () => {
   const queryClient = new QueryClient();
-  queryClient.setQueryData(activityNavAttentionQuery().queryKey, {
+  queryClient.setQueryData(activityNavAttentionQuery(WORKSPACE).queryKey, {
     hasUnread: false,
     streamPositions: at(4),
   });
   const dot = mountedDot(queryClient, async () => ({ hasUnread: false, streamPositions: at(4) }));
   try {
-    activityNavAttentionRealtime(queryClient, USER).onAttention({
+    activityNavAttentionRealtime(queryClient, USER, WORKSPACE).onAttention({
       hasUnread: true,
       streamPosition: after(6),
     });
@@ -143,9 +158,9 @@ test("a message published after the server's read keeps the dot lit; one before 
   const queryClient = new QueryClient();
   const dot = litDot(queryClient, async () => ({ hasUnread: true, streamPositions: at(4) }));
   try {
-    const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER);
+    const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
     // Message 7 reached this page before the announcement of a read made at 6, which may lack it.
-    onMessage(undefined, after(7));
+    onMessage({ workspaceId: WORKSPACE }, after(7));
     onAttention({ hasUnread: false, streamPosition: after(6) });
     await settle();
     expect(dot.data()?.hasUnread).toBe(true);
@@ -161,10 +176,10 @@ test("a message published right after the announcement lights the dot again", as
   const queryClient = new QueryClient();
   const dot = litDot(queryClient, async () => ({ hasUnread: true, streamPositions: at(4) }));
   try {
-    const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER);
+    const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
     // Both in one frame: the read-all made at 6, then message 7.
     onAttention({ hasUnread: false, streamPosition: after(6) });
-    onMessage(undefined, after(7));
+    onMessage({ workspaceId: WORKSPACE }, after(7));
     await settle();
     expect(dot.data()?.hasUnread).toBe(true);
   } finally {
@@ -180,14 +195,14 @@ test("a lit dot reads again when the server's place cannot be compared with its 
     return { hasUnread: false, streamPositions: at(9) };
   });
   try {
-    const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER);
-    onMessage(undefined, after(7));
+    const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
+    onMessage({ workspaceId: WORKSPACE }, after(7));
     // Centrifugo did not answer the write's position read in time.
     onAttention({ hasUnread: false });
     await dataBecomes<Dot>(queryClient, dot.queryKey, (d) => !d.hasUnread);
     expect(reads).toBe(1);
     // The read answered for the message; the next announcement needs no read.
-    onMessage(undefined, after(10));
+    onMessage({ workspaceId: WORKSPACE }, after(10));
     onAttention({ hasUnread: false, streamPosition: after(11) });
     await dataBecomes<Dot>(queryClient, dot.queryKey, (d) => !d.hasUnread);
     expect(reads).toBe(1);
@@ -201,7 +216,7 @@ test("a read from further along the channel than the announcement replaces it", 
   const gate = gatedRead<Dot>();
   const dot = litDot(queryClient, gate.read);
   try {
-    const { onActivity, onAttention } = activityNavAttentionRealtime(queryClient, USER);
+    const { onActivity, onAttention } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
     onAttention({ hasUnread: false, streamPosition: after(6) });
     // A resubscribe's read, which saw message 8 the subscription missed.
     onActivity();
@@ -219,7 +234,7 @@ test("a read under way when the announcement arrives does not bring the dot back
   const gate = gatedRead<Dot>();
   const dot = litDot(queryClient, gate.read);
   try {
-    const { onActivity, onAttention } = activityNavAttentionRealtime(queryClient, USER);
+    const { onActivity, onAttention } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
     // A mention from outside the channel started a read; the read-all is announced meanwhile.
     onActivity();
     await gate.started;
@@ -241,7 +256,7 @@ test("a read under way when the announcement arrives does not bring the dot back
 test("a mention published between the dot's read and the subscribe lights it", async () => {
   const queryClient = new QueryClient();
   let reads = 0;
-  queryClient.setQueryData(activityNavAttentionQuery().queryKey, {
+  queryClient.setQueryData(activityNavAttentionQuery(WORKSPACE).queryKey, {
     hasUnread: false,
     streamPositions: at(4),
   });
@@ -251,7 +266,7 @@ test("a mention published between the dot's read and the subscribe lights it", a
   });
   try {
     // The mention is publication 5; the subscription starts after it.
-    activityNavAttentionRealtime(queryClient, USER).onSubscribed({
+    activityNavAttentionRealtime(queryClient, USER, WORKSPACE).onSubscribed({
       wasRecovering: false,
       recovered: false,
       position: () => ({ epoch: "e", offset: 5 }),
@@ -266,7 +281,7 @@ test("a mention published between the dot's read and the subscribe lights it", a
 test("a subscribe that missed nothing reads nothing; one that lost publications reads", async () => {
   const queryClient = new QueryClient();
   let reads = 0;
-  queryClient.setQueryData(activityNavAttentionQuery().queryKey, {
+  queryClient.setQueryData(activityNavAttentionQuery(WORKSPACE).queryKey, {
     hasUnread: false,
     streamPositions: at(4),
   });
@@ -275,7 +290,7 @@ test("a subscribe that missed nothing reads nothing; one that lost publications 
     return { hasUnread: false, streamPositions: at(4) };
   });
   try {
-    const { onSubscribed } = activityNavAttentionRealtime(queryClient, USER);
+    const { onSubscribed } = activityNavAttentionRealtime(queryClient, USER, WORKSPACE);
     onSubscribed({
       wasRecovering: false,
       recovered: false,
