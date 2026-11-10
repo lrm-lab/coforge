@@ -190,7 +190,13 @@ export class AgentExitedDelivery {
    * `AgentDeliveryQueue`, acknowledging each as the daemon keeps it, so the next launch
    * presents them. */
   keepInputDeliveriesForNextLaunch(agentId: string, error: unknown): void {
-    for (const message of this.#ports.drainInputDeliveries(agentId)) {
+    this.keepDeliveries(agentId, this.#ports.drainInputDeliveries(agentId), error);
+  }
+
+  /** The same custody for deliveries the caller already took: a tracked mention is dropped as
+   * unknown (the server issues it again), any other is kept for the next launch. */
+  keepDeliveries(agentId: string, messages: readonly AgentMessageDelivery[], error: unknown): void {
+    for (const message of messages) {
       // A tracked mention named a launch that never came up; it never waits for the next one.
       if (this.#ports.dropMentionAsUnknown(message)) continue;
       this.keepForNextLaunch(agentId, message);

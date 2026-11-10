@@ -67,9 +67,21 @@ export function startAgent(
       : ports.agentProcessManager.runtime(agentId);
   // What an earlier cold start still owes is paid by a launch that spawns a process, never by one
   // that joins a launch in progress (which carries it already) or a running process.
-  const owed =
-    existingLaunch || activeRuntime ? undefined : ports.launchCoordinator.owedTo(agentId);
+  const fresh = !existingLaunch && !activeRuntime;
+  // A brand-new process started inside the hold window would be killed seconds later by the
+  // upgrade's stop. Refusing is safe: `#agentControl.replay()` re-issues the intent after the
+  // restart. Launches that only extend a live runtime returned above and are untouched.
+  if (fresh && ports.runnerHold !== undefined)
+    return Promise.reject(new Error(`Agent launches are held for ${ports.runnerHold.reason}`));
+  // The ended runtime's queue goes first, so what it hands to custody is counted by what is owed.
+  const endedInputs = fresh
+    ? ports.inputDrain.retire(agentId, (messages) =>
+        ports.exitedDelivery.keepDeliveries(agentId, messages, new Error("Agent runtime ended")),
+      )
+    : [];
+  const owed = fresh ? ports.launchCoordinator.owedTo(agentId) : undefined;
   const request = withOwed(startRequest, startRecovery, owed?.carried);
+  if (fresh) ports.inputDrain.carry(agentId, endedInputs, request.resumePrompt !== undefined);
   const { recovery } = request;
   const enqueueRecovery = (context: AgentRecoveryContext) =>
     ports.inputDrain.enqueue(agentId, (completion) => ({
@@ -148,12 +160,6 @@ export function startAgent(
     ports.inputDrain.ensure(agentId);
     return Promise.all(inputs).then(() => activeRuntime);
   }
-
-  // A brand-new process started inside the hold window would be killed seconds later by the
-  // upgrade's stop. Refusing is safe: `#agentControl.replay()` re-issues the intent after the
-  // restart. Launches that only extend a live runtime returned above and are untouched.
-  if (ports.runnerHold !== undefined)
-    return Promise.reject(new Error(`Agent launches are held for ${ports.runnerHold.reason}`));
 
   ports.messageAttention.clearAgent(agentId);
 

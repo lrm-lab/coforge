@@ -47,6 +47,8 @@ export type AgentInputDrainPorts = Readonly<{
  */
 export class AgentInputDrain {
   readonly #queues = new Map<string, AgentInputQueue>();
+  /** Drains of retired queues, still finishing the item they were on. */
+  readonly #retired = new Set<Promise<void>>();
 
   constructor(private readonly ports: AgentInputDrainPorts) {}
 
@@ -62,7 +64,60 @@ export class AgentInputDrain {
 
   /** The live drain promises, for a settle-all wait. */
   drains(): Promise<void>[] {
-    return [...this.#queues.values()].flatMap((queue) => (queue.drain ? [queue.drain] : []));
+    return [
+      ...[...this.#queues.values()].flatMap((queue) => (queue.drain ? [queue.drain] : [])),
+      ...this.#retired,
+    ];
+  }
+
+  /**
+   * A new launch begins for this Agent: a queue's drain belongs to the runtime it was armed for, so
+   * the one running now finishes the item it is on and exits, and the launch gets a queue of its
+   * own, armed by `ensure` once the launch succeeds. Otherwise that loop would go on to the launch's
+   * own inputs while the process they are for is not up, and run them against the dying one.
+   *
+   * What the ended runtime's loop left waiting is its own: the deliveries go to `keep` (custody for
+   * the next launch), and so does one the retired loop fails on. A queue with no loop running was
+   * filled for the launch now beginning (a wake queues its delivery first), so its deliveries stay.
+   * The prompts waiting and those deliveries are returned for `carry`. The rest (startup, memory,
+   * recovery) belonged to the ended session, and the new launch brings its own: they are settled.
+   */
+  retire(agentId: string, keep: (messages: AgentMessageDelivery[]) => void): AgentInput[] {
+    const queue = this.#queues.get(agentId);
+    if (!queue) return [];
+    this.#queues.delete(agentId);
+    const ended = queue.drain !== undefined;
+    const waiting: AgentMessageDelivery[] = [];
+    const carried: AgentInput[] = [];
+    for (const item of queue.items) {
+      if (item.kind === "prompt" || (item.kind === "delivery" && !ended)) carried.push(item);
+      else {
+        if (item.kind === "delivery") waiting.push(item.message);
+        item.completion.resolve();
+      }
+    }
+    if (waiting.length) keep(waiting);
+    queue.items = [];
+    queue.closed = true;
+    if (ended) queue.keep = (message) => keep([message]);
+    const drain = queue.drain;
+    if (drain) {
+      this.#retired.add(drain);
+      const done = () => void this.#retired.delete(drain);
+      drain.then(done, done);
+    }
+    return carried;
+  }
+
+  /** Puts what `retire` returned at the front of the launch's queue, ahead of its own input: an
+   * introduction always (a process gets at most one, and the one queued when a process ends is its
+   * relaunch's), a resume prompt only when the launch carries none of its own. */
+  carry(agentId: string, items: readonly AgentInput[], ownResumePrompt: boolean): void {
+    const carried = items.filter(
+      (item) => item.kind !== "prompt" || item.introduction || !ownResumePrompt,
+    );
+    for (const item of items) if (!carried.includes(item)) item.completion.resolve();
+    if (carried.length) this.#queues.set(agentId, { items: [...carried], closed: false });
   }
 
   enqueue(
@@ -173,6 +228,15 @@ export class AgentInputDrain {
           if (this.ports.sessionFor(agentId)) await this.ports.runPrompt(agentId, item.text);
         } else await this.ports.recoverAttention(agentId, item.context);
       } catch (error) {
+        // A retired queue belongs to a runtime that ended: its failures never consult the launch
+        // that replaced it.
+        if (queue.keep) {
+          if (item.kind === "delivery") {
+            queue.keep(item.message);
+            item.completion.resolve();
+          } else item.completion.reject(error);
+          continue;
+        }
         if (
           (item.kind === "recovery" || item.kind === "startup" || item.kind === "memory") &&
           this.ports.isLaunching(agentId)

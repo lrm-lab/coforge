@@ -77,6 +77,8 @@ export async function harness(
   let creations = 0;
   let deleteWorkspace: ((request: AgentWorkspaceDeleteRequest) => Promise<void>) | undefined;
   let failTerminalErrors = false;
+  /** While set, every notice a session is handed waits for it after being recorded. */
+  let noticeGate: Promise<void> | undefined;
   /** Whether the sessions report a turn in progress. */
   let liveTurn = false;
   /** While set, every notice a session is handed is refused. */
@@ -91,6 +93,7 @@ export async function harness(
           throw new Error("the provider would not start");
         const listeners = new Set<(event: AgentRuntimeEvent) => void>();
         const exitListeners = new Set<() => void>();
+        const ended = Promise.withResolvers<void>();
         const record: Recorded = {
           options: sessionOptions,
           notices: [],
@@ -110,6 +113,9 @@ export async function harness(
           },
           async notify(notice: string) {
             record.notices.push(notice);
+            // A gated notice is rejected when its session ends first, as a provider does.
+            if (noticeGate) await Promise.race([noticeGate, ended.promise]);
+            if (record.disposed) throw new Error("the session ended before accepting the notice");
             if (refuseNotices) throw new Error("the session refused the notice");
           },
           get hasLiveTurn() {
@@ -137,6 +143,7 @@ export async function harness(
               throw new Error("the process would not exit");
             }
             record.disposed = true;
+            ended.resolve();
             for (const listener of Array.from(exitListeners)) listener();
           },
         } satisfies AgentSession;
@@ -264,6 +271,15 @@ export async function harness(
       }),
     envelope,
     deliver,
+    /** Holds every notice a session is handed (after it is recorded) until the returned release. */
+    gateNotices() {
+      const gate = Promise.withResolvers<void>();
+      noticeGate = gate.promise;
+      return () => {
+        noticeGate = undefined;
+        gate.resolve();
+      };
+    },
     /** Makes every session report, or stop reporting, a turn in progress. */
     liveTurn(live: boolean) {
       liveTurn = live;

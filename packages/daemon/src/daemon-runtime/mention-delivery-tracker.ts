@@ -88,6 +88,10 @@ const namesLaunch = (identity: RunningMentionIdentity, envelope: MentionDelivery
  */
 export class MentionDeliveryTracker {
   readonly #tracked = new Map<string, Tracked>();
+  /** Terminal reports already sent, by delivery and envelope: the same issue is refused once, even
+   * when its in-flight notice fails after a relaunch already handed it back. A re-issue for another
+   * launch or session is a new issue. */
+  readonly #refused = new Set<string>();
   /** Delivery ids pending per Agent: told during a turn that has not ended. */
   readonly #pending = new Map<string, Set<string>>();
 
@@ -260,6 +264,12 @@ export class MentionDeliveryTracker {
     detail?: string,
   ): Promise<boolean> {
     this.#forget(message.deliveryId);
+    const { launchId, sessionId } = message.mentionDelivery;
+    const issue = `${message.deliveryId}\n${launchId}\n${sessionId}`;
+    if (this.#refused.has(issue)) return false;
+    this.#refused.add(issue);
+    if (this.#refused.size > REMEMBERED_MENTIONS)
+      this.#refused.delete(this.#refused.values().next().value!);
     logger.info("Tracked mention delivery refused", {
       event: "agent.mention_delivery.terminal_error",
       agent_id: message.agentId,

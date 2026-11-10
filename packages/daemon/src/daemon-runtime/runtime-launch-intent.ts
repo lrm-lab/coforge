@@ -54,6 +54,9 @@ export type AgentInputQueue = {
   items: AgentInput[];
   drain?: Promise<void>;
   closed: boolean;
+  /** Set on a retired queue: it belongs to a runtime that ended, so what its loop is still on
+   * fails into the next launch's custody and never touches the launch that replaced it. */
+  keep?: (message: AgentMessageDelivery) => void;
 };
 
 /** The runtime fields a Start and a config push both carry, with an absent field left out and
