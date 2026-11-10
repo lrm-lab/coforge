@@ -6,6 +6,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { readContextViewSource } from "#src/agent-context-view/context-view-source";
+import { ContextViewRestoreCache } from "#src/agent-context-view/context-view-restore-cache";
 import {
   providerTranscriptRoot,
   resolveProviderTranscriptToken,
@@ -16,6 +17,7 @@ import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view
 import type { DaemonConfig } from "./runtime";
 import type { AgentContextViewUploadError } from "#src/connection/agent-context-view-upload";
 import { getLogger } from "@logtape/logtape";
+import type { ContextViewRestoreResult } from "#src/agent-context-view/context-view-restore";
 
 const MAX_RESULT_BYTES = 32 * 1024 * 1024;
 const logger = getLogger(["coforge", "daemon", "context-view"]);
@@ -28,6 +30,7 @@ type Ports = {
   agentApiKey?(agentId: string): string | undefined;
   currentTransport(): DaemonConnectionClient;
   isStopping(): boolean;
+  restoreInChild?: typeof runContextViewRestoreInChild;
 };
 
 function failure(
@@ -110,6 +113,7 @@ export function subscribeContextViewQueries(
   ports: Ports,
 ): (() => void) | undefined {
   let requestChain = Promise.resolve();
+  const restoreCache = new ContextViewRestoreCache();
   const queued = (request: AgentContextViewRequest): Promise<void> => {
     const receivedAt = Date.now();
     const run = requestChain.then(async () => {
@@ -226,11 +230,38 @@ export function subscribeContextViewQueries(
       join(ports.connection.workspaceRoot, entry.transcript),
       join(ports.stateDirectory, entry.transcript),
     ];
-    const source =
-      sourcePathCandidates
-        .map((path) => readContextViewSource(path, allowedRoots))
-        .find((candidate) => candidate.ok) ??
-      readContextViewSource(sourcePathCandidates[0]!, allowedRoots);
+    const maxBytes = Math.min(MAX_RESULT_BYTES, request.maxBytes);
+    const cacheKey = (path: string) =>
+      JSON.stringify([
+        request.agentId,
+        entry.sessionId,
+        entry.messageId,
+        entry.offset,
+        maxBytes,
+        path,
+      ]);
+    let sourcePath: string | undefined;
+    let source:
+      | { ok: true; buffer: Buffer; sourceBytes: number }
+      | { ok: false; failure: "missing" | "outside_root" | "unsafe" | "too_large" | "read_failed" }
+      | undefined;
+    let restored: ContextViewRestoreResult | undefined;
+    for (const path of sourcePathCandidates) {
+      const cached = restoreCache.get({ key: cacheKey(path), path, allowedRoots });
+      if (cached) {
+        sourcePath = path;
+        source = { ok: true, buffer: cached.source, sourceBytes: cached.sourceBytes };
+        restored = cached.restored;
+        break;
+      }
+      const candidate = readContextViewSource(path, allowedRoots);
+      if (candidate.ok) {
+        sourcePath = path;
+        source = candidate;
+        break;
+      }
+    }
+    source ??= readContextViewSource(sourcePathCandidates[0]!, allowedRoots);
     if (!source.ok) {
       const reason =
         source.failure === "too_large"
@@ -249,19 +280,27 @@ export function subscribeContextViewQueries(
       });
       return;
     }
-    const restored = await runContextViewRestoreInChild({
-      runtime: entry.runtime,
-      sessionId: entry.sessionId,
-      messageId: entry.messageId,
-      buffer: source.buffer,
-      offset: entry.offset,
-      maxBytes: Math.min(MAX_RESULT_BYTES, request.maxBytes),
-    });
+    if (!restored) {
+      restored = await (ports.restoreInChild ?? runContextViewRestoreInChild)({
+        runtime: entry.runtime,
+        sessionId: entry.sessionId,
+        messageId: entry.messageId,
+        buffer: source.buffer,
+        offset: entry.offset,
+        maxBytes,
+      });
+      if (sourcePath)
+        restoreCache.set(
+          { key: cacheKey(sourcePath), path: sourcePath, allowedRoots },
+          source.buffer,
+          restored,
+        );
+    }
     const restoreFinishedAt = Date.now();
     const result = restored.ok
       ? (() => {
           const content = new TextEncoder().encode(JSON.stringify(restored.view));
-          return content.byteLength > Math.min(MAX_RESULT_BYTES, request.maxBytes)
+          return content.byteLength > maxBytes
             ? failure(request, "too_large", "view_over_max_bytes", {
                 sourceBytes: source.sourceBytes,
                 tooLargeCause: "request",

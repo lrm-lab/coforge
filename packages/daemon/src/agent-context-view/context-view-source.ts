@@ -25,6 +25,14 @@ export type ContextViewSourceResult =
   | { ok: true; buffer: Buffer; sourceBytes: number }
   | { ok: false; failure: ContextViewSourceFailure };
 
+export type ContextViewSourceFingerprint = Readonly<{
+  dev: number;
+  ino: number;
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+}>;
+
 function contextViewMemoryBytes(): number {
   const constrained =
     typeof process.constrainedMemory === "function" ? process.constrainedMemory() : 0;
@@ -38,6 +46,51 @@ export function contextViewSourceMaxBytes(): number {
 function contained(path: string, root: string): boolean {
   const rel = relative(root, path);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/** Securely inspects a source without reading its bytes, for short-lived restore cache hits. */
+export function fingerprintContextViewSource(
+  sourcePath: string,
+  allowedRoots: readonly string[],
+  maxBytes = contextViewSourceMaxBytes(),
+): ContextViewSourceFingerprint | undefined {
+  if (!sourcePath || !allowedRoots.length) return undefined;
+  try {
+    const realRoots: string[] = [];
+    for (const root of allowedRoots) {
+      try {
+        realRoots.push(realpathSync(root));
+      } catch {
+        return undefined;
+      }
+    }
+    const realSource = realpathSync(sourcePath);
+    if (!realRoots.some((root) => contained(realSource, root))) return undefined;
+    const listed = lstatSync(sourcePath);
+    if (!isPrivateRegularFile(listed) || listed.size > maxBytes) return undefined;
+    const fd = openSync(sourcePath, CONTEXT_VIEW_SOURCE_READ_FLAGS);
+    try {
+      const info = fstatSync(fd);
+      if (
+        !isPrivateRegularFile(info) ||
+        info.dev !== listed.dev ||
+        info.ino !== listed.ino ||
+        info.size > maxBytes
+      )
+        return undefined;
+      return {
+        dev: info.dev,
+        ino: info.ino,
+        size: info.size,
+        mtimeMs: info.mtimeMs,
+        ctimeMs: info.ctimeMs,
+      };
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 export function readContextViewSource(
