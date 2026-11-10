@@ -19,6 +19,8 @@ import { MessageQuestionCircle, Pin01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
+import { TabHomeHeader } from "#src/components/layout/tab-home-header";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
@@ -84,6 +86,7 @@ export function ActivityInboxView({
   const { user, currentWorkspace } = appRoute.useLoaderData();
   const workspaceId = currentWorkspace?.id ?? "";
   const workspaceSlug = useWorkspaceSlug();
+  const desktop = useBreakpoint("lg");
   const router = useRouter();
   const queryClient = useQueryClient();
   const markAllRead = useServerFn(markActivityInboxRead);
@@ -331,6 +334,44 @@ export function ActivityInboxView({
   ].filter((section) => section.rows.length > 0);
 
   const activeCount = firstPage?.activeItemCount;
+  // The header's parts: the page header's from `lg` up, the tab home's below it.
+  const activeCountMeta = activeCount !== undefined && (
+    // Gives way before the heading does when the column is narrow.
+    <span
+      data-activity-active-count
+      className="min-w-0 truncate text-sm text-tertiary tabular-nums"
+    >
+      {m.activity_inbox_active_count({ count: activeCount })}
+    </span>
+  );
+  const filterTabs = (
+    <ActivityInboxTabs
+      filter={filter}
+      onFilterChange={onFilterChange}
+      onFilterIntent={prefetchFilter}
+      counts={{
+        // The previous filter remains as placeholder data while the next filter loads;
+        // its counts must not be shown as if they belonged to the selected view.
+        unread: query.isPlaceholderData ? undefined : firstPage?.unreadItemCount,
+        mentions: query.isPlaceholderData ? undefined : firstPage?.unreadMentionItemCount,
+      }}
+    />
+  );
+  const moreActions = !query.isPlaceholderData &&
+    firstPage &&
+    // Both actions reach every row of the list, so Mentions, which shows only some of them,
+    // offers neither; the menu shows only while one has something to do.
+    filter !== "mentions" &&
+    (firstPage.unreadItemCount > 0 || (filter === "all" && items.length > 0)) && (
+      <ActivityInboxMoreMenu
+        onReadAll={firstPage.unreadItemCount > 0 ? readAll : undefined}
+        onDoneAll={
+          filter === "all" && loadedAt !== undefined && items.length > 0
+            ? () => doneAll(loadedAt, items)
+            : undefined
+        }
+      />
+    );
   const list = (
     <div
       data-activity-list
@@ -347,51 +388,23 @@ export function ActivityInboxView({
           : "min-w-0 flex-1",
       )}
     >
-      <PageHeader
-        heading={m.navigation_activity()}
-        meta={
-          activeCount !== undefined && (
-            // Gives way before the heading does when the column is narrow.
-            <span
-              data-activity-active-count
-              className="min-w-0 truncate text-sm text-tertiary tabular-nums"
-            >
-              {m.activity_inbox_active_count({ count: activeCount })}
-            </span>
-          )
-        }
-        tabsStart
-        tabs={
-          <ActivityInboxTabs
-            filter={filter}
-            onFilterChange={onFilterChange}
-            onFilterIntent={prefetchFilter}
-            counts={{
-              // The previous filter remains as placeholder data while the next filter loads;
-              // its counts must not be shown as if they belonged to the selected view.
-              unread: query.isPlaceholderData ? undefined : firstPage?.unreadItemCount,
-              mentions: query.isPlaceholderData ? undefined : firstPage?.unreadMentionItemCount,
-            }}
-          />
-        }
-        actions={
-          !query.isPlaceholderData &&
-          firstPage &&
-          // Both actions reach every row of the list, so Mentions, which shows only some of them,
-          // offers neither; the menu shows only while one has something to do.
-          filter !== "mentions" &&
-          (firstPage.unreadItemCount > 0 || (filter === "all" && items.length > 0)) && (
-            <ActivityInboxMoreMenu
-              onReadAll={firstPage.unreadItemCount > 0 ? readAll : undefined}
-              onDoneAll={
-                filter === "all" && loadedAt !== undefined && items.length > 0
-                  ? () => doneAll(loadedAt, items)
-                  : undefined
-              }
-            />
-          )
-        }
-      />
+      {desktop ? (
+        <PageHeader
+          heading={m.navigation_activity()}
+          meta={activeCountMeta}
+          tabsStart
+          tabs={filterTabs}
+          actions={moreActions}
+        />
+      ) : (
+        <>
+          <TabHomeHeader title={m.navigation_activity()} meta={activeCountMeta} />
+          <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-page py-2">
+            <div className="flex min-w-0 flex-1">{filterTabs}</div>
+            {moreActions}
+          </div>
+        </>
+      )}
       {failure && (
         <div
           role="alert"

@@ -4,6 +4,7 @@ import { Link, Navigate } from "@tanstack/react-router";
 import { Edit01, Edit03 } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
+import { ConversationListButton } from "./conversation-list-button";
 import {
   Empty,
   EmptyDescription,
@@ -42,6 +43,7 @@ function DraftsList() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
+        leading={<ConversationListButton />}
         heading={m.conversation_drafts_nav()}
         meta={
           rows.length > 0 && (
