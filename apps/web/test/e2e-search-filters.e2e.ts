@@ -110,6 +110,9 @@ test("search filters narrow results, name their values, and clear together", asy
         channelName: { in: ["e2e-filter-a", "e2e-filter-b"] },
       },
     });
+    // An earlier run may have left this Agent in another Workspace, with memberships there that
+    // cannot move along: remove it so it is made afresh here.
+    await db.agent.deleteMany({ where: { id: agentId, workspaceId: { not: workspaceId } } });
     await db.agent.upsert({
       where: { id: agentId },
       update: { deletedAt: null, visibility: "public", workspaceId, ownerId: DEV_BROWSER_USER.id },
