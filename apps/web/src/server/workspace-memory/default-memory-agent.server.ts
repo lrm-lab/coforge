@@ -8,6 +8,7 @@ import { RUNTIME_PROVIDER, deletedAgentName } from "@lrm/coforge-sdk/internal";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
 import { memoryAgentExperimentEnabled, memoryAgentGate } from "./memory-agent-gate.server";
 import { isOpenVikingPrototypeEnabled } from "./prototype-gate";
 import {
@@ -171,12 +172,21 @@ export async function enableMemoryAgentForWorkspace(
 }
 
 /** Undoes that creation: the Agent goes, and so does a profile the same call provisioned, so the
- * Workspace is back to having switched nothing on. */
+ * Workspace is back to having switched nothing on.
+ *
+ * The Agent is deleted the way the product deletes an Agent — the one atomic soft-delete store,
+ * which marks `deletedAt`, leaves its channel memberships and keeps Message, Task and Action-card
+ * rows readable. No row is ever hard-deleted; deletion is a marker, and every read filters on it. */
 export async function rollbackMemoryAgentEnable(
   db: PrismaClient,
-  input: { workspaceId: string; agentId: string },
+  input: { workspaceId: string; agentId: string; deletedByUserId?: string },
 ): Promise<void> {
-  await db.agent.deleteMany({ where: { id: input.agentId } });
+  await new PrismaAgentDeletionStore(db).delete({
+    agentId: input.agentId,
+    workspaceId: input.workspaceId,
+    deletedAt: new Date(),
+    ...(input.deletedByUserId ? { deletedByUserId: input.deletedByUserId } : {}),
+  });
   await db.workspaceMemoryProfile.deleteMany({ where: { workspaceId: input.workspaceId } });
 }
 

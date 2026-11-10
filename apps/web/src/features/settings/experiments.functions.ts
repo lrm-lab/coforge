@@ -71,6 +71,7 @@ export const setExperiment = createServerFn({ method: "POST" })
         await rollbackMemoryAgentEnable(context.db, {
           workspaceId: context.workspaceId,
           agentId: created,
+          deletedByUserId: context.user.id,
         });
       throw error;
     }
