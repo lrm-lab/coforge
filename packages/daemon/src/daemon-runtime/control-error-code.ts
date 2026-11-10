@@ -1,5 +1,5 @@
 /**
- * `AgentControl`'s fixed rejection messages (agent-runtime/agent-control.ts). They are stable,
+ * `AgentControl`'s fixed rejection messages (agent-runtime/agent-control*.ts). They are stable,
  * low-cardinality identifiers, safe to log verbatim as `control_code` — unlike an arbitrary error
  * message, which `diagnosticErrorCode` deliberately never logs raw.
  */

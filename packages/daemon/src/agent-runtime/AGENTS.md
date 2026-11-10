@@ -50,25 +50,24 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   process's display, authority file, and per-agent XDG directories. A missing
   service returns nothing, the launch continues, and stop does not call the port.
 
-## Control fencing (`agent-control.ts`)
+## Control fencing (`agent-control*.ts`)
 
 - `agent-control.ts` owns request/epoch-fenced stop, reset-workspace, and start plus their
   control completion, over the runtime port in `agent-control-runtime.ts`; never Session input.
-- A managed Start launches under the server-supplied `launchId`, never a
-  locally minted one.
-- `startPending(agentId)` is true from the synchronous `start` call until the
-  Start launches, runs out of attempts, or is ended by a Stop or newer
-  operation, launch-retry cooldowns included; `Runtime.startSettled` fires once
-  when it turns false.
-- A Start that meets an already running process under an older, terminal
-  operation rebinds it through the injected `Runtime.rebind(intent, launchId)`
-  hook: no second process and no new launch config. A running process without
-  a matching `running` record answers `failed` with `agent_already_running` so
-  the server operation terminates.
-- When a stored native Session cannot be resumed, report it through
-  `Runtime.invalidateSession` before the fresh retry launch, and pass the same
-  reason as that launch's `invalidateReason`. Do this only for
-  `session_missing` and `provider_replay_rejected`; `session_in_use` is a retry
+  Launch attempts, retries and the pending-Start count live in `agent-control-launch.ts`
+  (`ManagedLaunches`), the record fence and checks in `agent-control-fence.ts`, the rebind in
+  `agent-control-rebind.ts`.
+- A managed Start launches under the server-supplied `launchId`, never a locally minted one.
+- `startPending(agentId)` is true from the synchronous `start` call until the Start launches,
+  runs out of attempts, or is ended by a Stop or newer operation, launch-retry cooldowns
+  included; `Runtime.startSettled` fires once when it turns false.
+- A Start that meets an already running process under an older, terminal operation rebinds it
+  through the injected `Runtime.rebind(intent, launchId)` hook: no second process and no new
+  launch config. A running process without a matching `running` record answers `failed` with
+  `agent_already_running` so the server operation terminates.
+- When a stored native Session cannot be resumed, report it through `Runtime.invalidateSession`
+  before the fresh retry launch, and pass the same reason as that launch's `invalidateReason`.
+  Do this only for `session_missing` and `provider_replay_rejected`; `session_in_use` is a retry
   signal, not evidence that the session is gone.
 
 ## Launch failures (`launch-failure.ts`)
@@ -102,8 +101,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   attempts and backoff.
 - `launch-attempt-failure.ts` owns what a failed attempt owes — the retry
   after its cooldown, or the terminal `launch_failed` record — including the
-  non-retryable decision above; `AgentControl` only asks it and stops when it
-  scheduled a retry.
+  non-retryable decision above; `ManagedLaunches` (`agent-control-launch.ts`) only asks
+  it and stops when it scheduled a retry.
 
 ## Launch identity
 

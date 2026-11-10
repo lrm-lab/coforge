@@ -4,6 +4,8 @@ import type {
   AgentStartIntent,
   SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
+import type { AgentRuntimeState } from "./agent-runtime-state";
+import type { AgentSessions } from "./agent-session";
 
 /** The Agent runtime operations `AgentControl` drives. */
 export type AgentControlRuntime = {
@@ -47,4 +49,12 @@ export type AgentControlRuntime = {
   /** A Start that was pending for this Agent (see `startPending`) no longer is: it launched, its
    * attempts ran out, or a Stop or newer operation ended it. */
   startSettled?(agentId: string): void;
+};
+
+/** What every part of Agent control reads: the daemon instance, the shared state, Sessions and the runtime port. */
+export type AgentControlContext = {
+  readonly instanceId: string;
+  readonly state: AgentRuntimeState;
+  readonly sessions: AgentSessions;
+  readonly runtime: AgentControlRuntime;
 };
