@@ -278,7 +278,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector('section[aria-label="Document"] iframe') != null && document.querySelector('article[aria-label="Web page: Signup funnel"]') != null`,
+      `${pageHydrated} && document.querySelector('section[aria-label="Artifact"] iframe') != null && document.querySelector('article[aria-label="Web page: Signup funnel"]') != null`,
     );
     await shoot("7-web-beside-chat");
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
@@ -308,7 +308,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector('section[aria-label="Document"] .ProseMirror')?.textContent.includes("Friday")`,
+      `${pageHydrated} && document.querySelector('section[aria-label="Artifact"] .ProseMirror')?.textContent.includes("Friday")`,
     );
     expect(await evaluate<string>("location.pathname")).toEndWith(`/channel/${channel.id}`);
 

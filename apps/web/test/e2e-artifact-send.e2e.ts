@@ -180,7 +180,7 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${target.id}`);
     await waitFor(`document.body.textContent.includes("For Thursday's review")`, 60_000);
     await waitFor(
-      `document.body.textContent.includes("You don't have access to this document") && document.body.textContent.includes("This document was deleted")`,
+      `document.body.textContent.includes("You don't have access to this artifact") && document.body.textContent.includes("This artifact was deleted")`,
     );
     expect(await evaluate<boolean>(`document.body.textContent.includes("Salary bands")`)).toBe(
       false,

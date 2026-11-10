@@ -81,7 +81,7 @@ test("a document opens beside the chat, saves by itself and keeps the viewer's t
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   };
   // The artifact beside the chat, saved or new.
-  const pane = `(document.querySelector("main[aria-labelledby]") ?? document.querySelector('section[aria-label="Document"]'))`;
+  const pane = `(document.querySelector("main[aria-labelledby]") ?? document.querySelector('section[aria-label="Artifact"]'))`;
   const inPane = (text: string) => `(${pane}?.textContent ?? "").includes(${JSON.stringify(text)})`;
   const button = (text: string, within = "document") =>
     `[...${within}.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;
@@ -145,7 +145,7 @@ test("a document opens beside the chat, saves by itself and keeps the viewer's t
 
     // The card: title and the first lines, in the chat.
     await browser("open", `${page}?view=chat`);
-    const card = `document.querySelector('article[aria-label="Document: Home page launch plan"]')`;
+    const card = `document.querySelector('article[aria-label="Markdown: Home page launch plan"]')`;
     await browser("wait", "--fn", `${pageHydrated} && ${card} !== null`);
     expect(await evaluate<string>(`${card}.textContent`)).toContain("Ship the new home page");
     // Beside its card a document's link reads as its title, and a message of the link alone as
@@ -158,7 +158,7 @@ test("a document opens beside the chat, saves by itself and keeps the viewer's t
     );
     expect(
       await evaluate<boolean>(
-        `document.querySelector('article[aria-label="Document: Weekly sync notes"]') !== null`,
+        `document.querySelector('article[aria-label="Markdown: Weekly sync notes"]') !== null`,
       ),
     ).toBe(true);
     await shoot("desktop-1-card");
@@ -265,12 +265,12 @@ test("a document opens beside the chat, saves by itself and keeps the viewer's t
     // New document is a draft until typing rests: closed unwritten, it leaves nothing.
     const count = () => db.artifact.count({ where: { homeKey: `conversation:${channel.id}` } });
     const documentsBefore = await count();
-    await click(button("New document"));
+    await click(button("New artifact"));
     await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
     await click(`${pane}.querySelector('button[aria-label="Close"]')`);
     await browser("wait", "--fn", `${pane} == null`);
     expect(await count()).toBe(documentsBefore);
-    await click(button("New document"));
+    await click(button("New artifact"));
     await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
     await evaluate(`(${pane}.querySelector("textarea").focus(), true)`);
     await browser("keyboard", "type", "Launch checklist");

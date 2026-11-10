@@ -104,7 +104,7 @@ test("a document typed in offline says it could not save, and saves once back on
 
     // Leaving now would lose the edits (no save can go out): it asks first, and staying keeps them.
     await page.evaluate(`document.querySelector('a[href*="/channel/${channel.id}"]').click()`);
-    const asks = `document.body.textContent.includes("This document has unsaved changes. Leaving loses them.")`;
+    const asks = `document.body.textContent.includes("This artifact has unsaved changes. Leaving loses them.")`;
     await until(() => page.evaluate<boolean>(asks), 10_000);
     await page.evaluate(
       `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Keep editing").click()`,
