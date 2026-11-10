@@ -2,25 +2,36 @@ import { useEffect, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
 import { dateTimeFormat } from "#src/lib/dates";
-import { useTimeZone } from "#src/lib/time-zone-context";
+import { useRenderClock, useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
 /**
  * The days an Activity list falls on, newest first: each item goes under the day of its latest
- * message, in the viewer's time zone. Before
- * hydration there is no zone to name a day in, so the whole list is one group and no heading shows
- * (the server and the first client render agree).
+ * message, in the viewer's time zone.
+ *
+ * Before hydration the days come from the render's clock (`useRenderClock`): the zone the server
+ * knew and the moment it rendered, which the hydrating browser reads the same, so the list is
+ * grouped from its first frame and nothing moves when it hydrates (task #68). With no zone known
+ * yet (no saved zone, no cookie: a first visit) the whole list is one group with no heading until
+ * hydration. After it, the viewer's zone and the browser's clock, read at once on mount (loader
+ * data can be minutes old) and every minute after.
  */
 export function useActivityDays<T>(items: T[], at: (item: T) => string | Date) {
   const hydrated = useHydrated();
+  const render = useRenderClock();
   const zone = useTimeZone();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
-  if (!hydrated) return [{ key: "all", label: undefined, items }];
+  if (!hydrated) {
+    return render.zone
+      ? groupByDay(items, at, render.zone, render.renderedAt)
+      : [{ key: "all", label: undefined, items }];
+  }
   return groupByDay(items, at, zone, now);
 }
 

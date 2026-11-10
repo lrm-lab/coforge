@@ -426,7 +426,12 @@ export function ActivityInboxView({
                   className={cn(index > 0 && "pt-4")}
                 />
               )}
-              <ol aria-label={section.label} className="flex flex-col">
+              <ol
+                aria-label={section.label}
+                // The one list before the days are named, for the e2e that checks it never shows.
+                data-undated={section.dated === false ? "" : undefined}
+                className="flex flex-col"
+              >
                 {section.rows}
               </ol>
               {section.footer}
