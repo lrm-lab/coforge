@@ -110,8 +110,10 @@ test("a signed-in visitor joins a Workspace from its invite link", async () => {
     expect(await evaluate<string>(`document.querySelector("main h1")?.textContent`)).toBe(
       `Join ${name}`,
     );
+    // A new Workspace has its owner and no Agent: the Memory Agent comes only with the Workspace's
+    // own experiment switch on (bbef129b2), and this one never turned it on.
     expect(await evaluate<string>(`document.querySelector("main")?.innerText`)).toContain(
-      "It has 1 member and 1 Agent.",
+      "It has 1 member.",
     );
     await browser("screenshot", join(artifacts, "join-page.png"));
 

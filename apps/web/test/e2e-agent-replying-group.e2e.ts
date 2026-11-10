@@ -11,9 +11,10 @@ import { setupAgentReplying, visible } from "./helpers/agent-replying-fixture";
 const fx = setupAgentReplying({ artifactsName: "agent-replying-group" });
 const { suffix, agentName, evaluate, until } = fx;
 
-/** How many faces the line showing `sentence` draws. */
+/** How many faces the line showing `sentence` draws: its images (the pill above a composer is a
+ * button, so the faces are not the first hidden element in it). */
 const faces = (sentence: string) =>
-  `[...document.querySelectorAll(".replying-line")].find((line) => line.textContent === ${JSON.stringify(sentence)})?.querySelector('[aria-hidden="true"]').children.length ?? -1`;
+  `[...document.querySelectorAll(".replying-line")].find((line) => line.textContent === ${JSON.stringify(sentence)})?.querySelectorAll("img").length ?? -1`;
 
 test("one, three and four Agents read the same under a root and above the composer", async () => {
   const [b, c] = fx.otherAgents.map((agent) => agent.name);

@@ -158,7 +158,7 @@ test("signing in with an email and password, from a Workspace invite link", asyn
       joinPath,
     );
     expect(await evaluate<string>(`document.querySelector("main h1")?.textContent`)).toBe(
-      "Sign in to CoForge",
+      "Welcome back",
     );
     await browser("screenshot", join(artifacts, "1b-sign-in-page.png"));
 
