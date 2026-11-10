@@ -168,14 +168,16 @@ export const InputBase = ({
             {type === "password" && (
                 <AriaButton
                     aria-label="Toggle password visibility"
+                    // A toggle: pressed while the password shows, as the open eye says.
+                    aria-pressed={isPasswordVisible}
                     onClick={() => setIsPasswordVisible(!isPasswordVisible)}
                     className={cx(
                         "absolute flex cursor-pointer items-center justify-center text-fg-quaternary transition duration-100 ease-linear hover:text-fg-quaternary_hover focus:text-fg-quaternary_hover focus:outline-hidden",
                         sizes[inputSize].iconTrailing,
                     )}
                 >
-                    {/* The eye shows what the field does now: shut while the text is hidden, open while it shows
-                        (the designer's call, 11-10). */}
+                    {/* The eye shows what every password field does now: shut while the text is hidden, open
+                        while it shows (jing, 11-10; one behavior site-wide). */}
                     {isPasswordVisible ? <Eye className="size-4 stroke-[2.25px]" /> : <EyeOff className="size-4 stroke-[2.25px]" />}
                 </AriaButton>
             )}

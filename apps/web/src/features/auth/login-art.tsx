@@ -15,8 +15,6 @@ const SWAY: Keyframe[] = [
 const SWAY_MS = 900;
 /** The bubble stays up this long after the sway, so it is read before the page goes. */
 const HOLD_MS = 200;
-/** However the browser treats the animation, sign-in never waits on it longer than this. */
-const WELCOME_MAX_MS = 1600;
 
 /** Leaning back, as if not looking, while a password is typed. */
 const LEAN: Keyframe[] = [
@@ -72,10 +70,8 @@ export function LoginArt() {
         lean = null;
         setGreeting(kind);
         const sway = el.animate(SWAY, { duration: SWAY_MS, easing: "ease-in-out" });
-        await Promise.race([
-          sway.finished.then(() => wait(HOLD_MS)).catch(() => {}),
-          wait(WELCOME_MAX_MS),
-        ]);
+        // The provider stops waiting after `WELCOME_LIMIT_MS` whatever happens here.
+        await sway.finished.then(() => wait(HOLD_MS)).catch(() => {});
       },
     });
     return () => attach(null);
