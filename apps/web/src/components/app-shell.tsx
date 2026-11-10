@@ -243,15 +243,20 @@ export function AppShell({
     />
   );
 
-  // The expanded sidebar and the drawer share one footer: "What's new" above the user card. The
-  // collapsed rail has the same two as icons.
+  // "What's new" above the user card; the collapsed rail has the same two as icons. On desktop the
+  // bell is at the right of the top bar; the phone drawer keeps it by the user card.
+  const userCard = <UserMenuCard base={base} user={user} onSignOut={onSignOut} />;
   const expandedFooter = (
     <>
       <WhatsNewRow />
+      {userCard}
+    </>
+  );
+  const drawerFooter = (
+    <>
+      <WhatsNewRow />
       <div className="flex min-w-0 items-center gap-1">
-        <div className="min-w-0 flex-1">
-          <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
-        </div>
+        <div className="min-w-0 flex-1">{userCard}</div>
         <NotificationBell workspaceSlug={currentWorkspace.slug} />
       </div>
     </>
@@ -262,9 +267,15 @@ export function AppShell({
       <MobileDrawerProvider>
         {/* Clears the notch and the home indicator on a phone. */}
         <div className="flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:bg-(image:--sidebar-gradient) lg:[--app-top-bar:2.75rem]">
-          {/* Search, centred over the whole window; the fixed sidebars start below it. */}
-          <div className="hidden h-(--app-top-bar) shrink-0 items-center justify-center px-2 lg:flex">
-            <SearchBar />
+          {/* Search centred over the whole window, the bell at its right; the fixed sidebars start
+            below it. */}
+          <div className="hidden h-(--app-top-bar) shrink-0 grid-cols-[1fr_minmax(0,30rem)_1fr] items-center gap-2 px-3 lg:grid">
+            <div className="col-start-2 flex justify-center">
+              <SearchBar />
+            </div>
+            <div className="flex justify-end">
+              <NotificationBell workspaceSlug={currentWorkspace.slug} />
+            </div>
           </div>
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
             {/* Each sidebar is `fixed` + a spacer div reserving its width in flow;
@@ -275,7 +286,7 @@ export function AppShell({
                 activeUrl={activeUrl}
                 items={navItems}
                 subheader={workspaceSwitcher}
-                footer={expandedFooter}
+                footer={drawerFooter}
               />
               <SidebarExpanded
                 activeUrl={activeUrl}
@@ -298,7 +309,6 @@ export function AppShell({
                 footer={
                   <div className="flex w-full flex-col items-center gap-2">
                     <WhatsNewRailButton />
-                    <NotificationBell rail workspaceSlug={currentWorkspace.slug} />
                     <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
                   </div>
                 }

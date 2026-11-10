@@ -158,17 +158,12 @@ function NoticeSheet({ children }: { children: ReactNode }) {
 }
 
 /**
- * The bell by the user card (task #641), with the unread count, for a viewer who has notifications
- * to see. Beside the card and on the rail it opens to the right, clear of the sidebar; on a phone, as a sheet. What
+ * The bell, with the unread count, for a viewer who has notifications to see (task #641): at the
+ * right of the desktop's top bar, opening below it; in the phone drawer by the user card, as a
+ * sheet. What
  * was open counts as seen once the panel closes, so its dots stay for as long as it is read.
  */
-export function NotificationBell({
-  workspaceSlug,
-  rail = false,
-}: {
-  workspaceSlug: string;
-  rail?: boolean;
-}) {
+export function NotificationBell({ workspaceSlug }: { workspaceSlug: string }) {
   const notifications = useSystemNotifications();
   const wide = useBreakpoint("lg");
   const [open, setOpen] = useState(false);
@@ -218,8 +213,8 @@ export function NotificationBell({
       </span>
       {wide ? (
         <AriaPopover
-          placement="right bottom"
-          offset={rail ? 8 : 24}
+          placement="bottom end"
+          offset={8}
           className={cn(
             "flex max-h-[32.5rem] w-[23.75rem] origin-(--trigger-anchor-point) flex-col overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary",
             POPOVER_MOTION,
