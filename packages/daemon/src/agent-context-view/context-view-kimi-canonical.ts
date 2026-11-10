@@ -10,6 +10,7 @@ export type KimiCanonicalState = {
   openSteps: Map<string, number>;
   pendingToolResultIds: Set<string>;
   deferredMessages: RecordValue[];
+  systemPrompt: string;
 };
 
 const INTERRUPTED_TOOL_RESULT =
@@ -109,7 +110,12 @@ function loopEventMessage(event: RecordValue): RecordValue | undefined {
 }
 
 function applyRecord(state: KimiCanonicalState, record: RecordValue): void {
-  if (record.type === "llm.tools_snapshot" && typeof record.hash === "string") {
+  if (
+    (record.type === "config.update" || record.type === "profile.bind") &&
+    typeof record.systemPrompt === "string"
+  ) {
+    state.systemPrompt = record.systemPrompt;
+  } else if (record.type === "llm.tools_snapshot" && typeof record.hash === "string") {
     state.tools.set(record.hash, record.tools);
   } else if (record.type === "context.append_message" && isRecord(record.message)) {
     pushMessages(state, [record.message]);
@@ -341,6 +347,7 @@ export function prepareKimiCanonicalState(
     openSteps: new Map(),
     pendingToolResultIds: new Set(),
     deferredMessages: [],
+    systemPrompt: "",
   };
   const prefix = records.slice(0, Math.max(0, latestLoopIndex));
   const flattened = flattenKimiChain(prefix);
@@ -367,6 +374,7 @@ export function responseAfterKimiRequest(
     openSteps: new Map(state.openSteps),
     pendingToolResultIds: new Set(state.pendingToolResultIds),
     deferredMessages: [...state.deferredMessages],
+    systemPrompt: state.systemPrompt,
   };
   for (let index = latestLoopIndex + 1; index < records.length; index += 1) {
     const record = providerPayload(records[index]!);
@@ -479,9 +487,9 @@ export function validateKimiCanonicalRequest(
 ): "media_removed" | "context_mismatch" | undefined {
   if (payload.projection && String(payload.projection).includes("media")) return "media_removed";
   if (
-    typeof payload.systemPrompt === "string" &&
     typeof payload.systemPromptHash === "string" &&
-    sha256(payload.systemPrompt) !== payload.systemPromptHash
+    sha256(typeof payload.systemPrompt === "string" ? payload.systemPrompt : state.systemPrompt) !==
+      payload.systemPromptHash
   )
     return "context_mismatch";
   if (typeof payload.toolsHash === "string") {

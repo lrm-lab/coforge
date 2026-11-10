@@ -25,6 +25,10 @@ function messagesHash(messages: Array<Record<string, unknown>>): string {
   return hash.digest("hex");
 }
 
+function sha256Text(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
 function restore(records: unknown[], messageId: string) {
   const source = buffer(records);
   return restoreContextView({
@@ -321,5 +325,39 @@ test("synthesizes the prior interrupted result for duplicate Kimi tool calls", (
     },
   ];
   const result = restore(records, "m1");
+  expect(result).toMatchObject({ ok: true, view: { verification: "verified" } });
+});
+
+test("reconstructs the Kimi system prompt from a profile/config fold", () => {
+  const user = { role: "user", content: [{ type: "text", text: "hello" }] };
+  const result = restore(
+    [
+      { type: "config.update", sessionId: "s1", systemPrompt: "profile prompt" },
+      { type: "context.append_message", sessionId: "s1", message: user },
+      {
+        type: "llm.request",
+        kind: "loop",
+        sessionId: "s1",
+        message_id: "m1",
+        request: {
+          toolSelect: true,
+          systemPromptHash: sha256Text("profile prompt"),
+          messageCount: 1,
+          messagesHash: messagesHash([user]),
+        },
+      },
+      {
+        type: "context.append_loop_event",
+        sessionId: "s1",
+        event: { type: "tool.call", toolCallId: "send", name: "shell", args: {} },
+      },
+      {
+        type: "context.append_loop_event",
+        sessionId: "s1",
+        event: { type: "tool.result", toolCallId: "send", output: "Message ID: m1" },
+      },
+    ],
+    "m1",
+  );
   expect(result).toMatchObject({ ok: true, view: { verification: "verified" } });
 });

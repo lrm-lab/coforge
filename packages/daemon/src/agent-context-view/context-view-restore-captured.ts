@@ -344,7 +344,10 @@ export function restoreKimi(
     // subsequent request belong to a later turn and must not leak into this view.
     if (trigger && (latestLoopIndex < 0 || index >= latestLoopIndex)) break;
   }
-  if (responseCount > requestCount || pendingTools.size > 0)
+  if (
+    responseCount > requestCount ||
+    (canonicalState.verification === undefined && pendingTools.size > 0)
+  )
     return { ok: false, failure: "context_mismatch" };
   if (requestCount === 0 || !sawTarget || !trigger) return { ok: false, failure: "not_found" };
   if (!messages.length) return { ok: false, failure: "not_found" };
