@@ -120,6 +120,18 @@ function stripDynamicToolContext(messages: RecordValue[]): RecordValue[] {
   });
 }
 
+export function projectKimiRequestMessages(
+  payload: RecordValue,
+  state: KimiCanonicalState,
+): RecordValue[] {
+  const sourceMessages = state.messages.length
+    ? state.messages
+    : Array.isArray(payload.messages)
+      ? payload.messages.filter(isRecord)
+      : [];
+  return projectKimiCanonicalMessages(sourceMessages, payload);
+}
+
 function strictProjection(messages: RecordValue[]): RecordValue[] {
   const firstUser = messages.findIndex((message) => message.role === "user");
   const projected = firstUser < 0 ? [] : messages.slice(firstUser);
@@ -210,12 +222,7 @@ export function validateKimiCanonicalRequest(
     if (tools === undefined || sha256(JSON.stringify(tools)) !== payload.toolsHash)
       return "context_mismatch";
   }
-  const sourceMessages = state.messages.length
-    ? state.messages
-    : Array.isArray(payload.messages)
-      ? payload.messages.filter(isRecord)
-      : [];
-  const projectedMessages = projectKimiCanonicalMessages(sourceMessages, payload);
+  const projectedMessages = projectKimiRequestMessages(payload, state);
   if (typeof payload.messageCount === "number" && projectedMessages.length !== payload.messageCount)
     return "context_mismatch";
   if (

@@ -11,12 +11,42 @@ import { piRequestMessages, piResponseParts } from "./context-view-pi-projection
 import {
   hasKimiCanonicalFields,
   isNewerKimiWireRecord,
+  projectKimiRequestMessages,
   prepareKimiCanonicalState,
   validateKimiCanonicalRequest,
 } from "./context-view-kimi-canonical";
 
 function piRequestDigest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function kimiCanonicalViewMessage(record: RecordValue): RestoredContextMessage {
+  const role =
+    record.role === "assistant" || record.role === "system" || record.role === "tool"
+      ? record.role
+      : "user";
+  const view = message(role, record.content ?? record.parts ?? record.text);
+  if (role === "assistant" && Array.isArray(record.toolCalls)) {
+    view.parts.push(
+      ...record.toolCalls.filter(isRecord).map((call) => ({
+        kind: "tool_use",
+        toolName: typeof call.name === "string" ? call.name : "unknown",
+        toolUseId: typeof call.id === "string" ? call.id : null,
+        input: call.input ?? call.arguments ?? null,
+      })),
+    );
+  } else if (role === "tool") {
+    view.parts = [
+      {
+        kind: "tool_result",
+        toolName: null,
+        toolUseId: typeof record.toolCallId === "string" ? record.toolCallId : null,
+        output: typeof record.content === "string" ? record.content : (record.content ?? ""),
+        isError: record.isError === true,
+      },
+    ];
+  }
+  return view;
 }
 
 import {
@@ -142,6 +172,12 @@ export function restoreKimi(
       if (hasKimiCanonicalFields(requestPayload, record)) {
         const failure = validateKimiCanonicalRequest(requestPayload, canonicalState);
         if (failure) return { ok: false, failure };
+        messages.length = 0;
+        messages.push(
+          ...projectKimiRequestMessages(requestPayload, canonicalState).map(
+            kimiCanonicalViewMessage,
+          ),
+        );
       }
       if (typeof requestPayload.model === "string") model = requestPayload.model;
       else if (typeof record.model === "string") model = record.model;

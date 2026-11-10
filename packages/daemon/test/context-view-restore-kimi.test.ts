@@ -400,15 +400,20 @@ test("matches Kimi toolSelect and strict projection before hashing", () => {
       event: { type: "tool.result", toolCallId: "call-1", output: "Message ID: m1" },
     },
   ]);
-  expect(
-    restoreContextView({
-      runtime: "kimi-sdk",
-      sessionId: "s1",
-      messageId: "m1",
-      buffer: kimi,
-      offset: kimi.length,
-    }),
-  ).toMatchObject({ ok: true, view: { verification: "verified" } });
+  const restored = restoreContextView({
+    runtime: "kimi-sdk",
+    sessionId: "s1",
+    messageId: "m1",
+    buffer: kimi,
+    offset: kimi.length,
+  });
+  expect(restored).toMatchObject({ ok: true, view: { verification: "verified" } });
+  if (restored.ok) {
+    const rendered = JSON.stringify(restored.view.messages);
+    expect(rendered).toContain("hello");
+    expect(rendered).not.toContain("system");
+    expect(rendered).not.toContain('"tools"');
+  }
 });
 
 test("folds Kimi context.undo before rebuilding the latest loop request", () => {
