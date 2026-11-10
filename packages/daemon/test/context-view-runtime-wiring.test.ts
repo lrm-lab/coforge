@@ -130,7 +130,7 @@ test("forgetting an Agent disables its indexed context view before local state i
       { clearAgent() {} } as never,
       { remove() {} } as never,
       { forget() {} } as never,
-      { drop() {} } as never,
+      () => {},
     );
 
     expect(fixtureValue.deps.enabled.has("agent-1")).toBe(false);

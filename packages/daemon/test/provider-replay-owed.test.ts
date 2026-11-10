@@ -185,6 +185,24 @@ test("owed resume messages survive a Start that carries resume messages of its o
   }
 });
 
+test("a whole-runtime stop drops what a failed cold start owed", async () => {
+  const h = await harness({ resume: "stored-1", failSessions: [2] });
+  try {
+    await h.deliver(1);
+    await failColdStart(h);
+
+    // The same runtime object comes back up; the cloud's next Start is the source of what is unread.
+    await h.runtime.stop();
+    await h.runtime.start(connection);
+    await h.start();
+
+    expect(h.sessions).toHaveLength(2);
+    expect(unreadNotices(h.sessions[1]!.notices)).toEqual([]);
+  } finally {
+    await h.runtime.stop();
+  }
+});
+
 test("deleting the Agent drops what a failed cold start owed", async () => {
   const h = await harness({ resume: "stored-1", failSessions: [2] });
   try {

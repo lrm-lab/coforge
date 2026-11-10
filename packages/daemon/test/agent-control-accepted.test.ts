@@ -1,4 +1,3 @@
-import { OwedRecovery } from "#src/daemon-runtime/provider-replay-recovery";
 import { expect, test } from "bun:test";
 import type {
   AgentControlResult,
@@ -62,7 +61,8 @@ function harness(agentControlAccepted: boolean) {
         },
       }) as unknown as AgentRuntime,
     rebind: async () => undefined,
-    stops: { forgetSession: () => {}, owedRecovery: new OwedRecovery() },
+    stops: { forgetSession: () => {} },
+    dropOwedRecovery: () => {},
     startSettled: () => {},
     sendSessionInvalidate: () => {},
     reportSession: async () => {},

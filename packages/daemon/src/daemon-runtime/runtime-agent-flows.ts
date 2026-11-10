@@ -24,6 +24,10 @@ import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentRecoveryContext } from "./runtime-launch-intent";
 import type { AgentStopRegistry } from "./agent-stop-registry";
+import type { AgentLaunchCoordinator } from "./agent-launch-coordinator";
+import type { AgentControl } from "#src/agent-runtime/agent-control";
+import type { AgentSessions } from "#src/agent-runtime/agent-session";
+import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { LaunchRequest } from "./runtime-launch-types";
 import { recoveryOf, runtimeConfigOf } from "./runtime-launch-intent";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
@@ -140,7 +144,9 @@ export type AgentControlIntentPorts = {
   replaySession(agentId: string): Promise<void>;
   runtime(agentId: string): AgentRuntime | undefined;
   managed(agentId: string): boolean;
-  stops: Pick<AgentStopRegistry, "pendingStop" | "owedRecovery">;
+  stops: Pick<AgentStopRegistry, "pendingStop">;
+  /** Drops what a cold start owed the Agent's next launch. */
+  dropOwedRecovery(agentId: string): void;
   startAgent(
     agentId: string,
     config: AgentRuntimeConfig,
@@ -150,6 +156,43 @@ export type AgentControlIntentPorts = {
   stopAgent(agentId: string): Promise<void>;
   resetWorkspace(request: AgentWorkspaceResetRequest): Promise<void>;
 };
+
+/** What `controlIntentPorts` reads from the runtime: its collaborators, and `started` and
+ * `stopping` as they stand when an intent arrives. */
+export type AgentControlIntentDeps = {
+  assertOwnIntent(intent: AgentStartIntent | AgentStopIntent): void;
+  connection: { workspaceId: string; computerId: string };
+  started: boolean;
+  stopping: boolean;
+  agentControl: Pick<AgentControl, "start" | "stop" | "managed" | "resetWorkspace">;
+  agentSessions: Pick<AgentSessions, "replay">;
+  processes: Pick<AgentProcessManager, "runtime">;
+  stops: Pick<AgentStopRegistry, "pendingStop">;
+  launchCoordinator: Pick<AgentLaunchCoordinator, "dropOwedRecovery">;
+  startAgent: AgentControlIntentPorts["startAgent"];
+  stopAgent(agentId: string): Promise<void>;
+};
+
+/** The ports the control-intent handlers run on, bound to the runtime's collaborators. */
+export function controlIntentPorts(deps: AgentControlIntentDeps): AgentControlIntentPorts {
+  return {
+    assertOwnIntent: (intent) => deps.assertOwnIntent(intent),
+    connection: deps.connection,
+    started: deps.started,
+    stopping: deps.stopping,
+    controlStart: (intent) => deps.agentControl.start(intent),
+    controlStop: (intent) => deps.agentControl.stop(intent),
+    replaySession: (agentId) => deps.agentSessions.replay(agentId),
+    runtime: (agentId) => deps.processes.runtime(agentId),
+    managed: (agentId) => deps.agentControl.managed(agentId),
+    stops: deps.stops,
+    dropOwedRecovery: (agentId) => deps.launchCoordinator.dropOwedRecovery(agentId),
+    startAgent: (agentId, config, recovery, request) =>
+      deps.startAgent(agentId, config, recovery, request),
+    stopAgent: (agentId) => deps.stopAgent(agentId),
+    resetWorkspace: (request) => deps.agentControl.resetWorkspace(request),
+  };
+}
 
 /** A server Start: fenced through AgentControl, or an unfenced launch when no control epoch came. */
 export async function handleAgentStart(
@@ -199,7 +242,7 @@ export async function handleAgentStop(
   if (ports.managed(intent.agentId)) throw new Error("Agent requires a fenced Stop");
   await ports.stopAgent(intent.agentId);
   // A person's Stop of an unmanaged Agent: nothing a cold start owed its next launch is told to it.
-  ports.stops.owedRecovery.drop(intent.agentId);
+  ports.dropOwedRecovery(intent.agentId);
 }
 
 /** A server workspace reset: only for this runtime's own, started, not-stopping scope. */

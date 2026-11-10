@@ -18,6 +18,7 @@ import {
   launchEventObserver,
   handleAgentStart,
   handleAgentStop,
+  controlIntentPorts,
   handleAgentTurnInterrupt,
   handleAgentWorkspaceReset,
   scanUsage,
@@ -591,6 +592,7 @@ export class DaemonRuntime {
         this.#startAgent(agentId, config, recovery, request),
       rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
       stops: this.#stopState,
+      dropOwedRecovery: (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
       startSettled: (agentId) => this.#exitedDelivery.releaseStartBuffer(agentId),
       sendSessionInvalidate: (message) => this.#transport.sendSessionInvalidate?.(message),
       reportSession: (report) => this.#reportAgentSession(report),
@@ -835,6 +837,7 @@ export class DaemonRuntime {
       agentLaunches: this.#agentLaunches,
       agentProcessManager: this.#agentProcessManager,
       stops: this.#stopState,
+      launchCoordinator: this.#launchCoordinator,
       messageAttention: this.#messageAttention,
       mentionDeliveries: this.#mentionDeliveries,
       reminders: this.#reminders,
@@ -1118,22 +1121,19 @@ export class DaemonRuntime {
   }
 
   #controlIntentPorts(): AgentControlIntentPorts {
-    return {
-      assertOwnIntent: (intent) => this.#assertOwnIntent(intent),
+    return controlIntentPorts({
+      assertOwnIntent: this.#assertOwnIntent,
       connection: this.#connection,
       started: this.#startup.started,
       stopping: this.#stopping,
-      controlStart: (intent) => this.#agentControl.start(intent),
-      controlStop: (intent) => this.#agentControl.stop(intent),
-      replaySession: (agentId) => this.#agentSessions.replay(agentId),
-      runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
-      managed: (agentId) => this.#agentControl.managed(agentId),
+      agentControl: this.#agentControl,
+      agentSessions: this.#agentSessions,
+      processes: this.#agentProcessManager,
       stops: this.#stopState,
-      startAgent: (agentId, config, recovery, request) =>
-        this.#startAgent(agentId, config, recovery, request),
+      launchCoordinator: this.#launchCoordinator,
+      startAgent: this.#startAgent,
       stopAgent: (agentId) => this.stopAgent(agentId),
-      resetWorkspace: (request) => this.#agentControl.resetWorkspace(request),
-    };
+    });
   }
 
   async handleAgentWorkspaceReset(request: AgentWorkspaceResetRequest): Promise<void> {
@@ -1320,7 +1320,7 @@ export class DaemonRuntime {
       this.#messageAttention,
       this.#consumedSeqs,
       this.#sync,
-      this.#stopState.owedRecovery,
+      (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
     );
 
   #cleanupUnconfirmed = (agentId: string, error: unknown): boolean =>

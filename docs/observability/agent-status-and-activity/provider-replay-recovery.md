@@ -52,7 +52,7 @@
   不相加（server Start 的汇总与这份可能描述同一批未读）；冷启动之后才到、留给下次 launch 的排队投递
   另计入（恢复型 launch 会丢弃它们）。只有三件事会丢掉它：AgentControl 接受的人的 Stop（过了各项围栏、结束进程之前；
   过期或被拒的 Stop 不算；无 epoch 的非托管 Stop 在停完之后）、Agent 被删除、整个 runtime 停止
-  （`AgentStopRegistry.clear`）；失败 launch 之后 AgentControl 做的清理性 stop 不算。Daemon 重启后欠账随内存消失，
+  （`AgentLaunchCoordinator.clearOwedRecovery`）；失败 launch 之后 AgentControl 做的清理性 stop 不算。Daemon 重启后欠账随内存消失，
   未读消息由云端的已读边界在下一次 Start 或唤醒时再告知。
 - **App Inbox**：session 因此被替换时，该 Agent 已告知过的 App Inbox 条目一并忘记
   （`AgentInboxCoordinator.forgetAnnouncedAppItems`），新 launch 的 `drainAppInboxNotices` 重新告知。

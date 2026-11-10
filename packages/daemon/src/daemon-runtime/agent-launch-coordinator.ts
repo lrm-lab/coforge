@@ -35,6 +35,7 @@ import { launchAgentProcess } from "./agent-launch-process";
 import {
   carriedStart,
   newlyParked,
+  OwedRecovery,
   pendingMentions,
   reissuedMentions,
   type CarriedStart,
@@ -67,7 +68,7 @@ export type AgentLaunchCoordinatorPorts = {
   runtimeInstanceId: string;
   agentProcessManager: AgentProcessManager;
   /** Which Agents are stopping, and any stop still in flight. */
-  stops: Pick<AgentStopRegistry, "stopping" | "pendingStop" | "owedRecovery">;
+  stops: Pick<AgentStopRegistry, "stopping" | "pendingStop">;
   /** The Session each launch reported. */
   sessions: Pick<AgentStopRegistry, "sessionReference" | "rememberSession">;
   currentActivityLaunches: Map<string, ActivityLaunch>;
@@ -151,6 +152,8 @@ export class AgentLaunchCoordinator {
   readonly #freshLaunches = new Set<string>();
   /** Consecutive qualifying early crashes of a resumed Session, across this runtime's launches. */
   readonly resumedEarlyCrash = new ResumedEarlyCrashStreak();
+  /** What a cold start of a rejected Session still owes the Agent's next launch. */
+  readonly #owed = new OwedRecovery();
   /** The task idle reminder's daemon side, built from this coordinator's own collaborators. */
   readonly idleNudge: TaskIdleNudge;
 
@@ -353,10 +356,20 @@ export class AgentLaunchCoordinator {
     );
   }
 
+  /** Drops what the Agent was owed: a Stop a person made, or the Agent's delete. */
+  dropOwedRecovery(agentId: string): void {
+    this.#owed.drop(agentId);
+  }
+
+  /** Drops every debt, as a whole-runtime stop does: the cloud's next Start is the source then. */
+  clearOwedRecovery(): void {
+    this.#owed.clear();
+  }
+
   /** What the Agent's next launch still owes a cold start that did not finish telling it, and the
    * call that settles the debt once that launch has told it. */
   owedTo(agentId: string) {
-    return this.ports.stops.owedRecovery.owing(agentId, this.ports.deliveryQueue.pending(agentId));
+    return this.#owed.owing(agentId, this.ports.deliveryQueue.pending(agentId));
   }
 
   /** A stored Session that cannot be continued: invalidate it and cold-start a fresh Session
@@ -392,7 +405,7 @@ export class AgentLaunchCoordinator {
         sessionMode: "create",
       });
     this.ports.agentProcessManager.clearRestartSession(agentId);
-    if (carried) this.ports.stops.owedRecovery.owe(agentId, carried);
+    if (carried) this.#owed.owe(agentId, carried);
     // The exit that triggered this cold start must not sweep the strays the relaunch keeps
     // using; the mark clears when the new launch registers its tag token (task #673).
     noteAgentRelaunchPending(agentId);

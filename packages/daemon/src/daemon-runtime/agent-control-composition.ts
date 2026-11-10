@@ -41,9 +41,10 @@ export type AgentControlCompositionPorts = {
   ): Promise<AgentRuntime>;
   /** Rebinds an already-running process to a newer control scope. */
   rebind(intent: AgentStartIntent, launchId: string): Promise<SessionIdentity | undefined>;
-  /** Forgets the Session reference of a launch that starts over under a fresh session, and what an
-   * accepted Stop ends: the debt a cold start owed the Agent's next launch. */
-  stops: Pick<AgentStopRegistry, "forgetSession" | "owedRecovery">;
+  /** Forgets the Session reference of a launch that starts over under a fresh session. */
+  stops: Pick<AgentStopRegistry, "forgetSession">;
+  /** Drops the debt a cold start owed the Agent's next launch, once a Stop is accepted. */
+  dropOwedRecovery(agentId: string): void;
   /** A Start that was pending for this Agent no longer is. */
   startSettled(agentId: string): void;
   /** Sends the stale-session report this Agent's control decision produced. */
@@ -100,7 +101,7 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
       return session?.readSessionIdentity?.();
     },
     // A Stop passed every fence and is about to end the Agent's process.
-    stopAccepted: (agentId) => ports.stops.owedRecovery.drop(agentId),
+    stopAccepted: (agentId) => ports.dropOwedRecovery(agentId),
     launch: async (intent, launchId, replacedSessionId, invalidateReason) => {
       if (replacedSessionId) ports.stops.forgetSession(intent.agentId);
       const runtime = await ports.startAgent(

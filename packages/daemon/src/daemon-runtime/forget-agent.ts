@@ -4,7 +4,6 @@ import type { AgentFeatureSync } from "./agent-feature-sync";
 import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentOfflineResidency } from "./agent-offline-residency";
-import type { OwedRecovery } from "./provider-replay-recovery";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 
 export function forgetAgent(
@@ -17,9 +16,9 @@ export function forgetAgent(
   messageAttention: AgentMessageAttentionIndex,
   consumedSeqs: AgentConsumedSeqStore,
   featureSync: AgentFeatureSync,
-  owedRecovery: Pick<OwedRecovery, "drop">,
+  dropOwedRecovery: (agentId: string) => void,
 ): void {
-  owedRecovery.drop(agentId);
+  dropOwedRecovery(agentId);
   contextViewEnabled.delete(agentId);
   contextViewService.disable(agentId);
   inboxCoordinator.forgetAgent(agentId, {
