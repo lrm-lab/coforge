@@ -4,6 +4,7 @@ import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_CHANNEL_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { clearOnboardingAgent } from "#src/server/workspaces/workspace-onboarding.server";
 import { recordMembershipNotice } from "#src/server/conversations/channel-membership-notice.server";
+import { settlePendingNotLaunched } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import type {
   AgentDeletionOutcome,
   AgentDeletionStore,
@@ -13,7 +14,7 @@ import type {
  * One transaction makes a deleted Agent inert cloud-side: the Agent is marked
  * `deletedAt`, its Agent API keys are revoked, its public-channel memberships are soft-left
  * (which is what stops delivery and wake, since both read `ACTIVE_MEMBER_WHERE`), and its
- * scheduled Reminders are canceled. Messages, Tasks and Action cards are deliberately left
+ * scheduled Reminders are canceled, and its pending tracked @mentions are settled not launched. Messages, Tasks and Action cards are deliberately left
  * untouched — the `Restrict` foreign keys make them undeletable, and history must stay readable.
  *
  * Every statement is conditional on the Agent still being live, so a repeated delete is an
@@ -89,6 +90,12 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
           status: "scheduled",
         },
         data: { status: "canceled" },
+      });
+      // A deleted Agent is never woken or re-issued to, so its pending tracked mentions end here.
+      await settlePendingNotLaunched(tx, {
+        workspaceId: input.workspaceId,
+        agentId: input.agentId,
+        settledAt: input.deletedAt,
       });
       const apiKeysRevoked = await tx.agentApiKey.updateMany({
         where: { agentId: input.agentId, workspaceId: input.workspaceId, revokedAt: null },

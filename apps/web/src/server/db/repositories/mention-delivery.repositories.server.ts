@@ -101,6 +101,21 @@ const notLaunched = (now: Date) => ({
   mentionSettledAt: now,
 });
 
+/** Settles an Agent's pending tracked mentions as not launched: nothing will launch it for them. */
+export async function settlePendingNotLaunched(
+  db: Pick<PrismaClient, "agentMessageDelivery">,
+  input: { workspaceId: string; agentId: string; settledAt: Date },
+) {
+  await db.agentMessageDelivery.updateMany({
+    where: {
+      workspaceId: input.workspaceId,
+      agentId: input.agentId,
+      mentionOutcome: ISSUABLE_OUTCOME,
+    },
+    data: notLaunched(input.settledAt),
+  });
+}
+
 const AGENT_STATE_SELECT = {
   computerId: true,
   stoppedAt: true,
@@ -384,13 +399,10 @@ export class PrismaMentionDeliveryRepository {
 
   /** A person stopped the Agent: its still-pending tracked mentions will not be launched. */
   async settleStopped(input: { workspaceId: string; agentId: string; stoppedAt: Date }) {
-    await this.db.agentMessageDelivery.updateMany({
-      where: {
-        workspaceId: input.workspaceId,
-        agentId: input.agentId,
-        mentionOutcome: ISSUABLE_OUTCOME,
-      },
-      data: notLaunched(input.stoppedAt),
+    await settlePendingNotLaunched(this.db, {
+      workspaceId: input.workspaceId,
+      agentId: input.agentId,
+      settledAt: input.stoppedAt,
     });
   }
 
