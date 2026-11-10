@@ -45,6 +45,8 @@ const resetRequest: AgentWorkspaceResetRequest = { ...scope, requestId: "req-3" 
 
 function harness(agentControlAccepted: boolean) {
   const sent: AgentControlResult[] = [];
+  /** The order in which a stop ends the process and drops what a cold start owed. */
+  const calls: string[] = [];
   const ports: AgentControlCompositionPorts = {
     connection: {
       workspaceRoot: "/tmp/coforge-t584-test",
@@ -53,7 +55,9 @@ function harness(agentControlAccepted: boolean) {
     runtimeInstanceId: "daemon-1",
     running: () => false,
     session: () => undefined,
-    stopAgent: async () => {},
+    stopAgent: async () => {
+      calls.push("stop");
+    },
     startAgent: async () =>
       ({
         session: {
@@ -62,7 +66,9 @@ function harness(agentControlAccepted: boolean) {
       }) as unknown as AgentRuntime,
     rebind: async () => undefined,
     stops: { forgetSession: () => {} },
-    dropOwedRecovery: () => {},
+    dropOwedRecovery: () => {
+      calls.push("dropOwedRecovery");
+    },
     startSettled: () => {},
     sendSessionInvalidate: () => {},
     reportSession: async () => {},
@@ -71,7 +77,7 @@ function harness(agentControlAccepted: boolean) {
     },
     agentControlAccepted: () => agentControlAccepted,
   };
-  return { sent, control: composeAgentControl(ports).agentControl };
+  return { sent, calls, control: composeAgentControl(ports).agentControl };
 }
 
 test("a capable server gets `accepted` ahead of the serialized stop result", async () => {
@@ -84,6 +90,20 @@ test("a capable server gets `accepted` ahead of the serialized stop result", asy
     epoch: scope.epoch,
     sequence: 1,
   });
+});
+
+test("an accepted Stop drops what was owed before it ends the process, and a stale one never does", async () => {
+  const { calls, control } = harness(true);
+  await control.start(startIntent);
+
+  // Older than the Start that launched the Agent: the control fence refuses it.
+  await expect(control.stop({ ...scope, epoch: 0, requestId: "req-stale" })).rejects.toThrow(
+    "stale_control_request",
+  );
+  expect(calls).toEqual([]);
+
+  await control.stop({ ...scope, epoch: 2, requestId: "req-accepted" });
+  expect(calls).toEqual(["dropOwedRecovery", "stop"]);
 });
 
 test("an old server that never confirmed the phase sees no `accepted` result", async () => {

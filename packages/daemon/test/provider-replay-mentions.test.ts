@@ -98,3 +98,25 @@ test("a delivery parked after the attention was read is counted unless it was he
 
   expect(newlyParked(parked, new Set(["held"]), ["back"])).toEqual([{ deliveryId: "new" }]);
 });
+
+test("a tracked mention that arrives while the runtime is ending is the server's to issue again", async () => {
+  const gate = Promise.withResolvers<void>();
+  const h = await harness({ resume: "stored-1", disposeGate: gate.promise });
+  try {
+    await h.deliver(1);
+    h.failTurn(h.sessions[0]!);
+    await h.disposing;
+    // The old process is going away: the tracker refuses the mention as unknown instead of telling it.
+    await h.deliver(2, h.envelope(2, "stored-1"));
+    gate.resolve();
+    await h.until(() => h.sessions.length === 2 && h.sessions[1]!.notices.length > 0);
+
+    const told = unreadNotices(h.sessions[1]!.notices).join("\n");
+    expect(h.terminalErrors).toEqual(["IDENTITY_UNKNOWN"]);
+    expect(told).toContain("#general 1 new message");
+    expect(told).not.toContain("2 new messages");
+  } finally {
+    gate.resolve();
+    await h.runtime.stop();
+  }
+});
