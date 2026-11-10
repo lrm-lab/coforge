@@ -6,6 +6,16 @@ const twMerge = extendTailwindMerge({
       text: ["display-xs", "display-sm", "display-md", "display-lg", "display-xl", "display-2xl"],
       // The page gutter (`--spacing-page` in styles.css), so `px-page` overrides `px-4`.
       spacing: ["page"],
+      // Untitled's own shadows (`--shadow-*` in theme.css), so `shadow-none` overrides them.
+      shadow: [
+        "skeuomorphic",
+        "xs-skeuomorphic",
+        "modern-mockup-inner-sm",
+        "modern-mockup-inner-md",
+        "modern-mockup-inner-lg",
+        "modern-mockup-outer-md",
+        "modern-mockup-outer-lg",
+      ],
     },
   },
 });
