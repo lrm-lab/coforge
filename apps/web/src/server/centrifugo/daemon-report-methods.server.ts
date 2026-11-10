@@ -3,6 +3,7 @@ import { agentTurnInterruptMethods } from "./agent-turn-interrupt-receiver.serve
 import { runtimeAuthMethods } from "./runtime-auth-receiver.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 import { agentContextViewAvailabilityMethods } from "./agent-context-view-availability-receiver.server";
+import { agentCredentialRestoredMethods } from "./agent-credential-restored-receiver.server";
 
 /** The report methods of the features whose daemon answers arrive on RPC and are kept in Redis. */
 export function daemonReportMethods(db: PrismaClient | null): Record<string, CentrifugoRpcMethod> {
@@ -10,5 +11,6 @@ export function daemonReportMethods(db: PrismaClient | null): Record<string, Cen
     ...agentTurnInterruptMethods(db),
     ...runtimeAuthMethods(db),
     ...agentContextViewAvailabilityMethods(db !== null),
+    ...agentCredentialRestoredMethods(db),
   };
 }

@@ -23,6 +23,11 @@ mechanics only; domain rules stay in the owning `src/server/` module.
   any rejection. Keep that wire response unchanged; log a genuine failure with
   an allowlisted reason, as `agent_control:result_rejected` and
   `agent_session:snapshot_rejected` do.
+- `agent-credential-restored-receiver.server.ts` takes a daemon's report that an Agent's provider
+  credential works again (`agent:v1:credential:restored`, fire-and-forget like the receivers above).
+  `CredentialRestoredActivity` answers it with an `idle` row of its own launch, only while the Agent's
+  newest Activity is still the `runtime_error` the report's reason names, dated by the report's
+  `restoredAtMs`; a late report never turns a working Agent idle.
 - The context-usage receiver accepts a reading only when
   `AgentControlState.launchId` matches the message's own. It writes the
   display read model (`agent-display.server.ts`), never the control record.

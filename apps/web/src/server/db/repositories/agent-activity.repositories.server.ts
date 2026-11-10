@@ -278,6 +278,23 @@ export class AgentActivityRepository {
     }));
   }
 
+  /** The Agent's newest stored Activity, whoever may read it: its kind, the reason of its runtime
+   * error and when it happened. */
+  async newest(workspaceId: string, agentId: string) {
+    const row = await this.db.agentActivity.findFirst({
+      where: { workspaceId, agentId },
+      orderBy: [{ occurredAt: "desc" }, { clientSeq: "desc" }, { createdAt: "desc" }],
+      select: { detailKind: true, runtimeErrorReason: true, occurredAt: true },
+    });
+    return row
+      ? {
+          detailKind: row.detailKind,
+          runtimeErrorReason: row.runtimeErrorReason,
+          occurredAtMs: row.occurredAt.getTime(),
+        }
+      : undefined;
+  }
+
   /** Stores one Activity; true when this call inserted it (a replayed frame answers false). */
   async record(input: TrustedAgentActivity): Promise<boolean> {
     const { count } = await this.db.agentActivity.createMany({
