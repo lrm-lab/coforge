@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import { browserSession, cpuThrottle, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
  * Activity's "Waiting on you" section (task #413): a choice card that asks the viewer heads the
@@ -99,6 +99,7 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     `(${section}?.textContent ?? "").includes(${JSON.stringify(prompt)})`;
   // The first option, Red.
   const pick = `[data-message-id="${mineId}"] li:first-child > button[data-choice-row]`;
+  let throttle: Awaited<ReturnType<typeof cpuThrottle>> | undefined;
   try {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
@@ -135,24 +136,30 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     await browser("wait", "--fn", listed(older[0]!));
     expect(await evaluate<number>(shownRows)).toBe(4);
 
-    // The row opens the conversation at the card, which the viewer answers there.
+    // The row opens the conversation at the card, which the viewer answers there. Nothing may move
+    // the card once its options show (task #72): the notification banner over the composer used to
+    // arrive a beat later, shrink the pane and, the pane following its latest message, carry the
+    // card up by the banner's height under the press, which then landed on the next option. On a
+    // slowed CPU, as on a busy phone, that beat is long enough to press into.
+    throttle = await cpuThrottle(browser, "/activity");
+    await throttle.set(6);
+    await evaluate(
+      `(window.__pickTops = [], (function watch() { const b = document.querySelector('${pick}'); if (b) window.__pickTops.push(Math.round(b.getBoundingClientRect().top)); if (window.__pickTops.length < 90) requestAnimationFrame(watch); })(), true)`,
+    );
     await browser("find", "text", mine, "click");
-    await browser("wait", "--fn", `document.querySelector('${pick}') !== null`);
-    // The pane may still be scrolling to the card when the option first appears, and a click on
-    // a moving target lands beside it: click again until the card closes on the pick.
-    const closed = `document.querySelector('${pick}') === null`;
-    for (let attempt = 0; !(await evaluate<boolean>(closed)); attempt++) {
-      if (attempt === 5) throw new Error("the pick never landed");
-      await browser("click", pick).catch(() => undefined);
-      for (let poll = 0; poll < 15 && !(await evaluate<boolean>(closed)); poll++)
-        await Bun.sleep(200);
-    }
+    await browser("wait", "--fn", "window.__pickTops.length >= 90");
+    const tops = await evaluate<number[]>("window.__pickTops");
+    expect(new Set(tops).size).toBe(1);
+    await browser("click", pick);
+    await throttle.set(1);
+    await browser("wait", "--fn", `document.querySelector('${pick}') === null`);
     await browser("wait", "--fn", `!${listed(mine)}`);
     await browser("screenshot", join(artifacts, "answered.png"));
     const answered = await db.actionCard.findUniqueOrThrow({ where: { messageId: mineId } });
     expect(answered.state).toBe("executed");
     expect(answered.result).toMatchObject({ optionId: "a" });
   } finally {
+    throttle?.close();
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.agentMessageDelivery

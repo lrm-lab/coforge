@@ -198,3 +198,44 @@ export async function saveMessageInOtherTab(options: {
   await other.browser("eval", `${menuItemNamed("Save message")}.click()`);
   await wait(`!document.querySelector('[role="menu"]')`);
 }
+
+/**
+ * Slows the page's CPU the way DevTools' Performance panel does (`rate` 1 is full speed), over the
+ * DevTools protocol of the session's page whose URL contains `urlPart`: a busy phone's timing,
+ * where something late on the page (a fetch answering, a part mounting) lands while the reader is
+ * already pressing. `close` drops the connection; the browser's own close ends the throttle.
+ */
+export async function cpuThrottle(
+  browser: (...args: string[]) => Promise<string>,
+  urlPart: string,
+) {
+  const port = new URL((await browser("get", "cdp-url")).trim().replace(/^ws/, "http")).port;
+  const targets = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as {
+    type: string;
+    url: string;
+    webSocketDebuggerUrl: string;
+  }[];
+  const page = targets.find((target) => target.type === "page" && target.url.includes(urlPart));
+  if (!page) throw new Error(`no page at ${urlPart} to throttle`);
+  const socket = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    socket.onopen = resolve;
+    socket.onerror = reject;
+  });
+  let id = 0;
+  return {
+    set: (rate: number) =>
+      new Promise<void>((resolve) => {
+        const sent = ++id;
+        socket.addEventListener("message", function answered(event) {
+          if ((JSON.parse(String(event.data)) as { id?: number }).id !== sent) return;
+          socket.removeEventListener("message", answered);
+          resolve();
+        });
+        socket.send(
+          JSON.stringify({ id: sent, method: "Emulation.setCPUThrottlingRate", params: { rate } }),
+        );
+      }),
+    close: () => socket.close(),
+  };
+}

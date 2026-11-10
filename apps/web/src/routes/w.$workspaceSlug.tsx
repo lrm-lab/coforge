@@ -28,7 +28,7 @@ import { getBrowserRealtimeConnectionToken } from "#src/features/realtime/realti
 import { BrowserPushLifecycle } from "#src/features/notifications/browser-push-lifecycle";
 import { InPageNotifications } from "#src/features/notifications/in-page-notifications";
 import { ComputerActivityReport } from "#src/features/notifications/use-computer-activity-report";
-import { NotificationActivationContext } from "#src/features/notifications/notification-activation-banner";
+import { NotificationActivationProvider } from "#src/features/notifications/notification-activation-banner";
 import { getBrowserNotificationSettings } from "#src/features/notifications/notifications.functions";
 import { loadWorkspaceAgents } from "#src/features/agents/workspace-agents.functions";
 import { WorkspaceAgentsProvider } from "#src/features/agents/workspace-agents-realtime";
@@ -258,7 +258,7 @@ function AppLayout() {
                         />
                       </Suspense>
                     )}
-                    <NotificationActivationContext
+                    <NotificationActivationProvider
                       value={{
                         publicKey: notifications.publicKey,
                         workspaceSlug: currentWorkspace.slug,
@@ -296,7 +296,7 @@ function AppLayout() {
                           </Suspense>
                         )}
                       </AppShell>
-                    </NotificationActivationContext>
+                    </NotificationActivationProvider>
                   </SearchDialogHost>
                 </PanelTabOrderProvider>
               </WorkspaceAgentsProvider>

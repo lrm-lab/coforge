@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { BellRinging01, Check } from "@untitledui/icons";
@@ -7,16 +15,31 @@ import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { syncBrowserPushSubscription } from "./browser-push";
-import { useNotificationsAskable } from "./notification-permission";
+import {
+  startReadingNotificationsAskable,
+  useNotificationsAskable,
+} from "./notification-permission";
 import { saveBrowserNotificationPreference, subscribeBrowserPush } from "./notifications.functions";
 import "./notification-activation-banner.css";
 
+type NotificationActivation = { publicKey: string | null; workspaceSlug: string };
+
 /** What the banner needs from the Workspace layout. Absent (a pane rendered on its own), there is
  * no banner. */
-export const NotificationActivationContext = createContext<{
-  publicKey: string | null;
-  workspaceSlug: string;
-} | null>(null);
+const NotificationActivationContext = createContext<NotificationActivation | null>(null);
+
+/** Provides it, and starts reading whether the browser may be asked as the layout mounts: a pane
+ * opened from a page with no composer (Activity) then has the answer in its first frame. */
+export function NotificationActivationProvider({
+  value,
+  children,
+}: {
+  value: NotificationActivation;
+  children: ReactNode;
+}) {
+  useEffect(() => startReadingNotificationsAskable(), []);
+  return <NotificationActivationContext value={value}>{children}</NotificationActivationContext>;
+}
 
 /** Per tab, as on Raft: a dismissed banner stays away until the browser session ends. */
 const DISMISSED_KEY = "coforge:notification-activation-banner-dismissed:v1";
@@ -29,12 +52,32 @@ function readDismissed() {
   }
 }
 
-function writeDismissed() {
+// Storage off, the banner still goes for this page: the flag lives here too.
+let dismissedHere = false;
+const dismissListeners = new Set<() => void>();
+
+function dismiss() {
+  dismissedHere = true;
   try {
     window.sessionStorage.setItem(DISMISSED_KEY, "1");
   } catch {
-    // Storage off: the banner still goes for this page.
+    // Storage off: `dismissedHere` keeps it gone for this page.
   }
+  for (const listener of dismissListeners) listener();
+}
+
+/** Dismissed for this tab, read where the banner renders rather than after it mounts: a pane opened
+ * later shows or hides the banner in its first frame (task #72). The server render counts it
+ * dismissed, so hydration shows nothing. */
+function useDismissed() {
+  return useSyncExternalStore(
+    (listener) => {
+      dismissListeners.add(listener);
+      return () => dismissListeners.delete(listener);
+    },
+    () => dismissedHere || readDismissed(),
+    () => true,
+  );
 }
 
 /** Stands in for `{settings}` while the hidden-for-now sentence is split around its link. */
@@ -59,12 +102,10 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
   const ref = useRef<HTMLDivElement>(null);
   // Known in the browser only, so the server render and hydration agree on showing nothing.
   const [askable, recheckAskable] = useNotificationsAskable();
-  const [dismissed, setDismissed] = useState(true);
+  const dismissed = useDismissed();
   const [confirming, setConfirming] = useState(false);
   const [enabling, setEnabling] = useState(false);
   const [error, setError] = useState<"unavailable" | "generic" | null>(null);
-
-  useEffect(() => setDismissed(readDismissed()), []);
 
   if (!askable || (dismissed && !confirming)) return null;
 
@@ -137,10 +178,9 @@ function Banner({ publicKey, workspaceSlug }: { publicKey: string | null; worksp
         size="xs"
         color="secondary"
         onPress={() => {
-          writeDismissed();
           setError(null);
-          setDismissed(true);
           setConfirming(true);
+          dismiss();
         }}
       >
         {m.notification_activation_dismiss()}
