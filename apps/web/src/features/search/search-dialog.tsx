@@ -7,7 +7,7 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { isImeComposing } from "#src/lib/ime";
 import { m } from "#src/paraglide/messages";
 import type { SearchIntent } from "./search-dialog-context";
-import { SearchFilterChips, SearchFilterMenu } from "./search-filter-bar";
+import { SearchFilterChips, SearchFilterPanel, SearchFilterToggle } from "./search-filter-bar";
 import { clearedFilters, hasActiveFilter, type SearchFilters } from "./search-filters";
 import { SearchHome } from "./search-home";
 import { searchEntityKey } from "./search-memory";
@@ -54,6 +54,7 @@ export function SearchDialog({
   const [filters, setFilters] = useState<SearchFilters>(intent.filters ?? {});
   const [deferred, setDeferred] = useState(Boolean(intent.deferred));
   const [composing, setComposing] = useState(false);
+  const [filtersShown, setFiltersShown] = useState(false);
   const box = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
 
@@ -147,11 +148,9 @@ export function SearchDialog({
                   onChange={(event) => setText(event.target.value)}
                   className="w-full min-w-0 bg-transparent text-lg text-primary caret-fg-brand-primary outline-hidden placeholder:text-placeholder [&::-webkit-search-cancel-button]:appearance-none"
                 />
-                <SearchFilterMenu
-                  workspaceId={workspaceId}
-                  query={query}
-                  filters={filters}
-                  onChange={changeFilters}
+                <SearchFilterToggle
+                  expanded={filtersShown}
+                  onToggle={() => setFiltersShown((shown) => !shown)}
                 />
                 {/* A phone has no Esc and no backdrop to tap: the dialog fills the screen. */}
                 <ButtonUtility
@@ -164,11 +163,20 @@ export function SearchDialog({
                   onClick={onClose}
                 />
               </div>
-              <SearchFilterChips
-                workspaceId={workspaceId}
-                filters={filters}
-                onChange={changeFilters}
-              />
+              {filtersShown ? (
+                <SearchFilterPanel
+                  workspaceId={workspaceId}
+                  query={query}
+                  filters={filters}
+                  onChange={changeFilters}
+                />
+              ) : (
+                <SearchFilterChips
+                  workspaceId={workspaceId}
+                  filters={filters}
+                  onChange={changeFilters}
+                />
+              )}
             </div>
             <div ref={list} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
               {searching ? (
