@@ -11,6 +11,9 @@ import { seededUuid } from "./browser-e2e";
  */
 export const rowItems = JSON.stringify("[data-activity-list] ol > li");
 
+/** The days are named: before hydration the rows are one undated list, labelled "Activity". */
+export const daysNamed = `[...document.querySelectorAll("[data-activity-list] ol")].every((list) => list.getAttribute("aria-label") !== "Activity")`;
+
 /** The Pinned section's rows, as a selector literal for page expressions. */
 export const pinnedItems = JSON.stringify('ol[aria-label="Pinned"] > li');
 

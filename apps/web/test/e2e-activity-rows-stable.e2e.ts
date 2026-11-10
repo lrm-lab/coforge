@@ -5,7 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
-import { seedChannel } from "./helpers/activity-inbox-e2e";
+import { daysNamed, seedChannel } from "./helpers/activity-inbox-e2e";
 
 /**
  * Activity's rows stay the same elements once the page hydrates (task #64). Before hydration no
@@ -64,8 +64,7 @@ test("Activity keeps its row elements when the page hydrates and names the days"
     await browser("--init-script", observer, "set", "viewport", "1440", "900");
     await browser("open", `${origin}/en/w/${workspace.slug}/activity`);
     await waitFor(
-      // The undated section (before hydration) is labelled "Activity"; then the days are named.
-      `${pageHydrated} && document.body.textContent.includes("E2E rows-stable newest") && [...document.querySelectorAll("[data-activity-list] ol")].every((list) => list.getAttribute("aria-label") !== "Activity")`,
+      `${pageHydrated} && document.body.textContent.includes("E2E rows-stable newest") && ${daysNamed}`,
       60_000,
     );
     // The day headings are up; give any late re-render time to land.
