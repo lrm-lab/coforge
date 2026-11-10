@@ -71,5 +71,11 @@
   "action_card_questions_previous_step": "上一题",
   "action_card_questions_go_to": "第 {number} 题",
   "action_card_questions_steps": "问题",
+  "action_card_ignore": "忽略",
+  "action_card_ignored": "已忽略，5 秒后关闭",
+  "action_card_ignored_status": "已忽略，5 秒内可撤销",
+  "action_card_undo": "撤销",
+  "action_card_ignore_row": "忽略：{prompt}",
+  "action_card_ignored_short": "已忽略",
   "action_card_unknown": "这张卡片需要更新 CoForge 后才能显示。"
 }

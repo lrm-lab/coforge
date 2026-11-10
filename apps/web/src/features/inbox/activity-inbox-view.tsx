@@ -292,6 +292,7 @@ export function ActivityInboxView({
           card={card}
           tabStop={waitingRowKey(card.messageId) === tabStopKey}
           onOpen={onOpen}
+          onIgnored={refreshWaiting}
         />
       )),
       footer: waiting.length > WAITING_SHOWN && (
