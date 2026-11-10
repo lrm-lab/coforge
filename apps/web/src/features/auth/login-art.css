@@ -15,8 +15,9 @@
   margin-bottom: calc(var(--w) * 0.16);
 }
 
-/* The designer's two layers (@qq971766802, 11-09): the frame stays put; the white door, drawn
- * already ajar, sits in its opening where her mock puts it, as fractions of the frame's width. */
+/* The designer's two layers (@qq971766802, 11-09; the door redrawn 11-10): the frame stays put; the
+ * white door, drawn already ajar, fills its opening, as fractions of the frame's width. The door's
+ * body (inside its glow) keeps the earlier door's height, right edge and foot. */
 .login-art__frame {
   position: absolute;
   inset: 0 0 auto;
@@ -24,15 +25,15 @@
   height: auto;
 }
 
-/* Hinged on its right edge (the door body's, inside the glow: 90.4% across the layer); on hover it
+/* Hinged on its right edge (the door body's, inside the glow: 90.49% across the layer); on hover it
  * swings further in, its left edge going away from the viewer, over the frame's own lilac face. */
 .login-art__door {
   position: absolute;
-  left: 24.93%;
-  top: calc(var(--w) * 0.1409);
-  width: 69.17%;
+  left: 22.88%;
+  top: calc(var(--w) * 0.14);
+  width: 71.13%;
   height: auto;
-  transform-origin: 90.4% 50%;
+  transform-origin: 90.49% 50%;
   transform: perspective(calc(var(--w) * 2.5)) rotateY(0deg);
 }
 
@@ -43,11 +44,51 @@
   pointer-events: none;
 }
 
+/* The agent's place; it sways and leans from its foot. Inside it, the float, and in that the two
+ * faces, the smiling one over the open-eyed one. */
 .login-art__agent {
   left: 21%;
   top: 36.3%;
   width: 71%;
   z-index: 2;
+  transform-origin: 50% 92%;
+}
+
+.login-art__float {
+  position: relative;
+}
+
+.login-art__face {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.login-art__face--smile {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.login-art__face--smile[data-shown] {
+  opacity: 1;
+}
+
+/* Above the agent's head, clear of it (jing, 11-10: 90% of the sketch's size). */
+.login-art__bubble {
+  position: absolute;
+  right: -4%;
+  top: 15%;
+  z-index: 3;
+  padding: 0.55em 0.9em;
+  border-radius: 1em 1em 1em 0.25em;
+  background: #fff;
+  color: #5d36dc;
+  font-size: calc(var(--w) * 0.0585);
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgb(105 65 198 / 0.18);
+  transform-origin: 0% 100%;
 }
 
 .login-art__shadow {
@@ -160,9 +201,18 @@
     transition-duration: var(--motion-in-lg);
   }
 
-  .login-art__agent {
+  .login-art__float {
     will-change: transform;
     animation: login-float 4.8s ease-in-out infinite;
+  }
+
+  .login-art__face--smile {
+    transition: opacity 120ms linear;
+  }
+
+  /* Springs out from its corner by the agent. */
+  .login-art__bubble {
+    animation: login-bubble 300ms cubic-bezier(0.34, 1.56, 0.64, 1) 80ms both;
   }
 
   .login-art__shadow {
@@ -178,6 +228,13 @@
   }
   50% {
     transform: translateY(-3.5%);
+  }
+}
+
+@keyframes login-bubble {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
   }
 }
 
