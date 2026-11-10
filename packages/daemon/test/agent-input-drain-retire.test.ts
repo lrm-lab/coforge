@@ -50,6 +50,7 @@ function drain(options: { launching?: boolean } = {}) {
     publishStartupError: () => {},
     forgetIntroduced: () => {},
     dropMention: () => {},
+    takeCarried: () => [],
   } as unknown as AgentInputDrainPorts;
   return { drain: new AgentInputDrain(ports), abandoned, ran, gate };
 }

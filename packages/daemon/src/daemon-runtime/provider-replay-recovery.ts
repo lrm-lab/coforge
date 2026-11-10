@@ -1,9 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { thrownMessage, type AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import type { AgentMessageAttentionIndex, MessageAttention } from "./agent-message-attention-index";
-import { PENDING_WINDOW_LIMIT } from "./agent-message-attention-index-helpers";
-import { isTrackedMention } from "./mention-delivery-tracker";
+import type { MessageAttention } from "./agent-message-attention-index";
 import type { AgentRecoveryContext } from "./runtime-launch-intent";
 import { LaunchInboxes } from "./launch-inbox";
 import type { LaunchRequest } from "./runtime-launch-types";
@@ -83,53 +81,13 @@ export class ProviderReplayWatch {
 /** What a launch was started with and a cold start must not lose. */
 export type CarriedStart = Pick<LaunchRequest, "recovery" | "resumePrompt" | "introductionPrompt">;
 
-/** A message that reached the Agent only as tracked @mentions, with the deliveries that carried it. */
-export type PendingMention = Readonly<{ target: string; deliveryIds: readonly string[] }>;
-
-/**
- * The messages among `attention` that reached the Agent only as tracked @mentions, read from its
- * attention window before the exit clears it. A message outside the bounded window, or one any
- * untracked delivery also carried, is not listed: it is counted like any other unread message.
- */
-export function pendingMentions(
-  agentId: string,
-  attention: readonly Pick<MessageAttention, "target">[],
-  window: Pick<AgentMessageAttentionIndex, "pendingWindow">,
-): PendingMention[] {
-  const mentions: PendingMention[] = [];
-  for (const { target } of attention) {
-    const bySequence = new Map<number, AgentMessageDelivery[]>();
-    for (const { delivery } of window.pendingWindow(agentId, target, PENDING_WINDOW_LIMIT)) {
-      const deliveries = bySequence.get(delivery.sequence);
-      if (deliveries) deliveries.push(delivery);
-      else bySequence.set(delivery.sequence, [delivery]);
-    }
-    for (const deliveries of bySequence.values())
-      if (deliveries.every(isTrackedMention))
-        mentions.push({ target, deliveryIds: deliveries.map((d) => d.deliveryId) });
-  }
-  return mentions;
-}
-
-/** The mentions the server issues again: every delivery of the message was handed back. A mention
- * the tracker did not hand back (drained, or forgotten) is not here, so it is counted. */
-export function reissuedMentions(
-  mentions: readonly PendingMention[],
-  handedBack: readonly string[],
-): PendingMention[] {
-  const back = new Set(handedBack);
-  return mentions.filter(({ deliveryIds }) => deliveryIds.every((id) => back.has(id)));
-}
-
 /** The `parked` deliveries `check()` did not already count: one held before it was read is in the
- * attention as well, and one handed back is issued again by the server. */
+ * attention as well. */
 export function newlyParked<T extends Pick<AgentMessageDelivery, "deliveryId">>(
   parked: readonly T[],
   heldBefore: ReadonlySet<string>,
-  handedBack: readonly string[],
 ): T[] {
-  const back = new Set(handedBack);
-  return parked.filter(({ deliveryId }) => !heldBefore.has(deliveryId) && !back.has(deliveryId));
+  return parked.filter(({ deliveryId }) => !heldBefore.has(deliveryId));
 }
 
 const carriedOf = ({ recovery, resumePrompt, introductionPrompt }: CarriedStart): CarriedStart => ({
@@ -146,13 +104,14 @@ const carriedOf = ({ recovery, resumePrompt, introductionPrompt }: CarriedStart)
  * `unreadSummary`. `check()` counts, not `unreadDeliveries()`: that one leaves out messages a
  * notice previewed in full, and a fresh Session holds none of those previews. A Start's
  * summary-only targets were never in `check()` (only recovered messages are), so the counts add.
- * The `reissued` mentions are left out: the server issues each of them again.
+ * The `carried` mentions (per target, those `check()` counts) are left out: the fresh Session is
+ * told each of them on its own.
  */
 export function carriedStart(
   started: CarriedStart,
   attention: readonly Pick<MessageAttention, "target" | "pendingCount">[],
   parked: readonly Pick<AgentMessageDelivery, "target">[] = [],
-  reissued: readonly Pick<PendingMention, "target">[] = [],
+  carried: ReadonlyMap<string, number> = new Map(),
 ): CarriedStart {
   const counts = new Map<string, number>();
   const add = (target: string | undefined, count: number) => {
@@ -160,11 +119,8 @@ export function carriedStart(
   };
   for (const [target, count] of Object.entries(started.recovery?.unreadSummary ?? {}))
     add(target, count);
-  const reissuedCount = new Map<string, number>();
-  for (const { target } of reissued)
-    reissuedCount.set(target, (reissuedCount.get(target) ?? 0) + 1);
   for (const { target, pendingCount } of attention)
-    add(target, pendingCount - (reissuedCount.get(target) ?? 0));
+    add(target, pendingCount - (carried.get(target) ?? 0));
   for (const { target } of parked) add(target, 1);
   const { recovery } = started;
   return carriedOf({

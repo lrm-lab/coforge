@@ -41,6 +41,8 @@ export type AgentExitedDeliveryPorts = Readonly<{
   closeAgentInputQueue(agentId: string, error: unknown): void;
   /** Settles a tracked @mention as `IDENTITY_UNKNOWN`; true when the delivery was one. */
   dropMentionAsUnknown(message: AgentMessageDelivery): boolean;
+  /** Keeps a tracked @mention for the launch that is coming; true when the delivery was one. */
+  holdMention(message: AgentMessageDelivery): boolean;
   sendAgentStatus(agentId: string, status: "inactive"): void;
   sendAgentDeliveryRejection(message: AgentMessageDelivery, reason: "no_process"): Promise<void>;
   /** The Agent's session is registered (a pending-Start buffer releases only into one). */
@@ -193,12 +195,20 @@ export class AgentExitedDelivery {
     this.keepDeliveries(agentId, this.#ports.drainInputDeliveries(agentId), error);
   }
 
-  /** The same custody for deliveries the caller already took: a tracked mention is dropped as
-   * unknown (the server issues it again), any other is kept for the next launch. */
-  keepDeliveries(agentId: string, messages: readonly AgentMessageDelivery[], error: unknown): void {
+  /** The same custody for deliveries the caller already took. Any other than a tracked mention is
+   * kept for the next launch. A tracked mention is kept for it when `relaunching` (a restart is
+   * coming), and otherwise dropped as unknown: it named a launch that never came up. */
+  keepDeliveries(
+    agentId: string,
+    messages: readonly AgentMessageDelivery[],
+    error: unknown,
+    relaunching = false,
+  ): void {
     for (const message of messages) {
-      // A tracked mention named a launch that never came up; it never waits for the next one.
-      if (this.#ports.dropMentionAsUnknown(message)) continue;
+      if (
+        relaunching ? this.#ports.holdMention(message) : this.#ports.dropMentionAsUnknown(message)
+      )
+        continue;
       this.keepForNextLaunch(agentId, message);
       logger.info("Agent delivery kept for the next launch after a failed launch", {
         event: "agent.message.delivery_kept",

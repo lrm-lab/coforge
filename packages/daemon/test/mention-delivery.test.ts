@@ -760,11 +760,12 @@ test("a new group can finish during notice admission without inheriting another 
 });
 
 test.each(["accepted", "rejected"] as const)(
-  "a handed-back notice that is later %s cannot settle the reissued delivery",
+  "a notice of an ended process that is later %s leaves its mention to the next launch",
   async (outcome) => {
     const previous = Promise.withResolvers<"told">();
     const current = Promise.withResolvers<"told">();
     let attempts = 0;
+    let process: object = {};
     const terminals: string[] = [];
     const acked: string[] = [];
     const tracker = new MentionDeliveryTracker("computer", {
@@ -781,6 +782,7 @@ test.each(["accepted", "rejected"] as const)(
       announce: () => (attempts++ === 0 ? previous.promise : current.promise),
       busy: () => false,
       blocked: () => undefined,
+      process: () => process,
     });
     const message = {
       protocolMajor: 1,
@@ -802,22 +804,18 @@ test.each(["accepted", "rejected"] as const)(
       },
     };
     const oldDelivery = tracker.deliver(message).catch(() => undefined);
-    await tracker.handBackForRelaunch("agent");
-    const newDelivery = tracker.deliver({ ...message, requestId: "reissued-request" });
-    try {
-      if (outcome === "accepted") previous.resolve("told");
-      else previous.reject(new Error("old session disposed"));
-      await oldDelivery;
-      expect(terminals).toEqual(["IDENTITY_UNKNOWN"]);
-      expect(acked).toEqual([]);
-      current.resolve("told");
-      await newDelivery;
-      expect(acked).toEqual(["delivery"]);
-    } finally {
-      previous.resolve("told");
-      current.resolve("told");
-      await Promise.allSettled([oldDelivery, newDelivery]);
-    }
+    tracker.carry.carryForRelaunch("agent", true);
+    // The next launch is up before the old notice settles.
+    process = {};
+    if (outcome === "accepted") previous.resolve("told");
+    else previous.reject(new Error("old session disposed"));
+    await oldDelivery;
+    expect(terminals).toEqual([]);
+    expect(acked).toEqual([]);
+    const newDelivery = tracker.deliver(tracker.carry.takeCarried("agent")[0]!);
+    current.resolve("told");
+    await newDelivery;
+    expect(acked).toEqual(["delivery"]);
   },
 );
 

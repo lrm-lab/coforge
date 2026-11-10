@@ -54,7 +54,12 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
   };
   releaseSurvivingHolds(agentId: string): void;
   wakeAgent(agentId: string, restart: WakeRestart): Promise<unknown>;
-  mentionDeliveries(): { handBackForRelaunch(agentId: string): Promise<readonly string[]> };
+  mentionDeliveries(): {
+    carry: {
+      carryForRelaunch(agentId: string, freshSession: boolean): ReadonlyMap<string, number>;
+      abortRelaunch(agentId: string): void;
+    };
+  };
 }): RuntimeRelease<L> {
   return new RuntimeRelease<L>({
     launch: (agentId) => input.launches().get(agentId),
@@ -86,7 +91,9 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     wake: (agentId, restart) => input.wakeAgent(agentId, restart),
     publish: (agentId, launch, ...draft) =>
       input.activityPublisher().publish(agentId, launch, input.activity(agentId, ...draft)),
-    handBackMentions: (agentId) => input.mentionDeliveries().handBackForRelaunch(agentId),
+    carryMentions: (agentId, freshSession) =>
+      input.mentionDeliveries().carry.carryForRelaunch(agentId, freshSession),
+    abortMentionCarry: (agentId) => input.mentionDeliveries().carry.abortRelaunch(agentId),
     release: (agentId, timeoutMs) => input.processManager().release(agentId, timeoutMs),
   });
 }

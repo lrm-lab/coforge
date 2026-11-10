@@ -15,7 +15,7 @@ import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentOfflineResidency } from "./agent-offline-residency";
 import { agentDeliveryRejection } from "./message-composition";
-import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
+import { isTrackedMention, type MentionDeliveryTracker } from "./mention-delivery-tracker";
 
 /** What the exited-delivery settlement reads from the runtime. The collaborators the runtime builds
  * after this one are thunks: they are read when a delivery is settled, not when this is made. */
@@ -65,6 +65,11 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
     closeAgentInputQueue: (agentId, error) => ports.inputDrain().close(agentId, error),
     dropMentionAsUnknown: (message) =>
       ports.mentionDeliveries().drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
+    holdMention: (message) => {
+      if (!isTrackedMention(message)) return false;
+      ports.mentionDeliveries().carry.hold(message, true);
+      return true;
+    },
     sendAgentStatus: ports.sendAgentStatus,
     sendAgentDeliveryRejection: (message, reason) =>
       ports.transport().sendAgentDeliveryRejection?.(agentDeliveryRejection(message, reason)) ??

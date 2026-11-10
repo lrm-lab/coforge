@@ -28,17 +28,20 @@ async function replace(h: Harness, open: () => void) {
 const told = (h: Harness, text: string) =>
   h.sessions[1]!.notices.filter((notice) => notice.includes(text));
 
-test("a tracked mention waiting in the ended runtime's queue is handed back as unknown", async () => {
+test("a tracked mention waiting in the ended runtime's queue is carried and told once by the fresh session", async () => {
   const h = await harness({ resume: "stored-1" });
   const { open, telling } = await inFlight(h);
   try {
     const waiting = h.deliver(2, h.envelope(2, "stored-1")).catch(() => {});
     await replace(h, open);
     await Promise.all([telling, waiting]);
+    const own = () =>
+      told(h, "CoForge inbox notice").filter((notice) => !notice.includes("--unread"));
+    await h.until(() => own().length > 0);
 
-    // The server issues it again for the fresh session, instead of the new launch's tracker
-    // refusing the old envelope as drift.
-    expect(h.terminalErrors).toEqual(["IDENTITY_UNKNOWN"]);
+    // Not handed back for the server to issue again: the fresh session is told it, once.
+    expect(h.terminalErrors).toEqual([]);
+    expect(own()).toHaveLength(1);
   } finally {
     open();
     await h.runtime.stop();

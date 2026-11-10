@@ -78,21 +78,3 @@ export function readyRunningAgentIds(
         !launches.has(agentId) && !stopState.stopping(agentId) && !agents.isStopping(agentId),
     );
 }
-
-type AgentSessions = { session(agentId: string): unknown };
-type MentionIdentity = { launchId: string; sessionId: string };
-
-/** The session+launch pair a running Agent may receive tracked mentions for — only while its
- * process is up and its reported session still matches the launch currently being observed. */
-export function runningMentionIdentity(
-  agentId: string,
-  agents: AgentSessions,
-  reportedSessions: Map<string, MentionIdentity>,
-  currentLaunches: Map<string, { launchId?: string }>,
-): MentionIdentity | undefined {
-  if (!agents.session(agentId)) return undefined;
-  const reported = reportedSessions.get(agentId);
-  return reported && currentLaunches.get(agentId)?.launchId === reported.launchId
-    ? reported
-    : undefined;
-}

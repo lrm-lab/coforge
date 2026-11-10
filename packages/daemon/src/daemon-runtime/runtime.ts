@@ -47,7 +47,6 @@ import {
   disposeLaunchObservations,
   readyRunningAgentIds,
   revokeLocalLaunch,
-  runningMentionIdentity,
 } from "#src/daemon-runtime/agent-launch-revocation";
 import {
   ComputerUpdateNotice,
@@ -161,6 +160,7 @@ import { AgentOfflineResidency } from "./agent-offline-residency";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
 import { assembleUsageReport } from "./agent-usage-report-wiring";
 import { MentionDeliveryTracker, type RunningMentionIdentity } from "./mention-delivery-tracker";
+import { ReportedSessions } from "./reported-sessions";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import type { SystemCleaner, SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
@@ -209,7 +209,7 @@ export class DaemonRuntime {
   readonly agentRequests: AgentRequestForwarder;
   readonly #mentionDeliveries: MentionDeliveryTracker;
   /** Last cloud-reported launch/session identity per Agent. */
-  readonly #reportedSessions = new Map<string, RunningMentionIdentity>();
+  readonly #reported = new ReportedSessions();
   /** Durable context-view indexing and availability reporting for this Workspace runtime. */
   readonly #contextViewService: AgentContextViewService;
   /** Busy-gated delivery holding for providers with no safe busy path. */
@@ -527,7 +527,8 @@ export class DaemonRuntime {
         this.#startAgent(agentId, config, undefined, { sessionId }),
       assertRunning: () => this.#assertRunning(),
       agentIdForContext: (context) => agentIdForContext(this.#agentContexts, context),
-      runningMentionIdentity: (agentId) => this.#runningMentionIdentity(agentId),
+      runningMentionIdentity: (agentId, reported) =>
+        this.#runningMentionIdentity(agentId, reported),
     });
     this.agentRequests = assembleAgentRequests({
       transport: () => runtime.#transport,
@@ -1163,23 +1164,17 @@ export class DaemonRuntime {
   }
 
   /** Launch/session identity used by tracked mentions. */
-  #runningMentionIdentity(agentId: string): RunningMentionIdentity | undefined {
-    return runningMentionIdentity(
-      agentId,
-      this.#agentProcessManager,
-      this.#reportedSessions,
-      this.#currentActivityLaunches,
-    );
+  #runningMentionIdentity(agentId: string, reported?: true): RunningMentionIdentity | undefined {
+    return reported
+      ? this.#reported.last(agentId)
+      : this.#reported.running(agentId, this.#agentProcessManager, this.#currentActivityLaunches);
   }
 
   /** Sends a session report, and remembers the launch and session it names for tracked
    * mentions. */
   async #reportAgentSession(report: AgentSessionReport): Promise<void> {
     await this.#transport.reportAgentSession?.(report);
-    this.#reportedSessions.set(report.agentId, {
-      launchId: report.launchId,
-      sessionId: report.sessionId,
-    });
+    this.#reported.remember(report);
     await reportContextViewAvailability(this, report);
   }
 
@@ -1199,7 +1194,7 @@ export class DaemonRuntime {
     return this.#connection.workspaceRoot;
   }
   reported(agentId: string) {
-    return this.#reportedSessions.get(agentId);
+    return this.#reported.last(agentId);
   }
 
   #wakeAgent = (

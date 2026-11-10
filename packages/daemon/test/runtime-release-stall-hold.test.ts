@@ -60,7 +60,8 @@ function subject(
     takeParked: () => [],
     wake: async () => {},
     publish: () => {},
-    handBackMentions: async () => [],
+    carryMentions: () => new Map(),
+    abortMentionCarry: () => {},
     release: async () => {},
   };
   return {

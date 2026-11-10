@@ -36,8 +36,6 @@ import {
   carriedStart,
   newlyParked,
   OwedRecovery,
-  pendingMentions,
-  reissuedMentions,
   type CarriedStart,
 } from "./provider-replay-recovery";
 import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
@@ -325,15 +323,14 @@ export class AgentLaunchCoordinator {
       ports.stops.stopping(agentId)
     )
       return false;
+    // Read before the exit clears the attention.
     const unread = ports.messageAttention.check(agentId);
-    // Read before the exit clears the attention and the hand-back forgets the tracked mentions.
-    const mentions = pendingMentions(agentId, unread, ports.messageAttention);
     // A delivery held now is in `unread` too; only those held later are counted from the parking.
     const held = new Set(ports.deliveryGate.pending(agentId).map(({ deliveryId }) => deliveryId));
     return ports.runtimeRelease.endAndReplace(
       agentId,
       replayRejectedEndPlan(restart),
-      (parked, handedBack) => {
+      (parked, carried) => {
         // The failure's backoff belongs to the process that earned it, and its error class (a
         // status code makes it a provider API one) is not one a turn's end lifts: the fresh
         // Session starts with no hold, as after a take-offline.
@@ -346,12 +343,7 @@ export class AgentLaunchCoordinator {
           launch,
           staleSessionId,
           "provider_replay_rejected",
-          carriedStart(
-            started,
-            unread,
-            newlyParked(parked, held, handedBack),
-            reissuedMentions(mentions, handedBack),
-          ),
+          carriedStart(started, unread, newlyParked(parked, held), carried),
         );
       },
     );

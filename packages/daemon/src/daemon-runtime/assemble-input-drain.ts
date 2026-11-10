@@ -68,6 +68,7 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
           .activityPublisher()
           .publish(agentId, launch, ports.drafts().runtimeError(agentId, message)),
       forgetIntroduced: (agentId) => ports.introducedAgents().delete(agentId),
+      takeCarried: (agentId) => ports.mentionDeliveries().carry.takeCarried(agentId),
       dropMention: (message) =>
         ports.mentionDeliveries().drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
     },

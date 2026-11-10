@@ -111,16 +111,22 @@ export function handleTrackedMention(
   const { agentId } = message;
   const refusal = ports.mentionDeliveries.admissionRefusal(message);
   if (refusal) return ports.mentionDeliveries.refuse(message, refusal);
-  if (
-    ports.runnerHold === undefined &&
-    (ports.stops.stopping(agentId) ||
-      ports.runtimeRelease.isRecovering(agentId) ||
-      !ports.agentProcessManager.session(agentId))
-  ) {
-    // A stalled provider being restarted is no session to tell: refused as unknown, the server
-    // keeps the mention pending and issues it again for the relaunch's session report.
-    ports.mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
-    return Promise.resolve();
+  if (ports.runnerHold === undefined) {
+    const launching =
+      ports.agentLaunches.has(agentId) && !ports.agentProcessManager.session(agentId);
+    if (
+      !ports.stops.stopping(agentId) &&
+      (ports.runtimeRelease.isRecovering(agentId) || launching)
+    ) {
+      // A runtime being restarted, or a launch not yet up, is no session to tell: the mention is
+      // kept for the launch that is coming and told by it.
+      ports.mentionDeliveries.carry.hold(message);
+      return Promise.resolve();
+    }
+    if (ports.stops.stopping(agentId) || !ports.agentProcessManager.session(agentId)) {
+      ports.mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
+      return Promise.resolve();
+    }
   }
   const delivery = ports.launchCustody.enqueueDelivery(agentId, message);
   if (ports.runnerHold !== undefined) {

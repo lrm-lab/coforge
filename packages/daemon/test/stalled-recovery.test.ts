@@ -298,7 +298,7 @@ test("a turn that is silent for less than 15 minutes, or inside an open tool cal
   }
 });
 
-test("a tracked @mention pending in the stalled turn is handed back as unknown before the relaunch reports its session", async () => {
+test("a tracked @mention pending in the stalled turn is left pending for the resumed session, not handed back", async () => {
   const h = await harness();
   try {
     h.sessions[0]!.emit({ type: "progress" });
@@ -307,17 +307,16 @@ test("a tracked @mention pending in the stalled turn is handed back as unknown b
     h.cloud.length = 0;
     await h.deliver(2);
 
-    // Nothing settles a mention when its process exits; refused as unknown, the server keeps it
-    // pending and issues it again for the relaunch's session report.
+    // Nothing settles a mention when its process exits; the resumed session holds its notice.
     expect(h.sessions).toHaveLength(2);
-    expect(h.cloud).toEqual(["terminal delivery-1 IDENTITY_UNKNOWN", "session launch-1"]);
+    expect(h.cloud).toEqual(["session launch-1"]);
   } finally {
     await h.runtime.stop();
   }
 });
 
 test.each([false, true])(
-  "a pending provider notice stays unknown during stalled recovery (slow disposal: %s)",
+  "a provider notice still pending is kept for the relaunch during stalled recovery (slow disposal: %s)",
   async (slowDisposal) => {
     const disposeGate = Promise.withResolvers<void>();
     const h = await harness({
@@ -339,8 +338,8 @@ test.each([false, true])(
       await pending;
 
       expect(h.sessions).toHaveLength(2);
-      expect(h.terminals).toEqual([{ deliveryId: "delivery-1", code: "IDENTITY_UNKNOWN" }]);
-      expect(h.cloud).toEqual(["terminal delivery-1 IDENTITY_UNKNOWN", "session launch-1"]);
+      expect(h.terminals).toEqual([]);
+      expect(h.cloud).toEqual(["session launch-1"]);
     } finally {
       disposeGate.resolve();
       await h.runtime.stop();
@@ -384,7 +383,7 @@ test("a turn that just started after a quiet spell is measured from its start, n
   }
 });
 
-test("a tracked @mention arriving during the restart is refused as unknown, never told to the dying session", async () => {
+test("a tracked @mention arriving during the restart is kept for the new session, never told to the dying one", async () => {
   const disposeGate = Promise.withResolvers<void>();
   const h = await harness({ disposeGate: disposeGate.promise });
   try {
@@ -395,7 +394,7 @@ test("a tracked @mention arriving during the restart is refused as unknown, neve
     disposeGate.resolve();
     await recovery;
 
-    expect(h.terminals).toEqual([{ deliveryId: "delivery-2", code: "IDENTITY_UNKNOWN" }]);
+    expect(h.terminals).toEqual([]);
     expect(h.sessions[0]!.notices).toHaveLength(0);
   } finally {
     disposeGate.resolve();

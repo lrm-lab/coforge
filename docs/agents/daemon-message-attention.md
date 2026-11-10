@@ -83,10 +83,11 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   its envelope echoed, only once drained: already consumed (whatever launch the
   envelope names), or told to the launch and native session the daemon last
   reported, at a moment the Agent is idle or in a turn that has ended. It is
-  never held, never wakes an Agent, and never becomes `no_process`; otherwise
+  never becomes `no_process`, and is held (unacknowledged) only for a launch that is coming, never
+  to wake an Agent; otherwise
   the daemon reports a terminal error: `IDENTITY_DRIFT` (another Computer,
   launch or session), `INSTRUMENT_FAILED` (another message), `IDENTITY_UNKNOWN`
-  (no running session, including during a launch or a pending server Start),
+  (no running session and no launch coming, including a pending server Start),
   `QUOTA_LIMITED` (rate-limit backoff), `UNSUPPORTED_DELIVERY_PATH` (a provider
   that takes notices only between turns, while busy), or `DELIVERY_REJECTED`
   (another backoff, a refused notice, a process gone before it accepted the
@@ -96,7 +97,18 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   reports follow unawaited, so none delays another's settlement); one named by `notice-undelivered` is settled instead by
   the redelivery of that notice (drained once accepted). A runner hold queues it
   unacknowledged; one still queued for an Agent without a session when the
-  hold lifts is refused. Nothing is reported when a process exits.
+  hold lifts is refused. Nothing is reported when a process exits. A restart of the process
+  (`RuntimeRelease`) keeps the mentions it had not settled for the next launch (`mention-carry.ts`):
+  after the process is gone, one still being told, or waiting, always; one already told during a turn
+  only when the next launch starts a fresh session (a resumed session holds its notice; it settles at
+  that session's turn end as usual). A mention arriving while the runtime ends or a launch is in flight is
+  held against the launch and session last reported (another is `IDENTITY_DRIFT`; none is
+  `IDENTITY_UNKNOWN`), and a repeat adopts its newer envelope and is reported coalesced. The next launch's
+  input tells each carried mention once, in its own notice, without checking its envelope again, so it
+  is ACKed with the latest envelope. A notice that settles for a process the restart replaced never refuses
+  its mention (compared by process identity, not only while the restart is under way). A process that will not exit
+  leaves everything as it was; an inbox purge rejects the carried and queued mentions of the purged
+  conversations.
 - While a server Start is pending for such an Agent
   (`AgentControl.startPending`: from the `start` call through every
   launch-retry cooldown), its untracked deliveries are held, unacknowledged, instead of
@@ -137,9 +149,7 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   session. `stalled-recovery-sweep.ts` applies the same judgment every five
   minutes to every live Agent with queued deliveries, so a stall whose last
   message already waits is recovered without another arrival; a runner hold, a
-  mid-stop Agent or a recovery in flight suppresses the judgment. Nothing settles
-  a tracked mention on exit: hand the old turn's back
-  as unknown before the relaunch reports its session; refuse one arriving meanwhile.
+  mid-stop Agent or a recovery in flight suppresses the judgment. A tracked mention is kept for the relaunch (see the tracked @mention rules above).
 - Thread follow state is cloud-persisted. The Daemon only forwards the Agent's
   explicit unfollow operation.
 - What an Agent has already been shown lives in `AgentContextLedger` (`state.db`,

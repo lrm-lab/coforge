@@ -29,13 +29,13 @@
   与 server Start 的汇总式恢复同一条通道：新 session 被告知哪些会话有未读，并自己 `read --unread`。
   runtime 退出期间到达的消息由 `RuntimeRelease` 暂存，随后取出并计入同一个 `unreadSummary`
   （恢复型 launch 会丢弃排队的、target 被恢复内容点名的投递，所以这些必须由汇总覆盖）。读 `check` 时已经在排队的投递已在待读计数里，
-  不再按暂存重复计数；被交还 server 的也不计。没有待读时走普通启动输入。
-- **tracked @mention 不重复告知**：结束 runtime 时 `RuntimeRelease` 把未结算的 tracked @mention
-  交还 server（`IDENTITY_UNKNOWN`），server 会为新 session 重发。这些 mention 不计入 `unreadSummary`，
-  否则新 session 会被告知两次；已 drain 的（turn 内被告知、turn 结束时已 ACK）server 不会重发，照常计入。
-  判断由 tracker 给出：交还的投递 id（交还的 `IDENTITY_UNKNOWN` 报告确实发出了的）即“server 会重发”
-  的集合；报告没发出的、待读窗口里看不出是 tracked 的、tracker 已忘记的、窗口之外的，一律计入，
-  宁可重复告知也不丢。
+  不再按暂存重复计数。没有待读时走普通启动输入。
+- **tracked @mention 不重复告知**：结束 runtime 时，未结算的 tracked @mention 不再交还 server，而是
+  由 `mention-carry.ts` 留给下一次 launch（进程退出后才留；runtime 不退出则原样不动）。冷启动时，turn 内
+  已告知但还没 drain 的也一并留下，新 session 由 launch 的输入逐条单独告知一次（不经恢复通知），并以最新
+  envelope ACK；已 drain 的照常计入 `unreadSummary`。留下的 mention 若已被 `check()` 的待读计数统计，
+  就从该 target 的计数里扣掉（按投递 id 精确，不依赖待读窗口），避免新 session 被同一条告知两次。
+  `notice-undelivered` 的 mention 由那条通知的重发告知，同样扣掉。
 - **启动输入**：被拒的 launch 启动时带的东西（server Start 的 `unreadSummary`/`resumeMessages`/
   `wakeMessage`、`resumePrompt`、`introductionPrompt`）随冷启动一起带给新 session；Start 的汇总式
   target 从不在 `check` 里（只有恢复出来的消息在），与上面的未读计数不重叠，相加成同一份 `unreadSummary`。

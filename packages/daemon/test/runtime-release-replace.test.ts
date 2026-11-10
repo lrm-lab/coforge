@@ -54,7 +54,8 @@ function subject(
     takeParked: () => parked,
     wake: async () => {},
     publish: () => {},
-    handBackMentions: async () => [],
+    carryMentions: () => new Map(),
+    abortMentionCarry: () => {},
     release: async () => {
       entered.resolve();
       await end.promise;

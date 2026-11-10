@@ -37,6 +37,8 @@ export type AgentInputDrainPorts = Readonly<{
   publishStartupError(agentId: string, launch: ActivityLaunch, message: string): void;
   forgetIntroduced(agentId: string): void;
   dropMention(message: AgentMessageDelivery): void;
+  /** Takes the tracked mentions kept for the Agent's next launch, as delivery inputs to enqueue. */
+  takeCarried(agentId: string): AgentMessageDelivery[];
 }>;
 
 /**
@@ -181,15 +183,14 @@ export class AgentInputDrain {
   }
 
   ensure(agentId: string): void {
+    if (this.ports.runnerHeld() || !this.ports.sessionFor(agentId)) return;
+    // Behind the launch's own input: what an earlier process left for this one.
+    for (const message of this.ports.takeCarried(agentId))
+      void this.enqueue(agentId, (completion) => ({ kind: "delivery", message, completion })).catch(
+        () => {},
+      );
     const queue = this.get(agentId);
-    if (
-      !queue ||
-      queue.closed ||
-      queue.drain ||
-      this.ports.runnerHeld() ||
-      !this.ports.sessionFor(agentId)
-    )
-      return;
+    if (!queue || queue.closed || queue.drain) return;
     queue.drain = this.#drain(agentId, queue).finally(() => {
       queue.drain = undefined;
       if (queue.closed || !queue.items.length) {

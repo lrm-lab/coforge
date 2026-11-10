@@ -174,6 +174,7 @@ export class AgentOperations {
         dropped++;
         return false;
       });
+    ports.mentionDeliveries.carry.purge(purge.agentId, conversations);
     dropped += ports.deliveryGate.discardConversations(purge.agentId, conversations).length;
     ports.messageAttention.clearTargets(purge.agentId, purge.targets);
     logger.info("Agent inbox purged for channels it can no longer read", {

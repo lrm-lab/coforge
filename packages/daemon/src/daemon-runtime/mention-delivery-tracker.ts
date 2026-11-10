@@ -5,12 +5,15 @@ import {
   type MentionDeliveryEnvelope,
   type MentionDeliveryTerminalCode,
 } from "@lrm/coforge-sdk/internal";
-import type {
-  MentionDeliveryBlock,
-  MentionDeliveryPorts,
-  RunningMentionIdentity,
-} from "./mention-delivery-ports";
+import type { MentionDeliveryBlock, MentionDeliveryPorts } from "./mention-delivery-ports";
 import { MentionDeliveryReports } from "./mention-delivery-reports";
+import { MentionCarry } from "./mention-carry";
+import {
+  MentionEntries,
+  namesLaunch,
+  REMEMBERED_MENTIONS,
+  type Tracked,
+} from "./mention-delivery-entries";
 
 /** The running identity a tracked mention is checked against, as the runtime names it. */
 export type { RunningMentionIdentity } from "./mention-delivery-ports";
@@ -34,22 +37,6 @@ const BLOCKED_CODES: Readonly<Record<MentionDeliveryBlock, MentionDeliveryTermin
   queued_until_idle: MENTION_DELIVERY_TERMINAL_CODES.UNSUPPORTED_DELIVERY_PATH,
 };
 
-type TrackedState = "received" | "pending" | "drained";
-type Tracked = {
-  message: TrackedMentionDelivery;
-  state: TrackedState;
-  /** The session reported that the notice carrying it never reached the model; that notice's
-   * redelivery settles it. */
-  undelivered?: true;
-};
-
-/** Tracked mentions remembered at most, oldest forgotten first. A mention the server issues again
- * after it was forgotten is judged afresh, which only repeats a report the server already has. */
-const REMEMBERED_MENTIONS = 4096;
-
-const namesLaunch = (identity: RunningMentionIdentity, envelope: MentionDeliveryEnvelope) =>
-  identity.launchId === envelope.launchId && identity.sessionId === envelope.sessionId;
-
 /**
  * The daemon's side of tracked @mention delivery. A tracked delivery is ACKed, with its envelope
  * echoed, only once it is drained: told to the launch and session its envelope names while the
@@ -59,21 +46,24 @@ const namesLaunch = (identity: RunningMentionIdentity, envelope: MentionDelivery
  * starts over. Nothing is reported when a process exits.
  */
 export class MentionDeliveryTracker {
-  readonly #tracked = new Map<string, Tracked>();
   /** Terminal reports already sent, by delivery and envelope: the same issue is refused once, even
    * when its in-flight notice fails after a relaunch already handed it back. A re-issue for another
    * launch or session is a new issue. */
   readonly #refused = new Set<string>();
-  /** Delivery ids pending per Agent: told during a turn that has not ended. */
-  readonly #pending = new Map<string, Set<string>>();
-
+  readonly #entries = new MentionEntries();
   readonly #reports: MentionDeliveryReports;
+  /** The mentions kept for the launch that follows a restart. */
+  readonly carry: MentionCarry;
 
   constructor(
     private readonly computerId: string,
     private readonly ports: MentionDeliveryPorts,
   ) {
     this.#reports = new MentionDeliveryReports(ports);
+    this.carry = new MentionCarry(this.#entries, ports, this.#reports, {
+      drain: (message) => this.#drain(message),
+      refuse: (message, code) => this.refuse(message, code),
+    });
   }
 
   /** Why the envelope cannot belong to this delivery on this Computer, checked on receipt before
@@ -100,11 +90,17 @@ export class MentionDeliveryTracker {
       return this.#drain(message);
     }
     const envelope = message.mentionDelivery;
+    const kept = this.#entries.get(message.deliveryId);
+    if (kept?.carried && kept.message.agentId === message.agentId) {
+      kept.message = message;
+      delete kept.carried;
+      return this.#tell(message, kept);
+    }
     const running = this.ports.running(message.agentId);
     if (!running) return this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
     if (!namesLaunch(running, envelope))
       return this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_DRIFT);
-    const existing = this.#tracked.get(message.deliveryId);
+    const existing = this.#entries.get(message.deliveryId);
     if (existing) {
       if (
         existing.message.agentId !== message.agentId ||
@@ -115,14 +111,20 @@ export class MentionDeliveryTracker {
         existing.message = message;
         return this.#reports.acknowledge(message);
       }
-      if (namesLaunch(existing.message.mentionDelivery, envelope)) {
+      if (existing.state === "pending" || namesLaunch(existing.message.mentionDelivery, envelope)) {
         existing.message = message;
         this.#reports.transition(message, "daemon_pending", "coalesced");
         return;
       }
     }
-    this.#set(message, "received");
+    this.#entries.set(message, "received");
     this.#reports.transition(message, "daemon_received", "accepted");
+    return this.#tell(message, this.#entries.get(message.deliveryId));
+  }
+
+  /** Tells the Agent's running session about an admitted mention and settles what follows. */
+  async #tell(message: TrackedMentionDelivery, receiving: Tracked | undefined): Promise<void> {
+    const envelope = message.mentionDelivery;
     if (this.ports.told(message)) {
       this.ports.decided?.(message, "already_notified");
       return this.#told(message);
@@ -131,12 +133,15 @@ export class MentionDeliveryTracker {
     if (blocked) return this.refuse(message, BLOCKED_CODES[blocked]);
     // Read before the notice: writing it marks the Agent busy.
     const busy = this.ports.busy(message.agentId, message.conversationId);
-    const receiving = this.#tracked.get(message.deliveryId);
+    const process = this.ports.process?.(message.agentId);
+    if (receiving) receiving.inflight = true;
     let outcome: "told" | "gone";
     try {
       outcome = await this.ports.announce(message);
     } catch (error) {
-      if (this.#tracked.get(message.deliveryId) === receiving) {
+      if (receiving) delete receiving.inflight;
+      if (this.#entries.get(message.deliveryId) === receiving) {
+        if (receiving && this.carry.replaced(receiving, message.agentId, process)) throw error;
         // A wakeup that lost its session (cancelled mid-notice, session gone) is transient:
         // report IDENTITY_UNKNOWN, which the server answers by waking the Agent and re-issuing
         // the mention for the relaunched session — not by settling it lost.
@@ -151,7 +156,9 @@ export class MentionDeliveryTracker {
       }
       throw error;
     }
-    if (this.#tracked.get(message.deliveryId) !== receiving) return;
+    if (receiving) delete receiving.inflight;
+    if (this.#entries.get(message.deliveryId) !== receiving) return;
+    if (receiving && this.carry.replaced(receiving, message.agentId, process)) return;
     if (outcome === "gone") {
       const now = this.ports.running(message.agentId);
       return this.refuse(
@@ -188,10 +195,10 @@ export class MentionDeliveryTracker {
    * reports follow without being waited for, so none of them delays another's settlement.
    */
   settleTurnEnd(agentId: string, conversationId?: string): void {
-    const pending = this.#pending.get(agentId);
+    const pending = this.#entries.pending(agentId);
     if (!pending) return;
     for (const deliveryId of [...pending]) {
-      const tracked = this.#tracked.get(deliveryId);
+      const tracked = this.#entries.get(deliveryId);
       if (!tracked || tracked.undelivered) continue;
       const { message } = tracked;
       if (conversationId !== undefined && message.conversationId !== conversationId) continue;
@@ -204,7 +211,7 @@ export class MentionDeliveryTracker {
    * stay unacknowledged until that notice's redelivery settles them (`settleRedelivery`). */
   markUndelivered(agentId: string, deliveryIds: readonly string[]): void {
     for (const deliveryId of deliveryIds) {
-      const tracked = this.#tracked.get(deliveryId);
+      const tracked = this.#entries.get(deliveryId);
       if (tracked?.message.agentId === agentId && tracked.state !== "drained")
         tracked.undelivered = true;
     }
@@ -215,7 +222,7 @@ export class MentionDeliveryTracker {
    * applied now and their reports are not waited for. */
   settleRedelivery(agentId: string, deliveryIds: readonly string[], accepted: boolean): void {
     for (const deliveryId of deliveryIds) {
-      const tracked = this.#tracked.get(deliveryId);
+      const tracked = this.#entries.get(deliveryId);
       if (tracked?.message.agentId !== agentId || !tracked.undelivered) continue;
       if (accepted) void this.#drain(tracked.message);
       else void this.refuse(tracked.message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
@@ -237,7 +244,7 @@ export class MentionDeliveryTracker {
     code: MentionDeliveryTerminalCode,
     detail?: string,
   ): Promise<boolean> {
-    this.#forget(message.deliveryId);
+    this.#entries.forget(message.deliveryId);
     const { launchId, sessionId } = message.mentionDelivery;
     const issue = `${message.deliveryId}\n${launchId}\n${sessionId}`;
     if (this.#refused.has(issue)) return false;
@@ -256,32 +263,14 @@ export class MentionDeliveryTracker {
 
   /** Explicit Stop cancels received and pending notices; cancellation is never a drain. */
   async cancelAgent(agentId: string): Promise<void> {
-    const unsettled = [...this.#tracked.values()].filter(
-      (tracked) => tracked.message.agentId === agentId && tracked.state !== "drained",
-    );
+    const unsettled = this.#entries
+      .all()
+      .filter((tracked) => tracked.message.agentId === agentId && tracked.state !== "drained");
     await Promise.all(
       unsettled.map(({ message }) =>
         this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
       ),
     );
-  }
-
-  /**
-   * The Agent's process is being ended for a restart: each mention
-   * still received or pending for it is refused as unknown, so the server keeps it pending and
-   * issues it again for the relaunch's session report. Settles once every refusal was attempted,
-   * with the delivery ids whose report was sent: the ones the server issues again.
-   */
-  async handBackForRelaunch(agentId: string): Promise<string[]> {
-    const unsettled = [...this.#tracked.values()]
-      .filter((tracked) => tracked.message.agentId === agentId && tracked.state !== "drained")
-      .map((tracked) => tracked.message);
-    const sent = await Promise.all(
-      unsettled.map((message) =>
-        this.#refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
-      ),
-    );
-    return unsettled.flatMap((message, index) => (sent[index] ? [message.deliveryId] : []));
   }
 
   /** Already told in the current session: pending while that turn runs, drained once idle. */
@@ -292,42 +281,15 @@ export class MentionDeliveryTracker {
   }
 
   async #markPending(message: TrackedMentionDelivery): Promise<void> {
-    this.#set(message, "pending");
+    this.#entries.set(message, "pending");
     this.#reports.transition(message, "daemon_pending", "accepted");
   }
 
   async #drain(message: TrackedMentionDelivery): Promise<void> {
-    if (this.#tracked.get(message.deliveryId)?.state !== "drained") {
-      this.#set(message, "drained");
+    if (this.#entries.get(message.deliveryId)?.state !== "drained") {
+      this.#entries.set(message, "drained");
       this.#reports.transition(message, "daemon_drained", "accepted");
     }
     await this.#reports.acknowledge(message);
-  }
-
-  #set(message: TrackedMentionDelivery, state: TrackedState): void {
-    const { deliveryId, agentId } = message;
-    const previous = this.#tracked.get(deliveryId);
-    if (!previous && this.#tracked.size >= REMEMBERED_MENTIONS)
-      this.#forget(this.#tracked.keys().next().value!);
-    this.#tracked.delete(deliveryId);
-    this.#tracked.set(deliveryId, {
-      message,
-      state,
-      ...(previous?.undelivered && state !== "drained" ? { undelivered: true } : {}),
-    });
-    const pending = this.#pending.get(agentId);
-    if (state === "pending") {
-      if (pending) pending.add(deliveryId);
-      else this.#pending.set(agentId, new Set([deliveryId]));
-    } else if (pending?.delete(deliveryId) && pending.size === 0) this.#pending.delete(agentId);
-  }
-
-  #forget(deliveryId: string): void {
-    const tracked = this.#tracked.get(deliveryId);
-    if (!tracked) return;
-    this.#tracked.delete(deliveryId);
-    const pending = this.#pending.get(tracked.message.agentId);
-    pending?.delete(deliveryId);
-    if (pending?.size === 0) this.#pending.delete(tracked.message.agentId);
   }
 }

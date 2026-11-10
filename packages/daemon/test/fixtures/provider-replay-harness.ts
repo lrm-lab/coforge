@@ -62,11 +62,18 @@ export async function harness(
     reportAs?: string;
     /** The provider's session creations (1 is the first launch) that fail instead. */
     failSessions?: readonly number[];
+    /** Holds every session creation after the first open until the gate settles. */
+    createGate?: Promise<void>;
+    /** Holds the first session's second notice open past its own end, then fails it: a notice
+     * that settles after the Agent's next launch is registered. */
+    lateFailure?: Promise<void>;
   } = {},
 ) {
   let disposeFailures = options.disposeFailures ?? 0;
   /** Settles when the first session's `dispose` has begun. */
   const disposing = Promise.withResolvers<void>();
+  /** Settles when a later launch has reached its held session creation. */
+  const creating = Promise.withResolvers<void>();
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
   const sessions: Recorded[] = [];
@@ -74,9 +81,14 @@ export async function harness(
   const invalidates: Array<Record<string, unknown>> = [];
   /** The codes of the terminal errors the daemon reported for tracked mentions. */
   const terminalErrors: string[] = [];
+  /** The ACKs the daemon sent, with the envelope a tracked mention's one echoes. */
+  const acks: Array<{ deliveryId: string; mentionDelivery?: MentionDeliveryEnvelope }> = [];
+  /** The tracked-mention transitions the daemon reported. */
+  const transitions: Array<{ deliveryId: string; stage: string; outcome: string }> = [];
+  /** The launch and native session the daemon last reported for the Agent. */
+  let reported: { launchId: string; sessionId: string } | undefined;
   let creations = 0;
   let deleteWorkspace: ((request: AgentWorkspaceDeleteRequest) => Promise<void>) | undefined;
-  let failTerminalErrors = false;
   /** While set, every notice a session is handed waits for it after being recorded. */
   let noticeGate: Promise<void> | undefined;
   /** Whether the sessions report a turn in progress. */
@@ -92,11 +104,16 @@ export async function harness(
       provider: "pi",
       async createAgentSession(sessionOptions: AgentSessionOptions) {
         creations += 1;
+        if (creations > 1 && options.createGate) {
+          creating.resolve();
+          await options.createGate;
+        }
         if (options.failSessions?.includes(creations))
           throw new Error("the provider would not start");
         const listeners = new Set<(event: AgentRuntimeEvent) => void>();
         const exitListeners = new Set<() => void>();
         const ended = Promise.withResolvers<void>();
+        let notifies = 0;
         const record: Recorded = {
           options: sessionOptions,
           notices: [],
@@ -116,6 +133,10 @@ export async function harness(
           },
           async notify(notice: string) {
             record.notices.push(notice);
+            if (options.lateFailure && sessions.length === 1 && (notifies += 1) === 2) {
+              await options.lateFailure;
+              throw new Error("the ended session failed the notice late");
+            }
             // A gated notice is rejected when its session ends first, as a provider does.
             if (noticeGate) await Promise.race([noticeGate, ended.promise]);
             if (record.disposed) throw new Error("the session ended before accepting the notice");
@@ -173,15 +194,28 @@ export async function harness(
           invalidates.push(message);
         },
         async sendAgentControlResult() {},
-        async reportAgentSession() {},
-        async sendAgentDeliveryAck() {},
+        async reportAgentSession(report) {
+          reported = { launchId: report.launchId, sessionId: report.sessionId };
+        },
+        async sendAgentDeliveryAck(ack) {
+          acks.push({
+            deliveryId: ack.deliveryId,
+            ...(ack.mentionDelivery ? { mentionDelivery: ack.mentionDelivery } : {}),
+          });
+        },
         async sendAgentDeliveryRejection() {},
         onWorkspaceDelete(handler) {
           deleteWorkspace = handler;
           return () => {};
         },
+        async sendAgentMentionDeliveryTransition(report) {
+          transitions.push({
+            deliveryId: report.deliveryId,
+            stage: report.stage,
+            outcome: report.outcome,
+          });
+        },
         async sendAgentMentionDeliveryTerminalError(report) {
-          if (failTerminalErrors) throw new Error("the report could not be sent");
           terminalErrors.push(report.code);
         },
       }),
@@ -253,6 +287,14 @@ export async function harness(
     sessionId,
     computerId: connection.computerId,
   });
+  /** The envelope the server issues again for message `sequence`, for the launch and session the
+   * daemon last reported: the same delivery, a new envelope. */
+  const reissue = (sequence: number): MentionDeliveryEnvelope => ({
+    messageId: `message-${sequence}`,
+    launchId: reported!.launchId,
+    sessionId: reported!.sessionId,
+    computerId: connection.computerId,
+  });
   /** A turn that fails the way a rejected replay does. */
   const failTurn = (session: Recorded, event: AgentRuntimeEvent = REJECTED) => {
     session.emit(event);
@@ -269,6 +311,9 @@ export async function harness(
     activities,
     invalidates,
     terminalErrors,
+    acks,
+    transitions,
+    reissue,
     start,
     stop,
     /** The server deletes the Agent's workspace, as the Agent API would. */
@@ -295,10 +340,6 @@ export async function harness(
     liveTurn(live: boolean) {
       liveTurn = live;
     },
-    /** Makes every terminal-error report about a tracked mention fail to send. */
-    failTerminalErrors(fail: boolean) {
-      failTerminalErrors = fail;
-    },
     /** Makes every session refuse the notices it is handed from now on. */
     refuseNotices(refuse: boolean, answerFirst = false, only = "") {
       refuseNotices = refuse;
@@ -308,5 +349,6 @@ export async function harness(
     failTurn,
     until,
     disposing: disposing.promise,
+    creating: creating.promise,
   };
 }

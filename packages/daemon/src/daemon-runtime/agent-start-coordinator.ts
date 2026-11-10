@@ -76,7 +76,12 @@ export function startAgent(
   // The ended runtime's queue goes first, so what it hands to custody is counted by what is owed.
   const endedInputs = fresh
     ? ports.inputDrain.retire(agentId, (messages) =>
-        ports.exitedDelivery.keepDeliveries(agentId, messages, new Error("Agent runtime ended")),
+        ports.exitedDelivery.keepDeliveries(
+          agentId,
+          messages,
+          new Error("Agent runtime ended"),
+          true,
+        ),
       )
     : [];
   const owed = fresh ? ports.launchCoordinator.owedTo(agentId) : undefined;

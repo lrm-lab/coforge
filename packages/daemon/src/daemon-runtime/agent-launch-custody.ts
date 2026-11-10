@@ -52,6 +52,11 @@ export class AgentLaunchCustody {
     }));
   }
 
+  /** Asks the Agent's input to take what an earlier process left for the launch. */
+  ensureInput(agentId: string): void {
+    this.ports.inputDrain.ensure(agentId);
+  }
+
   async recover(agentId: string, context: AgentRecoveryContext): Promise<void> {
     const messages = [
       ...(context.wakeMessage ? [context.wakeMessage] : []),

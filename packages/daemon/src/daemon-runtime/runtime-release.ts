@@ -125,9 +125,12 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
     text: string,
     extra?: Readonly<{ runtimeError?: AgentActivityRuntimeError }>,
   ): void;
-  /** Hands the old turn's tracked mentions back as unknown before the process goes, and says which
-   * delivery ids it handed back. */
-  handBackMentions(agentId: string): Promise<readonly string[]>;
+  /** The process has gone for a restart that is coming: keeps the tracked mentions it had not
+   * settled for the next launch, and says, per target, how many the old session's unread count
+   * includes. `freshSession` says the next launch starts a new session. */
+  carryMentions(agentId: string, freshSession: boolean): ReadonlyMap<string, number>;
+  /** The process did not go: the restart is off. */
+  abortMentionCarry(agentId: string): void;
   /** Ends the process but keeps what a later wake needs. */
   release(agentId: string, timeoutMs: number): Promise<void>;
 }>;
@@ -300,7 +303,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     session: AgentSession,
     plan: RuntimeReleasePlan,
   ): Promise<boolean> {
-    return this.#endThen(agentId, launch, session, plan, async (current, join) => {
+    return this.#endThen(agentId, launch, session, plan, false, async (current, join) => {
       if (plan.wake.onlyIfParked && !this.#ports.hasParkedWork(agentId)) return;
       const sessionId = this.#ports.sessionId(agentId) ?? current.sessionId;
       join();
@@ -327,11 +330,15 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
    * a recovery launch discards whatever waits. True only when `replace` ran: a runner hold,
    * a migration or a running background task, a process that would not exit, a Stop that won, or a
    * newer launch that took the Agent over (`launch` is no longer current) all leave the Session as
-   * it was. `replace` is also told the tracked mentions handed back, which the server issues again. */
+   * it was. `replace` is also told, per target, how many tracked mentions the fresh session is
+   * told on their own, so its unread count leaves them out. */
   async endAndReplace(
     agentId: string,
     plan: RuntimeEndPlan,
-    replace: (parked: readonly AgentMessageDelivery[], handedBack: readonly string[]) => void,
+    replace: (
+      parked: readonly AgentMessageDelivery[],
+      carried: ReadonlyMap<string, number>,
+    ) => void,
   ): Promise<boolean> {
     const launch = this.#ports.launch(agentId);
     const session = this.#ports.runtime(agentId)?.session;
@@ -342,12 +349,12 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     if (facts.runnerHold || facts.migrating || (launch.backgroundTasks?.count ?? 0) > 0)
       return false;
     let replaced = false;
-    await this.#endThen(agentId, launch, session, plan, (_, join, handedBack) => {
+    await this.#endThen(agentId, launch, session, plan, true, (_, join, carried) => {
       // A Start made while the process was ending owns the Agent now; replacing under it would
       // invalidate a Session it is using.
       if (this.#ports.launch(agentId) !== launch) return;
       join();
-      replace(this.#ports.takeParked(agentId), handedBack);
+      replace(this.#ports.takeParked(agentId), carried);
       replaced = true;
     });
     return replaced;
@@ -362,45 +369,48 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     launch: L,
     session: AgentSession,
     plan: RuntimeEndPlan,
+    freshSession: boolean,
     proceed: (
       current: AgentRestartConfig,
       join: () => void,
-      handedBack: readonly string[],
+      carried: ReadonlyMap<string, number>,
     ) => void | Promise<void>,
   ): Promise<boolean> {
     this.#recovering.add(agentId);
     try {
-      const handedBack = await this.#end(agentId, launch, session, plan);
-      if (!handedBack) return false;
+      const carried = await this.#end(agentId, launch, session, plan, freshSession);
+      if (!carried) return false;
       const current = this.#ports.restartConfig(agentId);
       if (this.#ports.isStopping(agentId) || !current) return true;
-      await proceed(current, () => this.#recovering.delete(agentId), handedBack);
+      await proceed(current, () => this.#recovering.delete(agentId), carried);
       return true;
     } finally {
       this.#recovering.delete(agentId);
     }
   }
 
-  /** The delivery ids handed back, or undefined, with an error Activity, when the process will not
-   * exit. Once is enough: that launch is never judged again. */
+  /** The tracked mentions kept for the next launch (see `carryMentions`), or undefined, with an
+   * error Activity, when the process will not exit. Once is enough: that launch is never judged
+   * again. */
   async #end(
     agentId: string,
     launch: L,
     session: AgentSession,
     plan: RuntimeEndPlan,
-  ): Promise<readonly string[] | undefined> {
+    freshSession: boolean,
+  ): Promise<ReadonlyMap<string, number> | undefined> {
     // Before `stopping`, which mutes everything but stopped/interrupted/error Activity.
     if (plan.announce)
       this.#ports.publish(agentId, launch, plan.announce.detailKind, "info", plan.announce.text);
     plan.log?.();
     launch.stopping = true;
     try {
-      // Dispose can reject notices still waiting for provider acceptance. Hand their mentions
-      // back first, before those rejections can settle them as lost.
-      const handedBack = await this.#ports.handBackMentions(agentId);
+      // Disposing can reject notices still waiting for provider acceptance; while this restart is
+      // under way the tracker leaves such a mention for the next launch instead of refusing it.
       await this.#ports.release(agentId, STALLED_RECOVERY_EXIT_TIMEOUT_MS);
-      return handedBack;
+      return this.#ports.carryMentions(agentId, freshSession);
     } catch (error) {
+      this.#ports.abortMentionCarry(agentId);
       if (!plan.keepProgress) launch.progress = undefined;
       // A process that is still running gets its Activity back.
       const stillRunning = this.#ports.runtime(agentId)?.session === session;

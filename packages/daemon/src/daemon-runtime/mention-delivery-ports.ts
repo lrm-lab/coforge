@@ -34,4 +34,13 @@ export type MentionDeliveryPorts = {
   /** Whether the Agent is mid-turn: a notice written now lands in the turn in progress. */
   busy(agentId: string, conversationId?: string): boolean;
   blocked(agentId: string): MentionDeliveryBlock | undefined;
+  /** The Agent's current process, compared by identity: a notice settling for another one belongs
+   * to a restart, not to this Agent's present launch. */
+  process?(agentId: string): unknown;
+  /** Whether the Agent's runtime is being ended for a restart. */
+  relaunching?(agentId: string): boolean;
+  /** The launch and session last reported for the Agent, running or not. */
+  remembered?(agentId: string): RunningMentionIdentity | undefined;
+  /** Asks the Agent's input to take the mentions kept for it. */
+  pull?(agentId: string): void;
 };

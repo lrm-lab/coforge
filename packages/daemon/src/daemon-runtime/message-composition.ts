@@ -39,7 +39,7 @@ export type MessageCompositionPorts = {
   runtimeRelease: RuntimeRelease<ActivityLaunch>;
   processManager: AgentProcessManager;
   /** Built after this group: only a delivery marked busy reaches it, so it is read lazily. */
-  launchCustody(): Pick<AgentLaunchCustody, "noteTurnStarted">;
+  launchCustody(): Pick<AgentLaunchCustody, "noteTurnStarted" | "ensureInput">;
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   currentActivityLaunch(agentId: string): ActivityLaunch | undefined;
   /** One Activity draft, as the runtime builds every other one. */
@@ -52,7 +52,8 @@ export type MessageCompositionPorts = {
   ): ActivityDraft;
   sync: Pick<AgentFeatureSync, "noticePrefix">;
   /** The launch identity a tracked mention's envelope must name, while that launch runs. */
-  runningMentionIdentity(agentId: string): RunningMentionIdentity | undefined;
+  /** The running process's launch and session, or with `reported` the last ones reported. */
+  runningMentionIdentity(agentId: string, reported?: true): RunningMentionIdentity | undefined;
   contexts: AgentContexts;
   /** The Agent's Memory fence, when it is the Memory Agent. */
   memoryAgent(agentId: string): unknown;
@@ -93,12 +94,23 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     running: (agentId) => ports.runningMentionIdentity(agentId),
     consumed: (message) => messageAttention.hasConsumed(message),
     told: (message) => messageAttention.wasNotified(message),
+    process: (agentId) => ports.processManager.session(agentId),
+    relaunching: (agentId) => ports.runtimeRelease.isRecovering(agentId),
+    // Only an Agent that can still be relaunched has an identity to keep a mention for.
+    remembered: (agentId) =>
+      ports.processManager.restartConfig(agentId)
+        ? ports.runningMentionIdentity(agentId, true)
+        : undefined,
+    pull: (agentId) => ports.launchCustody().ensureInput(agentId),
     decided: (message, outcome) => messageAttention.logDecision(message, outcome),
     announce: (message) => messageAttention.announce(message),
-    busy: (agentId, conversationId) =>
-      (conversationId
-        ? ports.processManager.session(agentId)?.hasLiveTurnForConversation?.(conversationId)
-        : undefined) ?? ports.deliveryGate.isBusy(agentId),
+    busy: (agentId, conversationId) => {
+      const session = ports.processManager.session(agentId);
+      return (
+        (conversationId ? session?.hasLiveTurnForConversation?.(conversationId) : undefined) ??
+        (session?.hasLiveTurn === true || ports.deliveryGate.isBusy(agentId))
+      );
+    },
     blocked: (agentId) =>
       ports.deliveryGate.explicitHold(agentId) ??
       (ports.deliveryGate.shouldHold(agentId) ? "queued_until_idle" : undefined),
