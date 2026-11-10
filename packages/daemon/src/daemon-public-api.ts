@@ -377,7 +377,10 @@ export async function runDaemon(
         },
         inbox: async (context: string, request: LocalInboxRequest) =>
           requireRuntime().inbox(context, request),
-        ...operatorRunnerPorts(runtime, config?.workspaceId),
+        ...operatorRunnerPorts(
+          () => runtime,
+          () => config?.workspaceId,
+        ),
       };
       // In place before the Coordinator can start the runtime; sessions inherit it via Bun.env.
       await loginShellEnv;

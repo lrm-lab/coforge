@@ -15,22 +15,32 @@ export function operatorRunnerIdentities(
 }
 
 export function operatorRunnerPorts(
-  runtime: DaemonRuntime | undefined,
-  workspaceId: string | undefined,
+  runtime: () => DaemonRuntime | undefined,
+  workspaceId: () => string | undefined,
 ) {
   return {
-    hold: async (reason: import("@lrm/coforge-sdk/internal").RunnerHoldReason) => ({
-      held: true,
-      busyAgents: stampOperatorWorkspace(runtime?.holdRunners(reason), workspaceId ?? ""),
-    }),
-    release: async () => ({
-      held: false,
-      busyAgents: stampOperatorWorkspace(runtime?.releaseRunners(), workspaceId ?? ""),
-    }),
-    runnerIdentities: () => operatorRunnerIdentities(runtime, workspaceId),
+    hold: async (reason: import("@lrm/coforge-sdk/internal").RunnerHoldReason) => {
+      const current = runtime();
+      return {
+        held: true,
+        busyAgents: stampOperatorWorkspace(current?.holdRunners(reason), workspaceId() ?? ""),
+      };
+    },
+    release: async () => {
+      const current = runtime();
+      return {
+        held: false,
+        busyAgents: stampOperatorWorkspace(current?.releaseRunners(), workspaceId() ?? ""),
+      };
+    },
+    runnerIdentities: () => {
+      const current = runtime();
+      return operatorRunnerIdentities(current, workspaceId());
+    },
     stopAgent: async (agentId: string) => {
-      if (!runtime) throw new Error("daemon runtime is not running");
-      await runtime.stopAgent(agentId);
+      const current = runtime();
+      if (!current) throw new Error("daemon runtime is not running");
+      await current.stopAgent(agentId);
     },
   };
 }
