@@ -174,7 +174,9 @@ export const InputBase = ({
                         sizes[inputSize].iconTrailing,
                     )}
                 >
-                    {isPasswordVisible ? <EyeOff className="size-4 stroke-[2.25px]" /> : <Eye className="size-4 stroke-[2.25px]" />}
+                    {/* The eye shows what the field does now: shut while the text is hidden, open while it shows
+                        (the designer's call, 11-10). */}
+                    {isPasswordVisible ? <Eye className="size-4 stroke-[2.25px]" /> : <EyeOff className="size-4 stroke-[2.25px]" />}
                 </AriaButton>
             )}
 
