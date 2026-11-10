@@ -8,9 +8,8 @@ import {
 import type { TaskCommand } from "@lrm/coforge-sdk/internal";
 import { hostMessageId, type SelectedTask } from "./task-view.server";
 import type { TaskBoardPorts, Member } from "./task-board-ports.server";
-import { parentTasksOf, taskViewsOf } from "./task-relations.server";
+import { taskViewsOf } from "./task-relations.server";
 import {
-  announceNeighbours,
   announceTasks,
   publishAssignmentReceipt,
   publishDeliveries,
@@ -45,26 +44,12 @@ export async function publishCreatedTasks(
       .catch(() => undefined);
   const scopes = await conversationSignalScopes(ports.db, scope.conversationId, scope.workspaceId);
   const signalScope = scopes.message;
-  // A Task made under a parent changes the parent's own view (its sub-task progress), so
-  // the parent's new copy is announced with the new Tasks': in this conversation with them,
-  // in another to its own audience, as an amendment's neighbours are (task #65).
-  const parents = command.parent ? await parentTasksOf(ports.db, result.tasks) : [];
-  const here = parents.filter((parent) => parent.conversationId === scope.conversationId);
   const effects: Promise<unknown>[] = [
     announceTasks(ports, scope, async () => scopes.task, {
-      tasks: await taskViewsOf(ports.db, "people", [...result.tasks, ...here]),
+      tasks: await taskViewsOf(ports.db, "people", result.tasks),
       publicationId: `${result.tasks[0]!.id}:task-created`,
     }),
   ];
-  if (parents.length)
-    effects.push(
-      announceNeighbours(
-        ports,
-        scope.conversationId,
-        parents,
-        `${result.tasks[0]!.id}:task-created`,
-      ),
-    );
   effects.push(
     ...result.tasks.flatMap((task, index) => [
       ...(member.userId
