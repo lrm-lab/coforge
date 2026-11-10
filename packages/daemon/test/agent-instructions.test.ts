@@ -40,7 +40,7 @@ test("ordinary requests do not require task creation or per-turn memory bookkeep
   expect(instructions).toContain("Only a successful claimant implements");
   expect(instructions).toContain("others may analyze or review in its thread");
   expect(instructions).toContain("A failed claim blocks conflicting work");
-  expect(instructions).toContain("MEMORY.md is your index and recovery point");
+  expect(instructions).toContain("ride in with every fresh session and after a compaction");
   expect(instructions).not.toContain("## Startup sequence");
   expect(instructions).not.toContain("before you finish that turn");
 });
@@ -50,13 +50,15 @@ test("the Agent finishes all assigned work before it stops", () => {
   expect(instructions).toContain("coforge task list --mine");
 });
 
-test("memory is written for the next session, as reference rather than a log", () => {
-  expect(instructions).toContain("it arrives with every fresh session");
-  expect(instructions).toContain("It is what the next session resumes from");
-  expect(instructions).toContain("within its size limit");
-  expect(instructions).toContain("notes/active-context.md overwritten as the current state");
+test("the standing prompt says what memory is for in two sentences", () => {
+  expect(instructions).toContain(
+    "MEMORY.md and notes/active-context.md ride in with every fresh session and after a compaction",
+  );
+  expect(instructions).toContain("they are where the next session picks up");
   expect(instructions).toContain("Check MEMORY.md before asking a human");
-  expect(instructions).toContain("Check MEMORY.md before asking a human");
+  // The size limit and the active-context overwrite live in the manual, not here (task #10).
+  expect(instructions).not.toContain("within its size limit");
+  expect(instructions).not.toContain("overwritten as the current state");
 });
 
 test("capability-gated rules appear only when the launch has the capability", () => {
