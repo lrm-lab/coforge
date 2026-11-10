@@ -8,6 +8,8 @@ import { Toggle } from "#src/components/base/toggle/toggle";
 import { DialogAction } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import type { Mentionable } from "#src/features/conversations/mention-text";
+import { GroupAvatar } from "#src/features/conversations/group-avatar";
+import { useLiveChannelRow } from "#src/features/conversations/sidebar-lists";
 import { isAppError } from "#src/lib/app-error";
 import { isImeComposing } from "#src/lib/ime";
 import { isApplePlatform } from "#src/lib/platform";
@@ -95,6 +97,10 @@ export function CreateTaskDialog({
   const busy = useRef(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // A channel shows as the sidebar draws it: its group avatar, its name without `#` (Frank, 11-10).
+  const channelMembers = useLiveChannelRow(
+    where && !where.subtask ? (conversationId ?? "") : "",
+  )?.members;
   // The title grows with what it holds through `field-sizing: content`. A browser without it would
   // keep one row and hide the rest of a long title, the very cut the textarea is there to prevent:
   // there it is sized to its content here instead.
@@ -237,7 +243,16 @@ export function CreateTaskDialog({
                         data-layout="create"
                         className="inline-flex h-8 min-w-0 items-center rounded-lg bg-secondary text-secondary ring-1 ring-secondary ring-inset dark:bg-tertiary"
                       >
-                        {board?.place ?? <span className="truncate px-2.5">{where?.label}</span>}
+                        {board?.place ?? (
+                          <span className="flex min-w-0 items-center gap-1.5 px-2.5">
+                            {channelMembers?.length ? (
+                              <GroupAvatar members={channelMembers} className="avatar-group-xs" />
+                            ) : null}
+                            <span className="truncate">
+                              {channelMembers ? where?.label.replace(/^#/, "") : where?.label}
+                            </span>
+                          </span>
+                        )}
                       </span>
                       <ChevronRight
                         aria-hidden="true"

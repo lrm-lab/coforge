@@ -27,6 +27,7 @@ import type { ChannelVisibility } from "#src/features/conversations/channel-visi
 import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { GroupAvatar, type GroupAvatarMember } from "#src/features/conversations/group-avatar";
 
 /**
  * One picker for every "choose a person, an Agent or a Project" in the app (task #415): a channel's
@@ -48,7 +49,12 @@ export type PickerFace =
       agentId?: string;
     }
   | { kind: "project"; name: string; src?: string | null }
-  | { kind: "channel"; visibility: ChannelVisibility };
+  | {
+      kind: "channel";
+      visibility: ChannelVisibility;
+      /** Its group avatar's members: given, the channel shows as the sidebar draws it. */
+      members?: readonly GroupAvatarMember[];
+    };
 
 export type PickerOption = {
   /** Unique in the list. Namespace ids by kind (`user:…`, `agent:…`): ids of different kinds may
@@ -73,6 +79,8 @@ export type PickerOption = {
 /** A person's or Agent's picture (an Agent's mascot drawn whole, not clipped to a tile), a
  * Project's image or folder, or a channel's `#` (a lock when it is private). */
 export function Face({ face }: { face: PickerFace }) {
+  if (face.kind === "channel" && face.members?.length)
+    return <GroupAvatar members={face.members} className="avatar-group-xs" />;
   if (face.kind === "channel") {
     const Glyph = channelGlyph(face);
     return (

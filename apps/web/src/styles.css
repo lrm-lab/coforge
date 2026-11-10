@@ -314,6 +314,11 @@ html[data-drag-cursor] [data-drop-blocked] * {
     height: 110%;
   }
 
+  /* The group avatar at a picker face's 20 × 20px (a picker row, a form's chip). */
+  .avatar-group.avatar-group-xs {
+    --avatar-group-size: 1.25rem;
+  }
+
   /* The group avatar at the message avatar's 38 × 38px (an Activity row). */
   .avatar-group.avatar-group-sm {
     --avatar-group-size: 2.375rem;

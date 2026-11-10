@@ -10,6 +10,7 @@ import { requireWorkspaceMember } from "#src/server/workspaces/workspace-members
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { visibleChannelWhere } from "./channel-read-access.server";
 import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
+import { channelListMembers } from "./channel-list-preview.server";
 
 /** Round-robin over the lists, so a long run of one kind does not crowd the others out. */
 function interleave<T>(lists: readonly (readonly T[])[], limit: number): T[] {
@@ -96,11 +97,19 @@ export async function searchForwardTargets(
       })
     : [];
   const directOf = new Map(directs.map((direct) => [direct.directKey, direct.id]));
-  const channels = [...joinedChannels, ...otherChannels].map((channel): ForwardTarget => ({
+  const listed = [...joinedChannels, ...otherChannels];
+  // Each channel's group avatar, as the sidebar draws it (Frank, 11-10: a channel is never a `#`).
+  const avatarMembers = await channelListMembers(
+    db,
+    workspaceId,
+    listed.map((channel) => channel.id),
+  );
+  const channels = listed.map((channel): ForwardTarget => ({
     kind: "channel",
     conversationId: channel.id,
     name: channel.channelName!,
     visibility: channelVisibilityOf(channel),
+    members: avatarMembers.get(channel.id) ?? [],
     joined: channel.members.length > 0,
     canSend: channel.archivedAt === null,
   }));

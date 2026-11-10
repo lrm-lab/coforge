@@ -135,6 +135,8 @@ function defaultTarget(
       conversationId: place.conversationId,
       name: place.label.replace(/^#/, ""),
       visibility: "public",
+      // The picker reads its group avatar from the sidebar until the search lists it.
+      members: [],
       joined: true,
       canSend: true,
     };

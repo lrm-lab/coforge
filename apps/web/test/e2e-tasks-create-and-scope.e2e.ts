@@ -164,10 +164,11 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await browser("screenshot", join(artifacts, "create-empty.png"));
 
     // The dialog is laid out as the Task popup: where it goes, a To do title, then the details.
+    // Where it goes is the channel as the sidebar shows it: its group avatar and its name, no `#`.
     expect(
       await browser(
         "eval",
-        `document.querySelector('[role="dialog"]').textContent.includes("#${channel.channelName}")`,
+        `(() => { const d = document.querySelector('[role="dialog"]'); return d.textContent.includes(${JSON.stringify(channel.channelName)}) && !d.textContent.includes("#${channel.channelName}") && d.querySelector(".avatar-group") !== null; })()`,
       ),
     ).toContain("true");
     // Its Project starts empty; the last-used one heads the picker's options (Frank, 11-06).
@@ -245,6 +246,17 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
       ).then((out) => JSON.parse(out)),
     );
     expect(phoneLayout).toEqual({ submits: ["Create"], topBar: true, cancel: true, rows: 1 });
+    // Cancel puts the page away, not what was typed: opened again, the title is still there.
+    await browser("find", "role", "button", "click", "--name", "Cancel");
+    await waitFor(`document.querySelector('[role="dialog"]') === null`);
+    for (let attempt = 0; !(await browser("eval", dialogOpen)).includes("true"); attempt += 1) {
+      if (attempt === 10) throw new Error("the create page never opened again");
+      await browser("eval", `${byText("button", "Create task")}?.click()`);
+      await Bun.sleep(500);
+    }
+    expect(
+      await browser("eval", `document.querySelector(${JSON.stringify(titleField)}).value`),
+    ).toContain(`Phone ${suffix}`);
     await browser("find", "role", "button", "click", "--name", "Create");
     let phoneMade = null;
     for (let tries = 0; tries < 40 && !phoneMade; tries++) {

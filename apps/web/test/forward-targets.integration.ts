@@ -97,6 +97,13 @@ test("finds channels, members and Agents with whether each is joined and can tak
   expect(channelTarget(vault.id)).toMatchObject({ joined: true, visibility: "private" });
   expect(channelTarget(archived.id)).toMatchObject({ joined: true, canSend: false });
   expect(channelTarget(solo.id)).toMatchObject({ joined: false, canSend: true });
+  // Each channel brings its group avatar's members, as the sidebar draws it, joined or not.
+  const avatarIds = (conversationId: string) => {
+    const target = channelTarget(conversationId);
+    return target?.kind === "channel" ? target.members.map((member) => member.id).sort() : [];
+  };
+  expect(avatarIds(news.id)).toEqual([alice.id, bob.id].sort());
+  expect(avatarIds(solo.id)).toEqual([bob.id]);
   // Members come with the DM they already have; one without a DM has none to name.
   expect(all.find((target) => target.kind === "person" && target.userId === bob.id)).toMatchObject({
     name: "Bob",

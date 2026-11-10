@@ -20,6 +20,7 @@ const channel: ForwardTarget = {
   conversationId: "11111111-1111-4111-8111-111111111111",
   name: "design",
   visibility: "public",
+  members: [],
   joined: true,
   canSend: true,
 };
