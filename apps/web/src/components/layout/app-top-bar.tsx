@@ -4,10 +4,11 @@ import { LayoutLeft } from "@untitledui/icons";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
-import { SIDEBAR_EXPANDED_WIDTH } from "#src/components/layout/sidebar/sidebar-expanded";
+import { SIDEBAR_WIDTH_CLASS } from "#src/components/layout/sidebar/sidebar-expanded";
 import { writeSidebarExpanded } from "#src/features/settings/sidebar-expanded";
 import { SidebarToggleTooltip } from "#src/features/settings/sidebar-shortcut";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 
 /** The desktop bar across the top of the window: where you are on the left, search in the middle
  * with the busy Agents just before it, what concerns you on the right. Phones have no room for it;
@@ -30,10 +31,9 @@ export function AppTopBar({
     <header className="hidden h-12 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,20rem)_minmax(0,1fr)] items-center gap-3 lg:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)_minmax(0,1fr)]">
       <div className="flex min-w-0 items-center">
         {/* Exactly as wide as the expanded sidebar and on the nav icons' axis, so the toggle ends
-        where the sidebar does; a long Workspace name truncates inside it. */}
+        where the sidebar does; widening the sidebar gives a long Workspace name room. */}
         <div
-          style={{ width: SIDEBAR_EXPANDED_WIDTH }}
-          className="flex min-w-0 shrink-0 items-center gap-2 pr-3 pl-6"
+          className={cx("flex min-w-0 shrink-0 items-center gap-2 pr-3 pl-6", SIDEBAR_WIDTH_CLASS)}
         >
           <CoForgeMark className="size-5 shrink-0" />
           <div className="flex min-w-0">{workspace}</div>

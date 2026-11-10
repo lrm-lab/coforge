@@ -2,10 +2,14 @@ import type { FC, ReactNode } from "react";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { MobileNavigationHeader } from "#src/components/layout/sidebar/mobile-header";
+import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
+import { SIDEBAR_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { cx } from "#src/utils/cx";
 
-/** 192px at the default text size; rem so the sidebar grows with the browser's font size. */
-export const SIDEBAR_EXPANDED_WIDTH = "12rem";
+/** The expanded sidebar's width, which the top bar's zone above it shares: the width dragged on its
+ * edge (`SIDEBAR_COLUMN`), else 12rem, 192px at the default text size. Written out whole for
+ * Tailwind; it repeats `SIDEBAR_COLUMN.property`. */
+export const SIDEBAR_WIDTH_CLASS = "w-(--sidebar-width,12rem)";
 
 type ExpandedItemType = NavItemType & {
   icon: FC<{ className?: string }>;
@@ -105,8 +109,9 @@ export const SidebarMobileDrawer = (props: SidebarExpandedProps) => (
  * never depends on the stored preference. */
 export const SidebarExpanded = (props: SidebarExpandedProps) => (
   <div className="hidden shrink-0 lg:flex lg:[.sidebar-collapsed_&]:hidden">
-    <div style={{ width: SIDEBAR_EXPANDED_WIDTH }} className="h-full">
+    <div className={cx("relative h-full", SIDEBAR_WIDTH_CLASS)}>
       <SidebarExpandedPanel {...props} />
+      <ConversationListResizeHandle column={SIDEBAR_COLUMN} />
     </div>
   </div>
 );

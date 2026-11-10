@@ -16,6 +16,18 @@ export type ListColumn = {
   edge?: "left" | "right";
 };
 
+/** The desktop sidebar, dragged by its right edge (the content card's left edge) so a long
+ * Workspace name in the top bar's zone above it can show whole (task #73). It never goes narrower
+ * than its 12rem default. */
+export const SIDEBAR_COLUMN: ListColumn = {
+  key: "coforge-sidebar-width",
+  property: "--sidebar-width",
+  defaultWidth: 192,
+  min: 192,
+  max: 320,
+  label: m.navigation_resize_sidebar,
+};
+
 /** The Chat page's conversation list beside the open conversation, from `lg`. */
 export const CONVERSATION_LIST_COLUMN: ListColumn = {
   key: "coforge-conversation-list-width",
@@ -68,6 +80,7 @@ function bootScript({ key, property, min, max }: ListColumn): string {
 }
 
 export const CONVERSATION_LIST_BOOT =
+  bootScript(SIDEBAR_COLUMN) +
   bootScript(CONVERSATION_LIST_COLUMN) +
   bootScript(LIST_COLUMN) +
   bootScript(ATTACHMENT_COMMENTS_COLUMN);

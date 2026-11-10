@@ -4,6 +4,7 @@ import {
   CONVERSATION_LIST_BOOT,
   CONVERSATION_LIST_COLUMN as CHAT,
   LIST_COLUMN as LIST,
+  SIDEBAR_COLUMN,
   clampListWidth,
   dragListWidth,
   keyListWidth,
@@ -94,5 +95,12 @@ describe("list column width", () => {
   test("the boot script restores the comments panel's kept width", () => {
     expect(CONVERSATION_LIST_BOOT).toContain(COMMENTS.key);
     expect(CONVERSATION_LIST_BOOT).toContain(COMMENTS.property);
+  });
+
+  test("the sidebar never goes narrower than its default and its kept width is restored at boot", () => {
+    expect(SIDEBAR_COLUMN.min).toBe(SIDEBAR_COLUMN.defaultWidth);
+    expect(dragListWidth(SIDEBAR_COLUMN, 192, 192, 100)).toBe(192);
+    expect(dragListWidth(SIDEBAR_COLUMN, 192, 192, 600)).toBe(320);
+    expect(CONVERSATION_LIST_BOOT).toContain(SIDEBAR_COLUMN.property);
   });
 });
