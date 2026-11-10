@@ -140,8 +140,10 @@ export function TaskSection({
           layout === "sidebar" && "flex-col gap-3",
           layout === "column" && "flex-col",
           // One row that scrolls sideways when it does not fit; the page's edge stays its margin.
+          // Sideways only: `overflow-x: auto` alone makes the other axis `auto` too, and iOS then
+          // lets the row be dragged down and bounce, clipping its chips.
           layout === "chips" &&
-            "gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            "gap-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         )}
       >
         {/* As chips (a phone), what blocks the Task comes right after its status, where the row
