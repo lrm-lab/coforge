@@ -267,6 +267,10 @@ export class ContextViewStore {
     const encoded = () =>
       kept.map((entry) => JSON.stringify(entry)).join("\n") + (kept.length ? "\n" : "");
     const dropped = parsed.length - kept.length;
+    if (kept.length === 0) {
+      rmSync(this.#indexPath, { force: true });
+      return { kept: 0, dropped };
+    }
     const temp = `${this.#indexPath}.tmp-${process.pid}`;
     const tempFd = openSync(temp, CONTEXT_VIEW_APPEND_FLAGS | (constants.O_EXCL ?? 0), 0o600);
     try {

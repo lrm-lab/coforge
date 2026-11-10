@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
@@ -107,7 +107,7 @@ test("startup maintenance enumerates disk stores and compacts old entries", () =
     offset: 1,
   });
   service.compactAndSweep();
-  expect(readFileSync(store.indexPath, "utf8")).toBe("");
+  expect(existsSync(store.indexPath)).toBe(false);
 });
 
 test("restart maintenance sweeps request logs from the managed state directory", () => {

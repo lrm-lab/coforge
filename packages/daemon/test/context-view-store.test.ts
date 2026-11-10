@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmdirSync,
@@ -38,6 +39,7 @@ describe("ContextViewStore", () => {
     const store = new ContextViewStore(root, "server-1", "agent-1", () => now);
     store.record(entry);
     expect(store.compact(30)).toBe(0);
+    expect(existsSync(store.indexPath)).toBe(false);
     const current = { ...entry, messageId: "message-2", sentAt: new Date(now).toISOString() };
     store.record(current);
     expect(readFileSync(store.indexPath).length).toBeLessThanOrEqual(AGENT_CONTEXT_INDEX_MAX_BYTES);
