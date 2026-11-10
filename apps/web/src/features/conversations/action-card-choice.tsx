@@ -65,8 +65,7 @@ export function ChoiceActionCard({
   const answer = chosenAnswer(view);
   const isAsked = view.asked?.isViewer === true;
   const canIgnore = pending && view.canCommit && view.canCancel;
-  const { ignored: ignoredNow, ignore, undo } = useUndoableIgnore(onIgnore);
-  const ignored = canIgnore && ignoredNow;
+  const { ignored, ignore, undo } = useUndoableIgnore(onIgnore, canIgnore);
   const wasIgnored = useRef(false);
   // The collapsed line takes focus on Undo; coming back (undone, or the cancel failed), on Ignore.
   useEffect(() => {
@@ -74,11 +73,13 @@ export function ChoiceActionCard({
       focusIgnore(cardRef.current, "undo");
       setAnnouncement(m.action_card_ignored_status());
     } else if (wasIgnored.current) {
-      focusIgnore(cardRef.current, "ignore");
       setAnnouncement("");
+      // Answered or cancelled elsewhere meanwhile, Ignore is gone with Undo: the card keeps focus.
+      if (canIgnore) focusIgnore(cardRef.current, "ignore");
+      else if (document.activeElement === document.body) cardRef.current?.focus();
     }
     wasIgnored.current = ignored;
-  }, [ignored]);
+  }, [ignored, canIgnore]);
   // The asked person's pick replaces the card with its one line, unmounting the pressed row: focus
   // goes on to the next card waiting on them, or else to this line, which a screen reader reads.
   useEffect(() => {

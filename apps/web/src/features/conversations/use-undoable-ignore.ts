@@ -55,9 +55,14 @@ export function createUndoableIgnore({
 
 /**
  * An ignore that can be undone for `IGNORE_UNDO_MS`, then cancels (see `createUndoableIgnore`).
- * A rejection from the timed `send` puts the card back (`ignored` is false again).
+ * A rejection from the timed `send` puts the card back (`ignored` is false again). Once `available`
+ * turns false (the card was answered or cancelled elsewhere while counting) the count stops and
+ * nothing is sent: there is nothing left to cancel.
  */
-export function useUndoableIgnore(send: (options: { keepalive: boolean }) => Promise<void>) {
+export function useUndoableIgnore(
+  send: (options: { keepalive: boolean }) => Promise<void>,
+  available = true,
+) {
   const [ignored, setIgnored] = useState(false);
   // The latest `send`, so a timer set earlier never sends with a stale closure.
   const sendRef = useRef(send);
@@ -75,5 +80,8 @@ export function useUndoableIgnore(send: (options: { keepalive: boolean }) => Pro
       controller.leave();
     };
   }, [controller]);
-  return { ignored, ignore: controller.ignore, undo: controller.undo };
+  useEffect(() => {
+    if (!available) controller.undo();
+  }, [available, controller]);
+  return { ignored: available && ignored, ignore: controller.ignore, undo: controller.undo };
 }

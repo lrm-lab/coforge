@@ -80,8 +80,7 @@ export function QuestionsActionCard({
   const waitingOn = pending && !canAnswer ? view.asked : undefined;
   const withdrawable = pending && view.canCancel && !canAnswer;
   const canIgnore = canAnswer && view.canCancel;
-  const { ignored: ignoredNow, ignore, undo } = useUndoableIgnore(onIgnore);
-  const ignored = canIgnore && ignoredNow;
+  const { ignored, ignore, undo } = useUndoableIgnore(onIgnore, canIgnore);
   const cardRef = useRef<HTMLDivElement>(null);
   const wasIgnored = useRef(false);
   const [announcement, setAnnouncement] = useState("");
@@ -91,11 +90,13 @@ export function QuestionsActionCard({
       focusIgnore(cardRef.current, "undo");
       setAnnouncement(m.action_card_ignored_status());
     } else if (wasIgnored.current) {
-      focusIgnore(cardRef.current, "ignore");
       setAnnouncement("");
+      // Answered or cancelled elsewhere meanwhile, Ignore is gone with Undo: the card keeps focus.
+      if (canIgnore) focusIgnore(cardRef.current, "ignore");
+      else if (document.activeElement === document.body) cardRef.current?.focus();
     }
     wasIgnored.current = ignored;
-  }, [ignored]);
+  }, [ignored, canIgnore]);
   // Answered, the same pages as while answering, each pick marked (Frank, 11-04).
   const answeredView = view.state === "executed" ? recordedDrafts(view) : undefined;
   // Asked of someone else, the same pages to look through, nothing to pick (Frank, 11-04: a list
@@ -146,9 +147,11 @@ export function QuestionsActionCard({
       ref={cardRef}
       role="group"
       aria-label={view.prompt || view.questions[0]?.prompt}
+      tabIndex={-1}
       data-questions-card=""
       data-no-row-tap
       className={cn(
+        "outline-focus-ring focus-visible:outline-2",
         "mt-1 flex max-w-md flex-col gap-2 rounded-xl border border-secondary bg-primary px-1.5 pt-3 pb-1.5",
       )}
     >
