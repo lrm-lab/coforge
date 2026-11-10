@@ -174,10 +174,9 @@ export class AgentDeliveryQueue {
 
   /**
    * Unconditionally drains and returns everything held for the Agent, ignoring busy/idle and any
-   * explicit hold — for a caller that has already decided these held deliveries are redundant
-   * (a relaunch's `recover()` pass already told the Agent about the same canonical
-   * unread state) and only needs them back to account for them, never to notify with them. Each
-   * was acknowledged when the daemon took it.
+   * explicit hold — for `takeParked` (runtime-release-assembly.ts), which hands them to the cold
+   * start's unread summary: they are only accounted for there, never notified with. Each was
+   * acknowledged when the daemon took it.
    */
   discardPending(agentId: string): AgentMessageDelivery[] {
     return this.#drain(agentId);
@@ -189,16 +188,33 @@ export class AgentDeliveryQueue {
     agentId: string,
     conversationIds: ReadonlySet<string>,
   ): AgentMessageDelivery[] {
+    return this.#discardWhere(agentId, (message) => conversationIds.has(message.conversationId));
+  }
+
+  /** Removes and returns the held deliveries for these targets, leaving the rest held: for a
+   * relaunch whose `recover()` pass told the Agent about exactly those targets. */
+  discardTargets(agentId: string, targets: ReadonlySet<string>): AgentMessageDelivery[] {
+    return this.#discardWhere(
+      agentId,
+      (message) => message.target !== undefined && targets.has(message.target),
+    );
+  }
+
+  #discardWhere(
+    agentId: string,
+    dropped: (message: AgentMessageDelivery) => boolean,
+  ): AgentMessageDelivery[] {
     const list = this.#held.get(agentId);
     if (!list) return [];
-    const dropped = list.filter((message) => conversationIds.has(message.conversationId));
-    const kept = list.filter((message) => !conversationIds.has(message.conversationId));
+    const gone: AgentMessageDelivery[] = [];
+    const kept: AgentMessageDelivery[] = [];
+    for (const message of list) (dropped(message) ? gone : kept).push(message);
     if (kept.length) this.#held.set(agentId, kept);
     else {
       this.#held.delete(agentId);
       this.#heldSince.delete(agentId);
     }
-    return dropped;
+    return gone;
   }
 
   /** Records an app-item notice (`DaemonRuntime#notifyAppItem`) as held while busy. */

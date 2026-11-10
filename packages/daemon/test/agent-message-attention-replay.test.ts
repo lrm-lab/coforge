@@ -199,7 +199,7 @@ test("recover logs each message's adopt or discard decision", async () => {
     body: "body",
   });
   index.recordModelSeen("agent-1", "#team", 5);
-  const decisions = async (run: () => Promise<void>) =>
+  const decisions = async (run: () => Promise<unknown>) =>
     (await captureDaemonLogs(run)).records
       .filter((record) => record.properties.event === "agent.message.attention_decision")
       .map((record) => record.properties);

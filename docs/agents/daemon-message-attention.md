@@ -122,7 +122,9 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   Deliveries that wait for the next launch (in the cooldown, in a failed
   launch's input queue, a batched wake launch in flight, or kept by an offline
   Agent) wait in `AgentDeliveryQueue`, already ACKed. The next launch presents
-  them in one notice, or a server recovery notice covers them. `flush` gives
+  them in one notice, or a server recovery notice covers those whose target it
+  announces (`recover` returns those targets; a message it finds already read announces nothing); the rest are
+  presented as for a launch without recovery. `flush` gives
   them `receive`'s treatment (consumed, malformed). An explicit Stop, or a
   launch abandoned because its recovery notice was rejected, discards them;
   the next Start recovers them from the cloud read boundary.

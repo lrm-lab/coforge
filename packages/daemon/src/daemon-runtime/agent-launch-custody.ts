@@ -58,9 +58,10 @@ export class AgentLaunchCustody {
       ...(context.resumeMessages ?? []),
     ];
     const hasRecoveryContent = recoveryHasContent(context);
+    let announced: ReadonlySet<string> = new Set();
     try {
       if (hasRecoveryContent)
-        await this.ports.messageAttention.recover(
+        announced = await this.ports.messageAttention.recover(
           agentId,
           messages,
           context.unreadSummary ?? {},
@@ -74,16 +75,13 @@ export class AgentLaunchCustody {
       });
       throw error;
     }
-    // Reconcile whatever AgentDeliveryQueue held across an unexpected exit now that
-    // this launch's recovery pass has run. `recover()` above already told the Agent about the
-    // same canonical unread state (the server's own unread ledger, not this in-memory queue, is
-    // what a crashed-and-relaunched Agent's `resumeMessages`/`unreadSummary` are built from) —
-    // drop the surviving held deliveries (acknowledged when they were held) instead of a second,
-    // redundant notice for them.
-    // When there was no recovery content, nothing else has told the Agent, so flush them now,
-    // treating the freshly launched session as idle.
-    if (hasRecoveryContent) this.#dropSurvivingDeliveryQueue(agentId);
-    else this.flushSurvivingDeliveryQueue(agentId);
+    // Reconcile whatever AgentDeliveryQueue held across an unexpected exit now that this launch's
+    // recovery pass has run. The pass told the Agent about the targets it announced: a held
+    // delivery for one of those is redundant and dropped (each was acknowledged when held). Any
+    // other target, one the recovery named but found already read included, was not mentioned, so
+    // nothing has told the Agent about it: flush those now, treating the fresh session as idle.
+    this.ports.deliveryQueue.discardTargets(agentId, announced);
+    this.flushSurvivingDeliveryQueue(agentId);
     // App items (reminders, etc.) are a separate subsystem from canonical Message unread state
     // (`agent-app-inbox/`); `recover()` above never mentions them, so a held one is always
     // released here regardless of `hasRecoveryContent`, never dropped. A surviving fallback
@@ -93,13 +91,6 @@ export class AgentLaunchCustody {
     // it is the only choice that never silently drops one.
     this.ports.releaseHeldAppItems(agentId);
     this.ports.releaseFallbackNotices(agentId);
-  }
-
-  /** Drops whatever `AgentDeliveryQueue` held for `agentId` across an unexpected exit — used when
-   * this launch's `recover()` pass already covered the same unread state, so notifying about them
-   * again would be redundant. Each was acknowledged when the daemon took it. */
-  #dropSurvivingDeliveryQueue(agentId: string): void {
-    this.ports.deliveryQueue.discardPending(agentId);
   }
 
   /** Flushes whatever `AgentDeliveryQueue` held for `agentId` across an unexpected

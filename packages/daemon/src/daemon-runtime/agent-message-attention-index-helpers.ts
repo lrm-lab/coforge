@@ -1,6 +1,9 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { HELD_CONTEXT_LIMIT } from "@lrm/coforge-sdk/internal";
-import type { AgentConsumedSeqEntry } from "#src/persistence/agent-consumed-seq-store";
+import type {
+  AgentConsumedSeqEntry,
+  AgentConsumedSeqState,
+} from "#src/persistence/agent-consumed-seq-store";
 
 export const byNumber = (left: number, right: number) => left - right;
 
@@ -114,3 +117,26 @@ export type ConsumedAgent = {
 export type ConsumedTarget = {
   -readonly [K in keyof AgentConsumedSeqEntry]: AgentConsumedSeqEntry[K];
 };
+
+/** The durable snapshot of one Agent's consumed state: only what a cursor entry persists. */
+export function consumedSnapshot(state: ConsumedAgent): AgentConsumedSeqState {
+  const targets: Record<string, AgentConsumedSeqEntry> = {};
+  for (const [target, entry] of state.targets) {
+    const record: ConsumedTarget = {};
+    if (entry.seq !== undefined) record.seq = entry.seq;
+    if (entry.readOrder !== undefined) {
+      record.readOrder = entry.readOrder;
+      if (entry.reviewedSeq !== undefined) record.reviewedSeq = entry.reviewedSeq;
+    }
+    if (entry.exactSeqs?.length) record.exactSeqs = entry.exactSeqs;
+    // A conversation binding by itself never made a persisted cursor entry.
+    if (Object.keys(record).length === 0) continue;
+    if (entry.conversationId !== undefined) record.conversationId = entry.conversationId;
+    targets[target] = record;
+  }
+  return {
+    targets,
+    aliases: Object.fromEntries(state.aliases),
+    nextReadOrder: state.lastReadOrder + 1,
+  };
+}

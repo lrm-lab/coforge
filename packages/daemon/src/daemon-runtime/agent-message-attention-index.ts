@@ -47,16 +47,14 @@ import {
   type AttentionDecisionOutcome,
 } from "./agent-message-attention-decision-log";
 import { recoveryWakeupText } from "./agent-recovery-notice";
-import type {
-  AgentConsumedSeqEntry,
-  AgentConsumedSeqPort,
-} from "#src/persistence/agent-consumed-seq-store";
+import type { AgentConsumedSeqPort } from "#src/persistence/agent-consumed-seq-store";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import { PendingAttentionReads } from "./agent-message-attention-pending";
 import {
   PENDING_WINDOW_LIMIT,
   REMEMBERED_DELIVERIES,
   attentionRecorded,
+  consumedSnapshot,
   byNumber,
   containsSorted,
   firstAbove,
@@ -386,31 +384,38 @@ export class AgentMessageAttentionIndex {
     markFlushed(generation, settled);
   }
 
+  /** Tells the Agent what a recovery names that it has not read, and returns the targets the notice
+   * announced: none when everything named was already read or notified. */
   async recover(
     agentId: string,
     messages: readonly AgentRecoveryMessage[],
     unreadSummary: Readonly<Record<string, number>>,
     unreadConversationIds: Readonly<Record<string, string>> = {},
     conversation?: AgentConversationScope,
-  ): Promise<void> {
+  ): Promise<ReadonlySet<string>> {
     if (this.#isMemory(agentId) && !conversation) {
       const consumedConversations = new Map(
         [...(this.#consumedByAgent.get(agentId)?.targets ?? [])].flatMap(([target, entry]) =>
           entry.conversationId ? [[target, entry.conversationId] as const] : [],
         ),
       );
+      const announced = new Set<string>();
       for (const group of groupMemoryRecovery(
         messages,
         unreadSummary,
         unreadConversationIds,
         consumedConversations,
       )) {
-        await this.recover(agentId, group.messages, group.unreadSummary, unreadConversationIds, {
-          conversationId: group.conversationId,
-          target: group.target,
-        });
+        const groupAnnounced = await this.recover(
+          agentId,
+          group.messages,
+          group.unreadSummary,
+          unreadConversationIds,
+          { conversationId: group.conversationId, target: group.target },
+        );
+        for (const target of groupAnnounced) announced.add(target);
       }
-      return;
+      return announced;
     }
     const generation = this.#generation(agentId);
     const session = this.#runtimes.session(agentId);
@@ -456,7 +461,8 @@ export class AgentMessageAttentionIndex {
     const summaryOnly = Object.entries(unreadSummary).filter(
       ([target, count]) => !suppliedTargets.has(target) && isDeliveryTarget(target) && count > 0,
     );
-    if (!recoveredTargets.size && !summaryOnly.length) return;
+    if (!recoveredTargets.size && !summaryOnly.length) return new Set();
+    const announced = new Set([...recoveredTargets, ...summaryOnly.map(([target]) => target)]);
     const notice = recoveryWakeupText({
       agentId,
       announced: recoveredMessages,
@@ -472,7 +478,7 @@ export class AgentMessageAttentionIndex {
     } finally {
       if (this.#runtimes.session(agentId) === session) this.hold.noticeSettled?.(agentId);
     }
-    if (this.#generations.get(agentId) !== generation) return;
+    if (this.#generations.get(agentId) !== generation) return announced;
     this.#attention.set(agentId, byTarget);
     for (const message of recoveredMessages) {
       this.#recordConversation(agentId, message.target, message.conversationId);
@@ -485,6 +491,7 @@ export class AgentMessageAttentionIndex {
       this.#pendingSequences.set(agentId, pendingByTarget);
     }
     if (recoveredMessages.length) this.messageReceived(agentId, conversation);
+    return announced;
   }
 
   #isMemory(agentId: string): boolean {
@@ -986,25 +993,7 @@ export class AgentMessageAttentionIndex {
     const store = this.#consumedSeqs;
     if (!store) return;
     const state = this.#consumedState(agentId);
-    const targets: Record<string, AgentConsumedSeqEntry> = {};
-    for (const [target, entry] of state.targets) {
-      const record: ConsumedTarget = {};
-      if (entry.seq !== undefined) record.seq = entry.seq;
-      if (entry.readOrder !== undefined) {
-        record.readOrder = entry.readOrder;
-        if (entry.reviewedSeq !== undefined) record.reviewedSeq = entry.reviewedSeq;
-      }
-      if (entry.exactSeqs?.length) record.exactSeqs = entry.exactSeqs;
-      // A conversation binding by itself never made a persisted cursor entry.
-      if (Object.keys(record).length === 0) continue;
-      if (entry.conversationId !== undefined) record.conversationId = entry.conversationId;
-      targets[target] = record;
-    }
-    store.write(agentId, {
-      targets,
-      aliases: Object.fromEntries(state.aliases),
-      nextReadOrder: state.lastReadOrder + 1,
-    });
+    store.write(agentId, consumedSnapshot(state));
   }
 
   modelSeenSequence(agentId: string, target: string): number {
