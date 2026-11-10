@@ -131,9 +131,16 @@ export function TaskCard({
   const blocked = relations?.blocked ? <TaskBlockedMark blockedBy={relations.blockedBy} /> : null;
   const parent = relations?.parent ? <TaskParentMark parent={relations.parent} /> : null;
   const subtasks = relations?.subtasks ? <TaskSubtaskMark subtasks={relations.subtasks} /> : null;
-  const tools = (controls.handle || menu) && (
+  // A phone's list row has no drag handle: the menu moves a task there.
+  const handle =
+    controls.handle && list ? (
+      <span className="hidden sm:contents">{controls.handle}</span>
+    ) : (
+      controls.handle
+    );
+  const tools = (handle || menu) && (
     <div className="flex shrink-0 items-center">
-      {controls.handle}
+      {handle}
       {menu}
     </div>
   );
@@ -147,19 +154,32 @@ export function TaskCard({
       />
     );
   if (list) {
-    // One line: priority, number, status, title, then the pills, the owner and the row's own controls.
+    // From `sm` up, one line: priority, number, status, title, then the pills, the owner and the
+    // row's own controls. On a phone the title gets the width: up to two lines, with the priority
+    // and number under it.
     return (
       <article
         onPointerEnter={onPointerEnter}
         className="relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors hover:bg-primary_hover"
       >
         {/* A slot of its own, so the titles line up with or without a mark. */}
-        <span className="flex size-3.5 shrink-0">{priorityMark("size-3.5")}</span>
-        <span className="w-9 shrink-0 text-xs text-tertiary tabular-nums">#{task.number}</span>
+        <span className="hidden size-3.5 shrink-0 sm:flex">{priorityMark("size-3.5")}</span>
+        <span className="hidden w-9 shrink-0 text-xs text-tertiary tabular-nums sm:block">
+          #{task.number}
+        </span>
         <TaskStatusIcon status={task.status} />
-        <h3 className="min-w-0 flex-1 text-sm font-medium text-primary">
-          {renderTitle(<span className="line-clamp-1">{task.title}</span>)}
-        </h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
+            {renderTitle(<span className="line-clamp-2 sm:line-clamp-1">{task.title}</span>)}
+          </h3>
+          <p className="flex items-center gap-1 text-xs text-tertiary tabular-nums sm:hidden">
+            {priorityMark("size-3 shrink-0")}
+            <span className="truncate">
+              #{task.number}
+              {source && ` · ${source}`}
+            </span>
+          </p>
+        </div>
         {blocked}
         {(parent || subtasks) && (
           <span className="hidden shrink-0 items-center gap-2 text-xs text-tertiary sm:inline-flex">
