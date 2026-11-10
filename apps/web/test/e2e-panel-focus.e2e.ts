@@ -199,23 +199,20 @@ test("the chat's full screen hides the list and the thread, and Esc leaves it", 
 test("the thread's full screen hides the chat and keeps the chat's scroll and the thread's draft", async () => {
   await open();
   const draft = "A reply I have not sent yet";
-  // Scroll the chat up from the bottom, and write in the thread's composer.
-  // Then set directly, after a wheel event marks it as the reader's own scroll (the chat stops
-  // following the latest). Late layout may nudge it, so whatever offset it settles at, above the
-  // bottom, is the one the full screen must keep.
-  // First the chat's own opening scroll to the latest has to be done; a scroll before it is
-  // undone by it.
-  await waitFor(
-    `(() => { const chat = ${CHAT}; return chat.scrollHeight > chat.clientHeight + 600 && chat.scrollHeight - chat.scrollTop - chat.clientHeight <= 4; })()`,
-    30_000,
-  );
+  // Scroll the chat up, and write in the thread's composer.
+  // The chat opens on its first page of messages and its own opening position; once that has
+  // settled (the same offset on two reads) and leaves room to scroll, it is moved to halfway, after
+  // a wheel event marks the move as the reader's own (the chat then stops following the latest).
+  const settledScroll = (extra: string) =>
+    `(() => { const chat = ${CHAT}; const now = chat.scrollTop; const settled = now === window.__chatTop && ${extra}; window.__chatTop = now; return settled; })()`;
+  await waitFor(settledScroll("chat.scrollHeight - chat.clientHeight >= 250"), 30_000);
   await browser(
     "eval",
-    `(() => { const chat = ${CHAT}; chat.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true })); chat.scrollTop -= 600; return true; })()`,
+    `(() => { const chat = ${CHAT}; chat.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true })); chat.scrollTop = Math.round((chat.scrollHeight - chat.clientHeight) / 2); return true; })()`,
   );
-  await waitFor(
-    `(() => { const chat = ${CHAT}; const now = chat.scrollTop; const settled = now === window.__chatTop && now < chat.scrollHeight - chat.clientHeight - 100; window.__chatTop = now; return settled; })()`,
-  );
+  // Late layout may nudge it, so whatever offset it settles at, above the bottom, is the one the
+  // full screen must keep.
+  await waitFor(settledScroll("now < chat.scrollHeight - chat.clientHeight - 100"));
   const before = await evaluate<number>(`${CHAT}.scrollTop`);
   expect(before).toBeLessThan(
     await evaluate<number>(`${CHAT}.scrollHeight - ${CHAT}.clientHeight - 100`),
