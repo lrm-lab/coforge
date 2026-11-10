@@ -130,7 +130,7 @@ test("a channel started private shows its lock, and its settings switch it publi
     expect(created).toBe("private");
     await browser("screenshot", join(artifacts, "2-private-channel.png"));
 
-    // 2. Its settings make it public, once confirmed; the `#` is back.
+    // 2. Its settings make it public, once confirmed; the lock goes.
     await openSettingsAt("Change to public channel");
     await browser("screenshot", join(artifacts, "3-settings-private.png"));
     await confirmSwitch(
@@ -139,7 +139,10 @@ test("a channel started private shows its lock, and its settings switch it publi
       "Change to public",
       "4-confirm-public.png",
     );
-    await waitFor(`${titles}.some((title) => title.textContent.trim() === "#${name}")`);
+    // Public now: the lock is gone from the title, which reads the bare name (no `#`, task #74).
+    await waitFor(
+      `${titles}.some((title) => title.querySelector("[data-channel-name]")?.textContent.trim() === "${name}" && !title.querySelector('svg[aria-label="Private"]'))`,
+    );
     expect((await stored()).visibility).toBe("public");
 
     // 3. And private again.

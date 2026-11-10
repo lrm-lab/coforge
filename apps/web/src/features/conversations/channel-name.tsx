@@ -1,6 +1,8 @@
 import { Fragment, type ReactNode } from "react";
 import { Hash01, Lock01 } from "@untitledui/icons";
 import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
+import { useChannelMembers } from "./channel-members";
+import { GroupAvatar } from "./group-avatar";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
@@ -8,6 +10,24 @@ import { cx } from "#src/utils/cx";
  * marks it. */
 export function channelGlyph(channel: { visibility: ChannelVisibility }) {
   return isPrivateChannel(channel) ? Lock01 : Hash01;
+}
+
+/**
+ * A channel's face where it heads a page or a row (Frank, 11-10, task #74: a channel is never a
+ * `#`): its group avatar, from the channel names list, at `size` (`avatar-group-xs` 20px, or none
+ * for the default 48px). A channel no one is in draws `fallback` instead.
+ */
+export function ChannelFace({
+  channelId,
+  className,
+  fallback,
+}: {
+  channelId: string;
+  className?: string;
+  fallback: ReactNode;
+}) {
+  const members = useChannelMembers({ id: channelId });
+  return members?.length ? <GroupAvatar members={members} className={className} /> : fallback;
 }
 
 /** The lock before a private channel's name, read out as "Private". */
