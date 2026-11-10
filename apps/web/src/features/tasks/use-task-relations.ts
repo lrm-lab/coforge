@@ -141,7 +141,15 @@ export function useTaskRelations({
         },
       });
       writeTasks(conversationId, [{ tasks: result.tasks, deleted: [] }]);
-      // This Task's progress and tree changed; its own copy follows by announcement.
+      // A create's result names only the new Tasks: this Task's own copy (its sub-task progress)
+      // is never in it, and the popup holds that copy from before the create. Leaving the copy to
+      // its announcement kept the Sub-tasks tab hidden until a reload (task #65), so the Task that
+      // changed is read again and its copy written, as a command's own result writes it.
+      const own = await execute({
+        data: { operation: "show", number, idempotencyKey: crypto.randomUUID(), conversationId },
+      }).catch(() => undefined); // its announcement still carries the copy if this read fails
+      const changed = own?.tasks.find((task) => task.number === number);
+      if (changed) writeTasks(conversationId, [{ tasks: [changed], deleted: [] }]);
       await queryClient.invalidateQueries({ queryKey: ["task", "show", conversationId, number] });
       return result.tasks[0];
     },
