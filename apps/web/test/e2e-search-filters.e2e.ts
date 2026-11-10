@@ -112,7 +112,7 @@ test("search filters narrow results, name their values, and clear together", asy
     });
     await db.agent.upsert({
       where: { id: agentId },
-      update: { deletedAt: null, visibility: "public" },
+      update: { deletedAt: null, visibility: "public", workspaceId, ownerId: DEV_BROWSER_USER.id },
       create: {
         id: agentId,
         workspaceId,
