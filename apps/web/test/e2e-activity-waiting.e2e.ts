@@ -114,6 +114,23 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
       "· 4",
     );
     await browser("screenshot", join(artifacts, "waiting.png"));
+
+    // The keyboard walks the waiting cards with the rest (Frank, 11-10, task #51): Down from the
+    // filter tabs enters the list at its first row, the newest card, and Down and Up move on.
+    const focusedWaiting = `[...${section}.querySelectorAll(":scope > li")].findIndex((row) => row.contains(document.activeElement))`;
+    await evaluate(
+      `([...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.trim().startsWith("All")).focus(), true)`,
+    );
+    await browser("press", "ArrowDown");
+    expect(await evaluate<number>(focusedWaiting)).toBe(0);
+    await browser("press", "ArrowDown");
+    expect(await evaluate<number>(focusedWaiting)).toBe(1);
+    await browser("press", "ArrowUp");
+    expect(await evaluate<number>(focusedWaiting)).toBe(0);
+    // From the page itself, with nothing focused, Down enters it too.
+    await evaluate(`(document.activeElement.blur(), true)`);
+    await browser("press", "ArrowDown");
+    expect(await evaluate<number>(focusedWaiting)).toBe(0);
     await browser("find", "text", "1 more", "click");
     await browser("wait", "--fn", listed(older[0]!));
     expect(await evaluate<number>(shownRows)).toBe(4);

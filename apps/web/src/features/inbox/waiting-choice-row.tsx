@@ -12,6 +12,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ACTIVITY_ROW_ITEM_CLASS, ACTIVITY_ROW_LINK_CLASS } from "./activity-inbox-row";
 import { activityChatLink, waitingChoiceTarget } from "./activity-open-target";
+import { waitingRowKey } from "./use-activity-list-keyboard";
 
 /**
  * A choice card waiting on the viewer, laid out as an Activity row: the asking Agent's face, the
@@ -21,9 +22,12 @@ import { activityChatLink, waitingChoiceTarget } from "./activity-open-target";
  */
 export function WaitingChoiceRow({
   card,
+  tabStop,
   onOpen,
 }: {
   card: WaitingChoiceCard;
+  /** The list's one tab stop: the keyboard's selected row (`useActivityListKeyboard`). */
+  tabStop: boolean;
   onOpen: (target: HostedConversationTarget) => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
@@ -44,15 +48,19 @@ export function WaitingChoiceRow({
     .map((option, index) => `${choiceNumber(index)}. ${option.label}`)
     .join(" · ");
   return (
-    <li className={ACTIVITY_ROW_ITEM_CLASS}>
+    <li data-activity-row={waitingRowKey(card.messageId)} className={ACTIVITY_ROW_ITEM_CLASS}>
       <Link
         {...activityChatLink(workspaceSlug, target)}
+        tabIndex={tabStop ? 0 : -1}
         onClick={(event) => {
           if (!followInternalLinkClick(event)) return;
           event.preventDefault();
           onOpen(target);
         }}
-        className={cn(ACTIVITY_ROW_LINK_CLASS, "hover:bg-primary_hover")}
+        className={cn(
+          ACTIVITY_ROW_LINK_CLASS,
+          "hover:bg-primary_hover focus-visible:bg-primary_hover",
+        )}
       >
         <ActorAvatar
           size="sm"

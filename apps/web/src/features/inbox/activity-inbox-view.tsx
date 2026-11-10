@@ -61,7 +61,7 @@ import { ActivityInboxRow } from "./activity-inbox-row";
 import { useActivityDays } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
 import { ActivityInboxLoadMore, ActivityInboxSectionHeading } from "./activity-inbox-list-parts";
-import { useActivityListKeyboard } from "./use-activity-list-keyboard";
+import { useActivityListKeyboard, waitingRowKey } from "./use-activity-list-keyboard";
 import { useActivityBulkActions } from "./use-activity-bulk-actions";
 import { WaitingChoiceRow } from "./waiting-choice-row";
 
@@ -257,7 +257,13 @@ export function ActivityInboxView({
     onDoneStarted: startDone,
     onDoneSettled: settleDone,
   });
-  const { tabStopKey, listProps } = useActivityListKeyboard(rows, actions);
+  const shownWaiting = expandedWaiting ? waiting : waiting.slice(0, WAITING_SHOWN);
+  // Every row's key as laid out, the waiting cards first, which the keyboard's tab stop is one of.
+  const rowKeys = [
+    ...shownWaiting.map((card) => waitingRowKey(card.messageId)),
+    ...rows.map((item) => item.key),
+  ];
+  const { tabStopKey, listProps, headerProps } = useActivityListKeyboard(rowKeys, rows, actions);
   // Not empty while the waiting cards are still being read: they may be all there is.
   const empty =
     items.length === 0 &&
@@ -286,8 +292,13 @@ export function ActivityInboxView({
       // However many wait, they never push the conversations off the screen: the first few show,
       // the rest behind "N more", and the heading says how many in all.
       count: waiting.length,
-      rows: (expandedWaiting ? waiting : waiting.slice(0, WAITING_SHOWN)).map((card) => (
-        <WaitingChoiceRow key={card.messageId} card={card} onOpen={onOpen} />
+      rows: shownWaiting.map((card) => (
+        <WaitingChoiceRow
+          key={card.messageId}
+          card={card}
+          tabStop={waitingRowKey(card.messageId) === tabStopKey}
+          onOpen={onOpen}
+        />
       )),
       footer: waiting.length > WAITING_SHOWN && (
         // On the rows' text column, with room to tap.
@@ -319,6 +330,7 @@ export function ActivityInboxView({
   const list = (
     <div
       data-activity-list
+      {...headerProps}
       className={cn(
         "flex min-h-0 flex-col",
         // Raft's list column beside the conversation at `lg`, as wide as its handle keeps it.
