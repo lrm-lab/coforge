@@ -243,3 +243,41 @@ test("a notice that settles after the new launch is registered leaves its mentio
     await h.runtime.stop();
   }
 });
+
+test("a cold start that fails refuses the mention it was to tell, at once", async () => {
+  const h = await harness({ resume: "stored-1", failSessions: [2] });
+  const { open, telling } = await mentionInFlight(h);
+  try {
+    h.failTurn(h.sessions[0]!);
+    await h.until(() => h.terminalErrors.length > 0);
+    open();
+    await telling;
+
+    // No launch is coming for it: rejected, not left waiting for the next Start.
+    expect(h.terminalErrors).toEqual(["DELIVERY_REJECTED"]);
+    expect(mentionAcks(h, "delivery-2")).toEqual([]);
+  } finally {
+    open();
+    await h.runtime.stop();
+  }
+});
+
+test("a person's Stop refuses a mention kept while the runtime ends", async () => {
+  const gate = Promise.withResolvers<void>();
+  const h = await harness({ resume: "stored-1", disposeGate: gate.promise });
+  try {
+    await h.deliver(1);
+    h.failTurn(h.sessions[0]!);
+    await h.disposing;
+    await h.deliver(2, h.envelope(2, "stored-1"));
+
+    const stopping = h.stop();
+    gate.resolve();
+    await stopping;
+
+    expect(h.terminalErrors).toEqual(["DELIVERY_REJECTED"]);
+  } finally {
+    gate.resolve();
+    await h.runtime.stop();
+  }
+});

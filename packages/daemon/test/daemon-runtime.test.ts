@@ -3849,7 +3849,7 @@ describe("DaemonRuntime", () => {
     const notices: string[] = [];
     const acknowledgements: string[] = [];
     let allAcknowledged!: () => void;
-    const threeAcknowledged = new Promise<void>((resolve) => {
+    const bothAcknowledged = new Promise<void>((resolve) => {
       allAcknowledged = resolve;
     });
     let launchAttempts = 0;
@@ -3881,7 +3881,7 @@ describe("DaemonRuntime", () => {
           sendAgentStatus() {},
           async sendAgentDeliveryAck(ack) {
             acknowledgements.push(ack.deliveryId);
-            if (acknowledgements.length === 3) allAcknowledged();
+            if (acknowledgements.length === 2) allAcknowledged();
           },
           async requestAgentApiKey() {
             return `sk_agent_${"a".repeat(43)}`;
@@ -3924,16 +3924,15 @@ describe("DaemonRuntime", () => {
       expect(launchAttempts).toBe(2);
       expect(acknowledgements).toEqual(["delivery-1", "delivery-2"]);
 
-      // The cooldown itself is under test, so it runs on the real clock.
-      await Bun.sleep(1_100);
+      // The cooldown runs on the real clock; its end launches without another delivery.
       broken = false;
-      await runtime.handleAgentMessage(delivery(3));
-      await threeAcknowledged;
+      await Bun.sleep(1_300);
+      await bothAcknowledged;
       expect(launchAttempts).toBe(3);
       // One notice for everything that waited; each delivery was acknowledged exactly once.
       expect(notices).toHaveLength(1);
-      expect(notices[0]).toContain("@agent 3 new messages");
-      expect(acknowledgements).toEqual(["delivery-1", "delivery-2", "delivery-3"]);
+      expect(notices[0]).toContain("@agent 2 new messages");
+      expect(acknowledgements).toEqual(["delivery-1", "delivery-2"]);
     } finally {
       await runtime.stop();
     }

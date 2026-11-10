@@ -13,7 +13,7 @@ beforeEach(() =>
   ),
 );
 
-test("a mention for an idle Agent with a remembered launch wakes it and is told once", async () => {
+test("an idle Agent is woken by a mention and tells it once", async () => {
   const { runtime, frames, notices, envelope, deliver, exit, launches, frameSent } =
     await harness();
   try {
@@ -22,7 +22,7 @@ test("a mention for an idle Agent with a remembered launch wakes it and is told 
     await deliver(1, mention);
     await frameSent((frame) => frame.kind === "ack");
 
-    // Kept against the launch the Agent last reported, the woken launch tells it once.
+    // Kept against the last reported launch, told once by the woken one.
     expect(launches()).toBe(2);
     expect(notices).toHaveLength(1);
     expect(frames.filter((frame) => frame.kind === "terminal")).toEqual([]);
