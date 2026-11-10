@@ -13,7 +13,6 @@ import type { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import type { SystemCleaner } from "#src/system-cleaner/system-cleaner";
 import type { TaskIdleNudge } from "./task-idle-nudge";
 import type { AgentConfigApply } from "./agent-config-apply";
-import type { DeliveryConsumptionWatch } from "./delivery-consumption-watch";
 
 export type Publish = (
   id: string,
@@ -57,5 +56,4 @@ export type RuntimeEventObservationPorts = Readonly<{
   releaseTurnEndHolds(agentId: string): void;
   drainAppInboxNotices(agentId: string): Promise<void>;
   failCollectorRunningSlots(agentId: string, failureReason: string): Promise<void>;
-  deliveryConsumption?: DeliveryConsumptionWatch;
 }>;
