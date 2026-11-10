@@ -1,5 +1,7 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 import { MemberDirectory } from "#src/features/conversations/member-directory";
+import { useChannelMembers } from "#src/features/conversations/channel-members";
+import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import {
   ArrowLeft,
   ChevronRight,
@@ -415,9 +417,10 @@ function TaskTrail({
   const parent = task.parent;
   const openParent =
     parent && !parent.hidden && onOpenRelated ? () => onOpenRelated(parent) : undefined;
-  const here = conversationName
-    ? `#${conversationName.replace(/^#/, "")} #${task.number}`
-    : `#${task.number}`;
+  // A channel reads its group avatar and its name, no `#` (Frank, 11-10, task #74); the number
+  // after it is the Task's.
+  const members = useChannelMembers({ id: task.conversationId });
+  const place = conversationName?.replace(/^#/, "");
   return (
     <nav
       aria-label={m.tasks_trail()}
@@ -450,7 +453,11 @@ function TaskTrail({
           <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />
         </>
       )}
-      <span className="shrink-0 px-1 tabular-nums">{here}</span>
+      <span className="flex min-w-0 shrink-0 items-center gap-1.5 px-1">
+        {members?.length ? <GroupAvatar members={members} className="avatar-group-xs" /> : null}
+        {place && <span className="max-w-[16em] truncate">{place}</span>}
+        <span className="shrink-0 tabular-nums">#{task.number}</span>
+      </span>
     </nav>
   );
 }

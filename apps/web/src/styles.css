@@ -319,6 +319,11 @@ html[data-drag-cursor] [data-drop-blocked] * {
     --avatar-group-size: 1.25rem;
   }
 
+  /* The group avatar at a list row's 32 × 32px, a person's `sm` avatar beside it (a Drafts row). */
+  .avatar-group.avatar-group-row {
+    --avatar-group-size: 2rem;
+  }
+
   /* The group avatar at the message avatar's 38 × 38px (an Activity row). */
   .avatar-group.avatar-group-sm {
     --avatar-group-size: 2.375rem;

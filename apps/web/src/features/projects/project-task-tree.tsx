@@ -21,7 +21,7 @@ import { TaskOwnerAvatar } from "#src/features/tasks/task-owner";
 import { SubtaskProgressRing } from "#src/features/tasks/subtask-progress-ring";
 import { TaskParentMark, TaskSubtaskMark } from "#src/features/tasks/task-relations";
 import { openBlockers } from "#src/features/tasks/task-relation-edits";
-import { taskMetaLabel } from "#src/features/tasks/task-chip";
+import { TaskLocator, taskMetaLabel } from "#src/features/tasks/task-chip";
 import { TaskStatusIcon } from "#src/features/tasks/task-status-icon";
 import { statusLabel } from "#src/features/tasks/task-workflow";
 import { cn } from "#src/lib/utils";
@@ -259,9 +259,7 @@ function TreeBlockerMark({ blockedBy }: { blockedBy: readonly (TaskName | TaskLi
                     {"title" in task && (
                       <span className="min-w-0 truncate text-primary">{task.title}</span>
                     )}
-                    <span className="shrink-0 text-xs text-tertiary tabular-nums">
-                      {taskMetaLabel(task)}
-                    </span>
+                    <TaskLocator task={task} />
                   </>
                 )}
               </li>

@@ -1,9 +1,15 @@
+import type { GroupAvatarMember } from "./group-avatar";
 import type { ChannelVisibility } from "./channel-visibility";
 import type { DraftTarget } from "./composer-draft";
 import type { DeviceDraft } from "./composer-drafts-index";
 
 /** A channel as a draft row shows it. */
-export type DraftChannel = { name: string; visibility: ChannelVisibility };
+export type DraftChannel = {
+  name: string;
+  visibility: ChannelVisibility;
+  /** Its group avatar, the row's face (Frank, 11-10: a channel is never a `#`). */
+  members?: readonly GroupAvatarMember[];
+};
 
 /** A DM as a draft row shows it: the name it goes by, and who it is with, which is all drawing the
  * face takes (an Agent's live look is read by its avatar). */
