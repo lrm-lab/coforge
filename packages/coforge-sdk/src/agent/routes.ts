@@ -179,6 +179,10 @@ export const agentApiRoutes = {
     // Local-only: answered entirely by the Daemon's Agent proxy and never forwarded to Web/backend
     // (`coforge version`).
     version: { method: "GET", path: "/api/agent/v1/version" },
+    context: {
+      search: { method: "GET", path: "/api/agent/v1/context/search" },
+      read: { method: "GET", path: "/api/agent/v1/context/read" },
+    },
     messages: { method: "POST", path: "/api/agent/v1/messages" },
     // Local-only, like `version`: `DaemonRuntime.inbox()` assembles the answer from the Agent's own
     // state (message attention plus the app inbox) and never forwards it to Web/backend. It also
@@ -219,6 +223,10 @@ export const agentApiRoutes = {
     },
     // Local-only, like `version`; see the same entry under `proxy`.
     inbox: { method: "POST", path: "/api/agent/v1/inbox" },
+    context: {
+      search: { method: "GET", path: "/api/agent/v1/context/search" },
+      read: { method: "GET", path: "/api/agent/v1/context/read" },
+    },
     reminders: { method: "POST", path: "/api/agent/v1/reminders" },
     tasks: { method: "POST", path: "/api/agent/v1/tasks" },
     actionPrepare: { method: "POST", path: "/api/agent/v1/actions/prepare" },

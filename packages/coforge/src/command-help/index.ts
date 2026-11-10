@@ -207,6 +207,17 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   version: {
     syntax: "coforge version [--json]",
   },
+  context: {
+    syntax: "coforge context search|read ...",
+  },
+  "context search": {
+    syntax:
+      "coforge context search --message-id <id> --session-id <id> --query <text> [--limit <n>] [--offset <n>] [--json]",
+  },
+  "context read": {
+    syntax:
+      "coforge context read --message-id <id> --session-id <id> --around <entry> [--limit <n>] [--page <n>] [--json]",
+  },
   "weekly-report": {
     syntax: "coforge weekly-report templates|inbox|members|workflow|context|list|read ...",
   },

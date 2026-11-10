@@ -13,12 +13,9 @@ import {
   parseMentionSelector,
   RFC_UUID_PATTERN,
   type AgentMessageRecord,
-  type ChannelCommand,
   type MentionSelectorInput as MentionSelector,
   type TaskCommand,
-  type TaskResult,
   type WeeklyReportCommand,
-  type WeeklyReportResponse,
   validateWeeklyReportMemoryCommand,
   type WeeklyReportMemoryCommand,
   type WeeklyReportMemoryResult,
@@ -27,33 +24,18 @@ import {
 import {
   createAgentApiClient,
   createMessageTransportAgentApiTransport,
-  type ActionCardAction,
-  type AgentManualGetResponse,
-  type AgentManualSearchResponse,
-  type AgentVersionResponse,
-  type AgentProfileShowResponse,
-  type AgentProfileUpdateRequest,
-  type AgentProfileUpdateResponse,
-  type AgentAppConfigPatch,
-  type AgentAppConfigResponse,
-  type AgentAttachmentCommentsRequest,
-  type AgentAttachmentCommentsResponse,
-  type AgentUserInfoResponse,
   type AgentMentionActionKind,
-  type AgentMentionExecuteRequest,
-  type AgentMentionExecuteResponse,
-  type AgentMentionPendingResponse,
-  type AgentThreadListResponse,
-  type AgentMentionDeliveryResponse,
-  type GitHubCredentialResponse,
 } from "@lrm/coforge-sdk/agent";
 import { COFORGE_CLI_VERSION } from "#src/version";
 import { formatManualGet, formatManualSearchResults } from "#src/manual-format";
 import { formatProfile } from "#src/user-format";
 import { parseWhoamiArgs, runWhoami, type WhoamiInvocation, type WhoamiResult } from "#src/whoami";
 import { parseProfileUpdateArgs, type ProfileUpdateInvocation } from "#src/profile-update";
+import type { MessageTransport } from "#src/message-transport";
+import { parseContextArgs, runContextCommand, type ContextInvocation } from "#src/context-commands";
 
 export type { WhoamiInvocation, WhoamiResult, ProfileUpdateInvocation };
+export type { ContextInvocation } from "#src/context-commands";
 import { parseAttachmentViewArgs, type AttachmentViewInvocation } from "#src/attachment-view-args";
 import {
   parseAttachmentCommentsArgs,
@@ -64,12 +46,7 @@ import { parseUserInfoArgs, runUserInfo, type UserInfoInvocation } from "#src/us
 
 export type { UserInfoInvocation };
 import { parseAppConfigArgs, runAppConfig, type AppConfigInvocation } from "#src/app-config";
-import {
-  parseArtifactArgs,
-  runArtifact,
-  type ArtifactInvocation,
-  type ArtifactTransport,
-} from "#src/artifact-commands";
+import { parseArtifactArgs, runArtifact, type ArtifactInvocation } from "#src/artifact-commands";
 import {
   formatMentionActionResults,
   formatMentionDeliveries,
@@ -103,9 +80,7 @@ import { formatSearchResults } from "#src/search-format";
 import { formatWorkspaceInfo } from "#src/workspace-info-format";
 import {
   runWeeklyReportCollect,
-  type WeeklyReportCollectCommand,
   type WeeklyReportCollectInvocation,
-  type WeeklyReportCollectResult,
 } from "#src/weekly-report-collect";
 import {
   parseWorkspaceInfoArgs,
@@ -116,13 +91,12 @@ import {
 
 export type { WorkspaceInfoInvocation, WorkspaceInfoOptions, WorkspaceInfoResult };
 import { parseMessageSearchArgs, type MessageSearchOptions } from "#src/message-search-args";
-import { formatMessageCheck, type MessageCheckResult } from "#src/message-check-format";
+import { formatMessageCheck } from "#src/message-check-format";
 import { parseMessageReadArgs, type MessageReadOptions } from "#src/message-read-args";
 
 export type { MessageSearchOptions };
 import { runChannelCommand } from "#src/channel-commands";
 import { parseLabelArgs, runLabelCommand, type LabelInvocation } from "#src/label-commands";
-import type { LabelTransport } from "#src/label-commands";
 import {
   CliError,
   NO_MESSAGE_SENT_NEXT_ACTION,
@@ -132,12 +106,12 @@ import {
 import { inferAttachmentMimeType, validateAttachmentUploadArgs } from "#src/attachment-upload";
 import { runMentionPending, type MentionPendingInvocation } from "#src/mention-pending";
 import { parseMentionArgs } from "#src/mention-args";
-import { runInboxCheck, type InboxTransport } from "#src/inbox-check";
+import { runInboxCheck } from "#src/inbox-check";
 import { runAttention } from "#src/attention-format";
 import { parseTaskArgs, type TaskInvocation } from "#src/task-args";
 import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
 import type { TaskConversationInvocation } from "#src/task-conversation-args";
-import { runTaskConversation, type TaskConversationTransport } from "#src/task-conversation-run";
+import { runTaskConversation } from "#src/task-conversation-run";
 import {
   isAttentionInvocation,
   parseAttentionArgs,
@@ -198,13 +172,12 @@ export type AttachmentUploadInvocation = {
 };
 export type { ChannelManagementInvocation } from "./src/channel-args";
 import { parseReminderArgs, runReminder } from "#src/reminder-commands";
-import type { ReminderInvocation, ReminderResponse } from "#src/reminder-commands";
+import type { ReminderInvocation } from "#src/reminder-commands";
 export type {
   ReminderInvocation,
   ReminderResponse,
   ReminderTransportRequest,
 } from "#src/reminder-commands";
-import type { ReminderTransportRequest } from "#src/reminder-commands";
 export { resolveReminderId } from "#src/reminder-commands";
 export type WeeklyReportInvocation =
   | {
@@ -260,76 +233,7 @@ export type MentionInvocation =
       resolutionIds: string[];
       json?: boolean;
     };
-export type MessageTransport = LabelTransport & {
-  check(target?: string): Promise<MessageCheckResult>;
-  read(target: string, options?: MessageReadOptions): Promise<unknown>;
-  search?(options: MessageSearchOptions): Promise<unknown>;
-  send(
-    target: string,
-    body?: string,
-    options?: {
-      sendDraft?: boolean;
-      expectedDraftKey?: string;
-      continueAnyway?: boolean;
-      freshnessContextMode?: "withheld";
-      attachmentIds?: string[];
-      mentions?: MentionSelector[];
-      targetConfirmed?: boolean;
-    },
-  ): Promise<unknown>;
-  continue?(continuationId: string, choice: "a" | "b" | "c" | "d", body?: string): Promise<unknown>;
-  view(attachmentId: string): Promise<{ bytes: Uint8Array; fileName?: string }>;
-  attachmentComments?(
-    request: AgentAttachmentCommentsRequest,
-  ): Promise<AgentAttachmentCommentsResponse>;
-  upload?(input: {
-    path: string;
-    target: string;
-    mimeType?: string;
-  }): Promise<{ id: string; fileName: string; contentType: string; sizeBytes: number }>;
-  resolve?(messageId: string): Promise<unknown>;
-  react?(messageId: string, emoji: string, remove?: boolean): Promise<unknown>;
-  inboxCheck?(): Promise<unknown>;
-  inboxList?: InboxTransport["inboxList"];
-  setChannelMuted?(target: string, muted: boolean): Promise<unknown>;
-  reminder?(request: ReminderTransportRequest): Promise<ReminderResponse>;
-  artifact?: ArtifactTransport["artifact"];
-  setThreadFollowed?(target: string, followed: boolean): Promise<unknown>;
-  threadList?(): Promise<AgentThreadListResponse>;
-  channel?(command: Omit<ChannelCommand, "idempotencyKey">): Promise<unknown>;
-  task?(command: TaskCommand): Promise<TaskResult>;
-  taskConversation?: TaskConversationTransport["taskConversation"];
-  workspaceInfo?(): Promise<WorkspaceInfoResult>;
-  weeklyReport?(command: WeeklyReportCommand): Promise<WeeklyReportResponse>;
-  weeklyReportCollect?(command: WeeklyReportCollectCommand): Promise<WeeklyReportCollectResult>;
-  weeklyReportKeyPoints?(
-    command: WeeklyReportKeyPointsCommand,
-  ): Promise<WeeklyReportKeyPointsResult>;
-  weeklyReportMemory?(command: WeeklyReportMemoryCommand): Promise<WeeklyReportMemoryResult>;
-  githubCredential?(): Promise<GitHubCredentialResponse>;
-  /** Server-decided `Co-authored-by` trailers for `coforge git prepare-commit-msg`; never built by
-   * the CLI itself. */
-  githubCommitTrailers?(repository: string | null): Promise<string[]>;
-  actionPrepare?(target: string, action: ActionCardAction): Promise<ActionPrepareResult>;
-  manualGet?(topic: string, intent: string, reason: string): Promise<AgentManualGetResponse>;
-  manualSearch?(query: string, intent: string, reason: string): Promise<AgentManualSearchResponse>;
-  /** `coforge version`'s local-only Daemon query; never reaches Web/backend. */
-  version?(): Promise<AgentVersionResponse>;
-  userInfo?(name: string): Promise<AgentUserInfoResponse>;
-  profileShow?(target?: string): Promise<AgentProfileShowResponse>;
-  profileUpdate?(input: AgentProfileUpdateRequest): Promise<AgentProfileUpdateResponse>;
-  /** One of the calling Agent's own Apps' config (`coforge app config`). */
-  appConfigGet?(appId: string): Promise<AgentAppConfigResponse>;
-  /** A change to it, refused unless the config is still at `change.expectedRevision`. */
-  appConfigUpdate?(appId: string, change: AgentAppConfigPatch): Promise<AgentAppConfigResponse>;
-  /** The calling Agent's mentions that reached no one (`coforge mention pending`). */
-  mentionPending?(limit?: number): Promise<AgentMentionPendingResponse>;
-  /** Acts on pending mentions by resolution id (`coforge mention notify|add`). */
-  mentionExecute?(request: AgentMentionExecuteRequest): Promise<AgentMentionExecuteResponse>;
-  /** What became of each @mention in a message the calling Agent sent (`coforge mention
-   * delivery`). */
-  mentionDelivery?(messageId: string): Promise<AgentMentionDeliveryResponse>;
-};
+export type { MessageTransport } from "#src/message-transport";
 
 /** The message-id short forms (twelve hex, dashed, or eight hex) or a full UUID; the server stores
  * ids lowercase. */
@@ -362,6 +266,7 @@ export function parseArgs(
   | ManualInvocation
   | WhoamiInvocation
   | VersionInvocation
+  | ContextInvocation
   | UserInfoInvocation
   | AttachmentCommentsInvocation
   | ProfileShowInvocation
@@ -372,6 +277,8 @@ export function parseArgs(
   | MentionInvocation {
   if (args[0] === "whoami") return parseWhoamiArgs(args.slice(1));
   if (args[0] === "version") return parseVersionArgs(args.slice(1));
+  if (args[0] === "context" && (args[1] === "search" || args[1] === "read"))
+    return parseContextArgs(args.slice(1));
   if (args[0] === "manual" && (args[1] === "get" || args[1] === "search"))
     return parseManualArgs(args.slice(1));
   if (args[0] === "user" && args[1] === "info") return parseUserInfoArgs(args.slice(2));
@@ -754,6 +661,8 @@ export async function run(args: readonly string[], transport: MessageTransport):
     if (invocation.json) return JSON.stringify({ ok: true, data: info });
     return formatVersionInfo(info);
   }
+  if (invocation.command === "context-search" || invocation.command === "context-read")
+    return runContextCommand(invocation, transport);
   if (invocation.command === "manual-get") {
     if (!transport.manualGet) throw new Error("Manual transport is unavailable");
     const result = await transport.manualGet(

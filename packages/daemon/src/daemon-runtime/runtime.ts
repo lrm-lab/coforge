@@ -52,10 +52,7 @@ import {
   ComputerUpdateNotice,
   observeLatestComputerVersion,
 } from "#src/daemon-runtime/computer-update-notice";
-import {
-  localComputerUpdateNotice,
-  localVersionResponse,
-} from "#src/daemon-runtime/runtime-local-queries";
+import { RuntimeLocalQueries } from "#src/daemon-runtime/runtime-local-queries";
 import {
   type RunnerHoldReason,
   type AgentActivity,
@@ -182,7 +179,6 @@ import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { logComputerUpdateNoticeFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
-import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
 /** Per-provider reading deadline supplied by a runtime usage scan. */
 export { USAGE_SCAN_READ_TIMEOUT_MS } from "./runtime-agent-flows";
@@ -212,6 +208,7 @@ export class DaemonRuntime {
   readonly #reported = new ReportedSessions();
   /** Durable context-view indexing and availability reporting for this Workspace runtime. */
   readonly #contextViewService: AgentContextViewService;
+  readonly #localQueries: RuntimeLocalQueries;
   /** Busy-gated delivery holding for providers with no safe busy path. */
   readonly #deliveryGate = new AgentDeliveryGate();
   /** Launch failures of message-triggered wakes, per Agent. */
@@ -484,6 +481,12 @@ export class DaemonRuntime {
       workspaceId: connection.workspaceId,
       requestLogDirectory: (agentId) => this.#contextViewService.requestLogDirectory(agentId),
     });
+    this.#localQueries = new RuntimeLocalQueries(
+      this,
+      this.computerVersion,
+      this.#startedAt,
+      this.#computerUpdateNotice,
+    );
     this.#credentials = credentials;
     this.#transportFactory = transportFactory;
     this.#agentProxy = agentProxy;
@@ -870,6 +873,10 @@ export class DaemonRuntime {
     return agentId;
   };
 
+  authorizedAgent(context: string, agentApiKey: string | undefined): string {
+    return this.#authorizedAgent(context, agentApiKey);
+  }
+
   async scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse> {
     return scanUsage(
       {
@@ -1194,6 +1201,12 @@ export class DaemonRuntime {
   get workspaceRoot(): string {
     return this.#connection.workspaceRoot;
   }
+  currentActivityLaunch(agentId: string) {
+    return this.#currentActivityLaunches.get(agentId);
+  }
+  stopping(agentId: string): boolean {
+    return this.#stopState.stopping(agentId);
+  }
   reported(agentId: string) {
     return this.#reported.last(agentId);
   }
@@ -1321,27 +1334,14 @@ export class DaemonRuntime {
     return this.#agentOperations.agentMessage(context, request, agentApiKey);
   }
 
-  /** `coforge version`'s local-only query; the answer body lives in `runtime-local-queries`. */
-  async version(
-    context: string,
-    _request: Record<string, never>,
-    agentApiKey: string,
-  ): Promise<AgentVersionResponse> {
-    this.#authorizedAgent(context, agentApiKey);
-    return localVersionResponse({
-      computerVersion: this.computerVersion,
-      startedAt: this.#startedAt,
-    });
+  get version() {
+    return this.#localQueries.version.bind(this.#localQueries);
   }
-
-  /** The deduped Computer-update notice line for a CLI's output tail; assembled locally. */
-  async computerUpdateNotice(
-    context: string,
-    _request: Record<string, never>,
-    agentApiKey: string,
-  ): Promise<{ ok: true; notice: string | null }> {
-    this.#authorizedAgent(context, agentApiKey);
-    return localComputerUpdateNotice(this.#computerUpdateNotice);
+  get agentContext() {
+    return this.#localQueries.context.bind(this.#localQueries);
+  }
+  get computerUpdateNotice() {
+    return this.#localQueries.computerUpdateNotice.bind(this.#localQueries);
   }
 
   memoryFence(agentId: string): string | undefined {

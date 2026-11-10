@@ -3,6 +3,10 @@ import { declareNoStore } from "#src/features/no-store-response.server";
 import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { computerAgentContextViews } from "#src/server/computers/computer-agent-context-views-production.server";
+import {
+  agentVisibilityViewerForUser,
+  canSeeAgent,
+} from "#src/server/agents/agent-visibility.server";
 
 const startSchema = z.object({
   computerId: z.string().min(1),
@@ -53,14 +57,20 @@ export const resolveAgentContextViewTarget = createServerFn({ method: "GET" })
   .validator(z.object({ agentId: z.string().min(1) }))
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
     declareNoStore();
+    const viewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
     const agent = await db.agent.findFirst({
-      where: { id: data.agentId, workspaceId, ownerId: user.id, deletedAt: null },
+      where: { id: data.agentId, workspaceId, deletedAt: null },
       select: {
         id: true,
         computerId: true,
+        visibility: true,
+        ownerId: true,
+        systemKind: true,
         currentSession: { select: { nativeSessionId: true } },
       },
     });
+    if (agent && !canSeeAgent(viewer, agent))
+      return { status: "unavailable" as const, reason: "no_computer" as const };
     const sessionId = agent?.currentSession?.nativeSessionId;
     if (!agent?.computerId)
       return { status: "unavailable" as const, reason: "no_computer" as const };

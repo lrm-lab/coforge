@@ -17,6 +17,7 @@ export function daemonAgentProxyRuntime(
   const agentApi = () => requireRuntime().agentRequests;
   // Every caller awaits inside a try, so a missing runtime surfaces as a rejected call.
   return {
+    agentContext: async (...args) => requireRuntime().agentContext(...args),
     agentMessage: async (...args) => requireRuntime().agentMessage(...args),
     ...attachmentRuntime(agentApi),
     ...mentionRuntime(agentApi),

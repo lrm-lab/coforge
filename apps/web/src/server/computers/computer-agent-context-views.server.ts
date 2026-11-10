@@ -65,6 +65,7 @@ export class ComputerAgentContextViews {
           }
       >;
       enabled?: (viewer: AgentContextViewViewer) => Promise<boolean>;
+      visible?: (viewer: AgentContextViewViewer, agentId: string) => Promise<boolean>;
       publish(request: AgentContextViewRequest): Promise<void>;
       results: PendingResults;
     },
@@ -123,6 +124,8 @@ export class ComputerAgentContextViews {
       return { status: "pending" };
     if (this.dependencies.enabled && !(await this.dependencies.enabled(viewer)))
       return { status: "unsupported" };
+    if (this.dependencies.visible && !(await this.dependencies.visible(viewer, input.agentId)))
+      return { status: "unavailable", reason: "agent_moved" };
     if (!(await this.dependencies.owned(viewer, input.computerId)))
       return { status: "unavailable", reason: "agent_moved" };
     if (result.encoding === "gzip") {

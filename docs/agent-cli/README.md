@@ -20,3 +20,4 @@ itself is described in [`packages/coforge/README.md`](../../packages/coforge/REA
 | [Labels](labels.md)                         | `label list`: the Workspace's labels; `task ... --label` attaches and filters                |
 | [Action cards](action-cards.md)             | `action prepare`, supported card kinds, the app approval card, how a human commits a card                               |
 | [Output formats](output.md)                 | The plain-text formats the CLI prints                                                                                   |
+| [Agent context](context.md)                 | `context search/read`, stable entry ids, bounded pagination, and current-session authorization                          |

@@ -91,7 +91,8 @@ the cohort is healthy without reinstalling or changing the Computer data.
 
 ### Agent context view rollout
 
-`agentContextView` gates the owner-only Agent profile context view. Keep it off until the Web
+`agentContextView` gates the Agent profile context view for the Computer owner and Workspace
+owners/admins. Keep it off until the Web
 receiver, the `agent-context-view:v0` capability lease, and the Computer's availability reports
 are deployed together. A disabled flag must not publish a request or expose the result route.
 The Web side is a start and a read Server Function (`agent-context-view.functions.ts`), polled

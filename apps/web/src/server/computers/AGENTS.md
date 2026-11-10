@@ -163,7 +163,7 @@ These rules apply to `src/server/computers/`.
   answer expires on its own (30 seconds) so a lost reply can be asked for again. Every failure is
   one value, `failed`; the read changes nothing, so a failed start is just tried again.
 - `computer-agent-context-views.server.ts` asks a local Computer to restore an Agent's context
-  (`agentContextView` flag, Computer owner only). The Computer restores for up to about 25
+  (`agentContextView` flag, Computer owner or Workspace owner/admin). The Computer restores for up to about 25
   seconds and production closes a request idle for about ten, so it is two calls: `start`
   publishes and returns a request id, or a refusal value with nothing pending; `read` returns
   pending or the result. `read` answers only a request that names the caller's Workspace,

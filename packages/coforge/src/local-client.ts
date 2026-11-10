@@ -34,7 +34,6 @@ import {
   type AgentMentionPendingResponse,
   type AgentManualGetResponse,
   type AgentManualSearchResponse,
-  type AgentVersionResponse,
   type AgentAttachmentCommentsRequest,
 } from "@lrm/coforge-sdk/agent";
 import { CliError, MANUAL_NOT_FOUND_NEXT_ACTION } from "./cli-error";
@@ -44,7 +43,7 @@ import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
 import { refuseCredentialSolicitationIfNeeded } from "./send-credential-gate";
 import { proxyHttpFailure, proxyTransportFailure } from "./local-proxy-failure";
-import { computerUpdateNoticeRequest, versionRequest } from "./local-readonly-requests";
+import { computerUpdateNoticeRequest, localReadonlyRequests } from "./local-readonly-requests";
 import {
   envelopeRequest,
   operationFailedCode,
@@ -285,7 +284,7 @@ export function connectLocal(
         { query, intent, reason },
         decodeAgentManualSearchResponse,
       ),
-    version: (): Promise<AgentVersionResponse> => versionRequest(proxyEndpoint, context, proxyUrl),
+    ...localReadonlyRequests(proxyEndpoint, context, proxyUrl),
     computerUpdateNotice: (): Promise<{ ok: true; notice: string | null }> =>
       computerUpdateNoticeRequest(proxyEndpoint, context, proxyUrl),
     ...profileRequests(proxyEndpoint, context, proxyUrl),

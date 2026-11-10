@@ -39,6 +39,7 @@ import { TASK_CONVERSATION_PROXY_ROUTES } from "./agent-proxy-task-routes";
 import { APP_PROXY_ROUTES } from "./agent-proxy-app-routes";
 import { ATTACHMENT_PROXY_ROUTES } from "./agent-proxy-attachment-routes";
 import { LABEL_PROXY_ROUTES } from "./agent-proxy-label-routes";
+import { LOCAL_QUERY_PROXY_ROUTES } from "./agent-proxy-local-query-routes";
 
 export type AgentProxy = {
   url: string;
@@ -111,22 +112,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     }),
     domainFailure: domain.manualDomainFailure,
   }),
-  defineRoute({
-    family: "agent-api/version",
-    method: LOCAL_PROXY_ROUTES.version.method,
-    match: exactPath(LOCAL_PROXY_ROUTES.version.path),
-    body: "none",
-    handler: "version",
-    parse: () => ({}),
-  }),
-  defineRoute({
-    family: "agent-api/computer-update-notice",
-    method: LOCAL_PROXY_ROUTES.computerUpdateNotice.method,
-    match: exactPath(LOCAL_PROXY_ROUTES.computerUpdateNotice.path),
-    body: "none",
-    handler: "computerUpdateNotice",
-    parse: () => ({}),
-  }),
+  ...LOCAL_QUERY_PROXY_ROUTES,
   defineRoute({
     family: "agent-api/user-info",
     method: LOCAL_PROXY_ROUTES.users.method,
