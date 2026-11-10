@@ -179,6 +179,8 @@ export const agentApiRoutes = {
     // Local-only: answered entirely by the Daemon's Agent proxy and never forwarded to Web/backend
     // (`coforge version`).
     version: { method: "GET", path: "/api/agent/v1/version" },
+    // Local-only: the Daemon searches and reads the Agent's own context-view index and never
+    // forwards these queries to Web/backend.
     context: {
       search: { method: "GET", path: "/api/agent/v1/context/search" },
       read: { method: "GET", path: "/api/agent/v1/context/read" },
@@ -223,6 +225,7 @@ export const agentApiRoutes = {
     },
     // Local-only, like `version`; see the same entry under `proxy`.
     inbox: { method: "POST", path: "/api/agent/v1/inbox" },
+    // Local-only, like `version`; see the same entries under `proxy.context`.
     context: {
       search: { method: "GET", path: "/api/agent/v1/context/search" },
       read: { method: "GET", path: "/api/agent/v1/context/read" },
