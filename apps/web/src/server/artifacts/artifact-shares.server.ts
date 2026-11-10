@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import {
+  ARTIFACT_SHARE_MAX_ARTIFACTS,
+  ARTIFACT_SHARE_MAX_TARGETS,
+  ARTIFACT_SHARE_NOTE_MAX_LENGTH,
+} from "#src/features/artifacts/artifact-share-input";
 import { AppError, isAppError } from "#src/lib/app-error";
 import {
   type ArtifactActor,
@@ -48,9 +53,6 @@ export type ArtifactShareTargetResolver = (
   target: string,
 ) => Promise<ArtifactShareTargetResolution>;
 
-const MAX_SHARE_ARTIFACTS = 20;
-const MAX_SHARE_TARGETS = 20;
-
 /**
  * Shares live artifact links by posting ordinary messages. The artifact rows are checked once
  * before any destination is attempted; every destination then uses the caller's normal message
@@ -76,7 +78,10 @@ export class ArtifactShares {
     send: ArtifactShareSender;
   }): Promise<ArtifactShareResult> {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
-    if (input.artifactIds.length > MAX_SHARE_ARTIFACTS || input.targets.length > MAX_SHARE_TARGETS)
+    if (
+      input.artifactIds.length > ARTIFACT_SHARE_MAX_ARTIFACTS ||
+      input.targets.length > ARTIFACT_SHARE_MAX_TARGETS
+    )
       throw new AppError("INVALID_INPUT", { errorId: "artifact-share-request" });
     const artifactIds = [...new Set(input.artifactIds)];
     const targets = [...new Set(input.targets)];
@@ -84,7 +89,7 @@ export class ArtifactShares {
       throw new AppError("INVALID_INPUT", {
         errorId: "artifact-share-request",
       });
-    if ((input.note?.length ?? 0) > 500)
+    if ((input.note?.length ?? 0) > ARTIFACT_SHARE_NOTE_MAX_LENGTH)
       throw new AppError("INVALID_INPUT", { errorId: "artifact-share-note" });
 
     const [workspace, rows] = await Promise.all([

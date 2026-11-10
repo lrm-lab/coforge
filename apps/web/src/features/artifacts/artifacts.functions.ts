@@ -2,8 +2,20 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
+import {
+  productionArtifactShares,
+  productionArtifacts,
+} from "#src/server/artifacts/artifact-composition.server";
+import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
+import { postUserMessage } from "#src/server/conversations/user-message-post.server";
+import { productionCloudComputers } from "#src/server/hosts/host-production.server";
+import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { artifactInputs } from "./artifact-inputs";
-import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
+import { shareArtifactInputSchema } from "./artifact-share-input";
 
 /**
  * The web page's documents (task #385, the `artifacts` experiment): a document is sent and read
@@ -134,4 +146,49 @@ export const deleteArtifact = createServerFn({ method: "POST" })
       actor: { userId: context.user.id },
     });
     return { deleted: true as const };
+  });
+
+/**
+ * Sends an artifact's link into channels and DMs as the signed-in person (artifacts task #2): one
+ * message per destination, the optional note above the link. The actor is always the session's
+ * person, never the request's. The service refuses the whole request when they may not read the
+ * artifact, or documents are off; each destination then takes the person's own send there (a
+ * channel they are in and that is not archived, a DM they may write in), so one can fail while the
+ * rest go through, and a retry with the same `requestId` sends only to those that failed.
+ */
+export const shareArtifact = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(shareArtifactInputSchema)
+  .handler(({ context: { db, user, workspaceId }, data }) => {
+    const publisher = createCentrifugoServerApi();
+    const ports = {
+      db,
+      idempotency: getMessageRequestIdempotency(),
+      publisher,
+      realtime: new CentrifugoConversationRealtime(publisher),
+      notifications: bestEffortMessageNotifier(db),
+      prepareDirect: (workspace: string, userId: string, conversationId: string) =>
+        new WorkspaceAssistants(db).prepareConversation(
+          workspace,
+          userId,
+          conversationId,
+          (input) => productionCloudComputers(db).ensureDefault(input),
+        ),
+    };
+    return productionArtifactShares(db, (workspace) => artifactsEnabled(db, workspace)).share({
+      workspaceId,
+      actor: { userId: user.id },
+      artifactIds: [data.artifactId],
+      targets: data.destinations,
+      note: data.note || undefined,
+      requestId: data.requestId,
+      send: ({ target, idempotencyKey, body }) =>
+        postUserMessage(ports, {
+          workspaceId,
+          userId: user.id,
+          conversationId: target,
+          idempotencyKey,
+          body,
+        }),
+    });
   });

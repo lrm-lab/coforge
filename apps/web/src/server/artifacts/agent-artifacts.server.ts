@@ -2,6 +2,10 @@ import { z } from "zod";
 import type { AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
+import {
+  ARTIFACT_SHARE_MAX_ARTIFACTS,
+  ARTIFACT_SHARE_MAX_TARGETS,
+} from "#src/features/artifacts/artifact-share-input";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
@@ -57,8 +61,8 @@ const RULES = {
   }),
   revert: z.object({ artifact: id, to: version, baseVersion: version, idempotencyKey: id }),
   share: z.object({
-    artifactIds: z.array(id).min(1).max(20),
-    targets: z.array(z.string().trim().min(1).max(200)).min(1).max(20),
+    artifactIds: z.array(id).min(1).max(ARTIFACT_SHARE_MAX_ARTIFACTS),
+    targets: z.array(z.string().trim().min(1).max(200)).min(1).max(ARTIFACT_SHARE_MAX_TARGETS),
     note: note.optional(),
     requestId: id,
   }),
