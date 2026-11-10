@@ -88,7 +88,9 @@ export function activityPageSql(
     mentionNoticeRowsSql(workspaceId, userId),
     commentNoticeRowsSql(workspaceId, userId),
   ].map((branch) => Prisma.sql`SELECT ${ITEM_COLUMNS} FROM (${branch}) branch`);
-  // The All view's first page lists the viewer's pins, whatever their Done.
+  // The All view's first page lists the viewer's pins, which `items` already limits to the same
+  // activity-past-Done rule as every row (Raft's Activity: Done takes a row out until something
+  // new arrives), so a Done pin leaves Pinned with the rest and returns with new activity.
   const pins =
     options.filter === "all" && !options.cursor
       ? Prisma.sql`UNION ALL
@@ -112,7 +114,7 @@ export function activityPageSql(
           AS "unreadItemCount",
         (COUNT(*) FILTER (WHERE items."pastDone" AND items."unreadMention"))::int
           AS "unreadMentionItemCount",
-        (COUNT(*) FILTER (WHERE items."pastDone" OR items."pinOrder" IS NOT NULL))::int
+        (COUNT(*) FILTER (WHERE items."pastDone"))::int
           AS "activeItemCount"
       FROM items
     )

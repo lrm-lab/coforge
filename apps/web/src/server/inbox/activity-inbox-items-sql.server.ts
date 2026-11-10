@@ -345,7 +345,7 @@ export function conversationItemRowsSql(workspaceId: string, userId: string) {
     ${conversationUnreadProbeLateral}
     ${conversationMentionLateral}
     WHERE ${conversationItemVisibleSql(userId)}
-      AND (${conversationListedActivitySql} OR pin."memberId" IS NOT NULL)`;
+      AND ${conversationListedActivitySql}`;
 }
 
 /** The list's thread items: every listed followed thread with its DM Agent, newest reply,

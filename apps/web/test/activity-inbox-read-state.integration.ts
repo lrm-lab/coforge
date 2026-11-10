@@ -69,7 +69,7 @@ test("Done removes an item until newer activity arrives, and reads it", async ()
   }
 });
 
-test("a pinned conversation is listed under Pinned even when Done, and not again among the items", async () => {
+test("Done takes a pinned conversation out of Pinned like every row, until something new arrives", async () => {
   const db = database();
   const suffix = crypto.randomUUID();
   try {
@@ -81,23 +81,36 @@ test("a pinned conversation is listed under Pinned even when Done, and not again
     await pin(quiet.aliceMember, 0);
 
     const inbox = new ActivityInbox(db, {});
+    // The pinned conversation's row is the Pinned section's, once, and counts with the list.
+    const listed = await inbox.list(workspace.id, alice.id, { filter: "all" });
+    expect(listed.pinned.map((item) => item.place.conversationId)).toEqual([quiet.conversation.id]);
+    expect(listed.pinned[0]!.place).toMatchObject({
+      kind: "channel",
+      conversationId: quiet.conversation.id,
+    });
+    expect(listed.activeItemCount).toBe(2);
+
+    // Done takes it out like every row (Raft's Activity: a Done row leaves until something new
+    // arrives); the pin itself stays for the Chat sidebar.
     await inbox.markDone(workspace.id, alice.id, {
       kind: "conversation",
       conversationId: quiet.conversation.id,
       throughSequence: latest.sequence,
     });
-    const page = await inbox.list(workspace.id, alice.id, { filter: "all" });
+    let page = await inbox.list(workspace.id, alice.id, { filter: "all" });
+    expect(page.pinned).toEqual([]);
+    expect(page.items.map((item) => item.place.conversationId)).toEqual([general.conversation.id]);
+    expect(page.activeItemCount).toBe(1);
+
+    // Something new lists it again under Pinned, counting only the new message.
+    const fresh = await post(quiet.conversation.id, quiet.bobMember.id, "again");
+    page = await inbox.list(workspace.id, alice.id, { filter: "all" });
     expect(page.pinned.map((item) => [item.key, item.latest.id, item.unreadCount])).toEqual([
-      [`conversation:${quiet.conversation.id}`, latest.id, 0],
+      [`conversation:${quiet.conversation.id}`, fresh.id, 1],
     ]);
-    expect(page.pinned[0]!.place).toMatchObject({
-      kind: "channel",
-      conversationId: quiet.conversation.id,
-    });
     expect(page.items.map((item) => item.place.conversationId)).toEqual([general.conversation.id]);
     // Each item says whether the viewer pinned it.
     expect([...page.pinned, ...page.items].map((item) => item.pinned)).toEqual([true, false]);
-    // The header's "N active" counts what the All view lists: the pin, and the item below it.
     expect(page.activeItemCount).toBe(2);
   } finally {
     await cleanup(db, suffix);
