@@ -268,9 +268,11 @@ export class MentionDeliveryTracker {
     this.#cancelHooks.set(agentId, hook);
   }
 
-  /** The daemon is stopping: every Agent's waits are cancelled. */
+  /** The daemon is stopping: every Agent's waits are cancelled, and no launch is coming for the
+   * mentions kept for one. */
   cancelAll(): void {
     for (const agentId of this.#cancelHooks.keys()) this.#runCancelHook(agentId);
+    this.carry.refuseAllCarried(MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
   }
 
   #runCancelHook(agentId: string): void {

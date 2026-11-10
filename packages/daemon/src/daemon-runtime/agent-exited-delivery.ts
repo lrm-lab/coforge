@@ -15,6 +15,8 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 export type AgentExitedDeliveryPorts = Readonly<{
   /** A runtime-error backoff that must survive an unexpected process exit. */
   hasRuntimeErrorHold(agentId: string): boolean;
+  /** The hold is a retryable-error backoff, which ends by itself; a tripped fence's does not. */
+  backoffHeld(agentId: string): boolean;
   /** Records a delivery in attention and the daemon-owned hold without waking a process. */
   holdRuntimeErrorDelivery(message: AgentMessageDelivery): Promise<void>;
   /** The consumed cursor already covers this delivery. */
@@ -86,19 +88,40 @@ export class AgentExitedDelivery {
   /**
    * A tracked @mention for an Agent with no process and no launch in flight. It is kept against the
    * launch and session the Agent last reported and wakes the Agent, as an ordinary delivery does,
-   * the launch it starts telling the mention once. A wake that fails refuses it. With no identity to
-   * keep it for (stopped by a person, taken offline, never launched here, held by a backoff) it is
-   * refused as unknown, as before.
+   * the launch it starts telling the mention once. A wake that fails refuses it. Under a retryable
+   * runtime-error backoff it is kept the same way but wakes nobody: the Agent would only fail again,
+   * so `backoffEnded` wakes it when the backoff is over (a Stop, a purge, the Daemon stopping, an
+   * offline-taking failure or a failed launch refuses it first). With no identity to keep it for
+   * (stopped by a person, taken offline, never launched here, held by a tripped fence) it is
+   * refused as unknown.
    */
   deliverMention(message: TrackedMentionDelivery): void {
     const { agentId } = message;
     const restart = this.#ports.restartConfig(agentId);
-    if (!restart || this.#ports.offline.has(agentId) || this.#ports.hasRuntimeErrorHold(agentId)) {
+    const held = this.#ports.hasRuntimeErrorHold(agentId);
+    if (
+      !restart ||
+      this.#ports.offline.has(agentId) ||
+      (held && !this.#ports.backoffHeld(agentId))
+    ) {
       this.#ports.dropMentionAsUnknown(message);
       return;
     }
-    if (!this.#ports.keepMention(message)) return;
+    if (!this.#ports.keepMention(message) || held) return;
     if (this.#ports.wakeBlockedUntil(agentId) !== undefined) this.#wakeAfterCooldown(agentId);
+    else this.#wakeForKept(agentId, restart);
+  }
+
+  /** The Agent's runtime-error backoff ran its course. Mentions kept through it, which waited for
+   * the Agent to be able to run again, wake it now (after a launch-failure cooldown, when one
+   * runs); with nothing left to relaunch from they are refused as unknown. A running process
+   * has its launch telling them already. */
+  backoffEnded(agentId: string): void {
+    if (!this.#ports.hasKeptMentions(agentId) || this.#ports.hasSession(agentId)) return;
+    const restart = this.#ports.restartConfig(agentId);
+    if (!restart)
+      this.#ports.refuseKeptMentions(agentId, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
+    else if (this.#ports.wakeBlockedUntil(agentId) !== undefined) this.#wakeAfterCooldown(agentId);
     else this.#wakeForKept(agentId, restart);
   }
 

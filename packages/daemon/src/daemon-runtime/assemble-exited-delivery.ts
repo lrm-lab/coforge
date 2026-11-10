@@ -40,6 +40,10 @@ export type ExitedDeliveryCollaborators = {
 export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): AgentExitedDelivery {
   return new AgentExitedDelivery({
     hasRuntimeErrorHold: (agentId) => ports.deliveryGate.explicitHold(agentId) !== undefined,
+    backoffHeld: (agentId) => {
+      const reason = ports.deliveryGate.explicitHold(agentId);
+      return reason === "rate_limit_backoff" || reason === "runtime_error_backoff";
+    },
     holdRuntimeErrorDelivery: (message) => ports.messageAttention().receive(message),
     hasConsumed: (message) => ports.messageAttention().hasConsumed(message),
     logConsumed: (message) => ports.messageAttention().logDecision(message, "consumed"),

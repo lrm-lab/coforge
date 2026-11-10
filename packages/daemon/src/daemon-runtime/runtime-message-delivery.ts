@@ -102,8 +102,9 @@ export async function handleAgentMessage(
  * is told only if its envelope names that launch and session. A runtime being restarted, or a
  * launch not yet up, keeps it for the launch that follows, which tells it once. With no process
  * it is kept against the launch and session the Agent last reported and wakes the Agent
- * (`AgentExitedDelivery.deliverMention`); a consumed one is drained, and one with no identity to
- * keep it for (stopped, offline, held by a backoff, never launched here) is refused as
+ * (`AgentExitedDelivery.deliverMention`), except under a runtime-error backoff, which it waits out
+ * without waking the Agent; a consumed one is drained, and one with no identity to keep it for
+ * (stopped, offline, held by a tripped fence, never launched here) is refused as
  * `IDENTITY_UNKNOWN`, which the server answers. A runner hold queues it unacknowledged like any
  * delivery.
  */

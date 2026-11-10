@@ -17,11 +17,13 @@ export function assembleRuntimeErrorDeliveryHold(input: {
     "hold" | "release" | "endHoldForNextLaunch" | "explicitHold" | "pending"
   >;
   flush(agentId: string, held: AgentMessageDelivery[]): void;
+  backoffEnded(agentId: string): void;
 }): RuntimeErrorDeliveryHold {
   const store = new AgentRuntimeBackoffStore(input.stateDirectory);
   const hold = new RuntimeErrorDeliveryHold({
     deliveryGate: input.deliveryGate,
     flush: input.flush,
+    backoffEnded: input.backoffEnded,
     store,
   });
   // The runtime's state directory is assigned after its field initializers, so the restore runs

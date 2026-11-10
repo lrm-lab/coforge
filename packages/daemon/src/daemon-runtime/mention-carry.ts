@@ -139,6 +139,12 @@ export class MentionCarry {
       void this.settle.refuse(entry.message, code);
   }
 
+  /** The Daemon is stopping: whatever any Agent's next launch would have told is refused with `code`. */
+  refuseAllCarried(code: MentionDeliveryTerminalCode): void {
+    for (const entry of this.entries.all())
+      if (entry.carried) void this.settle.refuse(entry.message, code);
+  }
+
   /** The mentions kept for the Agent's next launch that its input has not taken yet. */
   takeCarried(agentId: string): TrackedMentionDelivery[] {
     const taken: TrackedMentionDelivery[] = [];

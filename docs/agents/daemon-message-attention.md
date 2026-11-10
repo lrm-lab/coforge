@@ -88,11 +88,20 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   would (`AgentExitedDelivery.deliverMention`); a launch that fails refuses it `DELIVERY_REJECTED` (a
   failed server Start, or a runtime error that takes the Agent offline, `IDENTITY_UNKNOWN`); while a
   launch-failure cooldown runs, one timer wakes the Agent when it ends (waiting out an extension, and dropped by a Stop, a purge or the daemon stopping) if anything still waits.
-  Otherwise
+  Under a retryable runtime-error backoff (`rate_limit_backoff` or `runtime_error_backoff`) with the process
+  gone it is kept the same way but wakes nobody, as the reference Computer holds a mention through a
+  provider-limit wait: `RuntimeErrorDeliveryHold` tells `AgentExitedDelivery.backoffEnded` when the backoff
+  runs its course (its time is up, a lifted limit or an observed recovery ends it), and that wakes the Agent
+  once (after a launch-failure cooldown, if one runs); the launch tells each kept mention once. The backoff's
+  end is its only bound. It is refused exactly once if the backoff never gets to end it: a Stop, an inbox
+  purge, the daemon stopping or a failed wake launch (`DELIVERY_REJECTED`), a failed server Start or a runtime
+  error that takes the Agent offline (`IDENTITY_UNKNOWN`). A tripped fingerprint fence, an offline record and
+  a stopped Agent refuse it as `IDENTITY_UNKNOWN` at once: the reference Computer has no identity to hold it
+  for either. Otherwise
   the daemon reports a terminal error: `IDENTITY_DRIFT` (another Computer,
   launch or session), `INSTRUMENT_FAILED` (another message), `IDENTITY_UNKNOWN`
   (no running session and nothing to relaunch from: stopped by a person, taken offline, held by a
-  backoff, or never launched here, including a pending server Start),
+  tripped fence, or never launched here, including a pending server Start),
   `QUOTA_LIMITED` (rate-limit backoff), `UNSUPPORTED_DELIVERY_PATH` (a provider
   that takes notices only between turns, while busy), or `DELIVERY_REJECTED`
   (another backoff, a refused notice, a process gone before it accepted the

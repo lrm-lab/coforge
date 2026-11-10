@@ -48,6 +48,10 @@ export type RuntimeErrorDeliveryHoldPorts = Readonly<{
   >;
   /** Attempts delivery of what a released hold gave back, never blocking the caller. */
   flush(agentId: string, held: AgentMessageDelivery[]): void;
+  /** A backoff just ended on its own (its time was up, or a lifted limit or an observed recovery
+   * ended it) and left the Agent free to run again: whoever kept something for it wakes it. Not
+   * called when a Stop, an offline-taking failure or the Daemon stopping ends the wait. */
+  backoffEnded?(agentId: string): void;
   /** Where a backoff outlives the process; absent when the caller keeps it in memory only. */
   store?: RuntimeErrorBackoffPersistence;
 }>;
@@ -292,12 +296,14 @@ export class RuntimeErrorDeliveryHold {
    * for an Agent that has no process to deliver it to. */
   #endBackoff(agentId: string, flush = true): void {
     this.#clearReleaseTimer(agentId);
-    if (!this.#isFenced(agentId)) {
+    const fenced = this.#isFenced(agentId);
+    if (!fenced) {
       if (flush) this.#releaseHeld(agentId);
       else this.#ports.deliveryGate.endHoldForNextLaunch(agentId);
     }
     this.#backoff.reset(agentId);
     this.#ports.store?.clear(agentId);
+    if (!fenced) this.#ports.backoffEnded?.(agentId);
   }
 
   /**
@@ -330,6 +336,7 @@ export class RuntimeErrorDeliveryHold {
         else {
           this.#releaseHeld(agentId);
           this.#ports.store?.clear(agentId);
+          this.#ports.backoffEnded?.(agentId);
         }
       },
       Math.min(Math.max(0, remainingMs), MAX_TIMER_DELAY_MS),

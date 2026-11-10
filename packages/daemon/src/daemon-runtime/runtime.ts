@@ -306,7 +306,8 @@ export class DaemonRuntime {
   readonly #runtimeErrorHold = assembleRuntimeErrorDeliveryHold({
     stateDirectory: () => this.stateDirectory,
     deliveryGate: this.#deliveryGate,
-    flush: (agentId, held) => this.#flushHeldDeliveries(agentId, held),
+    flush: (agentId, held) => flushHeldDeliveries(this.#turnPorts(), agentId, held),
+    backoffEnded: (agentId) => this.#exitedDelivery.backoffEnded(agentId),
   });
   readonly #reminders: ReminderScheduler;
   readonly #appConfigs: AgentAppConfigSync;
@@ -1271,8 +1272,6 @@ export class DaemonRuntime {
     launch: ActivityLaunch,
     { detail, entryText }: { detail: string; entryText?: string },
   ): void => narrateUnavailable(this.#turnPorts(), agentId, launch, detail, entryText);
-  #flushHeldDeliveries = (agentId: string, held: AgentMessageDelivery[]): void =>
-    flushHeldDeliveries(this.#turnPorts(), agentId, held);
   #interruptIfBusy = (agentId: string, activityLaunch: ActivityLaunch | undefined): void =>
     interruptIfBusy(this.#turnPorts(), agentId, activityLaunch);
   #showQuietTurn = (
