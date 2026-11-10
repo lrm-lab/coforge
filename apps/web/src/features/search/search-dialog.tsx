@@ -55,6 +55,7 @@ export function SearchDialog({
   const [deferred, setDeferred] = useState(Boolean(intent.deferred));
   const [composing, setComposing] = useState(false);
   const box = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -129,7 +130,11 @@ export function SearchDialog({
           aria-label={m.search_title()}
           className="group/search min-h-0 flex-1 overflow-hidden"
         >
-          <div onKeyDown={onKeyDown} className="flex max-h-[inherit] h-full min-h-0 flex-col">
+          <div
+            ref={panel}
+            onKeyDown={onKeyDown}
+            className="flex max-h-[inherit] h-full min-h-0 flex-col"
+          >
             <div
               className="flex flex-col gap-3 border-b border-secondary p-4"
               onCompositionStart={() => setComposing(true)}
@@ -152,6 +157,7 @@ export function SearchDialog({
                   query={query}
                   filters={filters}
                   onChange={changeFilters}
+                  besideRef={panel}
                 />
                 {/* A phone has no Esc and no backdrop to tap: the dialog fills the screen. */}
                 <ButtonUtility
