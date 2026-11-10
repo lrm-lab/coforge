@@ -8,8 +8,9 @@ import { cx } from "#src/utils/cx";
 
 /** The expanded sidebar's width, which the top bar's zone above it shares: the width dragged on its
  * edge (`SIDEBAR_COLUMN`), else 12rem, 192px at the default text size. Written out whole for
- * Tailwind; it repeats `SIDEBAR_COLUMN.property`. */
-export const SIDEBAR_WIDTH_CLASS = "w-(--sidebar-width,12rem)";
+ * Tailwind; it repeats `SIDEBAR_COLUMN.property`. Never under 12rem, whatever the text size, though
+ * the dragged width is kept in pixels. */
+export const SIDEBAR_WIDTH_CLASS = "w-(--sidebar-width,12rem) min-w-48";
 
 type ExpandedItemType = NavItemType & {
   icon: FC<{ className?: string }>;
