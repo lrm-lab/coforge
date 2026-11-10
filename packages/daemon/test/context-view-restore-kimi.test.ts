@@ -462,6 +462,67 @@ test("folds Kimi context.undo before rebuilding the latest loop request", () => 
   }
 });
 
+test("rebuilds the active Kimi agent.switched branch and refuses malformed branch metadata", () => {
+  const first = { role: "user", content: [{ type: "text", text: "first" }] };
+  const second = { role: "user", content: [{ type: "text", text: "second" }] };
+  const branch = buffer([
+    { type: "context.append_message", sessionId: "s1", message: first },
+    {
+      type: "agent.switched",
+      sessionId: "s1",
+      branch: "branch-1",
+      base: { branch: "main", line: 1 },
+    },
+    { type: "context.append_message", sessionId: "s1", message: second },
+    {
+      type: "llm.request",
+      kind: "loop",
+      sessionId: "s1",
+      message_id: "m1",
+      request: { toolSelect: true, messageCount: 2, messagesHash: messagesHash([first, second]) },
+    },
+    {
+      type: "context.append_loop_event",
+      sessionId: "s1",
+      event: { type: "tool.call", toolCallId: "call-1", name: "shell", args: {} },
+    },
+    {
+      type: "context.append_loop_event",
+      sessionId: "s1",
+      event: { type: "tool.result", toolCallId: "call-1", output: "Message ID: m1" },
+    },
+  ]);
+  expect(
+    restoreContextView({
+      runtime: "kimi-sdk",
+      sessionId: "s1",
+      messageId: "m1",
+      buffer: branch,
+      offset: branch.length,
+    }),
+  ).toMatchObject({ ok: true, view: { verification: "verified" } });
+
+  const malformed = buffer([
+    { type: "agent.switched", sessionId: "s1", branch: "branch-1" },
+    {
+      type: "llm.request",
+      kind: "loop",
+      sessionId: "s1",
+      message_id: "m1",
+      request: { messageCount: 0 },
+    },
+  ]);
+  expect(
+    restoreContextView({
+      runtime: "kimi-sdk",
+      sessionId: "s1",
+      messageId: "m1",
+      buffer: malformed,
+      offset: malformed.length,
+    }),
+  ).toEqual({ ok: false, failure: "read_failed" });
+});
+
 test("rejects a Kimi tools hash without a matching snapshot", () => {
   const kimi = buffer([
     {

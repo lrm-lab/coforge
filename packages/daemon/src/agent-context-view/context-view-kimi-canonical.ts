@@ -6,6 +6,7 @@ export type KimiCanonicalState = {
   messages: RecordValue[];
   tools: Map<string, unknown>;
   verification?: RestoredContextView["verification"];
+  unsupportedChain?: boolean;
 };
 
 function sha256(value: string): string {
@@ -181,9 +182,80 @@ export function prepareKimiCanonicalState(
   latestLoopIndex: number,
 ): KimiCanonicalState {
   const state: KimiCanonicalState = { messages: [], tools: new Map() };
-  for (const original of records.slice(0, Math.max(0, latestLoopIndex)))
-    applyRecord(state, providerPayload(original));
+  const prefix = records.slice(0, Math.max(0, latestLoopIndex));
+  const flattened = flattenKimiChain(prefix);
+  if (flattened === undefined) {
+    state.unsupportedChain = true;
+    return state;
+  }
+  for (const original of flattened) applyRecord(state, providerPayload(original));
   return state;
+}
+
+function flattenKimiChain(records: readonly RecordValue[]): RecordValue[] | undefined {
+  const switches = records
+    .map((record, index) => ({ record, line: index + 1 }))
+    .filter(({ record }) => record.type === "agent.switched");
+  if (switches.length === 0) return [...records];
+  const byBranch = new Map<string, { line: number; baseBranch: string; baseLine: number }>();
+  for (const { record, line } of switches) {
+    const branch = record.branch;
+    const base = isRecord(record.base) ? record.base : undefined;
+    if (
+      typeof branch !== "string" ||
+      !base ||
+      typeof base.branch !== "string" ||
+      typeof base.line !== "number" ||
+      !Number.isSafeInteger(base.line) ||
+      base.line < 0
+    )
+      return undefined;
+    byBranch.set(branch, { line, baseBranch: base.branch, baseLine: base.line });
+  }
+  const activeBranch = switches.at(-1)?.record.branch;
+  if (typeof activeBranch !== "string") return undefined;
+  const activeLines = new Set<number>();
+  const visited = new Set<string>();
+  const walk = (branch: string, until: number): boolean => {
+    if (visited.has(branch)) return false;
+    visited.add(branch);
+    const edge = byBranch.get(branch);
+    const floor = edge === undefined ? 1 : edge.line + 1;
+    if (edge !== undefined && !walk(edge.baseBranch, edge.baseLine)) return false;
+    for (let line = floor; line <= until; line += 1) {
+      const record = records[line - 1];
+      if (record?.type !== "agent.switched") activeLines.add(line);
+    }
+    return true;
+  };
+  if (!walk(activeBranch, records.length)) return undefined;
+  const pairedUndoLines = new Set(
+    switches
+      .map(({ record }) => record.legacyUndoLine)
+      .filter((line): line is number => typeof line === "number" && Number.isSafeInteger(line)),
+  );
+  const survivingPromptIds = new Set<string>();
+  const chain = records.filter((record, index) => {
+    const line = index + 1;
+    if (!activeLines.has(line)) return false;
+    if (record.type === "context.undone") return false;
+    if (record.type === "context.undo" && pairedUndoLines.has(line)) return false;
+    if (record.type === "context.append_message" && isRecord(record.message)) {
+      if (record.message.role === "user" && typeof record.message.id === "string")
+        survivingPromptIds.add(record.message.id);
+    }
+    return true;
+  });
+  const injections = records.filter((record, index) => {
+    if (activeLines.has(index + 1) || record.type !== "context.append_message") return false;
+    const message = isRecord(record.message) ? record.message : undefined;
+    const origin = message && isRecord(message.origin) ? message.origin : undefined;
+    return (
+      origin?.kind === "injection" &&
+      (typeof origin.ownerPromptId !== "string" || survivingPromptIds.has(origin.ownerPromptId))
+    );
+  });
+  return [...chain, ...injections];
 }
 
 export function isNewerKimiWireRecord(record: RecordValue): boolean {

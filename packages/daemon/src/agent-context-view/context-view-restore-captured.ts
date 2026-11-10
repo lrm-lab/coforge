@@ -150,6 +150,7 @@ export function restoreKimi(
   let responseCount = 0;
   const pendingTools = new Set<string>();
   const canonicalState = prepareKimiCanonicalState(records, latestLoopIndex);
+  if (canonicalState.unsupportedChain) return { ok: false, failure: "read_failed" };
   for (const [index, original] of records.entries()) {
     if (hasNestedIdentityConflict(original)) return { ok: false, failure: "context_mismatch" };
     const record = providerPayload(original);
