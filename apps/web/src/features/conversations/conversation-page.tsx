@@ -10,6 +10,7 @@ import { ArtifactsBesideChat } from "#src/features/artifacts/artifact-beside-cha
 import { ConversationArtifactPane } from "#src/features/artifacts/artifact-side-pane";
 import { useArtifactsOn } from "#src/features/artifacts/artifact-queries";
 import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
+import { useReportViewingItem } from "#src/features/inbox/viewing-items";
 import { usePageTitleLabel } from "#src/lib/browser-tab";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -404,6 +405,12 @@ function ConversationPageMain({
   // Nobody looking, nothing is reported (task #549): a background tab, or a window without focus,
   // reads what it loaded once it is in front with focus and this conversation still open.
   const attended = usePageAttended();
+  // While it is read here, its messages leave the Activity count alone (task #62).
+  useReportViewingItem(
+    isMember && !threadAlone && opened && attended
+      ? `conversation:${conversation.conversationId}`
+      : undefined,
+  );
   useEffect(() => {
     if (!readEnd || !isMember || threadAlone || !opened || !attended) return;
     readThrough(readEnd);

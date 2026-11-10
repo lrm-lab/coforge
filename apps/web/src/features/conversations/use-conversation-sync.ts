@@ -14,6 +14,7 @@ import type { DirectConversationView } from "./conversation-types";
 import { threadReadThrough } from "./thread-summary-model";
 import { useConversationOpened } from "./use-conversation-open";
 import { usePageAttended } from "./use-page-attended";
+import { useReportViewingItem } from "#src/features/inbox/viewing-items";
 
 type ConversationSyncView = Pick<
   DirectConversationView,
@@ -140,6 +141,10 @@ export function useConversationSync({
   // Nobody looking (hidden, or the window without focus), nothing is reported; coming back runs
   // this again (task #549), as the conversation's own read does.
   const attended = usePageAttended();
+  // While it is read here, its replies leave the Activity count alone (task #62).
+  useReportViewingItem(
+    threadInView && threadOpened && attended ? `thread:${threadInView}` : undefined,
+  );
   useEffect(() => {
     if (!threadInView || !threadInViewSequence || !threadOpened || reading.current || !attended)
       return;
