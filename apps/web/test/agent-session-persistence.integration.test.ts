@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
-import { Pool, type PoolClient } from "pg";
+import pg, { type PoolClient } from "pg";
 import { dropScratchDatabase } from "./helpers/drop-scratch-database";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -34,12 +34,12 @@ async function applyMigrations(client: PoolClient, names: readonly string[]) {
 test.skipIf(!connectionString)(
   "PostgreSQL session migration and fenced reference survive a new repository",
   async () => {
-    const admin = new Pool({ connectionString });
+    const admin = new pg.Pool({ connectionString });
     const database = `session_${crypto.randomUUID().replaceAll("-", "")}`;
     await admin.query(`CREATE DATABASE "${database}"`);
     const scratchUrl = new URL(connectionString!);
     scratchUrl.pathname = `/${database}`;
-    const pool = new Pool({ connectionString: scratchUrl.href });
+    const pool = new pg.Pool({ connectionString: scratchUrl.href });
     const client = await pool.connect();
     const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: scratchUrl.href }) });
     try {

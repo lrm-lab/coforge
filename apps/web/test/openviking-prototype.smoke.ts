@@ -18,7 +18,7 @@
  */
 
 import { expect, test } from "bun:test";
-import { Pool, type PoolClient } from "pg";
+import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaWorkspaceMemoryCitationStore } from "../src/server/db/repositories/workspace-memory-citation.repositories.server";
@@ -594,9 +594,9 @@ test.skipIf(!canRun)(
         steps.citation =
           "skipped (no MIGRATION_TEST_DATABASE_URL / CHANNEL_TEST_DATABASE_URL / DATABASE_URL)";
       } else {
-        const pool = new Pool({ connectionString: pgUrl });
+        const pool = new pg.Pool({ connectionString: pgUrl });
         const schema = `ov_smoke_${crypto.randomUUID().replaceAll("-", "")}`;
-        let client: PoolClient | null = null;
+        let client: pg.PoolClient | null = null;
         try {
           client = await pool.connect();
           await client.query(`CREATE SCHEMA "${schema}"`);

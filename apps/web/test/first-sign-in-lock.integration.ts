@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
+import pg from "pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { completeFirstSignIn } from "#src/server/auth/first-sign-in.server";
 
@@ -44,7 +44,7 @@ test("first sign-in locks its User before a second tab can choose a different Wo
   const secondDb = new PrismaClient({
     adapter: new PrismaPg({ connectionString: url(secondLabel) }),
   });
-  const blocker = new Pool({ connectionString });
+  const blocker = new pg.Pool({ connectionString });
   const lock = await blocker.connect();
   const calls: Promise<unknown>[] = [];
   const waitingQuery = async (label: string) => {

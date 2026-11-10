@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
+import pg from "pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaMemoryDispositionStore } from "#src/server/db/repositories/memory-disposition.repositories.server";
 import { handleMemoryDispositionHttp } from "#src/server/workspace-memory/memory-disposition-http.server";
@@ -12,7 +12,7 @@ test("a disposition authorizes and commits with one PostgreSQL connection", asyn
   if (!connectionString || !fixture)
     throw new Error("PostgreSQL and branch schema fixture required");
   const schema = `receipt_pool_${crypto.randomUUID().replaceAll("-", "")}`;
-  const setup = new Pool({ connectionString, max: 1 });
+  const setup = new pg.Pool({ connectionString, max: 1 });
   const sql = await setup.connect();
   const db = new PrismaClient({
     adapter: new PrismaPg(

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Pool } from "pg";
+import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaOpenVikingBindingStore } from "../src/server/db/repositories/openviking-binding.repositories.server";
@@ -26,7 +26,7 @@ const enabled = { prototypeEnabled: true };
 const SERVER_AUTHORIZATION = "Bearer server-held-ov-key";
 
 async function openHarness() {
-  const pool = new Pool({ connectionString });
+  const pool = new pg.Pool({ connectionString });
   const schema = `ov_gw_${crypto.randomUUID().replaceAll("-", "")}`;
   const client = await pool.connect();
   await client.query(`CREATE SCHEMA "${schema}"`);

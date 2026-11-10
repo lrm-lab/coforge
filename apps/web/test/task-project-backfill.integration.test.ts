@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
-import { Pool } from "pg";
+import pg from "pg";
 import { dropScratchDatabase } from "./helpers/drop-scratch-database";
 
 /**
@@ -20,12 +20,12 @@ const target = migrations.indexOf("20261105000300_task_project_backfill");
 test.skipIf(!connectionString)(
   "a following Task is filed under its channel's Project, a pinned one keeps its own",
   async () => {
-    const admin = new Pool({ connectionString });
+    const admin = new pg.Pool({ connectionString });
     const database = `taskproj_${crypto.randomUUID().replaceAll("-", "")}`;
     await admin.query(`CREATE DATABASE "${database}"`);
     const url = new URL(connectionString!);
     url.pathname = `/${database}`;
-    const pool = new Pool({ connectionString: url.href, max: 1 });
+    const pool = new pg.Pool({ connectionString: url.href, max: 1 });
     try {
       expect(target).toBeGreaterThan(0);
       const apply = async (names: readonly string[]) => {

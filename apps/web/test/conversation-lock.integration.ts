@@ -13,9 +13,15 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 test.skipIf(!connectionString)(
   "an attachment insert is not blocked while the conversation lock is held",
   async () => {
-    const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
+    // The probe below must sit on the held lock past the suite's 10 s "blocked" check, longer
+    // than the 10 s session lock_timeout every test connection now carries; its own transaction
+    // timeout (20 s) stays the bound.
+    const lockWait = { lock_timeout: 30_000 };
+    const db = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: connectionString!, ...lockWait }),
+    });
     const second = new PrismaClient({
-      adapter: new PrismaPg({ connectionString: connectionString! }),
+      adapter: new PrismaPg({ connectionString: connectionString!, ...lockWait }),
     });
     const suffix = crypto.randomUUID();
     const owner = await db.user.create({

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Pool } from "pg";
+import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaWorkspaceMemoryCitationStore } from "../src/server/db/repositories/workspace-memory-citation.repositories.server";
@@ -19,7 +19,7 @@ const connectionString = WORKSPACE_MEMORY_PG_URL;
 warnIfWorkspaceMemoryPgSkipped("workspace-memory citations");
 
 async function openHarness() {
-  const pool = new Pool({ connectionString });
+  const pool = new pg.Pool({ connectionString });
   const schema = `wmp_cite_${crypto.randomUUID().replaceAll("-", "")}`;
   const client = await pool.connect();
   await client.query(`CREATE SCHEMA "${schema}"`);
