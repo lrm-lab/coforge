@@ -90,9 +90,10 @@ test("on a phone the typing line shares the composer's top edge with the jump gr
       // The dev user's own root puts the jump group on the line's row, and the sentence ends
       // before the group starts: neither covers the other.
       const gap = await evaluate<number | null>(`(() => {
-        const line = [...document.querySelectorAll('[role="status"]')]
-          .find((node) => node.textContent === ${JSON.stringify(typingSentence)})
-          .closest(".replying-line");
+        // The pill is a button since the line counts working Agents too; its sentence is its text.
+        const line = [...document.querySelectorAll(".replying-line")].find(
+          (node) => node.textContent === ${JSON.stringify(typingSentence)},
+        );
         const group = line.closest(':has([role="group"])')?.querySelector('[role="group"]');
         return group && group.getBoundingClientRect().left - line.getBoundingClientRect().right;
       })()`);
