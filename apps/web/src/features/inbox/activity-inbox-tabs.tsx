@@ -37,13 +37,13 @@ export function ActivityInboxTabs({
       }}
       className="w-max shrink-0"
     >
-      {/* In a list column dragged narrow the tabs sit closer and step down a size, so the three
-          still fit (English "Mentions" included). */}
+      {/* In a list column dragged narrow the tabs sit closer, with less padding, and step down a
+          size, so the three still fit with their counts (English "Mentions" and "99+" included). */}
       <TabList
         type="button-gray"
         size="sm"
         aria-label={m.activity_inbox_filter_label()}
-        className="@max-[22rem]/tabbed-header:gap-2 @max-[22rem]/tabbed-header:*:text-sm"
+        className="@max-[22rem]/tabbed-header:gap-1 @max-[22rem]/tabbed-header:*:px-1.5 @max-[22rem]/tabbed-header:*:text-sm"
       >
         {FILTER_TABS.map((tab) => (
           <Tab

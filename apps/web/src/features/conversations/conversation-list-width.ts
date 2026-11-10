@@ -31,7 +31,8 @@ export const LIST_COLUMN: ListColumn = {
   key: "coforge-list-column-width",
   property: "--list-column-width",
   defaultWidth: 380,
-  min: 240,
+  // Wide enough for the filter tabs with both counts at "99+" (task #63).
+  min: 288,
   max: 640,
   label: m.list_column_resize,
 };
