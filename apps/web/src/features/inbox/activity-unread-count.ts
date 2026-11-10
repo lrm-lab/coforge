@@ -27,6 +27,17 @@ export type ActivityUnreadMessage = Pick<
   "conversationId" | "senderUserId" | "sender" | "threadRootId" | "muted"
 >;
 
+/** The Activity item a message belongs to: its thread when it is a reply, else its conversation. */
+export function activityItemKey({
+  conversationId,
+  threadRootId,
+}: {
+  conversationId: string;
+  threadRootId?: string | null;
+}): string {
+  return threadRootId ? `thread:${threadRootId}` : `conversation:${conversationId}`;
+}
+
 /**
  * Applies one message to the count, without a read. `reread` says the page cannot tell the
  * count from the message alone and the server should be asked (throttled by the caller);
@@ -47,9 +58,7 @@ export function applyActivityMessage(
   if (message.senderUserId === viewerUserId || message.sender.kind === "system") return ignored;
   // A muted channel counts only with an unread mention of the viewer, which only the server can
   // tell from the message.
-  const key = message.threadRootId
-    ? `thread:${message.threadRootId}`
-    : `conversation:${message.conversationId}`;
+  const key = activityItemKey(message);
   if (isViewing?.(key)) return ignored;
   if (message.muted) return { ...ignored, reread: true };
   const { unreadCount, unreadKeys = [] } = state;

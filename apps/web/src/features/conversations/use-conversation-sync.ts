@@ -14,6 +14,7 @@ import type { DirectConversationView } from "./conversation-types";
 import { threadReadThrough } from "./thread-summary-model";
 import { useConversationOpened } from "./use-conversation-open";
 import { usePageAttended } from "./use-page-attended";
+import { activityItemKey } from "#src/features/inbox/activity-unread-count";
 import { useReportViewingItem } from "#src/features/inbox/viewing-items";
 
 type ConversationSyncView = Pick<
@@ -143,7 +144,9 @@ export function useConversationSync({
   const attended = usePageAttended();
   // While it is read here, its replies leave the Activity count alone (task #62).
   useReportViewingItem(
-    threadInView && threadOpened && attended ? `thread:${threadInView}` : undefined,
+    threadInView && threadOpened && attended
+      ? activityItemKey({ conversationId: conversation.conversationId, threadRootId: threadInView })
+      : undefined,
   );
   useEffect(() => {
     if (!threadInView || !threadInViewSequence || !threadOpened || reading.current || !attended)
