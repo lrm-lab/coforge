@@ -7,6 +7,7 @@ import { HintText } from "#src/components/base/input/hint-text";
 import { Input } from "#src/components/base/input/input";
 import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
+import { useLoginArt } from "./login-art-state";
 import { signInWithAccountPassword } from "./sign-in.functions";
 
 type Problem =
@@ -52,6 +53,7 @@ export function PasswordSignInForm({
   const [password, setPassword] = useState("");
   const [problem, setProblem] = useState<Problem | null>(null);
   const [submitting, guard] = useSubmitGuard();
+  const art = useLoginArt();
 
   // Typing again clears what the last attempt said.
   const edit = (set: (value: string) => void) => (value: string) => {
@@ -68,7 +70,9 @@ export function PasswordSignInForm({
       try {
         const result = await submit({ data: { account, password, returnTo } });
         if (result.ok) {
-          // Stay busy through the navigation: the page is replaced, not returned to.
+          // The agent beside the form says hello first (jing, 11-10); then, busy through the
+          // navigation: the page is replaced, not returned to.
+          await art.welcome(result.welcomed ? "back" : "joined");
           window.location.assign(result.next);
           return STAY_PENDING;
         }
@@ -98,7 +102,12 @@ export function PasswordSignInForm({
           type="password"
           autoComplete="current-password"
           value={password}
-          onChange={edit(setPassword)}
+          onChange={(value) => {
+            edit(setPassword)(value);
+            art.lookAway(value.length > 0);
+          }}
+          // The agent looks away while a password is being typed, and back once the field is left.
+          onFocusChange={(focused) => art.lookAway(focused && password.length > 0)}
           isInvalid={problem === "invalid_credentials"}
         />
         {problem ? (

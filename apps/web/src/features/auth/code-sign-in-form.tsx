@@ -6,6 +6,7 @@ import { HintText } from "#src/components/base/input/hint-text";
 import { Input } from "#src/components/base/input/input";
 import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
+import { useLoginArt } from "./login-art-state";
 import { isSignInCode, parseCodeDestination } from "./code-destination";
 import { CodeInput, codeProblemText, SendCodeRow } from "./send-code-row";
 import { requestSignInCode, signInWithCode } from "./sign-in-code.functions";
@@ -38,6 +39,7 @@ export function CodeSignInForm({
   const [code, setCode] = useState("");
   const [problem, setProblem] = useState<Problem | null>(null);
   const [submitting, guard] = useSubmitGuard();
+  const art = useLoginArt();
   const codeSending = useCodeSending({
     destination,
     request: (typed) => send({ data: { destination: typed } }),
@@ -59,7 +61,9 @@ export function CodeSignInForm({
       try {
         const result = await submit({ data: { destination, code, returnTo } });
         if (result.ok) {
-          // Stay busy through the navigation: the page is replaced, not returned to.
+          // The agent beside the form says hello first (jing, 11-10); then, busy through the
+          // navigation: the page is replaced, not returned to.
+          await art.welcome(result.welcomed ? "back" : "joined");
           window.location.assign(result.next);
           return STAY_PENDING;
         }

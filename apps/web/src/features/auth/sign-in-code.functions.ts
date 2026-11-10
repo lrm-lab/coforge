@@ -72,5 +72,10 @@ export const signInWithCode = createServerFn({ method: "POST" })
     });
     if (result.status !== "signed_in") return { ok: false, problem: result.status } as const;
     appendResponseHeader("set-cookie", result.sessionCookie);
-    return { ok: true, next: nextHrefAfterSignIn(result.welcomed, data.returnTo) } as const;
+    return {
+      ok: true,
+      next: nextHrefAfterSignIn(result.welcomed, data.returnTo),
+      // Whether the account had signed in before: the page greets it back, or welcomes it aboard.
+      welcomed: result.welcomed,
+    } as const;
   });

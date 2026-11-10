@@ -19,10 +19,11 @@ import {
 
 /**
  * The split sign-in page: the brand panel (arch, agent, tagline, platforms) beside the form from
- * `lg` up, the form alone below it. Checks the two tabs, the fields each shows, the password tab's
- * "email code" link and its way back, and that the brand panel is there at 1440 and 1024 and gone
- * at 390 (where the form must still fit the width), then shoots the page at 1440, 768 and 390,
- * light and dark, under `.amp/e2e/login-split/`.
+ * `xl` up, the form alone below it. Checks the two tabs, the fields each shows, the password tab's
+ * "email code" link and its way back, that the brand panel is there at 1440 and gone at 768 and
+ * 390 (where the form must still fit the width), that the form's card keeps one width at 1440 and
+ * 1920, and that the agent shuts its eyes while a password is typed, then shoots the page at 1440,
+ * 768 and 390, light and dark, under `.amp/e2e/login-split/`.
  *
  * Opt-in like the other browser E2Es, and brings its own servers (`e2e-sign-in-harness.ts`):
  *
@@ -161,8 +162,8 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     for (const width of [1440, 768, 390]) {
       await setViewport(width);
       await browser("wait", "300");
-      // The panel shows from `lg` (1024) up only, and the form always fits the window.
-      expect(await brandVisible()).toBe(width >= 1024);
+      // The panel shows from `xl` (1280) up only, and the form always fits the window.
+      expect(await brandVisible()).toBe(width >= 1280);
       expect(await fits()).toBe(true);
       for (const [tab, name] of [
         [codeTab, "phone"],
@@ -181,6 +182,33 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
       }
     }
 
+    // The card is as wide as the form and its 7.875rem sides, whatever the window (jing, 11-10).
+    const cardWidth = () =>
+      evaluate<number>(`Math.round(document.querySelector("main").getBoundingClientRect().width)`);
+    for (const width of [1440, 1920]) {
+      await setViewport(width);
+      await browser("wait", "300");
+      expect(await cardWidth()).toBe(636);
+    }
+
+    // While a password is typed the agent smiles with its eyes shut; leaving the field opens them.
+    await setViewport(1440);
+    await browser("eval", `${passwordTab}.click()`);
+    await waitFor(`!!document.querySelector(${JSON.stringify(passwordFieldSelector)})`);
+    const smiling = () =>
+      evaluate<boolean>(
+        `document.querySelector(".login-art__face--smile").hasAttribute("data-shown")`,
+      );
+    expect(await smiling()).toBe(false);
+    await browser("click", passwordFieldSelector);
+    await browser("type", passwordFieldSelector, "hunter22");
+    await browser("wait", "300");
+    expect(await smiling()).toBe(true);
+    await browser("eval", `document.activeElement.blur()`);
+    await browser("wait", "300");
+    expect(await smiling()).toBe(false);
+    await browser("eval", `${codeTab}.click()`);
+
     // The agent floats and the shadow breathes on one beat, unless motion is reduced.
     await setViewport(1440);
     await browser("hover", ".login-art");
@@ -198,7 +226,7 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     await browser("screenshot", join(artifacts, "arch-open-1440.png"));
     await browser("mouse", "move", "1200", "100");
     const animations = await evaluate<{ agent: string; shadow: string }>(
-      `({ agent: getComputedStyle(document.querySelector(".login-art__agent")).animationDuration, shadow: getComputedStyle(document.querySelector(".login-art__shadow")).animationDuration })`,
+      `({ agent: getComputedStyle(document.querySelector(".login-art__float")).animationDuration, shadow: getComputedStyle(document.querySelector(".login-art__shadow")).animationDuration })`,
     );
     expect(animations.agent).toBe(animations.shadow);
     // The designer's copy, in Chinese.
