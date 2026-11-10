@@ -32,7 +32,7 @@ function coordinator(options: {
       },
     }),
     agentProcessManager: { session: () => (options.idle === false ? undefined : session) },
-    deliveryQueue: { hasQueued: () => false, shouldHold: () => false },
+    deliveryGate: { hasQueued: () => false, shouldHold: () => false },
     currentActivityLaunches: new Map([["agent-a", { launchId: "launch-1" }]]),
   } as never);
   return { coordinator, asked, delivered };

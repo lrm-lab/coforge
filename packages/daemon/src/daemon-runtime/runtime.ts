@@ -147,7 +147,7 @@ import {
   reportServerFeatureAvailability,
   resolveContextViewProviderSource,
 } from "./context-view-runtime-wiring";
-import { AgentDeliveryQueue } from "./agent-delivery-queue";
+import { AgentDeliveryGate } from "./agent-delivery-gate";
 import { ReplyIntentPublisher } from "./reply-intent-publisher";
 import {
   AgentActivityPublisher,
@@ -213,7 +213,7 @@ export class DaemonRuntime {
   /** Durable context-view indexing and availability reporting for this Workspace runtime. */
   readonly #contextViewService: AgentContextViewService;
   /** Busy-gated delivery holding for providers with no safe busy path. */
-  readonly #deliveryQueue = new AgentDeliveryQueue();
+  readonly #deliveryGate = new AgentDeliveryGate();
   /** Launch failures of message-triggered wakes, per Agent. */
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
   // Before the ports objects that reference them.
@@ -221,7 +221,7 @@ export class DaemonRuntime {
   #sendAgentStatus = (agentId: string, status: "active" | "inactive"): void =>
     sendAgentStatus(this.#statusReportPorts, agentId, status);
   readonly #exitedDelivery: AgentExitedDelivery = assembleExitedDelivery({
-    deliveryQueue: this.#deliveryQueue,
+    deliveryGate: this.#deliveryGate,
     wakeLaunchFailures: this.#wakeLaunchFailures,
     sendAgentStatus: this.#sendAgentStatus,
     messageAttention: () => this.#messageAttention,
@@ -253,7 +253,7 @@ export class DaemonRuntime {
       this.#activity(agentId, kind, level, detail, extra),
     inputDrain: () => this.#inputDrain,
     working: this.#isWorking,
-    deliveryQueue: () => this.#deliveryQueue,
+    deliveryGate: () => this.#deliveryGate,
     agentLaunches: () => this.#agentLaunches,
     stopState: () => this.#stopState,
     runnerHold: () => this.#runnerHold,
@@ -280,7 +280,7 @@ export class DaemonRuntime {
   });
   readonly #stalledRecoverySweep = stalledRecoverySweep({
     agentIds: () => this.#agentProcessManager.runningAgentIds(),
-    hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
+    hasQueuedDeliveries: (agentId) => this.#deliveryGate.hasQueued(agentId),
     runnerHold: () => this.#runnerHold !== undefined,
     isStopping: (agentId) => this.#stopState.stopping(agentId),
     release: this.#runtimeRelease,
@@ -301,11 +301,11 @@ export class DaemonRuntime {
   readonly #wakeRecycle = new WakeRecycle({
     provider: (provider) => this.#createProvider(provider),
     inputQueue: (agentId) => this.#inputDrain.get(agentId),
-    hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
+    hasQueuedDeliveries: (agentId) => this.#deliveryGate.hasQueued(agentId),
   });
   readonly #runtimeErrorHold = assembleRuntimeErrorDeliveryHold({
     stateDirectory: () => this.stateDirectory,
-    deliveryQueue: this.#deliveryQueue,
+    deliveryGate: this.#deliveryGate,
     flush: (agentId, held) => this.#flushHeldDeliveries(agentId, held),
   });
   readonly #reminders: ReminderScheduler;
@@ -334,7 +334,7 @@ export class DaemonRuntime {
     runnerHeld: () => this.#runnerHold !== undefined,
     processManager: () => this.#agentProcessManager,
     launches: () => this.#currentActivityLaunches,
-    deliveryQueue: () => this.#deliveryQueue,
+    deliveryGate: () => this.#deliveryGate,
     agentLaunches: () => this.#agentLaunches,
     stopState: () => this.#stopState,
     contextView: () => this,
@@ -357,7 +357,7 @@ export class DaemonRuntime {
   readonly #agentStatusSequences = new Map<string, number>();
   /** The per-Agent offline record a runtime error leaves (`agent-offline-residency.ts`). */
   readonly #offlineResidency = new AgentOfflineResidency({
-    endHoldForNextLaunch: (agentId) => this.#deliveryQueue.endHoldForNextLaunch(agentId),
+    endHoldForNextLaunch: (agentId) => this.#deliveryGate.endHoldForNextLaunch(agentId),
     forgetRuntimeErrorHold: (agentId) => this.#runtimeErrorHold.forget(agentId),
     keepInputDeliveriesForNextLaunch: (agentId, error) =>
       this.#exitedDelivery.keepInputDeliveriesForNextLaunch(agentId, error),
@@ -511,7 +511,7 @@ export class DaemonRuntime {
       stateDirectory,
       transport: () => this.#transport,
       consumedSeqs: this.#consumedSeqs,
-      deliveryQueue: this.#deliveryQueue,
+      deliveryGate: this.#deliveryGate,
       runtimeRelease: this.#runtimeRelease,
       processManager: this.#agentProcessManager,
       launchCustody: () => this.#launchCustody,
@@ -588,7 +588,7 @@ export class DaemonRuntime {
     this.#agentControl = control.agentControl;
     this.#observationPorts = {
       activityPublisher: this.#activityPublisher,
-      deliveryQueue: this.#deliveryQueue,
+      deliveryGate: this.#deliveryGate,
       offlineResidency: this.#offlineResidency,
       usageReport: this.#usageReport,
       phaseBookkeeping: this.#phaseBookkeeping,
@@ -617,7 +617,7 @@ export class DaemonRuntime {
     };
     this.#launchCustody = new AgentLaunchCustody({
       messageAttention: this.#messageAttention,
-      deliveryQueue: this.#deliveryQueue,
+      deliveryGate: this.#deliveryGate,
       inputDrain: this.#inputDrain,
       agentProcessManager: this.#agentProcessManager,
       currentActivityLaunches: this.#currentActivityLaunches,
@@ -636,7 +636,7 @@ export class DaemonRuntime {
       revokeAgentApiKey: (agentId, apiKey, scope) =>
         this.#revokeAgentApiKey(agentId, apiKey, scope),
       messageAttention: this.#messageAttention,
-      deliveryQueue: this.#deliveryQueue,
+      deliveryGate: this.#deliveryGate,
       runtimeErrorHold: this.#runtimeErrorHold,
       offlineResidency: this.#offlineResidency,
       sendAgentStatus: this.#sendAgentStatus,
@@ -653,7 +653,7 @@ export class DaemonRuntime {
       activityPublisher: this.#activityPublisher,
       phaseBookkeeping: this.#phaseBookkeeping,
       contexts: this.#contexts,
-      deliveryQueue: this.#deliveryQueue,
+      deliveryGate: this.#deliveryGate,
       usageReport: this.#usageReport,
       fastModeWarned: this.#fastModeWarned,
       sync: this.#sync,
@@ -788,7 +788,7 @@ export class DaemonRuntime {
       activity: (agentId, detailKind, level, detail, extra) =>
         this.#activity(agentId, detailKind, level, detail, extra),
       messageAttention: this.#messageAttention,
-      deliveryQueue: this.#deliveryQueue,
+      deliveryGate: this.#deliveryGate,
       inputDrain: this.#inputDrain,
       mentionDeliveries: this.#mentionDeliveries,
       launchCustody: this.#launchCustody,
@@ -998,7 +998,7 @@ export class DaemonRuntime {
       exitedDelivery: this.#exitedDelivery,
       wakeLaunches: this.#wakeLaunches,
       agentLaunches: this.#agentLaunches,
-      deliveryQueue: this.#deliveryQueue,
+      deliveryGate: this.#deliveryGate,
       launchCustody: this.#launchCustody,
       inputDrain: this.#inputDrain,
       agentProcessManager: this.#agentProcessManager,
@@ -1250,7 +1250,7 @@ export class DaemonRuntime {
   #turnPorts = () => ({
     messageAttention: this.#messageAttention,
     activityPublisher: this.#activityPublisher,
-    deliveryQueue: this.#deliveryQueue,
+    deliveryGate: this.#deliveryGate,
     inboxCoordinator: this.#inboxCoordinator,
     launchCustody: this.#launchCustody,
     processManager: this.#agentProcessManager,

@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { AgentDeliveryQueue } from "#src/daemon-runtime/agent-delivery-queue";
+import { AgentDeliveryGate } from "#src/daemon-runtime/agent-delivery-gate";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { delivery, session } from "./fixtures/attention-delivery";
 
-/** The attention index wired to a real `AgentDeliveryQueue` as `message-composition.ts` wires it,
+/** The attention index wired to a real `AgentDeliveryGate` as `message-composition.ts` wires it,
  * with the Agent's deliveries held (a runtime-error backoff). */
 function heldAgent() {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   const notices: string[] = [];
   const acknowledgements: string[] = [];
   const index = new AgentMessageAttentionIndex(

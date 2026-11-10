@@ -891,7 +891,7 @@ test("which threads count as read context survives the Agent's next launch", () 
   expect(index.modelSeenSequence("agent-1", "#general:22222222")).toBe(0);
 });
 
-// A fake `hold` collaborator standing in for `AgentDeliveryQueue`, matching the seam
+// A fake `hold` collaborator standing in for `AgentDeliveryGate`, matching the seam
 // `AgentMessageAttentionIndex`'s constructor consumes (`shouldHold`/`enqueue`/`busy`) and what
 // `flush` expects back (the drained list).
 function heldQueue() {

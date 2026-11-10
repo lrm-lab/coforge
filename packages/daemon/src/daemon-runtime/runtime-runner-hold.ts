@@ -5,7 +5,6 @@ import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
 import type { RunnerHold } from "./shutdown-reason";
 import type { RunnerHoldReason } from "@lrm/coforge-sdk/internal";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
-import { dropHeldMentionsWithoutSession } from "./held-mention-sweep";
 import { MENTION_DELIVERY_TERMINAL_CODES } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 
@@ -43,13 +42,14 @@ export function releaseRunners(
       reason: state.hold.reason,
     });
   state.hold = undefined;
-  dropHeldMentionsWithoutSession({
-    inputDrain,
-    hasSession: (agentId) => Boolean(processManager.session(agentId)),
-    hasLaunch: (agentId) => agentLaunches.has(agentId),
-    dropMention: (message) =>
+  // A mention a runner hold kept queued for an Agent with no session and no launch in flight names
+  // a launch that is gone: it is settled now rather than left queued.
+  for (const [agentId] of inputDrain.entries()) {
+    if (processManager.session(agentId) || agentLaunches.has(agentId)) continue;
+    inputDrain.dropDeliveries(agentId, (message) =>
       mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
-  });
+    );
+  }
   // Copied deliberately: a finishing drain deletes its own entry mid-iteration.
   const queued = [...inputDrain.entries()].map(([agentId]) => agentId);
   for (const agentId of queued) inputDrain.ensure(agentId);

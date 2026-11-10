@@ -7,7 +7,7 @@ import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 /** A fake session whose `subscribe` listener the test drives directly, so it can
  * simulate a provider's busy/idle transitions (`progress` while a turn runs, `completed` at turn
  * end) without a real provider process. */
-export function deliveryQueueSession() {
+export function deliveryGateSession() {
   const listeners = new Set<(event: AgentRuntimeEvent) => void>();
   const exitListeners = new Set<() => void>();
   const notices: string[] = [];
@@ -81,10 +81,10 @@ export function ackGate(count: number) {
   };
 }
 
-/** A DaemonRuntime over `deliveryQueueSession` for the delivery-queue tests: no provider
+/** A DaemonRuntime over `deliveryGateSession` for the delivery-gate tests: no provider
  * process, every delivery answered through the fake session, and the connection's own ports
  * recording the acks, rejections, activities and statuses a test asserts on. */
-export async function createDeliveryQueueHarness({
+export async function createDeliveryGateHarness({
   connection,
   config,
   provider,
@@ -103,7 +103,7 @@ export async function createDeliveryQueueHarness({
 }) {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-  const fake = deliveryQueueSession();
+  const fake = deliveryGateSession();
   const statuses: AgentStatus[] = [];
   const rejections: { reason: string }[] = [];
   const runtime = new DaemonRuntime(

@@ -3,7 +3,7 @@ import { daemonIdleFacts } from "./agent-idle-facts";
 import type { ActivityDraft, BusyActivity } from "./agent-activity-publisher";
 import { RuntimeRelease } from "./runtime-release";
 import type { ReleasableLaunch, RuntimeReleasePorts, WakeRestart } from "./runtime-release";
-import type { DeliveryHoldReason } from "./agent-delivery-queue";
+import type { DeliveryHoldReason } from "./agent-delivery-gate";
 
 /** The `RuntimeRelease` construction `runtime.ts` reads as a call: its ports come from the
  * runtime's collaborators, assembled here so the construction site names them, not their
@@ -32,7 +32,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     get(agentId: string): { items: readonly unknown[]; drain?: unknown } | undefined;
   };
   working(agentId: string): boolean;
-  deliveryQueue(): {
+  deliveryGate(): {
     queuedForMs(agentId: string): number | undefined;
     explicitHold(agentId: string): DeliveryHoldReason | undefined;
     hasQueued(agentId: string): boolean;
@@ -66,13 +66,13 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     resumable: (agentId) => input.runningMentionIdentity(agentId) !== undefined,
     sessionId: (agentId) => input.stopState().sessionId(agentId),
     isStopping: (agentId) => input.stopState().stopping(agentId),
-    queuedForMs: (agentId) => input.deliveryQueue().queuedForMs(agentId),
-    explicitHold: (agentId) => input.deliveryQueue().explicitHold(agentId),
+    queuedForMs: (agentId) => input.deliveryGate().queuedForMs(agentId),
+    explicitHold: (agentId) => input.deliveryGate().explicitHold(agentId),
     daemonIdleFacts: (agentId) =>
       daemonIdleFacts({
         queue: input.inputDrain().get(agentId),
         working: input.working(agentId),
-        deliveriesQueued: input.deliveryQueue().hasQueued(agentId),
+        deliveriesQueued: input.deliveryGate().hasQueued(agentId),
         launching: input.agentLaunches().has(agentId),
         stopping:
           input.stopState().isStopping(agentId) || input.processManager().isStopping(agentId),
@@ -80,9 +80,9 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
         migrating: input.migrations()?.holds(agentId) === true,
       }),
     hasParkedWork: (agentId) =>
-      input.deliveryQueue().hasQueued(agentId) || input.deliveryQueue().hasHeldAppItems(agentId),
+      input.deliveryGate().hasQueued(agentId) || input.deliveryGate().hasHeldAppItems(agentId),
     flushParked: (agentId) => input.releaseSurvivingHolds(agentId),
-    takeParked: (agentId) => input.deliveryQueue().discardPending(agentId),
+    takeParked: (agentId) => input.deliveryGate().discardPending(agentId),
     wake: (agentId, restart) => input.wakeAgent(agentId, restart),
     publish: (agentId, launch, ...draft) =>
       input.activityPublisher().publish(agentId, launch, input.activity(agentId, ...draft)),

@@ -146,7 +146,7 @@ fence，同样走下线路径：可见 `detail` 为
 （10 秒起、最长 5 分钟），Agent 保持在线；夹在两次相同错误之间的这类错误也不清零已有计数。
 既然这类错误不会让 Agent 下线，排队就没有上限：每个退避台阶记一行
 `agent.runtime.delivery_held`（`agent_id`、`error_class`、`attempt`、`retry_in_ms`、`held`、`reason`，
-不含消息正文）。`AgentDeliveryQueue` 没有容量上限，不会因为排队过多而丢弃投递（与参考客户端一致）；同一个
+不含消息正文）。`AgentDeliveryGate` 没有容量上限，不会因为排队过多而丢弃投递（与参考客户端一致）；同一个
 `deliveryId` 的重发（新的 requestId）只占一个位置，仍会 ACK，通知也只算一条消息。
 
 同一个 launch 内，连续 5 次明确 HTTP 404 且分类为 `NotFoundError` 的错误也会熔断，
@@ -160,7 +160,7 @@ class streak 随 launch 隔离，触发后清零，沿用 `runtime_error_fenced`
 换模型/升级套餐）、`BillingError`（provider 余额耗尽，无 `requiredAction`）和同一指纹
 连续 3 次或连续 5 次 HTTP 404 触发的熔断（`runtime_error_fenced`，无 `requiredAction`）。下线即终态驻留：
 进程结束后不保留 restart config，Daemon 也不自行重启。后续投递由
-Daemon 接管：排入 `AgentDeliveryQueue` 等待下一次 launch 并立即 ACK，同时重发
+Daemon 接管：排入 `AgentDeliveryGate` 等待下一次 launch 并立即 ACK，同时重发
 `inactive` 与该错误 Activity（更高的 clientSeq）；已消费的投递仍只 ACK、不再排队。
 下一次 launch 的首个 notice 呈现这些排队的投递（或服务端恢复通知覆盖它们）。显式
 Stop、下一次 `active` 状态或 Agent 离开本机时清除该记录——Stop 之后投递恢复为

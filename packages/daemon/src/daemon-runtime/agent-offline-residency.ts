@@ -30,7 +30,7 @@ export type AgentOfflineResidencyPorts = Readonly<{
   endHoldForNextLaunch(agentId: string): void;
   /** Forgets the Agent's runtime-error recovery streaks (backoff and fence). */
   forgetRuntimeErrorHold(agentId: string): void;
-  /** Moves the launch's still-pending input-queue deliveries to `AgentDeliveryQueue`, ACKed. */
+  /** Moves the launch's still-pending input-queue deliveries to `AgentDeliveryGate`, ACKed. */
   keepInputDeliveriesForNextLaunch(agentId: string, error: Error): void;
   /** Closes the launch's input queue, rejecting non-delivery input. */
   closeAgentInputQueue(agentId: string, error: unknown): void;

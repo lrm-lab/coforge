@@ -6,7 +6,7 @@ import {
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import type { ActivityLaunch } from "./activity-launch";
 import type { ActivityDraft, AgentActivityPublisher } from "./agent-activity-publisher";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import type { TaskIdleNudge } from "./task-idle-nudge";
 import type { AgentConfigApply } from "./agent-config-apply";
@@ -24,7 +24,7 @@ type Drafts = ReturnType<typeof import("./agent-activity-drafts").agentActivityD
 export type RuntimeTurnPorts = {
   messageAttention: AgentMessageAttentionIndex;
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   inboxCoordinator: AgentInboxCoordinator;
   launchCustody: AgentLaunchCustody;
   processManager: AgentProcessManager;
@@ -133,7 +133,7 @@ export function reconcileIdleTurn(
 
 /** Presents what was kept across an exit or a runtime's end, as at idle. */
 export function releaseSurvivingHolds(ports: RuntimeTurnPorts, agentId: string): void {
-  ports.launchCustody.flushSurvivingDeliveryQueue(agentId);
+  ports.launchCustody.flushSurvivingDeliveries(agentId);
   ports.inboxCoordinator.releaseHeldAppItems(agentId);
   ports.inboxCoordinator.releaseFallbackNotices(agentId);
 }
@@ -141,12 +141,12 @@ export function releaseSurvivingHolds(ports: RuntimeTurnPorts, agentId: string):
 /** Whether the Agent is mid-turn, by its last busy Activity or a notice just written. */
 export function isWorking(ports: RuntimeTurnPorts, agentId: string): boolean {
   return (
-    ports.activityPublisher.lastBusy(agentId) !== undefined || ports.deliveryQueue.isBusy(agentId)
+    ports.activityPublisher.lastBusy(agentId) !== undefined || ports.deliveryGate.isBusy(agentId)
   );
 }
 
 export function releaseTurnEndHolds(ports: RuntimeTurnPorts, agentId: string): void {
-  const held = ports.deliveryQueue.idle(agentId);
+  const held = ports.deliveryGate.idle(agentId);
   if (held.length) flushHeldDeliveries(ports, agentId, held);
   // Flush first: notifying marks busy synchronously, so app items re-hold for the next
   // turn rather than racing the notice that just started it.

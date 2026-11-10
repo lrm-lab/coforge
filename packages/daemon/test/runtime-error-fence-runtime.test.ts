@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
-import { ackGate, createDeliveryQueueHarness } from "./fixtures/delivery-queue";
+import { ackGate, createDeliveryGateHarness } from "./fixtures/delivery-gate";
 
 /** The runtime-level companion to `runtime-error-fence-transient.test.ts`: the same three
  * transient classes, driven through a whole DaemonRuntime, so the observable claim is the one a
@@ -34,7 +34,7 @@ test.each([
   async (_kind, message) => {
     const stateDirectory = mkdtempSync(join(tmpdir(), "coforge-fence-runtime-state-"));
     const acks = ackGate(1);
-    const { runtime, fake, deliver, statuses, rejections } = await createDeliveryQueueHarness({
+    const { runtime, fake, deliver, statuses, rejections } = await createDeliveryGateHarness({
       connection,
       config,
       provider: "pi",

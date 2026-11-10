@@ -125,7 +125,7 @@ test("cleanup of a quota wait does not report the agent inactive", async () => {
     agentApiKeys: new Map(),
     revokeAgentApiKey: async () => {},
     messageAttention: { clearAgent() {} },
-    deliveryQueue: { clearAgent() {} },
+    deliveryGate: { clearAgent() {} },
     runtimeErrorHold: { forget() {} },
     offlineResidency: offline,
     sendAgentStatus(_agentId: string, status: "active" | "inactive") {

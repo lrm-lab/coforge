@@ -3,7 +3,7 @@ import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { ActivityLaunch } from "./activity-launch";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { stalledTurnObservation } from "./stalled-turn-indicator";
@@ -16,7 +16,7 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
  * held-state releases `recover` runs regardless of recovery content. */
 export type AgentLaunchCustodyPorts = Readonly<{
   messageAttention: AgentMessageAttentionIndex;
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   inputDrain: AgentInputDrain;
   agentProcessManager: AgentProcessManager;
   currentActivityLaunches: ReadonlyMap<string, ActivityLaunch>;
@@ -75,13 +75,13 @@ export class AgentLaunchCustody {
       });
       throw error;
     }
-    // Reconcile whatever AgentDeliveryQueue held across an unexpected exit now that this launch's
+    // Reconcile whatever AgentDeliveryGate held across an unexpected exit now that this launch's
     // recovery pass has run. The pass told the Agent about the targets it announced: a held
     // delivery for one of those is redundant and dropped (each was acknowledged when held). Any
     // other target, one the recovery named but found already read included, was not mentioned, so
     // nothing has told the Agent about it: flush those now, treating the fresh session as idle.
-    this.ports.deliveryQueue.discardTargets(agentId, announced);
-    this.flushSurvivingDeliveryQueue(agentId);
+    this.ports.deliveryGate.discardTargets(agentId, announced);
+    this.flushSurvivingDeliveries(agentId);
     // App items (reminders, etc.) are a separate subsystem from canonical Message unread state
     // (`agent-app-inbox/`); `recover()` above never mentions them, so a held one is always
     // released here regardless of `hasRecoveryContent`, never dropped. A surviving fallback
@@ -93,11 +93,11 @@ export class AgentLaunchCustody {
     this.ports.releaseFallbackNotices(agentId);
   }
 
-  /** Flushes whatever `AgentDeliveryQueue` held for `agentId` across an unexpected
+  /** Flushes whatever `AgentDeliveryGate` held for `agentId` across an unexpected
    * exit, treating the (fresh or just-recovered) session as idle — used when nothing else has
    * told the Agent about it. */
-  flushSurvivingDeliveryQueue(agentId: string): void {
-    const held = this.ports.deliveryQueue.idle(agentId);
+  flushSurvivingDeliveries(agentId: string): void {
+    const held = this.ports.deliveryGate.idle(agentId);
     if (!held.length) return;
     void this.ports.messageAttention.flush(agentId, held).catch((error: unknown) => {
       // Already acknowledged when held: they come back as unread on the next Start or daemon

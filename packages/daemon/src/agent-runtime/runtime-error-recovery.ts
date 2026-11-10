@@ -15,7 +15,7 @@ import { PHASE_EDGES } from "./runtime-phases";
  *
  * Pure bookkeeping on purpose, matching `LaunchFailureBackoff`'s shape: no timers, no I/O. The
  * caller (`daemon-runtime/runtime-error-delivery-hold.ts`) decides what the computed delay
- * means — releasing `AgentDeliveryQueue`'s explicit hold — and owns the actual timer.
+ * means — releasing `AgentDeliveryGate`'s explicit hold — and owns the actual timer.
  *
  * Two independent streaks live here; the caller decides which runtime events reset each one
  * (`runtimeErrorRecoverySignal` below names what a raw event signals):

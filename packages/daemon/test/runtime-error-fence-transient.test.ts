@@ -18,10 +18,10 @@ type Launch = { runtimeErrorClassFence?: RuntimeErrorClassFence };
 function harness() {
   const held = new Map<
     string,
-    ReturnType<RuntimeErrorDeliveryHoldPorts["deliveryQueue"]["explicitHold"]>
+    ReturnType<RuntimeErrorDeliveryHoldPorts["deliveryGate"]["explicitHold"]>
   >();
   const hold = new RuntimeErrorDeliveryHold({
-    deliveryQueue: {
+    deliveryGate: {
       hold: (id, reason) => {
         held.set(id, reason);
       },
@@ -113,7 +113,7 @@ test("a transient repeat never resets the fence streak of a real one beside it",
 test("every backoff step logs its rung, its wait and the queue depth, never the mail", async () => {
   const { records } = await captureDaemonLogs(async () => {
     const hold = new RuntimeErrorDeliveryHold({
-      deliveryQueue: {
+      deliveryGate: {
         hold: () => {},
         release: () => [],
         endHoldForNextLaunch: () => {},

@@ -74,11 +74,7 @@ import {
 import type { LogRecord } from "@logtape/logtape";
 import { captureDaemonLogs } from "./log-capture";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
-import {
-  ackGate,
-  createDeliveryQueueHarness,
-  deliveryQueueSession,
-} from "./fixtures/delivery-queue";
+import { ackGate, createDeliveryGateHarness, deliveryGateSession } from "./fixtures/delivery-gate";
 import { createMessageHarness } from "./fixtures/message-harness";
 import { messageRecord } from "./fixtures/message-record";
 
@@ -7015,7 +7011,7 @@ describe("DaemonRuntime", () => {
     async (ending) => {
       const credentials = new InMemoryDaemonCredentialStore();
       await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-      const sessions = new Map<string, ReturnType<typeof deliveryQueueSession>>();
+      const sessions = new Map<string, ReturnType<typeof deliveryGateSession>>();
       const readings: import("@lrm/coforge-sdk/internal").AgentContextUsage[] = [];
       const runtime = new DaemonRuntime(
         connection,
@@ -7023,7 +7019,7 @@ describe("DaemonRuntime", () => {
           provider: "pi",
           async createAgentSession(options) {
             if (!options.agentId) throw new Error("Test session requires an Agent ID");
-            const fake = deliveryQueueSession();
+            const fake = deliveryGateSession();
             sessions.set(options.agentId, fake);
             return fake.session;
           },
@@ -7089,7 +7085,7 @@ describe("DaemonRuntime", () => {
     async (exitMode, pendingOutput) => {
       const credentials = new InMemoryDaemonCredentialStore();
       await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-      const sessions: ReturnType<typeof deliveryQueueSession>[] = [];
+      const sessions: ReturnType<typeof deliveryGateSession>[] = [];
       const readings: import("@lrm/coforge-sdk/internal").AgentContextUsage[] = [];
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
       const runtime = new DaemonRuntime(
@@ -7097,7 +7093,7 @@ describe("DaemonRuntime", () => {
         () => ({
           provider: "pi",
           async createAgentSession() {
-            const fake = deliveryQueueSession();
+            const fake = deliveryGateSession();
             sessions.push(fake);
             return {
               ...fake.session,
@@ -8653,14 +8649,14 @@ describe("DaemonRuntime", () => {
 });
 
 describe("Agent delivery queue", () => {
-  function deliveryQueueHarness(
+  function deliveryGateHarness(
     provider: AgentRuntimeConfig["provider"],
     acks = ackGate(0),
     stateDirectory?: string,
     onActivity?: (activity: import("@lrm/coforge-sdk/internal").AgentActivity) => void,
     agentConfig: Partial<AgentRuntimeConfig> = {},
   ) {
-    return createDeliveryQueueHarness({
+    return createDeliveryGateHarness({
       connection,
       config,
       provider,
@@ -8677,7 +8673,7 @@ describe("Agent delivery queue", () => {
     // that provider-level behavior. At the daemon level this fake session stands in for any
     // steer-mode provider, so `shouldHold` for "kiro" now behaves exactly like "pi" below.
     const acks = ackGate(1);
-    const { fake, deliver } = await deliveryQueueHarness("kiro", acks);
+    const { fake, deliver } = await deliveryGateHarness("kiro", acks);
 
     fake.emit({ type: "progress" });
     await deliver(1);
@@ -8688,7 +8684,7 @@ describe("Agent delivery queue", () => {
 
   test("an idle Kiro-mode Agent still delivers immediately", async () => {
     const acks = ackGate(1);
-    const { fake, deliver } = await deliveryQueueHarness("kiro", acks);
+    const { fake, deliver } = await deliveryGateHarness("kiro", acks);
 
     await deliver(1);
     await acks.done;
@@ -8698,7 +8694,7 @@ describe("Agent delivery queue", () => {
 
   test("a busy steer-mode Agent (Pi) is delivered to immediately, unchanged by this queue", async () => {
     const acks = ackGate(1);
-    const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+    const { fake, deliver } = await deliveryGateHarness("pi", acks);
 
     fake.emit({ type: "progress" });
     await deliver(1);
@@ -8711,7 +8707,7 @@ describe("Agent delivery queue", () => {
   // emits any event) has no live provider to exercise it through DaemonRuntime's public API any
   // more (Kiro moved to steer — see above); it stays covered at the unit level in
   // agent-message-attention-index.test.ts ("marks busy synchronously … before the session
-  // accepts it") and agent-delivery-queue.test.ts ("a queue_until_idle mode only holds while
+  // accepts it") and agent-delivery-gate.test.ts ("a queue_until_idle mode only holds while
   // busy", via the new setMode primitive that exists for exactly this).
 
   test("a fallback notice (steer could not deliver it) is held and redelivered once at turn end, without a second ACK", async () => {
@@ -8722,7 +8718,7 @@ describe("Agent delivery queue", () => {
     // AgentRuntimeEvent any provider can raise; this fake session raises it directly to prove the
     // daemon's own hold-and-redeliver-once-idle side, independent of Kiro's wire protocol.
     const acks = ackGate(1);
-    const { fake, deliver } = await deliveryQueueHarness("kiro", acks);
+    const { fake, deliver } = await deliveryGateHarness("kiro", acks);
 
     await deliver(1); // ordinary idle delivery, ACKed immediately and unrelated to the fallback
     await acks.done;
@@ -8741,7 +8737,7 @@ describe("Agent delivery queue", () => {
 
   test("a fallback notice survives an unexpected exit and is redelivered exactly once on the next launch", async () => {
     const acks = ackGate(0);
-    const { runtime, fake } = await deliveryQueueHarness("kiro", acks);
+    const { runtime, fake } = await deliveryGateHarness("kiro", acks);
 
     fake.emit({ type: "notice-undelivered", text: "STEERED-BUT-NEVER-INJECTED" });
     expect(fake.notices).toEqual([]);
@@ -8799,7 +8795,7 @@ describe("Agent delivery queue", () => {
 
     test("a retryable runtime error holds a new delivery and releases it once the backoff elapses", async () => {
       const acks = ackGate(1);
-      const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+      const { fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
 
       fake.emit({ type: "error", message: "connect ECONNRESET" });
@@ -8822,7 +8818,7 @@ describe("Agent delivery queue", () => {
       // so the Agent is never fenced.
       const acks = ackGate(1);
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake, deliver } = await deliveryQueueHarness(
+      const { runtime, fake, deliver } = await deliveryGateHarness(
         "pi",
         acks,
         undefined,
@@ -8854,7 +8850,7 @@ describe("Agent delivery queue", () => {
       "runtime progress during a backoff ends it and flushes the held delivery at once (%s)",
       async (_kind, progress) => {
         const acks = ackGate(1);
-        const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+        const { fake, deliver } = await deliveryGateHarness("pi", acks);
         jest.useFakeTimers();
 
         // A classified error, whose backoff its own turn end leaves holding.
@@ -8878,7 +8874,7 @@ describe("Agent delivery queue", () => {
       "%s during a backoff leaves the held delivery held until the delay elapses",
       async (_kind, between) => {
         const acks = ackGate(1);
-        const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+        const { fake, deliver } = await deliveryGateHarness("pi", acks);
         jest.useFakeTimers();
 
         // A classified error, whose turn end leaves its backoff holding.
@@ -8899,7 +8895,7 @@ describe("Agent delivery queue", () => {
 
     test("output while busy mid-turn ends a backoff, and the held delivery is delivered at that turn's end", async () => {
       const acks = ackGate(1);
-      const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+      const { fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
 
       fake.emit({ type: "text-delta", text: "working" }); // the Agent is busy in a turn
@@ -8920,7 +8916,7 @@ describe("Agent delivery queue", () => {
       ),
     )("three identical errors with %s between them: %s", async (_kind, outcome, between) => {
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake } = await deliveryQueueHarness("pi", undefined, undefined, (activity) =>
+      const { runtime, fake } = await deliveryGateHarness("pi", undefined, undefined, (activity) =>
         activities.push(activity),
       );
       try {
@@ -8943,7 +8939,7 @@ describe("Agent delivery queue", () => {
       "a %s turn end between three identical errors resets the fence's streak",
       async (status) => {
         const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-        const { runtime, fake } = await deliveryQueueHarness(
+        const { runtime, fake } = await deliveryGateHarness(
           "pi",
           undefined,
           undefined,
@@ -8967,7 +8963,7 @@ describe("Agent delivery queue", () => {
 
     test("a non-retryable runtime error does not hold the next delivery", async () => {
       const acks = ackGate(1);
-      const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+      const { fake, deliver } = await deliveryGateHarness("pi", acks);
 
       fake.emit({ type: "error", message: "the request timed out after 60000ms" });
       await deliver(1);
@@ -8977,7 +8973,7 @@ describe("Agent delivery queue", () => {
 
     test("output resets the backoff streak, so the next failure starts at the base delay again", async () => {
       const acks = ackGate(2);
-      const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+      const { fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
 
       // First streak: fail, let it back off and release on its own.
@@ -9004,7 +9000,7 @@ describe("Agent delivery queue", () => {
 
     test("a turn end ends the backoff of an unclassified error and flushes what it held", async () => {
       const acks = ackGate(1);
-      const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+      const { fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
 
       fake.emit({ type: "error", message: "something odd happened" });
@@ -9026,7 +9022,7 @@ describe("Agent delivery queue", () => {
       "a classified retryable error's backoff keeps holding across a turn end with no output (%s: %s, turn %s)",
       async (_class, message, status) => {
         const acks = ackGate(1);
-        const { fake, deliver } = await deliveryQueueHarness("pi", acks);
+        const { fake, deliver } = await deliveryGateHarness("pi", acks);
         jest.useFakeTimers();
 
         fake.emit({ type: "error", message });
@@ -9063,7 +9059,7 @@ describe("Agent delivery queue", () => {
       "three consecutive failures with the same fingerprint trip the fence, reporting it in CoForge's own words (%s)",
       async (_hint, hints, errorClass, errorReason) => {
         const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-        const { runtime, fake } = await deliveryQueueHarness(
+        const { runtime, fake } = await deliveryGateHarness(
           "pi",
           undefined,
           undefined,
@@ -9124,7 +9120,7 @@ describe("Agent delivery queue", () => {
 
     test("a tripped fence takes the Agent offline: it keeps custody of later deliveries until a fresh start", async () => {
       const acks = ackGate(2);
-      const { runtime, fake, deliver, statuses, rejections } = await deliveryQueueHarness(
+      const { runtime, fake, deliver, statuses, rejections } = await deliveryGateHarness(
         "pi",
         acks,
       );
@@ -9155,7 +9151,7 @@ describe("Agent delivery queue", () => {
 
     test("the fence trip's Activity is restated, at a higher clientSeq, on a kept delivery", async () => {
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake, deliver, rejections } = await deliveryQueueHarness(
+      const { runtime, fake, deliver, rejections } = await deliveryGateHarness(
         "pi",
         undefined,
         undefined,
@@ -9189,7 +9185,7 @@ describe("Agent delivery queue", () => {
 
     test("an explicit Stop discards the backoff and fence streaks for the next launch", async () => {
       const acks = ackGate(1);
-      const { runtime, fake, deliver } = await deliveryQueueHarness("pi", acks);
+      const { runtime, fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
 
       fake.emit({ type: "error", message: "connect ECONNRESET" });
@@ -9231,7 +9227,7 @@ describe("Agent delivery queue", () => {
 
     test("a runtime started again after stopping mid-backoff delivers without waiting it out", async () => {
       const acks = ackGate(1);
-      const { runtime, fake, deliver } = await deliveryQueueHarness("pi", acks);
+      const { runtime, fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
 
       fake.emit({ type: "error", message: "connect ECONNRESET" });
@@ -9266,7 +9262,7 @@ describe("Agent delivery queue", () => {
     async function idleWithUnreadMessage() {
       const acks = ackGate(1);
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const harness = await deliveryQueueHarness("pi", acks, undefined, (activity) =>
+      const harness = await deliveryGateHarness("pi", acks, undefined, (activity) =>
         activities.push(activity),
       );
       await harness.deliver(1);
@@ -9334,7 +9330,7 @@ describe("Agent delivery queue", () => {
 
     test("an Agent the fingerprint fence took offline keeps deliveries and stays quiet to a probe", async () => {
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake, deliver, rejections } = await deliveryQueueHarness(
+      const { runtime, fake, deliver, rejections } = await deliveryGateHarness(
         "pi",
         undefined,
         undefined,
@@ -9374,7 +9370,7 @@ describe("Agent delivery queue", () => {
     ] as const)("a message held behind %s", async (_hold, message, failures, expected) => {
       const acks = ackGate(1);
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake, deliver } = await deliveryQueueHarness(
+      const { runtime, fake, deliver } = await deliveryGateHarness(
         "pi",
         acks,
         undefined,
@@ -9403,7 +9399,7 @@ describe("Agent delivery queue", () => {
     test("unread wins over a remembered busy turn, whose heartbeat stays armed", async () => {
       const acks = ackGate(1);
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake, deliver } = await deliveryQueueHarness(
+      const { runtime, fake, deliver } = await deliveryGateHarness(
         "pi",
         acks,
         undefined,
@@ -9450,7 +9446,7 @@ describe("Agent delivery queue", () => {
 
     test("a Memory Agent's observed channel updates are not unread debt; a personal mention is", async () => {
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake } = await deliveryQueueHarness(
+      const { runtime, fake } = await deliveryGateHarness(
         "pi",
         ackGate(0),
         undefined,

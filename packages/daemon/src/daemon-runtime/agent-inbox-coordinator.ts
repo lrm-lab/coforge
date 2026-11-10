@@ -13,7 +13,7 @@ import type { AgentMessageAttentionIndex } from "./agent-message-attention-index
 import { forgetLocalAgent, type AgentLocalFootprint } from "./agent-forget";
 import { agentInbox, appInbox, appInboxSeals } from "./agent-inbox-factories";
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { ActivityLaunch } from "./activity-launch";
 import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
 import type { RuntimeRelease } from "./runtime-release";
@@ -25,7 +25,7 @@ export type AgentInboxCoordinatorPorts = {
   stateDirectory: string;
   consumedSeqs: AgentConsumedSeqStore;
   messageAttention: Pick<AgentMessageAttentionIndex, "check">;
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   runtimeRelease: Pick<RuntimeRelease<ActivityLaunch>, "isRecovering">;
   processManager: Pick<AgentProcessManager, "session" | "restartConfig">;
   startAgent: (
@@ -181,7 +181,7 @@ export class AgentInboxCoordinator {
     const pending = Promise.resolve().then(async () => {
       // An ending runtime takes no notice: it waits for the launch that follows.
       if (this.ports.runtimeRelease.isRecovering(agentId)) {
-        this.ports.deliveryQueue.holdAppItem(agentId, itemId);
+        this.ports.deliveryGate.holdAppItem(agentId, itemId);
         return false;
       }
       let session = this.ports.processManager.session(agentId);
@@ -196,11 +196,11 @@ export class AgentInboxCoordinator {
       // A queue_until_idle provider's session/notify has no safe busy path, same as an
       // ordinary message delivery — hold this app-item notice instead of sending it now, and
       // release it (re-attempting this same call) at the next turn end.
-      if (this.ports.deliveryQueue.shouldHold(agentId)) {
-        this.ports.deliveryQueue.holdAppItem(agentId, itemId);
+      if (this.ports.deliveryGate.shouldHold(agentId)) {
+        this.ports.deliveryGate.holdAppItem(agentId, itemId);
         return false;
       }
-      this.ports.deliveryQueue.busy(agentId);
+      this.ports.deliveryGate.busy(agentId);
       const launch = this.ports.currentActivityLaunch(agentId);
       try {
         await session.notify("New app item available. Run coforge inbox check.");
@@ -221,17 +221,17 @@ export class AgentInboxCoordinator {
     }
   }
 
-  /** Re-attempts every app-item notice `AgentDeliveryQueue` held for `agentId` — each
+  /** Re-attempts every app-item notice `AgentDeliveryGate` held for `agentId` — each
    * one re-checks `shouldHold` itself inside `notifyAppItem`, so one that is still busy (e.g. a
    * coalesced delivery flush that just re-armed busy) simply re-holds itself for the next
    * release rather than being lost or sent too early. */
   releaseHeldAppItems(agentId: string): void {
-    for (const itemId of this.ports.deliveryQueue.releaseAppItems(agentId))
+    for (const itemId of this.ports.deliveryGate.releaseAppItems(agentId))
       void this.notifyAppItem(agentId, itemId).catch(() => {});
   }
 
   /**
-   * Redelivers every fallback notice text `AgentDeliveryQueue` held for `agentId`
+   * Redelivers every fallback notice text `AgentDeliveryGate` held for `agentId`
    * (Kiro's `notice-undelivered` event) as a bare `session.notify` call — never through
    * `AgentMessageAttentionIndex`, since the delivery or App Inbox item this text originally
    * came from already settled its own ACK (or never had one); this call must never produce a second
@@ -240,7 +240,7 @@ export class AgentInboxCoordinator {
    * losing it.
    */
   releaseFallbackNotices(agentId: string): void {
-    const notices = this.ports.deliveryQueue.releaseFallbackNotices(agentId);
+    const notices = this.ports.deliveryGate.releaseFallbackNotices(agentId);
     if (!notices.length) return;
     const session = this.ports.processManager.session(agentId);
     for (const { text, deliveryIds = [], conversation } of notices) {

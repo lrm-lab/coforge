@@ -9,7 +9,7 @@ import {
   type MentionDeliveryTerminalCode,
   type MentionDeliveryTransitionOutcome,
 } from "@lrm/coforge-sdk/internal";
-import type { DeliveryHoldReason } from "./agent-delivery-queue";
+import type { DeliveryHoldReason } from "./agent-delivery-gate";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import { AgentWakeupUnavailableError } from "./agent-wakeup-unavailable-error";
 

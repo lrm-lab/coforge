@@ -22,7 +22,7 @@ export type AgentExitedDeliveryPorts = Readonly<{
   startPending(agentId: string): boolean;
   /** Deliveries already wait for this Agent's next launch. */
   hasQueued(agentId: string): boolean;
-  /** Records a delivery in `AgentDeliveryQueue` as waiting for the next launch. */
+  /** Records a delivery in `AgentDeliveryGate` as waiting for the next launch. */
   queueForNextLaunch(agentId: string, message: AgentMessageDelivery): void;
   /** The wake launch cooldown's end instant, when one is in force. */
   wakeBlockedUntil(agentId: string): number | undefined;
@@ -147,7 +147,7 @@ export class AgentExitedDelivery {
 
   /**
    * An Agent a runtime error took offline keeps custody of its deliveries (terminal residency,
-   * as the reference Computer does): each is queued in `AgentDeliveryQueue` for the next launch
+   * as the reference Computer does): each is queued in `AgentDeliveryGate` for the next launch
    * and acknowledged now, with `inactive` and the failure's Activity restated at a fresh
    * clientSeq. The daemon never launches it on its own — a person's Start does.
    */
@@ -179,7 +179,7 @@ export class AgentExitedDelivery {
     }
   }
 
-  /** Keeps a delivery in `AgentDeliveryQueue` for the Agent's next launch, acknowledged now: the
+  /** Keeps a delivery in `AgentDeliveryGate` for the Agent's next launch, acknowledged now: the
    * daemon has taken custody of it, so the server need not resend it. */
   keepForNextLaunch(agentId: string, message: AgentMessageDelivery): void {
     this.#ports.queueForNextLaunch(agentId, message);
@@ -187,7 +187,7 @@ export class AgentExitedDelivery {
   }
 
   /** A failed launch hands the deliveries still waiting in its input queue to
-   * `AgentDeliveryQueue`, acknowledging each as the daemon keeps it, so the next launch
+   * `AgentDeliveryGate`, acknowledging each as the daemon keeps it, so the next launch
    * presents them. */
   keepInputDeliveriesForNextLaunch(agentId: string, error: unknown): void {
     this.keepDeliveries(agentId, this.#ports.drainInputDeliveries(agentId), error);

@@ -61,7 +61,7 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   messages the read returned.
 - An untracked delivery is ACKed as soon as the daemon takes custody of it:
   when its notice is accepted, or when it is held for a later notice or launch
-  (`AgentDeliveryQueue`, a failed launch's input queue). A delivery queued
+  (`AgentDeliveryGate`, a failed launch's input queue). A delivery queued
   behind the runner hold of a `coforge-computer restart` is not ACKed.
 - An Agent with no process and no launch in progress takes no custody
   (`agent-exited-delivery.ts`): its untracked delivery, and any a lifted
@@ -69,7 +69,7 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   `agent:v1:message:reject` — the server decides whether to start it —
   unless a runtime error took it offline (`agent-offline-residency.ts`),
   which keeps custody even while a restart config still stands: ACKed,
-  queued in `AgentDeliveryQueue`, `inactive` and its Activity restated.
+  queued in `AgentDeliveryGate`, `inactive` and its Activity restated.
   A failed server Start leaves no restart config or failure record.
 - A failure that takes an Agent offline also drops its restart config
   (`AgentProcessManager.forgetRestart` in `reportLaunchFailure`), so no
@@ -121,7 +121,7 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   (`LaunchFailureBackoff`, no attempt cap); any successful launch ends it.
   Deliveries that wait for the next launch (in the cooldown, in a failed
   launch's input queue, a batched wake launch in flight, or kept by an offline
-  Agent) wait in `AgentDeliveryQueue`, already ACKed. The next launch presents
+  Agent) wait in `AgentDeliveryGate`, already ACKed. The next launch presents
   them in one notice, or a server recovery notice covers those whose target it
   announces (`recover` returns those targets; a message it finds already read announces nothing); the rest are
   presented as for a launch without recovery. `flush` gives

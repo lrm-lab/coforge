@@ -8,7 +8,7 @@ import {
   STALLED_RECOVERY_SILENCE_QUEUE_ONLY_MS,
   ProviderProgress,
 } from "#src/daemon-runtime/stalled-recovery";
-import type { DeliveryHoldReason } from "#src/daemon-runtime/agent-delivery-queue";
+import type { DeliveryHoldReason } from "#src/daemon-runtime/agent-delivery-gate";
 
 type Launch = { stopping: boolean; progress?: ProviderProgress };
 

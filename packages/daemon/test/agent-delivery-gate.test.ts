@@ -1,6 +1,6 @@
 import { expect, setSystemTime, test } from "bun:test";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import { AgentDeliveryQueue } from "#src/daemon-runtime/agent-delivery-queue";
+import { AgentDeliveryGate } from "#src/daemon-runtime/agent-delivery-gate";
 
 const delivery = (id: string): AgentMessageDelivery => ({
   protocolMajor: 1,
@@ -20,7 +20,7 @@ test("a queue_until_idle mode only holds while busy", () => {
   // No RuntimeProvider maps to queue_until_idle today (Kiro moved to steer once its
   // own _session/steer extension was wired in); setMode exercises the mode directly, since
   // setProvider alone cannot reach it any more.
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   expect(queue.shouldHold("agent-1")).toBe(false);
   queue.busy("agent-1");
@@ -31,7 +31,7 @@ test("a queue_until_idle mode only holds while busy", () => {
 });
 
 test("a steer provider never holds, even while busy", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   for (const provider of ["pi", "codex", "claude-code", "cursor", "coforge", "kiro"] as const) {
     queue.setProvider("agent-1", provider);
     queue.busy("agent-1");
@@ -41,7 +41,7 @@ test("a steer provider never holds, even while busy", () => {
 });
 
 test("idle drains everything enqueued while busy, oldest first", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   queue.busy("agent-1");
   queue.enqueue("agent-1", delivery("one"));
@@ -58,7 +58,7 @@ test("idle drains everything enqueued while busy, oldest first", () => {
 });
 
 test("an explicit hold gates delivery independent of busy/idle and blocks idle draining", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setProvider("agent-1", "pi");
   expect(queue.shouldHold("agent-1")).toBe(false);
   queue.hold("agent-1", "runtime_error_backoff");
@@ -73,7 +73,7 @@ test("an explicit hold gates delivery independent of busy/idle and blocks idle d
 });
 
 test("release while still busy clears the explicit hold but does not drain", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   queue.busy("agent-1");
   queue.hold("agent-1", "fingerprint_fence");
@@ -86,7 +86,7 @@ test("release while still busy clears the explicit hold but does not drain", () 
 });
 
 test("an unexpected process exit clears busy but keeps what was held for the next launch", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   queue.busy("agent-1");
   queue.enqueue("agent-1", delivery("one"));
@@ -98,7 +98,7 @@ test("an unexpected process exit clears busy but keeps what was held for the nex
 });
 
 test("an offline-taking runtime error ends the explicit hold but keeps what was held", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   queue.busy("agent-1");
   queue.hold("agent-1", "fingerprint_fence");
@@ -113,7 +113,7 @@ test("an offline-taking runtime error ends the explicit hold but keeps what was 
 });
 
 test("an explicit Stop discards everything held, unlike an unexpected exit", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   queue.busy("agent-1");
   queue.enqueue("agent-1", delivery("one"));
@@ -124,7 +124,7 @@ test("an explicit Stop discards everything held, unlike an unexpected exit", () 
 });
 
 test("discardPending unconditionally drains, ignoring busy and an explicit hold", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   queue.busy("agent-1");
   queue.hold("agent-1", "fingerprint_fence");
@@ -138,7 +138,7 @@ test("discardPending unconditionally drains, ignoring busy and an explicit hold"
 });
 
 test("holdAppItem/releaseAppItems track app-item ids separately from the message queue", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   queue.holdAppItem("agent-1", "item-1");
   queue.holdAppItem("agent-1", "item-2");
@@ -152,7 +152,7 @@ test("holdAppItem/releaseAppItems track app-item ids separately from the message
 });
 
 test("an unexpected exit keeps held app items; explicit Stop discards them", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   queue.holdAppItem("agent-1", "item-1");
   queue.onProcessExit("agent-1");
@@ -164,7 +164,7 @@ test("an unexpected exit keeps held app items; explicit Stop discards them", () 
 });
 
 test("per-Agent state is independent", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.setMode("agent-1", "queue_until_idle");
   queue.setMode("agent-2", "queue_until_idle");
   queue.busy("agent-1");
@@ -174,7 +174,7 @@ test("per-Agent state is independent", () => {
 });
 
 test("discarding conversations removes only their held deliveries", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   const held = (id: string, conversationId: string) => ({ ...delivery(id), conversationId });
   queue.enqueue("agent-1", held("team-1", "conversation-team"));
   queue.enqueue("agent-1", held("dm-1", "conversation-dm"));
@@ -192,7 +192,7 @@ test("discarding conversations removes only their held deliveries", () => {
 });
 
 test("the queue measures how long the oldest held delivery has waited", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   try {
     setSystemTime(new Date("2026-11-02T00:00:00.000Z"));
     expect(queue.queuedForMs("agent-1")).toBeUndefined();
@@ -213,7 +213,7 @@ test("the queue measures how long the oldest held delivery has waited", () => {
 /** A resend is the server offering a delivery again with a request of its own; it is still the one
  * delivery, so the queue holds it once, in the place the first attempt took. */
 test("a delivery enqueued again while held replaces its earlier request instead of queueing twice", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   try {
     setSystemTime(new Date("2026-11-02T00:00:00.000Z"));
     queue.enqueue("agent-1", delivery("one"));
@@ -233,7 +233,7 @@ test("a delivery enqueued again while held replaces its earlier request instead 
 });
 
 test("distinct deliveries of one message are both held", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.enqueue("agent-1", delivery("one"));
   queue.enqueue("agent-1", { ...delivery("other"), messageId: "message-one" });
   expect(queue.pending("agent-1").map((message) => message.deliveryId)).toEqual([
@@ -243,7 +243,7 @@ test("distinct deliveries of one message are both held", () => {
 });
 
 test("the same deliveryId held for two Agents is held for each, and again once drained", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   queue.enqueue("agent-1", delivery("one"));
   queue.enqueue("agent-2", delivery("one"));
   expect(queue.pending("agent-1")).toHaveLength(1);

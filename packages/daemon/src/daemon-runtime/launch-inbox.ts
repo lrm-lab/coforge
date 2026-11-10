@@ -36,6 +36,18 @@ export class LaunchInbox {
     return gone;
   }
 
+  /** Settles the queued input deliveries that `settle` takes: each is removed and its completion
+   * resolved. */
+  dropInputDeliveries(settle: (message: AgentMessageDelivery) => boolean): void {
+    const queue = this.input;
+    if (!queue) return;
+    queue.items = queue.items.filter((item) => {
+      if (item.kind !== "delivery" || !settle(item.message)) return true;
+      item.completion.resolve();
+      return false;
+    });
+  }
+
   /** Whether nothing is held, owed or queued as input. */
   get empty(): boolean {
     return this.held.length === 0 && this.owed === undefined && this.input === undefined;

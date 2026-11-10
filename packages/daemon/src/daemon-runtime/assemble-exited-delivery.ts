@@ -9,7 +9,7 @@ import { MENTION_DELIVERY_TERMINAL_CODES } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { logAgentOperationFailure } from "./agent-failure-logs";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
@@ -20,7 +20,7 @@ import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
 /** What the exited-delivery settlement reads from the runtime. The collaborators the runtime builds
  * after this one are thunks: they are read when a delivery is settled, not when this is made. */
 export type ExitedDeliveryCollaborators = {
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   wakeLaunchFailures: LaunchFailureBackoff;
   sendAgentStatus(agentId: string, status: "active" | "inactive"): void;
   messageAttention(): AgentMessageAttentionIndex;
@@ -39,7 +39,7 @@ export type ExitedDeliveryCollaborators = {
 /** Settles a delivery for an Agent with no hold, session or launch in flight (`AgentExitedDelivery`). */
 export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): AgentExitedDelivery {
   return new AgentExitedDelivery({
-    hasRuntimeErrorHold: (agentId) => ports.deliveryQueue.explicitHold(agentId) !== undefined,
+    hasRuntimeErrorHold: (agentId) => ports.deliveryGate.explicitHold(agentId) !== undefined,
     holdRuntimeErrorDelivery: (message) => ports.messageAttention().receive(message),
     hasConsumed: (message) => ports.messageAttention().hasConsumed(message),
     logConsumed: (message) => ports.messageAttention().logDecision(message, "consumed"),
@@ -47,8 +47,8 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
     acknowledgeCustody: (message) => ports.launchCustody().acknowledge(message),
     restartConfig: (agentId) => ports.agentProcessManager().restartConfig(agentId),
     startPending: (agentId) => ports.agentControl().startPending(agentId),
-    hasQueued: (agentId) => ports.deliveryQueue.hasQueued(agentId),
-    queueForNextLaunch: (agentId, m) => ports.deliveryQueue.enqueue(agentId, m),
+    hasQueued: (agentId) => ports.deliveryGate.hasQueued(agentId),
+    queueForNextLaunch: (agentId, m) => ports.deliveryGate.enqueue(agentId, m),
     wakeBlockedUntil: (agentId) =>
       ports.wakeLaunchFailures.isBlocked(agentId)
         ? ports.wakeLaunchFailures.blockedUntil(agentId)

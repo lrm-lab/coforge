@@ -5,7 +5,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { AgentProcessManager, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentExitedDelivery } from "./agent-exited-delivery";
 import type { AgentFeatureSync } from "./agent-feature-sync";
 import type { AgentInputDrain } from "./agent-input-drain";
@@ -29,7 +29,7 @@ export type RuntimeMessageDeliveryPorts = {
   exitedDelivery: AgentExitedDelivery;
   wakeLaunches: Set<string>;
   agentLaunches: Map<string, Promise<AgentRuntime>>;
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   launchCustody: AgentLaunchCustody;
   inputDrain: AgentInputDrain;
   agentProcessManager: AgentProcessManager;
@@ -69,7 +69,7 @@ export async function handleAgentMessage(
     ports.runnerHold === undefined &&
     !ports.agentProcessManager.session(message.agentId) &&
     ports.wakeLaunches.has(message.agentId) &&
-    ports.deliveryQueue.hasQueued(message.agentId)
+    ports.deliveryGate.hasQueued(message.agentId)
   ) {
     // A wake launch that will present waiting deliveries is still in flight: join them as well,
     // rather than arriving as a second notice right after theirs. Only a wake: a recovery launch

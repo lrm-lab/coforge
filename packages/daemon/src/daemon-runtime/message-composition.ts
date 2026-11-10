@@ -4,7 +4,7 @@ import type { DaemonConnectionClient } from "#src/connection/daemon-connection-c
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { AgentContexts } from "./agent-contexts";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import {
   AGENT_MESSAGE_REJECT_METHOD,
   type AgentDeliveryRejectionReason,
@@ -34,7 +34,7 @@ export type MessageCompositionPorts = {
   /** The Workspace's current transport, read at send time. */
   transport(): DaemonConnectionClient;
   consumedSeqs: AgentConsumedSeqStore;
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   runtimeRelease: RuntimeRelease<ActivityLaunch>;
   processManager: AgentProcessManager;
   /** Built after this group: only a delivery marked busy reaches it, so it is read lazily. */
@@ -97,10 +97,10 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     busy: (agentId, conversationId) =>
       (conversationId
         ? ports.processManager.session(agentId)?.hasLiveTurnForConversation?.(conversationId)
-        : undefined) ?? ports.deliveryQueue.isBusy(agentId),
+        : undefined) ?? ports.deliveryGate.isBusy(agentId),
     blocked: (agentId) =>
-      ports.deliveryQueue.explicitHold(agentId) ??
-      (ports.deliveryQueue.shouldHold(agentId) ? "queued_until_idle" : undefined),
+      ports.deliveryGate.explicitHold(agentId) ??
+      (ports.deliveryGate.shouldHold(agentId) ? "queued_until_idle" : undefined),
   });
   messageAttention = new MessageAttention(
     connection.workspaceId,
@@ -133,13 +133,13 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       }
     },
     {
-      shouldHold: (agentId) => ports.deliveryQueue.shouldHold(agentId),
-      queued: (agentId) => ports.deliveryQueue.pending(agentId),
-      enqueue: (agentId, message) => ports.deliveryQueue.enqueue(agentId, message),
+      shouldHold: (agentId) => ports.deliveryGate.shouldHold(agentId),
+      queued: (agentId) => ports.deliveryGate.pending(agentId),
+      enqueue: (agentId, message) => ports.deliveryGate.enqueue(agentId, message),
       busy: (agentId) => {
-        if (!ports.deliveryQueue.isBusy(agentId))
+        if (!ports.deliveryGate.isBusy(agentId))
           ports.launchCustody().noteTurnStarted(agentId, "delivery");
-        ports.deliveryQueue.busy(agentId);
+        ports.deliveryGate.busy(agentId);
       },
       noticeSettled: (agentId) => {
         const launch = ports.currentActivityLaunch(agentId);
@@ -157,7 +157,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     stateDirectory: ports.stateDirectory,
     consumedSeqs: ports.consumedSeqs,
     messageAttention,
-    deliveryQueue: ports.deliveryQueue,
+    deliveryGate: ports.deliveryGate,
     runtimeRelease: ports.runtimeRelease,
     processManager: ports.processManager,
     startAgent: (agentId, config, sessionId) => ports.startAgent(agentId, config, sessionId),

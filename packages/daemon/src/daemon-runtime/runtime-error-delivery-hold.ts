@@ -20,7 +20,7 @@ import {
   type RuntimeErrorFingerprintFenceState,
   type RuntimeErrorRecoverySignal,
 } from "#src/agent-runtime/runtime-error-recovery";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 
 /** The longest delay one `setTimeout` honours (a signed 32-bit millisecond count). */
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
@@ -42,8 +42,8 @@ export type RuntimeErrorBackoffPersistence = Readonly<{
 
 export type RuntimeErrorDeliveryHoldPorts = Readonly<{
   /** Owns the explicit hold; this module only decides when it starts and ends. */
-  deliveryQueue: Pick<
-    AgentDeliveryQueue,
+  deliveryGate: Pick<
+    AgentDeliveryGate,
     "hold" | "release" | "endHoldForNextLaunch" | "explicitHold" | "pending"
   >;
   /** Attempts delivery of what a released hold gave back, never blocking the caller. */
@@ -56,7 +56,7 @@ export type RuntimeErrorDeliveryHoldPorts = Readonly<{
  * Turns an Agent's mid-turn runtime errors into its delivery hold: the consecutive-failure
  * backoff, the same-fingerprint repeat fence (both streaks in
  * `agent-runtime/runtime-error-recovery.ts`), and the one release timer per Agent that ends a
- * backoff. `AgentDeliveryQueue` records that the Agent is held and why; the release timer here is
+ * backoff. `AgentDeliveryGate` records that the Agent is held and why; the release timer here is
  * the single owner of when a backoff ends.
  *
  * What the runtime does next ends them, per the reference behaviour cited at
@@ -118,7 +118,7 @@ export class RuntimeErrorDeliveryHold {
       Date.now(),
       classification.retryNotBefore,
     );
-    this.#ports.deliveryQueue.hold(
+    this.#ports.deliveryGate.hold(
       agentId,
       classification.errorClass === RUNTIME_ERROR_CLASS.RATE_LIMIT
         ? "rate_limit_backoff"
@@ -141,7 +141,7 @@ export class RuntimeErrorDeliveryHold {
       error_class: classification.errorClass,
       attempt: backoff.attempts,
       retry_in_ms: backoff.delayMs,
-      held: this.#ports.deliveryQueue.pending(agentId).length,
+      held: this.#ports.deliveryGate.pending(agentId).length,
       reason:
         classification.errorClass === RUNTIME_ERROR_CLASS.RATE_LIMIT
           ? "rate_limit_backoff"
@@ -171,7 +171,7 @@ export class RuntimeErrorDeliveryHold {
         this.#ports.store?.clear(record.agentId);
         continue;
       }
-      this.#ports.deliveryQueue.hold(record.agentId, record.reason);
+      this.#ports.deliveryGate.hold(record.agentId, record.reason);
       this.#scheduleRelease(record.agentId, record.untilMs, record.provider);
       // A restarted Daemon says which waits it picked up: the only line that shows a usage limit
       // surviving the process without a live failure to point at.
@@ -245,7 +245,7 @@ export class RuntimeErrorDeliveryHold {
     let released = 0;
     for (const [agentId, waiting] of Array.from(this.#releaseTimers)) {
       if (waiting.provider !== provider) continue;
-      if (this.#ports.deliveryQueue.explicitHold(agentId) !== "rate_limit_backoff") continue;
+      if (this.#ports.deliveryGate.explicitHold(agentId) !== "rate_limit_backoff") continue;
       this.#endBackoff(agentId, hasSession(agentId));
       released += 1;
     }
@@ -280,7 +280,7 @@ export class RuntimeErrorDeliveryHold {
   disposeAll(): void {
     for (const [agentId, { timer }] of this.#releaseTimers) {
       clearTimeout(timer);
-      this.#ports.deliveryQueue.release(agentId);
+      this.#ports.deliveryGate.release(agentId);
     }
     this.#releaseTimers.clear();
   }
@@ -294,7 +294,7 @@ export class RuntimeErrorDeliveryHold {
     this.#clearReleaseTimer(agentId);
     if (!this.#isFenced(agentId)) {
       if (flush) this.#releaseHeld(agentId);
-      else this.#ports.deliveryQueue.endHoldForNextLaunch(agentId);
+      else this.#ports.deliveryGate.endHoldForNextLaunch(agentId);
     }
     this.#backoff.reset(agentId);
     this.#ports.store?.clear(agentId);
@@ -311,11 +311,11 @@ export class RuntimeErrorDeliveryHold {
    */
   #holdFenced(agentId: string): void {
     this.#clearReleaseTimer(agentId);
-    this.#ports.deliveryQueue.hold(agentId, "fingerprint_fence");
+    this.#ports.deliveryGate.hold(agentId, "fingerprint_fence");
   }
 
   #isFenced(agentId: string): boolean {
-    return this.#ports.deliveryQueue.explicitHold(agentId) === "fingerprint_fence";
+    return this.#ports.deliveryGate.explicitHold(agentId) === "fingerprint_fence";
   }
 
   /** Releases the hold at `untilMs`. A wait longer than one timer can run (a quota reset days
@@ -345,7 +345,7 @@ export class RuntimeErrorDeliveryHold {
   }
 
   #releaseHeld(agentId: string): void {
-    const held = this.#ports.deliveryQueue.release(agentId);
+    const held = this.#ports.deliveryGate.release(agentId);
     if (held.length) this.#ports.flush(agentId, held);
   }
 }

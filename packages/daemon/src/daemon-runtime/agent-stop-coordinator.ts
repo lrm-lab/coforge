@@ -1,7 +1,7 @@
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentProcessManager, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentOfflineResidency } from "./agent-offline-residency";
 import type { ActivityLaunch } from "./activity-launch";
 import type { AgentActivityPublisher } from "./agent-activity-publisher";
@@ -25,7 +25,7 @@ export type AgentStopCoordinatorPorts = {
   agentApiKeys: Map<string, string>;
   revokeAgentApiKey: (agentId: string, apiKey: string | undefined, scope?: "all") => Promise<void>;
   messageAttention: AgentMessageAttentionIndex;
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
   offlineResidency: AgentOfflineResidency;
   sendAgentStatus: (agentId: string, status: "active" | "inactive") => void;
@@ -76,7 +76,7 @@ export class AgentStopCoordinator {
     if (stoppedTagToken !== undefined) clearAgentLaunchTag(agentId, stoppedTagToken);
     sweepAgentLaunchTagStrays(agentId, "stop");
     this.ports.messageAttention.clearAgent(agentId);
-    this.ports.deliveryQueue.clearAgent(agentId);
+    this.ports.deliveryGate.clearAgent(agentId);
     this.ports.runtimeErrorHold.forget(agentId);
     // A quota launch is waiting out a recovery time. Reporting inactive here is what makes the
     // card look offline; the retry stays armed on the control record. Read the wait before

@@ -1,5 +1,5 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import { AgentRuntimeBackoffStore } from "#src/persistence/agent-runtime-backoff-store";
 
@@ -12,15 +12,15 @@ import { AgentRuntimeBackoffStore } from "#src/persistence/agent-runtime-backoff
 export function assembleRuntimeErrorDeliveryHold(input: {
   /** A thunk: field initializers run before the runtime's own state directory is assigned. */
   stateDirectory(): string;
-  deliveryQueue: Pick<
-    AgentDeliveryQueue,
+  deliveryGate: Pick<
+    AgentDeliveryGate,
     "hold" | "release" | "endHoldForNextLaunch" | "explicitHold" | "pending"
   >;
   flush(agentId: string, held: AgentMessageDelivery[]): void;
 }): RuntimeErrorDeliveryHold {
   const store = new AgentRuntimeBackoffStore(input.stateDirectory);
   const hold = new RuntimeErrorDeliveryHold({
-    deliveryQueue: input.deliveryQueue,
+    deliveryGate: input.deliveryGate,
     flush: input.flush,
     store,
   });

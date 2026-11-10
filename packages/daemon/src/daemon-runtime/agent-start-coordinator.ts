@@ -200,7 +200,7 @@ export function startAgent(
         if (recoveryCompletion) await recoveryCompletion;
         // No recovery notice told the Agent anything (no recovery item was enqueued, or the launch
         // stands on one its session refused), yet the session is ready — flush anything
-        // AgentDeliveryQueue held across an unexpected exit now, as the one owner of what a
+        // AgentDeliveryGate held across an unexpected exit now, as the one owner of what a
         // standing launch presents. Do not open a second recovery notice: the queued startup input
         // opens the initial turn if needed.
         if (!recoveryTold) ports.releaseSurvivingHolds(agentId);

@@ -13,7 +13,7 @@ import type { DaemonConnectionClient } from "#src/connection/daemon-connection-c
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { ActivityDraft, AgentActivityPublisher } from "./agent-activity-publisher";
 import type { agentActivityDrafts } from "./agent-activity-drafts";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
@@ -51,7 +51,7 @@ export type AgentOperationsPorts = {
     extra?: Partial<ActivityDraft>,
   ): ActivityDraft;
   messageAttention: AgentMessageAttentionIndex;
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   inputDrain: AgentInputDrain;
   mentionDeliveries: MentionDeliveryTracker;
   launchCustody: Pick<AgentLaunchCustody, "acknowledge">;
@@ -91,7 +91,7 @@ export class AgentOperations {
       return;
     }
     const unread = ports.messageAttention.unreadDeliveries(probe.agentId);
-    const hold = ports.deliveryQueue.explicitHold(probe.agentId);
+    const hold = ports.deliveryGate.explicitHold(probe.agentId);
     if (unread.length && hold !== "fingerprint_fence") {
       logger.info("Activity probe answered for an Agent with unread messages", {
         event: "agent_activity_probe:pending_delivery",
@@ -174,7 +174,7 @@ export class AgentOperations {
         dropped++;
         return false;
       });
-    dropped += ports.deliveryQueue.discardConversations(purge.agentId, conversations).length;
+    dropped += ports.deliveryGate.discardConversations(purge.agentId, conversations).length;
     ports.messageAttention.clearTargets(purge.agentId, purge.targets);
     logger.info("Agent inbox purged for channels it can no longer read", {
       event: "agent.inbox.purged",

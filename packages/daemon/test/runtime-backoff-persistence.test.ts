@@ -93,7 +93,7 @@ function holdWith(records: Parameters<RuntimeErrorDeliveryHold["restore"]>[0]) {
   const cleared: string[] = [];
   const saved: Array<{ agentId: string; untilMs: number; reason: string; provider?: string }> = [];
   const hold = new RuntimeErrorDeliveryHold({
-    deliveryQueue: {
+    deliveryGate: {
       hold: (agentId, reason) => void held.set(agentId, reason),
       release: (agentId) => {
         held.delete(agentId);

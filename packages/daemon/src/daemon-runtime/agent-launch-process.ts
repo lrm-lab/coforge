@@ -291,7 +291,7 @@ export async function launchAgentProcess(
       // An unexpected exit only clears busy — whatever a queue_until_idle provider
       // was still holding stays queued for the next launch; only explicit Stop discards it
       // (see AgentStopCoordinator.releaseAgentRuntime).
-      ports.deliveryQueue.onProcessExit(agentId);
+      ports.deliveryGate.onProcessExit(agentId);
       ports.revokeLocalLaunch(agentId, localContext, proxyToken);
       void ports.revokeAgentApiKey(agentId, agentApiKey).catch((revokeError) => {
         // Local access is already revoked; the key stays pending and is retried later.
@@ -353,7 +353,7 @@ export async function launchAgentProcess(
         resumedSessionId,
         staleSessionId: reference.sessionId ?? requestedSessionId,
         offline: launch.offlineError !== undefined,
-        deliveryHold: ports.deliveryQueue.explicitHold(agentId) !== undefined,
+        deliveryHold: ports.deliveryGate.explicitHold(agentId) !== undefined,
         daemonStopping: ports.isStopping(),
         exit,
         streak: ports.resumedEarlyCrash,

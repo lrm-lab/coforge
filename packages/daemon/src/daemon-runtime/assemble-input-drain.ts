@@ -3,7 +3,7 @@ import { MENTION_DELIVERY_TERMINAL_CODES } from "@lrm/coforge-sdk/internal";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { ActivityLaunch } from "./activity-launch";
 import type { AgentActivityPublisher } from "./agent-activity-publisher";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import { AgentInputDrain } from "./agent-input-drain";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
@@ -21,7 +21,7 @@ export type InputDrainCollaborators = {
   runnerHeld(): boolean;
   processManager(): AgentProcessManager;
   launches(): ReadonlyMap<string, ActivityLaunch>;
-  deliveryQueue(): AgentDeliveryQueue;
+  deliveryGate(): AgentDeliveryGate;
   agentLaunches(): ReadonlyMap<string, unknown>;
   stopState(): Pick<AgentStopRegistry, "stopping">;
   contextView(): ContextViewRuntimeDeps;
@@ -41,7 +41,7 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
       runnerHeld: ports.runnerHeld,
       sessionFor: (agentId) => ports.processManager().session(agentId),
       launchFor: (agentId) => ports.launches().get(agentId),
-      hasQueuedDeliveries: (agentId) => ports.deliveryQueue().hasQueued(agentId),
+      hasQueuedDeliveries: (agentId) => ports.deliveryGate().hasQueued(agentId),
       isLaunching: (agentId) => ports.agentLaunches().has(agentId),
       isStopping: (agentId) => ports.stopState().stopping(agentId),
       deliverMessage: (agentId, message) =>
@@ -71,6 +71,6 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
       dropMention: (message) =>
         ports.mentionDeliveries().drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
     },
-    ports.deliveryQueue().inboxes,
+    ports.deliveryGate().inboxes,
   );
 }

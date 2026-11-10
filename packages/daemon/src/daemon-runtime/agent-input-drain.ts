@@ -161,6 +161,11 @@ export class AgentInputDrain {
     return kept;
   }
 
+  /** Settles the delivery-kind items waiting in this Agent's queue that `settle` takes. */
+  dropDeliveries(agentId: string, settle: (message: AgentMessageDelivery) => boolean): void {
+    this.inboxes.peek(agentId)?.dropInputDeliveries(settle);
+  }
+
   /** Puts an input at the front of this Agent's queue, creating it if no input is pending. */
   prepend(
     agentId: string,

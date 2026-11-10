@@ -10,10 +10,10 @@ type Launch = { runtimeErrorClassFence?: RuntimeErrorClassFence };
 function harness() {
   const held = new Map<
     string,
-    ReturnType<RuntimeErrorDeliveryHoldPorts["deliveryQueue"]["explicitHold"]>
+    ReturnType<RuntimeErrorDeliveryHoldPorts["deliveryGate"]["explicitHold"]>
   >();
   const hold = new RuntimeErrorDeliveryHold({
-    deliveryQueue: {
+    deliveryGate: {
       hold: (id, reason) => {
         held.set(id, reason);
       },

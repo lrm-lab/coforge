@@ -9,7 +9,7 @@ import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentContexts } from "./agent-contexts";
-import { AgentDeliveryQueue } from "./agent-delivery-queue";
+import { AgentDeliveryGate } from "./agent-delivery-gate";
 import { AgentFeatureSync } from "./agent-feature-sync";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { AgentOfflineResidency } from "./agent-offline-residency";
@@ -75,7 +75,7 @@ export type AgentLaunchCoordinatorPorts = {
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   phaseBookkeeping: PhaseBookkeeping;
   contexts: AgentContexts;
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   usageReport: AgentUsageReport;
   fastModeWarned: Set<string>;
   sync: AgentFeatureSync;
@@ -158,7 +158,7 @@ export class AgentLaunchCoordinator {
   readonly idleNudge: TaskIdleNudge;
 
   constructor(readonly ports: AgentLaunchCoordinatorPorts) {
-    this.#owed = new OwedRecovery(ports.deliveryQueue.inboxes);
+    this.#owed = new OwedRecovery(ports.deliveryGate.inboxes);
     this.idleNudge = new TaskIdleNudge({
       ask: async (agentId, request) => {
         const agentApiKey = this.ports.agentApiKeys.get(agentId);
@@ -172,8 +172,8 @@ export class AgentLaunchCoordinator {
         return (
           session !== undefined &&
           session.hasLiveTurn === false &&
-          !this.ports.deliveryQueue.hasQueued(agentId) &&
-          !this.ports.deliveryQueue.shouldHold(agentId)
+          !this.ports.deliveryGate.hasQueued(agentId) &&
+          !this.ports.deliveryGate.shouldHold(agentId)
         );
       },
       backgroundTasks: (agentId) =>
@@ -211,7 +211,7 @@ export class AgentLaunchCoordinator {
   wakeFinishedSubagents(agentId: string): void {
     const session = this.ports.agentProcessManager.session(agentId);
     if (!session?.notify || session.hasLiveTurn !== false) return;
-    if (this.ports.deliveryQueue.hasQueued(agentId) || this.ports.deliveryQueue.shouldHold(agentId))
+    if (this.ports.deliveryGate.hasQueued(agentId) || this.ports.deliveryGate.shouldHold(agentId))
       return;
     void session.notify(SUBAGENTS_FINISHED_WAKE).catch((error: unknown) => {
       logger.info("Subagent wake notice could not be written", {
@@ -262,8 +262,8 @@ export class AgentLaunchCoordinator {
     this.ports.phaseBookkeeping.dispose(agentId);
     this.ports.contexts.newContext(agentId, config.provider);
     // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
-    // #deliveryQueue.shouldHold on every delivery for this Agent from now on.
-    this.ports.deliveryQueue.setProvider(agentId, config.provider);
+    // #deliveryGate.shouldHold on every delivery for this Agent from now on.
+    this.ports.deliveryGate.setProvider(agentId, config.provider);
     this.ports.usageReport.forget(agentId);
     this.ports.fastModeWarned.delete(agentId);
     // AgentControl's fresh retry after a kiro/pi AgentSessionRecoveryError: the invalidate was
@@ -329,7 +329,7 @@ export class AgentLaunchCoordinator {
     // Read before the exit clears the attention and the hand-back forgets the tracked mentions.
     const mentions = pendingMentions(agentId, unread, ports.messageAttention);
     // A delivery held now is in `unread` too; only those held later are counted from the parking.
-    const held = new Set(ports.deliveryQueue.pending(agentId).map(({ deliveryId }) => deliveryId));
+    const held = new Set(ports.deliveryGate.pending(agentId).map(({ deliveryId }) => deliveryId));
     return ports.runtimeRelease.endAndReplace(
       agentId,
       replayRejectedEndPlan(restart),
@@ -337,7 +337,7 @@ export class AgentLaunchCoordinator {
         // The failure's backoff belongs to the process that earned it, and its error class (a
         // status code makes it a provider API one) is not one a turn's end lifts: the fresh
         // Session starts with no hold, as after a take-offline.
-        ports.deliveryQueue.endHoldForNextLaunch(agentId);
+        ports.deliveryGate.endHoldForNextLaunch(agentId);
         ports.runtimeErrorHold.forget(agentId);
         // The fresh Session was told of none of the items the dead one was told of.
         ports.appInbox.forgetAnnouncedAppItems(agentId);
@@ -370,7 +370,7 @@ export class AgentLaunchCoordinator {
   /** What the Agent's next launch still owes a cold start that did not finish telling it, and the
    * call that settles the debt once that launch has told it. */
   owedTo(agentId: string) {
-    return this.#owed.owing(agentId, this.ports.deliveryQueue.pending(agentId));
+    return this.#owed.owing(agentId, this.ports.deliveryGate.pending(agentId));
   }
 
   /** A stored Session that cannot be continued: invalidate it and cold-start a fresh Session

@@ -56,9 +56,9 @@ export const AGENT_DELIVERY_MODE: Readonly<Record<RuntimeProvider, AgentDelivery
 };
 
 /**
- * Daemon-owned per-Agent delivery queue. Decides, per Agent, whether a delivery must
- * be held rather than reaching `AgentSession.notify()` right now, and holds it until it can be
- * released. `daemon-runtime/agent-message-attention-index.ts` consults it (via the
+ * Daemon-owned per-Agent delivery gate. Decides, per Agent, whether a delivery must
+ * be held rather than reaching `AgentSession.notify()` right now, and holds it (in the Agent's
+ * `LaunchInbox`) until it can be released. `daemon-runtime/agent-message-attention-index.ts` consults it (via the
  * `shouldHold`/`enqueue` seam passed into its constructor) and is the only one that flushes held
  * deliveries (`flush`, reusing its own coalesced-notice wording). `daemon-runtime/runtime.ts` also
  * enqueues deliveries that wait for an exited Agent's next launch (a wake cooldown, a failed
@@ -68,7 +68,7 @@ export const AGENT_DELIVERY_MODE: Readonly<Record<RuntimeProvider, AgentDelivery
  * runtime-error backoff and fingerprint fence use, and `pending`/`hasQueued` for carrying held
  * deliveries into a relaunch.
  */
-export class AgentDeliveryQueue {
+export class AgentDeliveryGate {
   readonly #mode = new Map<string, AgentDeliveryMode>();
   readonly #busy = new Set<string>();
   /** App-item ids held while busy (`DaemonRuntime#notifyAppItem`) — a separate,

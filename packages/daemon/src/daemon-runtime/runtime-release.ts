@@ -15,7 +15,7 @@ import { UnattendedRecoveries, reportUnattendedLimit } from "./stalled-recovery-
 import { logStalledRecovery } from "./agent-failure-logs";
 import { idleBlocker, type AgentIdleFacts, type ColdIdleAgent } from "./cold-idle-sweep";
 import type { BusyActivity } from "./agent-activity-publisher";
-import type { DeliveryHoldReason } from "./agent-delivery-queue";
+import type { DeliveryHoldReason } from "./agent-delivery-gate";
 import type { LaunchRequest } from "./runtime-launch-types";
 import {
   coldIdleRuntimePlan,

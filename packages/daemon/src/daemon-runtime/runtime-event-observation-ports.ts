@@ -4,7 +4,7 @@ import type { AgentSessions } from "#src/agent-runtime/agent-session";
 import type { ActivityLaunch } from "./activity-launch";
 import type { ActivityDraft, PublishedActivityLaunch } from "./agent-activity-publisher";
 import type { AgentActivityPublisher } from "./agent-activity-publisher";
-import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentOfflineResidency } from "./agent-offline-residency";
 import type { AgentUsageReport } from "./agent-usage-report";
 import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
@@ -24,7 +24,7 @@ export type Publish = (
  * pass through by reference, one-off helpers arrive as functions. No daemon state is copied. */
 export type RuntimeEventObservationPorts = Readonly<{
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
-  deliveryQueue: AgentDeliveryQueue;
+  deliveryGate: AgentDeliveryGate;
   offlineResidency: AgentOfflineResidency;
   usageReport: AgentUsageReport;
   phaseBookkeeping: PhaseBookkeeping;

@@ -62,7 +62,7 @@ export function observeRuntimeEvent(
     event.type !== "completed" &&
     runtime.session.hasLiveTurn !== false
   )
-    ports.deliveryQueue.busy(agentId);
+    ports.deliveryGate.busy(agentId);
   if (endsStalledTurn(event, runtime.session.hasLiveTurn)) launch.stalled?.finish(agentId);
   else if (ports.isWorking(agentId) || runtime.session.hasLiveTurn === true)
     launch.stalled?.observe(agentId, stalledTurnObservation(launch));
@@ -332,7 +332,7 @@ export function observeRuntimeEvent(
     // bookkeeping here; whatever originally accepted this text already settled its own ACK (or
     // never had one, for an App Inbox notice). The tracked mentions it carried were not told:
     // that redelivery settles them, not this turn's end.
-    ports.deliveryQueue.holdFallbackNotice(agentId, {
+    ports.deliveryGate.holdFallbackNotice(agentId, {
       text: event.text,
       ...(event.conversation ? { conversation: event.conversation } : {}),
       ...(event.deliveryIds?.length ? { deliveryIds: event.deliveryIds } : {}),

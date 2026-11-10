@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import { AgentDeliveryQueue } from "#src/daemon-runtime/agent-delivery-queue";
+import { AgentDeliveryGate } from "#src/daemon-runtime/agent-delivery-gate";
 import { AgentLaunchCustody } from "#src/daemon-runtime/agent-launch-custody";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { session } from "./fixtures/attention-delivery";
@@ -22,8 +22,8 @@ const delivery = (id: string, target: string): AgentMessageDelivery => ({
 /** A custody over a real delivery queue that holds `held`, and an attention that records what it
  * was asked to announce (`recover`) and to flush. */
 function custody(held: AgentMessageDelivery[]) {
-  const deliveryQueue = new AgentDeliveryQueue();
-  for (const message of held) deliveryQueue.enqueue("agent-1", message);
+  const deliveryGate = new AgentDeliveryGate();
+  for (const message of held) deliveryGate.enqueue("agent-1", message);
   const flushed: string[][] = [];
   const recovered: Array<Record<string, number>> = [];
   const messageAttention = {
@@ -45,15 +45,15 @@ function custody(held: AgentMessageDelivery[]) {
   };
   const subject = new AgentLaunchCustody({
     messageAttention,
-    deliveryQueue,
+    deliveryGate,
     releaseHeldAppItems: () => {},
     releaseFallbackNotices: () => {},
   } as never);
-  return { subject, deliveryQueue, flushed, recovered };
+  return { subject, deliveryGate, flushed, recovered };
 }
 
 test("a delivery held for a target the recovery does not name is flushed to the fresh session", async () => {
-  const { subject, deliveryQueue, flushed, recovered } = custody([
+  const { subject, deliveryGate, flushed, recovered } = custody([
     delivery("ops", "#ops"),
     delivery("general", "#general"),
   ]);
@@ -63,7 +63,7 @@ test("a delivery held for a target the recovery does not name is flushed to the 
   expect(recovered).toEqual([{ "#general": 1 }]);
   // The summary told of #general; nothing told of #ops, so only that one is presented.
   expect(flushed).toEqual([["delivery-ops"]]);
-  expect(deliveryQueue.pending("agent-1")).toEqual([]);
+  expect(deliveryGate.pending("agent-1")).toEqual([]);
 });
 
 test("a delivery held for a target a resume message names is not presented again", async () => {
@@ -100,7 +100,7 @@ test("a summary count of zero names nothing", async () => {
 });
 
 test("discarding targets leaves the other held deliveries in order", () => {
-  const queue = new AgentDeliveryQueue();
+  const queue = new AgentDeliveryGate();
   for (const message of [delivery("a", "#a"), delivery("b", "#b"), delivery("c", "#a")])
     queue.enqueue("agent-1", message);
 
@@ -112,7 +112,7 @@ test("discarding targets leaves the other held deliveries in order", () => {
 
 test("a delivery newer than a message the Agent already read is still presented", async () => {
   const notices: string[] = [];
-  const deliveryQueue = new AgentDeliveryQueue();
+  const deliveryGate = new AgentDeliveryGate();
   const index = new AgentMessageAttentionIndex(
     "workspace-1",
     { session: () => session((notice) => notices.push(notice)) },
@@ -125,7 +125,7 @@ test("a delivery newer than a message the Agent already read is still presented"
     latestSenderKind: "human",
     latestSenderHandle: "alice",
   };
-  deliveryQueue.enqueue("agent-1", held);
+  deliveryGate.enqueue("agent-1", held);
   // The custody flushes without waiting; keep the flushes to wait on them.
   const flushing: Promise<void>[] = [];
   const subject = new AgentLaunchCustody({
@@ -137,7 +137,7 @@ test("a delivery newer than a message the Agent already read is still presented"
         return flush;
       },
     },
-    deliveryQueue,
+    deliveryGate,
     releaseHeldAppItems: () => {},
     releaseFallbackNotices: () => {},
   } as never);
@@ -162,5 +162,5 @@ test("a delivery newer than a message the Agent already read is still presented"
 
   await Promise.all(flushing);
   expect(notices.filter((notice) => notice.includes("#general"))).toHaveLength(1);
-  expect(deliveryQueue.pending("agent-1")).toEqual([]);
+  expect(deliveryGate.pending("agent-1")).toEqual([]);
 });
