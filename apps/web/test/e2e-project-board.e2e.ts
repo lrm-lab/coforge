@@ -399,7 +399,12 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       "Write the launch checklist",
     );
     await shot(`${prefix}-dialog-390`);
-    // Many labels: the popup's picker, whose chips wrap in the form (Frank, 11-06).
+    // Many labels: the popup's picker. On a phone the chips are one row that scrolls sideways
+    // (task #54), so Labels, the last, is swiped to first.
+    await browser(
+      "eval",
+      `document.querySelector('[role="dialog"] button[aria-label="Edit labels"]').scrollIntoView({ inline: "end" })`,
+    );
     await browser("click", '[role="dialog"] button[aria-label="Edit labels"]');
     const labelRows = `[...document.querySelectorAll('[role^="menuitem"]')]`;
     await browser("wait", "--fn", `${labelRows}.length > 0`);

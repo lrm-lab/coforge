@@ -225,6 +225,33 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await browser("screenshot", join(artifacts, "create-phone.png"));
     await browser("eval", `document.documentElement.classList.add("dark-mode")`);
     await browser("screenshot", join(artifacts, "create-phone-dark.png"));
+    // A page of its own (task #54): Cancel, the heading and Create across the top, the desktop's
+    // footer gone, and the chips one row at the foot, where the keyboard leaves them in reach.
+    const phoneLayout = JSON.parse(
+      await browser(
+        "eval",
+        `JSON.stringify((() => {
+          const form = document.querySelector('[role="dialog"] form');
+          const shown = (el) => el.getClientRects().length > 0;
+          const submits = [...form.querySelectorAll("button")].filter((b) => shown(b) && ["Create", "Create task"].includes(b.textContent.trim()));
+          const chips = [...form.querySelector(':scope > [data-layout="create"]').children];
+          return {
+            submits: submits.map((b) => b.textContent.trim()),
+            topBar: submits[0].getBoundingClientRect().top < form.querySelector('[aria-label="Task title"]').getBoundingClientRect().top,
+            cancel: [...form.querySelectorAll("button")].some((b) => shown(b) && b.textContent.trim() === "Cancel"),
+            rows: new Set(chips.map((c) => Math.round(c.getBoundingClientRect().top))).size,
+          };
+        })())`,
+      ).then((out) => JSON.parse(out)),
+    );
+    expect(phoneLayout).toEqual({ submits: ["Create"], topBar: true, cancel: true, rows: 1 });
+    await browser("find", "role", "button", "click", "--name", "Create");
+    let phoneMade = null;
+    for (let tries = 0; tries < 40 && !phoneMade; tries++) {
+      phoneMade = await db.task.findFirst({ where: { title: `Phone ${suffix}` } });
+      if (!phoneMade) await Bun.sleep(250);
+    }
+    expect(phoneMade).not.toBeNull();
   } finally {
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, direct.id] } } })
