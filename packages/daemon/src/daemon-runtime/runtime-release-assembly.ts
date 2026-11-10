@@ -4,6 +4,7 @@ import type { ActivityDraft, BusyActivity } from "./agent-activity-publisher";
 import { RuntimeRelease } from "./runtime-release";
 import type { ReleasableLaunch, RuntimeReleasePorts, WakeRestart } from "./runtime-release";
 import type { DeliveryHoldReason } from "./agent-delivery-gate";
+import type { DeliveryConsumptionWatch } from "./delivery-consumption-watch";
 
 /** The `RuntimeRelease` construction `runtime.ts` reads as a call: its ports come from the
  * runtime's collaborators, assembled here so the construction site names them, not their
@@ -38,6 +39,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     hasQueued(agentId: string): boolean;
     hasHeldAppItems(agentId: string): boolean;
     discardPending(agentId: string): readonly AgentMessageDelivery[];
+    consumption?: Pick<DeliveryConsumptionWatch, "snapshot">;
   };
   agentLaunches(): ReadonlyMap<string, unknown>;
   stopState(): {
@@ -80,6 +82,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
         queue: input.inputDrain().get(agentId),
         working: input.working(agentId),
         deliveriesQueued: input.deliveryGate().hasQueued(agentId),
+        deliveryInFlight: input.deliveryGate().consumption?.snapshot(agentId) !== undefined,
         launching: input.agentLaunches().has(agentId),
         stopping:
           input.stopState().isStopping(agentId) || input.processManager().isStopping(agentId),

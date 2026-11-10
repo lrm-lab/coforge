@@ -83,6 +83,7 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
       },
       dropMention: (message) =>
         ports.mentionDeliveries().drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
+      deliveryConsumption: ports.deliveryGate().consumption,
     },
     ports.deliveryGate().inboxes,
   );

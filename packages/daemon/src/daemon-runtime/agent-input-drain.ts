@@ -4,6 +4,7 @@ import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import type { ActivityLaunch } from "./activity-launch";
+import type { DeliveryConsumptionWatch } from "./delivery-consumption-watch";
 import { LaunchInboxes } from "./launch-inbox";
 import {
   queueHasInputContent,
@@ -45,6 +46,7 @@ export type AgentInputDrainPorts = Readonly<{
   /** Presents what the Agent's launch kept: the deliveries held for it and the tracked mentions,
    * in one notice. */
   presentKept(agentId: string): Promise<void>;
+  deliveryConsumption?: Pick<DeliveryConsumptionWatch, "recordWrite">;
 }>;
 
 /**
@@ -237,6 +239,9 @@ export class AgentInputDrain {
         }
         if (item.kind === "delivery") {
           await this.ports.deliverMessage(agentId, item.message);
+          const launchId = this.ports.launchFor(agentId)?.launchId;
+          if (launchId)
+            this.ports.deliveryConsumption?.recordWrite(agentId, launchId, item.message);
           logger.info("Agent delivery indexed", {
             event: "agent.message.delivery_indexed",
             agent_id: agentId,

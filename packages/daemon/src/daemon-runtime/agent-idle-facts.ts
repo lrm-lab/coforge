@@ -5,6 +5,7 @@
 export type DaemonIdleFacts = Readonly<{
   working: boolean;
   deliveriesQueued: boolean;
+  deliveryInFlight: boolean;
   inputsQueued: boolean;
   launching: boolean;
   stopping: boolean;

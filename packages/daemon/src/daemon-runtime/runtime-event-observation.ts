@@ -41,6 +41,9 @@ export function observeRuntimeEvent(
   controlled: boolean,
   event: AgentRuntimeEvent,
 ): void {
+  const deliveryConsumption = ports.deliveryConsumption;
+  if (deliveryConsumption)
+    deliveryConsumption.observeRuntimeEvent(agentId, launch.launchId, event);
   // The launch's first provider event, whatever it carries: the end of the launch's cold path.
   launch.timing?.phase("first_activity");
   const publish: Publish = (id, source, activity) =>

@@ -2,6 +2,7 @@ import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/interna
 import type { AgentConversationScope } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { LaunchInboxes } from "./launch-inbox";
+import { DeliveryConsumptionWatch } from "./delivery-consumption-watch";
 
 /**
  * How a provider's session accepts a delivery notice while a turn is already in progress.
@@ -69,6 +70,7 @@ export const AGENT_DELIVERY_MODE: Readonly<Record<RuntimeProvider, AgentDelivery
  * deliveries into a relaunch.
  */
 export class AgentDeliveryGate {
+  readonly consumption = new DeliveryConsumptionWatch();
   readonly #mode = new Map<string, AgentDeliveryMode>();
   readonly #busy = new Set<string>();
   /** App-item ids held while busy (`DaemonRuntime#notifyAppItem`) — a separate,

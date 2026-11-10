@@ -21,6 +21,7 @@ export type AgentIdleFacts = Readonly<{
   /** A busy Activity is showing, or a notice was just written. */
   working: boolean;
   deliveriesQueued: boolean;
+  deliveryInFlight: boolean;
   inputsQueued: boolean;
   /** A tracked @mention of the Agent is not settled: received, told in a turn that has not ended,
    * or kept for its next launch. */
@@ -45,6 +46,7 @@ export type IdleBlocker =
   | "live_turn"
   | "live_turn_unknown"
   | "working"
+  | "delivery_in_flight"
   | "queued_delivery"
   | "queued_input"
   | "tracked_mention"
@@ -63,6 +65,7 @@ export function idleBlocker(facts: AgentIdleFacts): IdleBlocker | undefined {
   if (facts.hasLiveTurn === undefined) return "live_turn_unknown";
   if (facts.hasLiveTurn) return "live_turn";
   if (facts.working) return "working";
+  if (facts.deliveryInFlight) return "delivery_in_flight";
   if (facts.deliveriesQueued) return "queued_delivery";
   if (facts.inputsQueued) return "queued_input";
   if (facts.trackedMentionOpen) return "tracked_mention";
