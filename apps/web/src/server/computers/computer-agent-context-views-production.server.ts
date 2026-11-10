@@ -13,7 +13,6 @@ import { ComputerAgentContextViews } from "./computer-agent-context-views.server
 
 /** Production owner-gated composition for Agent context view requests. */
 export function computerAgentContextViews(db: Pick<PrismaClient, "computer" | "agent">) {
-  const centrifugo = createCentrifugoServerApi();
   return new ComputerAgentContextViews({
     enabled: (viewer) => isFeatureEnabled("agentContextView", { workspaceId: viewer.workspaceId }),
     owned: async (viewer, computerId) =>
@@ -58,8 +57,9 @@ export function computerAgentContextViews(db: Pick<PrismaClient, "computer" | "a
         };
       return { supported: true };
     },
+    // Made on use: reading a result needs neither the API nor its environment.
     publish: (request) =>
-      centrifugo.publish(
+      createCentrifugoServerApi().publish(
         daemonControlChannel(request.workspaceId, request.computerId),
         encodeAgentContextViewRequest(request),
       ),

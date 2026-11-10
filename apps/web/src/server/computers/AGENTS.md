@@ -148,6 +148,14 @@ These rules apply to `src/server/computers/`.
   names the caller's Workspace and Computer and authorizes only once an answer exists; the
   answer expires on its own (30 seconds) so a lost reply can be asked for again. Every failure is
   one value, `failed`; the read changes nothing, so a failed start is just tried again.
+- `computer-agent-context-views.server.ts` asks a local Computer to restore an Agent's context
+  (`agentContextView` flag, Computer owner only). The Computer restores for up to about 25
+  seconds and production closes a request idle for about ten, so it is two calls: `start`
+  publishes and returns a request id, or a refusal value with nothing pending; `read` returns
+  pending or the result. `read` answers only a request that names the caller's Workspace,
+  Computer and Agent, checks the flag and the Computer's owner again once a result exists, and
+  leaves the result to expire (35 seconds) so a lost reply can be asked for again. Never hold a
+  request for the result.
 - `computer-runtime-auth.server.ts` stores structurally validated status reports without a
   provider whitelist, so a newer daemon's report survives an older Web. Provider identifiers
   are 1–64 ASCII identifier characters, at most 32 unique entries, normalized JSON at most

@@ -1,16 +1,24 @@
 import type { AgentContextViewRequest, AgentContextViewResult } from "@lrm/coforge-sdk/internal";
 
 export type AgentContextViewViewer = { userId: string; workspaceId: string };
-export type AgentContextViewResponse =
-  | { status: "ready"; result: AgentContextViewResult }
-  | { status: "failed"; result: AgentContextViewResult }
+
+/** What starting a view tells the page: the request whose result `read` returns, or a refusal
+ * with nothing pending. */
+export type AgentContextViewStart =
+  | { status: "started"; requestId: string }
   | { status: "offline"; reason: "offline" }
   | { status: "unsupported"; reason?: "unsupported_runtime" | "no_session" | "old_daemon" }
+  | { status: "unavailable"; reason: "no_computer" | "offline" };
+
+/** What reading a request tells the page: no result yet, the result, or why it cannot be shown.
+ * `read` never returns `timeout`: the page's poll ends as it when no result came in time. */
+export type AgentContextViewRead =
+  | { status: "pending" }
+  | { status: "ready"; result: AgentContextViewResult }
+  | { status: "failed"; result: AgentContextViewResult }
+  | { status: "unsupported" }
   | { status: "timeout"; reason: "old_daemon" }
-  | {
-      status: "unavailable";
-      reason?: "no_computer" | "agent_moved" | "context_mismatch" | "read_failed" | "offline";
-    };
+  | { status: "unavailable"; reason: "agent_moved" | "read_failed" };
 
 export function sameAgentContextViewScope(
   request: AgentContextViewRequest,
@@ -31,9 +39,14 @@ export function sameAgentContextViewScope(
 type PendingResults = {
   begin(pending: { request: AgentContextViewRequest; userId: string }): Promise<void>;
   read(requestId: string): Promise<AgentContextViewResult | undefined>;
-  clear(requestId: string): Promise<void>;
 };
 
+/**
+ * An Agent's context view, restored by its Computer. The Computer can take about 25 seconds and
+ * production closes a request idle for about ten, so starting publishes the request and returns at
+ * once and the page polls `read`. Both need the feature on and the Computer owned by the viewer;
+ * a result is returned only for a request that names the caller's Workspace, Computer and Agent.
+ */
 export class ComputerAgentContextViews {
   constructor(
     private readonly dependencies: {
@@ -55,17 +68,12 @@ export class ComputerAgentContextViews {
       publish(request: AgentContextViewRequest): Promise<void>;
       results: PendingResults;
     },
-    private readonly timing: {
-      now(): number;
-      wait(ms: number): Promise<void>;
-      timeoutMs: number;
-    } = { now: Date.now, wait: (ms) => Bun.sleep(ms), timeoutMs: 30_000 },
   ) {}
 
-  async view(
+  async start(
     viewer: AgentContextViewViewer,
     input: Omit<AgentContextViewRequest, "protocolMajor" | "requestId" | "workspaceId">,
-  ): Promise<AgentContextViewResponse> {
+  ): Promise<AgentContextViewStart> {
     if (this.dependencies.enabled && !(await this.dependencies.enabled(viewer)))
       return { status: "unsupported" };
     const request: AgentContextViewRequest = {
@@ -85,48 +93,52 @@ export class ComputerAgentContextViews {
     const support = typeof supported === "boolean" ? { supported } : supported;
     if (!support.supported)
       return { status: "unsupported", ...(support.reason ? { reason: support.reason } : {}) };
-    let phase: "transport" | "read" = "transport";
     try {
       await this.dependencies.results.begin({ request, userId: viewer.userId });
       await this.dependencies.publish(request);
-      phase = "read";
-      const deadline = this.timing.now() + this.timing.timeoutMs;
-      while (this.timing.now() < deadline) {
-        const result = await this.dependencies.results.read(request.requestId);
-        if (result) {
-          if (!(await this.dependencies.owned(viewer, request.computerId)))
-            return { status: "unavailable", reason: "agent_moved" };
-          if (!sameAgentContextViewScope(request, result))
-            return { status: "unavailable", reason: "context_mismatch" };
-          if (result.encoding === "gzip") {
-            try {
-              return {
-                status: "ready",
-                result: {
-                  ...result,
-                  content: new Uint8Array(Bun.gunzipSync(Buffer.from(result.content))),
-                  encoding: "identity",
-                },
-              };
-            } catch {
-              return { status: "unavailable", reason: "read_failed" };
-            }
-          }
-          return result.status === "failed"
-            ? { status: "failed", result }
-            : { status: "ready", result };
-        }
-        await this.timing.wait(100);
-      }
-      // Raft exposes a viewer timeout as old_daemon when the advertised daemon never answers.
-      return { status: "timeout", reason: "old_daemon" };
     } catch {
-      return {
-        status: "unavailable",
-        reason: phase === "transport" ? "offline" : "read_failed",
-      };
-    } finally {
-      await this.dependencies.results.clear(request.requestId).catch(() => {});
+      // The request expires on its own; the page is told the Computer could not be reached.
+      return { status: "unavailable", reason: "offline" };
     }
+    return { status: "started", requestId: request.requestId };
+  }
+
+  /**
+   * The Computer's result for one request. While nothing matching has arrived the answer is
+   * pending and nothing else is read; a result is checked against the viewer's access before it
+   * is returned, and is left to expire so a poll that lost the reply can ask again. A store that
+   * cannot be read throws: the poll asks again.
+   */
+  async read(
+    viewer: AgentContextViewViewer,
+    input: { computerId: string; agentId: string; requestId: string },
+  ): Promise<AgentContextViewRead> {
+    const result = await this.dependencies.results.read(input.requestId);
+    if (
+      !result ||
+      result.workspaceId !== viewer.workspaceId ||
+      result.computerId !== input.computerId ||
+      result.agentId !== input.agentId
+    )
+      return { status: "pending" };
+    if (this.dependencies.enabled && !(await this.dependencies.enabled(viewer)))
+      return { status: "unsupported" };
+    if (!(await this.dependencies.owned(viewer, input.computerId)))
+      return { status: "unavailable", reason: "agent_moved" };
+    if (result.encoding === "gzip") {
+      try {
+        return {
+          status: "ready",
+          result: {
+            ...result,
+            content: new Uint8Array(Bun.gunzipSync(Buffer.from(result.content))),
+            encoding: "identity",
+          },
+        };
+      } catch {
+        return { status: "unavailable", reason: "read_failed" };
+      }
+    }
+    return result.status === "failed" ? { status: "failed", result } : { status: "ready", result };
   }
 }

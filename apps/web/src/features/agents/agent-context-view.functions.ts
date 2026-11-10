@@ -4,7 +4,7 @@ import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { computerAgentContextViews } from "#src/server/computers/computer-agent-context-views-production.server";
 
-const requestSchema = z.object({
+const startSchema = z.object({
   computerId: z.string().min(1),
   agentId: z.string().min(1),
   messageId: z.string().min(1),
@@ -17,13 +17,34 @@ const requestSchema = z.object({
     .default(32 * 1024 * 1024),
 });
 
-/** Owner-only request seam used by the Agent profile context view entry. */
-export const requestAgentContextView = createServerFn({ method: "POST" })
+/** The request a start returned; the result is read with it, scoped to the Computer and Agent. */
+const readSchema = z.object({
+  computerId: z.string().min(1),
+  agentId: z.string().min(1),
+  requestId: z.string().regex(/^ctxv_[0-9a-f]{32}$/),
+});
+
+/**
+ * Owner-only: asks the Computer to restore an Agent's context and returns at once with the
+ * request to poll, because production closes a request idle for about ten seconds and the restore
+ * can take about 25. The result is read with `readAgentContextView`, which
+ * `awaitAgentContextView` polls.
+ */
+export const startAgentContextView = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(requestSchema)
+  .validator(startSchema)
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
     declareNoStore();
-    return computerAgentContextViews(db).view({ userId: user.id, workspaceId }, data);
+    return computerAgentContextViews(db).start({ userId: user.id, workspaceId }, data);
+  });
+
+/** The Computer's result for a started view: pending, the result, or why it cannot be shown. */
+export const readAgentContextView = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(readSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    declareNoStore();
+    return computerAgentContextViews(db).read({ userId: user.id, workspaceId }, data);
   });
 
 /** Resolves the current native session and newest delivered message for the profile entry. */

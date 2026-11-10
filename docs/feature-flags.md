@@ -94,6 +94,9 @@ the cohort is healthy without reinstalling or changing the Computer data.
 `agentContextView` gates the owner-only Agent profile context view. Keep it off until the Web
 receiver, the `agent-context-view:v0` capability lease, and the Computer's availability reports
 are deployed together. A disabled flag must not publish a request or expose the result route.
+The Web side is a start and a read Server Function (`agent-context-view.functions.ts`), polled
+through `awaitAgentContextView`, because the Computer's restore outlasts production's idle
+timeout.
 
 Every flag is boolean, with the variants `on` and `off` and `off` as the default variant.
 
