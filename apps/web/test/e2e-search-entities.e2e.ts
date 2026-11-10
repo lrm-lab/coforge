@@ -194,7 +194,9 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
     const rows = await evaluate<string[]>(
       `[...document.querySelectorAll('[role="dialog"] [data-search-entity]')].map((row) => row.textContent)`,
     );
-    expect(rows[0]).toContain("#e2e-lighthouse");
+    // A channel's row reads its name with no `#`: its group avatar says what it is (task #74).
+    expect(rows[0]).toContain("e2e-lighthouse");
+    expect(rows[0]).not.toContain("#");
     expect(rows[1]).toContain("Lighthouse Bot");
     await browser("screenshot", join(artifacts, "entities.png"));
 

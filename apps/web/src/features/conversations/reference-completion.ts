@@ -1,3 +1,4 @@
+import type { GroupAvatarMember } from "./group-avatar";
 import type { ChannelVisibility } from "./channel-visibility";
 
 /**
@@ -18,8 +19,10 @@ export type ChannelSuggestion = {
   name: string;
   description: string;
   archived: boolean;
-  /** Private: the row shows a lock where a public one shows `#`. */
+  /** Private: a row with no members to show reads a lock where a public one reads `#`. */
   visibility: ChannelVisibility;
+  /** Its group avatar, the row's face (Frank, 11-10: a channel is never a `#`). */
+  members?: readonly GroupAvatarMember[];
 };
 
 /**

@@ -59,6 +59,18 @@ test("a created channel joins the names, and a changed one takes its new info", 
   ]);
 });
 
+test("a changed channel keeps its group avatar's members, which the event does not carry", () => {
+  const members = [{ kind: "user" as const, id: "u-1", name: "Ada", avatarUrl: null }];
+  expect(
+    channelNamesAfter([{ ...lab, members }], {
+      type: "channel.updated.v1",
+      ...ids,
+      conversationId: "c-lab",
+      channel: { name: "lab-2", description: "", archived: false, visibility: "public" as const },
+    }),
+  ).toEqual([{ ...lab, name: "lab-2", members }]);
+});
+
 test("a deleted or hidden channel leaves the names", () => {
   expect(
     channelNamesAfter([general, lab], {

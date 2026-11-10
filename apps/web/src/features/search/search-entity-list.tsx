@@ -1,6 +1,6 @@
 import { channelGlyph } from "#src/features/conversations/channel-name";
+import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { Link } from "@tanstack/react-router";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
@@ -95,7 +95,8 @@ function EntityContent({
     <>
       <EntityMark entity={entity} display={display} />
       <span className="min-w-0 truncate text-sm text-primary">
-        {entity.kind === "channel" ? channelLabel(entity) : entity.name}
+        {/* A channel's face says what it is; its name reads with no `#` (Frank, 11-10). */}
+        {entity.name}
       </span>
       {entity.kind === "channel" && entity.archived && (
         <Badge size="sm" color="gray" type="modern" className="shrink-0">
@@ -157,7 +158,8 @@ function entitySubtitle(entity: SearchEntity): string | undefined {
   }
 }
 
-/** The row's leading mark: the channel icon, the Computer's icon, an Agent's live avatar, the
+/** The row's leading mark: the channel's group avatar (its icon while no one is in it), the
+ * Computer's icon, an Agent's live avatar, the
  * member's avatar. */
 function EntityMark({
   entity,
@@ -195,6 +197,13 @@ function EntityMark({
           src={entity.avatarUrl}
           size="xs"
         />
+      </span>
+    );
+  if (entity.kind === "channel" && entity.members?.length)
+    // The row's own text names the channel; its face is its group avatar (Frank, 11-10).
+    return (
+      <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center">
+        <GroupAvatar members={entity.members} className="avatar-group-xs" />
       </span>
     );
   const Icon =

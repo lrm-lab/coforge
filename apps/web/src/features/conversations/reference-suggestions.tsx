@@ -7,6 +7,7 @@ import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { channelGlyph } from "./channel-name";
+import { GroupAvatar } from "./group-avatar";
 import { mentionKey, mentionKeysShowingHandle, type Mentionable } from "./mention-text";
 import type { ChannelSuggestion, ReferenceTrigger } from "./reference-completion";
 import type { ReferenceSuggestion } from "./use-reference-completion";
@@ -20,7 +21,7 @@ import type { ReferenceSuggestion } from "./use-reference-completion";
  * except where two people in the list read identically (`mentionKeysShowingHandle`). In a channel
  * the `@` list has two groups, the members and then the Workspace's people and public Agents
  * outside the channel, titled only when both are shown; an outsider's name reads dimmed, since
- * mentioning them notifies no one by itself. A channel row reads a `#` icon, the
+ * mentioning them notifies no one by itself. A channel row reads its group avatar, the
  * name and the description, with an "Archived" badge on the right; an archived channel's row is
  * dimmed.
  * An Agent's avatar carries the same online/working/thinking/error/offline dot the sidebar and
@@ -230,14 +231,18 @@ function MentionRow({
   );
 }
 
-/** A channel row: `#` icon (a lock for a private channel), name, description, and an "Archived"
- * badge on an archived channel. */
+/** A channel row: its group avatar (a channel no one is in yet reads its `#` or lock), name,
+ * description, and an "Archived" badge on an archived channel. */
 function ChannelRow({ channel }: { channel: ChannelSuggestion }) {
   const Glyph = channelGlyph(channel);
   return (
     <>
       <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center">
-        <Glyph className={cx("size-4", channel.archived ? "text-quaternary" : "text-tertiary")} />
+        {channel.members?.length ? (
+          <GroupAvatar members={channel.members} className="avatar-group-xs" />
+        ) : (
+          <Glyph className={cx("size-4", channel.archived ? "text-quaternary" : "text-tertiary")} />
+        )}
       </span>
       <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-center gap-2">
         <span

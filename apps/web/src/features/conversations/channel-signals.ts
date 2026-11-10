@@ -1,3 +1,4 @@
+import type { GroupAvatarMember } from "./group-avatar";
 import type { ChannelVisibility } from "./channel-visibility";
 import type { ChannelCreatedEvent, ChannelUpdatedEvent } from "./conversation-realtime";
 
@@ -14,6 +15,8 @@ export type ChannelName = {
   description: string;
   archived: boolean;
   visibility: ChannelVisibility;
+  /** Its group avatar's members, from the server read; a realtime update keeps the ones it had. */
+  members?: readonly GroupAvatarMember[];
 };
 
 /**
@@ -29,7 +32,7 @@ export function channelNamesAfter(
   if (!signal.channel) return undefined;
   const next = { id: signal.conversationId, ...signal.channel };
   return names.some((channel) => channel.id === next.id)
-    ? names.map((channel) => (channel.id === next.id ? next : channel))
+    ? names.map((channel) => (channel.id === next.id ? { ...channel, ...next } : channel))
     : [...names, next];
 }
 

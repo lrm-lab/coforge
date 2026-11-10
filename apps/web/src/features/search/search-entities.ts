@@ -1,3 +1,4 @@
+import type { GroupAvatarMember } from "#src/features/conversations/group-avatar";
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { nameMatchTier } from "#src/lib/name-match";
 
@@ -11,6 +12,8 @@ export type SearchEntity =
       description: string;
       archived: boolean;
       visibility: ChannelVisibility;
+      /** Its group avatar, the row's face. */
+      members?: readonly GroupAvatarMember[];
     }
   | { kind: "computer"; id: string; name: string; hostname: string; computerKind: string }
   | {

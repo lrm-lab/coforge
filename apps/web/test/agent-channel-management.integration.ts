@@ -240,6 +240,7 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
       description: "Eng team",
       archived: true,
       visibility: "public",
+      members: expect.any(Array),
     });
     await expect(manage.join(workspace.id, admin.id, "#eng")).rejects.toThrow(
       "channel is archived",

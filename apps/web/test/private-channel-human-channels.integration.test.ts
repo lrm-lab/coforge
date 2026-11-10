@@ -31,7 +31,14 @@ test.skipIf(!connectionString)(
       ] as const) {
         const userId = people[who];
         const listed = (await channels.list(ws, userId)).map((row) => row.id);
-        const named = (await channels.names(ws, userId)).map((row) => row.id);
+        const names = await channels.names(ws, userId);
+        const named = names.map((row) => row.id);
+        // Each name carries its group avatar's members, read with the list (task #74): the
+        // insider is among the faces of the private channel they are in.
+        if (sees)
+          expect(names.find((row) => row.id === vault.id)?.members?.map(({ id }) => id)).toContain(
+            userId,
+          );
         for (const id of [closed.id, vault.id]) {
           expect({ who, listed: listed.includes(id), named: named.includes(id) }).toEqual({
             who,

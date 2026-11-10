@@ -12,6 +12,8 @@ import { canListArchivedChannels, resolveActorServerRole } from "./channel-autho
 import { isClosedAndUnpinned } from "./channel-closed.server";
 import { visibleChannelWhere } from "./channel-read-access.server";
 import { channelListPreviews } from "./channel-list-preview.server";
+import type { ChannelName } from "#src/features/conversations/channel-signals";
+import { channelListMembers } from "./channel-list-preview.server";
 import { channelInfoOf } from "./conversation-realtime.server";
 import { HUMAN_UNREAD_BASE_SQL } from "./human-unread.server";
 
@@ -28,13 +30,24 @@ export async function channelNames(
   { db }: PublicChannelPorts,
   workspaceId: string,
   userId: string,
-) {
+): Promise<ChannelName[]> {
   await requireWorkspaceMember(db, workspaceId, userId);
   const channels = await db.conversation.findMany({
     where: visibleChannelWhere(workspaceId, { userId }),
     select: { id: true, channelName: true, description: true, archivedAt: true, visibility: true },
   });
-  return channels.map((channel) => ({ id: channel.id, ...channelInfoOf(channel) }));
+  // Each channel's group avatar, read once with the list rather than per row: the composer's `#`
+  // list and search show it (Frank, 11-10: a channel is never a `#`).
+  const members = await channelListMembers(
+    db,
+    workspaceId,
+    channels.map(({ id }) => id),
+  );
+  return channels.map((channel) => ({
+    id: channel.id,
+    ...channelInfoOf(channel),
+    members: members.get(channel.id) ?? [],
+  }));
 }
 
 export async function listChannels(

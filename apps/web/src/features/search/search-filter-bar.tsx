@@ -15,8 +15,7 @@ import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
-import { GroupAvatar } from "#src/features/conversations/group-avatar";
-import { useLiveChannelRow } from "#src/features/conversations/sidebar-lists";
+import { GroupAvatar, type GroupAvatarMember } from "#src/features/conversations/group-avatar";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import {
@@ -81,7 +80,7 @@ export function SearchFilterChips({
   onChange: (filters: SearchFilters) => void;
 }) {
   const { sender, channel } = useFilterNames(workspaceId, filters);
-  const chips: { name: string; next: SearchFilters; channelId?: string }[] = [
+  const chips: { name: string; next: SearchFilters; members?: readonly GroupAvatarMember[] }[] = [
     sender && {
       name: m.search_chip_sender({ name: sender.label }),
       next: withSender(filters, undefined),
@@ -98,7 +97,7 @@ export function SearchFilterChips({
       // As the sidebar draws it: its group avatar and its name, no `#` (Frank, 11-10).
       name: channel.name,
       next: { ...filters, channelId: undefined },
-      channelId: channel.id,
+      members: channel.members,
     },
     filters.range && { name: RANGE_LABEL[filters.range](), next: { ...filters, range: undefined } },
     filters.sort === "recent" && {
@@ -116,19 +115,15 @@ export function SearchFilterChips({
           onPress={() => onChange(chip.next)}
           className="inline-flex max-w-[16rem] cursor-pointer items-center gap-1 rounded-lg bg-brand-primary_alt px-2 py-1 text-xs font-medium text-fg-brand-primary outline-focus-ring focus-visible:outline-2"
         >
-          {chip.channelId && <ChannelChipAvatar channelId={chip.channelId} />}
+          {chip.members?.length ? (
+            <GroupAvatar members={chip.members} className="avatar-group-xs" />
+          ) : null}
           <span className="truncate">{chip.name}</span>
           <XClose aria-hidden="true" className="size-3 shrink-0" />
         </AriaButton>
       ))}
     </div>
   );
-}
-
-/** A channel chip's group avatar, from the sidebar's row; none until the row is known. */
-function ChannelChipAvatar({ channelId }: { channelId: string }) {
-  const members = useLiveChannelRow(channelId)?.members;
-  return members?.length ? <GroupAvatar members={members} className="avatar-group-xs" /> : null;
 }
 
 /** The filter button beside the search box and, behind it, the filters (design B, task #46): time
@@ -203,7 +198,11 @@ export function SearchFilterMenu({
                 id: candidate.id,
                 label: candidate.name,
                 ariaLabel: channelLabel(candidate),
-                face: { kind: "channel" as const, visibility: candidate.visibility },
+                face: {
+                  kind: "channel" as const,
+                  visibility: candidate.visibility,
+                  members: candidate.members,
+                },
                 // The row's `#` is an icon; typing it still finds the channel.
                 keywords: `#${candidate.name} ${candidate.description}`,
                 addon: candidate.archived ? m.search_archived() : undefined,
@@ -274,7 +273,17 @@ export function SearchFilterMenu({
           <FilterRow
             icon={Hash02}
             label={m.search_channel()}
-            value={channel?.name}
+            value={
+              channel && (
+                // As the chip draws it: its group avatar, then its name (Frank, 11-10).
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {channel.members?.length ? (
+                    <GroupAvatar members={channel.members} className="avatar-group-xs" />
+                  ) : null}
+                  <span className="truncate">{channel.name}</span>
+                </span>
+              )
+            }
             fallback={m.search_channel_any()}
             onPress={() => setList("channel")}
           />
