@@ -13,20 +13,13 @@ import { countDistinctMessages } from "./agent-history-read";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   SEEN_EXACT_SEQS_LIMIT,
-  isValidMessageSender,
   mergeSeenExactSeqs,
   threadRootTarget,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 
-import {
-  attentionFlags,
-  foldMessageAttention,
-  hasDeliveryScope,
-  isDeliveryTarget,
-  latestCreatedAtField,
-} from "./message-attention-fields";
+import { attentionFlags, hasDeliveryScope, latestCreatedAtField } from "./message-attention-fields";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import { printableSender } from "./agent-notice-sender";
 import {
@@ -46,7 +39,7 @@ import {
   type AttentionDecisionMessage,
   type AttentionDecisionOutcome,
 } from "./agent-message-attention-decision-log";
-import { recoveryWakeupText } from "./agent-recovery-notice";
+import { planRecovery } from "./agent-message-attention-recovery";
 import type { AgentConsumedSeqPort } from "#src/persistence/agent-consumed-seq-store";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import { PendingAttentionReads } from "./agent-message-attention-pending";
@@ -420,55 +413,20 @@ export class AgentMessageAttentionIndex {
     const generation = this.#generation(agentId);
     const session = this.#runtimes.session(agentId);
     if (!session?.notify) throw new Error("Agent session cannot receive a wakeup notice");
-    const currentAttention = this.#attention.get(agentId) ?? new Map<string, MessageAttention>();
-    const byTarget = new Map(currentAttention);
-    const recoveredTargets = new Set<string>();
-    const suppliedTargets = new Set<string>();
-    const recoveredMessages: AgentRecoveryMessage[] = [];
-    const decide = (message: AgentRecoveryMessage, outcome: AttentionDecisionOutcome) =>
-      this.logDecision({ ...message, workspaceId: this.#workspaceId, agentId }, outcome);
-    for (const message of [...messages].sort(
-      (left, right) =>
-        left.conversationId.localeCompare(right.conversationId) || left.sequence - right.sequence,
-    )) {
-      if (
-        !message.messageId ||
-        !message.deliveryId ||
-        !message.conversationId ||
-        !message.body ||
-        !isDeliveryTarget(message.target) ||
-        message.sequence < 1 ||
-        !isValidMessageSender(message.latestSenderKind, message.latestSenderHandle)
-      )
-        throw new Error("invalid Agent recovery message");
-      suppliedTargets.add(message.target);
-      if (this.#alreadyRead(agentId, message)) {
-        decide(message, "consumed");
-        continue;
-      }
-      if (
-        generation.seenDeliveryIds.has(message.deliveryId) ||
-        generation.seenMessageIds.has(message.messageId)
-      ) {
-        decide(message, "already_notified");
-        continue;
-      }
-      recoveredMessages.push(message);
-      recoveredTargets.add(message.target);
-      decide(message, "notified");
-      foldMessageAttention(byTarget, message);
-    }
-    const summaryOnly = Object.entries(unreadSummary).filter(
-      ([target, count]) => !suppliedTargets.has(target) && isDeliveryTarget(target) && count > 0,
-    );
-    if (!recoveredTargets.size && !summaryOnly.length) return new Set();
-    const announced = new Set([...recoveredTargets, ...summaryOnly.map(([target]) => target)]);
-    const notice = recoveryWakeupText({
+    const plan = planRecovery({
       agentId,
-      announced: recoveredMessages,
-      summaryOnly,
+      messages,
+      unreadSummary,
+      currentAttention: this.#attention.get(agentId) ?? new Map<string, MessageAttention>(),
+      seenDeliveryIds: generation.seenDeliveryIds,
+      seenMessageIds: generation.seenMessageIds,
+      alreadyRead: (id, message) => this.#alreadyRead(id, message),
+      decide: (message, outcome) =>
+        this.logDecision({ ...message, workspaceId: this.#workspaceId, agentId }, outcome),
       hasToolProfile: Boolean(this.#runtimes.runtime?.(agentId)?.config.toolProfile),
     });
+    if (!plan) return new Set();
+    const { byTarget, recoveredMessages, announced, notice } = plan;
     // Same synchronous-busy rule as `#notify` — this is also a `session.notify` call.
     this.hold.busy(agentId);
     try {
