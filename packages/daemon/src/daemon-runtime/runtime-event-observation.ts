@@ -76,13 +76,17 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE) {
-    ports.usageReport.contextUsage(
+    const recorded = ports.usageReport.contextUsage(
       agentId,
       launch,
       config.provider,
       event.usedTokens,
       event.windowTokens,
+      event.occurredAt,
     );
+    // A compaction that ended before this reading landed is waiting for it: Claude Code reports
+    // its reading at the turn's end, after the boundary that ended the compaction (task #16).
+    if (recorded) ports.phaseBookkeeping.contextUsageObserved(agentId);
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER) {
@@ -366,6 +370,8 @@ export function observeRuntimeEvent(
     inferredFrom: "turn end",
   });
   ports.phaseBookkeeping.closeSilently("review", agentId);
+  // Last, so a compaction line held for a reading this turn never delivered is written now.
+  ports.phaseBookkeeping.turnEnded(agentId);
   // A turn outcome (of any status) resolves any error observed mid-turn; a crash wording only
   // applies to a process exit with no such outcome in between. A failed turn that already
   // showed its own runtime_error Activity this turn (`crashDetail` set by the `error` event

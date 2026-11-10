@@ -50,23 +50,27 @@ export class AgentUsageReport {
     this.#ports.recordClientSeq(agentId, clientSeq);
   }
 
-  /** A context-usage reading: skipped until the launch's native session id is known, and when
-   * it repeats the last reading. */
+  /** A context-usage reading: skipped until the launch's native session id is known. Whether the
+   * reading was recorded, so the caller knows a compaction may be waiting for it. */
   contextUsage(
     agentId: string,
     launch: PublishedActivityLaunch,
     provider: RuntimeProvider,
     usedTokens: number,
     windowTokens: number,
-  ): void {
+    occurredAt?: string,
+  ): boolean {
     const sessionId = this.#ports.sessionId(agentId);
-    if (!sessionId) return;
+    if (!sessionId) return false;
+    // When the reading was taken rides along, the runtime's own sampling time when it gave one: a
+    // compaction tells a reading it saw before it started from one that arrived after, and the
+    // daemon's receipt time would say the second happened whenever it happened to be parsed.
+    const observedAtMs = observedAt(occurredAt);
     const last = this.#lastContextUsage.get(agentId);
-    if (last && last.usedTokens === usedTokens && last.windowTokens === windowTokens) return;
-    // When the reading was taken rides along: a compaction tells a reading it saw before it
-    // started from one that arrived after, instead of reading the old one back as the result.
-    const observedAtMs = Date.now();
+    // An unchanged count is not re-sent, but it is still a newer sample: the reading on record
+    // takes the newer time, so a held compaction line can see that one arrived.
     this.#lastContextUsage.set(agentId, { usedTokens, windowTokens, observedAtMs });
+    if (last && last.usedTokens === usedTokens && last.windowTokens === windowTokens) return true;
     this.#report(agentId, launch, (clientSeq) =>
       this.#ports.sendContextUsage?.({
         ...this.#ports.envelope(),
@@ -81,6 +85,7 @@ export class AgentUsageReport {
         clientSeq,
       }),
     );
+    return true;
   }
 
   /** The last context-usage reading for an Agent, for the compaction log: a compaction's token
@@ -129,4 +134,13 @@ export class AgentUsageReport {
     this.#lastContextUsage.clear();
     this.#lastServiceTier.clear();
   }
+}
+
+/** When the runtime sampled a reading, from the `occurredAt` its adapter forwards; the daemon's own
+ * clock stands in for a runtime that gave no time, an unparseable one, or one that parses to zero —
+ * the wire format rejects a non-positive `observedAtMs`, and this is a fire-and-forget report that
+ * must never fail the event it observed. */
+function observedAt(occurredAt: string | undefined): number {
+  const parsed = occurredAt === undefined ? Number.NaN : Date.parse(occurredAt);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : Date.now();
 }

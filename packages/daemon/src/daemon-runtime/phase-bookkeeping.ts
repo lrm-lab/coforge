@@ -28,6 +28,53 @@ export type CompactionTokens = Readonly<{
   windowTokens?: number;
 }>;
 
+/** A context reading, and when the runtime sampled it. */
+export type ContextReading = Readonly<{
+  usedTokens: number;
+  windowTokens: number;
+  observedAtMs: number;
+}>;
+
+/** A compaction that ended before its result was known, waiting for it. The runtimes that report
+ * no numbers of their own (Claude Code, Codex) produce their context reading at the end of the
+ * turn the compaction ran in — after the boundary that ends the compaction — so the line waits
+ * for that reading instead of saying the compaction freed nothing (task #16). */
+type EndedCompaction = Readonly<{
+  outcome: "finished" | "inferred" | "interrupted";
+  tokensBefore?: number;
+  /** When the compaction ended. The daily report attributes the line by this, not by when the line
+   * was written, since a held line is written at the end of the turn. */
+  endedAtMs: number;
+  /** The newest reading sample this compaction knows of: the one it opened on, or, once the line
+   * is held, the one that was on record when it was held — so the same sample cannot end the wait. */
+  seenAtMs?: number;
+  readingsExist: boolean;
+  reported?: CompactionTokens;
+  interruption?: CompactionInterruption;
+}>;
+
+/** The reading that is this compaction's result, or `undefined` while there is none: a later
+ * sample than the reading this compaction knows of, and never a zero — Codex writes one around a
+ * compaction, and a compacted context still holds its summary, so zero is a sentinel rather than a
+ * measurement.
+ *
+ * `mustBeSmaller` applies only while the compaction's end is being observed: a reading on record
+ * then may still be the one taken before it started, which repeats the starting count and would
+ * say the compaction freed nothing. A reading that arrives after the end was observed is a fresh
+ * sample taken after the compaction, so it need not be smaller — the turn it ends may well have
+ * grown past the count the compaction opened on, which is all Claude Code ever has to compare to. */
+function compactionResult(
+  ended: EndedCompaction,
+  reading: ContextReading | undefined,
+  { mustBeSmaller }: { mustBeSmaller: boolean },
+): ContextReading | undefined {
+  if (!reading || reading.usedTokens <= 0) return undefined;
+  if (ended.seenAtMs !== undefined && reading.observedAtMs <= ended.seenAtMs) return undefined;
+  if (mustBeSmaller && ended.tokensBefore !== undefined && reading.usedTokens >= ended.tokensBefore)
+    return undefined;
+  return reading;
+}
+
 /** The runtime supplies only where Activity goes: the current launch, its draft builder, and the
  * publisher. Providers report raw phase signals; this module decides what each becomes on the
  * wire — see `agent-runtime/phase-tracker.ts` for the watchdog semantics. */
@@ -44,9 +91,7 @@ export type PhaseBookkeepingPorts = Readonly<{
   contexts: Pick<AgentContexts, "newContext" | "compactionFailed" | "compactionSucceeded">;
   /** The Agent's last context-usage reading and when it was taken: a compaction's token numbers,
    * when one was observed — and only the one observed after it started counts as its result. */
-  contextUsage?(
-    agentId: string,
-  ): { usedTokens: number; windowTokens: number; observedAtMs: number } | undefined;
+  contextUsage?(agentId: string): ContextReading | undefined;
 }>;
 
 /**
@@ -56,12 +101,11 @@ export type PhaseBookkeepingPorts = Readonly<{
  */
 export class PhaseBookkeeping {
   readonly #phases: Readonly<Record<RuntimePhase, PhaseTracker>>;
-  /** Where each open compaction started: the reading it saw then (with when it was taken), and
-   * when it opened, so a reading from before it cannot be read back as its result. */
-  readonly #compactionBefore = new Map<
-    string,
-    { usedTokens?: number; startedAtMs: number; seenAtMs?: number }
-  >();
+  /** Where each open compaction started: the reading it saw then, so a reading from before it
+   * cannot be read back as its result. */
+  readonly #compactionBefore = new Map<string, { usedTokens?: number; seenAtMs?: number }>();
+  /** Compactions whose line waits for the turn's reading — see `EndedCompaction`. */
+  readonly #endedCompactions = new Map<string, EndedCompaction>();
   /** Failures seen while this compaction stayed open: the second one means its recovery did not
    * help, and Raft counts it as exhausted. */
   readonly #compactionAttempts = new Map<string, number>();
@@ -79,9 +123,9 @@ export class PhaseBookkeeping {
   /** One line per compaction that ends, with the numbers the runtime itself reported for the
    * compaction first, then our own context readings. A missing number stays missing — this never
    * invents one to look complete. */
-  #logCompactionTokens(
+  #endCompaction(
     agentId: string,
-    outcome: "finished" | "inferred" | "interrupted",
+    outcome: EndedCompaction["outcome"],
     reported?: CompactionTokens,
     interruption?: CompactionInterruption,
   ): void {
@@ -89,39 +133,82 @@ export class PhaseBookkeeping {
     this.#compactionBefore.delete(agentId);
     this.#compactionAttempts.delete(agentId);
     const reading = this.ports.contextUsage?.(agentId);
-    const tokensBefore = reported?.tokensBefore ?? started?.usedTokens;
-    // A runtime that reports its own numbers needs no fallback; one that does not (Claude Code,
-    // Codex) has only these readings. A reading counts as this compaction's result when it is a
-    // new sample — newer than the one the compaction opened on — and smaller than what it started
-    // with: readings arrive at turn boundaries, so one taken while the compaction was still running
-    // repeats the full context and must not pass as the result.
-    const after =
-      started &&
-      reading &&
-      reading.observedAtMs >= started.startedAtMs &&
-      (started.seenAtMs === undefined || reading.observedAtMs > started.seenAtMs) &&
-      (tokensBefore === undefined || reading.usedTokens < tokensBefore)
-        ? reading
-        : undefined;
-    const tokensAfter = reported?.tokensAfter ?? after?.usedTokens;
-    // Whether this runtime has ever produced a reading for the Agent tells a missed reading from a
-    // runtime that has none to give: only some runtimes emit them at all.
-    const readingsExist = started?.seenAtMs !== undefined || reading !== undefined;
+    const ended: EndedCompaction = {
+      outcome,
+      tokensBefore: reported?.tokensBefore ?? started?.usedTokens,
+      endedAtMs: Date.now(),
+      seenAtMs: started?.seenAtMs,
+      // Whether this runtime has ever produced a reading for the Agent tells a missed reading
+      // from a runtime that has none to give: only some runtimes emit them at all.
+      readingsExist: started?.seenAtMs !== undefined || reading !== undefined,
+      reported,
+      interruption,
+    };
+    const result = compactionResult(ended, reading, { mustBeSmaller: true });
+    // An interruption says why the compaction ended rather than how much it freed, so it does not
+    // wait for a number; a runtime that reports its own numbers needs none either.
+    if (outcome === "interrupted" || reported?.tokensAfter !== undefined || result) {
+      this.#writeCompactionLine(agentId, ended, result);
+      return;
+    }
+    // Claude Code reports its reading at the end of the turn the compaction ran in: hold the line
+    // until that reading lands (`contextUsageObserved`) or the turn ends without one (`turnEnded`).
+    // The sample already on record cannot end the wait, so the hold remembers it as the newest.
+    this.#endedCompactions.set(agentId, {
+      ...ended,
+      seenAtMs: reading?.observedAtMs ?? ended.seenAtMs,
+    });
+  }
+
+  /** A context reading arrived for an Agent: resolve a compaction that ended before it. */
+  contextUsageObserved(agentId: string): void {
+    const ended = this.#endedCompactions.get(agentId);
+    if (!ended) return;
+    const result = compactionResult(ended, this.ports.contextUsage?.(agentId), {
+      mustBeSmaller: false,
+    });
+    if (!result) return;
+    this.#endedCompactions.delete(agentId);
+    this.#writeCompactionLine(agentId, ended, result, true);
+  }
+
+  /** The Agent's turn is over: a held compaction line is written now, saying what it lacks. */
+  turnEnded(agentId: string): void {
+    const ended = this.#endedCompactions.get(agentId);
+    if (!ended) return;
+    this.#endedCompactions.delete(agentId);
+    this.#writeCompactionLine(agentId, ended, undefined, true);
+  }
+
+  #writeCompactionLine(
+    agentId: string,
+    ended: EndedCompaction,
+    result: ContextReading | undefined,
+    held = false,
+  ): void {
+    const { reported, interruption } = ended;
+    const tokensAfter = reported?.tokensAfter ?? result?.usedTokens;
+    const lastReading = this.ports.contextUsage?.(agentId);
     logger.info("Context compaction ended", {
       event: "agent.runtime.compaction_tokens",
       agent_id: agentId,
-      outcome,
-      tokens_before: tokensBefore,
+      outcome: ended.outcome,
+      // When the compaction ended, so the daily report buckets this line by the compaction rather
+      // than by when it was written, and `delayed_ms` says how long it waited for its reading.
+      compaction_ended_at: new Date(ended.endedAtMs).toISOString(),
+      ...(held ? { delayed_ms: Math.max(0, Date.now() - ended.endedAtMs) } : {}),
+      tokens_before: ended.tokensBefore,
       tokens_after: tokensAfter,
-      window_tokens: reported?.windowTokens ?? after?.windowTokens ?? reading?.windowTokens,
+      window_tokens: reported?.windowTokens ?? result?.windowTokens ?? lastReading?.windowTokens,
       // Where the after number came from: the runtime's own compaction result, or one of our
       // context readings. The daily report splits its trend on this instead of guessing versions,
       // because a reading-derived number under the old code could only repeat the starting count.
       ...(tokensAfter === undefined
         ? {
-            tokens_after_unavailable: readingsExist
-              ? "no_reading_after_compaction"
-              : "runtime_reports_no_readings",
+            tokens_after_unavailable:
+              ended.readingsExist || lastReading !== undefined
+                ? "no_reading_after_compaction"
+                : "runtime_reports_no_readings",
           }
         : { tokens_source: reported?.tokensAfter !== undefined ? "runtime" : "reading" }),
       // An interruption nobody explained stays visibly unexplained rather than reading as a plain
@@ -160,10 +247,12 @@ export class PhaseBookkeeping {
     if (this.#phases[phase].start(agentId) !== "started") return;
     this.#publish(agentId, launch, RUNTIME_PHASES[phase].started, conversation);
     if (phase === "compaction") {
+      // A compaction that ended and never got its reading is written before this one opens, so
+      // the older line cannot be lost behind the newer start.
+      this.turnEnded(agentId);
       const seen = this.ports.contextUsage?.(agentId);
       this.#compactionBefore.set(agentId, {
         usedTokens: seen?.usedTokens,
-        startedAtMs: Date.now(),
         seenAtMs: seen?.observedAtMs,
       });
     }
@@ -184,7 +273,7 @@ export class PhaseBookkeeping {
       this.ports.contexts.compactionSucceeded(agentId);
       // Recovered: a later exhaustion is news again.
       this.#resetNoticeSent.delete(agentId);
-      this.#logCompactionTokens(agentId, "finished", reported);
+      this.#endCompaction(agentId, "finished", reported);
     }
   }
 
@@ -198,7 +287,7 @@ export class PhaseBookkeeping {
     if (this.#phases.compaction.finish(agentId) !== "finished") return;
     this.#publish(agentId, launch, inferredCompactionFinish(inferredFrom), conversation);
     this.ports.contexts.newContext(agentId);
-    this.#logCompactionTokens(agentId, "inferred");
+    this.#endCompaction(agentId, "inferred");
   }
 
   /** Ends an open phase once as interrupted, for a phase that reports interruptions.
@@ -223,7 +312,7 @@ export class PhaseBookkeeping {
     if (this.#phases[phase].interrupt(agentId) !== "interrupted") return;
     this.#publish(agentId, launch, interrupted, conversation);
     if (phase !== "compaction") return;
-    this.#logCompactionTokens(agentId, "interrupted", undefined, interruption);
+    this.#endCompaction(agentId, "interrupted", undefined, interruption);
   }
 
   /** A runtime error that arrives while a compaction is open is that compaction failing. Counted
@@ -272,6 +361,8 @@ export class PhaseBookkeeping {
 
   /** Forgets one Agent's open phases and stops their watchdogs. */
   dispose(agentId: string): void {
+    // A held line is written before the Agent is forgotten: the compaction happened either way.
+    this.turnEnded(agentId);
     for (const tracker of Object.values(this.#phases)) tracker.dispose(agentId);
     // A relaunch is a new attempt at the same session's problem: it may say so again.
     this.#resetNoticeSent.delete(agentId);
@@ -279,6 +370,7 @@ export class PhaseBookkeeping {
 
   /** Forgets every Agent's open phases; used on full daemon shutdown. */
   disposeAll(): void {
+    for (const agentId of [...this.#endedCompactions.keys()]) this.turnEnded(agentId);
     for (const tracker of Object.values(this.#phases)) tracker.disposeAll();
   }
 }
