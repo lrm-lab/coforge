@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 const repositoryRoot = realpathSync(join(import.meta.dir, "../.."));
 const worktree = process.cwd();
 const formatPath = /\.(?:[cm]?[jt]sx?|jsonc?|css|scss|less)$/i;
-const rootFormatDirectories = new Set([
+export const ROOT_FORMAT_DIRECTORIES = new Set([
   "audit",
   "ci",
   "dev",
+  "deploy",
   "docs",
   "git-hooks",
   "migration-safety",
@@ -16,6 +17,10 @@ const rootFormatDirectories = new Set([
   "reference-computer",
   "release",
   "test",
+]);
+export const ROOT_FORMAT_FILES = new Set([
+  "scripts/verify-oss-cdn.test.ts",
+  "scripts/verify-oss-cdn.ts",
 ]);
 const formatPathspecs = [
   "*.cjs",
@@ -57,9 +62,8 @@ function stagedFiles(): string[] {
 
 function isFormatScope(path: string): boolean {
   if (path.startsWith("apps/") || path.startsWith("packages/")) return true;
-  if (path === "scripts/verify-oss-cdn.ts" || path === "scripts/verify-oss-cdn.test.ts")
-    return true;
-  return path.startsWith("scripts/") && rootFormatDirectories.has(path.split("/")[1] ?? "");
+  if (ROOT_FORMAT_FILES.has(path)) return true;
+  return path.startsWith("scripts/") && ROOT_FORMAT_DIRECTORIES.has(path.split("/")[1] ?? "");
 }
 
 function stagedBlob(path: string): Uint8Array {

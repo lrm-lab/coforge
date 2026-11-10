@@ -1,11 +1,36 @@
 import { expect, spyOn, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { checkOxfmtAvailable } from "../ci/staged-format";
+import {
+  checkOxfmtAvailable,
+  ROOT_FORMAT_DIRECTORIES,
+  ROOT_FORMAT_FILES,
+} from "../ci/staged-format";
 import { useTestRepo } from "./test-repo";
 
 const repo = useTestRepo();
 const formatted = "const value = { ok: true };\n";
 const unformatted = "const value={ok:true};\n";
+
+test("the staged-format scope matches every root CI oxfmt command", () => {
+  const root = JSON.parse(readFileSync(join(import.meta.dir, "../../package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+  const directories = new Set<string>();
+  const files = new Set<string>();
+  for (const command of Object.values(root.scripts)) {
+    for (const match of command.matchAll(/bunx oxfmt --check ([^&]+)/g)) {
+      for (const path of match[1]!.trim().split(/\s+/)) {
+        if (!path.startsWith("scripts/")) continue;
+        if (/\.[a-z]+$/i.test(path)) files.add(path);
+        else directories.add(path.slice("scripts/".length));
+      }
+    }
+  }
+  expect(directories).toEqual(ROOT_FORMAT_DIRECTORIES);
+  expect(files).toEqual(ROOT_FORMAT_FILES);
+});
 
 test("pre-commit checks the staged blob, not the worktree file", () => {
   repo.seed({ "apps/web/src.ts": formatted });
