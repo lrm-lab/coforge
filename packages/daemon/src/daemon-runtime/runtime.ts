@@ -7,7 +7,7 @@ import {
   type UsageSnapshot,
 } from "@lrm/coforge-anvil";
 import { OperatingSystemInfo } from "#src/platform/operating-system";
-import { AgentInputDrain } from "./agent-input-drain";
+import { assembleInputDrain } from "./assemble-input-drain";
 import { attachFreshSessionMemoryPort } from "./session-memory-hooks";
 import { rebindAgent } from "./agent-rebind";
 import { AgentLaunchCustody } from "./agent-launch-custody";
@@ -59,7 +59,6 @@ import {
 } from "#src/daemon-runtime/runtime-local-queries";
 import {
   type RunnerHoldReason,
-  MENTION_DELIVERY_TERMINAL_CODES,
   type AgentActivity,
   type AgentMessageResponse,
   type AgentStartIntent,
@@ -144,7 +143,6 @@ import { AgentRequestForwarder } from "./agent-request-forwarder";
 import { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import {
   applyContextViewGate,
-  deliverContextViewMessage,
   reportContextViewAvailability,
   reportServerFeatureAvailability,
   resolveContextViewProviderSource,
@@ -162,11 +160,7 @@ import type { ActivityLaunch } from "./activity-launch";
 import { AgentOfflineResidency } from "./agent-offline-residency";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
 import { assembleUsageReport } from "./agent-usage-report-wiring";
-import {
-  isTrackedMention,
-  MentionDeliveryTracker,
-  type RunningMentionIdentity,
-} from "./mention-delivery-tracker";
+import { MentionDeliveryTracker, type RunningMentionIdentity } from "./mention-delivery-tracker";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import type { SystemCleaner, SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
@@ -336,32 +330,21 @@ export class DaemonRuntime {
   /** Agents launched with the weekly-report-collect skill pack. */
   readonly #collectSkillAgents = new Set<string>();
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
-  readonly #inputDrain = new AgentInputDrain({
+  readonly #inputDrain = assembleInputDrain({
     runnerHeld: () => this.#runnerHold !== undefined,
-    sessionFor: (agentId) => this.#agentProcessManager.session(agentId),
-    launchFor: (agentId) => this.#currentActivityLaunches.get(agentId),
-    hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
-    isLaunching: (agentId) => this.#agentLaunches.has(agentId),
-    isStopping: (agentId) => this.#stopState.stopping(agentId),
-    deliverMessage: (agentId, message) =>
-      deliverContextViewMessage(this, agentId, message, () =>
-        isTrackedMention(message)
-          ? this.#mentionDeliveries.deliver(message)
-          : this.#messageAttention.receive(message),
-      ),
-    runStartup: async (agentId, session, launch, text) => {
-      this.#launchCustody.noteStartupTurn(agentId);
-      await launch.startup?.run(session.sendMessage(text));
-    },
-    runPrompt: (agentId, text, introduction) =>
-      this.#launchCustody.runPromptTurn(agentId, text, introduction),
-    recoverAttention: (agentId, context) => this.#launchCustody.recover(agentId, context),
+    processManager: () => this.#agentProcessManager,
+    launches: () => this.#currentActivityLaunches,
+    deliveryQueue: () => this.#deliveryQueue,
+    agentLaunches: () => this.#agentLaunches,
+    stopState: () => this.#stopState,
+    contextView: () => this,
+    mentionDeliveries: () => this.#mentionDeliveries,
+    messageAttention: () => this.#messageAttention,
+    launchCustody: () => this.#launchCustody,
     abandonLaunch: (agentId, error) => this.#abandonLaunch(agentId, error),
-    publishStartupError: (agentId, launch, message) =>
-      this.#activityPublisher.publish(agentId, launch, this.#drafts.runtimeError(agentId, message)),
-    forgetIntroduced: (agentId) => this.#introducedAgents.delete(agentId),
-    dropMention: (message) =>
-      this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
+    activityPublisher: () => this.#activityPublisher,
+    drafts: () => this.#drafts,
+    introducedAgents: () => this.#introducedAgents,
   });
   /** Delivery admission, launch-boundary recovery, and turn-open bookkeeping. */
   readonly #launchCustody: AgentLaunchCustody;
