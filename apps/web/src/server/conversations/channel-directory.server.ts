@@ -212,10 +212,17 @@ export async function archivedChannels(
     orderBy: [{ archivedAt: "desc" }, { channelName: "asc" }],
     select: { id: true, channelName: true, archivedAt: true, visibility: true },
   });
+  // Each row's group avatar comes with the list, so Settings renders it on the server too.
+  const members = await channelListMembers(
+    db,
+    workspaceId,
+    channels.map(({ id }) => id),
+  );
   return channels.map((channel) => ({
     id: channel.id,
     name: channel.channelName!,
     archivedAt: channel.archivedAt!,
     visibility: channelVisibilityOf(channel),
+    members: members.get(channel.id) ?? [],
   }));
 }

@@ -15,7 +15,8 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { loadArchivedChannels, setPublicChannelArchived } from "./channel-lifecycle.functions";
-import { ChannelFace, channelGlyph } from "./channel-name";
+import { channelGlyph } from "./channel-name";
+import { GroupAvatar } from "./group-avatar";
 import { isPrivateChannel } from "./channel-visibility";
 import { useRefreshSidebarChannels } from "./sidebar-lists";
 
@@ -132,13 +133,11 @@ function ArchivedChannelRow({
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {/* The line under the name says whether it is public or private; the icon only echoes it. */}
         <span aria-hidden="true" className="shrink-0">
-          <ChannelFace
-            channelId={channel.id}
-            className="avatar-group-row"
-            fallback={
-              <FeaturedIcon icon={channelGlyph(channel)} color="gray" theme="modern" size="sm" />
-            }
-          />
+          {channel.members.length > 0 ? (
+            <GroupAvatar members={channel.members} className="avatar-group-row" />
+          ) : (
+            <FeaturedIcon icon={channelGlyph(channel)} color="gray" theme="modern" size="sm" />
+          )}
         </span>
         <div className="min-w-0">
           <Link
