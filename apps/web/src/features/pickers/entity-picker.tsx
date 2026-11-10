@@ -185,6 +185,9 @@ export function PickerMenu({
         : {
             selectionMode: "single" as const,
             selectedKeys: choice.selectedKey === null ? [] : [choice.selectedKey],
+            // A menu given `onClose` closes through it, never by closing the overlay it sits in:
+            // a filter's list inside the search filters goes back to them, the filters stay open.
+            shouldCloseOnSelect: !onClose,
             // Choosing what is already chosen changes nothing, as a select would not.
             onAction: (key: Key) => {
               if (key !== choice.selectedKey) choice.onSelect(String(key));
