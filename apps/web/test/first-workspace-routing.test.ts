@@ -60,6 +60,10 @@ await mockModuleForFile("#src/features/settings/assumed-viewport.functions", () 
   // Read from the request on a real server; nothing here is a phone.
   loadAssumedPhone: () => false,
 }));
+// The browser's zone from its cookie: read from the request, which a unit test has none of.
+await mockModuleForFile("#src/features/settings/time-zone-cookie.functions", () => ({
+  loadCookieTimeZone: () => undefined,
+}));
 let joinPreview: unknown = null;
 const joinFunctions = await import("#src/features/workspaces/join-links.functions");
 await mockModuleForFile("#src/features/workspaces/join-links.functions", () => ({

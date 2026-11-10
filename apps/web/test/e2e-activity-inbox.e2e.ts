@@ -8,7 +8,6 @@ import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./hel
 import {
   activeCount,
   currentRow,
-  daysNamed,
   inPane,
   listColumnWidth,
   openParam,
@@ -345,12 +344,10 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     // A thread read to the end with no mention opens at its newest reply. Activity without an
     // open conversation (where its nav item leads) is the full-width list again.
     await browser("open", `${origin}${workspacePath}/activity`);
-    // Until the days are named: they are only once hydrated, and their headings move the rows
-    // down, so a click before then can land on a heading. That shift is task #68's.
     await browser(
       "wait",
       "--fn",
-      `document.body.textContent.includes("E2E quiet root") && ${pageHydrated} && ${daysNamed}`,
+      `document.body.textContent.includes("E2E quiet root") && ${pageHydrated}`,
     );
     expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
     await browser("find", "text", "E2E quiet root", "click");

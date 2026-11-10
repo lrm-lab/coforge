@@ -10,6 +10,8 @@ import { ComputerUpgradeWatcher } from "#src/features/computers/computer-upgrade
 import { TimeFormatProvider } from "#src/lib/time-format-context";
 import { TimeZoneProvider } from "#src/lib/time-zone-context";
 import { loadAssumedPhone } from "#src/features/settings/assumed-viewport.functions";
+import { loadCookieTimeZone } from "#src/features/settings/time-zone-cookie.functions";
+import { useTimeZoneCookie } from "#src/features/settings/use-time-zone-cookie";
 import { AssumedViewportProvider } from "#src/hooks/assumed-viewport";
 import { getUserProfile } from "#src/features/profiles/profile.functions";
 import {
@@ -142,6 +144,11 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       statusAgents: workspaceAgents.statusAgents,
       agentStreamPositions: workspaceAgents.streamPositions,
       timeZone: preferences.timeZone,
+      // The browser's zone, which the server knows only from the cookie the page writes, and when
+      // this ran: together the render's clock, so a list grouped by day is grouped before hydration
+      // the same way the browser hydrates it (task #68).
+      cookieTimeZone: loadCookieTimeZone() ?? null,
+      renderedAt: Date.now(),
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
       language: preferences.language,
@@ -163,6 +170,8 @@ function AppLayout() {
     agentStreamPositions,
     notifications,
     timeZone,
+    cookieTimeZone,
+    renderedAt,
     assumedPhone,
     timeFormat,
     language,
@@ -191,6 +200,7 @@ function AppLayout() {
   }, [language]);
   const aiWorkbench = useAiWorkbenchEnabled(aiWorkbenchEnabled);
   useLastLocationMemory();
+  useTimeZoneCookie();
   useSidebarShortcut();
   const getRealtimeToken = useServerFn(getBrowserRealtimeConnectionToken);
   const getConnectionToken = useCallback(() => getRealtimeToken(), [getRealtimeToken]);
@@ -199,7 +209,7 @@ function AppLayout() {
   const otherTask = parseOtherTask(useOtherTaskParam());
   return (
     <TimeFormatProvider timeFormat={timeFormat}>
-      <TimeZoneProvider saved={timeZone}>
+      <TimeZoneProvider saved={timeZone} cookie={cookieTimeZone} renderedAt={renderedAt}>
         <AssumedViewportProvider phone={assumedPhone}>
           <BrowserRealtimeProvider
             workspaceId={currentWorkspace.id}

@@ -57,3 +57,34 @@ test("an older day names its weekday within this year and its year before it", (
   expect(lastYear).toMatch(/2025/);
   expect(lastYear).not.toMatch(/Wednesday/);
 });
+
+// The server groups with the render's clock (task #68); these are the zones and instants where a
+// day boundary is easiest to get wrong.
+test("half-hour and far-east zones name the right day, a minute either side of their midnight", () => {
+  // 18:30 UTC is midnight in Kolkata (UTC+5:30); 11:00 UTC is midnight in Tongatapu (UTC+13).
+  const kolkata = [
+    { id: "before", at: "2026-11-07T18:29:00Z" },
+    { id: "after", at: "2026-11-07T18:31:00Z" },
+  ];
+  expect(groupByDay(kolkata, at, "Asia/Kolkata", now).map((group) => group.key)).toEqual([
+    "2026-11-07",
+    "2026-11-08",
+  ]);
+  const tonga = [
+    { id: "before", at: "2026-11-07T10:59:00Z" },
+    { id: "after", at: "2026-11-07T11:01:00Z" },
+  ];
+  expect(groupByDay(tonga, at, "Pacific/Tongatapu", now).map((group) => group.key)).toEqual([
+    "2026-11-07",
+    "2026-11-08",
+  ]);
+});
+
+test("today follows the render's moment, a minute either side of the viewer's midnight", () => {
+  const items = [{ id: "a", at: "2026-11-07T18:00:00Z" }];
+  // Kolkata's 2026-11-08 begins at 2026-11-07T18:30Z: the item is that day's "yesterday" just after.
+  const justBefore = Date.parse("2026-11-07T18:29:00Z");
+  const justAfter = Date.parse("2026-11-07T18:31:00Z");
+  expect(groupByDay(items, at, "Asia/Kolkata", justBefore)[0]!.label).toBe("Today");
+  expect(groupByDay(items, at, "Asia/Kolkata", justAfter)[0]!.label).toBe("Yesterday");
+});
