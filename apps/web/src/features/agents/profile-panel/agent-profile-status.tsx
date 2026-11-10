@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
@@ -6,13 +6,18 @@ import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useAppToast } from "#src/components/ui/toast";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
-import { interruptAgentTurn } from "#src/features/agents/agent-turn-interrupt.functions";
+import {
+  readAgentTurnInterrupt,
+  startAgentTurnInterrupt,
+} from "#src/features/agents/agent-turn-interrupt.functions";
+import { interruptAgentTurnOutcome } from "#src/features/agents/agent-turn-interrupt-poll";
+import type { AgentTurnInterruptOutcome } from "#src/server/agents/agent-turn-interrupt.server";
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { m } from "#src/paraglide/messages";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentErrorBanner, type AgentRetry } from "./agent-error-banner";
 
-type Outcome = Awaited<ReturnType<typeof interruptAgentTurn>>;
+type Outcome = AgentTurnInterruptOutcome;
 type Failure = Extract<Outcome, "needs_upgrade" | "offline" | "failed">;
 
 const OUTCOME_TEXT: Record<Outcome, () => string> = {
@@ -55,24 +60,32 @@ export function AgentProfileStatus({
 
 /** Unmounting on recovery also discards feedback from the preceding stalled turn. */
 function StalledTurnStatus({ agentId }: { agentId: string }) {
-  const interrupt = useServerFn(interruptAgentTurn);
+  const start = useServerFn(startAgentTurnInterrupt);
+  const read = useServerFn(readAgentTurnInterrupt);
   const toast = useAppToast();
   const [pending, guard] = useSubmitGuard();
   const [failure, setFailure] = useState<Failure | null>(null);
+  // The Daemon ends the stalled display before it reports, which unmounts this panel while the
+  // poll runs. The poll is not cancelled and the toast is still shown; only this component's own
+  // state is guarded.
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   function stopTurn() {
     void guard(async () => {
       setFailure(null);
-      try {
-        const outcome = await interrupt({
-          data: { agentId, requestId: crypto.randomUUID() },
-        });
-        if (outcome === "needs_upgrade" || outcome === "offline" || outcome === "failed")
-          setFailure(outcome);
-        else toast.success(OUTCOME_TEXT[outcome]());
-      } catch {
-        setFailure("failed");
-      }
+      const outcome = await interruptAgentTurnOutcome({
+        start: () => start({ data: { agentId } }),
+        read: (requestId) => read({ data: { agentId, requestId } }),
+      });
+      if (outcome === "needs_upgrade" || outcome === "offline" || outcome === "failed") {
+        if (mounted.current) setFailure(outcome);
+      } else toast.success(OUTCOME_TEXT[outcome]());
     });
   }
 

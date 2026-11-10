@@ -73,6 +73,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   throwing; `executeAgentControl` throws only on `failed`. `publishStop()`
   throws on supersede because its callers need a confirmed stop.
 - Control clears the Session binding at the local chain step.
+- `agent-turn-interrupt.server.ts` (Stop current turn) never holds a request for the Daemon (up to ~15 s; production cuts idle requests at ~10 s): `start` returns a request id or a refusal, `read` returns `pending` or the outcome, both re-checking access, the result keyed by Workspace and Agent.
 
 ## Send freshness
 
