@@ -38,3 +38,13 @@ test("a selector a revamp retired stays out of the e2es", () => {
       `${name} selects the retired Activity list label; aim it at the section or the list column`,
     ).toBe(false);
 });
+
+test("no e2e finds the sidebar's Activity link by its exact name", () => {
+  // Task #62 put the unread count in the link's name ("Activity, 5 unread"), so an exact "Activity"
+  // match finds nothing once anything is unread; clickActivityLink finds it by its address.
+  for (const { name, source } of e2eFiles)
+    expect(
+      /"--name",\s*"Activity",\s*"--exact"/.test(source),
+      `${name} finds the Activity link by its exact name; use clickActivityLink from helpers/`,
+    ).toBe(false);
+});

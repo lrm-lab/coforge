@@ -14,6 +14,18 @@ export const rowItems = JSON.stringify("[data-activity-list] ol > li");
 /** The days are named: before hydration the rows are one undated list, labelled "Activity". */
 export const daysNamed = `[...document.querySelectorAll("[data-activity-list] ol")].every((list) => list.getAttribute("aria-label") !== "Activity")`;
 
+/**
+ * Clicks the sidebar's Activity link, with a real click. Found by its address, not its name: the
+ * name carries the unread count ("Activity, 5 unread"), and the shell also renders a hidden copy.
+ */
+export async function clickActivityLink(browser: (...args: string[]) => Promise<string>) {
+  const links = 'a[href$="/activity"]';
+  const visible = `JSON.stringify([...document.querySelectorAll(${JSON.stringify(links)})].findIndex((link) => link.getClientRects().length > 0))`;
+  const index = JSON.parse(JSON.parse(await browser("eval", visible))) as number;
+  if (index < 0) throw new Error("no visible Activity link");
+  await browser("find", "nth", String(index), links, "click");
+}
+
 /** The Pinned section's rows, as a selector literal for page expressions. */
 export const pinnedItems = JSON.stringify('ol[aria-label="Pinned"] > li');
 

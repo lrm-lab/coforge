@@ -12,7 +12,7 @@ import {
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
-import { inPane, rowItems, waitFor } from "./helpers/activity-inbox-e2e";
+import { clickActivityLink, inPane, rowItems, waitFor } from "./helpers/activity-inbox-e2e";
 import { dividerBetween, postLive, row, seedChannel } from "./helpers/open-unread-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
@@ -71,7 +71,7 @@ test("a channel read in Chat and opened from Activity after messages came shows 
     // An Agent's receipt, as on staging's #teste-testa.
     await send(read.length + 2, "E2E open-cached probe received");
 
-    await browser("find", "role", "link", "click", "--name", "Activity", "--exact");
+    await clickActivityLink(browser);
     const unreadTab = `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith("Unread"))`;
     // SSR draws the tabs before React can hear a click; wait for hydration first.
     await browser("wait", "--fn", `${unreadTab} !== undefined && ${hydratedElement(unreadTab)}`);

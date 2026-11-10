@@ -1,4 +1,5 @@
 import { emptyCatalogs } from "./fixtures/empty-catalogs";
+import { clickActivityLink } from "./helpers/activity-inbox-e2e";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -197,7 +198,7 @@ test("Profile controls and Skills cross Web, WSS, native child and Session persi
     expect(restart.identity?.sessionId).toBe(resumableId);
     expect(() => process.kill(oldPid, 0)).toThrow();
     expect(Number(await Bun.file(join(workspace, ".control-child-pid")).text())).not.toBe(oldPid);
-    await browser("find", "role", "link", "click", "--name", "Activity", "--exact");
+    await clickActivityLink(browser);
     await browser(
       "wait",
       "--fn",
