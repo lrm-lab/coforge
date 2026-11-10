@@ -32,7 +32,14 @@ import {
 import { type AgentActivity, type AgentSessionInvalidateReason } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { launchAgentProcess } from "./agent-launch-process";
-import { carriedStart, type CarriedStart } from "./provider-replay-recovery";
+import {
+  carriedStart,
+  newlyParked,
+  pendingMentions,
+  reissuedMentions,
+  type CarriedStart,
+} from "./provider-replay-recovery";
+import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import { replayRejectedEndPlan } from "./runtime-release-plans";
 import type { RuntimeRelease } from "./runtime-release";
 import { noteAgentRelaunchPending } from "./agent-launch-tags";
@@ -60,7 +67,7 @@ export type AgentLaunchCoordinatorPorts = {
   runtimeInstanceId: string;
   agentProcessManager: AgentProcessManager;
   /** Which Agents are stopping, and any stop still in flight. */
-  stops: Pick<AgentStopRegistry, "stopping" | "pendingStop">;
+  stops: Pick<AgentStopRegistry, "stopping" | "pendingStop" | "owedRecovery">;
   /** The Session each launch reported. */
   sessions: Pick<AgentStopRegistry, "sessionReference" | "rememberSession">;
   currentActivityLaunches: Map<string, ActivityLaunch>;
@@ -129,7 +136,8 @@ export type AgentLaunchCoordinatorPorts = {
     provider: AgentRuntimeConfig["provider"],
     error: unknown,
   ) => ActivityDraft;
-  drainAppInboxNotices: (agentId: string) => Promise<void>;
+  /** The App Inbox: each launch announces its items, and a replaced Session forgets who was told. */
+  appInbox: Pick<AgentInboxCoordinator, "drainAppInboxNotices" | "forgetAnnouncedAppItems">;
   /** Puts the Agent's MEMORY.md block at the front of a fresh session's queued input. */
   attachSessionMemory: (agentId: string) => Promise<boolean>;
   /** A daemon-initiated relaunch after a process exit (the resumed-session cold start): the
@@ -295,7 +303,7 @@ export class AgentLaunchCoordinator {
    * turn has ended: end the live runtime through `RuntimeRelease`, then replace the Session as for
    * an early crash. The fresh Session is told what the Agent never read, read before the exit
    * clears it, what arrived while the runtime was ending, and what the launch was started with
-   * (provider-replay-recovery.ts).
+   * (provider-replay-recovery.ts), less the tracked mentions the server issues again.
    * Whether the Session was replaced: when not, the watch stays armed for the next rejected turn. */
   async #coldStartRejectedReplay(
     agentId: string,
@@ -314,20 +322,41 @@ export class AgentLaunchCoordinator {
     )
       return false;
     const unread = ports.messageAttention.check(agentId);
-    return ports.runtimeRelease.endAndReplace(agentId, replayRejectedEndPlan(restart), (parked) => {
-      // The failure's backoff belongs to the process that earned it, and its error class (a status
-      // code makes it a provider API one) is not one a turn's end lifts: the fresh Session starts
-      // with no hold, as after a take-offline.
-      ports.deliveryQueue.endHoldForNextLaunch(agentId);
-      ports.runtimeErrorHold.forget(agentId);
-      this.#coldStartResumedSession(
-        agentId,
-        launch,
-        staleSessionId,
-        "provider_replay_rejected",
-        carriedStart(started, unread, parked),
-      );
-    });
+    // Read before the exit clears the attention and the hand-back forgets the tracked mentions.
+    const mentions = pendingMentions(agentId, unread, ports.messageAttention);
+    // A delivery held now is in `unread` too; only those held later are counted from the parking.
+    const held = new Set(ports.deliveryQueue.pending(agentId).map(({ deliveryId }) => deliveryId));
+    return ports.runtimeRelease.endAndReplace(
+      agentId,
+      replayRejectedEndPlan(restart),
+      (parked, handedBack) => {
+        // The failure's backoff belongs to the process that earned it, and its error class (a
+        // status code makes it a provider API one) is not one a turn's end lifts: the fresh
+        // Session starts with no hold, as after a take-offline.
+        ports.deliveryQueue.endHoldForNextLaunch(agentId);
+        ports.runtimeErrorHold.forget(agentId);
+        // The fresh Session was told of none of the items the dead one was told of.
+        ports.appInbox.forgetAnnouncedAppItems(agentId);
+        this.#coldStartResumedSession(
+          agentId,
+          launch,
+          staleSessionId,
+          "provider_replay_rejected",
+          carriedStart(
+            started,
+            unread,
+            newlyParked(parked, held, handedBack),
+            reissuedMentions(mentions, handedBack),
+          ),
+        );
+      },
+    );
+  }
+
+  /** What the Agent's next launch still owes a cold start that did not finish telling it, and the
+   * call that settles the debt once that launch has told it. */
+  owedTo(agentId: string) {
+    return this.ports.stops.owedRecovery.owing(agentId, this.ports.deliveryQueue.pending(agentId));
   }
 
   /** A stored Session that cannot be continued: invalidate it and cold-start a fresh Session
@@ -335,7 +364,8 @@ export class AgentLaunchCoordinator {
    * the stale Session back up. Two early crashes of a resumed Session within seconds, which the
    * provider cannot report as corrupt (resumed-early-crash.ts; Raft 1.0.63
    * `repeated_early_crash`), and a provider that rejects its replay
-   * (provider-replay-recovery.ts) both come here, after the runtime is gone. */
+   * (provider-replay-recovery.ts) both come here, after the runtime is gone. What a rejected replay
+   * `carried` is owed to the Agent's next launch until one has told it. */
   #coldStartResumedSession(
     agentId: string,
     launch: ActivityLaunch,
@@ -362,6 +392,7 @@ export class AgentLaunchCoordinator {
         sessionMode: "create",
       });
     this.ports.agentProcessManager.clearRestartSession(agentId);
+    if (carried) this.ports.stops.owedRecovery.owe(agentId, carried);
     // The exit that triggered this cold start must not sweep the strays the relaunch keeps
     // using; the mark clears when the new launch registers its tag token (task #673).
     noteAgentRelaunchPending(agentId);
@@ -369,7 +400,6 @@ export class AgentLaunchCoordinator {
       sessionMode: "create",
       replacedSessionId: staleSessionId,
       invalidateReason: reason,
-      ...carried,
     });
   }
 }

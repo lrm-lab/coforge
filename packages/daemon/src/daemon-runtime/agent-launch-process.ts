@@ -375,7 +375,7 @@ export async function launchAgentProcess(
       wakeReusedAgent(runtime.session, (identity) =>
         ports.agentControl.wake(agentId, launch.launchId, identity),
       );
-    void ports.drainAppInboxNotices(agentId).catch(() => {});
+    void ports.appInbox.drainAppInboxNotices(agentId).catch(() => {});
     return runtime;
   } catch (error) {
     ports.desktops.end(agentId);

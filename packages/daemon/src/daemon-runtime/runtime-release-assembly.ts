@@ -54,7 +54,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
   };
   releaseSurvivingHolds(agentId: string): void;
   wakeAgent(agentId: string, restart: WakeRestart): Promise<unknown>;
-  mentionDeliveries(): { handBackForRelaunch(agentId: string): Promise<void> };
+  mentionDeliveries(): { handBackForRelaunch(agentId: string): Promise<readonly string[]> };
 }): RuntimeRelease<L> {
   return new RuntimeRelease<L>({
     launch: (agentId) => input.launches().get(agentId),

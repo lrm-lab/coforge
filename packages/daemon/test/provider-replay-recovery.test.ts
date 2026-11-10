@@ -57,6 +57,31 @@ test("the message the failed turn was handling reaches the fresh session", async
   }
 });
 
+test("a delivery held during the failed turn is told once, not as unread and as parked", async () => {
+  const h = await harness({ resume: "stored-1" });
+  try {
+    h.liveTurn(true);
+    await h.deliver(1);
+    // A failure with an HTTP status backs deliveries off, and the turn's end does not lift it.
+    h.sessions[0]!.emit({
+      ...REJECTED,
+      message:
+        "unexpected status 400 Bad Request: Encrypted content could not be decrypted or parsed.",
+    });
+    // Held behind that backoff, after the attention already counted it.
+    await h.deliver(2);
+    h.liveTurn(false);
+    h.sessions[0]!.emit(FAILED_TURN);
+    await h.until(() => h.sessions.length === 2 && h.sessions[1]!.notices.length > 0);
+
+    const told = h.sessions[1]!.notices.filter((notice) => notice.includes("--unread")).join("\n");
+    expect(told).toContain("#general 2 new messages");
+    expect(told).not.toContain("3 new messages");
+  } finally {
+    await h.runtime.stop();
+  }
+});
+
 test("the rejected turn's failure does not hold back what arrives for the fresh session", async () => {
   const h = await harness({ resume: "stored-1" });
   try {

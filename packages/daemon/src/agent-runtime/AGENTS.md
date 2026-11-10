@@ -52,8 +52,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 
 ## Control fencing (`agent-control.ts`)
 
-- `agent-control.ts` owns request/epoch-fenced stop, reset-workspace, and start
-  plus their control completion. It does not deliver Session input.
+- `agent-control.ts` owns request/epoch-fenced stop, reset-workspace, and start plus their
+  control completion, over the runtime port in `agent-control-runtime.ts`; never Session input.
 - A managed Start launches under the server-supplied `launchId`, never a
   locally minted one.
 - `startPending(agentId)` is true from the synchronous `start` call until the

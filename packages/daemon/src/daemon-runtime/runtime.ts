@@ -590,7 +590,7 @@ export class DaemonRuntime {
       startAgent: (agentId, config, recovery, request) =>
         this.#startAgent(agentId, config, recovery, request),
       rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
-      forgetSessionReference: (agentId) => this.#stopState.forgetSession(agentId),
+      stops: this.#stopState,
       startSettled: (agentId) => this.#exitedDelivery.releaseStartBuffer(agentId),
       sendSessionInvalidate: (message) => this.#transport.sendSessionInvalidate?.(message),
       reportSession: (report) => this.#reportAgentSession(report),
@@ -719,7 +719,7 @@ export class DaemonRuntime {
         this.#revokeAgentApiKey(agentId, apiKey, scope),
       launchFailureActivity: (agentId, provider, error) =>
         this.#launchFailureActivity(agentId, provider, error),
-      drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
+      appInbox: this.#inboxCoordinator,
       attachSessionMemory: attachFreshSessionMemoryPort(this.#memoryHooks),
       relaunchResumed: (agentId, restart, request) => {
         void this.#wakeAgent(agentId, restart, request).catch(() => {});
@@ -1128,7 +1128,7 @@ export class DaemonRuntime {
       replaySession: (agentId) => this.#agentSessions.replay(agentId),
       runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
       managed: (agentId) => this.#agentControl.managed(agentId),
-      pendingStop: (agentId) => this.#stopState.pendingStop(agentId),
+      stops: this.#stopState,
       startAgent: (agentId, config, recovery, request) =>
         this.#startAgent(agentId, config, recovery, request),
       stopAgent: (agentId) => this.stopAgent(agentId),
@@ -1320,6 +1320,7 @@ export class DaemonRuntime {
       this.#messageAttention,
       this.#consumedSeqs,
       this.#sync,
+      this.#stopState.owedRecovery,
     );
 
   #cleanupUnconfirmed = (agentId: string, error: unknown): boolean =>

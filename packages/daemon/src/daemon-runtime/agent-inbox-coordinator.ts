@@ -84,6 +84,12 @@ export class AgentInboxCoordinator {
     return removed;
   }
 
+  /** Forgets which App Inbox items the Agent was told of, so its next launch announces them all:
+   * for a Session replaced with a fresh one, which was told of none. */
+  forgetAnnouncedAppItems(agentId: string): void {
+    this.#notifiedAppItems.delete(agentId);
+  }
+
   async inbox(context: string, request: LocalInboxRequest): Promise<InboxResponse> {
     this.ports.assertRunning();
     const agentId = this.ports.agentIdForContext(context);

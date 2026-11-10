@@ -60,7 +60,7 @@ function subject(
     takeParked: () => [],
     wake: async () => {},
     publish: () => {},
-    handBackMentions: async () => {},
+    handBackMentions: async () => [],
     release: async () => {},
   };
   return {

@@ -40,7 +40,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `agent-input-drain.ts` owns each Agent's serialized input queue: enqueue is admission, one drain loop is the only consumer, and a closed queue settles its live drain. `agent-launch-custody.ts` owns what the daemon owes a launch at its boundary: delivery custody acknowledgment, the recovery pass that reconciles held state, and turn-open bookkeeping.
 - `agent-inbox-coordinator.ts` owns per-Agent Message/App Inbox state, app-item notices, and fallback notice release; `runtime.ts` supplies lifecycle and process ports.
 - `runtime-reconnect.ts` owns reconnect recovery subscriptions; `runtime.ts` supplies inventory, reminder, replay, and upgrade-report callbacks.
-- `agent-stop-registry.ts` owns which Agents are stopping and which Session each launch reported: readers ask `isStopping`/`pendingStop`/`sessionReference`, and a write happens only where a stop begins or settles, where a launch reports its Session, or where a whole-runtime stop marks every Agent.
+- `agent-stop-registry.ts` owns which Agents are stopping and which Session each launch reported (and holds the `OwedRecovery`): readers ask `isStopping`/`pendingStop`/`sessionReference`, and a write happens only where a stop begins or settles, where a launch reports its Session, or where a whole-runtime stop marks every Agent.
 - `agent-operations.ts` owns the cloud-facing Agent operations one runtime answers — the activity probe, the inbox purge for channels an Agent can no longer read, one Agent's stop, and the Agent's own message operation; `runtime.ts` supplies the collaborators they call.
 - `runtime-services-composition.ts` builds the Workspace's background services — the reminder schedule, the System Cleaner and the App config sync it serves, and the migration runner when the transport offers that route — from one ports object; `runtime.ts` supplies the collaborators their ports call.
 - `message-composition.ts` builds the Agent message state — tracked @mention deliveries, per-Agent attention, App Inbox coordination and the Agent's own message operations — from one ports object; `runtime.ts` supplies the collaborators those ports call.
@@ -75,9 +75,14 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `provider-replay-recovery.ts` owns the rejected-replay watch (a resumed Session's `error` event with
   `sessionRecovery`, acted on after the failed turn ends, spent only once the Session was replaced) and
   what the fresh Session carries: the rejected launch's own start input plus the unread summary
-  (the Agent's unread and deliveries parked while the runtime ends). `AgentLaunchCoordinator` ends the
-  runtime through `RuntimeRelease.endAndReplace` and cold-starts through the same path as the early
-  crash, with `LaunchRequest.recovery`.
+  (the Agent's unread and deliveries parked while the runtime ends, less the tracked @mentions
+  `RuntimeRelease.endAndReplace` hands back, which the server issues again). `AgentLaunchCoordinator`
+  ends the runtime through `endAndReplace` and cold-starts through the same path as the early crash.
+  What it carries is owed (`OwedRecovery`, held by `AgentStopRegistry`) until a launch for the Agent
+  has told it: `startAgent` merges it into the next launch that spawns a process and pays it after
+  that launch's input is delivered. Only a Stop `AgentControl` accepted (`stopAccepted`; an unmanaged
+  one in `handleAgentStop`), the Agent's delete and a whole-runtime stop drop it, never the stop
+  that cleans up after a failed launch.
 - `agent-launch-config.ts` owns the transport fallback for obtaining an Agent launch credential/config.
 - `agent-wake-control.ts` owns reused-wake identity reads and control-record wake ordering; an
   unavailable provider identity keeps the wake and preserves the last known identity.

@@ -23,6 +23,7 @@ import { interruptAgentTurn } from "./turn-interrupt";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentRecoveryContext } from "./runtime-launch-intent";
+import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { LaunchRequest } from "./runtime-launch-types";
 import { recoveryOf, runtimeConfigOf } from "./runtime-launch-intent";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
@@ -139,7 +140,7 @@ export type AgentControlIntentPorts = {
   replaySession(agentId: string): Promise<void>;
   runtime(agentId: string): AgentRuntime | undefined;
   managed(agentId: string): boolean;
-  pendingStop(agentId: string): Promise<void> | undefined;
+  stops: Pick<AgentStopRegistry, "pendingStop" | "owedRecovery">;
   startAgent(
     agentId: string,
     config: AgentRuntimeConfig,
@@ -167,7 +168,7 @@ export async function handleAgentStart(
     return runtime;
   }
   if (ports.managed(intent.agentId)) throw new Error("Agent requires a fenced Start");
-  const stopping = ports.pendingStop(intent.agentId);
+  const stopping = ports.stops.pendingStop(intent.agentId);
   if (stopping) await stopping;
   return ports.startAgent(intent.agentId, runtimeConfigOf(intent), recoveryOf(intent), {
     sessionId: intent.sessionId,
@@ -187,6 +188,7 @@ export async function handleAgentStop(
 ): Promise<void> {
   ports.assertOwnIntent(intent);
   if (intent.provider !== undefined && intent.controlEpoch !== undefined) {
+    // AgentControl drops what a cold start owed once it accepts the Stop; a stale one leaves it.
     await ports.controlStop({
       ...intent,
       provider: intent.provider,
@@ -196,6 +198,8 @@ export async function handleAgentStop(
   }
   if (ports.managed(intent.agentId)) throw new Error("Agent requires a fenced Stop");
   await ports.stopAgent(intent.agentId);
+  // A person's Stop of an unmanaged Agent: nothing a cold start owed its next launch is told to it.
+  ports.stops.owedRecovery.drop(intent.agentId);
 }
 
 /** A server workspace reset: only for this runtime's own, started, not-stopping scope. */

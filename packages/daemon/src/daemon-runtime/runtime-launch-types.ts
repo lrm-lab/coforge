@@ -18,9 +18,8 @@ export type LaunchRequest = {
   /** Set when the launch comes from a server Start's own fields rather than the restart config;
    * carries that Start's `agentConfigRevision`. */
   fromStart?: { agentConfigRevision?: number };
-  /** The recovery this launch opens with: a server Start's own, or what a launch the daemon starts
-   * itself must still tell the Agent (the Start's takes precedence). A cold start of a rejected
-   * launch carries it on (`provider-replay-recovery.ts`). */
+  /** The recovery this launch opens with: a server Start's own, merged under what an earlier cold
+   * start still owes the Agent (`provider-replay-recovery.ts`); `startAgent` sets it. */
   recovery?: AgentRecoveryContext;
   replacedSessionId?: string;
   /** Set only alongside `replacedSessionId`, threaded from `AgentControl.start()`'s retry

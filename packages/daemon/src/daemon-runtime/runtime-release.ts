@@ -125,8 +125,9 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
     text: string,
     extra?: Readonly<{ runtimeError?: AgentActivityRuntimeError }>,
   ): void;
-  /** Hands the old turn's tracked mentions back as unknown before the process goes. */
-  handBackMentions(agentId: string): Promise<void>;
+  /** Hands the old turn's tracked mentions back as unknown before the process goes, and says which
+   * delivery ids it handed back. */
+  handBackMentions(agentId: string): Promise<readonly string[]>;
   /** Ends the process but keeps what a later wake needs. */
   release(agentId: string, timeoutMs: number): Promise<void>;
 }>;
@@ -326,11 +327,11 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
    * a recovery launch discards whatever waits. True only when `replace` ran: a runner hold,
    * a migration or a running background task, a process that would not exit, a Stop that won, or a
    * newer launch that took the Agent over (`launch` is no longer current) all leave the Session as
-   * it was. */
+   * it was. `replace` is also told the tracked mentions handed back, which the server issues again. */
   async endAndReplace(
     agentId: string,
     plan: RuntimeEndPlan,
-    replace: (parked: readonly AgentMessageDelivery[]) => void,
+    replace: (parked: readonly AgentMessageDelivery[], handedBack: readonly string[]) => void,
   ): Promise<boolean> {
     const launch = this.#ports.launch(agentId);
     const session = this.#ports.runtime(agentId)?.session;
@@ -341,12 +342,12 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     if (facts.runnerHold || facts.migrating || (launch.backgroundTasks?.count ?? 0) > 0)
       return false;
     let replaced = false;
-    await this.#endThen(agentId, launch, session, plan, (_, join) => {
+    await this.#endThen(agentId, launch, session, plan, (_, join, handedBack) => {
       // A Start made while the process was ending owns the Agent now; replacing under it would
       // invalidate a Session it is using.
       if (this.#ports.launch(agentId) !== launch) return;
       join();
-      replace(this.#ports.takeParked(agentId));
+      replace(this.#ports.takeParked(agentId), handedBack);
       replaced = true;
     });
     return replaced;
@@ -361,28 +362,33 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     launch: L,
     session: AgentSession,
     plan: RuntimeEndPlan,
-    proceed: (current: AgentRestartConfig, join: () => void) => void | Promise<void>,
+    proceed: (
+      current: AgentRestartConfig,
+      join: () => void,
+      handedBack: readonly string[],
+    ) => void | Promise<void>,
   ): Promise<boolean> {
     this.#recovering.add(agentId);
     try {
-      if (!(await this.#end(agentId, launch, session, plan))) return false;
+      const handedBack = await this.#end(agentId, launch, session, plan);
+      if (!handedBack) return false;
       const current = this.#ports.restartConfig(agentId);
       if (this.#ports.isStopping(agentId) || !current) return true;
-      await proceed(current, () => this.#recovering.delete(agentId));
+      await proceed(current, () => this.#recovering.delete(agentId), handedBack);
       return true;
     } finally {
       this.#recovering.delete(agentId);
     }
   }
 
-  /** False, with an error Activity, when the process will not exit. Once is enough: that launch
-   * is never judged again. */
+  /** The delivery ids handed back, or undefined, with an error Activity, when the process will not
+   * exit. Once is enough: that launch is never judged again. */
   async #end(
     agentId: string,
     launch: L,
     session: AgentSession,
     plan: RuntimeEndPlan,
-  ): Promise<boolean> {
+  ): Promise<readonly string[] | undefined> {
     // Before `stopping`, which mutes everything but stopped/interrupted/error Activity.
     if (plan.announce)
       this.#ports.publish(agentId, launch, plan.announce.detailKind, "info", plan.announce.text);
@@ -391,9 +397,9 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     try {
       // Dispose can reject notices still waiting for provider acceptance. Hand their mentions
       // back first, before those rejections can settle them as lost.
-      await this.#ports.handBackMentions(agentId);
+      const handedBack = await this.#ports.handBackMentions(agentId);
       await this.#ports.release(agentId, STALLED_RECOVERY_EXIT_TIMEOUT_MS);
-      return true;
+      return handedBack;
     } catch (error) {
       if (!plan.keepProgress) launch.progress = undefined;
       // A process that is still running gets its Activity back.
@@ -418,7 +424,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
         still_running: stillRunning,
         error: thrownMessage(error),
       });
-      return false;
+      return undefined;
     }
   }
 }

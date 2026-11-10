@@ -13,6 +13,7 @@ import type { AgentRecoveryContext } from "./runtime-launch-intent";
 import type { LaunchRequest } from "./runtime-launch-types";
 import type { RunnerHold } from "./shutdown-reason";
 import { recoveryHasContent } from "./runtime-launch-intent";
+import { withOwed } from "./provider-replay-recovery";
 import { agentStartupInput } from "#src/agent-runtime/agent-startup";
 import { AgentPreflightError } from "./agent-preflight-error";
 
@@ -41,9 +42,8 @@ export function startAgent(
   agentId: string,
   config: AgentRuntimeConfig,
   startRecovery: AgentRecoveryContext | undefined,
-  request: LaunchRequest,
+  startRequest: LaunchRequest,
 ): Promise<AgentRuntime> {
-  const recovery = startRecovery ?? request.recovery;
   try {
     ports.assertRunning();
     ports.assertAgentNotStopping(agentId);
@@ -56,6 +56,21 @@ export function startAgent(
     return Promise.reject(error);
   }
   ports.requestAppConfigSnapshot(agentId);
+  const existingLaunch = ports.agentLaunches.get(agentId);
+  // A teardown that could not confirm exit keeps its runtime registered, but it is not a runtime
+  // anyone may extend: it falls through to the launch, whose first step re-clears that tree and
+  // refuses with the reason while it lasts (task #705). Without this, the Start the failure's own
+  // message recommends would be rejected as "already active" and never reach that cleanup.
+  const activeRuntime =
+    existingLaunch || ports.agentProcessManager.stopFailed(agentId)
+      ? undefined
+      : ports.agentProcessManager.runtime(agentId);
+  // What an earlier cold start still owes is paid by a launch that spawns a process, never by one
+  // that joins a launch in progress (which carries it already) or a running process.
+  const owed =
+    existingLaunch || activeRuntime ? undefined : ports.launchCoordinator.owedTo(agentId);
+  const request = withOwed(startRequest, startRecovery, owed?.carried);
+  const { recovery } = request;
   const enqueueRecovery = (context: AgentRecoveryContext) =>
     ports.inputDrain.enqueue(agentId, (completion) => ({
       kind: "recovery",
@@ -92,7 +107,6 @@ export function startAgent(
       ),
     };
   };
-  const existingLaunch = ports.agentLaunches.get(agentId);
   if (existingLaunch) {
     if (carriesPrompt || recoveryHasContent(recovery)) {
       const queue = ports.inputDrain.get(agentId);
@@ -122,13 +136,6 @@ export function startAgent(
     ports.agentLaunches.set(agentId, extendedLaunch);
     return extendedLaunch;
   }
-  // A teardown that could not confirm exit keeps its runtime registered, but it is not a runtime
-  // anyone may extend: it falls through to the launch, whose first step re-clears that tree and
-  // refuses with the reason while it lasts (task #705). Without this, the Start the failure's own
-  // message recommends would be rejected as "already active" and never reach that cleanup.
-  const activeRuntime = ports.agentProcessManager.stopFailed(agentId)
-    ? undefined
-    : ports.agentProcessManager.runtime(agentId);
   if (activeRuntime) {
     if (!recovery && !carriesPrompt)
       return Promise.reject(new Error(`Agent runtime is already active: ${agentId}`));
@@ -173,11 +180,7 @@ export function startAgent(
   // A process is about to read its whole configuration afresh; a Start that only joined a launch
   // above, or a running process, did not.
   if (request.fromStart) ports.configApply.launched(agentId, request.fromStart.agentConfigRevision);
-  const launching = ports.launchCoordinator.launchAgent(
-    agentId,
-    config,
-    recovery ? { ...request, recovery } : request,
-  );
+  const launching = ports.launchCoordinator.launchAgent(agentId, config, request);
   const launch = launching
     .then(
       async (runtime) => {
@@ -191,6 +194,8 @@ export function startAgent(
         // second recovery notice: the queued startup input opens the initial turn if needed.
         else ports.releaseSurvivingHolds(agentId);
         if (startupCompletion) await startupCompletion;
+        // Told: a launch that failed anywhere above leaves it owed to the next one.
+        owed?.paid();
         return runtime;
       },
       (error: unknown) => {

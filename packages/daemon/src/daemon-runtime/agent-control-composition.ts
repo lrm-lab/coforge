@@ -13,6 +13,7 @@ import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
 import type { DaemonConfig } from "./runtime";
+import type { AgentStopRegistry } from "./agent-stop-registry";
 import { recoveryOf, runtimeConfigOf, type AgentRecoveryContext } from "./runtime-launch-intent";
 import type { LaunchRequest } from "./runtime-launch-types";
 import { connectionSessionInvalidate } from "./session-invalidate-activity";
@@ -40,8 +41,9 @@ export type AgentControlCompositionPorts = {
   ): Promise<AgentRuntime>;
   /** Rebinds an already-running process to a newer control scope. */
   rebind(intent: AgentStartIntent, launchId: string): Promise<SessionIdentity | undefined>;
-  /** Forgets the Session reference of a launch that starts over under a fresh session. */
-  forgetSessionReference(agentId: string): void;
+  /** Forgets the Session reference of a launch that starts over under a fresh session, and what an
+   * accepted Stop ends: the debt a cold start owed the Agent's next launch. */
+  stops: Pick<AgentStopRegistry, "forgetSession" | "owedRecovery">;
   /** A Start that was pending for this Agent no longer is. */
   startSettled(agentId: string): void;
   /** Sends the stale-session report this Agent's control decision produced. */
@@ -97,8 +99,10 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
       await ports.stopAgent(agentId);
       return session?.readSessionIdentity?.();
     },
+    // A Stop passed every fence and is about to end the Agent's process.
+    stopAccepted: (agentId) => ports.stops.owedRecovery.drop(agentId),
     launch: async (intent, launchId, replacedSessionId, invalidateReason) => {
-      if (replacedSessionId) ports.forgetSessionReference(intent.agentId);
+      if (replacedSessionId) ports.stops.forgetSession(intent.agentId);
       const runtime = await ports.startAgent(
         intent.agentId,
         runtimeConfigOf(intent),

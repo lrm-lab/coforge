@@ -1,8 +1,11 @@
 import type { SessionReference } from "./launch-identity";
+import { OwedRecovery } from "./provider-replay-recovery";
 
 /**
  * One Workspace runtime's record of which Agents are stopping and which Session each running
- * Agent last reported.
+ * Agent last reported, and what a replaced Session's cold start still owes an Agent's next launch.
+ * That debt survives a launch's failure, so a stop that cleans up after one leaves it; a person's
+ * Stop and the Agent's delete drop it where they are handled.
  *
  * The record has one owner so "this Agent is stopping" cannot be written from everywhere that
  * happens to hold a collection: readers ask `isStopping`/`pendingStop`/`sessionReference`, and a
@@ -12,6 +15,8 @@ export class AgentStopRegistry {
   readonly #stopping = new Set<string>();
   readonly #stops = new Map<string, Promise<void>>();
   readonly #sessions = new Map<string, SessionReference>();
+  /** What a cold start of a rejected Session still owes the Agent's next launch. */
+  readonly owedRecovery = new OwedRecovery();
 
   /** Whether this Agent is stopping: its stop began, or one is still in flight. */
   isStopping(agentId: string): boolean {
@@ -99,5 +104,6 @@ export class AgentStopRegistry {
     this.#stopping.clear();
     this.#stops.clear();
     this.#sessions.clear();
+    this.owedRecovery.clear();
   }
 }

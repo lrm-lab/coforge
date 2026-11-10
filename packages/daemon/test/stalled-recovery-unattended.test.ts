@@ -62,7 +62,7 @@ function release() {
     publish: (_agentId, _launch, detailKind, level, text, extra) => {
       published.push({ level, detailKind, text, ...extra });
     },
-    handBackMentions: async () => {},
+    handBackMentions: async () => [],
     release: async () => {},
   };
   const stalled = {
@@ -222,7 +222,7 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     wake: async () => {},
     // As the daemon's runtime wires it.
     publish: (agentId, current, ...rest) => publisher.publish(agentId, current, draft(...rest)),
-    handBackMentions: async () => {},
+    handBackMentions: async () => [],
     release: async () => {},
   });
   try {

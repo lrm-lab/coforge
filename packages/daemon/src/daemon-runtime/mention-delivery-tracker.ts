@@ -250,6 +250,15 @@ export class MentionDeliveryTracker {
     code: MentionDeliveryTerminalCode,
     detail?: string,
   ): Promise<void> {
+    await this.#refuse(message, code, detail);
+  }
+
+  /** `refuse`, saying whether the report was sent. */
+  async #refuse(
+    message: TrackedMentionDelivery,
+    code: MentionDeliveryTerminalCode,
+    detail?: string,
+  ): Promise<boolean> {
     this.#forget(message.deliveryId);
     logger.info("Tracked mention delivery refused", {
       event: "agent.mention_delivery.terminal_error",
@@ -258,7 +267,7 @@ export class MentionDeliveryTracker {
       code,
       ...(detail ? { detail } : {}),
     });
-    await this.#send("terminal_error", message, () =>
+    return this.#send("terminal_error", message, () =>
       this.ports.terminalError({ ...this.#scope(message), code }),
     );
   }
@@ -278,17 +287,19 @@ export class MentionDeliveryTracker {
   /**
    * The Agent's process is being ended for a restart: each mention
    * still received or pending for it is refused as unknown, so the server keeps it pending and
-   * issues it again for the relaunch's session report. Settles once every refusal was sent.
+   * issues it again for the relaunch's session report. Settles once every refusal was attempted,
+   * with the delivery ids whose report was sent: the ones the server issues again.
    */
-  async handBackForRelaunch(agentId: string): Promise<void> {
+  async handBackForRelaunch(agentId: string): Promise<string[]> {
     const unsettled = [...this.#tracked.values()]
       .filter((tracked) => tracked.message.agentId === agentId && tracked.state !== "drained")
       .map((tracked) => tracked.message);
-    await Promise.all(
+    const sent = await Promise.all(
       unsettled.map((message) =>
-        this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
+        this.#refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
       ),
     );
+    return unsettled.flatMap((message, index) => (sent[index] ? [message.deliveryId] : []));
   }
 
   /** Already told in the current session: pending while that turn runs, drained once idle. */
@@ -349,8 +360,8 @@ export class MentionDeliveryTracker {
     );
   }
 
-  #acknowledge(message: TrackedMentionDelivery): Promise<void> {
-    return this.#send("ack", message, () => this.ports.acknowledge(message));
+  async #acknowledge(message: TrackedMentionDelivery): Promise<void> {
+    await this.#send("ack", message, () => this.ports.acknowledge(message));
   }
 
   #scope(message: TrackedMentionDelivery) {
@@ -365,14 +376,15 @@ export class MentionDeliveryTracker {
   }
 
   /** A report that fails is logged, never thrown: the server still holds the mention pending and
-   * issues it again. */
+   * issues it again. Whether it was sent. */
   async #send(
     kind: "transition" | "terminal_error" | "ack",
     message: TrackedMentionDelivery,
     send: () => Promise<void>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await send();
+      return true;
     } catch (error) {
       logger.warn("Tracked mention delivery report was not sent", {
         event: "agent.mention_delivery.report_failed",
@@ -381,6 +393,7 @@ export class MentionDeliveryTracker {
         delivery_id: message.deliveryId,
         error_code: diagnosticErrorName(error),
       });
+      return false;
     }
   }
 }
