@@ -58,7 +58,12 @@ export async function publishCreatedTasks(
   ];
   if (parents.length)
     effects.push(
-      announceNeighbours(ports, scope.conversationId, parents, `${result.tasks[0]!.id}:task-created`),
+      announceNeighbours(
+        ports,
+        scope.conversationId,
+        parents,
+        `${result.tasks[0]!.id}:task-created`,
+      ),
     );
   effects.push(
     ...result.tasks.flatMap((task, index) => [
