@@ -30,9 +30,11 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
   const focused = `${rows}.findIndex((row) => row.contains(document.activeElement))`;
   const focusSeeded = (index: number) =>
     evaluate(`(${seeded}[${index}].querySelector("a").focus(), true)`);
-  /** Whether the seeded row `index` says it has new messages (its text always holds "N new"). */
-  const isUnread = (index: number) =>
-    evaluate<boolean>(`/\\d+ new/.test(${seeded}[${index}].textContent)`);
+  /** Whether the seeded row `index` says it has new messages: its count is named "N new" (the
+   * number alone is what shows, since the row's redesign on 11-09). */
+  const unreadExpression = (index: number) =>
+    `[...${seeded}[${index}].querySelectorAll("[aria-label]")].some((el) => /\\d+ new/.test(el.getAttribute("aria-label")))`;
+  const isUnread = (index: number) => evaluate<boolean>(unreadExpression(index));
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -77,13 +79,13 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
     await focusSeeded(unreadAt);
     expect(await isUnread(unreadAt)).toBe(true);
     await browser("press", "r");
-    await waitFor(`!/\\d+ new/.test(${seeded}[${unreadAt}].textContent)`);
+    await waitFor(`!${unreadExpression(unreadAt)}`);
     expect(
       (await db.conversationMember.findUniqueOrThrow({ where: { id: unread.viewer.id } }))
         .readThroughSequence,
     ).toBeGreaterThanOrEqual(5);
     await browser("press", "r");
-    await waitFor(`/\\d+ new/.test(${seeded}[${unreadAt}].textContent)`);
+    await waitFor(unreadExpression(unreadAt));
     // The row kept the selection through both.
     expect(await evaluate<boolean>(`${seeded}[${unreadAt}].contains(document.activeElement)`)).toBe(
       true,
