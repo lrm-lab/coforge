@@ -8,66 +8,15 @@ import type {
 import { createHash } from "node:crypto";
 import { restorePiIndexed } from "./context-view-restore-indexed-pi";
 import { piRequestMessages, piResponseParts } from "./context-view-pi-projection";
+import {
+  hasKimiCanonicalFields,
+  isNewerKimiWireRecord,
+  prepareKimiCanonicalState,
+  validateKimiCanonicalRequest,
+} from "./context-view-kimi-canonical";
 
 function piRequestDigest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-function sha256Text(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function reportsMessage(value: unknown, messageId: string): boolean {
-  const escaped = messageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`Message ID:\\s*${escaped}(?![A-Za-z0-9_-])`).test(
-    typeof value === "string" ? value : JSON.stringify(value ?? ""),
-  );
-}
-
-function kimiSendRecordIndex(
-  records: RecordValue[],
-  messageId: string,
-  indexOffset: number,
-): number | undefined {
-  const calls = new Map<string, { command: string; sourceIndex: number }>();
-  for (const [sourceIndex, record] of records.entries()) {
-    if (record.type !== "context.append_loop_event" || !isRecord(record.event)) continue;
-    const event = record.event;
-    if (event.type !== "tool.call") continue;
-    const id =
-      typeof event.toolCallId === "string"
-        ? event.toolCallId
-        : typeof event.id === "string"
-          ? event.id
-          : undefined;
-    if (!id) continue;
-    const args = parseToolInput(event.arguments ?? event.args);
-    calls.set(id, {
-      command:
-        isRecord(args) && typeof args.command === "string"
-          ? args.command
-          : typeof event.command === "string"
-            ? event.command
-            : "",
-      sourceIndex,
-    });
-  }
-  for (let index = 0; index < records.length; index += 1) {
-    const record = records[index];
-    if (!record) continue;
-    if (record.type !== "context.append_loop_event" || !isRecord(record.event)) continue;
-    const event = record.event;
-    if (event.type !== "tool.result" || typeof event.toolCallId !== "string") continue;
-    if (!reportsMessage(event.output, messageId)) continue;
-    const call = calls.get(event.toolCallId);
-    if (!call) continue;
-    if (
-      /\b(?:raft|slock)\s+(?:message\s+send|task\s+reply)\b/.test(call.command) ||
-      (recordEnd(records[call.sourceIndex]!) ?? Number.MAX_SAFE_INTEGER) <= indexOffset
-    )
-      return index;
-  }
-  return undefined;
 }
 
 import {
@@ -78,10 +27,10 @@ import {
   message,
   parseToolInput,
   providerPayload,
-  recordEnd,
   sessionMatches,
   buildView,
 } from "./context-view-restore";
+import { kimiSendRecordIndex } from "./context-view-kimi-target";
 
 export function restoreKimi(
   records: RecordValue[],
@@ -137,6 +86,22 @@ export function restoreKimi(
         foldedMessages.push(
           message(role, record.message.content ?? record.message.parts ?? record.message.text),
         );
+      } else if (record.type === "context.undo") {
+        const count =
+          typeof record.count === "number" && Number.isSafeInteger(record.count)
+            ? Math.max(0, record.count)
+            : 0;
+        for (let remaining = count; remaining > 0; remaining -= 1) {
+          let cut = -1;
+          for (let index = foldedMessages.length - 1; index >= 0; index -= 1) {
+            if (foldedMessages[index]?.role === "user") {
+              cut = index;
+              break;
+            }
+          }
+          if (cut < 0) break;
+          foldedMessages.splice(cut);
+        }
       }
     }
   }
@@ -154,12 +119,14 @@ export function restoreKimi(
   let requestCount = 0;
   let responseCount = 0;
   const pendingTools = new Set<string>();
+  const canonicalState = prepareKimiCanonicalState(records, latestLoopIndex);
   for (const [index, original] of records.entries()) {
     if (hasNestedIdentityConflict(original)) return { ok: false, failure: "context_mismatch" };
     const record = providerPayload(original);
     if (!sessionMatches(record, request.sessionId))
       return { ok: false, failure: "context_mismatch" };
     if (hasHashMismatch(record)) return { ok: false, failure: "context_mismatch" };
+    if (isNewerKimiWireRecord(record)) return { ok: false, failure: "newer_session_format" };
     const sequence = record.sequence ?? record.seq;
     if (typeof sequence === "number" && Number.isSafeInteger(sequence)) {
       if (lastSequence !== undefined && sequence <= lastSequence)
@@ -172,12 +139,10 @@ export function restoreKimi(
       messages.push(...foldedMessages);
       compaction = foldedCompaction;
       const requestPayload = isRecord(record.request) ? record.request : record;
-      if (
-        typeof requestPayload.systemPrompt === "string" &&
-        typeof requestPayload.systemPromptHash === "string" &&
-        sha256Text(requestPayload.systemPrompt) !== requestPayload.systemPromptHash
-      )
-        return { ok: false, failure: "context_mismatch" };
+      if (hasKimiCanonicalFields(requestPayload, record)) {
+        const failure = validateKimiCanonicalRequest(requestPayload, canonicalState);
+        if (failure) return { ok: false, failure };
+      }
       if (typeof requestPayload.model === "string") model = requestPayload.model;
       else if (typeof record.model === "string") model = record.model;
       else if (typeof record.model_name === "string") model = record.model_name;
@@ -354,6 +319,7 @@ export function restoreKimi(
     built.view.requestAt = requestAt;
     built.view.tokens = tokens;
     if (trigger) built.view.trigger = trigger;
+    if (canonicalState.verification) built.view.verification = canonicalState.verification;
   }
   return built;
 }
