@@ -302,8 +302,10 @@ test("channels lists the open channels the Agent is an active member of, by name
   await db.conversationMember.create({
     data: { conversationId: outside!.id, workspaceId, agentId: agents.bob!.id },
   });
+  // Each row carries its group avatar's members: here Ada alone, the one active member.
+  const face = [expect.objectContaining({ kind: "agent", id: agents.ada!.id })];
   expect(await channels("ada")).toEqual([
-    { id: alpha!.id, name: `alpha-${suffix}`, description: "", muted: true },
-    { id: beta!.id, name: `beta-${suffix}`, description: "Second.", muted: false },
+    { id: alpha!.id, name: `alpha-${suffix}`, description: "", muted: true, members: face },
+    { id: beta!.id, name: `beta-${suffix}`, description: "Second.", muted: false, members: face },
   ]);
 });

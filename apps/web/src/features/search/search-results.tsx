@@ -1,4 +1,4 @@
-import { ChannelTitle } from "#src/features/conversations/channel-name";
+import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { actionCardPreviewText } from "#src/features/conversations/action-card-preview";
 import { useMemo } from "react";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -354,11 +354,11 @@ function SearchResultRow({
   const workspaceSlug = useWorkspaceSlug();
   const directory = useQuery(searchDirectoryQuery(workspaceId)).data;
   const place = conversation.channelName ? (
-    // A private channel with its lock, as everywhere a channel is named (task #375).
-    <ChannelTitle
+    // Its group avatar and name; a private channel with its lock (tasks #375, #55).
+    <ChannelPlace
+      id={conversation.id}
       name={conversation.channelName}
       visibility={conversation.visibility}
-      lockClassName="size-3.5"
     />
   ) : (
     // The other side's face before their name (task #521); the picture comes from the directory
