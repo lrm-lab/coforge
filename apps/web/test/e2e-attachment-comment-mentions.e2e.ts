@@ -239,7 +239,11 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     await browser("set", "viewport", "1440", "560");
     await browser("open", `${origin}${workspacePath}/activity`);
     await browser("wait", "--fn", `${pageHydrated} && Boolean(${row})`);
-    await evaluate(`${row}.querySelector("a").click() ?? true`);
+    // A real click, as a person makes: a scripted `click()` on this row's link went to Chat
+    // instead of opening beside the list (11-10, cause not yet known; the link's Chat target
+    // still opens the comment).
+    await evaluate(`(${row}.querySelector("a").setAttribute("data-e2e-open", ""), true)`);
+    await browser("click", "[data-e2e-open]");
     // The conversation opens beside the list at the file's message, with the file's review over it.
     await browser("wait", "--fn", inPane(message.id));
     await browser("wait", "--fn", reached);
