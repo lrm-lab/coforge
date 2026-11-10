@@ -172,7 +172,7 @@ test("does not expose another member's message, but permits the viewer's thread 
   ).resolves.toMatchObject({ seen: [], undeliveredAgents: [] });
 });
 
-test("reports a muted Agent that is outside the top-level delivery audience", async () => {
+test("reports the current mute as the documented top-level delivery approximation", async () => {
   const result = await readMessageSeenBy(
     dbFor({
       conversation: { directKey: null, channelName: "general", coordinatorAgentId: null },
@@ -230,6 +230,32 @@ test("reports only a structured prior unfollow for a thread reply", async () => 
   expect(result.undeliveredAgents).toEqual([
     { id: "unfollowed-agent", reason: "thread_unfollowed" },
   ]);
+});
+
+test("counts an Agent whose thread read cursor reached the reply", async () => {
+  const result = await readMessageSeenBy(
+    dbFor({
+      message: { senderMemberId: ids.viewerMember, sequence: 7, threadRootId: "root-1" },
+      conversation: { directKey: null, channelName: "general", coordinatorAgentId: null },
+      members: [
+        {
+          id: "member-2",
+          userId: null,
+          agentId: "thread-reader",
+          notificationLevel: "all",
+          readThroughSequence: 0,
+          agentReadThroughSequence: 0,
+        },
+      ],
+      threadReads: [{ memberId: "member-2", readThroughSequence: 7 }],
+      followedAgentIds: ["thread-reader"],
+    }) as never,
+    input,
+  );
+  expect(result).toMatchObject({
+    seen: [{ kind: "agent", id: "thread-reader" }],
+    undeliveredAgents: [],
+  });
 });
 
 test("requires an active conversation member", async () => {
