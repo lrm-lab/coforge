@@ -20,6 +20,10 @@ import { getLogger } from "@logtape/logtape";
 import type { ContextViewRestoreResult } from "#src/agent-context-view/context-view-restore";
 
 const MAX_RESULT_BYTES = 32 * 1024 * 1024;
+/** How long a request may wait behind this Agent's own restore before it is answered `expired`.
+ * The page polls for 30 seconds and the server keeps a result for 35, so this leaves the last
+ * seconds of the page's window for the upload and the poll that reads it. */
+export const CONTEXT_VIEW_QUEUE_DEADLINE_MS = 23_000;
 const logger = getLogger(["coforge", "daemon", "context-view"]);
 
 type Ports = {
@@ -112,23 +116,37 @@ export function subscribeContextViewQueries(
   transport: DaemonConnectionClient,
   ports: Ports,
 ): (() => void) | undefined {
-  let requestChain = Promise.resolve();
+  /** One restore at a time per Agent — a second request for the same Agent waits rather than
+   * racing its own read — but not one at a time for the whole Computer: a slow Agent's read must
+   * not make every other Agent's request expire behind it (task #18). */
+  const chains = new Map<string, Promise<void>>();
   const restoreCache = new ContextViewRestoreCache();
   const queued = (request: AgentContextViewRequest): Promise<void> => {
     const receivedAt = Date.now();
-    const run = requestChain.then(async () => {
-      // Leave the final five seconds of Raft's 30 second viewer window for upload and polling.
-      if (Date.now() - receivedAt >= 23_000) {
+    const run = (chains.get(request.agentId) ?? Promise.resolve()).then(async () => {
+      const queuedMs = Math.max(0, Date.now() - receivedAt);
+      if (queuedMs >= CONTEXT_VIEW_QUEUE_DEADLINE_MS) {
         logger.error("Context view request expired", {
           event: "daemon.agent_context_view.request_expired",
           agent_id: request.agentId,
-          queued_ms: Math.max(0, Date.now() - receivedAt),
+          queued_ms: queuedMs,
         });
+        // Answered, not dropped: a page that hears nothing waits out its own deadline and blames
+        // an old daemon, when what happened is that its Computer was busy (task #18).
+        const expired = failure(request, "expired", "queue_deadline");
+        const postTrace = await sendResult(
+          transport,
+          expired,
+          ports.agentApiKey?.(request.agentId),
+        );
         logRequestTrace(request, receivedAt, {
-          outcome: "expired",
-          failure_detail: "queue_deadline",
-          post_outcome: "skipped",
-          queued_ms: Math.max(0, Date.now() - receivedAt),
+          outcome: expired.status,
+          failure_detail: expired.failureDetail,
+          queued_ms: queuedMs,
+          ...postTrace,
+          status: expired.status,
+          reason: expired.reason,
+          failure: expired.reason,
         });
         return;
       }
@@ -149,7 +167,13 @@ export function subscribeContextViewQueries(
         });
       }
     });
-    requestChain = run.catch(() => undefined);
+    const settled = run.catch(() => undefined);
+    chains.set(request.agentId, settled);
+    // The chain is dropped once it drains, so a long-lived daemon keeps no entry per Agent it has
+    // ever seen — unless a newer request already replaced it.
+    void settled.then(() => {
+      if (chains.get(request.agentId) === settled) chains.delete(request.agentId);
+    });
     return run;
   };
   const answer = async (request: AgentContextViewRequest, receivedAt: number) => {
