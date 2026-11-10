@@ -17,7 +17,7 @@ import {
  * The rows below Pinned: since the Activity redesign (task #30) they group by day, so this test's
  * rows (all seeded today) sit under the "Today" heading's section, not an ol named "Activity".
  */
-const rowItems = JSON.stringify('ol[aria-label="Today"] > li');
+const todayRows = JSON.stringify('ol[aria-label="Today"] > li');
 
 /**
  * The Activity page's Pinned section in a real browser: a pinned channel lists under Pinned,
@@ -67,7 +67,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     await browser(
       "wait",
       "--fn",
-      `${rowsIn(pinnedItems)}.length === 1 && ${rowsIn(rowItems)}.length === 1 && ${pageHydrated}`,
+      `${rowsIn(pinnedItems)}.length === 1 && ${rowsIn(todayRows)}.length === 1 && ${pageHydrated}`,
     );
     // The channel's own row is under Pinned, and only there; its followed thread is below.
     const [pinnedRow] = await evaluate<string[]>(rowsIn(pinnedItems));
@@ -78,7 +78,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     expect(pinnedRow).toContain("Activity Peer: ");
     expect(pinnedRow).toContain("E2E pinned hello");
     expect(pinnedRow).toContain("1 new");
-    const [threadRow] = await evaluate<string[]>(rowsIn(rowItems));
+    const [threadRow] = await evaluate<string[]>(rowsIn(todayRows));
     expect(threadRow).toContain("E2E pinned root");
     expect(threadRow).toContain("#e2e-activity-pinned · ");
     expect(threadRow).not.toContain("E2E pinned hello");
@@ -106,7 +106,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     await browser(
       "wait",
       "--fn",
-      `${rowsIn(rowItems)}.some((text) => text.includes("E2E pinned hello"))`,
+      `${rowsIn(todayRows)}.some((text) => text.includes("E2E pinned hello"))`,
     );
     expect(
       await evaluate<boolean>(`document.querySelector('ol[aria-label="Pinned"]') === null`),
@@ -153,7 +153,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1 && ${pageHydrated}`);
     expect((await evaluate<string[]>(rowsIn(pinnedItems)))[0]).toContain("E2E pinned again");
     expect(await evaluate<number>(activeCount)).toBe(2);
-    expect(await evaluate<string[]>(rowsIn(rowItems))).toEqual([
+    expect(await evaluate<string[]>(rowsIn(todayRows))).toEqual([
       expect.stringContaining("E2E pinned root"),
     ]);
 
@@ -184,8 +184,8 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       titles: number[];
       tabsPastEdge: number;
     }>(`(() => {
-      const list = document.querySelector(${rowItems})?.closest("ol")?.parentElement;
-      const titles = [...document.querySelectorAll(${rowItems})]
+      const list = document.querySelector(${todayRows})?.closest("ol")?.parentElement;
+      const titles = [...document.querySelectorAll(${todayRows})]
         .filter((item) => /E2E pinned|e2e-activity-pinned/.test(item.textContent))
         .map((item) => Math.round(item.querySelector("a .truncate")?.getBoundingClientRect().width ?? 0));
       const tabs = document.querySelector('[role="tablist"][aria-label="Filter activity"]');
