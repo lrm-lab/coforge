@@ -287,9 +287,7 @@ test.skipIf(!connectionString)(
       }),
     ).toEqual({ deletedAt: expect.any(Date), deletedByUserId: owner.id });
     // And nothing still calls it a member of anything or the Workspace's Memory Agent.
-    expect(
-      await db.conversationMember.count({ where: { agentId, leftAt: null } }),
-    ).toBe(0);
+    expect(await db.conversationMember.count({ where: { agentId, leftAt: null } })).toBe(0);
     expect(
       await db.workspaceMemoryAgent.findUnique({ where: { workspaceId: workspace.id } }),
     ).toBeNull();
