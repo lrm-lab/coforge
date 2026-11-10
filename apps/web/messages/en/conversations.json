@@ -201,7 +201,7 @@
   "tasks_close": "Close",
   "tasks_delete": "Delete task",
   "tasks_deleting": "Deleting…",
-  "tasks_delete_title": "Delete Task #{number}?",
+  "tasks_delete_title": "Delete task #{number}?",
   "tasks_delete_description": "You can undo it right after.",
   "tasks_delete_failed": "Couldn't delete this Task. Try again.",
   "tasks_deleted_toast": "Deleted task #{number}",
