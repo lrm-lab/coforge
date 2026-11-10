@@ -114,7 +114,7 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
     });
     await db.agent.upsert({
       where: { id: agentId },
-      update: { deletedAt: null, visibility: "public" },
+      update: { deletedAt: null, visibility: "public", workspaceId, ownerId: DEV_BROWSER_USER.id },
       create: {
         id: agentId,
         workspaceId,
@@ -136,7 +136,7 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
     });
     await db.agent.upsert({
       where: { id: othersAgentId },
-      update: { deletedAt: null, visibility: "public" },
+      update: { deletedAt: null, visibility: "public", workspaceId, ownerId: colleague.id },
       create: {
         id: othersAgentId,
         workspaceId,
