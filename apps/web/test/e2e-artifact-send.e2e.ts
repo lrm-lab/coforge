@@ -161,7 +161,7 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     await pick(`#e2e-send-to-${tail}`);
     await browser("fill", '[role="dialog"] textarea', "For Thursday's review");
     await shoot("1-send-dialog");
-    await press(button("Send to 1", '[role="dialog"]'));
+    await press(`document.querySelector('[role="dialog"] button[aria-label="Send to 1"]')`);
     await waitFor(`document.querySelector('[role="dialog"]') === null`);
     const sent = await db.message.findFirstOrThrow({
       where: { conversationId: target.id, body: { contains: `/artifacts/${plan.id}` } },

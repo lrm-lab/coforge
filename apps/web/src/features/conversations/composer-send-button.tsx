@@ -23,8 +23,11 @@ export function ComposerSendButton({
   taskMode,
   isDisabled,
   onChoose,
+  label: labelOverride,
   className,
 }: {
+  /** What the send says it does, when not a plain send (the forward dialog's "Forward to 2"). */
+  label?: string;
   /** Whether a plain send (the button, Enter) goes out as a Task: an edited-back Task. */
   asTask: boolean;
   taskMode: boolean;
@@ -33,7 +36,7 @@ export function ComposerSendButton({
   onChoose: (asTask: boolean) => void;
   className?: string;
 }) {
-  const label = asTask ? m.conversation_send_as_task() : m.conversation_send();
+  const label = labelOverride ?? (asTask ? m.conversation_send_as_task() : m.conversation_send());
   const other = asTask
     ? { label: m.conversation_send(), description: m.conversation_send_plain_description() }
     : {

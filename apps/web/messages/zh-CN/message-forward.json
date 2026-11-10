@@ -55,5 +55,6 @@
   "message_forward_send_to": "转发给 {count} 个对象",
   "message_forward_title_one": "转发消息",
   "message_forward_title_several": "转发 {count} 条消息",
-  "message_forward_summary_more": "+{count} 条"
+  "message_forward_summary_more": "+{count} 条",
+  "message_forward_limit": "一次最多选 {max} 个。"
 }

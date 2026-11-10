@@ -91,9 +91,9 @@ async function shotBoth(name: string) {
 const rowOf = (messageId: string) => `li[data-message-id="${messageId}"]`;
 const selectedCount = `document.querySelector("[data-selection-bar]")?.textContent ?? ""`;
 
-/** The dialog's labelled send button, by what it says ("Forward to 2", or "Join and forward"). */
+/** The dialog's send button, by its name ("Forward to 2", or "Join and forward"). */
 const sendButton = (label: string) =>
-  `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
+  `(document.querySelector('[role="dialog"] button[aria-label=${JSON.stringify(label)}]') ?? undefined)`;
 const send = (label = "Forward to 1") => browser("eval", `${sendButton(label)}.click()`);
 
 async function pick(search: string, label: string) {

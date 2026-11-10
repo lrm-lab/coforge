@@ -60,6 +60,7 @@ export function ComposerField({
   leading,
   below,
   onPaste,
+  sendLabel,
 }: {
   /** The owner's `useReferenceCompletion`, whose `onChange` is `onValueChange` too. */
   completion: ReturnType<typeof useReferenceCompletion>;
@@ -85,6 +86,8 @@ export function ComposerField({
   /** Shown under the text, across the field, while stacked (the attachments). */
   below?: ReactNode;
   onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
+  /** The send button's name and tooltip, when it does more than send (`ComposerSendButton`). */
+  sendLabel?: string;
 }) {
   const id = useId();
   // IME composition tracking for Enter-to-send: see composer-behavior.ts.
@@ -202,6 +205,7 @@ export function ComposerField({
           asTask={asTask}
           taskMode={taskMode}
           isDisabled={sendDisabled}
+          label={sendLabel}
           onChoose={(wantTask) => {
             onSubmit(wantTask);
             // The closing menu hands focus back to its trigger; take it back after.

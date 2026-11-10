@@ -4,6 +4,11 @@
 export const COMPOSER_FRAME_CLASS =
   "relative mx-4 mt-2 mb-3 flex shrink-0 flex-col gap-1 rounded-xl border border-primary bg-primary p-2 md:mx-6";
 
+/** The same box without the stream's margins, for a composer set inside something else (the
+ * forward dialog's note, task #50), so it looks like the one under the messages. */
+export const COMPOSER_BOX_CLASS =
+  "relative flex shrink-0 flex-col gap-1 rounded-xl border border-primary bg-primary p-2";
+
 /** How the live composer's box shows it has focus; the loading screen's copy never takes focus. */
 export const COMPOSER_FOCUS_CLASS =
   "transition-shadow focus-within:border-border-input-focus focus-within:shadow-xs";

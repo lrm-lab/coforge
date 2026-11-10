@@ -55,5 +55,6 @@
   "message_forward_send_to": "Forward to {count}",
   "message_forward_title_one": "Forward message",
   "message_forward_title_several": "Forward {count} messages",
-  "message_forward_summary_more": "+{count} more"
+  "message_forward_summary_more": "+{count} more",
+  "message_forward_limit": "You can pick up to {max} at a time."
 }

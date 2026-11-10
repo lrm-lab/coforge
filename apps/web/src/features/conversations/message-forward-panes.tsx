@@ -2,20 +2,25 @@ import { useState, type ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { ChevronDown, SearchLg } from "@untitledui/icons";
 
-import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
-import { TextArea } from "#src/components/base/textarea/textarea";
 import { Face } from "#src/features/pickers/entity-picker";
 import { PickerListRow } from "#src/features/pickers/picker-list";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import type { ForwardFailureCode, ForwardTarget } from "./message-forward";
+import { ComposerField } from "./composer-field";
+import { COMPOSER_BOX_CLASS, COMPOSER_FOCUS_CLASS } from "./composer-frame";
+import {
+  FORWARD_DESTINATIONS_MAX,
+  type ForwardFailureCode,
+  type ForwardTarget,
+} from "./message-forward";
 import {
   canSelectTarget,
   forwardTargetKey,
   forwardTargetLabel,
   isUnjoinedChannel,
 } from "./message-forward-model";
+import { useReferenceCompletion } from "./use-reference-completion";
 
 /** What a destination's failure reads as on its row: a channel to join first, or one that will not
  * take it. */
@@ -116,6 +121,12 @@ export function ForwardTargetPane({
           onChange={onQueryChange}
         />
       </div>
+      {selected.size >= FORWARD_DESTINATIONS_MAX && (
+        // Why the rest have greyed out.
+        <p role="status" className="px-4 text-sm text-tertiary sm:px-6">
+          {m.message_forward_limit({ max: FORWARD_DESTINATIONS_MAX })}
+        </p>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 sm:px-4">
         {error ? (
           <p role="alert" className="py-6 text-center text-sm text-error-primary">
@@ -176,8 +187,9 @@ function WhatArrives({ summary, preview }: { summary: ReactNode; preview: ReactN
   );
 }
 
-/** Under the list: what arrives, the optional note, and the send button, which names how many it
- * goes to and says when sending joins a channel first. ⌘/Ctrl+Enter in the note sends. */
+/** Under the list: what arrives, then the note in the same composer as under the messages (Frank,
+ * 11-10), whose send button is named for what it does: how many it goes to, or that sending joins a
+ * channel first. Enter sends, as in a conversation. */
 export function ForwardComposer({
   summary,
   preview,
@@ -204,37 +216,40 @@ export function ForwardComposer({
   /** What the last press of send left to say: a failure, with its retry. */
   notice: ReactNode;
 }) {
+  // No `@` or `#` lists: a note is read where it lands, so it names no one here.
+  const completion = useReferenceCompletion({
+    mentionables: undefined,
+    value: note,
+    onChange: onNoteChange,
+  });
+  const send = () => {
+    if (canSend && !sending) onSend();
+  };
   return (
     <div className="flex shrink-0 flex-col gap-3 border-t border-secondary px-4 pt-4 pb-[max(1rem,var(--spacing-safe-bottom))] sm:px-6 sm:pb-6">
       <WhatArrives summary={summary} preview={preview} />
-      <TextArea
-        size="sm"
-        aria-label={m.message_forward_note_label()}
-        placeholder={placeholder}
-        rows={2}
-        maxLength={noteMaxLength}
-        value={note}
-        onChange={onNoteChange}
-        isDisabled={sending}
-        onTextAreaKeyDown={(event) => {
-          if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
-          if (event.nativeEvent.isComposing) return;
-          event.preventDefault();
-          if (canSend) onSend();
-        }}
-      />
       {notice}
-      <Button
-        size="md"
-        className="max-sm:w-full sm:self-end"
-        isDisabled={!canSend}
-        isLoading={sending}
-        showTextWhileLoading
-        onPress={onSend}
-        aria-keyshortcuts="Meta+Enter Control+Enter"
+      {/* A form, as under the messages: the send button submits it. */}
+      <form
+        className={cn(COMPOSER_BOX_CLASS, COMPOSER_FOCUS_CLASS)}
+        onSubmit={(event) => {
+          event.preventDefault();
+          send();
+        }}
       >
-        {sendLabel}
-      </Button>
+        <ComposerField
+          completion={completion}
+          value={note}
+          onValueChange={onNoteChange}
+          label={m.message_forward_note_label()}
+          placeholder={placeholder}
+          onSubmit={send}
+          sendDisabled={!canSend || sending}
+          isReadOnly={sending}
+          maxLength={noteMaxLength}
+          sendLabel={sendLabel}
+        />
+      </form>
     </div>
   );
 }
