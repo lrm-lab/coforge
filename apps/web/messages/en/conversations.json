@@ -162,6 +162,7 @@
   "tasks_new_description": "Add a description…",
   "tasks_new_submit": "Create task",
   "tasks_create_more": "Create more",
+  "tasks_create_submit_short": "Create",
   "tasks_create_error": "The task could not be created. Try again.",
   "tasks_create_cancel": "Cancel",
   "tasks_create_title_required": "Add a title for the task.",

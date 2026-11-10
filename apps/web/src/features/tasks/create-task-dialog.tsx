@@ -19,6 +19,7 @@ import { TaskProjectMenu } from "./task-project-menu";
 import { TaskPriorityMenu } from "./task-priority-menu";
 import { cn } from "#src/lib/utils";
 import { BARE_CHIP, TaskProperty } from "./task-property";
+import { CreateTaskPhoneBar } from "./create-task-phone-bar";
 import { TaskStatusIcon } from "./task-status-icon";
 import { StatusPicker } from "./task-status-menu";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
@@ -93,6 +94,7 @@ export function CreateTaskDialog({
   const [more, setMore] = useState(false);
   const busy = useRef(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   // The title grows with what it holds through `field-sizing: content`. A browser without it would
   // keep one row and hide the rest of a long title, the very cut the textarea is there to prevent:
   // there it is sized to its content here instead.
@@ -202,6 +204,7 @@ export function CreateTaskDialog({
         <Dialog aria-label={heading} className="flex min-h-0 flex-1 flex-col">
           {({ close }) => (
             <form
+              ref={formRef}
               onSubmit={(event) => void submit(event)}
               // ⌘↵ (Ctrl+↵) creates from anywhere in the form, the description included.
               onKeyDown={(event) => {
@@ -212,8 +215,20 @@ export function CreateTaskDialog({
               }}
               className="flex min-h-0 flex-1 flex-col"
             >
-              {/* Where it goes, as the popup's trail: the conversation, or the Task above it. */}
-              <div className="flex shrink-0 items-center gap-1 pt-3 pr-3 pl-4 sm:pl-6">
+              <CreateTaskPhoneBar
+                heading={heading}
+                saving={saving}
+                onCancel={close}
+                onCreate={() => formRef.current?.requestSubmit()}
+              />
+              {/* Where it goes, as the popup's trail: the conversation, or the Task above it. On a
+                  phone the bar above names the page and closes it, so only where it goes stays. */}
+              <div
+                className={cn(
+                  "flex shrink-0 items-center gap-1 pt-3 pr-3 pl-4 max-sm:pt-1 sm:pl-6",
+                  !(board || where) && "max-sm:hidden",
+                )}
+              >
                 <p className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-tertiary">
                   {(board || where) && (
                     <>
@@ -226,11 +241,11 @@ export function CreateTaskDialog({
                       </span>
                       <ChevronRight
                         aria-hidden="true"
-                        className="size-3.5 shrink-0 text-fg-quaternary"
+                        className="size-3.5 shrink-0 text-fg-quaternary max-sm:hidden"
                       />
                     </>
                   )}
-                  <span className="shrink-0">{heading}</span>
+                  <span className="shrink-0 max-sm:hidden">{heading}</span>
                 </p>
                 <ButtonUtility
                   icon={XClose}
@@ -239,6 +254,7 @@ export function CreateTaskDialog({
                   aria-label={m.tasks_close()}
                   isDisabled={saving}
                   onClick={close}
+                  className="max-sm:hidden"
                 />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
@@ -283,10 +299,12 @@ export function CreateTaskDialog({
                   className="mt-2 block w-full resize-none bg-transparent px-4 pb-4 text-md text-secondary outline-hidden placeholder:text-placeholder sm:px-6"
                 />
               </div>
-              {/* What else it starts with, under what it says, as the popup's chips on a phone. */}
+              {/* What else it starts with, under what it says, as the popup's chips. On a phone they
+                  are one row that scrolls sideways at the page's foot, which the overlay keeps right
+                  above the keyboard, so they are in reach while the title is typed. */}
               <div
                 data-layout="create"
-                className="flex shrink-0 flex-wrap gap-2 px-4 pt-1 pb-5 sm:px-6"
+                className="flex shrink-0 flex-wrap gap-2 px-4 pt-1 pb-5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overscroll-x-contain max-sm:border-t max-sm:border-secondary max-sm:py-2 max-sm:[scrollbar-width:none] sm:px-6"
               >
                 {board && (
                   <TaskProperty label={m.tasks_overview_status()}>
@@ -352,8 +370,9 @@ export function CreateTaskDialog({
                   {error}
                 </p>
               )}
-              {/* Closing is the corner's ✕ and Escape; the row is creating, once or one after another. */}
-              <div className="flex shrink-0 items-center justify-end gap-4 border-t border-secondary px-4 py-3 sm:px-6">
+              {/* Closing is the corner's ✕ and Escape; the row is creating, once or one after another.
+                  A phone has no ⌘↵ and rarely makes Tasks in a row: its bar above does both jobs. */}
+              <div className="flex shrink-0 items-center justify-end gap-4 border-t border-secondary px-4 py-3 max-sm:hidden sm:px-6">
                 <Toggle
                   size="sm"
                   label={m.tasks_create_more()}
