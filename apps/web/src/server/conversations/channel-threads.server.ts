@@ -95,10 +95,9 @@ async function setThreadFollowed(
             body: unfollowNotice.body,
             systemMessage: {
               create: {
-                workspaceId,
-                conversationId,
                 kind: AGENT_THREAD_UNFOLLOWED_SYSTEM_MESSAGE_KIND,
                 params: { agentId: unfollowNotice.agentId, rootMessageId },
+                conversation: { connect: { id_workspaceId: { id: conversationId, workspaceId } } },
               },
             },
           },
