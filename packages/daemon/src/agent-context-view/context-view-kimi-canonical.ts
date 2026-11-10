@@ -7,7 +7,43 @@ export type KimiCanonicalState = {
   tools: Map<string, unknown>;
   verification?: RestoredContextView["verification"];
   unsupportedChain?: boolean;
+  openSteps: Map<string, number>;
+  pendingToolResultIds: Set<string>;
+  deferredMessages: RecordValue[];
 };
+
+const INTERRUPTED_TOOL_RESULT =
+  "Tool execution was interrupted before its result was recorded. Do not assume the tool completed successfully.";
+
+function resetReplayState(state: KimiCanonicalState): void {
+  state.openSteps.clear();
+  state.pendingToolResultIds.clear();
+  state.deferredMessages.length = 0;
+}
+
+function pushMessages(state: KimiCanonicalState, messages: RecordValue[]): void {
+  if (state.pendingToolResultIds.size > 0) state.deferredMessages.push(...messages);
+  else state.messages.push(...messages);
+}
+
+function flushDeferredMessages(state: KimiCanonicalState): void {
+  if (state.pendingToolResultIds.size > 0 || state.deferredMessages.length === 0) return;
+  state.messages.push(...state.deferredMessages);
+  state.deferredMessages.length = 0;
+}
+
+function closePendingToolResults(state: KimiCanonicalState): void {
+  if (state.pendingToolResultIds.size === 0) return;
+  for (const toolCallId of state.pendingToolResultIds)
+    state.messages.push({
+      role: "tool",
+      content: [{ type: "text", text: INTERRUPTED_TOOL_RESULT }],
+      toolCallId,
+      isError: true,
+    });
+  state.pendingToolResultIds.clear();
+  flushDeferredMessages(state);
+}
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -76,9 +112,10 @@ function applyRecord(state: KimiCanonicalState, record: RecordValue): void {
   if (record.type === "llm.tools_snapshot" && typeof record.hash === "string") {
     state.tools.set(record.hash, record.tools);
   } else if (record.type === "context.append_message" && isRecord(record.message)) {
-    state.messages.push(record.message);
+    pushMessages(state, [record.message]);
   } else if (record.type === "context.clear") {
     state.messages.length = 0;
+    resetReplayState(state);
   } else if (record.type === "context.undo") {
     const count =
       typeof record.count === "number" && Number.isSafeInteger(record.count) ? record.count : 0;
@@ -93,6 +130,7 @@ function applyRecord(state: KimiCanonicalState, record: RecordValue): void {
       if (cut < 0) break;
       state.messages.splice(cut);
     }
+    resetReplayState(state);
   } else if (record.type === "context.apply_compaction") {
     state.messages.length = 0;
     const summary =
@@ -105,7 +143,71 @@ function applyRecord(state: KimiCanonicalState, record: RecordValue): void {
             : null;
     if (summary !== null)
       state.messages.push({ role: "system", content: [{ type: "text", text: summary }] });
+    resetReplayState(state);
   } else if (record.type === "context.append_loop_event" && isRecord(record.event)) {
+    const event = record.event;
+    if (event.type === "step.begin") {
+      closePendingToolResults(state);
+      const message: RecordValue = { role: "assistant", content: [], toolCalls: [] };
+      state.messages.push(message);
+      if (typeof event.uuid === "string")
+        state.openSteps.set(event.uuid, state.messages.length - 1);
+      return;
+    }
+    if (event.type === "step.end") {
+      if (typeof event.uuid === "string") state.openSteps.delete(event.uuid);
+      flushDeferredMessages(state);
+      return;
+    }
+    if (event.type === "content.part") {
+      const index =
+        typeof event.stepUuid === "string" ? state.openSteps.get(event.stepUuid) : undefined;
+      if (index !== undefined) {
+        const message = state.messages[index];
+        if (!message) return;
+        message.content = [...(Array.isArray(message.content) ? message.content : []), event.part];
+      }
+      return;
+    }
+    if (event.type === "tool.call") {
+      const index =
+        typeof event.stepUuid === "string" ? state.openSteps.get(event.stepUuid) : undefined;
+      if (index !== undefined) {
+        const message = state.messages[index];
+        if (!message) return;
+        const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+        if (toolCallId) {
+          message.toolCalls = [
+            ...(Array.isArray(message.toolCalls) ? message.toolCalls : []),
+            {
+              id: toolCallId,
+              name: typeof event.name === "string" ? event.name : "unknown",
+              input: event.args ?? null,
+            },
+          ];
+          state.pendingToolResultIds.add(toolCallId);
+        }
+        return;
+      }
+    }
+    if (event.type === "tool.result" && typeof event.toolCallId === "string") {
+      if (!state.pendingToolResultIds.has(event.toolCallId)) return;
+      const result = isRecord(event.result) ? event.result : undefined;
+      const output = result?.output ?? event.output ?? "";
+      pushMessages(state, [
+        {
+          role: "tool",
+          content: [
+            { type: "text", text: typeof output === "string" ? output : JSON.stringify(output) },
+          ],
+          toolCallId: event.toolCallId,
+          isError: result?.isError === true,
+        },
+      ]);
+      state.pendingToolResultIds.delete(event.toolCallId);
+      flushDeferredMessages(state);
+      return;
+    }
     const folded = loopEventMessage(record.event);
     if (folded) state.messages.push(folded);
   }
@@ -119,6 +221,57 @@ function stripDynamicToolContext(messages: RecordValue[]): RecordValue[] {
     const toolCalls = Array.isArray(rest.toolCalls) ? rest.toolCalls : undefined;
     return content?.length === 0 && toolCalls?.length === 0 ? [] : [rest];
   });
+}
+
+function pairToolBlocks(messages: RecordValue[]): RecordValue[] {
+  type Pending = { id: string; result?: RecordValue };
+  type Block = { message: RecordValue; pending: Pending[] };
+  const blocks: Block[] = [];
+  const open = new Map<string, Pending>();
+  for (const message of messages) {
+    if (message.partial === true) continue;
+    if (message.role === "tool" && typeof message.toolCallId === "string") {
+      const pending = open.get(message.toolCallId);
+      if (!pending) continue;
+      pending.result = message;
+      open.delete(message.toolCallId);
+      continue;
+    }
+    const block: Block = { message, pending: [] };
+    blocks.push(block);
+    if (message.role === "assistant" && Array.isArray(message.toolCalls)) {
+      for (const call of message.toolCalls) {
+        if (!isRecord(call) || typeof call.id !== "string") continue;
+        const previous = open.get(call.id);
+        if (previous) {
+          previous.result = {
+            role: "tool",
+            content: [{ type: "text", text: INTERRUPTED_TOOL_RESULT }],
+            toolCallId: call.id,
+            isError: true,
+          };
+          open.delete(call.id);
+        }
+        const pending: Pending = { id: call.id };
+        block.pending.push(pending);
+        open.set(call.id, pending);
+      }
+    }
+  }
+  const out: RecordValue[] = [];
+  for (const block of blocks) {
+    out.push(block.message);
+    for (const pending of block.pending)
+      out.push(
+        pending.result ?? {
+          role: "tool",
+          content: [{ type: "text", text: INTERRUPTED_TOOL_RESULT }],
+          toolCallId: pending.id,
+          isError: true,
+        },
+      );
+  }
+  return out;
 }
 
 export function projectKimiRequestMessages(
@@ -174,14 +327,21 @@ export function projectKimiCanonicalMessages(
   payload: RecordValue,
 ): RecordValue[] {
   const dynamic = payload.toolSelect === true ? messages : stripDynamicToolContext(messages);
-  return payload.projection === "strict" ? strictProjection(dynamic) : dynamic;
+  const paired = pairToolBlocks(dynamic);
+  return payload.projection === "strict" ? strictProjection(paired) : paired;
 }
 
 export function prepareKimiCanonicalState(
   records: readonly RecordValue[],
   latestLoopIndex: number,
 ): KimiCanonicalState {
-  const state: KimiCanonicalState = { messages: [], tools: new Map() };
+  const state: KimiCanonicalState = {
+    messages: [],
+    tools: new Map(),
+    openSteps: new Map(),
+    pendingToolResultIds: new Set(),
+    deferredMessages: [],
+  };
   const prefix = records.slice(0, Math.max(0, latestLoopIndex));
   const flattened = flattenKimiChain(prefix);
   if (flattened === undefined) {
@@ -190,6 +350,41 @@ export function prepareKimiCanonicalState(
   }
   for (const original of flattened) applyRecord(state, providerPayload(original));
   return state;
+}
+
+export function responseAfterKimiRequest(
+  records: readonly RecordValue[],
+  latestLoopIndex: number,
+  state: KimiCanonicalState,
+): RecordValue | undefined {
+  const responseIndex = state.messages.findLastIndex(
+    (message) => message.role === "assistant" && message.partial === true,
+  );
+  if (responseIndex < 0) return undefined;
+  const after: KimiCanonicalState = {
+    ...state,
+    messages: state.messages.map((message) => ({ ...message })),
+    openSteps: new Map(state.openSteps),
+    pendingToolResultIds: new Set(state.pendingToolResultIds),
+    deferredMessages: [...state.deferredMessages],
+  };
+  for (let index = latestLoopIndex + 1; index < records.length; index += 1) {
+    const record = providerPayload(records[index]!);
+    if (
+      [
+        "context.apply_compaction",
+        "context.clear",
+        "context.undo",
+        "agent.switched",
+        "llm.request",
+      ].includes(String(record.type))
+    )
+      break;
+    applyRecord(after, record);
+    if (after.messages.length <= responseIndex) break;
+  }
+  const candidate = after.messages[responseIndex];
+  return candidate?.role === "assistant" && candidate.partial !== true ? candidate : undefined;
 }
 
 function flattenKimiChain(records: readonly RecordValue[]): RecordValue[] | undefined {
