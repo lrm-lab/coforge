@@ -11,7 +11,6 @@ export { COMPUTER_FILE_MAX_BYTES };
 export const COMPUTER_FILE_UPLOAD_CAPABILITY = "computer-file-upload:v1" as const;
 export const COMPUTER_FILE_PULL_METHOD = RPC_METHODS.daemonComputerFilePull;
 export const COMPUTER_FILE_PULL_RESULT_METHOD = RPC_METHODS.daemonComputerFilePullResult;
-export const COMPUTER_FILE_SESSION_SECONDS = 900;
 
 const REQUEST_TYPE = "coforge.rpc.v1.ComputerFilePullRequest";
 const RESULT_TYPE = "coforge.rpc.v1.ComputerFilePullResult";

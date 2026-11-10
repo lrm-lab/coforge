@@ -9,7 +9,10 @@ import { isFile } from "#src/server/attachments/upload-file.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { toPublicServerError } from "#src/server/errors/public-error.server";
 import { computerFileUploads } from "#src/server/computers/computer-file-upload-production.server";
-import type { ComputerFileUploadCompleteResponse } from "#src/server/computers/computer-file-upload.server";
+import type {
+  ComputerFileUploadReason,
+  ComputerFileUploadStart,
+} from "#src/server/computers/computer-file-upload.server";
 import { requireWorkspaceIdForRequest } from "#src/server/workspaces/selection.server";
 
 const inputSchema = z.object({
@@ -17,16 +20,7 @@ const inputSchema = z.object({
   workspaceSlug: z.string().optional(),
 });
 
-export type ComputerFileUploadRefusal =
-  | "too_large"
-  | "signed_out"
-  | "offline"
-  | "unsupported"
-  | "timeout"
-  | "unavailable"
-  | "storage_unavailable"
-  | "invalid_name"
-  | "failed";
+export type ComputerFileUploadRefusal = ComputerFileUploadReason | "signed_out";
 
 export const Route = createFileRoute("/api/computers/$computerId/file-uploads")({
   server: {
@@ -36,7 +30,7 @@ export const Route = createFileRoute("/api/computers/$computerId/file-uploads")(
   },
 });
 
-type Dependencies = {
+export type ComputerFileUploadRouteDependencies = {
   authenticate(
     cookieHeader: string | undefined,
   ): { id: string } | null | Promise<{ id: string } | null>;
@@ -46,15 +40,15 @@ type Dependencies = {
     userId: string,
     workspaceSlug: string | undefined,
   ): Promise<string>;
-  ingest(
+  start(
     db: PrismaClient,
     viewer: { userId: string; workspaceId: string },
     computerId: string,
     file: File,
-  ): Promise<ComputerFileUploadCompleteResponse | { status: "too_large" | "invalid_name" }>;
+  ): Promise<ComputerFileUploadStart>;
 };
 
-const dependencies: Dependencies = {
+const dependencies: ComputerFileUploadRouteDependencies = {
   authenticate: optionalBrowserUser,
   database: getDatabaseClient,
   resolveWorkspace: (db, userId, workspaceSlug) =>
@@ -65,14 +59,19 @@ const dependencies: Dependencies = {
         ? workspaceSlug
         : undefined,
     ),
-  ingest: async (db, viewer, computerId, file) =>
-    (await computerFileUploads(db)).ingest(viewer, computerId, file),
+  start: async (db, viewer, computerId, file) =>
+    (await computerFileUploads(db)).start(viewer, computerId, file),
 };
 
+/**
+ * Receives the file and answers with the upload id as soon as it is validated: storing it and the
+ * Computer's pull take longer than production keeps a request open, so the outcome is read with
+ * `readComputerFileUpload`.
+ */
 export async function handleComputerFileUpload(
   request: Request,
   computerId: string,
-  deps: Dependencies = dependencies,
+  deps: ComputerFileUploadRouteDependencies = dependencies,
 ): Promise<Response> {
   try {
     if (!z.uuid().safeParse(computerId).success) throw new AppError("INVALID_INPUT");
@@ -93,27 +92,21 @@ export async function handleComputerFileUpload(
     const db = deps.database();
     if (!db) throw new AppError("TEMPORARILY_UNAVAILABLE");
     const workspaceId = await deps.resolveWorkspace(db, user.id, parsed.data.workspaceSlug);
-    const result = await deps.ingest(
+    const result = await deps.start(
       db,
       { userId: user.id, workspaceId },
       computerId,
       parsed.data.file,
     );
-    if (result.status === "ready") {
-      return Response.json(result, { headers: { "cache-control": "no-store" } });
+    if (result.status === "started") {
+      return Response.json(result, { status: 202, headers: { "cache-control": "no-store" } });
     }
     if (result.status === "too_large") return refused(413, "too_large");
     if (result.status === "invalid_name") return refused(400, "invalid_name");
     if (result.status === "storage_unavailable") return refused(503, "storage_unavailable");
     if (result.status === "offline") return refused(503, "offline");
     if (result.status === "unsupported") return refused(503, "unsupported");
-    if (result.status === "timeout") return refused(504, "timeout");
-    if (result.status === "unavailable") return refused(404, "unavailable");
-    if (result.status !== "failed") return refused(500, "failed");
-    return Response.json(
-      { reason: "failed" satisfies ComputerFileUploadRefusal, message: result.message },
-      { status: 422, headers: { "cache-control": "no-store" } },
-    );
+    return refused(404, "unavailable");
   } catch (error) {
     const publicError = toPublicServerError(error);
     if (!isAppError(publicError)) throw publicError;

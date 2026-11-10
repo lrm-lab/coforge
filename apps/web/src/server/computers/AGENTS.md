@@ -170,6 +170,26 @@ These rules apply to `src/server/computers/`.
   Computer and Agent, checks the flag and the Computer's owner again once a result exists, and
   leaves the result to expire (35 seconds) so a lost reply can be asked for again. Never hold a
   request for the result.
+- `computer-file-upload.server.ts` places an owner's browser upload in the Computer's `uploads/`.
+  Production closes a request idle for about ten seconds and storing the object plus the Computer's
+  pull can take minutes, so it is two calls. `start` (behind `POST /api/computers/<id>/file-uploads`)
+  answers once the body is validated and the status record is written, with an upload id or a
+  refusal (`too_large`, `invalid_name`, `unavailable`, `storage_unavailable`, `offline`,
+  `unsupported`); nothing is stored for a refusal, and a record that cannot be written throws. The
+  server then stores the object and asks the Computer to pull it, never awaited by the request.
+  `read` (`readComputerFileUpload`) returns the record: pending, placed (with the path the Computer
+  used) or failed with a reason. Both need the Computer's owner; `read` answers pending from the
+  record alone and checks ownership once there is an outcome. The record lives in Redis under the
+  Workspace, Computer and upload id, and names its owner (`computer-file-upload-statuses.server.ts`).
+  Pending is a 90 second lease the running upload renews every 15 seconds (a renewal also makes a
+  record that expired during a Redis stall pending again, and never touches an outcome), so a web
+  process that restarts mid-upload leaves a record that expires and reads as failed, as does any
+  id that is missing or not the reader's. The outcome is written with a few retries and stays
+  readable for 10 minutes; the stored object is removed, best effort, once the outcome is known.
+  A shutdown after the pull request is published can still place the file on the Computer though
+  the page reads failed, and leaves the stored object behind. The page's deadline
+  (`features/computers/computer-file-upload-poll.ts`) must stay past the server's store and pull
+  limits (`COMPUTER_FILE_UPLOAD_TIMING`).
 - `computer-runtime-auth.server.ts` stores structurally validated status reports without a
   provider whitelist, so a newer daemon's report survives an older Web. Provider identifiers
   are 1–64 ASCII identifier characters, at most 32 unique entries, normalized JSON at most

@@ -9,11 +9,10 @@ import {
 import { getFileStorage } from "#src/server/files/file-storage.server";
 import { ComputerFileUploads } from "./computer-file-upload.server";
 import { getComputerFileUploadCapabilityLease } from "./computer-file-upload-capability.server";
-import { getComputerFileUploadSessions } from "./computer-file-upload-sessions.server";
+import { getComputerFileUploadStatuses } from "./computer-file-upload-statuses.server";
 
 /** Production composition for owner uploads that land in a Computer's uploads directory. */
 export async function computerFileUploads(db: Pick<PrismaClient, "computer">) {
-  const centrifugo = createCentrifugoServerApi();
   const storage = await getFileStorage();
   return new ComputerFileUploads({
     owned: async (viewer, computerId) =>
@@ -32,10 +31,11 @@ export async function computerFileUploads(db: Pick<PrismaClient, "computer">) {
     supported: ({ workspaceId, computerId }) =>
       getComputerFileUploadCapabilityLease().supports(workspaceId, computerId),
     storage,
-    sessions: getComputerFileUploadSessions(),
+    statuses: getComputerFileUploadStatuses(),
     pullResults: getComputerFilePullResults(),
+    // Made on use: reading an upload needs neither the API nor its environment.
     publishPull: (request) =>
-      centrifugo.publish(
+      createCentrifugoServerApi().publish(
         daemonControlChannel(request.workspaceId, request.computerId),
         encodeComputerFilePullRequest(request),
       ),

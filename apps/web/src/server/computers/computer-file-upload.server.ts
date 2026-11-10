@@ -1,6 +1,5 @@
 import {
   COMPUTER_FILE_MAX_BYTES,
-  COMPUTER_FILE_SESSION_SECONDS,
   sanitizeComputerFileName,
   type ComputerFilePullRequest,
   type ComputerFilePullResult,
@@ -9,38 +8,79 @@ import type { FileStorage } from "#src/server/files/file-storage.server";
 
 export type ComputerFileViewer = { userId: string; workspaceId: string };
 
-export type ComputerFileUploadSessionRecord = {
-  uploadId: string;
-  workspaceId: string;
-  computerId: string;
-  userId: string;
-  objectKey: string;
-  fileName: string;
-  contentType: string;
-  sizeBytes: number;
-  state: "pending" | "completed" | "failed";
-  expiresAt: string;
-};
+/** Every reason a start is refused or an upload fails: the ones the panel has a message for. */
+export type ComputerFileUploadReason =
+  | "too_large"
+  | "invalid_name"
+  | "unavailable"
+  | "storage_unavailable"
+  | "offline"
+  | "unsupported"
+  | "timeout"
+  | "failed";
 
-export type ComputerFileUploadCreated = {
-  uploadId: string;
-  state: "pending";
-  expiresAt: string;
-  upload: { method: "PUT"; url: string; headers: Record<string, string> };
-};
+/** Why a start is refused: nothing was stored and no upload id exists. */
+export type ComputerFileUploadStartRefusal = Exclude<
+  ComputerFileUploadReason,
+  "timeout" | "failed"
+>;
 
-export type ComputerFileUploadCompleteResponse =
-  | { status: "ready"; path: string; fileName: string; sizeBytes: number }
-  | { status: "offline" | "unsupported" | "timeout" | "unavailable" | "storage_unavailable" }
-  | { status: "failed"; message: string };
+/** Why a started upload ended without the file on the Computer. */
+export type ComputerFileUploadFailureReason = Exclude<
+  ComputerFileUploadReason,
+  "too_large" | "invalid_name"
+>;
+
+export type ComputerFileUploadStart =
+  | { status: "started"; uploadId: string }
+  | { status: ComputerFileUploadStartRefusal };
+
+/** How a started upload ended; `placed` carries the path the Computer used. */
+export type ComputerFileUploadOutcome =
+  | { status: "placed"; path: string; fileName: string; sizeBytes: number }
+  | { status: "failed"; reason: ComputerFileUploadFailureReason; message?: string };
+
+export type ComputerFileUploadRead = { status: "pending" } | ComputerFileUploadOutcome;
+
+export type ComputerFileUploadScope = { workspaceId: string; computerId: string };
+
+/** What the status store holds for one upload: its owner, and the outcome once there is one. */
+export type ComputerFileUploadStatus = { userId: string; outcome?: ComputerFileUploadOutcome };
+
+/**
+ * The short-lived record of one upload, scoped to its Workspace and Computer. `begin` writes it
+ * pending for a lease that `renew` keeps extending while the work runs; a record nobody renews
+ * (the web process went away) expires, and a missing record reads as failed. `renew` makes a
+ * missing record pending again, since the upload that renews it is alive, and never touches an
+ * outcome.
+ */
+export interface ComputerFileUploadStatuses {
+  begin(
+    scope: ComputerFileUploadScope,
+    uploadId: string,
+    userId: string,
+    leaseSeconds: number,
+  ): Promise<void>;
+  renew(
+    scope: ComputerFileUploadScope,
+    uploadId: string,
+    userId: string,
+    leaseSeconds: number,
+  ): Promise<void>;
+  settle(
+    scope: ComputerFileUploadScope,
+    uploadId: string,
+    userId: string,
+    outcome: ComputerFileUploadOutcome,
+    ttlSeconds: number,
+  ): Promise<void>;
+  read(
+    scope: ComputerFileUploadScope,
+    uploadId: string,
+  ): Promise<ComputerFileUploadStatus | undefined>;
+}
 
 export type PendingComputerFilePull = { request: ComputerFilePullRequest; userId: string };
-
-export interface ComputerFileUploadSessions {
-  put(session: ComputerFileUploadSessionRecord, ttlSeconds: number): Promise<void>;
-  get(uploadId: string): Promise<ComputerFileUploadSessionRecord | undefined>;
-  clear(uploadId: string): Promise<void>;
-}
 
 export interface ComputerFilePullResults {
   begin(pending: PendingComputerFilePull): Promise<void>;
@@ -67,52 +107,130 @@ function pollDelayMs(attempt: number) {
   return attempt < 25 ? 20 : 100;
 }
 
+export type ComputerFileUploadTiming = {
+  now(): number;
+  wait(ms: number): Promise<void>;
+  /** The longest the object may take to reach storage. */
+  storeTimeoutMs: number;
+  /** The longest the Computer may take to pull the stored object. */
+  pullTimeoutMs: number;
+  /** How long a pending record lives without being renewed. */
+  leaseSeconds: number;
+  /** How often the running upload renews its pending record; well inside `leaseSeconds`. */
+  leaseRenewMs: number;
+  /** How long the outcome stays readable: a page polling from a throttled tab still finds it. */
+  settledSeconds: number;
+  /** How many times the outcome is written before giving up, `settleRetryMs` apart. */
+  settleAttempts: number;
+  settleRetryMs: number;
+  /** The signed download link's lifetime; outlasts the pull. */
+  pullExpiresInSeconds: number;
+};
+
+/**
+ * The page stops asking after `COMPUTER_FILE_UPLOAD_CLIENT_DEADLINE_MS`
+ * (`features/computers/computer-file-upload-poll.ts`), which must stay past
+ * `storeTimeoutMs + pullTimeoutMs` so the page shows the server's own verdict.
+ */
+export const COMPUTER_FILE_UPLOAD_TIMING: ComputerFileUploadTiming = {
+  now: Date.now,
+  wait: (ms) => Bun.sleep(ms),
+  storeTimeoutMs: 300_000,
+  // A large file on a modest Computer uplink can take several minutes to pull.
+  pullTimeoutMs: 600_000,
+  // Long enough to ride out a Redis stall of several renewals.
+  leaseSeconds: 90,
+  leaseRenewMs: 15_000,
+  settledSeconds: 600,
+  settleAttempts: 5,
+  settleRetryMs: 1_000,
+  pullExpiresInSeconds: 900,
+};
+
+/** Whether `work` finished in `ms`; the work itself is not cancelled. Its failure is thrown. */
+async function completesWithin(work: Promise<void>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  try {
+    return await Promise.race([work.then(() => true as const), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+type UploadedFile = Blob & { name: string; type: string; size: number };
+
+/**
+ * A validated upload as the background work sees it: the file's size and type, and a way to store
+ * the body that lets go of the body once called, so the buffered body is not kept alive through
+ * the Computer's pull.
+ */
+type StartedUpload = {
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  store(objectKey: string): Promise<void>;
+};
+
+/**
+ * A plain function on purpose: the closure's scope must not be the caller's. An async function's
+ * parameters live in a scope its closures keep alive, which would hold `file` for as long as the
+ * upload runs.
+ */
+function startedUpload(file: UploadedFile, fileName: string, storage: FileStorage): StartedUpload {
+  const contentType = file.type || "application/octet-stream";
+  let body: Blob | undefined = file;
+  return {
+    fileName,
+    contentType,
+    sizeBytes: file.size,
+    store: (objectKey) => {
+      const stored = body!;
+      body = undefined;
+      return storage.put(objectKey, stored, contentType);
+    },
+  };
+}
+
 /**
  * Owner uploads that land in a Computer's `uploads/` directory.
  *
- * The browser path uses {@link ComputerFileUploads.ingest}: the web server writes the object
- * (attachments-style), then asks the Computer to pull a short-lived GET URL. Browser→OSS PUT is
- * not used yet — OSS CORS for direct upload is still an ops follow-up.
+ * Production closes a request idle for about ten seconds, and storing the object and the
+ * Computer's pull take longer, so an upload is two calls. {@link ComputerFileUploads.start}
+ * answers once the request is validated and the status record exists; the server then stores the
+ * object and asks the Computer to pull a short-lived GET URL, and {@link ComputerFileUploads.read}
+ * returns the record. Browser→OSS PUT is not used: OSS CORS for direct upload is still an ops
+ * follow-up.
  */
 export class ComputerFileUploads {
   constructor(
     private readonly dependencies: {
       owned(viewer: ComputerFileViewer, computerId: string): Promise<boolean>;
-      online(scope: { workspaceId: string; computerId: string }): Promise<boolean>;
-      supported(scope: { workspaceId: string; computerId: string }): Promise<boolean>;
+      online(scope: ComputerFileUploadScope): Promise<boolean>;
+      supported(scope: ComputerFileUploadScope): Promise<boolean>;
       storage: FileStorage;
-      sessions: ComputerFileUploadSessions;
+      statuses: ComputerFileUploadStatuses;
       pullResults: ComputerFilePullResults;
       publishPull(request: ComputerFilePullRequest): Promise<void>;
     },
-    private readonly timing: {
-      now(): number;
-      wait(ms: number): Promise<void>;
-      timeoutMs: number;
-      sessionExpiresInSeconds: number;
-      pullExpiresInSeconds: number;
-    } = {
-      now: Date.now,
-      wait: (ms) => Bun.sleep(ms),
-      // 100 MiB on a modest Computer uplink can take minutes; keep the browser wait and
-      // the signed GET alive for the same window.
-      timeoutMs: 600_000,
-      sessionExpiresInSeconds: COMPUTER_FILE_SESSION_SECONDS,
-      pullExpiresInSeconds: 900,
-    },
+    private readonly timing: ComputerFileUploadTiming = COMPUTER_FILE_UPLOAD_TIMING,
   ) {}
 
   /**
-   * Browser upload: store the bytes on the server's file backend, then pull onto the Computer.
+   * Validates the upload and records it pending, then stores and places it in the background.
    * Needs `presignGet` so the Daemon can fetch outbound; local-only storage cannot place files.
+   * Throws only when the record cannot be written, because nothing has been started then.
    */
-  async ingest(
+  async start(
     viewer: ComputerFileViewer,
     computerId: string,
-    file: Blob & { name: string; type: string; size: number },
-  ): Promise<ComputerFileUploadCompleteResponse | { status: "too_large" | "invalid_name" }> {
+    file: UploadedFile,
+  ): Promise<ComputerFileUploadStart> {
+    const { storage, statuses } = this.dependencies;
     if (!(await this.dependencies.owned(viewer, computerId))) return { status: "unavailable" };
-    if (!this.dependencies.storage.presignGet) return { status: "storage_unavailable" };
+    if (!storage.presignGet) return { status: "storage_unavailable" };
     if (!Number.isSafeInteger(file.size) || file.size <= 0 || file.size > COMPUTER_FILE_MAX_BYTES)
       return { status: "too_large" };
     let fileName: string;
@@ -121,205 +239,174 @@ export class ComputerFileUploads {
     } catch {
       return { status: "invalid_name" };
     }
-    const contentType = file.type || "application/octet-stream";
+    const scope = { workspaceId: viewer.workspaceId, computerId };
+    const unreachable = await this.unreachable(scope);
+    if (unreachable) return { status: unreachable };
+
     const uploadId = crypto.randomUUID();
-    const objectKey = `workspaces/${viewer.workspaceId}/computer-files/${computerId}/${uploadId}/original`;
-    try {
-      await this.dependencies.storage.put(objectKey, file, contentType);
-    } catch (error) {
-      return {
-        status: "failed",
-        message: error instanceof Error ? error.message.slice(0, 200) : "storage put failed",
-      };
-    }
-    return this.pullPlacedObject(viewer, computerId, {
-      uploadId,
-      objectKey,
-      fileName,
-      contentType,
-      sizeBytes: file.size,
-    });
+    await statuses.begin(scope, uploadId, viewer.userId, this.timing.leaseSeconds);
+    void this.run(viewer, scope, uploadId, startedUpload(file, fileName, storage));
+    return { status: "started", uploadId };
   }
 
-  async create(
-    viewer: ComputerFileViewer,
-    computerId: string,
-    input: { fileName: string; contentType: string; sizeBytes: number },
-  ): Promise<
-    | ComputerFileUploadCreated
-    | { status: "unavailable" | "storage_unavailable" | "too_large" | "invalid_name" }
-  > {
-    if (!(await this.dependencies.owned(viewer, computerId))) return { status: "unavailable" };
-    if (!this.dependencies.storage.presignPut || !this.dependencies.storage.presignGet)
-      return { status: "storage_unavailable" };
-    if (
-      !Number.isSafeInteger(input.sizeBytes) ||
-      input.sizeBytes <= 0 ||
-      input.sizeBytes > COMPUTER_FILE_MAX_BYTES
-    )
-      return { status: "too_large" };
-    let fileName: string;
-    try {
-      fileName = sanitizeComputerFileName(input.fileName);
-    } catch {
-      return { status: "invalid_name" };
-    }
-    const uploadId = crypto.randomUUID();
-    const objectKey = `workspaces/${viewer.workspaceId}/computer-files/${computerId}/${uploadId}/original`;
-    const expiresAt = new Date(
-      this.timing.now() + this.timing.sessionExpiresInSeconds * 1000,
-    ).toISOString();
-    await this.dependencies.sessions.put(
-      {
-        uploadId,
-        workspaceId: viewer.workspaceId,
-        computerId,
-        userId: viewer.userId,
-        objectKey,
-        fileName,
-        contentType: input.contentType,
-        sizeBytes: input.sizeBytes,
-        state: "pending",
-        expiresAt,
-      },
-      this.timing.sessionExpiresInSeconds,
-    );
-    const upload = await this.dependencies.storage.presignPut(objectKey, {
-      contentType: input.contentType,
-      expiresInSeconds: this.timing.sessionExpiresInSeconds,
-    });
-    return {
-      uploadId,
-      state: "pending",
-      expiresAt,
-      upload: { method: "PUT", url: upload.url, headers: upload.headers },
-    };
-  }
-
-  async complete(
+  /**
+   * The upload's record. A missing record (the lease ran out, or the id is not the reader's)
+   * reads as failed. A pending upload is answered from its record alone; an outcome is shown only
+   * to someone who still owns the Computer.
+   */
+  async read(
     viewer: ComputerFileViewer,
     computerId: string,
     uploadId: string,
-  ): Promise<ComputerFileUploadCompleteResponse> {
-    if (!(await this.dependencies.owned(viewer, computerId))) return { status: "unavailable" };
-    const storage = this.dependencies.storage;
-    if (!storage.presignPut || !storage.presignGet) return { status: "storage_unavailable" };
-
-    const session = await this.dependencies.sessions.get(uploadId);
-    if (
-      !session ||
-      session.workspaceId !== viewer.workspaceId ||
-      session.computerId !== computerId ||
-      session.userId !== viewer.userId
-    )
-      return { status: "unavailable" };
-    if (Date.parse(session.expiresAt) <= this.timing.now()) {
-      await this.dependencies.sessions.clear(uploadId).catch(() => {});
-      return { status: "failed", message: "upload session expired" };
-    }
-
-    const head = await storage.head(session.objectKey);
-    if (!head) return { status: "failed", message: "uploaded object not found" };
-    if (head.sizeBytes !== session.sizeBytes)
-      return {
-        status: "failed",
-        message: `object size ${head.sizeBytes} does not match declared ${session.sizeBytes}`,
-      };
-
-    return this.pullPlacedObject(viewer, computerId, {
-      uploadId: session.uploadId,
-      objectKey: session.objectKey,
-      fileName: session.fileName,
-      contentType: session.contentType,
-      sizeBytes: session.sizeBytes,
-    });
+  ): Promise<ComputerFileUploadRead> {
+    const status = await this.dependencies.statuses.read(
+      { workspaceId: viewer.workspaceId, computerId },
+      uploadId,
+    );
+    if (!status || status.userId !== viewer.userId) return { status: "failed", reason: "failed" };
+    if (!status.outcome) return { status: "pending" };
+    if (!(await this.dependencies.owned(viewer, computerId)))
+      return { status: "failed", reason: "unavailable" };
+    return status.outcome;
   }
 
-  private async pullPlacedObject(
-    viewer: ComputerFileViewer,
-    computerId: string,
-    placed: {
-      uploadId: string;
-      objectKey: string;
-      fileName: string;
-      contentType: string;
-      sizeBytes: number;
-    },
-  ): Promise<ComputerFileUploadCompleteResponse> {
-    const storage = this.dependencies.storage;
-    if (!storage.presignGet) return { status: "storage_unavailable" };
-
-    const availability = { workspaceId: viewer.workspaceId, computerId };
+  private async unreachable(scope: ComputerFileUploadScope) {
     const [online, supported] = await Promise.all([
-      this.dependencies.online(availability),
-      this.dependencies.supported(availability),
+      this.dependencies.online(scope),
+      this.dependencies.supported(scope),
     ]);
-    if (!online) return { status: "offline" };
-    if (!supported) return { status: "unsupported" };
+    if (!online) return "offline";
+    if (!supported) return "unsupported";
+    return undefined;
+  }
 
-    const downloadUrl = await storage.presignGet(placed.objectKey, {
+  /**
+   * Runs one started upload to its end and always records how it ended; never rejects. The stored
+   * object only serves the Computer's pull, so it is removed once the outcome is known. A
+   * shutdown in between leaves it, and a file the Computer already pulled placed though the page
+   * reads failed.
+   */
+  private async run(
+    viewer: ComputerFileViewer,
+    scope: ComputerFileUploadScope,
+    uploadId: string,
+    upload: StartedUpload,
+  ) {
+    const { statuses, storage } = this.dependencies;
+    const objectKey = `workspaces/${scope.workspaceId}/computer-files/${scope.computerId}/${uploadId}/original`;
+    let renewing: Promise<void> = Promise.resolve();
+    const timer = setInterval(() => {
+      renewing = renewing
+        .then(() => statuses.renew(scope, uploadId, viewer.userId, this.timing.leaseSeconds))
+        .catch(() => {});
+    }, this.timing.leaseRenewMs);
+    timer.unref();
+    let outcome: ComputerFileUploadOutcome;
+    try {
+      outcome = await this.place(viewer, scope, objectKey, upload);
+    } catch {
+      outcome = { status: "failed", reason: "unavailable" };
+    } finally {
+      clearInterval(timer);
+    }
+    // A renewal still in flight must land before the outcome, or it would shorten its lifetime.
+    await renewing;
+    await this.settle(scope, uploadId, viewer.userId, outcome);
+    await storage.remove(objectKey).catch(() => {});
+  }
+
+  /** Writes the outcome, again after a short pause if the write fails, so a success is not lost. */
+  private async settle(
+    scope: ComputerFileUploadScope,
+    uploadId: string,
+    userId: string,
+    outcome: ComputerFileUploadOutcome,
+  ) {
+    for (let attempt = 1; attempt <= this.timing.settleAttempts; attempt++) {
+      try {
+        await this.dependencies.statuses.settle(
+          scope,
+          uploadId,
+          userId,
+          outcome,
+          this.timing.settledSeconds,
+        );
+        return;
+      } catch {
+        if (attempt < this.timing.settleAttempts) await this.timing.wait(this.timing.settleRetryMs);
+      }
+    }
+  }
+
+  private async place(
+    viewer: ComputerFileViewer,
+    scope: ComputerFileUploadScope,
+    objectKey: string,
+    upload: StartedUpload,
+  ): Promise<ComputerFileUploadOutcome> {
+    const { storage, pullResults } = this.dependencies;
+    if (!storage.presignGet) return { status: "failed", reason: "storage_unavailable" };
+    try {
+      // A store that outlasts its bound is a plain failure; its cause is not the user's to read.
+      if (!(await completesWithin(upload.store(objectKey), this.timing.storeTimeoutMs)))
+        return { status: "failed", reason: "failed" };
+    } catch (error) {
+      return {
+        status: "failed",
+        reason: "failed",
+        message: error instanceof Error ? error.message.slice(0, 200) : "storage put failed",
+      };
+    }
+
+    const unreachable = await this.unreachable(scope);
+    if (unreachable) return { status: "failed", reason: unreachable };
+
+    const downloadUrl = await storage.presignGet(objectKey, {
       expiresInSeconds: this.timing.pullExpiresInSeconds,
     });
     const request: ComputerFilePullRequest = {
       protocolMajor: 1,
       requestId: crypto.randomUUID(),
-      workspaceId: viewer.workspaceId,
-      computerId,
+      workspaceId: scope.workspaceId,
+      computerId: scope.computerId,
       downloadUrl,
-      fileName: placed.fileName,
-      sizeBytes: placed.sizeBytes,
-      contentType: placed.contentType,
+      fileName: upload.fileName,
+      sizeBytes: upload.sizeBytes,
+      contentType: upload.contentType,
     };
-    const session: ComputerFileUploadSessionRecord = {
-      uploadId: placed.uploadId,
-      workspaceId: viewer.workspaceId,
-      computerId,
-      userId: viewer.userId,
-      objectKey: placed.objectKey,
-      fileName: placed.fileName,
-      contentType: placed.contentType,
-      sizeBytes: placed.sizeBytes,
-      state: "pending",
-      expiresAt: new Date(this.timing.now() + 60_000).toISOString(),
-    };
-
     try {
-      await this.dependencies.pullResults.begin({ request, userId: viewer.userId });
+      await pullResults.begin({ request, userId: viewer.userId });
       await this.dependencies.publishPull(request);
-      const deadline = this.timing.now() + this.timing.timeoutMs;
+      const deadline = this.timing.now() + this.timing.pullTimeoutMs;
       let attempt = 0;
       do {
-        const result = await this.dependencies.pullResults.read(request.requestId);
+        const result = await pullResults.read(request.requestId);
         if (result) {
           if (
-            !(await this.dependencies.owned(viewer, computerId)) ||
+            !(await this.dependencies.owned(viewer, scope.computerId)) ||
             !sameComputerFilePullScope(request, result)
           )
-            return { status: "unavailable" };
-          if (result.status === "ok") {
-            await this.dependencies.sessions
-              .put({ ...session, state: "completed" }, 60)
-              .catch(() => {});
+            return { status: "failed", reason: "unavailable" };
+          if (result.status === "ok")
             return {
-              status: "ready",
+              status: "placed",
               path: result.path,
-              fileName: placed.fileName,
-              sizeBytes: placed.sizeBytes,
+              fileName: upload.fileName,
+              sizeBytes: upload.sizeBytes,
             };
-          }
-          await this.dependencies.sessions.put({ ...session, state: "failed" }, 60).catch(() => {});
           return {
             status: "failed",
+            reason: "failed",
             message: result.errorMessage || result.status,
           };
         }
         await this.timing.wait(pollDelayMs(attempt++));
       } while (this.timing.now() < deadline);
-      return { status: "timeout" };
+      return { status: "failed", reason: "timeout" };
     } catch {
-      return { status: "unavailable" };
+      return { status: "failed", reason: "unavailable" };
     } finally {
-      await this.dependencies.pullResults.clear(request.requestId).catch(() => {});
+      await pullResults.clear(request.requestId).catch(() => {});
     }
   }
 }
