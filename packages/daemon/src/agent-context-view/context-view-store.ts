@@ -268,7 +268,7 @@ export class ContextViewStore {
       kept.map((entry) => JSON.stringify(entry)).join("\n") + (kept.length ? "\n" : "");
     const dropped = parsed.length - kept.length;
     if (kept.length === 0) {
-      rmSync(this.#indexPath, { force: true });
+      unlinkSync(this.#indexPath);
       return { kept: 0, dropped };
     }
     const temp = `${this.#indexPath}.tmp-${process.pid}`;
