@@ -10,7 +10,9 @@ import { ArtifactsBesideChat } from "#src/features/artifacts/artifact-beside-cha
 import { ConversationArtifactPane } from "#src/features/artifacts/artifact-side-pane";
 import { useArtifactsOn } from "#src/features/artifacts/artifact-queries";
 import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
+import { usePageTitleLabel } from "#src/lib/browser-tab";
 import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
 import { markPublicChannelRead } from "./channels.functions";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
 import { ConversationFilesPanel } from "./conversation-files";
@@ -43,6 +45,8 @@ type ConversationPageProps = {
   jumpMessage?: string;
   /** Clears the host's landing once the pane has used it. */
   onJumpMessageConsumed?: () => void;
+  /** Shown inside another page (Activity's pane) rather than as the page itself. */
+  hosted?: boolean;
 };
 
 /**
@@ -323,6 +327,7 @@ function ConversationPageMain({
   search: pageSearch,
   jumpMessage,
   onJumpMessageConsumed,
+  hosted,
   unreadKey,
   page,
   taskView,
@@ -354,6 +359,16 @@ function ConversationPageMain({
   // so it stays unread.
   const markSeen = useMarkConversationSeen();
   const threadAlone = useStandaloneThread() !== null;
+  // The tab title names the conversation, with " - Thread" while a thread is open (as Raft's). A
+  // conversation hosted in Activity leaves the title alone: Activity is the page, and a row being
+  // previewed is not where the person is. A thread shown alone there does name itself, as Raft's
+  // Activity does for an opened thread.
+  const threadOpen = threadAlone || pageSearch.threadRootId !== undefined;
+  usePageTitleLabel(
+    hosted && !threadAlone
+      ? undefined
+      : `${direct ? "@" : ""}${name}${threadOpen ? ` - ${m.conversation_thread()}` : ""}`,
+  );
   const readEnd = rowReadEnd(conversation, direct === true);
   useEffect(() => {
     if (threadAlone) return;
