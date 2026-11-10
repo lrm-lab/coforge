@@ -150,7 +150,12 @@ function applyRecord(state: KimiCanonicalState, record: RecordValue): void {
             ? record.content
             : null;
     if (summary !== null)
-      state.messages.push({ role: "system", content: [{ type: "text", text: summary }] });
+      state.messages.push({
+        role: "user",
+        content: [{ type: "text", text: summary }],
+        origin: { kind: "compaction_summary" },
+        toolCalls: [],
+      });
     resetReplayState(state);
   } else if (record.type === "context.append_loop_event" && isRecord(record.event)) {
     const event = record.event;
