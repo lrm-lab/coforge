@@ -9,16 +9,13 @@ import { TextArea } from "#src/components/base/textarea/textarea";
 import { Face } from "#src/features/pickers/entity-picker";
 import { PickerListRow } from "#src/features/pickers/picker-list";
 import { m } from "#src/paraglide/messages";
-import { FORWARD_NOTE_MAX_LENGTH } from "./message-forward";
-import type { ForwardFailureCode, ForwardTarget, ForwardedMessageView } from "./message-forward";
-import { ForwardedMessageCard } from "./message-forward-card";
+import type { ForwardFailureCode, ForwardTarget } from "./message-forward";
 import {
   canSelectTarget,
   forwardTargetKey,
   forwardTargetLabel,
   isUnjoinedChannel,
 } from "./message-forward-model";
-import type { MessageView } from "./message-view";
 
 /** What a destination's failure reads as on its row: a channel to join first, or one that will not
  * take it. */
@@ -168,27 +165,27 @@ function Recipients({
   );
 }
 
-/** The right pane: the card as it will arrive, then who it goes to, the optional note, and the
- * send button, which says when sending joins a channel first. ⌘/Ctrl+Enter in the note sends. */
+/** The right pane: what arrives (`preview`), then who it goes to, the optional note, and the send
+ * button, which says when sending joins a channel first. ⌘/Ctrl+Enter in the note sends. */
 export function ForwardNotePane({
-  forwarded,
-  attachments,
+  preview,
   picked,
   onRemove,
   note,
   onNoteChange,
+  noteMaxLength,
   placeholder,
   sendLabel,
   sending,
   onSend,
   notice,
 }: {
-  forwarded: readonly ForwardedMessageView[];
-  attachments: MessageView["attachments"];
+  preview: ReactNode;
   picked: readonly ForwardTarget[];
   onRemove: (target: ForwardTarget) => void;
   note: string;
   onNoteChange: (note: string) => void;
+  noteMaxLength: number;
   placeholder: string;
   sendLabel: string;
   sending: boolean;
@@ -199,9 +196,7 @@ export function ForwardNotePane({
   const canSend = picked.length > 0 && !sending;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <ForwardedMessageCard forwarded={forwarded} attachments={attachments} />
-      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">{preview}</div>
       <div className="flex shrink-0 flex-col gap-3 border-t border-secondary p-4 pb-[max(1rem,var(--spacing-safe-bottom))]">
         {notice}
         <Recipients picked={picked} onRemove={onRemove} />
@@ -210,7 +205,7 @@ export function ForwardNotePane({
           aria-label={m.message_forward_note_label()}
           placeholder={placeholder}
           rows={3}
-          maxLength={FORWARD_NOTE_MAX_LENGTH}
+          maxLength={noteMaxLength}
           value={note}
           onChange={onNoteChange}
           isDisabled={sending}
