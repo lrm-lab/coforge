@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { TaskStatus } from "@lrm/coforge-sdk/internal";
 
+import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { statusLabel, TaskStatusIcon } from "#src/features/tasks/task-status-icon";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -49,8 +50,13 @@ export function SearchTaskList({
                 onClick={onOpen}
                 className={SEARCH_ROW_CLASS}
               >
-                <span className="max-w-[40%] shrink-0 truncate text-xs text-tertiary tabular-nums">
-                  {channelName ? `#${channelName}` : m.search_task_direct()} · #{task.number}
+                <span className="flex max-w-[40%] min-w-0 shrink-0 items-center gap-1 text-xs text-tertiary tabular-nums">
+                  {channelName ? (
+                    <ChannelPlace id={id} name={channelName} />
+                  ) : (
+                    <span className="truncate">{m.search_task_direct()}</span>
+                  )}
+                  <span className="shrink-0">· #{task.number}</span>
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm text-primary">
                   <SearchMatches text={task.title} terms={terms} lead={Infinity} />

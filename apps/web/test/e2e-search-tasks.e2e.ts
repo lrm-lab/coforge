@@ -21,7 +21,10 @@ test("search finds Tasks by title, by number across channels and by full referen
   const box = 'input[type="search"]';
   const rows = `[...document.querySelectorAll("[data-search-task]")]`;
   const places = () =>
-    evaluate<string[]>(`${rows}.map((row) => row.innerText.split(" · ")[0].trim())`);
+    // A channel's place is its group avatar and name (task #55); a DM's is its text.
+    evaluate<string[]>(
+      `${rows}.map((row) => row.querySelector("[data-channel-name]")?.textContent ?? row.innerText.split(" · ")[0].trim())`,
+    );
   try {
     const [task] = await db.task.findMany({
       where: { number: 3, conversation: { channelName: "product" } },
@@ -46,11 +49,13 @@ test("search finds Tasks by title, by number across channels and by full referen
     await browser("fill", box, "#3");
     await waitFor(`${rows}.length >= 2`);
     const found = await places();
-    expect(found[0]).toBe("#product");
-    expect(found).toContain("#general");
+    expect(found[0]).toBe("product");
+    expect(found).toContain("general");
 
     await browser("fill", box, "#general:#3");
-    await waitFor(`${rows}.length === 1 && ${rows}[0].innerText.startsWith("#general")`);
+    await waitFor(
+      `${rows}.length === 1 && ${rows}[0].querySelector("[data-channel-name]")?.textContent === "general"`,
+    );
 
     await browser("fill", box, task.title.split(" ")[0]!);
     await waitFor(`${rows}.some((row) => row.innerText.includes(${JSON.stringify(task.title)}))`);

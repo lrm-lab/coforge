@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { Hash01, Lock01 } from "@untitledui/icons";
 import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
-import { useChannelMembers } from "./channel-members";
+import { useChannelMembers, useChannelName } from "./channel-members";
 import { GroupAvatar } from "./group-avatar";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -64,6 +64,40 @@ export function ChannelTitle({
     <span className="inline-flex max-w-full min-w-0 items-center gap-1 align-bottom">
       <ChannelLock className={lockClassName} />
       <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
+/**
+ * A channel named in a line beside other text (a search result's or a saved message's place): its
+ * group avatar at 20px, then its name with no `#` (Frank, 11-10: a channel is never a `#`, task
+ * #55); a private one keeps its lock. A channel no one is in reads its name alone. Sentences keep
+ * `#name` (`withChannelTitle`).
+ */
+export function ChannelPlace({
+  id,
+  name,
+  visibility,
+}: {
+  id: string;
+  name: string;
+  /** When the caller's data lacks it, the channel names' say. */
+  visibility?: ChannelVisibility;
+}) {
+  const listed = useChannelName({ id });
+  return (
+    <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 align-bottom">
+      {listed?.members?.length ? (
+        <GroupAvatar members={listed.members} className="avatar-group-xs" />
+      ) : null}
+      <span data-channel-name="" className="min-w-0 truncate">
+        <ChannelTitle
+          name={name}
+          visibility={visibility ?? listed?.visibility ?? "public"}
+          hash={false}
+          lockClassName="size-3.5"
+        />
+      </span>
     </span>
   );
 }

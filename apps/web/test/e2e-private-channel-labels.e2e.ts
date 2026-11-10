@@ -50,6 +50,8 @@ test("a private channel goes without `#` wherever another page names it", async 
   const text = `document.body.textContent`;
   /** The page names the private channel bare and never as `#vault`. */
   const namesVaultBare = `${text}.includes("${vaultName}") && !${text}.includes("#${vaultName}")`;
+  /** The public channel reads its group avatar before its name, no `#` (Frank, 11-10, task #55). */
+  const plazaFaced = `[...document.querySelectorAll("[data-channel-name]")].some((el) => el.textContent === "${plazaName}" && el.parentElement.querySelector(".avatar-group"))`;
   /** Outside the sidebar, the private name follows its lock. */
   const vaultLocked = `[...document.querySelectorAll('[role="img"][aria-label="Private"]')].some((lock) => !lock.closest("[data-sidebar]") && lock.nextElementSibling?.textContent === "${vaultName}")`;
   const both = async (shot: string) => {
@@ -147,7 +149,7 @@ test("a private channel goes without `#` wherever another page names it", async 
       return { id: created.id, root };
     };
     const vault = await channel(vaultName, "private");
-    await channel(plazaName, "public");
+    const plaza = await channel(plazaName, "public");
 
     // An Agent of the dev user's with a reminder anchored in the private channel.
     const computer = await db.computer.create({
@@ -191,7 +193,14 @@ test("a private channel goes without `#` wherever another page names it", async 
       `${text}.includes("${plazaName}") && ${text}.includes("${vaultName}")`,
       "1-search.png",
     );
-    await shoot(`/saved`, `${text}.includes("#${plazaName}")`, "2-saved.png");
+    expect(await evaluate(plazaFaced)).toBe(true);
+    // A saved message's place is the channel's group avatar and name, no `#` (task #55).
+    await shoot(
+      `/saved`,
+      `${text}.includes("${plazaName}") && !${text}.includes("#${plazaName}")`,
+      "2-saved.png",
+    );
+    expect(await evaluate(plazaFaced)).toBe(true);
     await shoot(`/activity`, `${text}.includes("#${plazaName}")`, "3-activity.png");
     await shoot(`/tasks`, `${text}.includes("#${plazaName}")`, "4-tasks.png", false);
     await shoot(
@@ -199,6 +208,18 @@ test("a private channel goes without `#` wherever another page names it", async 
       `${text}.includes("Check the vault")`,
       "5-reminders.png",
     );
+    // The Agent's Chat tab lists the channels it is in, each with its group avatar (task #55).
+    await db.conversationMember.create({
+      data: { conversationId: plaza.id, workspaceId: workspace.id, agentId: agent.id },
+    });
+    await browser("open", `${origin}${workspacePath}/agent/${agent.id}?agentTab=chat`);
+    const plazaRow = `[...document.querySelectorAll("li")].find((row) => row.querySelector("a")?.textContent === "${plazaName}")`;
+    await waitFor(`${pageHydrated} && ${plazaRow} != null`);
+    await both("5b-agent-chat.png");
+    expect(await evaluate<boolean>(`${plazaRow}.querySelector(".avatar-group") != null`)).toBe(
+      true,
+    );
+    expect(await evaluate<boolean>(`${text}.includes("#${plazaName}")`)).toBe(false);
 
     // Mentioning Grace, who is not in the private channel, leaves the strip under the message.
     await browser("open", `${origin}${workspacePath}/channel/${vault.id}`);
