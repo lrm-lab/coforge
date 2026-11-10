@@ -63,7 +63,7 @@ async function openForwardDialog(conversationId: string) {
   );
   await clickNamed("menuitem", "Forward");
   await waitFor(
-    `document.querySelector('[role="dialog"] input[placeholder="Search targets"]') !== null`,
+    `document.querySelector('[role="dialog"] input[placeholder="Search channels, people or Agents"]') !== null`,
   );
 }
 
@@ -91,13 +91,13 @@ async function shotBoth(name: string) {
 const rowOf = (messageId: string) => `li[data-message-id="${messageId}"]`;
 const selectedCount = `document.querySelector("[data-selection-bar]")?.textContent ?? ""`;
 
-/** The dialog's labelled send button, by what it says ("Forward", or "Join and forward"). */
+/** The dialog's labelled send button, by what it says ("Forward to 2", or "Join and forward"). */
 const sendButton = (label: string) =>
   `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
-const send = (label = "Forward") => browser("eval", `${sendButton(label)}.click()`);
+const send = (label = "Forward to 1") => browser("eval", `${sendButton(label)}.click()`);
 
 async function pick(search: string, label: string) {
-  await browser("fill", 'input[placeholder="Search targets"]', search);
+  await browser("fill", 'input[placeholder="Search channels, people or Agents"]', search);
   await waitFor(`document.querySelector(${JSON.stringify(targetRow(label))}) !== null`);
   await click(targetRow(label));
 }
@@ -195,12 +195,10 @@ test("forwards a message with its attachment to a channel and a new DM, with a n
   await pick(channelB, `#${channelB}`);
   await pick(writerName, `@${writerName}`);
   await browser("fill", '[role="dialog"] textarea', note);
-  // Both picks show as chips by the note.
-  await waitFor(
-    `document.querySelectorAll('[role="dialog"] [aria-label="Recipients"] [role="row"]').length === 2`,
-  );
+  // The picks lead the list, and the send button counts them.
+  await waitFor(`${sendButton("Forward to 2")} !== undefined`);
   await shot("1440-dialog-selected");
-  await send();
+  await send("Forward to 2");
   await waitFor(bodyIncludes("Forwarded to 2 destinations"));
   await shot("1440-toast");
 
@@ -286,17 +284,13 @@ test("on a phone the targets and the note are two steps", async () => {
     `[...document.querySelectorAll("[data-message-actions-popover] button")].find((b) => b.textContent.trim() === "Forward").click()`,
   );
   await waitFor(
-    `document.querySelector('[role="dialog"] input[placeholder="Search targets"]') !== null`,
+    `document.querySelector('[role="dialog"] input[placeholder="Search channels, people or Agents"]') !== null`,
   );
   await shot("390-destinations");
   await pick(channelB, `#${channelB}`);
-  await clickNamed("button", "Next");
-  await waitFor(`document.querySelector('[role="dialog"] textarea') !== null`);
-  await shot("390-note");
-  await clickNamed("button", "Back to destinations");
-  await waitFor(
-    `document.querySelector('[role="dialog"] input[placeholder="Search targets"]')?.offsetParent !== null`,
-  );
+  // One sheet on a phone: the list, then the note and the send button under it.
+  await waitFor(`document.querySelector('[role="dialog"] textarea')?.offsetParent != null`);
+  await shot("390-picked");
   await browser("press", "Escape");
   // Headless agent-browser marks the page hidden after an Escape, which freezes every exit
   // animation and transition the next tests wait on; selecting the tab shows it again.
@@ -332,7 +326,7 @@ test("select mode forwards several messages as one card, oldest first, and copie
     `[...document.querySelectorAll("[data-selection-bar] button")].find((b) => b.textContent.trim() === "Forward").click()`,
   );
   await waitFor(
-    `document.querySelector('[role="dialog"] input[placeholder="Search targets"]') !== null`,
+    `document.querySelector('[role="dialog"] input[placeholder="Search channels, people or Agents"]') !== null`,
   );
   await pick(channelB, `#${channelB}`);
   await shotBoth("1440-select-dialog");

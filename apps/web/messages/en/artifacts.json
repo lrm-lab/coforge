@@ -87,5 +87,6 @@
   "doc_send_uncertain": "We couldn't confirm whether it was sent. It's safe to try again.",
   "doc_send_gone": "This artifact is no longer available.",
   "doc_card_forbidden": "You don't have access to this artifact",
-  "doc_card_deleted": "This artifact was deleted"
+  "doc_card_deleted": "This artifact was deleted",
+  "doc_send_send_to": "Send to {count}"
 }

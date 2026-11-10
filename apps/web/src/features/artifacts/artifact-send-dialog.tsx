@@ -9,6 +9,7 @@ import type { ForwardMessageResult } from "#src/features/conversations/message-f
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { ArtifactCardFace } from "./artifact-card";
+import { ArtifactIcon } from "./artifact-parts";
 import { artifactCardQuery } from "./artifact-queries";
 import { ARTIFACT_SHARE_NOTE_MAX_LENGTH } from "./artifact-share-input";
 import { shareArtifact } from "./artifacts.functions";
@@ -17,6 +18,7 @@ import { shareArtifact } from "./artifacts.functions";
 const sendCopy = (title: string): ShareDialogCopy => ({
   title: m.doc_send_title({ title }),
   send: m.doc_send_send(),
+  sendTo: (count) => m.doc_send_send_to({ count }),
   joinAndSend: m.doc_send_join_and_send(),
   sentTo: (target) => m.doc_send_sent_to({ target }),
   sentToMany: (count) => m.doc_send_sent_to_many({ count }),
@@ -43,6 +45,14 @@ export function ArtifactSendDialog({
   return (
     <ConversationShareDialog
       copy={sendCopy(title || m.doc_untitled())}
+      summary={
+        <>
+          {card && <ArtifactIcon kind={card.kind} size="sm" />}
+          <span className="min-w-0 truncate font-semibold text-secondary">
+            {title || m.doc_untitled()}
+          </span>
+        </>
+      }
       preview={card ? <ArtifactCardFace card={card} /> : null}
       noteMaxLength={ARTIFACT_SHARE_NOTE_MAX_LENGTH}
       deliver={async ({ requestId, destinations, note }): Promise<ForwardMessageResult> => {

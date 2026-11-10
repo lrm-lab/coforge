@@ -7,11 +7,13 @@ import { FORWARD_NOTE_MAX_LENGTH } from "./message-forward";
 import { forwardMessage } from "./message-forward.functions";
 import { ForwardedMessageCard } from "./message-forward-card";
 import { forwardedPreview, type ForwardSource } from "./message-forward-model";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 /** Read per render: the messages follow the current locale. */
-const forwardCopy = (): ShareDialogCopy => ({
-  title: m.message_forward_action(),
+const forwardCopy = (count: number): ShareDialogCopy => ({
+  title: count > 1 ? m.message_forward_title_several({ count }) : m.message_forward_title_one(),
   send: m.message_forward_send(),
+  sendTo: (targets) => m.message_forward_send_to({ count: targets }),
   joinAndSend: m.message_forward_join_and_send(),
   sentTo: (target) => m.message_forward_sent_to({ target }),
   sentToMany: (count) => m.message_forward_sent_to_many({ count }),
@@ -37,7 +39,8 @@ export function MessageForwardDialog({
   const forward = useServerFn(forwardMessage);
   return (
     <ConversationShareDialog
-      copy={forwardCopy()}
+      copy={forwardCopy(source.messages.length)}
+      summary={<ForwardSummary source={source} />}
       preview={
         <ForwardedMessageCard
           forwarded={forwardedPreview(source)}
@@ -65,5 +68,40 @@ export function MessageForwardDialog({
       onClose={onClose}
       onDelivered={onForwarded}
     />
+  );
+}
+
+/** The first original in one line: its author's face and handle, the start of its words (or its
+ * first file's name), and how many more follow. */
+function ForwardSummary({ source }: { source: ForwardSource }) {
+  const [first, ...rest] = source.messages;
+  if (!first) return null;
+  const { message, plainBody } = first;
+  const text = plainBody.trim() || message.attachments[0]?.fileName || "";
+  return (
+    <>
+      <ActorAvatar
+        size="xs"
+        presence={false}
+        name={message.senderName}
+        src={message.senderAvatarUrl ?? null}
+        {...(message.senderKind === "agent" && message.senderAgentId
+          ? { agentId: message.senderAgentId }
+          : message.senderUserId
+            ? { userId: message.senderUserId }
+            : {})}
+      />
+      <span className="min-w-0 truncate">
+        <span className="font-semibold text-secondary">
+          @{message.senderHandle ?? message.senderName}
+        </span>
+        <span className="text-tertiary">: {text}</span>
+      </span>
+      {rest.length > 0 && (
+        <span className="shrink-0 text-quaternary">
+          {m.message_forward_summary_more({ count: rest.length })}
+        </span>
+      )}
+    </>
   );
 }

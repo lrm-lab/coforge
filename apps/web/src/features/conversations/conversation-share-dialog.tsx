@@ -2,14 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Heading } from "react-aria-components";
-import { ArrowLeft } from "@untitledui/icons";
 
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { useAppToast } from "#src/components/ui/toast";
 import {
   UnsavedChangesDialog,
@@ -17,7 +13,6 @@ import {
 } from "#src/components/ui/unsaved-changes-dialog";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import { joinPublicChannel } from "./channels.functions";
 import { openDirectConversation } from "./conversations.functions";
@@ -30,7 +25,7 @@ import {
   isRetryableForwardFailure,
   isUnjoinedChannel,
 } from "./message-forward-model";
-import { ForwardNotePane, ForwardTargetPane } from "./message-forward-panes";
+import { ForwardComposer, ForwardTargetPane } from "./message-forward-panes";
 
 /** How long typing pauses before the targets are searched. */
 const SEARCH_DEBOUNCE_MS = 250;
@@ -45,6 +40,8 @@ export type ShareNotice = { text: string; retry?: boolean };
 export type ShareDialogCopy = {
   title: string;
   send: string;
+  /** The button once targets are picked: "Forward to 2". */
+  sendTo: (count: number) => string;
   joinAndSend: string;
   sentTo: (target: string) => string;
   sentToMany: (count: number) => string;
@@ -54,13 +51,16 @@ export type ShareDialogCopy = {
 
 /**
  * Sends something into conversations (task #237's Forward, and an artifact's Send): pick up to ten
- * destinations, optionally add a note, and send. Wide screens show the targets beside the preview
- * and note; a phone shows them as two steps. It mounts per opening, so its request id is one per
+ * destinations, optionally add a note, and send. One column at every width (Frank, 11-10, design
+ * B; task #50): search, the targets one line each with the picked ones first, then what arrives
+ * as one line that opens, the note and the send button; a phone has it as a sheet from the bottom
+ * edge, as every picker there. It mounts per opening, so its request id is one per
  * opening: pressing send again after a partial failure retries only the destinations that failed.
  * What is sent, and how, is the caller's: `preview` shows it and `deliver` sends it.
  */
 export function ConversationShareDialog({
   copy,
+  summary,
   preview,
   noteMaxLength,
   deliver,
@@ -69,7 +69,9 @@ export function ConversationShareDialog({
   onDelivered,
 }: {
   copy: ShareDialogCopy;
-  /** What arrives, as the right pane shows it above the note. */
+  /** What arrives, in one line: who and the start of it. */
+  summary: ReactNode;
+  /** What arrives, in full, when that line is opened. */
   preview: ReactNode;
   noteMaxLength: number;
   /** One request to every destination, under the opening's request id. */
@@ -84,8 +86,6 @@ export function ConversationShareDialog({
   /** Every destination took it; the dialog closes too. */
   onDelivered?: () => void;
 }) {
-  const desktop = useBreakpoint("lg");
-  const controlSize = useDialogControlSize();
   const router = useRouter();
   const toast = useAppToast();
   const workspaceSlug = useWorkspaceSlug();
@@ -94,7 +94,6 @@ export function ConversationShareDialog({
   const join = useServerFn(joinPublicChannel);
   const openDirect = useServerFn(openDirectConversation);
   const [requestId] = useState(() => crypto.randomUUID());
-  const [step, setStep] = useState<"destinations" | "note">("destinations");
   const [query, setQuery] = useState("");
   const [term, setTerm] = useState("");
   const [selected, setSelected] = useState<ReadonlyMap<string, ForwardTarget>>(new Map());
@@ -266,83 +265,51 @@ export function ConversationShareDialog({
         onOpenChange={(open) => {
           if (!open && !sending) guard.requestClose();
         }}
-        className="max-lg:[--modal-pb:0px] max-lg:[--modal-pt:0px] max-lg:px-0"
+        className="max-sm:px-0 max-sm:[--modal-pb:0px]"
       >
-        <Modal className="max-lg:h-(--visual-viewport-height) max-lg:w-full max-lg:rounded-none max-lg:safe-area-padding lg:w-[calc(100vw-4rem)] lg:max-w-4xl">
-          <Dialog className="flex h-full max-h-[inherit] flex-col overflow-hidden text-left lg:h-[min(40rem,calc(var(--visual-viewport-height)-4rem))]">
-            {desktop || step === "destinations" ? (
-              <DialogHeader
-                title={copy.title}
-                onClose={sending ? undefined : guard.requestClose}
-                className="px-4 pt-4 pb-3 lg:px-6 lg:pt-6"
+        <Modal className="w-full max-sm:rounded-t-2xl max-sm:rounded-b-none sm:max-w-lg">
+          <Dialog className="flex max-h-[inherit] flex-col overflow-y-auto text-left max-sm:h-[min(88dvh,var(--visual-viewport-height))]">
+            <div
+              aria-hidden="true"
+              className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-quaternary/40 sm:hidden"
+            />
+            <DialogHeader
+              title={copy.title}
+              onClose={sending ? undefined : guard.requestClose}
+              className="px-4 pt-3 pb-3 sm:px-6 sm:pt-5"
+            />
+            {/* 20rem of list, giving way when the window is short (or zoomed) down to two rows;
+                shorter still, the dialog scrolls, so the send button is never out of reach. */}
+            <div className="flex min-h-24 flex-1 flex-col sm:flex-[0_1_20rem]">
+              <ForwardTargetPane
+                query={query}
+                onQueryChange={setQuery}
+                targets={targets.data ?? null}
+                failed={failed}
+                error={targets.isError}
+                selected={selected}
+                onToggle={toggle}
               />
-            ) : (
-              <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-                <ButtonUtility
-                  size="sm"
-                  color="tertiary"
-                  icon={ArrowLeft}
-                  aria-label={m.message_forward_back()}
-                  onClick={() => setStep("destinations")}
-                />
-                <Heading slot="title" className="text-lg font-semibold text-primary">
-                  {copy.title}
-                </Heading>
-              </div>
-            )}
-            {/* Each pane may be narrower than its rows' text (`min-w-0`): a long name or `@handle`
-                truncates instead of widening the pane past the dialog. */}
-            <div className="flex min-h-0 flex-1 border-t border-secondary lg:grid lg:grid-cols-[2fr_3fr]">
-              <div
-                className={
-                  step === "note"
-                    ? "flex min-h-0 min-w-0 flex-col max-lg:hidden lg:border-r lg:border-secondary"
-                    : "flex min-h-0 min-w-0 flex-1 flex-col lg:border-r lg:border-secondary"
-                }
-              >
-                <ForwardTargetPane
-                  query={query}
-                  onQueryChange={setQuery}
-                  targets={targets.data ?? null}
-                  failed={failed}
-                  error={targets.isError}
-                  selected={selected}
-                  onToggle={toggle}
-                />
-              </div>
-              <div
-                className={
-                  step === "destinations"
-                    ? "flex min-h-0 min-w-0 flex-col max-lg:hidden"
-                    : "flex min-h-0 min-w-0 flex-1 flex-col"
-                }
-              >
-                <ForwardNotePane
-                  preview={preview}
-                  picked={picked}
-                  onRemove={(target) => toggle(target, false)}
-                  note={note}
-                  onNoteChange={setNote}
-                  noteMaxLength={noteMaxLength}
-                  placeholder={placeholder}
-                  sendLabel={unjoined.length > 0 ? copy.joinAndSend : copy.send}
-                  sending={sending}
-                  onSend={() => void send()}
-                  notice={noticeView}
-                />
-              </div>
             </div>
-            {!desktop && step === "destinations" && (
-              <div className="flex shrink-0 justify-end border-t border-secondary px-4 py-3 pb-[max(0.75rem,var(--spacing-safe-bottom))]">
-                <Button
-                  size={controlSize}
-                  isDisabled={picked.length === 0}
-                  onPress={() => setStep("note")}
-                >
-                  {m.message_forward_next()}
-                </Button>
-              </div>
-            )}
+            <ForwardComposer
+              summary={summary}
+              preview={preview}
+              canSend={picked.length > 0 && !sending}
+              note={note}
+              onNoteChange={setNote}
+              noteMaxLength={noteMaxLength}
+              placeholder={placeholder}
+              sendLabel={
+                unjoined.length > 0
+                  ? copy.joinAndSend
+                  : picked.length > 0
+                    ? copy.sendTo(picked.length)
+                    : copy.send
+              }
+              sending={sending}
+              onSend={() => void send()}
+              notice={noticeView}
+            />
           </Dialog>
         </Modal>
       </ModalOverlay>

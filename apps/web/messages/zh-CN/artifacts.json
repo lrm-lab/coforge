@@ -87,5 +87,6 @@
   "doc_send_uncertain": "无法确认是否已发送，可以放心重试。",
   "doc_send_gone": "这个 Artifact 已不可用。",
   "doc_card_forbidden": "你没有权限查看这个 Artifact",
-  "doc_card_deleted": "这个 Artifact 已删除"
+  "doc_card_deleted": "这个 Artifact 已删除",
+  "doc_send_send_to": "发送给 {count} 个对象"
 }

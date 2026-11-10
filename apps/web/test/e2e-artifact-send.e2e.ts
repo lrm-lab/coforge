@@ -101,8 +101,16 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
   };
   const targetRow = (label: string) => `label:has(input[aria-label=${JSON.stringify(label)}])`;
   const pick = async (label: string) => {
-    await browser("fill", 'input[placeholder="Search targets"]', label.replace(/^#/, ""));
+    await browser(
+      "fill",
+      'input[placeholder="Search channels, people or Agents"]',
+      label.replace(/^#/, ""),
+    );
     await waitFor(`document.querySelector(${JSON.stringify(targetRow(label))}) !== null`);
+    // The row may sit below the list's fold until the search narrows it; bring it into view.
+    await evaluate(
+      `(document.querySelector(${JSON.stringify(targetRow(label))}).scrollIntoView({ block: "nearest" }), true)`,
+    );
     await browser("click", targetRow(label));
   };
   const openSend = async () => {
@@ -111,7 +119,7 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     await waitFor(`${button("Send to…", '[role="dialog"]')} !== undefined`);
     await press(button("Send to…", '[role="dialog"]'));
     await waitFor(
-      `document.querySelector('[role="dialog"] input[placeholder="Search targets"]') !== null`,
+      `document.querySelector('[role="dialog"] input[placeholder="Search channels, people or Agents"]') !== null`,
     );
   };
   // Noor's share: as a person, under her own send, as the web's does.
@@ -146,14 +154,14 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     await browser("set", "viewport", "1280", "860");
     await browser("open", `${origin}/en/w/${workspace.slug}/artifacts/${plan.id}`);
     await openSend();
-    // The card shows what arrives, read once the dialog is up.
+    // What arrives is named under the list, read once the dialog is up.
     await waitFor(
-      `[...document.querySelectorAll('[role="dialog"] article')].some((card) => card.textContent.includes("Launch plan"))`,
+      `document.querySelector('[role="dialog"] button[aria-expanded]')?.textContent.includes("Launch plan")`,
     );
     await pick(`#e2e-send-to-${tail}`);
     await browser("fill", '[role="dialog"] textarea', "For Thursday's review");
     await shoot("1-send-dialog");
-    await press(button("Send", '[role="dialog"]'));
+    await press(button("Send to 1", '[role="dialog"]'));
     await waitFor(`document.querySelector('[role="dialog"]') === null`);
     const sent = await db.message.findFirstOrThrow({
       where: { conversationId: target.id, body: { contains: `/artifacts/${plan.id}` } },
@@ -196,15 +204,13 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     await waitFor(`document.querySelector('article[aria-label*="Launch plan"] a') !== null`);
     await shoot("2-channel-cards");
 
-    // A phone: the destinations first, then the card and the note.
+    // A phone: one sheet, the destinations over the note and the send button.
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}/en/w/${workspace.slug}/artifacts/${plan.id}`);
     await openSend();
     await pick(`#e2e-send-home-${tail}`);
-    await shoot("3-phone-destinations");
-    await press(button("Next", '[role="dialog"]'));
     await waitFor(`document.querySelector('[role="dialog"] textarea')?.offsetParent != null`);
-    await shoot("4-phone-note");
+    await shoot("3-phone-sheet");
   } finally {
     await browser("close").catch(() => {});
     await experiments.write(workspaceId, "artifacts", before);
