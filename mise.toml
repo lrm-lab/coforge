@@ -115,6 +115,10 @@ run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/e2e/run
 description = "Run one browser e2e from apps/web/test against a local stack (no file lists them)"
 run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/e2e/run-web-e2e.sh {{arg(name="file", var=true, default="")}}'
 
+[tasks."test:e2e:web:all"]
+description = "Sweep the CI-tracked browser e2es against a local stack (before a DOM-restructuring change merges)"
+run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/e2e/run-web-e2e.sh all'
+
 [tasks."check:web"]
 description = "Run Web package checks"
 run = "bun run --cwd packages/coforge-sdk generate && cd apps/web && bun run check"
