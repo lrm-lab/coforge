@@ -1,4 +1,3 @@
-import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
 import { isMutedLevel } from "#src/server/conversations/notification-level.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { channelActorOf } from "#src/server/conversations/channel-actor.server";
@@ -7,21 +6,14 @@ import { assertCanAssignOther } from "./task-assignment-authority.server";
 import type { TaskCommand, TaskHistoryChange, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AppError } from "#src/lib/app-error";
-import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
-import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import {
   storeMessageBody,
   writeMessageReferences,
 } from "#src/server/conversations/message-references.server";
-import {
-  agentMessageSender,
-  MESSAGE_SENDER_SELECT,
-} from "#src/server/conversations/sender-display.server";
 import { assigneeMention, noticeText } from "./task-notices.server";
 import { DUPLICATE_TASK_WINDOW_MS, normalizeTaskTitle } from "./task-command-validation.server";
 import { creationChanges, historyRows } from "./task-history.server";
 import {
-  hostMessageId,
   LIVE_TASK_WHERE,
   taskSelection,
   UNFINISHED_TASK_STATUSES,
@@ -31,14 +23,9 @@ import type { TaskBoardPorts, Member } from "./task-board-ports.server";
 import { memberId } from "./task-board-ports.server";
 import { ensureTaskExecutionSession } from "./task-change.server";
 import { linkCreatedTasks } from "./task-gates.server";
-import { parentTasksOf, taskViewsOf } from "./task-relations.server";
+import { taskViewsOf } from "./task-relations.server";
 import { withNotices } from "./task-notice-posting.server";
-import {
-  announceNeighbours,
-  announceTasks,
-  publishDeliveries,
-  publishAssignmentReceipt,
-} from "./task-publication.server";
+import { publishCreatedTasks } from "./task-creation-publication.server";
 import { receiptAssignee, assigneeMember } from "./task-assignees.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { assignmentReceipts } from "./task-assignment.server";
@@ -402,79 +389,7 @@ export async function createTasks(
       started,
     };
   });
-  if (result.created) {
-    // Committed Tasks survive notification/realtime/daemon failure through normal recovery.
-    // Catch each effect immediately, including while delivery rows are still being read.
-    const attempt = (effect: () => unknown) =>
-      Promise.resolve()
-        .then(effect)
-        .catch(() => undefined);
-    const scopes = await conversationSignalScopes(
-      ports.db,
-      scope.conversationId,
-      scope.workspaceId,
-    );
-    const signalScope = scopes.message;
-    // A Task made under a parent changes the parent's own view (its sub-task progress), so
-    // the parent's new copy is announced with the new Tasks': in this conversation with them,
-    // in another to its own audience, as an amendment's neighbours are (task #65).
-    const parents = command.parent ? await parentTasksOf(ports.db, result.tasks) : [];
-    const here = parents.filter((parent) => parent.conversationId === scope.conversationId);
-    const effects: Promise<unknown>[] = [
-      announceTasks(ports, scope, async () => scopes.task, {
-        tasks: await taskViewsOf(ports.db, "people", [...result.tasks, ...here]),
-        publicationId: `${result.tasks[0]!.id}:task-created`,
-      }),
-    ];
-    if (parents.length)
-      effects.push(
-        announceNeighbours(ports, scope.conversationId, parents, `${result.tasks[0]!.id}:task-created`),
-      );
-    effects.push(
-      ...result.tasks.flatMap((task, index) => [
-        ...(member.userId
-          ? [attempt(() => ports.dependencies.notifications?.notifyMessage(hostMessageId(task)))]
-          : []),
-        attempt(() =>
-          announceMessageBestEffort(ports.db, ports.dependencies.realtime, {
-            conversationId: scope.conversationId,
-            messageId: hostMessageId(task),
-            sequence: result.sequences[index]!,
-            ...signalScope,
-            ...(member.userId ? { senderUserId: member.userId } : {}),
-          }),
-        ),
-      ]),
-    );
-    if (member.userId && ports.dependencies.publisher) {
-      const messages = await ports.db.message.findMany({
-        where: { id: { in: result.tasks.map((task) => hostMessageId(task)) } },
-        include: {
-          sender: MESSAGE_SENDER_SELECT,
-          mentions: MESSAGE_MENTIONS_SELECT,
-          deliveries: { include: { agent: { select: { computerId: true } } } },
-        },
-      });
-      for (const message of messages) {
-        const sender = agentMessageSender(message.sender);
-        effects.push(
-          publishDeliveries(
-            ports,
-            message,
-            command.idempotencyKey,
-            scope.channelName ? `#${scope.channelName}` : `@${sender.handle}`,
-            sender,
-          ),
-        );
-      }
-    }
-    await Promise.all(effects);
-    // One delivery per Task's receipt, each its own daemon request: the receipt's id is stable
-    // across retries, as the command's key is for a single one.
-    await Promise.all(
-      result.receipts.map((receipt) => publishAssignmentReceipt(ports, receipt.id, receipt.id)),
-    );
-  }
+  if (result.created) await publishCreatedTasks(ports, scope, member, command, result);
   const { receipts } = result;
   return {
     tasks: await taskViewsOf(ports.db, ports.reader, result.tasks),
