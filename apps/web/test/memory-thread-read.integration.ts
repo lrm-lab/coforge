@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { Pool } from "pg";
+import pg from "pg";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
@@ -22,7 +22,7 @@ test("a Task thread follow-up remains readable and can anchor autonomous diagnos
   if (!ddl.includes('CREATE TABLE "users"')) throw new Error("Invalid branch schema fixture");
   const suffix = crypto.randomUUID();
   const schema = `memory_thread_${suffix.replaceAll("-", "")}`;
-  const pool = new Pool({ connectionString, max: 1 });
+  const pool = new pg.Pool({ connectionString, max: 1 });
   const sql = await pool.connect();
   const db = new PrismaClient({
     adapter: new PrismaPg(

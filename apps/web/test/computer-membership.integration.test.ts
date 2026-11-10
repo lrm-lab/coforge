@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Pool } from "pg";
+import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
@@ -10,7 +10,7 @@ const connectionString = Bun.env.MIGRATION_TEST_DATABASE_URL;
 test.skipIf(!connectionString)(
   "a Computer is available to Workspace members only, through the Workspace it is connected to",
   async () => {
-    const pool = new Pool({ connectionString });
+    const pool = new pg.Pool({ connectionString });
     const schema = `computer_member_${crypto.randomUUID().replaceAll("-", "")}`;
     const client = await pool.connect();
     const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }, { schema }) });

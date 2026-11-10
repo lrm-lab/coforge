@@ -5,7 +5,7 @@ import { fixtureMemoryOfferHints } from "./helpers/memory-offer-hints";
  * PostgreSQL is required; skipIf is explicit when no connection string is set.
  */
 import { expect, test } from "bun:test";
-import { Pool } from "pg";
+import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import {
@@ -103,7 +103,7 @@ type Harness = {
 };
 
 async function openHarness(): Promise<Harness & { dispose: () => Promise<void> }> {
-  const pool = new Pool({ connectionString });
+  const pool = new pg.Pool({ connectionString });
   const schema = `wmp_scen_${crypto.randomUUID().replaceAll("-", "")}`;
   const client = await pool.connect();
   await client.query(`CREATE SCHEMA "${schema}"`);

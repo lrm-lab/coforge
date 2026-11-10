@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from "bun:test";
-import { Pool } from "pg";
+import pg from "pg";
 
 const connectionString = Bun.env.MIGRATION_TEST_DATABASE_URL;
-const pool = connectionString ? new Pool({ connectionString }) : undefined;
+const pool = connectionString ? new pg.Pool({ connectionString }) : undefined;
 const migration = await Bun.file(
   new URL(
     "../prisma/migrations/20260907100000_workspace_runtime_inventory/migration.sql",

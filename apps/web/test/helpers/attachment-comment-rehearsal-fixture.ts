@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { legacyDiscussion } from "./attachment-comment-migration-fixture";
@@ -10,7 +10,7 @@ export async function attachmentCommentRehearsalFixture() {
   const connectionString = Bun.env.MIGRATION_TEST_DATABASE_URL;
   if (!connectionString) throw new Error("MIGRATION_TEST_DATABASE_URL is required");
   const schema = `attachment_rehearsal_${crypto.randomUUID().replaceAll("-", "")}`;
-  const pool = new Pool({ connectionString, max: 1 });
+  const pool = new pg.Pool({ connectionString, max: 1 });
   const sql = await pool.connect();
   const db = new PrismaClient({
     adapter: new PrismaPg(

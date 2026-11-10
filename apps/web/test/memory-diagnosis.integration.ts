@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Pool } from "pg";
+import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { resolveMemoryDiagnosisScope } from "#src/server/workspace-memory/memory-diagnosis-scope.server";
@@ -8,7 +8,7 @@ import { resolveMemoryDiagnosisScope } from "#src/server/workspace-memory/memory
 test("Memory can diagnose an observed Task state only within its live channel and snapshot", async () => {
   const connectionString = Bun.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is required for diagnosis integration");
-  const pool = new Pool({ connectionString, max: 1 });
+  const pool = new pg.Pool({ connectionString, max: 1 });
   const schema = `diagnosis_${crypto.randomUUID().replaceAll("-", "")}`;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }, { schema }) });
   const sql = await pool.connect();
