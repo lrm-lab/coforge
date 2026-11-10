@@ -14,9 +14,9 @@ import { ActivityInbox } from "../apps/web/src/server/inbox/activity-inbox.serve
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL must point at local PostgreSQL");
 
-const CHANNELS = 400;
-const MESSAGES_PER_CHANNEL = 45;
-const RUNS = 7;
+const CHANNELS = Number(Bun.env.BENCH_CHANNELS ?? 400);
+const MESSAGES_PER_CHANNEL = Number(Bun.env.BENCH_MESSAGES_PER_CHANNEL ?? 45);
+const RUNS = Number(Bun.env.BENCH_RUNS ?? 7);
 const db = new PrismaClient({ adapter: new PrismaPg(databasePoolConfig(connectionString)) });
 const suffix = crypto.randomUUID().slice(0, 8);
 
