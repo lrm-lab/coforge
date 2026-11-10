@@ -198,6 +198,8 @@ test("the coordinator picker follows member changes without a page reload", asyn
   await waitFor(panelHas(agents.added.displayName), 15_000);
 
   // Back to the settings: the picker now offers the added Agent, still without a reload.
+  // The members view comes back after the add or remove settles; its Back is there once it has.
+  await waitFor(`document.querySelector('[aria-label="Back"]') != null`, 15_000);
   await browser("eval", `document.querySelector('[aria-label="Back"]').click()`);
   await waitFor(`${panel}?.querySelector('${picker}') != null`, 15_000);
   await waitForOptions((options) => hasAgent(options, agents.added.displayName), "the added Agent");
@@ -216,6 +218,8 @@ test("the coordinator picker follows member changes without a page reload", asyn
   await waitFor(`document.body.textContent.includes("Remove member")`, 15_000);
   await clickText('[role="dialog"] button', "Remove member");
   await waitFor(`!${panelHas(agents.added.displayName)}`, 15_000);
+  // The members view comes back after the add or remove settles; its Back is there once it has.
+  await waitFor(`document.querySelector('[aria-label="Back"]') != null`, 15_000);
   await browser("eval", `document.querySelector('[aria-label="Back"]').click()`);
   await waitFor(`${panel}?.querySelector('${picker}') != null`, 15_000);
   await waitForOptions(
