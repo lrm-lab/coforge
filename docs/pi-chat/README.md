@@ -124,7 +124,12 @@ to that directory, and preserve existing model defaults when adding a provider.
 
 Web uses its existing Centrifugo API and Redis configuration. Pi Chat requires
 neither `COFORGE_PI_CHAT_ORIGIN` nor the desktop origin nor a new network tunnel.
-An offline Computer or one without `pi-chat:v1` is refused immediately. The
+An offline Computer or one without `pi-chat:v1` is refused immediately. A command is
+started (`startPiChat` publishes it and answers with its request ID) and its reply read
+(`readPiChat`, scoped to the caller's Workspace, user and Computer; a poll with no reply yet
+touches Redis only, and the caller is authorized each time a reply is stored), because production closes a request idle for about ten seconds. The page polls from
+50 ms, doubling to 500 ms, for 25 seconds; the reply stays readable until its 30-second
+lifetime ends. The
 legacy signed host adapter remains available to an older Web during rollback;
 the current Web never falls back to it. Roll back Web and the Computer image
 together; there is no database migration or session backfill.

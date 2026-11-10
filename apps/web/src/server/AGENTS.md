@@ -1,6 +1,6 @@
 # Server modules
 
-- `server/pi-chat/` — User/Workspace-authorized native Pi commands, scoped RPC reply chunks and private live feedback over the existing Daemon connection.
+- `server/pi-chat/` — User/Workspace-authorized native Pi commands (started, then their reply read by request id), scoped RPC reply chunks and private live feedback over the existing Daemon connection.
 
 The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENTS.md#module-map). Each line names a directory under `src/` and its single responsibility. Update it before adding or reorganizing a module.
 

@@ -59,15 +59,30 @@ export const getPiChatComputers = createServerFn({ method: "GET" })
     };
   });
 
-export const executePiChat = createServerFn({ method: "POST" })
+/** Publishes one command to the Computer's daemon and answers at once with the id its reply is
+ * read by (`readPiChat`): production closes a request that sends nothing for about ten seconds. */
+export const startPiChat = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ computerId: z.uuid(), command: piChatCommandSchema }))
   .handler(async ({ context, data }) => {
     declareNoStore();
     await requireAiWorkbench(context.db, context.workspaceId);
-    return productionPiChat(context.db).execute(
+    return productionPiChat(context.db).start(
       { userId: context.user.id, workspaceId: context.workspaceId },
       data.computerId,
       data.command,
+    );
+  });
+
+/** The daemon's reply to a command this caller started, authorized as the start is whenever it holds a reply. */
+export const readPiChat = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ computerId: z.uuid(), requestId: z.uuid() }))
+  .handler(async ({ context, data }) => {
+    declareNoStore();
+    return productionPiChat(context.db).read(
+      { userId: context.user.id, workspaceId: context.workspaceId },
+      data.computerId,
+      data.requestId,
     );
   });

@@ -17,7 +17,12 @@ import {
   encodePiChatRequest,
   PiChatFrameAssembly,
 } from "@lrm/coforge-sdk/internal/pi-chat-wire";
-import { piChatEventSchema, type PiChatEvent } from "@lrm/coforge-sdk/internal/pi-chat";
+import {
+  piChatEventSchema,
+  type PiChatCommand,
+  type PiChatEvent,
+} from "@lrm/coforge-sdk/internal/pi-chat";
+import { awaitPiChat } from "#src/features/pi-chat/pi-chat-poll";
 import { PiChatGateway } from "#src/server/pi-chat/pi-chat-gateway.server";
 import { RedisPiChatResults } from "#src/server/pi-chat/pi-chat-results.server";
 import { createPiChatFrameMethod } from "#src/server/pi-chat/pi-chat-frame-receiver.server";
@@ -227,9 +232,17 @@ test("thinking, file tools and partial answers arrive before completion and hist
     results,
     publish: async (request) => publish(encodePiChatRequest(request)),
   });
+  // The page's own path: start the command, then poll for its reply.
+  const execute = async (computerId: string, command: PiChatCommand) => {
+    const { requestId } = await gateway.start(scope, computerId, command);
+    return awaitPiChat({
+      read: () => gateway.read(scope, computerId, requestId),
+      signal: new AbortController().signal,
+    });
+  };
   const requestId = crypto.randomUUID();
   try {
-    const start = await gateway.execute(scope, scope.computerId, {
+    const start = await execute(scope.computerId, {
       action: "start",
       requestId,
       message: "Write a file, read it and answer.",
@@ -241,13 +254,12 @@ test("thinking, file tools and partial answers arrive before completion and hist
     releaseThinking.resolve();
     await observedWithin(tool.promise);
     await observedWithin(partial.promise);
-    expect(
-      (await gateway.execute(scope, scope.computerId, { action: "read", sessionId })).session!
-        .status,
-    ).toBe("running");
+    expect((await execute(scope.computerId, { action: "read", sessionId })).session!.status).toBe(
+      "running",
+    );
     expect(
       (
-        await gateway.execute(scope, scope.computerId, {
+        await execute(scope.computerId, {
           action: "start",
           requestId,
           message: "Write a file, read it and answer.",
@@ -257,7 +269,7 @@ test("thinking, file tools and partial answers arrive before completion and hist
     expect(calls).toBe(3);
     releaseAnswer.resolve();
     await observedWithin(settled.promise);
-    const final = await gateway.execute(scope, scope.computerId, { action: "read", sessionId });
+    const final = await execute(scope.computerId, { action: "read", sessionId });
     expect(final.messages!.at(-1)!.text).toBe("Partial answer complete.");
     await relay.close();
     relay = new PiChatRelay(scope, (frame) => transport.sendPiChatFrame(frame), {
@@ -267,9 +279,9 @@ test("thinking, file tools and partial answers arrive before completion and hist
         join(root, "sessions"),
       ],
     });
-    expect(
-      (await gateway.execute(scope, scope.computerId, { action: "read", sessionId })).messages,
-    ).toEqual(final.messages);
+    expect((await execute(scope.computerId, { action: "read", sessionId })).messages).toEqual(
+      final.messages,
+    );
     expect(calls).toBe(3);
     const file = join(root, "sessions", scope.workspaceId, scope.userId, "stream-proof.txt");
     expect(await Bun.file(file).text()).toBe("native file output");
