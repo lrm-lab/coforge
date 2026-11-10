@@ -224,16 +224,16 @@ describe("unsupported context view runtimes", () => {
       computerId: "computer-1",
       reportAvailability: (value) => reports.push(value),
     });
-    service.reportAvailability({ agentId: "agent-kimi", runtime: "kimi" });
-    service.reportAvailability({ agentId: "agent-kimi-coding", runtime: "kimi-coding" });
+    service.reportAvailability({ agentId: "agent-kiro", runtime: RUNTIME_PROVIDER.KIRO });
+    service.reportAvailability({ agentId: "agent-grok", runtime: RUNTIME_PROVIDER.GROK });
     expect(reports).toEqual([
       expect.objectContaining({
-        runtime: "kimi",
+        runtime: RUNTIME_PROVIDER.KIRO,
         supported: false,
         unsupportedReason: "unsupported_runtime",
       }),
       expect.objectContaining({
-        runtime: "kimi-coding",
+        runtime: RUNTIME_PROVIDER.GROK,
         supported: false,
         unsupportedReason: "unsupported_runtime",
       }),
@@ -242,15 +242,14 @@ describe("unsupported context view runtimes", () => {
 });
 
 describe("the provider value an Agent's launch config carries", () => {
-  // task #739: the gate used to name its own runtimes ("claude", "builtin", "kimi-sdk"), which
-  // no Agent config ever holds — its `provider` is a RuntimeProvider value. Claude Code and the
-  // built-in Agent therefore reported unsupported_runtime forever.
+  // task #739: the gate used to name its own runtimes ("claude", "builtin"), which no Agent
+  // config ever holds — its `provider` is a RuntimeProvider value. Claude Code and the built-in
+  // Agent therefore reported unsupported_runtime forever.
   const markers: Record<string, string> = {
     [RUNTIME_PROVIDER.CLAUDE_CODE]: '{"type":"api-request"}',
     [RUNTIME_PROVIDER.CODEX]: '{"type":"additional_tools"}',
     [RUNTIME_PROVIDER.PI]: '{"type":"request",}',
     [RUNTIME_PROVIDER.COFORGE]: '{"type":"request",}',
-    "kimi-sdk": '{"type":"llm.request"}',
   };
   test.each(Object.keys(markers))(
     "indexes a %s Agent's request log and reports it supported",

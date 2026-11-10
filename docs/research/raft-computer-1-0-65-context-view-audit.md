@@ -44,3 +44,5 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 - 完成真实 staging/browser/Redis/Centrifugo/provider E2E（本轮按范围豁免，当前结论仍不把它们描述为已验证）。
 
 真实 staging/browser/Redis/Centrifugo/provider E2E 按本次范围豁免；当前结论不把它们描述为已验证。
+
+> 2026-11-10（task #12）：Kimi 运行时部分已删除——CoForge 不接 Kimi，`kimi-sdk` 的 context-view reader、session index 定位和 wire 重放已随之移出代码；上文中关于 Kimi 的对齐结论和待办只作历史记录。

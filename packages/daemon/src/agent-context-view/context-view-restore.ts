@@ -1,7 +1,7 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { redactContextViewValue, type ContextViewRedactionCounts } from "./context-view-redaction";
 import { restoreClaude, restoreCodex } from "./context-view-restore-native";
-import { restoreKimi, restorePi } from "./context-view-restore-captured";
+import { restorePi } from "./context-view-restore-captured";
 import { CONTEXT_VIEW_PROVIDERS, type ContextViewRuntime } from "./context-view-providers";
 
 export type RestoredContextMessage = {
@@ -243,7 +243,6 @@ const RESTORE_READERS: Record<
   [RUNTIME_PROVIDER.CODEX]: restoreCodex,
   [RUNTIME_PROVIDER.PI]: restorePi,
   [RUNTIME_PROVIDER.COFORGE]: restorePi,
-  "kimi-sdk": restoreKimi,
 };
 
 export function restoreContextView(request: RestoreRequest): ContextViewRestoreResult {
@@ -253,14 +252,12 @@ export function restoreContextView(request: RestoreRequest): ContextViewRestoreR
     request.offset > request.buffer.length
   )
     return { ok: false, failure: "read_failed" };
-  // Native Kimi and captured Pi indexes are captured at request commit, while the send result or
+  // Captured Pi indexes are captured at request commit, while the send result or
   // continuation that proves a viewer message may be appended later. Their readers search the
   // complete bounded source and use parsed record ends to retain the offset boundary.
   const records = parseRecords(
     request.buffer,
-    request.runtime === "kimi-sdk" ||
-      request.runtime === RUNTIME_PROVIDER.PI ||
-      request.runtime === RUNTIME_PROVIDER.COFORGE
+    request.runtime === RUNTIME_PROVIDER.PI || request.runtime === RUNTIME_PROVIDER.COFORGE
       ? request.buffer.length
       : request.offset,
   );
