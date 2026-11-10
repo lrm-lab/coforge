@@ -34,7 +34,13 @@ export function TaskPerson({
         deleted={person.deleted}
         {...faceOf(person)}
       />
-      <span className={wrap ? "min-w-0 text-left break-words" : "truncate"}>{person.name}</span>
+      <span
+        className={
+          wrap ? "min-w-0 text-left break-words [[data-layout=chips]_&]:truncate" : "truncate"
+        }
+      >
+        {person.name}
+      </span>
       {/* A Task's holder can be a deleted Agent: its Tasks stay readable, so the card says the
           identity is gone rather than reading as a live owner. */}
       {person.deleted && <DeletedAgentBadge />}

@@ -35,7 +35,7 @@ export function TaskTrail({
   return (
     <nav
       aria-label={m.tasks_trail()}
-      className="flex min-w-0 flex-1 items-center gap-1 text-sm text-tertiary"
+      className="flex min-w-0 flex-1 items-center gap-1 text-sm text-tertiary max-sm:justify-center"
     >
       {onBack ? (
         <ButtonUtility
@@ -46,7 +46,7 @@ export function TaskTrail({
           onClick={onBack}
         />
       ) : (
-        <span aria-hidden="true" className="w-1" />
+        <span aria-hidden="true" className="w-1 max-sm:hidden" />
       )}
       {parent && (
         <>
@@ -64,7 +64,7 @@ export function TaskTrail({
           <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />
         </>
       )}
-      <span className="flex min-w-0 shrink-0 items-center gap-1.5 px-1">
+      <span className="flex min-w-0 shrink-0 items-center gap-1.5 px-1 max-sm:shrink">
         {members?.length ? <GroupAvatar members={members} className="avatar-group-xs" /> : null}
         {place && <span className="max-w-[16em] truncate">{place}</span>}
         <span className="shrink-0 tabular-nums">#{task.number}</span>
