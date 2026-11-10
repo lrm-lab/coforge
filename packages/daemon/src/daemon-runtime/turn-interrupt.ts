@@ -96,6 +96,8 @@ export async function interruptAgentTurn<Launch extends TurnInterruptLaunch>(
     interruptTimeoutMs: AGENT_TURN_INTERRUPT_TIMEOUT_MS,
     releaseTimeoutMs: AGENT_TURN_INTERRUPT_RELEASE_TIMEOUT_MS,
     cutoffAtMs: turnInterruptCutoffAtMs(launch),
+    // The daemon-side timeout line names the request that asked for this stop.
+    identity: { requestId: intent.requestId, launchId: intent.launchId },
   });
   logAccepted(intent, status);
   // The restart may have replaced the launch; read the live one for what to show and report.

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { AgentSession, AgentRuntimeConfig, AgentRuntimeEvent } from "@coforge/agent";
+import { captureDaemonLogs } from "./log-capture";
 
 const config: AgentRuntimeConfig = { provider: "pi", model: "default", reasoning: "balanced" };
 const root = join(tmpdir(), `coforge-interrupt-manager-${crypto.randomUUID()}`);
@@ -89,6 +90,58 @@ test("a timed-out interrupt releases the runtime but keeps its restart config", 
     ).resolves.toBe("restarted");
     expect(manager.runningAgentIds()).toEqual([]);
     expect(manager.serverLaunch("agent-1")).toMatchObject({ launchId: "launch-2" });
+  } finally {
+    await manager.shutdown();
+  }
+});
+
+test("a timed-out interrupt writes one line naming the turn, its provider and the wait", async () => {
+  const current = {
+    ...session(),
+    hasLiveTurn: true,
+    async interrupt() {
+      await new Promise<void>(() => {});
+    },
+  } satisfies AgentSession & { hasLiveTurn: boolean };
+  const manager = new AgentProcessManager(() => ({
+    provider: "pi",
+    createAgentSession: async () => current,
+  }));
+  try {
+    const { result, records } = await captureDaemonLogs(async () => {
+      await manager.start("agent-1", config, {
+        agentWorkspaceDirectory: join(root, "timeout-log"),
+        serverLaunch: { requestId: "start-6", controlEpoch: 6, launchId: "launch-6" },
+      });
+      return manager.interruptTurn("agent-1", {
+        interruptTimeoutMs: 1,
+        releaseTimeoutMs: 100,
+        cutoffAtMs: 42_000,
+        identity: { requestId: "stop-6", launchId: "launch-6" },
+      });
+    });
+    expect(result).toBe("restarted");
+    const line = records.find(
+      (record) => record.properties.event === "agent_runtime:turn_interrupt_timeout",
+    );
+    expect(line).toBeDefined();
+    expect(line!.properties).toMatchObject({
+      agent_id: "agent-1",
+      request_id: "stop-6",
+      launch_id: "launch-6",
+      provider: "pi",
+      turn_started_at_ms: 42_000,
+      timeout_ms: 1,
+      release: "exited",
+      outcome: "restarted",
+    });
+    expect(line!.properties.waited_ms).toBeGreaterThanOrEqual(1);
+    // One line per timed-out interrupt: the accepted log belongs to the intent, not to this path.
+    expect(
+      records.filter(
+        (record) => record.properties.event === "agent_runtime:turn_interrupt_timeout",
+      ),
+    ).toHaveLength(1);
   } finally {
     await manager.shutdown();
   }

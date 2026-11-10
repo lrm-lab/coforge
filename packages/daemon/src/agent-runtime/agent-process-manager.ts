@@ -2,6 +2,7 @@ import { AgentStateMachine, type AgentStatus } from "./agent-state-machine";
 import type { AgentRuntimeConfig, AgentSession } from "@coforge/agent";
 import type { CodeAgentProviderFactory } from "@lrm/coforge-anvil";
 import { AgentProcessCleanupError, withDeadline } from "@lrm/coforge-anvil";
+import { getLogger } from "@logtape/logtape";
 import {
   createAgentSession,
   prepareAgentLaunch,
@@ -17,6 +18,34 @@ import {
   sweepStrays,
   type AgentStopSettings,
 } from "./agent-stop";
+
+const logger = getLogger(["coforge", "daemon", "runtime"]);
+
+/** The bounded wait ended without the provider ending its turn, so the runtime is being
+ * restarted. This is the one place that knows both the provider and how long it waited;
+ * `turn_started_at_ms` is the turn's own start on the host process clock, which is the closest
+ * identity the daemon keeps for a turn: the adapter contract exposes no turn id. */
+function logInterruptTimeout(
+  agentId: string,
+  provider: string,
+  options: AgentTurnInterruptOptions,
+  waitedMs: number,
+  release: "exited" | "failed",
+): void {
+  logger.warning("Agent turn interrupt timed out; restarting its runtime", {
+    event: "agent_runtime:turn_interrupt_timeout",
+    ...(options.identity
+      ? { request_id: options.identity.requestId, launch_id: options.identity.launchId }
+      : {}),
+    agent_id: agentId,
+    provider,
+    ...(options.cutoffAtMs !== undefined ? { turn_started_at_ms: options.cutoffAtMs } : {}),
+    waited_ms: waitedMs,
+    timeout_ms: options.interruptTimeoutMs,
+    release,
+    outcome: "restarted",
+  });
+}
 
 export type { AgentStatus } from "./agent-state-machine";
 
@@ -47,6 +76,8 @@ export type AgentTurnInterruptOptions = Readonly<{
   interruptTimeoutMs: number;
   releaseTimeoutMs: number;
   cutoffAtMs?: number;
+  /** What the request names, so the line a timed-out interrupt writes stands on its own. */
+  identity?: Readonly<{ requestId: string; launchId: string }>;
 }>;
 
 /** The server-minted scope a launch was authorized under. */
@@ -214,6 +245,8 @@ export class AgentProcessManager {
     if (!runtime) return "not_running";
     if (runtime.session.hasLiveTurn === false) return "not_running";
     let unsubscribe = () => {};
+    const waitStartedAtMs = processClockMs();
+    const interruptDeadline = new Error(`Agent turn interrupt timed out: ${agentId}`);
     try {
       const turnEnded = new Promise<void>((resolve) => {
         unsubscribe = runtime.session.subscribe((event) => {
@@ -223,7 +256,7 @@ export class AgentProcessManager {
       await withDeadline(
         Promise.all([runtime.session.interrupt(), turnEnded]).then(() => undefined),
         options.interruptTimeoutMs,
-        () => new Error(`Agent turn interrupt timed out: ${agentId}`),
+        () => interruptDeadline,
       );
       // Raft's killTurnProcesses: the native interrupt ended the turn but left the process
       // running, so the descendants it spawned are still alive. Kill only those, bounded by the
@@ -236,13 +269,20 @@ export class AgentProcessManager {
           })
           .catch(() => undefined);
       return "interrupted";
-    } catch {
+    } catch (error) {
+      const waitedMs = processClockMs() - waitStartedAtMs;
+      let release: "exited" | "failed" = "failed";
       try {
         await this.release(agentId, options.releaseTimeoutMs, { cutoffAtMs: options.cutoffAtMs });
+        release = "exited";
       } catch {
         // Cleanup has already attempted its graceful and forced ladder; preserve the bounded
         // fallback result so the request does not leak an exception to the Web caller.
       }
+      // Only the deadline's own rejection is this path: a provider that rejects the interrupt
+      // itself has not stalled, and restarting for it would be a different event.
+      if (error === interruptDeadline)
+        logInterruptTimeout(agentId, runtime.config.provider, options, waitedMs, release);
       return "restarted";
     } finally {
       unsubscribe();
