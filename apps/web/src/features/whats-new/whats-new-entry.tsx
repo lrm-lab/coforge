@@ -9,11 +9,12 @@ import { WhatsNewDialog } from "./whats-new-dialog";
 import type { WhatsNewId } from "./whats-new-entries";
 
 /**
- * "What's new" in the sidebar (task #516): a row like the navigation's, with a dot, only while
- * entries wait (task #585). It opens the dialog on them; whatever was reached is then seen, and
- * once nothing waits the row goes until the next release.
+ * "What's new" (task #516): a row with a dot, only while entries wait (task #585). It opens the
+ * dialog on them; whatever was reached is then seen, and once nothing waits the row goes until the
+ * next release. The sidebar draws the row (`WhatsNewRow`, `WhatsNewRailButton`) and so does the
+ * Me page, from the same state.
  */
-function useWhatsNewEntry() {
+export function useWhatsNewEntry() {
   const { pending, dismiss } = useWhatsNew();
   // What the dialog pages through stays as it was when it opened.
   const [shown, setShown] = useState<readonly WhatsNewId[] | null>(null);
@@ -34,7 +35,7 @@ function useWhatsNewEntry() {
   };
 }
 
-/** The row above the user card in the expanded sidebar and the phone's menu. */
+/** The row at the foot of the expanded sidebar. */
 export function WhatsNewRow() {
   const entry = useWhatsNewEntry();
   // The dialog stays mounted, so it closes in place once the row goes with the last entry.

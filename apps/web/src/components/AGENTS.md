@@ -26,7 +26,11 @@ primitives and the lint-exemption policy.
   icon, localized copy, and empty-state condition.
 - `ui/skeleton.tsx` owns decorative placeholder styling only; loading
   placeholders themselves belong to the owning feature.
-- The global navigation drawer (`layout/sidebar/`) contains global
-  destinations only, never channel or direct-message lists or their creation
-  actions. Pages own their titles and actions; `mobile-header.tsx` only
-  connects page-owned mobile menu controls to the drawer.
+- Global navigation (`layout/sidebar/` on desktop, the bottom tab bar
+  `layout/phone-tab-bar.tsx` on a phone) contains global destinations only, never
+  channel or direct-message lists or their creation actions. There is no drawer:
+  below `lg` the tab bar shows only on the four tab homes (`layout/tab-home.ts`,
+  the one place that decides), every other page gets `PageBackButton` from
+  `PageHeader` (or its own back control), and the tab homes share `TabHomeHeader`.
+  Pages own their titles and actions; `AppShell` hands the nav items, switcher and
+  user to the tab pages through `layout/phone-shell.tsx`.

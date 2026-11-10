@@ -4,8 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { PageHeader } from "#src/components/layout/page-header";
+import { useReportChatListOpen } from "#src/components/layout/phone-shell";
+import { TabHomeHeader } from "#src/components/layout/tab-home-header";
 import { Spinner } from "#src/components/ui/spinner";
 import { ConnectionStatusPill } from "#src/features/realtime/connection-status-pill";
+import { SearchField } from "#src/features/search/search-field";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
 import { ConversationListContext } from "./conversation-list-button";
@@ -178,6 +181,8 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   // This renders on every live Agent or sidebar change; a new value each time would re-render
   // every reader, the open conversation's panes included.
   const detailVisible = desktop || !showList;
+  // The phone's tab bar shows with the list, whichever address the list is over.
+  useReportChatListOpen(showList);
   const listControls = useMemo(
     () => ({
       showList: () => setBrowsing(true),
@@ -199,19 +204,38 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                 showList ? "flex" : "hidden",
               )}
             >
-              <PageHeader
-                heading={m.navigation_chat()}
-                meta={
-                  <>
-                    <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
-                    <ChatHeaderBusyAgents
-                      directs={directs}
-                      onConversationPage={Boolean(channel || openDm)}
-                    />
-                  </>
-                }
-                actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
-              />
+              {desktop ? (
+                <PageHeader
+                  heading={m.navigation_chat()}
+                  meta={
+                    <>
+                      <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
+                      <ChatHeaderBusyAgents
+                        directs={directs}
+                        onConversationPage={Boolean(channel || openDm)}
+                      />
+                    </>
+                  }
+                  actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
+                />
+              ) : (
+                <>
+                  <TabHomeHeader
+                    title={m.navigation_chat_short()}
+                    meta={<ConnectionStatusPill whenConnected={<SavingChangesBadge />} />}
+                    agents={
+                      <ChatHeaderBusyAgents
+                        directs={directs}
+                        onConversationPage={Boolean(channel || openDm)}
+                      />
+                    }
+                    actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
+                  />
+                  <div className="shrink-0 px-page py-2">
+                    <SearchField />
+                  </div>
+                </>
+              )}
               {/* 0.75rem under the header rule. Saved's icon is centered in the 2.25rem
                   row and the bookmark path is inset another 0.125rem, so the rule
                   sits 1.5rem above the bookmark. Bottom padding stays 1rem. */}

@@ -94,7 +94,7 @@
 
 原范围：`sidebar-nav-icons.test.tsx` 的渲染用例、`spinner.test.tsx`；CSS token 检查继续自动测试。
 
-- [ ] 折叠 rail、展开侧栏和移动 drawer 的普通图标使用 nav-fg，当前项使用 nav-fg-current；不退回品牌紫或旧 caption 灰。检查对应描边（rail 2.4、展开栏 2）与 light/dark 对比度。
+- [ ] 折叠 rail、展开侧栏和手机底部标签栏的普通图标使用 nav-fg，当前项使用 nav-fg-current；不退回品牌紫或旧 caption 灰。检查对应描边（rail 2.4、展开栏 2）与 light/dark 对比度。
 - [ ] 折叠 rail 保持 3.5rem 图标列，按钮目标为 2.75rem；名称不作为可见文字挤入窄列，但可访问名称、当前页标识与 Tooltip 正确。无横向溢出，Tooltip 靠近图标。
 - [ ] Spinner 使用继承当前颜色的装饰性 SVG，不向辅助技术重复播报；允许动画时旋转，系统开启 reduced motion 时停止旋转。
 

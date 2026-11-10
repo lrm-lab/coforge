@@ -6,6 +6,7 @@ import {
   MenuItem as AriaMenuItem,
 } from "react-aria-components";
 
+import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { useAppToast } from "#src/components/ui/toast";
@@ -26,11 +27,15 @@ export function WorkspaceSwitcher({
   current,
   onSelect,
   onCreate,
+  trigger = "name",
 }: {
   workspaces: WorkspaceOption[];
   current: WorkspaceOption | null;
   onSelect?: (slug: string) => Promise<void> | void;
   onCreate?: (input: CreateWorkspaceInput) => Promise<void>;
+  /** What opens the menu: the Workspace's name (the desktop top bar), or the CoForge mark alone
+   * (a phone's tab home header, which has no room for the name). */
+  trigger?: "name" | "mark";
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const toast = useAppToast();
@@ -47,15 +52,27 @@ export function WorkspaceSwitcher({
   return (
     <>
       <Dropdown.Root>
-        <AriaButton
-          aria-label={m.workspace_switcher()}
-          className="flex h-8 max-w-full min-w-0 items-center gap-1 rounded-lg bg-transparent px-1.5 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-brand"
-        >
-          <span data-workspace-name className="min-w-0 truncate text-sm font-semibold text-primary">
-            {label}
-          </span>
-          <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-        </AriaButton>
+        {trigger === "mark" ? (
+          <AriaButton
+            aria-label={m.workspace_switcher()}
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg outline-focus-ring transition-colors duration-100 ease-linear hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            <CoForgeMark className="size-5" />
+          </AriaButton>
+        ) : (
+          <AriaButton
+            aria-label={m.workspace_switcher()}
+            className="flex h-8 max-w-full min-w-0 items-center gap-1 rounded-lg bg-transparent px-1.5 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <span
+              data-workspace-name
+              className="min-w-0 truncate text-sm font-semibold text-primary"
+            >
+              {label}
+            </span>
+            <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+          </AriaButton>
+        )}
         <Dropdown.Popover
           placement="bottom start"
           offset={6}

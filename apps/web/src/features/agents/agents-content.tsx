@@ -9,7 +9,7 @@ import { Spinner } from "#src/components/ui/spinner";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
-import { MobileNavigationButton } from "#src/components/layout/sidebar/mobile-header";
+import { PageBackButton } from "#src/components/layout/page-back-button";
 import { formatCalendarDate } from "#src/lib/dates";
 import { getLocale } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
@@ -150,7 +150,7 @@ export function AgentsContent({
        * on a phone or beside the profile panel, the tabs wrap onto their own row. */}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-page @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div className="flex h-12 min-w-0 flex-1 items-center gap-3">
-          <MobileNavigationButton />
+          <PageBackButton />
           <h1 className="truncate text-lg font-semibold text-primary">
             {m.member_directory_title()}
           </h1>

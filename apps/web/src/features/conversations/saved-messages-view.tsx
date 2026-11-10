@@ -8,6 +8,7 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { PageHeader } from "#src/components/layout/page-header";
+import { ConversationListButton } from "./conversation-list-button";
 import {
   Empty,
   EmptyDescription,
@@ -40,6 +41,7 @@ export function SavedMessagesView() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
+        leading={<ConversationListButton />}
         heading={m.conversation_saved_nav()}
         meta={
           <span className="shrink-0 text-sm text-tertiary">
