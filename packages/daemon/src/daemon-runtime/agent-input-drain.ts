@@ -226,7 +226,10 @@ export class AgentInputDrain {
         } else if (item.kind === "memory") {
           // Context, not a request: it opens a turn of its own ahead of the real input.
           if (this.ports.sessionFor(agentId)) await this.ports.runPrompt(agentId, item.text);
-        } else await this.ports.recoverAttention(agentId, item.context);
+        } else {
+          await this.ports.recoverAttention(agentId, item.context);
+          item.told?.();
+        }
       } catch (error) {
         // A retired queue belongs to a runtime that ended: its failures never consult the launch
         // that replaced it.

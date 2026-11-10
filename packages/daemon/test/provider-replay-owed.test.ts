@@ -87,6 +87,62 @@ test("a launch that fails again keeps what is owed for the one after it", async 
   }
 });
 
+test("a launch whose recovery notice was refused after the model answered stands and leaves it owed", async () => {
+  const h = await harness({ resume: "stored-1", failSessions: [2] });
+  try {
+    await h.deliver(1);
+    await failColdStart(h);
+
+    // The launch stands, but the Agent was never told: the notice was refused.
+    h.refuseNotices(true, true);
+    await h.start();
+    expect(h.sessions).toHaveLength(2);
+    h.refuseNotices(false);
+
+    // A stop that does not drop the debt (only a person's Stop intent does), then the next launch.
+    await h.runtime.stopAgent("agent-a");
+    await h.start();
+
+    expect(h.sessions).toHaveLength(3);
+    expect(unreadNotices(h.sessions[2]!.notices)[0]).toContain("#general 1 new message");
+  } finally {
+    await h.runtime.stop();
+  }
+});
+
+test("a launch that stands on a refused recovery notice still tells the deliveries held for it", async () => {
+  const h = await harness({ resume: "stored-1" });
+  // A real session is mid-turn once it accepts a notice, so a turn's end releases no holds.
+  h.liveTurn(true);
+  const open = h.gateNotices();
+  try {
+    const telling = h.deliver(1).catch(() => {});
+    await h.until(() => h.sessions[0]!.notices.some((notice) => notice.includes("#general")));
+    // Waits behind message 1 in the old session's queue; the cold start keeps it held.
+    const waiting = h.deliver(2, undefined, "#ops").catch(() => {});
+    h.refuseNotices(true, true, "--unread");
+    h.failTurn(h.sessions[0]!);
+    await h.until(() => h.sessions.length === 2);
+    open();
+    await Promise.all([telling, waiting]);
+    const ops = () =>
+      h.sessions[1]!.notices.filter(
+        (notice) => notice.includes("#ops") && !notice.includes("--unread"),
+      );
+    await h.until(() => ops().length > 0);
+    h.refuseNotices(false);
+
+    // Presented as for a launch with no recovery, once; the refused summary stays owed.
+    expect(ops()).toHaveLength(1);
+    await h.runtime.stopAgent("agent-a");
+    await h.start();
+    expect(unreadNotices(h.sessions[2]!.notices)[0]).toContain("#general 1 new message");
+  } finally {
+    open();
+    await h.runtime.stop();
+  }
+});
+
 test("a Stop drops what a failed cold start owed", async () => {
   const h = await harness({ resume: "stored-1", failSessions: [2] });
   try {

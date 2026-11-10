@@ -83,6 +83,9 @@ export async function harness(
   let liveTurn = false;
   /** While set, every notice a session is handed is refused. */
   let refuseNotices = false;
+  let answerBeforeRefusing = false;
+  /** Only notices containing this are refused. */
+  let refuseOnly = "";
   const runtime = new DaemonRuntime(
     connection,
     () => ({
@@ -116,7 +119,11 @@ export async function harness(
             // A gated notice is rejected when its session ends first, as a provider does.
             if (noticeGate) await Promise.race([noticeGate, ended.promise]);
             if (record.disposed) throw new Error("the session ended before accepting the notice");
-            if (refuseNotices) throw new Error("the session refused the notice");
+            if (refuseNotices && notice.includes(refuseOnly)) {
+              // The model may have answered by the time the session refuses the notice.
+              if (answerBeforeRefusing) record.emit({ type: "text-delta", text: "On it." });
+              throw new Error("the session refused the notice");
+            }
           },
           get hasLiveTurn() {
             return liveTurn;
@@ -219,7 +226,11 @@ export async function harness(
   };
   await start();
   /** A delivery of message `sequence`; tracked when it carries an envelope. */
-  const deliver = (sequence: number, mentionDelivery?: MentionDeliveryEnvelope) =>
+  const deliver = (
+    sequence: number,
+    mentionDelivery?: MentionDeliveryEnvelope,
+    target = "#general",
+  ) =>
     runtime.handleAgentMessage({
       protocolMajor: 1,
       requestId: `request-${sequence}`,
@@ -231,7 +242,7 @@ export async function harness(
       agentId: "agent-a",
       body: `body-${sequence}`,
       method: "agent:v1:message:deliver",
-      target: "#general",
+      target,
       mentionsAgent: true,
       ...(mentionDelivery ? { mentionDelivery } : {}),
     });
@@ -289,8 +300,10 @@ export async function harness(
       failTerminalErrors = fail;
     },
     /** Makes every session refuse the notices it is handed from now on. */
-    refuseNotices(refuse: boolean) {
+    refuseNotices(refuse: boolean, answerFirst = false, only = "") {
       refuseNotices = refuse;
+      refuseOnly = only;
+      answerBeforeRefusing = answerFirst;
     },
     failTurn,
     until,

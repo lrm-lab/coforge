@@ -30,7 +30,14 @@ export function recoveryHasContent(context: AgentRecoveryContext | undefined): b
 }
 
 export type AgentInput =
-  | { kind: "recovery"; context: AgentRecoveryContext; completion: AgentInputCompletion }
+  | {
+      kind: "recovery";
+      context: AgentRecoveryContext;
+      completion: AgentInputCompletion;
+      /** Called once the recovery pass ran to its end: the completion also settles for a refused
+       * notice the launch tolerates, which told the Agent nothing. */
+      told?: () => void;
+    }
   | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
   | { kind: "startup"; text: string; completion: AgentInputCompletion }
   | { kind: "prompt"; text: string; introduction?: true; completion: AgentInputCompletion }
