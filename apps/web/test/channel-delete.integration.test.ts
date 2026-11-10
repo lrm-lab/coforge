@@ -8,7 +8,7 @@ import type { AgentInboxPurgeRequest } from "#src/server/agents/agent-inbox-purg
 import type { BulkFileRemoval } from "#src/server/files/file-storage.server";
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
+import { MEMORY_AGENT_ON, defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 
 /**
  * A Workspace owner or admin deletes a channel for good: the channel and everything in it — its
@@ -46,6 +46,12 @@ test.skipIf(!connectionString)(
       slug: `del-${suffix}`,
       name: "Delete channel",
       userId: owner.id,
+    });
+    // The Memory Agent is opt-in per Workspace (task #6). Switching it on before the first channel
+    // is what a Workspace that wants one does, and keeps this the world where its daemon is told.
+    await db.workspace.update({
+      where: { id: workspace.id },
+      data: { experiments: MEMORY_AGENT_ON },
     });
     const updated: { conversationId: string; gone?: true }[] = [];
     const tasksDeleted: { conversationId: string; deleted: string[] }[] = [];

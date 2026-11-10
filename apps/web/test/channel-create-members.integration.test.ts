@@ -4,7 +4,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
+import { MEMORY_AGENT_ON, defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 
 /**
  * Creating a channel with the people and Agents picked for it: the channel exists with its
@@ -35,6 +35,7 @@ async function setup() {
     data: {
       slug: `ccm-${suffix}`,
       name: "Create with members",
+      experiments: MEMORY_AGENT_ON,
       members: {
         create: [
           { userId: creator.id, role: "member" },

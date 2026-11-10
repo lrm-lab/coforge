@@ -15,6 +15,7 @@ import type {
 } from "#src/server/conversations/conversation-realtime.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { MEMORY_AGENT_ON } from "./helpers/default-memory-agent-fixture";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 import {
   connectionString,
@@ -89,6 +90,9 @@ test.skipIf(!connectionString)(
   async () => {
     const fixture = await privateChannelFixture(connectionString!);
     const { db, ws, people, suffix, open } = fixture;
+    // The Memory Agent is opt-in per Workspace (task #6): this case is about private channels not
+    // getting it, so the Workspace is one that switched the experiment on.
+    await db.workspace.update({ where: { id: ws }, data: { experiments: MEMORY_AGENT_ON } });
     const { created, realtime } = recording();
     const channels = new PublicChannels(db, undefined, quietCentrifugo(), undefined, realtime, {
       purge: async () => {},

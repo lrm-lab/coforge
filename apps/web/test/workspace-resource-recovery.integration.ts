@@ -7,6 +7,7 @@ import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.ser
 import { provisionWorkspaceEnrollment } from "#src/server/workspaces/enrollment.server";
 import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
 import { recoverWorkspaceResourcesOnOpen } from "#src/server/workspaces/resource-recovery.server";
+import { MEMORY_AGENT_ON } from "./helpers/default-memory-agent-fixture";
 
 test("an owner reopening a committed Workspace repairs failed provisioning without a second enrollment", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -25,6 +26,12 @@ test("an owner reopening a committed Workspace repairs failed provisioning witho
       { id: true },
     );
     workspaceId = workspace.id;
+    // The Memory Agent is opt-in per Workspace (task #6): this Workspace switched it on, so its
+    // absence later is a failed enrollment the open repairs.
+    await db.workspace.update({
+      where: { id: workspaceId },
+      data: { experiments: MEMORY_AGENT_ON },
+    });
     const computer = await db.computer.create({
       data: {
         ownerId: owner.id,

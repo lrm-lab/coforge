@@ -5,6 +5,7 @@ import { PublicChannels } from "#src/server/conversations/public-channels.server
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
+import { MEMORY_AGENT_ON } from "./helpers/default-memory-agent-fixture";
 
 function enrollGeneral(db: PrismaClient, workspaceId: string) {
   return db.$transaction((tx) => enrollGeneralChannel(tx, workspaceId));
@@ -25,6 +26,7 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
     data: {
       slug: `manage-${suffix}`,
       name: "Channel management",
+      experiments: MEMORY_AGENT_ON,
       members: {
         create: [{ userId: owner.id, role: "owner" }, { userId: outsider.id }],
       },

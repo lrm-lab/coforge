@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
+import { MEMORY_AGENT_ON, defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
@@ -39,6 +39,7 @@ test("channel members add humans and Agents; a Workspace member outside the chan
     data: {
       slug: `members-${suffix}`,
       name: "Channel membership",
+      experiments: MEMORY_AGENT_ON,
       members: {
         create: [
           { userId: owner.id, role: "owner" },

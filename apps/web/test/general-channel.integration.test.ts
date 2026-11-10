@@ -9,7 +9,6 @@ import { admitWorkspaceMember } from "#src/server/workspaces/member-admission.se
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { PrismaChangeAgentVisibilityStore } from "#src/server/db/repositories/agent-visibility-change.repositories.server";
-import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 
 /**
  * `#general` is the Workspace-wide channel: every human member and every public, live Agent is in
@@ -84,20 +83,17 @@ test.skipIf(!connectionString)(
       });
       created.push(fromEnrollment);
 
+      // The Memory Agent is opt-in per Workspace (task #6): a Workspace that never switched the
+      // experiment on starts with #general and its creator alone. The opted-in Workspace, which
+      // plants the Agent at creation, is covered by memory-agent-channel-attach.integration.test.
       expect(await generalMembers(db, fromCatalog.id)).toEqual({
         archived: false,
-        members: [
-          `user:${alice.id}`,
-          `agent:${await defaultMemoryAgentId(db, fromCatalog.id)}`,
-        ].sort(),
+        members: [`user:${alice.id}`],
         muted: [],
       });
       expect(await generalMembers(db, fromEnrollment)).toEqual({
         archived: false,
-        members: [
-          `user:${bob.id}`,
-          `agent:${await defaultMemoryAgentId(db, fromEnrollment)}`,
-        ].sort(),
+        members: [`user:${bob.id}`],
         muted: [],
       });
     } finally {
@@ -176,13 +172,9 @@ test.skipIf(!connectionString)(
       });
 
       const enrolled = await generalMembers(db, workspace.id);
+      // No Memory Agent: this Workspace never switched the experiment on (task #6).
       expect(enrolled?.members).toEqual(
-        [
-          `user:${owner.id}`,
-          `user:${returning.id}`,
-          `agent:${helper.id}`,
-          `agent:${await defaultMemoryAgentId(db, workspace.id)}`,
-        ].sort(),
+        [`user:${owner.id}`, `user:${returning.id}`, `agent:${helper.id}`].sort(),
       );
       expect(enrolled?.members).not.toContain(`agent:${secret.id}`);
       // Agents and humans join #general unmuted; an Agent may mute it later itself.

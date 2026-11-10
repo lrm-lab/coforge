@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { enrollGeneral } from "./helpers/general-channel-fixture";
-import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
@@ -363,9 +362,9 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
           where: { workspaceId: id, channelName: "general" },
           include: { members: true },
         });
-        expect(createdGeneral?.members.map((m) => m.userId ?? m.agentId).sort()).toEqual(
-          [alice.id, await defaultMemoryAgentId(db, id)].sort(),
-        );
+        // The Memory Agent is opt-in per Workspace (task #6), and a Workspace created here never
+        // switched it on: #general is its creator alone (memory-agent-channel-attach covers the rest).
+        expect(createdGeneral?.members.map((m) => m.userId ?? m.agentId)).toEqual([alice.id]);
       } finally {
         await db.workspace.delete({ where: { id } });
       }

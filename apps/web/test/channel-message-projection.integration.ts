@@ -5,7 +5,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
-import { defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
+import { MEMORY_AGENT_ON, defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 // Pins the browser-facing shape of a channel message as `PublicChannels.open`, `updates` and
@@ -31,6 +31,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
     data: {
       slug: `projection-${suffix}`,
       name: "Projection",
+      experiments: MEMORY_AGENT_ON,
       members: { create: [{ userId: alice.id }, { userId: bob.id }] },
     },
   });
