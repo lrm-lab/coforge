@@ -50,11 +50,17 @@ export class MentionCarry {
       ) {
         void this.settle.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.INSTRUMENT_FAILED);
         return false;
-      } else if (!fromQueue) {
+      }
+      if (!fromQueue) {
         existing.message = message;
         if (existing.state === "drained") void this.reports.acknowledge(message);
         else this.reports.transition(message, "daemon_pending", "coalesced");
       }
+      // Back from an ended runtime's input, it waits for the next launch to take it again. One
+      // told to a process that has since gone has nobody left to settle it: the launch tells it.
+      if (existing.state !== "drained")
+        if (existing.carried ? fromQueue : !existing.undelivered && !this.#running(message.agentId))
+          this.#keep(existing);
       return existing.state !== "drained";
     }
     const remembered = this.ports.remembered?.(message.agentId);
@@ -68,7 +74,7 @@ export class MentionCarry {
       return false;
     }
     this.entries.set(message, "received");
-    this.entries.get(message.deliveryId)!.carried = "waiting";
+    this.entries.carry(this.entries.get(message.deliveryId)!, "waiting");
     this.reports.transition(message, "daemon_received", "accepted");
     return true;
   }
@@ -97,13 +103,22 @@ export class MentionCarry {
       }
       if (entry.state === "pending" || entry.inflight)
         counted.set(message.target!, (counted.get(message.target!) ?? 0) + 1);
-      // In place: a notice still being written for this entry finds it carried when it settles.
-      entry.state = "received";
-      delete entry.inflight;
-      entry.carried ??= "waiting";
-      this.entries.unpend(agentId, message.deliveryId);
+      this.#keep(entry);
     }
     return counted;
+  }
+
+  /** Keeps the entry for the next launch, to be taken again whatever became of an earlier take. In
+   * place: a notice still being written for it finds it carried when it settles. */
+  #keep(entry: Tracked): void {
+    entry.state = "received";
+    delete entry.inflight;
+    this.entries.unpend(entry.message.agentId, entry.message.deliveryId);
+    this.entries.carry(entry, "waiting");
+  }
+
+  #running(agentId: string): boolean {
+    return this.ports.process?.(agentId) !== undefined;
   }
 
   /** The restart did not happen: a mention whose notice failed while it was under way is lost. */
@@ -115,22 +130,21 @@ export class MentionCarry {
 
   /** Whether any mention is kept for the Agent's next launch. */
   hasCarried(agentId: string): boolean {
-    return this.entries.all().some((entry) => entry.message.agentId === agentId && entry.carried);
+    return this.entries.carriedOf(agentId).length > 0;
   }
 
   /** No launch is coming after all: the mentions kept for it are refused with `code`. */
   refuseCarried(agentId: string, code: MentionDeliveryTerminalCode): void {
-    for (const entry of this.entries.all())
-      if (entry.message.agentId === agentId && entry.carried)
-        void this.settle.refuse(entry.message, code);
+    for (const entry of this.entries.carriedOf(agentId))
+      void this.settle.refuse(entry.message, code);
   }
 
   /** The mentions kept for the Agent's next launch that its input has not taken yet. */
   takeCarried(agentId: string): TrackedMentionDelivery[] {
     const taken: TrackedMentionDelivery[] = [];
-    for (const entry of this.entries.all())
-      if (entry.message.agentId === agentId && entry.carried === "waiting") {
-        entry.carried = "queued";
+    for (const entry of this.entries.carriedOf(agentId))
+      if (entry.carried === "waiting") {
+        this.entries.carry(entry, "queued");
         taken.push(entry.message);
       }
     return taken;
@@ -154,7 +168,7 @@ export class MentionCarry {
     if (entry.carried || this.ports.relaunching?.(agentId)) return true;
     const now = this.ports.process?.(agentId);
     if (process === undefined || now === undefined || now === process) return false;
-    entry.carried = "waiting";
+    this.entries.carry(entry, "waiting");
     this.ports.pull?.(agentId);
     return true;
   }

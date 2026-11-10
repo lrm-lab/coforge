@@ -82,12 +82,12 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   settled by `mention-delivery-tracker.ts`, in memory only. It is ACKed, with
   its envelope echoed, only once drained: already consumed (whatever launch the
   envelope names), or told to the launch and native session the daemon last
-  reported, at a moment the Agent is idle or in a turn that has ended. It is
+  reported, at a moment the Agent is idle or in a turn that has ended. It
   never becomes `no_process`. An Agent with no process but a restart config and a remembered launch
   accepts it against that launch, keeps it unacknowledged and wakes the Agent as an untracked delivery
   would (`AgentExitedDelivery.deliverMention`); a launch that fails refuses it `DELIVERY_REJECTED` (a
   failed server Start, or a runtime error that takes the Agent offline, `IDENTITY_UNKNOWN`); while a
-  launch-failure cooldown runs, one timer wakes the Agent when it ends if anything still waits.
+  launch-failure cooldown runs, one timer wakes the Agent when it ends (waiting out an extension, and dropped by a Stop, a purge or the daemon stopping) if anything still waits.
   Otherwise
   the daemon reports a terminal error: `IDENTITY_DRIFT` (another Computer,
   launch or session), `INSTRUMENT_FAILED` (another message), `IDENTITY_UNKNOWN`
@@ -110,7 +110,7 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   held against the launch and session last reported (another is `IDENTITY_DRIFT`; none is
   `IDENTITY_UNKNOWN`), and a repeat adopts its newer envelope and is reported coalesced. The next launch's
   input tells each carried mention once, in its own notice, without checking its envelope again, so it
-  is ACKed with the latest envelope. A notice that settles for a process the restart replaced never refuses
+  is ACKed with the latest envelope. A carried mention counts as work parked for the launch, so a cold idle or config-apply stop wakes the Agent for it, and a repeat of a mention told to a process that has since gone is carried the same way. A notice that settles for a process the restart replaced never refuses
   its mention (compared by process identity, not only while the restart is under way). A process that will not exit
   leaves everything as it was; an inbox purge rejects the carried and queued mentions of the purged
   conversations.

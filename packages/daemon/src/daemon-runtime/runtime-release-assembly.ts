@@ -58,6 +58,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     carry: {
       carryForRelaunch(agentId: string, freshSession: boolean): ReadonlyMap<string, number>;
       abortRelaunch(agentId: string): void;
+      hasCarried(agentId: string): boolean;
     };
   };
 }): RuntimeRelease<L> {
@@ -85,7 +86,9 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
         migrating: input.migrations()?.holds(agentId) === true,
       }),
     hasParkedWork: (agentId) =>
-      input.deliveryGate().hasQueued(agentId) || input.deliveryGate().hasHeldAppItems(agentId),
+      input.deliveryGate().hasQueued(agentId) ||
+      input.deliveryGate().hasHeldAppItems(agentId) ||
+      input.mentionDeliveries().carry.hasCarried(agentId),
     flushParked: (agentId) => input.releaseSurvivingHolds(agentId),
     takeParked: (agentId) => input.deliveryGate().discardPending(agentId),
     wake: (agentId, restart) => input.wakeAgent(agentId, restart),

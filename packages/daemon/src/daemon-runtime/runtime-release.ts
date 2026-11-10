@@ -108,7 +108,7 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
     | "runnerHold"
     | "migrating"
   >;
-  /** Messages or app-item notices kept for the Agent's next launch while its runtime was ending. */
+  /** Messages, app-item notices or tracked mentions kept for the Agent's next launch. */
   hasParkedWork(agentId: string): boolean;
   /** The runtime stayed up: presents what was kept as it would at a turn's end. */
   flushParked(agentId: string): void;

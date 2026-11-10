@@ -32,6 +32,8 @@ export type AgentExitedDeliveryPorts = Readonly<{
   queueForNextLaunch(agentId: string, message: AgentMessageDelivery): void;
   /** The wake launch cooldown's end instant, when one is in force. */
   wakeBlockedUntil(agentId: string): number | undefined;
+  /** Runs `hook` when the Agent's waits are cancelled (a Stop, a purge, the daemon stopping). */
+  whenCancelled(agentId: string, hook: () => void): void;
   /** Queues a delivery as the Agent's next input; settles once the input drain handled it. */
   enqueueInputDelivery(agentId: string, message: AgentMessageDelivery): Promise<void>;
   wakeAgent(agentId: string, restart: AgentRestartConfig): Promise<unknown>;
@@ -112,7 +114,8 @@ export class AgentExitedDelivery {
   }
 
   /** Whatever waits for the Agent's next launch is not left waiting for a delivery to come: one
-   * wake is armed for the instant its launch-failure cooldown ends, when anything still waits. */
+   * wake is armed for the instant its launch-failure cooldown ends, when anything still waits. A
+   * cooldown extended meanwhile is waited out again; a cancellation drops the wake. */
   #wakeAfterCooldown(agentId: string): void {
     const until = this.#ports.wakeBlockedUntil(agentId);
     if (until === undefined || this.#cooldownWakes.has(agentId)) return;
@@ -123,12 +126,18 @@ export class AgentExitedDelivery {
           this.#cooldownWakes.delete(agentId);
           const restart = this.#ports.restartConfig(agentId);
           if (!restart || this.#ports.hasSession(agentId)) return;
+          if (this.#ports.wakeBlockedUntil(agentId) !== undefined)
+            return this.#wakeAfterCooldown(agentId);
           if (this.#ports.hasQueued(agentId) || this.#ports.hasKeptMentions(agentId))
             this.#wakeForKept(agentId, restart);
         },
         Math.max(1, until - Date.now()),
       ),
     );
+    this.#ports.whenCancelled(agentId, () => {
+      this.#cooldownWakes.get(agentId)?.();
+      this.#cooldownWakes.delete(agentId);
+    });
   }
 
   /** A delivery for an Agent with no hold, session, or launch in flight. */

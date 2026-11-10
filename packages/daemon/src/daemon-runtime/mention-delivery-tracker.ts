@@ -47,10 +47,12 @@ const BLOCKED_CODES: Readonly<Record<MentionDeliveryBlock, MentionDeliveryTermin
  */
 export class MentionDeliveryTracker {
   /** Terminal reports already sent, by delivery and envelope: the same issue is refused once, even
-   * when its in-flight notice fails after a relaunch already handed it back. A re-issue for another
-   * launch or session is a new issue. */
+   * when its in-flight notice fails after it was refused another way. A re-issue for another launch
+   * or session is a new issue. */
   readonly #refused = new Set<string>();
   readonly #entries = new MentionEntries();
+  /** What each Agent's cancellation drops besides its mentions (see `whenCancelled`). */
+  readonly #cancelHooks = new Map<string, () => void>();
   readonly #reports: MentionDeliveryReports;
   /** The mentions kept for the launch that follows a restart. */
   readonly carry: MentionCarry;
@@ -92,9 +94,9 @@ export class MentionDeliveryTracker {
     const envelope = message.mentionDelivery;
     const kept = this.#entries.get(message.deliveryId);
     if (kept?.carried && kept.message.agentId === message.agentId) {
-      kept.message = message;
-      delete kept.carried;
-      return this.#tell(message, kept);
+      // Told as the newest issue the server made while it waited, which the entry holds.
+      this.#entries.uncarry(kept);
+      return this.#tell(kept.message, kept);
     }
     const running = this.ports.running(message.agentId);
     if (!running) return this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
@@ -261,8 +263,25 @@ export class MentionDeliveryTracker {
     return this.#reports.terminalError(message, code);
   }
 
+  /** Registers what to drop when the Agent's waits are cancelled; the Agent keeps one hook. */
+  whenCancelled(agentId: string, hook: () => void): void {
+    this.#cancelHooks.set(agentId, hook);
+  }
+
+  /** The daemon is stopping: every Agent's waits are cancelled. */
+  cancelAll(): void {
+    for (const agentId of this.#cancelHooks.keys()) this.#runCancelHook(agentId);
+  }
+
+  #runCancelHook(agentId: string): void {
+    const hook = this.#cancelHooks.get(agentId);
+    this.#cancelHooks.delete(agentId);
+    hook?.();
+  }
+
   /** Explicit Stop cancels received and pending notices; cancellation is never a drain. */
   async cancelAgent(agentId: string): Promise<void> {
+    this.#runCancelHook(agentId);
     const unsettled = this.#entries
       .all()
       .filter((tracked) => tracked.message.agentId === agentId && tracked.state !== "drained");

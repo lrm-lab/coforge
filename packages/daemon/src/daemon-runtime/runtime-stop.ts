@@ -124,6 +124,7 @@ export class RuntimeStop {
       void ports.mentionDeliveries.cancelAgent(agentId);
       ports.agentProcessManager.session(agentId)?.cancelPendingNotices?.();
     }
+    ports.mentionDeliveries.cancelAll();
     ports.startup.unsubscribeAll();
     // A start still waiting for its first cloud connection would otherwise hold this stop up for
     // as long as the cloud stays unreachable.

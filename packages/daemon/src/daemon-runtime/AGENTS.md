@@ -81,7 +81,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   `sessionRecovery`, acted on after the failed turn ends, spent only once the Session was replaced) and
   what the fresh Session carries: the rejected launch's own start input plus the unread summary
   (the Agent's unread and deliveries parked while the runtime ends, less the tracked @mentions
-  `RuntimeRelease.endAndReplace` hands back, which the server issues again). `AgentLaunchCoordinator`
+  `RuntimeRelease.endAndReplace` carries to the fresh launch, which tells each on its own). `AgentLaunchCoordinator`
   ends the runtime through `endAndReplace` and cold-starts through the same path as the early crash.
   What it carries is owed (`OwedRecovery`, kept in the Agent's `LaunchInbox`) until a launch for the Agent
   has told it: `startAgent` merges it into the next launch that spawns a process and pays it after

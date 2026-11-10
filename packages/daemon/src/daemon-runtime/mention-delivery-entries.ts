@@ -28,6 +28,8 @@ export class MentionEntries {
   readonly #tracked = new Map<string, Tracked>();
   /** Delivery ids pending per Agent: told during a turn that has not ended. */
   readonly #pending = new Map<string, Set<string>>();
+  /** Delivery ids carried per Agent: kept for its next launch. */
+  readonly #carried = new Map<string, Set<string>>();
 
   get(deliveryId: string): Tracked | undefined {
     return this.#tracked.get(deliveryId);
@@ -42,6 +44,25 @@ export class MentionEntries {
     return this.#pending.get(agentId);
   }
 
+  /** The Agent's carried entries; a snapshot, safe to settle entries while walking it. */
+  carriedOf(agentId: string): Tracked[] {
+    const ids = this.#carried.get(agentId);
+    return ids ? [...ids].map((deliveryId) => this.#tracked.get(deliveryId)!) : [];
+  }
+
+  /** Keeps the entry for its Agent's next launch: `waiting` until that launch's input takes it. */
+  carry(entry: Tracked, mode: "waiting" | "queued"): void {
+    const { agentId, deliveryId } = entry.message;
+    entry.carried = mode;
+    this.#carried.set(agentId, (this.#carried.get(agentId) ?? new Set()).add(deliveryId));
+  }
+
+  /** The entry is no longer kept for a launch. */
+  uncarry(entry: Tracked): void {
+    delete entry.carried;
+    this.#uncarried(entry.message.agentId, entry.message.deliveryId);
+  }
+
   /** Records the mention in `state`, as a new entry. */
   set(message: TrackedMentionDelivery, state: TrackedState): void {
     const { deliveryId, agentId } = message;
@@ -49,6 +70,7 @@ export class MentionEntries {
     if (!previous && this.#tracked.size >= REMEMBERED_MENTIONS)
       this.forget(this.#tracked.keys().next().value!);
     this.#tracked.delete(deliveryId);
+    this.#uncarried(agentId, deliveryId);
     this.#tracked.set(deliveryId, {
       message,
       state,
@@ -64,11 +86,17 @@ export class MentionEntries {
     if (!tracked) return;
     this.#tracked.delete(deliveryId);
     this.unpend(tracked.message.agentId, deliveryId);
+    this.#uncarried(tracked.message.agentId, deliveryId);
   }
 
   /** Takes the mention out of the pending set. */
   unpend(agentId: string, deliveryId: string): void {
     const pending = this.#pending.get(agentId);
     if (pending?.delete(deliveryId) && pending.size === 0) this.#pending.delete(agentId);
+  }
+
+  #uncarried(agentId: string, deliveryId: string): void {
+    const carried = this.#carried.get(agentId);
+    if (carried?.delete(deliveryId) && carried.size === 0) this.#carried.delete(agentId);
   }
 }

@@ -98,11 +98,14 @@ export async function handleAgentMessage(
 }
 
 /**
- * A tracked @mention: told only to the running launch and session its envelope names, and ACKed
- * only once drained there (`MentionDeliveryTracker`). It never wakes an Agent, waits for a
- * launch or a pending server Start, or becomes `no_process`: with no running session it is
- * drained if already consumed and refused as `IDENTITY_UNKNOWN` otherwise, and the server
- * decides what happens next. A runner hold queues it unacknowledged like any delivery.
+ * A tracked @mention: ACKed only once drained (`MentionDeliveryTracker`). With a running session it
+ * is told only if its envelope names that launch and session. A runtime being restarted, or a
+ * launch not yet up, keeps it for the launch that follows, which tells it once. With no process
+ * it is kept against the launch and session the Agent last reported and wakes the Agent
+ * (`AgentExitedDelivery.deliverMention`); a consumed one is drained, and one with no identity to
+ * keep it for (stopped, offline, held by a backoff, never launched here) is refused as
+ * `IDENTITY_UNKNOWN`, which the server answers. A runner hold queues it unacknowledged like any
+ * delivery.
  */
 export function handleTrackedMention(
   ports: RuntimeMessageDeliveryPorts,

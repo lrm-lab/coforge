@@ -53,6 +53,7 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
       ports.wakeLaunchFailures.isBlocked(agentId)
         ? ports.wakeLaunchFailures.blockedUntil(agentId)
         : undefined,
+    whenCancelled: (agentId, hook) => ports.mentionDeliveries().whenCancelled(agentId, hook),
     enqueueInputDelivery: (agentId, message) =>
       ports.launchCustody().enqueueDelivery(agentId, message),
     wakeAgent: (agentId, restart) => ports.wakeAgent(agentId, restart),
