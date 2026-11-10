@@ -18,7 +18,10 @@ import { agentStartIntent, agentStopIntent } from "#src/server/agents/manage-age
 import { userAgentRuntimeControl } from "#src/server/agents/user-agent-control.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { PrismaAgentMigrationStore } from "#src/server/db/repositories/agent-migration.repositories.server";
-import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
+import {
+  moveAgentToComputer,
+  PrismaAgentRepository,
+} from "#src/server/db/repositories/agent.repositories.server";
 import { AgentMigrationDispatch } from "./agent-migration-dispatch.server";
 import {
   AgentMigrationOrchestrator,
@@ -96,6 +99,8 @@ export async function agentMigrationServices(db: PrismaClient) {
 /** A person's moves of their Agents, wired to one database. */
 export function agentMigrationRequests(db: PrismaClient) {
   const migrations = new AgentMigrations(new PrismaAgentMigrationStore(db));
+  const agents = new PrismaAgentRepository(db);
+  const runtimeControl = userAgentRuntimeControl(db, agents);
   return new AgentMigrationRequests({
     migrations,
     orchestrator: () => agentMigrationOrchestrator(db, migrations),
@@ -163,6 +168,38 @@ export function agentMigrationRequests(db: PrismaClient) {
           select: { computerId: true },
         })
       )?.computerId ?? null,
+    computerInWorkspace: async (workspaceId, computerId) =>
+      Boolean(
+        await db.workspaceComputer.findUnique({
+          where: { workspaceId_computerId: { workspaceId, computerId } },
+          select: { id: true },
+        }),
+      ),
+    placeWithoutSource: async ({ workspaceId, agentId, fromComputerId, targetComputerId }) =>
+      db.$transaction(async (tx) => {
+        const target = await tx.workspaceComputer.findFirst({
+          where: { workspaceId, computerId: targetComputerId, computer: { deletedAt: null } },
+          select: { id: true },
+        });
+        if (!target) return "target_unavailable" as const;
+        const moved = await moveAgentToComputer(tx, {
+          agentId,
+          fromComputerId,
+          toComputerId: targetComputerId,
+        });
+        return moved ? ("placed" as const) : ("placement_conflict" as const);
+      }),
+    startPlaced: async ({ workspaceId, agentId, targetComputerId, requestedByUserId }) => {
+      const agent = await agents.getById(agentId);
+      if (!agent || agent.workspaceId !== workspaceId || agent.computerId !== targetComputerId)
+        return false;
+      try {
+        await runtimeControl.start(agentStartIntent(agent, targetComputerId), requestedByUserId);
+        return true;
+      } catch {
+        return false;
+      }
+    },
     // Connected, from the Computer status cache; able to move Agents, from what its daemon's last
     // ready said, which a heartbeat keeps alive.
     computerReadiness: async (workspaceId, computerId) => {

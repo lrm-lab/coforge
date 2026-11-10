@@ -19,6 +19,10 @@ function setup(
     runtimeRefusal?: AgentRuntimeRefusalWithoutModel;
     runtimeDetecting?: boolean;
     readiness?: Record<string, Readiness>;
+    agentComputer?: string | null;
+    sourceLinked?: boolean;
+    directPlacement?: "placed" | "target_unavailable" | "placement_conflict";
+    startPublished?: boolean;
   } = {},
 ) {
   const fixture = memoryStore();
@@ -42,7 +46,11 @@ function setup(
       ({ "computer-a": "Computer A", "computer-b": "Studio Mac" })[computerId] ?? null,
     runtimeRefusal: async () => options.runtimeRefusal ?? null,
     runtimeDetecting: async () => options.runtimeDetecting ?? false,
-    agentComputer: async () => "computer-a",
+    agentComputer: async () =>
+      options.agentComputer === undefined ? "computer-a" : options.agentComputer,
+    computerInWorkspace: async () => options.sourceLinked ?? true,
+    placeWithoutSource: async () => options.directPlacement ?? "placed",
+    startPlaced: async () => options.startPublished ?? true,
     computerReadiness: async (_workspaceId, computerId) =>
       options.readiness?.[computerId] ?? "ready",
     otherComputers: async () => [
@@ -92,10 +100,47 @@ test("a Workspace admin moves and cancels another member's Agent, as the referen
     targetComputerId: "computer-b",
   });
   expect(requested).toEqual(["computer-b"]);
-  await requests.cancel(admin, { agentId: "agent-1", migrationId: moved.id });
+  await requests.cancel(admin, { agentId: "agent-1", migrationId: moved.id! });
   expect(await requests.status(owner, "agent-1")).toMatchObject({
     migration: { state: "canceled" },
   });
+});
+
+test("an unplaced Agent binds directly to a ready Computer and starts with no migration record", async () => {
+  const { requests, requested } = setup({ agentComputer: null });
+  const result = await requests.request(owner, {
+    agentId: "agent-1",
+    targetComputerId: "computer-b",
+  });
+  expect(result).toEqual({
+    id: null,
+    direct: true,
+    computerAccessRevoked: false,
+    unmigratedLocalData: true,
+    startPublished: true,
+  });
+  expect(requested).toEqual([]);
+});
+
+test("an Agent whose Computer link was revoked binds directly and marks its local data left behind", async () => {
+  const { requests } = setup({ sourceLinked: false });
+  expect(await requests.status(owner, "agent-1")).toMatchObject({
+    available: true,
+    directPlacement: true,
+    computerAccessRevoked: true,
+    unmigratedLocalData: true,
+    sourceComputerId: "computer-a",
+  });
+  await expect(
+    requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" }),
+  ).resolves.toMatchObject({ direct: true, computerAccessRevoked: true, startPublished: true });
+});
+
+test("a direct placement race refuses with a conflict and never starts the target", async () => {
+  const { requests } = setup({ agentComputer: null, directPlacement: "placement_conflict" });
+  await expect(
+    requests.request(owner, { agentId: "agent-1", targetComputerId: "computer-b" }),
+  ).rejects.toMatchObject({ code: "CONFLICT", errorId: "agent-migration-placement-conflict" });
 });
 
 test("only the owner or a Workspace admin may move or cancel, and each refusal names its reason", async () => {
@@ -119,14 +164,14 @@ test("only the owner or a Workspace admin may move or cancel, and each refusal n
     errorId: "agent-migrating",
   });
   await expect(
-    requests.cancel(stranger, { agentId: "agent-1", migrationId: moved.id }),
+    requests.cancel(stranger, { agentId: "agent-1", migrationId: moved.id! }),
   ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-  await requests.cancel(owner, { agentId: "agent-1", migrationId: moved.id });
+  await requests.cancel(owner, { agentId: "agent-1", migrationId: moved.id! });
   expect(await requests.status(owner, "agent-1")).toMatchObject({
     migration: { state: "canceled" },
   });
   // A second cancel of a migration that already ended is not an error.
-  await requests.cancel(owner, { agentId: "agent-1", migrationId: moved.id });
+  await requests.cancel(owner, { agentId: "agent-1", migrationId: moved.id! });
 });
 
 test("a deployment without the migration bucket, or a source that cannot stop, refuses up front", async () => {

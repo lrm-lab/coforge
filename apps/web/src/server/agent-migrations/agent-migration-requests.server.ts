@@ -7,7 +7,11 @@ import type {
   AgentRuntimeRefusalWithoutModel,
   AgentRuntimeSelectionRefusal,
 } from "#src/server/agents/agent-runtime-availability.server";
-import type { AgentMigrationRequestRefusal, AgentMigrations } from "./agent-migrations.server";
+import {
+  isFinishedAgentMigration,
+  type AgentMigrationRequestRefusal,
+  type AgentMigrations,
+} from "./agent-migrations.server";
 
 /**
  * A person's side of moving an Agent to another Computer: asking for the move, canceling it, and
@@ -59,6 +63,8 @@ function refusalError(code: AgentMigrationRequestRefusal) {
       return new AppError("INVALID_INPUT", { errorId: "agent-migration-target-unavailable" });
     case "already_migrating":
       return new AppError("CONFLICT", { errorId: "agent-migrating" });
+    case "placement_conflict":
+      return new AppError("CONFLICT", { errorId: "agent-migration-placement-conflict" });
   }
 }
 
@@ -92,6 +98,22 @@ export class AgentMigrationRequests {
       runtimeDetecting(workspaceId: string, computerId: string): Promise<boolean>;
       /** The Computer the Agent is placed on now, or null when it has none. */
       agentComputer(workspaceId: string, agentId: string): Promise<string | null>;
+      /** Whether the Agent's current Computer is still linked to this Workspace. */
+      computerInWorkspace?(workspaceId: string, computerId: string): Promise<boolean>;
+      /** Direct placement for an Agent whose source is absent or revoked; no file migration. */
+      placeWithoutSource?(input: {
+        workspaceId: string;
+        agentId: string;
+        fromComputerId: string | null;
+        targetComputerId: string;
+      }): Promise<"placed" | "target_unavailable" | "placement_conflict">;
+      /** Starts a directly placed Agent on its target, using the normal start path. */
+      startPlaced?(input: {
+        workspaceId: string;
+        agentId: string;
+        targetComputerId: string;
+        requestedByUserId: string;
+      }): Promise<boolean>;
       computerReadiness(workspaceId: string, computerId: string): Promise<AgentMigrationReadiness>;
       /** The Workspace's Computers other than this one, by name. */
       otherComputers(
@@ -112,12 +134,29 @@ export class AgentMigrationRequests {
         !(await this.deps.isWorkspaceAdmin(principal.workspaceId, principal.userId)))
     )
       throw new AppError("NOT_FOUND");
-    const [available, latest] = await Promise.all([
+    const [available, latest, sourceComputerId] = await Promise.all([
       this.deps.available(),
       this.deps.migrations.latestForAgent(principal.workspaceId, agentId),
+      this.deps.agentComputer(principal.workspaceId, agentId),
     ]);
+    const sourceAccessRevoked = Boolean(
+      sourceComputerId &&
+      !((await this.deps.computerInWorkspace?.(principal.workspaceId, sourceComputerId)) ?? true),
+    );
+    const directPlacement = !sourceComputerId || sourceAccessRevoked;
     return {
-      available,
+      available: available || directPlacement,
+      ...(directPlacement
+        ? {
+            directPlacement: true,
+            computerAccessRevoked: sourceAccessRevoked,
+            unmigratedLocalData: true,
+            sourceComputerId,
+            sourceComputerName: sourceComputerId
+              ? await this.deps.computerName(sourceComputerId)
+              : null,
+          }
+        : {}),
       migration: latest
         ? {
             id: latest.id,
@@ -135,13 +174,24 @@ export class AgentMigrationRequests {
 
   async request(principal: Principal, input: { agentId: string; targetComputerId: string }) {
     await this.#assertManager(principal, input.agentId);
-    if (!(await this.deps.available()))
+    const sourceComputerId = await this.deps.agentComputer(principal.workspaceId, input.agentId);
+    const sourceAccessRevoked = Boolean(
+      sourceComputerId &&
+      !((await this.deps.computerInWorkspace?.(principal.workspaceId, sourceComputerId)) ?? true),
+    );
+    const directPlacement = !sourceComputerId || sourceAccessRevoked;
+    const latest = await this.deps.migrations.latestForAgent(principal.workspaceId, input.agentId);
+    if (latest && !isFinishedAgentMigration(latest.state))
+      throw new AppError("CONFLICT", { errorId: "agent-migrating" });
+    if (!directPlacement && !(await this.deps.available()))
       throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "agent-migration-unavailable" });
     // Before anything stops: an old daemon on either side would ignore the move, leaving the
     // Agent stopped until its lease ran out. This is the only check: the dialog lists every
     // Computer, as Raft does, and says what this refusal names.
-    const source = await this.#agentComputerReadiness(principal.workspaceId, input.agentId);
-    if (source && source !== "ready")
+    const source = directPlacement
+      ? null
+      : await this.#agentComputerReadiness(principal.workspaceId, input.agentId);
+    if (!directPlacement && source && source !== "ready")
       throw new AppError("TEMPORARILY_UNAVAILABLE", {
         errorId: READINESS_REFUSALS.source[source],
       });
@@ -166,6 +216,32 @@ export class AgentMigrationRequests {
       throw new AppError("INVALID_INPUT", {
         errorId: detecting ? "agent-migration-runtime-detecting" : RUNTIME_REFUSALS[runtimeRefusal],
       });
+    }
+    if (directPlacement) {
+      if (!this.deps.placeWithoutSource) throw new Error("direct Agent placement is unavailable");
+      const placed = await this.deps.placeWithoutSource({
+        workspaceId: principal.workspaceId,
+        agentId: input.agentId,
+        fromComputerId: sourceComputerId,
+        targetComputerId: input.targetComputerId,
+      });
+      if (placed === "target_unavailable")
+        throw new AppError("INVALID_INPUT", { errorId: "agent-migration-target-unavailable" });
+      if (placed === "placement_conflict")
+        throw new AppError("CONFLICT", { errorId: "agent-migration-placement-conflict" });
+      return {
+        id: null,
+        direct: true,
+        computerAccessRevoked: sourceAccessRevoked,
+        unmigratedLocalData: true,
+        startPublished:
+          (await this.deps.startPlaced?.({
+            workspaceId: principal.workspaceId,
+            agentId: input.agentId,
+            targetComputerId: input.targetComputerId,
+            requestedByUserId: principal.userId,
+          })) ?? false,
+      };
     }
     let started: Awaited<ReturnType<AgentMigrationOrchestrator["request"]>>;
     try {

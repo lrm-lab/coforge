@@ -115,6 +115,7 @@ export type AgentMigrationRequestRefusal =
   | "agent_unplaced"
   | "same_computer"
   | "target_unavailable"
+  | "placement_conflict"
   | "already_migrating";
 
 export type AgentMigrationStepRefusal =

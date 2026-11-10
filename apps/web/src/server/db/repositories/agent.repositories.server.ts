@@ -279,13 +279,13 @@ export class PrismaAgentRepository implements AgentRepository {
 
 /**
  * Moves a live Agent to another Computer inside the caller's transaction, only while it is still on
- * `fromComputerId`. False means it had already moved (or was deleted) and nothing was written. An
- * Agent migration's switch is the caller: it must not re-home an Agent that a concurrent edit has
- * already moved somewhere else.
+ * `fromComputerId` (including null for a first placement). False means it had already moved (or
+ * was deleted) and nothing was written. An Agent migration's switch is the caller: it must not
+ * re-home an Agent that a concurrent edit has already moved somewhere else.
  */
 export async function moveAgentToComputer(
   tx: Prisma.TransactionClient,
-  input: { agentId: string; fromComputerId: string; toComputerId: string },
+  input: { agentId: string; fromComputerId: string | null; toComputerId: string },
 ): Promise<boolean> {
   const { count } = await tx.agent.updateMany({
     where: { id: input.agentId, computerId: input.fromComputerId, ...ACTIVE_AGENT_WHERE },
