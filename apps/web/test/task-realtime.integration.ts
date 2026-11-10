@@ -6,6 +6,8 @@ import {
   type TaskChangedSignal,
 } from "#src/server/conversations/conversation-realtime.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
+import { decodeTaskChangedEvent } from "#src/features/tasks/task-realtime";
 import { withPublishBatch, withPublishJsonBatch } from "./helpers/fake-centrifugo";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -329,4 +331,65 @@ test("a Workspace without Tasks v2 refuses a sub-task, so its create never reads
   ).rejects.toMatchObject({ errorId: "task_relations_off" });
   expect(drain()).toEqual([]);
   expect((await run({ operation: "list" })).tasks).toHaveLength(1);
+});
+
+test("a sub-task made in a Task popup pushes its parent's new copy to the channel", async () => {
+  // What the popup's sub-task dialog sends (`useTaskRelations.createSubtasks`): a `create` with a
+  // parent, as a person's browser issues it — through the Centrifugo port, on the channel the
+  // open popup listens to. The parent's own row does not change; its progress does.
+  const relations = await relationsWorkspace();
+  const pushed: Array<{ channel: string; data: unknown }> = [];
+  const centrifugo = withPublishBatch({
+    async publish() {},
+    async broadcast() {},
+    async publishJson(channel: string, data: unknown) {
+      pushed.push({ channel, data });
+    },
+  });
+  const conversation = await db.conversation.create({
+    data: {
+      workspaceId: relations.id,
+      channelName: `realtime-popup-${handle}`,
+      members: { create: [{ userId: alice.id }] },
+    },
+  });
+  cleanup.push(() => db.conversation.delete({ where: { id: conversation.id } }));
+  const board = new TaskBoard(db, {
+    realtime: new CentrifugoConversationRealtime(centrifugo),
+    publisher: centrifugo,
+  });
+  const run = (command: Record<string, unknown>) =>
+    board.execute({ workspaceId: relations.id, userId: alice.id }, {
+      idempotencyKey: crypto.randomUUID(),
+      conversationId: conversation.id,
+      ...command,
+    } as Parameters<TaskBoard["execute"]>[1]);
+  const [parent] = (await run({ operation: "create", titles: ["Parent"] })).tasks;
+  pushed.length = 0;
+  const [child] = (
+    await run({ operation: "create", title: "Child", parent: { number: parent!.number } })
+  ).tasks;
+
+  const changes = pushed
+    .map(({ channel, data }) => ({
+      channel,
+      event: data as {
+        type: string;
+        tasks: Array<{ number: number; revision: number; subtasks: unknown }>;
+      },
+    }))
+    .filter(({ event }) => event.type === "task.changed.v1");
+  expect(changes).toHaveLength(1);
+  expect(changes[0]!.channel).toBe(workspaceConversationChannel(relations.id));
+  const copies = new Map(changes[0]!.event.tasks.map((task) => [task.number, task]));
+  expect(copies.get(parent!.number)).toMatchObject({
+    revision: parent!.revision,
+    subtasks: { total: 1, finished: 0 },
+  });
+  expect(copies.get(child!.number)).toBeDefined();
+  // The browser's own decoder reads the publication as announced Tasks, sub-task progress and all.
+  const decoded = decodeTaskChangedEvent(changes[0]!.event);
+  expect(decoded?.tasks.find((task) => task.number === parent!.number)).toMatchObject({
+    subtasks: { total: 1, finished: 0 },
+  });
 });
