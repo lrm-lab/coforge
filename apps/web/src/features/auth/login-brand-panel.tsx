@@ -9,13 +9,14 @@ import { m } from "#src/paraglide/messages";
 import { LoginArt } from "./login-art";
 
 /**
- * The sign-in page's left half, from `lg` up: the logo, the illustration, the tagline and the
- * agents CoForge works with. A brand panel, light in both themes, so its colours are fixed rather
+ * The sign-in page's left half, from `xl` up: the logo, the illustration, the tagline and the
+ * agents CoForge works with. Past 90rem its content moves in by the
+ * layout's gutter, so it stays paired with the card. A brand panel, light in both themes, so its colours are fixed rather
  * than semantic tokens (which turn dark with the app).
  */
 export function LoginBrandPanel() {
   return (
-    <div className="login-brand-panel relative hidden flex-col bg-[#EEEBFE] px-10 pb-10 text-gray-600 lg:flex xl:px-20">
+    <div className="login-brand-panel relative hidden flex-col bg-[#EEEBFE] pr-12 pb-10 pl-[calc(var(--login-pair-gutter)+5rem)] text-gray-600 xl:flex">
       {/* Placed by `login-art.css` to match the homepage's logo, above the panel's top inset. */}
       <Link to="/" aria-label="CoForge" className="login-brand-logo">
         <img src="/login/homepage-logo.webp" alt="" className="h-auto w-full" />
