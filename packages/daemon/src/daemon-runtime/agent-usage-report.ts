@@ -30,7 +30,10 @@ export type AgentUsageReportPorts = Readonly<{
  */
 export class AgentUsageReport {
   readonly #ports: AgentUsageReportPorts;
-  readonly #lastContextUsage = new Map<string, { usedTokens: number; windowTokens: number }>();
+  readonly #lastContextUsage = new Map<
+    string,
+    { usedTokens: number; windowTokens: number; observedAtMs: number }
+  >();
   readonly #lastServiceTier = new Map<string, AgentServiceTierObserved>();
 
   constructor(ports: AgentUsageReportPorts) {
@@ -60,7 +63,10 @@ export class AgentUsageReport {
     if (!sessionId) return;
     const last = this.#lastContextUsage.get(agentId);
     if (last && last.usedTokens === usedTokens && last.windowTokens === windowTokens) return;
-    this.#lastContextUsage.set(agentId, { usedTokens, windowTokens });
+    // When the reading was taken rides along: a compaction tells a reading it saw before it
+    // started from one that arrived after, instead of reading the old one back as the result.
+    const observedAtMs = Date.now();
+    this.#lastContextUsage.set(agentId, { usedTokens, windowTokens, observedAtMs });
     this.#report(agentId, launch, (clientSeq) =>
       this.#ports.sendContextUsage?.({
         ...this.#ports.envelope(),
@@ -70,7 +76,7 @@ export class AgentUsageReport {
         sessionId,
         usedTokens,
         windowTokens,
-        observedAtMs: Date.now(),
+        observedAtMs,
         daemonInstanceId: this.#ports.daemonInstanceId(),
         clientSeq,
       }),
@@ -79,7 +85,9 @@ export class AgentUsageReport {
 
   /** The last context-usage reading for an Agent, for the compaction log: a compaction's token
    * numbers come from these readings, and a missing one stays missing rather than invented. */
-  lastContextUsage(agentId: string): { usedTokens: number; windowTokens: number } | undefined {
+  lastContextUsage(
+    agentId: string,
+  ): { usedTokens: number; windowTokens: number; observedAtMs: number } | undefined {
     return this.#lastContextUsage.get(agentId);
   }
 

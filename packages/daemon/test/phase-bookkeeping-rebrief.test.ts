@@ -239,7 +239,9 @@ test("an error outside an open compaction is not counted as a compaction failure
 });
 
 test("a finished compaction logs the token numbers it started and ended with", async () => {
-  let usage = { usedTokens: 100, windowTokens: 200 };
+  // The reading moves the way a runtime's does: a new sample, taken after the compaction opened,
+  // which is the only kind that can be its result.
+  let usage = { usedTokens: 100, windowTokens: 200, observedAtMs: Date.now() - 60_000 };
   const bookkeeping = new PhaseBookkeeping({
     launchFor: () => launch,
     publish: () => {},
@@ -253,7 +255,7 @@ test("a finished compaction logs the token numbers it started and ended with", a
   });
   const { records } = await captureDaemonLogs(async () => {
     bookkeeping.start("compaction", "agent-a", launch, undefined);
-    usage = { usedTokens: 20, windowTokens: 200 };
+    usage = { usedTokens: 20, windowTokens: 200, observedAtMs: Date.now() };
     bookkeeping.finish("compaction", "agent-a", launch, undefined);
   });
   expect(
@@ -308,6 +310,7 @@ test("a compaction's own numbers win over our context readings", async () => {
       tokens_before: 112_630,
       tokens_after: 40_369,
       window_tokens: 200_000,
+      tokens_source: "runtime",
     }),
   ]);
 });

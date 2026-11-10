@@ -14,7 +14,9 @@ export function assemblePhaseBookkeeping(
   currentLaunch: (agentId: string) => ActivityLaunch | undefined,
   publish: (agentId: string, launch: ActivityLaunch, draft: ActivityDraft) => void,
   activity: (agentId: string, kind: AgentActivity["detailKind"], detail: string) => ActivityDraft,
-  contextUsage?: (agentId: string) => { usedTokens: number; windowTokens: number } | undefined,
+  contextUsage?: (
+    agentId: string,
+  ) => { usedTokens: number; windowTokens: number; observedAtMs: number } | undefined,
 ): PhaseBookkeeping {
   return new PhaseBookkeeping({
     contexts,

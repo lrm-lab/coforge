@@ -42,8 +42,11 @@ export type PhaseBookkeepingPorts = Readonly<{
   /** A finished compaction starts the Agent's context over; a failed one counts toward the
    * session being spent. */
   contexts: Pick<AgentContexts, "newContext" | "compactionFailed" | "compactionSucceeded">;
-  /** The Agent's last context-usage reading: a compaction's token numbers, when one was observed. */
-  contextUsage?(agentId: string): { usedTokens: number; windowTokens: number } | undefined;
+  /** The Agent's last context-usage reading and when it was taken: a compaction's token numbers,
+   * when one was observed — and only the one observed after it started counts as its result. */
+  contextUsage?(
+    agentId: string,
+  ): { usedTokens: number; windowTokens: number; observedAtMs: number } | undefined;
 }>;
 
 /**
@@ -53,8 +56,12 @@ export type PhaseBookkeepingPorts = Readonly<{
  */
 export class PhaseBookkeeping {
   readonly #phases: Readonly<Record<RuntimePhase, PhaseTracker>>;
-  /** Where each open compaction started, in tokens, for the one line it logs when it ends. */
-  readonly #compactionBefore = new Map<string, number | undefined>();
+  /** Where each open compaction started: the reading it saw then (with when it was taken), and
+   * when it opened, so a reading from before it cannot be read back as its result. */
+  readonly #compactionBefore = new Map<
+    string,
+    { usedTokens?: number; startedAtMs: number; seenAtMs?: number }
+  >();
   /** Failures seen while this compaction stayed open: the second one means its recovery did not
    * help, and Raft counts it as exhausted. */
   readonly #compactionAttempts = new Map<string, number>();
@@ -78,17 +85,45 @@ export class PhaseBookkeeping {
     reported?: CompactionTokens,
     interruption?: CompactionInterruption,
   ): void {
-    const observedBefore = this.#compactionBefore.get(agentId);
+    const started = this.#compactionBefore.get(agentId);
     this.#compactionBefore.delete(agentId);
     this.#compactionAttempts.delete(agentId);
-    const usage = this.ports.contextUsage?.(agentId);
+    const reading = this.ports.contextUsage?.(agentId);
+    const tokensBefore = reported?.tokensBefore ?? started?.usedTokens;
+    // A runtime that reports its own numbers needs no fallback; one that does not (Claude Code,
+    // Codex) has only these readings. A reading counts as this compaction's result when it is a
+    // new sample — newer than the one the compaction opened on — and smaller than what it started
+    // with: readings arrive at turn boundaries, so one taken while the compaction was still running
+    // repeats the full context and must not pass as the result.
+    const after =
+      started &&
+      reading &&
+      reading.observedAtMs >= started.startedAtMs &&
+      (started.seenAtMs === undefined || reading.observedAtMs > started.seenAtMs) &&
+      (tokensBefore === undefined || reading.usedTokens < tokensBefore)
+        ? reading
+        : undefined;
+    const tokensAfter = reported?.tokensAfter ?? after?.usedTokens;
+    // Whether this runtime has ever produced a reading for the Agent tells a missed reading from a
+    // runtime that has none to give: only some runtimes emit them at all.
+    const readingsExist = started?.seenAtMs !== undefined || reading !== undefined;
     logger.info("Context compaction ended", {
       event: "agent.runtime.compaction_tokens",
       agent_id: agentId,
       outcome,
-      tokens_before: reported?.tokensBefore ?? observedBefore,
-      tokens_after: reported?.tokensAfter ?? usage?.usedTokens,
-      window_tokens: reported?.windowTokens ?? usage?.windowTokens,
+      tokens_before: tokensBefore,
+      tokens_after: tokensAfter,
+      window_tokens: reported?.windowTokens ?? after?.windowTokens ?? reading?.windowTokens,
+      // Where the after number came from: the runtime's own compaction result, or one of our
+      // context readings. The daily report splits its trend on this instead of guessing versions,
+      // because a reading-derived number under the old code could only repeat the starting count.
+      ...(tokensAfter === undefined
+        ? {
+            tokens_after_unavailable: readingsExist
+              ? "no_reading_after_compaction"
+              : "runtime_reports_no_readings",
+          }
+        : { tokens_source: reported?.tokensAfter !== undefined ? "runtime" : "reading" }),
       // An interruption nobody explained stays visibly unexplained rather than reading as a plain
       // ending, and the runtime's own reason and failure text are bounded like every log field.
       ...(interruption
@@ -124,8 +159,14 @@ export class PhaseBookkeeping {
   ): void {
     if (this.#phases[phase].start(agentId) !== "started") return;
     this.#publish(agentId, launch, RUNTIME_PHASES[phase].started, conversation);
-    if (phase === "compaction")
-      this.#compactionBefore.set(agentId, this.ports.contextUsage?.(agentId)?.usedTokens);
+    if (phase === "compaction") {
+      const seen = this.ports.contextUsage?.(agentId);
+      this.#compactionBefore.set(agentId, {
+        usedTokens: seen?.usedTokens,
+        startedAtMs: Date.now(),
+        seenAtMs: seen?.observedAtMs,
+      });
+    }
   }
 
   /** Ends an open phase once on its own finish signal. */
