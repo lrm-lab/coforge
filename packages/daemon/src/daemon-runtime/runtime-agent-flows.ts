@@ -203,6 +203,9 @@ export async function handleAgentStart(
     ...intent,
     computerId: intent.computerId || ports.connection.computerId,
   });
+  // A Start follows a stop already under way for the Agent, never adopts or races its process.
+  const stopping = ports.stops.pendingStop(intent.agentId);
+  if (stopping) await stopping.catch(() => undefined);
   if (intent.controlEpoch) {
     await ports.controlStart(intent);
     await ports.replaySession(intent.agentId);
@@ -211,8 +214,6 @@ export async function handleAgentStart(
     return runtime;
   }
   if (ports.managed(intent.agentId)) throw new Error("Agent requires a fenced Start");
-  const stopping = ports.stops.pendingStop(intent.agentId);
-  if (stopping) await stopping;
   return ports.startAgent(intent.agentId, runtimeConfigOf(intent), recoveryOf(intent), {
     sessionId: intent.sessionId,
     requestId: intent.requestId,

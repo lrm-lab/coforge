@@ -957,7 +957,7 @@ describe("DaemonRuntime", () => {
     await harness.runtime.stop();
   });
 
-  test("does not control-start a replacement when the same Agent stop fails", async () => {
+  test("control-starts the replacement after a stop whose dispose failed completes", async () => {
     let releaseDispose!: () => void;
     const disposeGate = new Promise<void>((resolve) => (releaseDispose = resolve));
     const harness = await queueHarness({
@@ -988,12 +988,9 @@ describe("DaemonRuntime", () => {
     const restarting = harness.runtime.handleAgentStart({ ...intent, requestId: "start-2" });
     const results = Promise.allSettled([stopping, restarting]);
     releaseDispose();
-    expect(await results).toEqual([
-      expect.objectContaining({ status: "rejected", reason: expect.any(Error) }),
-      expect.objectContaining({ status: "rejected", reason: expect.any(Error) }),
-    ]);
-    expect(harness.sessions()).toBe(1);
-    await harness.runtime.stop().catch(() => undefined);
+    expect((await results).map(({ status }) => status)).toEqual(["fulfilled", "fulfilled"]);
+    expect(harness.sessions()).toBe(2);
+    await harness.runtime.stop();
   });
 
   test("message check drains the events endpoint in one session, honoring the requested limit", async () => {
@@ -6153,7 +6150,7 @@ describe("DaemonRuntime", () => {
     },
   );
 
-  test("stop reports cleanup failure from a session whose creation was still pending", async () => {
+  test("stop completes when a session whose creation was still pending cannot be cleaned up", async () => {
     const creating = Promise.withResolvers<void>();
     const created = Promise.withResolvers<void>();
     const activities: string[] = [];
@@ -6175,10 +6172,10 @@ describe("DaemonRuntime", () => {
     const stopping = harness.runtime.stopAgent("agent-a");
     created.resolve();
     try {
-      await expect(stopping).rejects.toThrow();
-      await expect(launching).rejects.toThrow("process tree did not exit");
-      expect(activities).toContain("runtime_error");
-      await expect(harness.runtime.startAgent("agent-a", config)).rejects.toThrow(/did not exit/);
+      await expect(stopping).resolves.toBeUndefined();
+      await expect(launching).rejects.toThrow();
+      expect(activities).not.toContain("runtime_error");
+      expect(harness.runtime.agentProcessManager.size).toBe(0);
     } finally {
       await harness.runtime.stop().catch(() => {});
     }
@@ -7435,17 +7432,18 @@ describe("DaemonRuntime", () => {
       detailKind: "runtime_error",
       level: "error",
       clientSeq: 1,
-      detail: "Agent runtime did not exit. Start again to clear it; stop to retry.",
     });
+    expect(activities[0]?.detail).not.toContain("Start again to clear");
     await expect(runtime.startAgent("agent-a", config)).rejects.toThrow();
     expect(credentialRequests).toBe(2);
     await runtime.stop().catch(() => undefined);
   });
 
-  test("reports stop failure when process-tree exit cannot be confirmed", async () => {
+  test("a stop completes without a runtime_error when process-tree exit cannot be confirmed", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
+    const statuses: string[] = [];
     const runtime = new DaemonRuntime(
       connection,
       () => ({
@@ -7465,6 +7463,9 @@ describe("DaemonRuntime", () => {
           async start() {},
           async ready() {},
           async stop() {},
+          sendAgentStatus(status) {
+            statuses.push(status.status);
+          },
           sendAgentActivity(activity) {
             activities.push(activity);
           },
@@ -7489,13 +7490,10 @@ describe("DaemonRuntime", () => {
       reasoning: "balanced",
     });
 
-    await expect(runtime.stopAgent("agent-a")).rejects.toThrow("process tree did not exit");
-    expect(activities.map(({ detailKind }) => detailKind)).toEqual(["starting", "runtime_error"]);
-    expect(activities[1]).toMatchObject({
-      level: "error",
-      clientSeq: 2,
-      detail: "Agent runtime did not exit. Start again to clear it; stop to retry.",
-    });
+    await expect(runtime.stopAgent("agent-a")).resolves.toBeUndefined();
+    expect(activities.map(({ detailKind }) => detailKind)).not.toContain("runtime_error");
+    expect(statuses.at(-1)).toBe("inactive");
+    expect(runtime.agentProcessManager.size).toBe(0);
     await runtime.stop().catch(() => undefined);
   });
 

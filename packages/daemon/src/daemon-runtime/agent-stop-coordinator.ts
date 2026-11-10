@@ -7,7 +7,6 @@ import type { ActivityLaunch } from "./activity-launch";
 import type { AgentActivityPublisher } from "./agent-activity-publisher";
 import type { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
-import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 import { logAgentApiKeyRevokeFailed } from "./agent-failure-logs";
 import {
   agentLaunchTagToken,
@@ -44,8 +43,8 @@ export class AgentStopCoordinator {
     // launch recovery using it) first would prevent the very disposal that releases it.
     await this.releaseAgentRuntime(agentId, { retainLaunch: true });
     if (launch) await Promise.allSettled([launch]);
-    // A provider still creating its session at Stop may register and fail cleanup afterwards.
-    if (this.ports.processManager.isStopping(agentId)) throw new AgentProcessCleanupError();
+    // A provider still creating its session at Stop may register afterwards; the manager's stop
+    // joins one already in flight.
     await this.ports.processManager.stop(agentId);
     if (inputDrain) await Promise.allSettled([inputDrain]);
     if (activityLaunch) this.ports.publishStopped(agentId, activityLaunch);

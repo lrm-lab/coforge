@@ -26,7 +26,6 @@ import type { AgentStopRegistry } from "./agent-stop-registry";
 
 import { AgentPreflightError } from "./agent-preflight-error";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
-import { stopFailureMessage } from "./agent-failure-presentation";
 import { canonicalAgentMessageTarget } from "./runtime-agent-flows";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -62,7 +61,6 @@ export type AgentOperationsPorts = {
   disposeLaunchObservations(agentId: string): void;
   revokeLocalLaunch(agentId: string): void;
   stopCoordinator: Pick<AgentStopCoordinator, "stopAgent">;
-  cleanupUnconfirmed(agentId: string, error: unknown): boolean;
   messageOperations: Pick<AgentMessageOperations, "handle">;
 };
 
@@ -192,8 +190,8 @@ export class AgentOperations {
     if (existingStop) return existingStop;
     // Close this Agent's launch gate and local capabilities before the first await.
     ports.stops.beginStop(agentId);
-    // Held until the stop's outcome is known: a stop that cannot confirm the process gone leaves
-    // the Agent running, and its mentions settle with it.
+    // The Agent's mentions are dropped for the cloud to settle; reports a dying process still
+    // produces are held and dropped with them.
     ports.mentionDeliveries.beginStop(agentId);
     ports.inputDrain.close(agentId, new Error(`Agent runtime is stopping: ${agentId}`));
     // Invalidate acceptance before disposal: a late native reply cannot acknowledge a cancelled
@@ -209,26 +207,14 @@ export class AgentOperations {
     ports.revokeLocalLaunch(agentId);
     const stopping = ports.stopCoordinator
       .stopAgent(agentId)
-      .then(() => ports.mentionDeliveries.endStop(agentId, true))
       .catch((error) => {
-        ports.mentionDeliveries.endStop(agentId, false);
-        if (activityLaunch) {
-          // The launch is still this Agent's current one and the process may still be running, so
-          // it must keep admitting Activity: a stop that failed is not a stop in progress
-          // (task #705). The error frame below is the last word until the person retries either.
-          activityLaunch.stopping = false;
-          ports.activityPublisher.publish(
-            agentId,
-            activityLaunch,
-            ports.drafts.runtimeError(
-              agentId,
-              stopFailureMessage(ports.cleanupUnconfirmed(agentId, error), error),
-            ),
-          );
-        }
+        // A process that will not exit never reaches here (the stop completes without it); only
+        // a defect does. The launch keeps admitting Activity: a failed stop is not a stop in progress.
+        if (activityLaunch) activityLaunch.stopping = false;
         throw error;
       })
       .finally(() => {
+        ports.mentionDeliveries.endStop(agentId);
         ports.stops.settleStop(agentId, ports.processManager.isStopping(agentId));
       });
     ports.stops.trackStop(agentId, stopping);

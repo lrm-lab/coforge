@@ -490,36 +490,6 @@ describe("AgentProcessManager", () => {
     expect(starts).toBe(2);
   });
 
-  test("rejects a replacement start when process-tree termination remains unresolved", async () => {
-    const session = sessionSpy();
-    session.dispose = async () => {
-      session.disposeCalls += 1;
-      session.exit();
-      throw new Error("tree did not exit");
-    };
-    let starts = 0;
-    const manager = new AgentProcessManager(() => ({
-      provider: "pi",
-      async createAgentSession() {
-        starts++;
-        return session;
-      },
-    }));
-    const workspace = join(testWorkspaceRoot, "unresolved", "agent-1");
-    await manager.start("agent-1", config, {
-      agentWorkspaceDirectory: workspace,
-    });
-
-    await expect(manager.stop("agent-1")).rejects.toThrow("tree did not exit");
-    await expect(
-      manager.start("agent-1", config, {
-        agentWorkspaceDirectory: workspace,
-      }),
-    ).rejects.toThrow("tree did not exit");
-    expect(starts).toBe(1);
-    expect(manager.status("agent-1")).toBe("active");
-  });
-
   test("release ends the process but keeps what a later wake needs, reporting stopping meanwhile", async () => {
     const session = sessionSpy();
     const exit = Promise.withResolvers<void>();

@@ -52,9 +52,9 @@ test("a whole-runtime stop marks every Agent and clears every record", () => {
   const registry = new AgentStopRegistry();
   registry.rememberSession("a", { requestId: "req-1", provider: "kiro", sessionId: "sess-1" });
   registry.beginAll(["a", "b"]);
-  expect([...registry.stoppingAgentIds()]).toEqual(["a", "b"]);
+  expect([registry.stopping("a"), registry.stopping("b")]).toEqual([true, true]);
 
   registry.clear();
-  expect(registry.stoppingAgentIds()).toEqual([]);
+  expect([registry.stopping("a"), registry.stopping("b")]).toEqual([false, false]);
   expect(registry.sessionId("a")).toBeUndefined();
 });

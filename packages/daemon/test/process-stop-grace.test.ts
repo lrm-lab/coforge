@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+import { PROCESS_OUTPUT_DRAIN_MS, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+import {
+  AGENT_STOP_DEADLINE_MS,
+  AGENT_STOP_SWEEP_DEADLINE_MS,
+} from "#src/agent-runtime/agent-stop";
 import { STALLED_RECOVERY_EXIT_TIMEOUT_MS } from "#src/daemon-runtime/stalled-recovery";
 import { jobPlist } from "#src/platform/launchd-job";
 import {
@@ -35,6 +39,15 @@ test("the release deadline a restart waits on outlasts both rungs of the cleanup
  * shorter than a real stop: the plist said 2 seconds and the supervisor 15, so the daemon was
  * killed mid-cleanup and the stop was reported as failed while launchd was still finishing it.
  */
+test("an Agent stop fits inside the ladder it wraps and inside a Daemon stop", () => {
+  expect(AGENT_STOP_DEADLINE_MS).toBeGreaterThan(
+    2 * PROCESS_TREE_EXIT_GRACE_MS + PROCESS_OUTPUT_DRAIN_MS,
+  );
+  expect(AGENT_STOP_DEADLINE_MS + AGENT_STOP_SWEEP_DEADLINE_MS).toBeLessThanOrEqual(
+    DAEMON_STOP_WORST_CASE_MS,
+  );
+});
+
 test("the job's exit timeout covers a stop's worst case plus a margin", () => {
   expect(DAEMON_STOP_WORST_CASE_MS).toBe(STALLED_RECOVERY_EXIT_TIMEOUT_MS);
   expect(LAUNCHD_EXIT_TIMEOUT_SECONDS * 1000 - DAEMON_STOP_WORST_CASE_MS).toBeGreaterThanOrEqual(

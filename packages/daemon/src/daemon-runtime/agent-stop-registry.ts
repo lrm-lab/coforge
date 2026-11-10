@@ -38,11 +38,6 @@ export class AgentStopRegistry {
     return this.#sessions.get(agentId)?.sessionId;
   }
 
-  /** Every Agent whose stop began and has not settled. */
-  stoppingAgentIds(): readonly string[] {
-    return [...this.#stopping];
-  }
-
   /**
    * Marks the Agent stopping without forgetting its Session: an abandoned launch is teardown, not
    * a person's Stop, and the next wake must still resume the Session it reported.

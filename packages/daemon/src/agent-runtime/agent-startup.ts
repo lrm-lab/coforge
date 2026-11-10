@@ -34,6 +34,12 @@ Read each listed conversation with ${command} ${reading}, then end this turn. Do
 }
 export const AGENT_STARTUP_TIMEOUT_MS = 120_000;
 
+/** How far past its window a startup timer may fire before the delay is read as the Computer
+ * having slept rather than the process having been silent. */
+export const STARTUP_SUSPEND_SLACK_MS = 30_000;
+
+type StartupTiming = Readonly<{ timeoutMs: number; now: () => number }>;
+
 /** Launch-local startup judgement. Transport/session bookkeeping is not evidence that the model
  * can work; any other event, a bare `error` included, closes the startup window, and later
  * silence belongs to the ordinary runtime liveness policy, not this timer. Once the model has
@@ -47,9 +53,24 @@ export class AgentStartup {
   #responses = 0;
   #errorObserved = false;
 
-  constructor(onTimeout: () => void) {
+  constructor(
+    onTimeout: () => void,
+    private readonly timing: StartupTiming = { timeoutMs: AGENT_STARTUP_TIMEOUT_MS, now: Date.now },
+  ) {
     void this.#ready.promise.catch(() => {});
-    this.#timer = setTimeout(onTimeout, AGENT_STARTUP_TIMEOUT_MS);
+    this.#arm(onTimeout);
+  }
+
+  /** Arms the window. A timer that fires long after its time ran while the Computer slept, before
+   * the loop read what the process wrote meanwhile; that silence is not evidence, so the window
+   * restarts instead of abandoning a live process. */
+  #arm(onTimeout: () => void): void {
+    const armedAt = this.timing.now();
+    this.#timer = setTimeout(() => {
+      if (this.timing.now() - armedAt > this.timing.timeoutMs + STARTUP_SUSPEND_SLACK_MS)
+        this.#arm(onTimeout);
+      else onTimeout();
+    }, this.timing.timeoutMs);
     this.#timer.unref?.();
   }
 

@@ -96,12 +96,9 @@ test("a startup cleanup probe failure leaves the Agent retryable, not stuck stop
       agentWorkspaceDirectory: workspace,
     }),
   ).rejects.toThrow("process tree did not exit");
-  // The launch died in its own teardown, which used to leave the Agent marked stopping and refuse
-  // every later Start. Now the retry is judged by its own re-clear — nothing of that launch is
-  // left, since the provider returned no session and its process carries no launch tag — so it
-  // runs and fails again for the provider's own reason (task #705).
+  // The launch died in its own teardown. The retry sweeps the launch tag once, then runs and
+  // fails again for the provider's own reason.
   expect(manager.isStopping("agent-1")).toBe(false);
-  expect(manager.stopFailed("agent-1")).toBe(true);
   await expect(
     manager.start("agent-1", runtime, {
       agentWorkspaceDirectory: workspace,

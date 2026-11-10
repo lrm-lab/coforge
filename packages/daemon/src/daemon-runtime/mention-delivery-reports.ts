@@ -13,8 +13,8 @@ const logger = getLogger(["coforge", "daemon", "mention-delivery"]);
 /** The reports the daemon sends the cloud about a tracked mention. A report that fails is logged,
  * never thrown. */
 export class MentionDeliveryReports {
-  /** The reports held for each Agent whose Stop is under way, by delivery. */
-  readonly #held = new Map<string, Map<string, Array<() => Promise<unknown>>>>();
+  /** The deliveries whose reports were held, for each Agent whose Stop is under way. */
+  readonly #held = new Map<string, Set<string>>();
 
   constructor(
     private readonly ports: Pick<
@@ -23,26 +23,22 @@ export class MentionDeliveryReports {
     >,
   ) {}
 
-  /** The Agent's Stop begins: its reports wait for the Stop's outcome. */
+  /** The Agent's Stop begins: its reports are held until the Stop ends. */
   hold(agentId: string): void {
-    if (!this.#held.has(agentId)) this.#held.set(agentId, new Map());
+    if (!this.#held.has(agentId)) this.#held.set(agentId, new Set());
   }
 
-  /** The Stop ended: the held reports go out in order when the process is still running, and are
-   * dropped when it is gone. Returns the deliveries that had reports held. */
-  release(agentId: string, send: boolean): ReadonlySet<string> {
+  /** The Stop ended: the held reports are dropped. Returns the deliveries that had reports held. */
+  drop(agentId: string): ReadonlySet<string> {
     const held = this.#held.get(agentId);
     this.#held.delete(agentId);
-    if (!held) return new Set();
-    if (send) for (const sends of held.values()) for (const report of sends) void report();
-    return new Set(held.keys());
+    return held ?? new Set();
   }
 
-  #holds(message: TrackedMentionDelivery, report: () => Promise<unknown>): boolean {
+  #holds(message: TrackedMentionDelivery): boolean {
     const held = this.#held.get(message.agentId);
-    if (!held) return false;
-    held.set(message.deliveryId, [...(held.get(message.deliveryId) ?? []), report]);
-    return true;
+    held?.add(message.deliveryId);
+    return held !== undefined;
   }
 
   /** Diagnostic only: sent without waiting, so it never delays telling the Agent. */
@@ -55,12 +51,12 @@ export class MentionDeliveryReports {
       this.#send("transition", message, () =>
         this.ports.transition({ ...this.#scope(message), stage, outcome }),
       );
-    if (!this.#holds(message, send)) void send();
+    if (!this.#holds(message)) void send();
   }
 
   async acknowledge(message: TrackedMentionDelivery): Promise<void> {
     const send = () => this.#send("ack", message, () => this.ports.acknowledge(message));
-    if (!this.#holds(message, send)) await send();
+    if (!this.#holds(message)) await send();
   }
 
   /** Whether the terminal error was sent; false while it is held. */
@@ -72,7 +68,7 @@ export class MentionDeliveryReports {
       this.#send("terminal_error", message, () =>
         this.ports.terminalError({ ...this.#scope(message), code }),
       );
-    return this.#holds(message, send) ? false : send();
+    return this.#holds(message) ? false : send();
   }
 
   #scope(message: TrackedMentionDelivery) {

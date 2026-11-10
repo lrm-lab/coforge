@@ -2,7 +2,6 @@ import { getLogger } from "@logtape/logtape";
 import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { AgentLaunchCoordinator } from "./agent-launch-coordinator";
 import type { DaemonShutdownReason } from "@lrm/coforge-sdk/internal";
-import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import type { AgentControl } from "#src/agent-runtime/agent-control";
@@ -49,7 +48,7 @@ export type RuntimeStopPorts = {
   agentLaunches: Map<string, Promise<unknown>>;
   agentProcessManager: AgentProcessManager;
   /** Which Agents are stopping: a whole-runtime stop marks them all before it awaits. */
-  stops: Pick<AgentStopRegistry, "beginAll" | "stoppingAgentIds" | "clear">;
+  stops: Pick<AgentStopRegistry, "beginAll" | "clear">;
   /** What a cold start owed an Agent's next launch is dropped with the rest of the stopped state. */
   launchCoordinator: Pick<AgentLaunchCoordinator, "clearOwedRecovery">;
   messageAttention: AgentMessageAttentionIndex;
@@ -226,9 +225,7 @@ export class RuntimeStop {
     await Promise.allSettled(ports.agentLaunches.values());
     await Promise.allSettled(ports.inputDrain.drains());
     try {
-      // Reconcile sessions whose creation finished during shutdown, including failed cleanup.
-      for (const agentId of ports.stops.stoppingAgentIds())
-        if (ports.agentProcessManager.isStopping(agentId)) throw new AgentProcessCleanupError();
+      // Reconcile sessions whose creation finished during shutdown.
       await ports.agentProcessManager.shutdown();
       ports.stops.clear();
       ports.launchCoordinator.clearOwedRecovery();

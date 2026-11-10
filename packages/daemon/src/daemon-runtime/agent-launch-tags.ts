@@ -21,10 +21,10 @@ export function sweepAgentLaunchTagStrays(agentId: string, trigger: string): voi
 }
 
 /**
- * Collects what a launch that could not confirm its teardown left behind, sparing nothing, and
- * reports it: a Start's evidence that no old process is still there (task #705). The registry
- * token is deliberately left alone — the launch waiting behind this reclaim already registered
- * its own, and a later sweep must spare the process it is about to spawn.
+ * Collects what a teardown that could not confirm its end left behind, sparing nothing, and
+ * reports it: a stop's escalation and a Start's last look before it launches. The registry token
+ * is deliberately left alone — the launch waiting behind this reclaim already registered its
+ * own, and a later sweep must spare the process it is about to spawn.
  */
 export async function reclaimAgentLaunchTagStrays(
   agentId: string,

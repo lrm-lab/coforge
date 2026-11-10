@@ -122,7 +122,12 @@ async function harness() {
       notices.length >= length
         ? Promise.resolve()
         : new Promise<void>((resolve) => noticeWaiters.push({ length, resolve })),
-    disposed: disposed.promise,
+    // Dispose being called starts the stop; the Agent is released, and its offline record kept,
+    // only after it returns. Wait for that, not for the call.
+    disposed: disposed.promise.then(async () => {
+      while (runtime.agentProcessManager.size > 0) await Bun.sleep(0);
+      await Bun.sleep(0);
+    }),
     wasDisposed: () => disposedCalled,
     emit(event: AgentRuntimeEvent) {
       for (const listener of listeners) listener(event);

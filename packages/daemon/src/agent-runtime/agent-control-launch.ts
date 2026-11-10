@@ -147,20 +147,7 @@ export class ManagedLaunches {
       assertPhaseInvariants(this.context, intent.agentId, record);
       this.#onLaunchSucceeded(intent.agentId);
     } catch (launchError) {
-      try {
-        await this.context.runtime.stop(intent.agentId);
-      } catch (stopError) {
-        // Cleanup after a failed launch could not confirm the process exited. The record stays
-        // in phase "starting" (already written above): the launch retry/backoff owns the
-        // outcome within this process, and across a restart the question is boot process
-        // cleanup's (task #54 step 1) — no persisted fence holds the uncertainty anymore.
-        logger.error("Agent launch cleanup did not confirm process exit", {
-          event: "agent_control:launch_cleanup_unconfirmed",
-          agent_id: intent.agentId,
-          error_code: diagnosticErrorCode(stopError),
-        });
-        throw stopError;
-      }
+      await this.context.runtime.stop(intent.agentId);
       const failed = await settleLaunchFailure({
         intent,
         scope,

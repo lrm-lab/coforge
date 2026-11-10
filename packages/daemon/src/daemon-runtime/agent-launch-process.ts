@@ -276,13 +276,14 @@ export async function launchAgentProcess(
         );
     });
     runtime.session.onExit((exit) => {
-      ports.desktops.end(agentId);
       launch.startup?.dispose();
       trajectory.dispose();
       // Any call still open died with the process: nothing else will report its end.
       toolCalls.logAbandoned();
       replyIntents.dispose();
       if (ports.currentActivityLaunches.get(agentId) !== launch) return;
+      // After the guard: a session abandoned by a stop must not end its replacement's hold.
+      ports.desktops.end(agentId);
       // No leaked watchdog timer, and a later launch for this Agent starts clean.
       ports.disposeLaunchObservations(agentId);
       ports.collectSkillAgents.delete(agentId);

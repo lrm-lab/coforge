@@ -128,7 +128,7 @@ import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentIdForContext, contextFor } from "./agent-context";
-import { cleanupUnconfirmed, buildLaunchFailureActivity } from "./launch-failure-activity";
+import { buildLaunchFailureActivity } from "./agent-failure-presentation";
 import { RuntimeRelease, wakeRequest, type WakeRestart } from "./runtime-release";
 import { beginWakeLaunch } from "./wake-launch";
 import { AgentFeatureSync } from "./agent-feature-sync";
@@ -573,7 +573,9 @@ export class DaemonRuntime {
     const control = composeAgentControl({
       connection,
       runtimeInstanceId: this.#runtimeInstanceId,
-      running: (agentId) => Boolean(this.#agentProcessManager.session(agentId)),
+      // A process being stopped is not one a Start may adopt: it would rebind to what is dying.
+      running: (agentId) =>
+        !this.#stopState.isStopping(agentId) && Boolean(this.#agentProcessManager.session(agentId)),
       session: (agentId) => this.#agentProcessManager.session(agentId),
       stopAgent: (agentId) => this.stopAgent(agentId),
       startAgent: (agentId, config, recovery, request) =>
@@ -804,7 +806,6 @@ export class DaemonRuntime {
       revokeLocalLaunch: (agentId) =>
         revokeLocalLaunch(this.#agentContexts, this.#agentProxyTokens, this.#agentProxy, agentId),
       stopCoordinator: this.#stopCoordinator,
-      cleanupUnconfirmed: (agentId, error) => this.#cleanupUnconfirmed(agentId, error),
       messageOperations: this.#messageOperations,
     });
     this.#shutdown = new RuntimeStop({
@@ -1313,14 +1314,9 @@ export class DaemonRuntime {
       (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
     );
 
-  #cleanupUnconfirmed = (agentId: string, error: unknown): boolean =>
-    cleanupUnconfirmed(agentId, error, (id) => this.#agentProcessManager.isStopping(id));
-
   /** The error Activity for a launch that did not start; `agent-failure-presentation` builds it. */
   #launchFailureActivity = (agentId: string, provider: RuntimeProvider, error: unknown) =>
-    buildLaunchFailureActivity(agentId, provider, error, this.#drafts, (id) =>
-      this.#agentProcessManager.isStopping(id),
-    );
+    buildLaunchFailureActivity(agentId, provider, error, this.#drafts);
 
   get #revokeAgentApiKey() {
     return revokeAgentApiKey.bind(undefined, this.#transport, this.agentApiKeys);

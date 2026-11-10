@@ -55,7 +55,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `runtime-publication-subscriptions.ts` owns pre-ready publication buffering and Agent/control/App/migration event listeners; `runtime.ts` supplies operation handlers and releases buffered work after ready.
 - `runtime-ready-wait.ts` reports publications held before ready past `READY_WAIT_LOG_TIMEOUT_MS` (2 minutes), repeating every `READY_WAIT_LOG_REPEAT_MS` (10 minutes) until released: `runtime:ready_wait_long` carries the accumulated wait, the ready attempts it outlasted and how many publications are held, so a stalled start is visible instead of looking like a healthy daemon ignoring every intent (task #630). The clock starts at the first `publications.install()` and a ready that fails and is retried keeps it, because an outage answers each attempt in seconds while the hold lasts hours; only a release, `close()` or `abort()` settles it. `runtime-startup.ts` counts an attempt from the ready request factory, which the connection calls once per attempt. Log only.
 - `local-session-query-handlers.ts` binds owner-authorized local Session list/search/excerpt requests to the bounded catalog and current transport.
-- `agent-stop-coordinator.ts` owns process release/stop ordering after runtime admission closes; `runtime.ts` supplies launch maps and lifecycle collaborators.
+- `agent-stop-coordinator.ts` owns release/stop ordering once admission closes; a stop always completes ([agent-runtime](../agent-runtime/AGENTS.md)).
 - `stalled-recovery-sweep.ts` restarts a busy turn silent past its fuse — 15
   minutes for a session that declares `steersBusyTurn`, 60 for one that only queues
   input — with no open tool call and

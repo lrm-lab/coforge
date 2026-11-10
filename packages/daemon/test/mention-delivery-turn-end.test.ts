@@ -76,18 +76,15 @@ test("a mention a turn's end drained is drained for a repeat arriving before its
   }
 });
 
-test("a Stop that cannot confirm the process gone settles its mention as a turn's end does, reporting only then", async () => {
-  const { runtime, frames, envelope, deliver, emit, frameSent } = await harness({
+test("a Stop whose dispose fails still completes and sends nothing for its mention", async () => {
+  const { runtime, frames, envelope, deliver, emit } = await harness({
     disposeError: new AgentProcessCleanupError(),
   });
   try {
     emit({ type: "progress" });
     await deliver(1, envelope(1));
-    await expect(runtime.stopAgent("agent-a")).rejects.toBeInstanceOf(AgentProcessCleanupError);
-    await frameSent((frame) => frame.kind === "terminal");
-    expect(frames.filter((frame) => frame.kind !== "transition")).toEqual([
-      { kind: "terminal", deliveryId: "delivery-1", code: "DELIVERY_REJECTED" },
-    ]);
+    await runtime.stopAgent("agent-a");
+    expect(frames.filter((frame) => frame.kind !== "transition")).toEqual([]);
   } finally {
     await runtime.stop().catch(() => {});
   }

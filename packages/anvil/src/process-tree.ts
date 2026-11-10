@@ -79,3 +79,7 @@ export interface ProcessTreeSpawner {
  * ten-second grace after the polite SIGTERM (task #726; it was five). A cleanup ladder therefore
  * needs up to twice this, so any deadline wrapped around one must be longer. */
 export const PROCESS_TREE_EXIT_GRACE_MS = 10_000;
+
+/** How long a teardown waits, after its tree is gone, for the process's exit and its last output.
+ * The daemon's whole stop is bounded at 25 seconds, so this and a full ladder stay inside it. */
+export const PROCESS_OUTPUT_DRAIN_MS = 3_000;

@@ -2,11 +2,13 @@ import type { AgentSessionExit } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { JsonlProtocolError, JsonlRequestError } from "./jsonl-error";
 import {
+  PROCESS_OUTPUT_DRAIN_MS,
   PROCESS_TREE_EXIT_GRACE_MS,
   type OwnedChildProcess,
   type OwnedProcessTree,
   type ProcessTreeSpawner,
 } from "./process-tree";
+import { AgentProcessCleanupError } from "./contract";
 import { LineBuffer } from "./line-buffer";
 import { cleanupOwnedTree, type ProcessTreeCleanupOptions } from "./process-tree-cleanup";
 import { withDeadline } from "./deadline";
@@ -55,6 +57,7 @@ export class JsonlProcess {
     processTreeOwner: ProcessTreeSpawner,
     onStderrDiagnostic?: (diagnostic: string) => void,
     routineStderrLine?: (line: string) => boolean,
+    private readonly drainMs: number = PROCESS_OUTPUT_DRAIN_MS,
   ) {
     const identity = launchLogProperties(environment);
     this.#logger = Object.keys(identity).length > 0 ? logger.with(identity) : logger;
@@ -396,10 +399,15 @@ export class JsonlProcess {
         options?.onKillReport?.(report);
       },
     });
-    await this.#child.exited;
     // Close means tree cleanup AND drained diagnostics, so adapters can decide
-    // whether a failed native resume is eligible for a fresh launch.
-    await this.#outputFinished;
+    // whether a failed native resume is eligible for a fresh launch. A descendant that escaped the
+    // tree can hold a pipe open forever, so the wait is bounded and a pipe still open is an
+    // unconfirmed cleanup, not a hang.
+    await withDeadline(
+      Promise.all([this.#child.exited, this.#outputFinished]),
+      this.drainMs,
+      () => new AgentProcessCleanupError(),
+    );
   }
 
   #notifyClosed(): void {

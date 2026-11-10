@@ -88,7 +88,8 @@ export class AgentControl {
         };
         record.lastResult = record.stopResult;
       } catch (error) {
-        // The failed receipt is terminal for this request, not proof of process exit.
+        // A process that will not exit does not reach here: the runtime's stop completes without
+        // it. Only a defect does, and its receipt is terminal for this request.
         record.phase = "stopping";
         record.stopResult = {
           ...scope,
@@ -97,12 +98,7 @@ export class AgentControl {
           errorCode: "stop_failed",
         };
         record.lastResult = record.stopResult;
-        // The failed receipt is terminal for the request. The process may still be alive — a
-        // genuine local Stop failure — but no persisted fence holds that uncertainty anymore:
-        // the record lives only in this process (task #54 step 2), the user's next Stop (new
-        // epoch) retries, and a daemon restart hands the question to boot process cleanup
-        // (task #54 step 1), which reaps what this stop could not confirm.
-        logger.warning("Agent Stop did not confirm process exit", {
+        logger.warning("Agent Stop failed", {
           event: "agent_control:stop_failed",
           agent_id: scope.agentId,
           error_code: diagnosticErrorCode(error),

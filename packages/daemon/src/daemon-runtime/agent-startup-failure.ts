@@ -67,9 +67,8 @@ export async function abandonLaunch(
   } catch (cleanupError) {
     return cleanupError;
   } finally {
-    // Whether or not the teardown confirmed exit, the launch gate re-opens: the process manager
-    // keeps the failed teardown, and the next Start re-clears that tree itself (task #705).
-    // Leaving this mark would mute the Agent's Activity and refuse every later launch.
+    // The launch gate re-opens however the teardown ended; a stuck mark would mute the Agent's
+    // Activity and refuse every later launch.
     if (!ports.stops.pendingStop(agentId)) ports.stops.forgetStopping(agentId);
   }
 }

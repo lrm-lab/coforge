@@ -60,14 +60,7 @@ export function startAgent(
   }
   ports.requestAppConfigSnapshot(agentId);
   const existingLaunch = ports.agentLaunches.get(agentId);
-  // A teardown that could not confirm exit keeps its runtime registered, but it is not a runtime
-  // anyone may extend: it falls through to the launch, whose first step re-clears that tree and
-  // refuses with the reason while it lasts (task #705). Without this, the Start the failure's own
-  // message recommends would be rejected as "already active" and never reach that cleanup.
-  const activeRuntime =
-    existingLaunch || ports.agentProcessManager.stopFailed(agentId)
-      ? undefined
-      : ports.agentProcessManager.runtime(agentId);
+  const activeRuntime = existingLaunch ? undefined : ports.agentProcessManager.runtime(agentId);
   // What an earlier cold start still owes is paid by a launch that spawns a process, never by one
   // that joins a launch in progress (which carries it already) or a running process.
   const fresh = !existingLaunch && !activeRuntime;
