@@ -157,10 +157,10 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       expect.stringContaining("E2E pinned root"),
     ]);
 
-    // A pinned row opens beside the list and is marked as the open one. Its preview's text runs on
-    // from a mention chip, so the row's link is clicked rather than an element with that text.
+    // A pinned row opens beside the list and is marked as the open one. The row now previews the
+    // new message, and its link is clicked rather than an element with that text.
     await evaluate(`[...document.querySelectorAll(${pinnedItems})]
-      .find((item) => item.textContent.includes("E2E pinned hello"))
+      .find((item) => item.textContent.includes("E2E pinned again"))
       .querySelector("a")
       .click() ?? true`);
     await browser("wait", "--fn", `${openParam} === ${JSON.stringify(`channel:${channelId}`)}`);
@@ -168,7 +168,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     await browser(
       "wait",
       "--fn",
-      `[...document.querySelectorAll(${pinnedItems})].some((item) => item.querySelector("a")?.getAttribute("aria-current") === "true" && item.textContent.includes("E2E pinned hello"))`,
+      `[...document.querySelectorAll(${pinnedItems})].some((item) => item.querySelector("a")?.getAttribute("aria-current") === "true" && item.textContent.includes("E2E pinned again"))`,
     );
     // Dragged to its narrowest, the list keeps each row's title (its marks shorten to "@" and
     // the count) and never scrolls sideways (task #399).
