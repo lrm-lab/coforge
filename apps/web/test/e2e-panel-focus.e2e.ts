@@ -200,13 +200,13 @@ test("the thread's full screen hides the chat and keeps the chat's scroll and th
   await open();
   const draft = "A reply I have not sent yet";
   // Scroll the chat up from the bottom, and write in the thread's composer.
-  // A real wheel over the chat, as a reader scrolls: the chat then stops pinning to the bottom.
-  // Whatever offset it settles at is the one the full screen must keep.
-  const box = await evaluate<{ x: number; y: number }>(
-    `(() => { const r = ${CHAT}.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+  // Set directly, after a wheel event marks it as the reader's own scroll (the chat stops
+  // following the latest). Late layout may nudge it, so whatever offset it settles at, above the
+  // bottom, is the one the full screen must keep.
+  await browser(
+    "eval",
+    `(() => { const chat = ${CHAT}; chat.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true })); chat.scrollTop = 500; return true; })()`,
   );
-  await browser("mouse", "move", String(Math.round(box.x)), String(Math.round(box.y)));
-  await browser("mouse", "wheel", "-600");
   await waitFor(
     `(() => { const chat = ${CHAT}; const now = chat.scrollTop; const settled = now === window.__chatTop && now < chat.scrollHeight - chat.clientHeight - 100; window.__chatTop = now; return settled; })()`,
   );
