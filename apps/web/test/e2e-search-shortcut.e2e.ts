@@ -145,7 +145,7 @@ test("search opens over the page, walks by keyboard and lands on the message", a
       })),
     });
     const channelPath = `${workspacePath}/channel/${channelA}`;
-    const onChannelA = `[...document.querySelectorAll("h1")].some((h) => h.textContent === "#e2e-shortcut-a")`;
+    const onChannelA = `document.querySelector("h1[data-channel-title] [data-channel-name]")?.textContent === "e2e-shortcut-a"`;
 
     await browser("open", `${origin}${channelPath}`);
     await waitFor(onChannelA);

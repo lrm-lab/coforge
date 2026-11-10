@@ -151,7 +151,7 @@ test("an owner hides #general from its panel and restores it from Settings → M
     );
     await waitFor(`location.pathname === "${workspacePath}/channel/${general.id}"`);
     await waitFor(
-      `[...document.querySelectorAll("header h1")].some((h1) => h1.textContent === "#general")`,
+      `document.querySelector("h1[data-channel-title] [data-channel-name]")?.textContent === "general"`,
       30_000,
     );
   } finally {

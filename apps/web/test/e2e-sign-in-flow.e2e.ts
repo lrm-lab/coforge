@@ -194,7 +194,7 @@ test("signing in with an email and password, from a Workspace invite link", asyn
     await browser("eval", `${button(`Join ${name}`)}.click()`);
     // The URL changes before the Workspace renders, so wait for its #general and no error page.
     await waitFor(
-      `location.pathname.includes("/w/${slug}") && !${button(`Join ${name}`)} && document.body.innerText.includes("#general") && !document.body.innerText.includes("could not be loaded")`,
+      `location.pathname.includes("/w/${slug}") && !${button(`Join ${name}`)} && document.querySelector("h1[data-channel-title] [data-channel-name]")?.textContent === "general" && !document.body.innerText.includes("could not be loaded")`,
     );
     const alice = aliceId;
     expect(
@@ -242,7 +242,9 @@ test("signing in with an email and password, from a Workspace invite link", asyn
     await signInAs("alice");
     await waitFor(onJoinPageAs(people.alice.email));
     await browser("open", `${origin}/en/w/${slug}`);
-    await waitFor(`document.body.innerText.includes("#general")`);
+    await waitFor(
+      `document.querySelector("h1[data-channel-title] [data-channel-name]")?.textContent === "general"`,
+    );
     await browser("eval", `document.querySelector('button[aria-label^="Current user"]').click()`);
     await waitFor(
       `[...document.querySelectorAll('[role="menuitem"]')].some((i) => i.textContent.trim() === "Sign out")`,
