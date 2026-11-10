@@ -20,6 +20,9 @@ import {
 } from "./channel-access.server";
 import { lockConversation } from "./conversation-lock.server";
 
+/** Structured marker kept on an Agent's unfollow notice so delivery explanations survive renames. */
+export const AGENT_THREAD_UNFOLLOWED_SYSTEM_MESSAGE_KIND = "channel.agent_thread_unfollowed";
+
 /**
  * A channel Thread's followers and a person's read position in it. A thread uses its root
  * Message identity: following one is a `ThreadFollow` row of a member, never a membership.
@@ -69,7 +72,7 @@ async function setThreadFollowed(
   conversationId: string,
   rootMessageId: string,
   followed: boolean,
-  unfollowNotice?: string,
+  unfollowNotice?: { body: string; agentId: string },
 ) {
   await db.$transaction(async (tx) => {
     await lockConversation(tx, conversationId);
@@ -89,7 +92,15 @@ async function setThreadFollowed(
             workspaceId,
             conversationId,
             sequence,
-            body: unfollowNotice,
+            body: unfollowNotice.body,
+            systemMessage: {
+              create: {
+                workspaceId,
+                conversationId,
+                kind: AGENT_THREAD_UNFOLLOWED_SYSTEM_MESSAGE_KIND,
+                params: { agentId: unfollowNotice.agentId, rootMessageId },
+              },
+            },
           },
         });
       }
@@ -134,7 +145,9 @@ export async function setAgentThreadFollowed(
   });
   const root = await resolveChannelThreadRoot(db, channel.id, anchor);
   const notice =
-    followed === false ? agentUnfollowNotice(agent.displayName, agent.name, reason) : undefined;
+    followed === false
+      ? { body: agentUnfollowNotice(agent.displayName, agent.name, reason), agentId }
+      : undefined;
   await setThreadFollowed(db, member.id, workspaceId, channel.id, root.id, followed, notice);
   return { followed };
 }

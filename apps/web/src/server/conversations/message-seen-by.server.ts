@@ -1,6 +1,9 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { channelAgentRecipients } from "./channel-agent-recipients.server";
+import { agentDeliveryBlockers, type AgentDeliveryBlocker } from "./agent-delivery-reasons.server";
+import { AGENT_THREAD_UNFOLLOWED_SYSTEM_MESSAGE_KIND } from "./channel-threads.server";
 import { ConversationHistory } from "./conversation-history.server";
 
 export type MessageSeenByInput = {
@@ -12,11 +15,17 @@ export type MessageSeenByInput = {
 
 export type MessageSeenBy = { kind: "user" | "agent"; id: string };
 
-/** Readers of one of the viewer's own top-level messages, excluding the sender. */
+export type MessageUndeliveredAgent = AgentDeliveryBlocker;
+
+/** Readers and delivery blockers for one of the viewer's own messages, excluding the sender. */
 export async function readMessageSeenBy(
   db: PrismaClient,
   input: MessageSeenByInput,
-): Promise<{ seen: MessageSeenBy[]; seenAt?: string }> {
+): Promise<{
+  seen: MessageSeenBy[];
+  seenAt?: string;
+  undeliveredAgents: MessageUndeliveredAgent[];
+}> {
   const authorization = await new ConversationHistory(db).authorize(
     input.workspaceId,
     input.userId,
@@ -29,61 +38,134 @@ export async function readMessageSeenBy(
       id: input.messageId,
       conversationId: input.conversationId,
       workspaceId: input.workspaceId,
-      threadRootId: null,
     },
-    select: { senderMemberId: true, sequence: true, createdAt: true },
+    select: {
+      senderMemberId: true,
+      sequence: true,
+      createdAt: true,
+      threadRootId: true,
+      conversation: { select: { channelName: true, directKey: true, coordinatorAgentId: true } },
+      mentions: { select: { kind: true, actorId: true } },
+    },
   });
   if (!message || message.senderMemberId !== authorization.activeMemberId)
     throw new AppError("NOT_FOUND");
 
-  const members = await db.conversationMember.findMany({
-    where: {
-      conversationId: input.conversationId,
-      workspaceId: input.workspaceId,
-      ...ACTIVE_MEMBER_WHERE,
-      id: { not: authorization.activeMemberId },
-      // A person counts only if they were in the conversation when the message was sent (task
-      // #549): joining or being added starts a person's read cursor at the conversation's end, so
-      // a cursor past the message says nothing about whether someone who came later saw it. An
-      // Agent's cursor moves only when it reads (`message read`, a delivery's drain), so an Agent
-      // seated after the message that read it has seen it.
-      OR: [{ agentId: { not: null } }, { joinedAt: { lte: message.createdAt } }],
-    },
-    select: {
-      userId: true,
-      agentId: true,
-      readThroughSequence: true,
-      agentReadThroughSequence: true,
-    },
-  });
+  const [members, firstRead] = await Promise.all([
+    db.conversationMember.findMany({
+      where: {
+        conversationId: input.conversationId,
+        workspaceId: input.workspaceId,
+        ...ACTIVE_MEMBER_WHERE,
+        id: { not: authorization.activeMemberId },
+        // A person counts only if they were in the conversation when the message was sent (task
+        // #549): joining or being added starts a person's read cursor at the conversation's end, so
+        // a cursor past the message says nothing about whether someone who came later saw it. An
+        // Agent's cursor moves only when it reads (`message read`, a delivery's drain), so an Agent
+        // seated after the message that read it has seen it.
+        OR: [{ agentId: { not: null } }, { joinedAt: { lte: message.createdAt } }],
+      },
+      select: {
+        id: true,
+        userId: true,
+        agentId: true,
+        notificationLevel: true,
+        readThroughSequence: true,
+        agentReadThroughSequence: true,
+      },
+    }),
+    // When the other side first read it, for a direct conversation only: a channel keeps no such
+    // record, and the caller shows no time rather than a guess.
+    db.messageRead.findFirst({
+      where: {
+        conversationId: input.conversationId,
+        workspaceId: input.workspaceId,
+        memberId: { not: authorization.activeMemberId },
+        sequence: { gte: message.sequence },
+      },
+      orderBy: { readAt: "asc" },
+      select: { readAt: true, conversation: { select: { directKey: true } } },
+    }),
+  ]);
 
-  // When the other side first read it, for a direct conversation only: a channel keeps no such
-  // record, and the caller shows no time rather than a guess.
-  const firstRead = await db.messageRead.findFirst({
-    where: {
-      conversationId: input.conversationId,
-      workspaceId: input.workspaceId,
-      memberId: { not: authorization.activeMemberId },
-      sequence: { gte: message.sequence },
-    },
-    orderBy: { readAt: "asc" },
-    select: { readAt: true, conversation: { select: { directKey: true } } },
-  });
+  const threadReads = message.threadRootId
+    ? await db.threadRead.findMany({
+        where: {
+          conversationId: input.conversationId,
+          workspaceId: input.workspaceId,
+          rootMessageId: message.threadRootId,
+          memberId: { in: members.map((member) => member.id) },
+        },
+        select: { memberId: true, readThroughSequence: true },
+      })
+    : [];
+
   const seenAt =
     firstRead?.conversation.directKey === null || !firstRead
       ? undefined
       : firstRead.readAt.toISOString();
 
-  return {
-    ...(seenAt ? { seenAt } : {}),
-    seen: members.flatMap((member) => {
-      const id = member.agentId ?? member.userId;
-      const readThrough = member.agentId
+  const threadReadThrough = new Map(
+    threadReads.map((read) => [read.memberId, read.readThroughSequence]),
+  );
+  const seen = members.flatMap((member) => {
+    const id = member.agentId ?? member.userId;
+    const readThrough = message.threadRootId
+      ? (threadReadThrough.get(member.id) ?? 0)
+      : member.agentId
         ? member.agentReadThroughSequence
         : member.readThroughSequence;
-      return id && readThrough >= message.sequence
-        ? [{ kind: member.agentId ? ("agent" as const) : ("user" as const), id }]
-        : [];
+    return id && readThrough >= message.sequence
+      ? [{ kind: member.agentId ? ("agent" as const) : ("user" as const), id }]
+      : [];
+  });
+
+  if (message.conversation.channelName === null)
+    return { ...(seenAt ? { seenAt } : {}), seen, undeliveredAgents: [] };
+
+  const [audience, unfollowNotices] = await Promise.all([
+    channelAgentRecipients(db, {
+      conversationId: input.conversationId,
+      threadRootId: message.threadRootId ?? undefined,
+      mentions: message.mentions.map((mention) => ({ type: mention.kind, id: mention.actorId })),
     }),
+    message.threadRootId
+      ? db.$queryRaw<{ agentId: string; rootMessageId: string }[]>(Prisma.sql`
+          SELECT DISTINCT sm."params"->>'agentId' AS "agentId",
+            sm."params"->>'rootMessageId' AS "rootMessageId"
+          FROM "system_messages" sm
+          JOIN "messages" m ON m."id" = sm."messageId" AND m."conversationId" = sm."conversationId"
+          WHERE sm."workspaceId" = ${input.workspaceId}::uuid
+            AND sm."conversationId" = ${input.conversationId}::uuid
+            AND sm."kind" = ${AGENT_THREAD_UNFOLLOWED_SYSTEM_MESSAGE_KIND}
+            AND m."sequence" < ${message.sequence}
+            AND sm."params"->>'rootMessageId' = ${message.threadRootId}
+            AND sm."params"->>'agentId' IS NOT NULL
+        `)
+      : Promise.resolve([]),
+  ]);
+  const undeliveredAgents = agentDeliveryBlockers({
+    message: {
+      threadRootId: message.threadRootId,
+      hasAgentMention: message.mentions.some((mention) => mention.kind === "agent"),
+    },
+    agents: members.flatMap((member) =>
+      member.agentId
+        ? [{ agentId: member.agentId, notificationLevel: member.notificationLevel }]
+        : [],
+    ),
+    audience: new Set(audience),
+    seenAgentIds: seen.flatMap((reader) => (reader.kind === "agent" ? [reader.id] : [])),
+    hasActiveCoordinator: Boolean(
+      message.conversation.coordinatorAgentId &&
+      members.some((member) => member.agentId === message.conversation.coordinatorAgentId),
+    ),
+    unfollowed: unfollowNotices,
+  });
+
+  return {
+    ...(seenAt ? { seenAt } : {}),
+    seen,
+    undeliveredAgents,
   };
 }
