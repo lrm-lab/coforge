@@ -33,7 +33,7 @@ test("search filters narrow results, name their values, and clear together", asy
   /** A filter row or button in the filter popover whose text starts with `prefix`. */
   const chip = (prefix: string) =>
     find(
-      '[role="dialog"][aria-label="Search filters"] button',
+      "[data-search-filter-panel] button",
       `element.textContent.trim().startsWith(${JSON.stringify(prefix)})`,
     );
   /** The text a row shows: the filter's name, or its chosen value. */
@@ -47,12 +47,12 @@ test("search filters narrow results, name their values, and clear together", asy
   /** One choice of a one-press filter (Time, Scope, Sort). */
   const choice = (group: string, label: string) =>
     find(
-      `[role="dialog"][aria-label="Search filters"] [aria-label="${group}"] button`,
+      `[data-search-filter-panel] [aria-label="${group}"] button`,
       `element.textContent.trim() === ${JSON.stringify(label)}`,
     );
   /** What a one-press filter has chosen, in its order, as JSON. */
   const chosen = (group: string) =>
-    `JSON.stringify([...document.querySelectorAll('[role="dialog"][aria-label="Search filters"] [aria-label="${group}"] button')].filter((button) => button.getAttribute("aria-checked") === "true" || button.getAttribute("aria-pressed") === "true").map((button) => button.textContent.trim()))`;
+    `JSON.stringify([...document.querySelectorAll('[data-search-filter-panel] [aria-label="${group}"] button')].filter((button) => button.getAttribute("aria-checked") === "true" || button.getAttribute("aria-pressed") === "true").map((button) => button.textContent.trim()))`;
   const isChosen = (group: string, labels: string[]) =>
     `${chosen(group)} === ${JSON.stringify(JSON.stringify(labels))}`;
   const press = (group: string, label: string) =>
