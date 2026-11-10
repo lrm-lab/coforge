@@ -55,7 +55,12 @@ async function coordinatorOptions(): Promise<string[]> {
   await browser("eval", `${pickerTrigger}.click()`);
   await waitFor(`document.querySelectorAll('[role^="menuitem"]').length > 0`, 15_000);
   const options = await evaluate<string[]>(pickerOptions);
-  await browser("press", "Escape");
+  // Escape goes to the menu from inside the page: agent-browser's `press Escape` here marks the
+  // page hidden, and a hidden page never finishes the menu's exit transition, so the menu would
+  // stay mounted (`data-exiting`) and the next open would read stale options.
+  await evaluate(
+    `document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))`,
+  );
   await waitFor(`document.querySelectorAll('[role^="menuitem"]').length === 0`, 15_000);
   return options;
 }
