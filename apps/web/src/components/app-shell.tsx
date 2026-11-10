@@ -37,6 +37,7 @@ import {
   type WorkspaceOption,
 } from "#src/features/workspaces/workspace-switcher";
 import type { CreateWorkspaceInput } from "#src/features/workspaces/create-workspace-form";
+import { useReportActivityUnread, useWorkspaceTabTitle } from "#src/lib/browser-tab";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
 import { SearchButton } from "#src/features/search/search-button";
@@ -222,6 +223,8 @@ export function AppShell({
     rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${search}`);
   }, [workspaceId, base, pathname, searchStr]);
   const hasActivityAttention = useActivityAttention(user, workspaceId);
+  useReportActivityUnread(hasActivityAttention);
+  useWorkspaceTabTitle(currentWorkspace.name);
   const navItems = useNavItems(
     base,
     recordsPreview,

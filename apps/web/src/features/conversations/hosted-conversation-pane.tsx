@@ -127,6 +127,7 @@ function HostedConversation({
       <ConversationPage
         target={{ kind: target.kind, id: target.id }}
         search={search}
+        hosted
         jumpMessage={target.messageId}
         onJumpMessageConsumed={onJumpMessageConsumed}
       />
