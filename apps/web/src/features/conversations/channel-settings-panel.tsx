@@ -47,7 +47,7 @@ import { ChannelActionConfirmDialog, type ConfirmedAction } from "./channel-acti
 import { ActionsSection } from "./channel-settings-actions";
 import { StopChannelAgentsDialog } from "./stop-channel-agents-dialog";
 import { InfoForm, useInfoForm } from "./channel-settings-info";
-import { OPEN_OVERLAY_SELECTOR } from "./conversation-focus-model";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 
 /**
  * The channel header's details-and-settings slideout: identity, the Members strip, the Info form

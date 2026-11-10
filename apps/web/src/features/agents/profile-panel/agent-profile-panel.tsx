@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
@@ -71,7 +71,7 @@ import {
   canManageAgent,
   useInvalidateAgentProfile,
 } from "./agent-profile-queries";
-import { OPEN_OVERLAY_SELECTOR } from "#src/features/conversations/conversation-focus-model";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -100,11 +100,15 @@ export function AgentProfilePanel({
   const router = useRouter();
   // Escape closes the panel, like Thread's Close; an open overlay or a field being edited keeps it.
   // An effect event, so a caller's fresh `onClose` each render does not re-add the listener.
+  const root = useRef<HTMLDivElement>(null);
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (target?.closest("input, textarea, [contenteditable=true]")) return;
     if (document.querySelector(OPEN_OVERLAY_SELECTOR)) return;
+    // A panel hidden behind the chat's full screen keeps its keys.
+    if (root.current?.offsetParent === null) return;
+    event.preventDefault();
     onClose();
   });
   useEffect(() => {
@@ -261,7 +265,7 @@ export function AgentProfilePanel({
   const diagnosticFacts = profile && profileDiagnosticFacts(profile);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col">
+    <div ref={root} className="flex h-full min-h-0 min-w-0 flex-col">
       <AgentProfileHeader
         canMessage={Boolean(profile?.canMessage)}
         deleted={deleted}

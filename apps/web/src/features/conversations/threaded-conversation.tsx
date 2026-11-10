@@ -238,8 +238,10 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   // Below `md` there is no room for a resizable split; see `ConversationSlotLayout`.
   const wideViewport = useBreakpoint("md");
   const focus = useConversationFocus();
-  // The thread in view is marked read: the task popup's when it is open, else the side pane's.
-  const threadInView = openTaskRoot?.id ?? (detailVisible ? selected : undefined);
+  // The thread in view is marked read: the task popup's when it is open, else the side pane's,
+  // unless the chat's full screen hides it.
+  const threadInView =
+    openTaskRoot?.id ?? (detailVisible && focus?.focused !== "chat" ? selected : undefined);
   const threadInViewSequence = useThreadTailSequence(conversation.conversationId, threadInView);
   const { visited, windowRead, threadRootFailure, loadThreadRoot } = useConversationSync({
     conversation,

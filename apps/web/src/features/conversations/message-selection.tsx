@@ -12,6 +12,7 @@ import {
   type MessageSelectionState,
 } from "./message-selection-model";
 import type { MessageView } from "./message-view";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 
 type MessageSelection = {
   state: MessageSelectionState | null;
@@ -44,7 +45,9 @@ export function MessageSelectionHost({ children }: { children: ReactNode }) {
     const leave = (event: KeyboardEvent) => {
       // A dialog or menu open over the stream takes its own Escape first.
       if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (document.querySelector("[role=dialog], [role=menu]")) return;
+      if (document.querySelector(OPEN_OVERLAY_SELECTOR)) return;
+      // Taken: the chat's full screen, which yields to select mode, sees it.
+      event.preventDefault();
       setState(null);
     };
     window.addEventListener("keydown", leave);

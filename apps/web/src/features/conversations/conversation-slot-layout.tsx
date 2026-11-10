@@ -34,7 +34,8 @@ export function ConversationSlotLayout({
   /** False for a thread shown alone: the conversation is not mounted at all. */
   mainShown?: boolean;
   /** The pane in full screen (task #75): the other and the separator hide, by attribute, which
-   * reaches the library's own wrapper. Sizes stay with the library, so leaving restores the split. */
+   * reaches the library's own wrapper; the separator unmounts, so no hit area is left behind. Sizes
+   * stay with the library, so leaving restores the split. */
   focused?: FocusedPanel;
 }) {
   const layout = useDefaultLayout({
@@ -71,11 +72,12 @@ export function ConversationSlotLayout({
       </Panel>
       {slot && (
         <>
-          <Separator
-            aria-label={slot === "thread" ? m.conversation_thread() : m.agent_profile_resize()}
-            hidden={focused !== undefined}
-            className="hidden w-px shrink-0 bg-border-secondary transition-colors hover:bg-brand-solid data-[separator=active]:bg-brand-solid md:block"
-          />
+          {!focused && (
+            <Separator
+              aria-label={slot === "thread" ? m.conversation_thread() : m.agent_profile_resize()}
+              className="hidden w-px shrink-0 bg-border-secondary transition-colors hover:bg-brand-solid data-[separator=active]:bg-brand-solid md:block"
+            />
+          )}
           <Panel
             id={slot}
             defaultSize="35"
