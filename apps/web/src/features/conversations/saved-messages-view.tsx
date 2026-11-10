@@ -1,4 +1,4 @@
-import { ChannelTitle } from "./channel-name";
+import { ChannelPlace } from "./channel-name";
 import { actionCardPreviewText } from "./action-card-preview";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Bookmark, BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
@@ -94,11 +94,11 @@ function SavedMessageCard({
   // The localized URL (`publicHref`), the one the card links to and the address bar shows.
   const href = router.buildLocation(jump).publicHref;
   const place = conversation.channelName ? (
-    // A private channel with its lock, as everywhere a channel is named (task #375).
-    <ChannelTitle
+    // Its group avatar and name; a private channel with its lock (tasks #375, #55).
+    <ChannelPlace
+      id={conversation.id}
       name={conversation.channelName}
       visibility={conversation.visibility}
-      lockClassName="size-3.5"
     />
   ) : (
     `@${message.senderName}`
