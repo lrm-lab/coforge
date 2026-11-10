@@ -99,11 +99,21 @@ export class AgentLaunchCustody {
   }
 
   /** Flushes whatever `AgentDeliveryGate` held for `agentId` across an unexpected
-   * exit, treating the (fresh or just-recovered) session as idle — used when nothing else has
-   * told the Agent about it. The tracked mentions kept for the launch are told in the same notice,
-   * by delivery id, as the launch's starting inbox. */
+   * exit, treating the fresh session as idle — used when nothing else has told the Agent about
+   * it. A turn already open (a notice just written, or the provider says so) is not ended by
+   * this: the Agent stays busy, and what a queueing provider holds waits for the turn's end. The
+   * tracked mentions kept for the launch are told in the same notice, by delivery id, as the
+   * launch's starting inbox. */
   flushSurvivingDeliveries(agentId: string): Promise<void> {
-    const held = this.ports.deliveryGate.idle(agentId);
+    const { deliveryGate: gate } = this.ports;
+    // The provider's own word wins over the daemon's busy mark, as event observation treats it.
+    const live = this.ports.agentProcessManager.session(agentId)?.hasLiveTurn;
+    const turnOpen = live ?? gate.isBusy(agentId);
+    const held = !turnOpen
+      ? gate.idle(agentId)
+      : gate.shouldHold(agentId)
+        ? []
+        : gate.discardPending(agentId);
     return this.ports.inputDrain.tellCarried(agentId, held).catch((error: unknown) => {
       // Already acknowledged when held: they come back as unread on the next Start or daemon
       // restart, not from a `ready` replay.

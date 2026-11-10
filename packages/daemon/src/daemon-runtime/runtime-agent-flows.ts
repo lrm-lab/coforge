@@ -166,7 +166,7 @@ export type AgentControlIntentDeps = {
   stopping: boolean;
   agentControl: Pick<AgentControl, "start" | "stop" | "managed" | "resetWorkspace">;
   agentSessions: Pick<AgentSessions, "replay">;
-  processes: Pick<AgentProcessManager, "runtime">;
+  processes: Pick<AgentProcessManager, "runtime" | "pendingRelease">;
   stops: Pick<AgentStopRegistry, "pendingStop">;
   launchCoordinator: Pick<AgentLaunchCoordinator, "dropOwedRecovery">;
   startAgent: AgentControlIntentPorts["startAgent"];
@@ -185,7 +185,11 @@ export function controlIntentPorts(deps: AgentControlIntentDeps): AgentControlIn
     replaySession: (agentId) => deps.agentSessions.replay(agentId),
     runtime: (agentId) => deps.processes.runtime(agentId),
     managed: (agentId) => deps.agentControl.managed(agentId),
-    stops: deps.stops,
+    // A release in flight (cold idle, a config apply, a restart) is a teardown like a stop.
+    stops: {
+      pendingStop: (agentId) =>
+        deps.stops.pendingStop(agentId) ?? deps.processes.pendingRelease(agentId),
+    },
     dropOwedRecovery: (agentId) => deps.launchCoordinator.dropOwedRecovery(agentId),
     startAgent: (agentId, config, recovery, request) =>
       deps.startAgent(agentId, config, recovery, request),

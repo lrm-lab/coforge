@@ -32,6 +32,9 @@ export type AgentExitedDeliveryPorts = Readonly<{
   hasQueued(agentId: string): boolean;
   /** Records a delivery in `AgentDeliveryGate` as waiting for the next launch. */
   queueForNextLaunch(agentId: string, message: AgentMessageDelivery): void;
+  /** A wake started for the kept mentions failed: gives the Agent up when its failures leave
+   * nothing to retry, refusing what is still kept. */
+  giveUpWake(agentId: string): void;
   /** The wake launch cooldown's end instant, when one is in force. */
   wakeBlockedUntil(agentId: string): number | undefined;
   /** Runs `hook` when the Agent's waits are cancelled (a Stop, a purge, the daemon stopping). */
@@ -148,7 +151,7 @@ export class AgentExitedDelivery {
 
   /** Wakes the Agent for what is kept. A launch that fails refuses only `trigger`, the mention
    * whose arrival started it; the rest stay kept, and the cooldown the failure starts is waited
-   * out for them (`wakeFailed`). */
+   * out for them (`wakeFailed`), until the failures leave nothing to retry (`giveUpWake`). */
   #wakeForKept(
     agentId: string,
     restart: AgentRestartConfig,
@@ -157,6 +160,7 @@ export class AgentExitedDelivery {
     this.#ports.wakeAgent(agentId, restart).catch(() => {
       if (trigger)
         this.#ports.refuseKeptMention(trigger, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+      this.#ports.giveUpWake(agentId);
     });
   }
 

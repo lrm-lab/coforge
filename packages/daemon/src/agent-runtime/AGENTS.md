@@ -28,8 +28,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 
 - Lifecycle control uses separate versioned `agent:start` and `agent:stop`
   intents; there is no `agent:replace`. A stop emits no `stopping` Activity.
-- A start after a stop for the same Agent waits for the stop to finish and never adopts a process
-  being stopped. A stop always completes, whatever its process does ([`agent-stop.ts`](agent-stop.ts),
+- A start after a stop or a release for the same Agent waits for it to finish and never adopts a
+  process being stopped or released (`AgentProcessManager.isRunning`). A stop always completes, whatever its process does ([`agent-stop.ts`](agent-stop.ts),
   [lifecycle doc](../../../../docs/observability/agent-status-and-activity/stop.md)); `release()` rejects at its own deadline.
 - A start for an already running Agent preserves its process, session, and
   config. It accepts only `wakeMessage`, `resumePrompt` and `introductionPrompt`

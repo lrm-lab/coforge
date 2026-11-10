@@ -49,7 +49,15 @@ export function launchFailureCooldownMs(
 export class LaunchFailureBackoff {
   readonly #failures = new Map<
     string,
-    { attempts: number; untilMs: number; recoveryWait: boolean }
+    {
+      attempts: number;
+      untilMs: number;
+      recoveryWait: boolean;
+      /** Failures that did not wait on a named recovery time. */
+      streak: number;
+      /** A failure no retry can fix was recorded. */
+      terminal: boolean;
+    }
   >();
 
   readonly #listeners: Array<(agentId: string) => void> = [];
@@ -63,20 +71,28 @@ export class LaunchFailureBackoff {
    * Records one failed attempt for `agentId` and returns the cooldown the next attempt owes.
    * `cooldownMs`, when positive, replaces the exponential cooldown: a quota failure that names
    * a recovery time waits until then. The attempt still counts. Omitting it keeps the short
-   * backoff, which stops growing at the cap.
+   * backoff, which stops growing at the cap. `terminal` says no retry can fix this failure.
    */
   recordFailure(
     agentId: string,
     now: number = Date.now(),
     cooldownMs?: number,
+    terminal = false,
   ): LaunchFailureBackoffState {
-    const attempts = this.attempts(agentId) + 1;
+    const previous = this.#failures.get(agentId);
+    const attempts = (previous?.attempts ?? 0) + 1;
     const recoveryWait = cooldownMs !== undefined && Number.isFinite(cooldownMs) && cooldownMs > 0;
     const cooldown = recoveryWait
       ? cooldownMs
       : launchFailureCooldownMs(attempts, this.baseMs, this.capMs);
     const untilMs = now + cooldown;
-    this.#failures.set(agentId, { attempts, untilMs, recoveryWait });
+    this.#failures.set(agentId, {
+      attempts,
+      untilMs,
+      recoveryWait,
+      streak: (previous?.streak ?? 0) + (recoveryWait ? 0 : 1),
+      terminal: terminal || previous?.terminal === true,
+    });
     for (const listener of this.#listeners) listener(agentId);
     return { attempts, cooldownMs: cooldown, untilMs };
   }
@@ -105,6 +121,13 @@ export class LaunchFailureBackoff {
     const attempts = this.attempts(agentId);
     this.#failures.delete(agentId);
     return attempts;
+  }
+
+  /** Whether the Agent's failures leave nothing to retry: one no retry can fix, or `cap`
+   * consecutive ones that were not waits on a named recovery time. */
+  exhausted(agentId: string, cap: number): boolean {
+    const failure = this.#failures.get(agentId);
+    return failure !== undefined && (failure.terminal || failure.streak >= cap);
   }
 
   attempts(agentId: string): number {

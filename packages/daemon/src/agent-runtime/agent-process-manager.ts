@@ -305,6 +305,17 @@ export class AgentProcessManager {
     return this.#runtimes.get(agentId)?.session;
   }
 
+  /** Whether a process is registered and none of its teardowns is under way: the only one a
+   * Start may adopt, since a process being stopped or released is gone before the Start settles. */
+  isRunning(agentId: string): boolean {
+    return this.#runtimes.has(agentId) && !this.#stopping.has(agentId);
+  }
+
+  /** The release now in flight for this Agent, if any. */
+  pendingRelease(agentId: string): Promise<void> | undefined {
+    return this.#releases.get(agentId);
+  }
+
   runtime(agentId: string): AgentRuntime | undefined {
     return this.#runtimes.get(agentId);
   }

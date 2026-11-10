@@ -53,6 +53,7 @@ function custody(held: AgentMessageDelivery[]) {
     messageAttention,
     deliveryGate,
     inputDrain: { tellCarried: presentHeld(messageAttention) },
+    agentProcessManager: { session: () => undefined },
     releaseHeldAppItems: () => {},
     releaseFallbackNotices: () => {},
   } as never);
@@ -147,6 +148,7 @@ test("a delivery newer than a message the Agent already read is still presented"
     messageAttention,
     deliveryGate,
     inputDrain: { tellCarried: presentHeld(messageAttention) },
+    agentProcessManager: { session: () => undefined },
     releaseHeldAppItems: () => {},
     releaseFallbackNotices: () => {},
   } as never);

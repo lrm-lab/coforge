@@ -246,7 +246,8 @@ export class AgentInputDrain {
             sequence: item.message.sequence,
           });
         } else if (item.kind === "carried") {
-          await this.ports.presentKept(agentId);
+          // The recovery pass may have told them since the item was queued: then nothing is left.
+          if (this.ports.hasCarried(agentId)) await this.ports.presentKept(agentId);
         } else if (item.kind === "startup") {
           const session = this.ports.sessionFor(agentId);
           const launch = this.ports.launchFor(agentId);

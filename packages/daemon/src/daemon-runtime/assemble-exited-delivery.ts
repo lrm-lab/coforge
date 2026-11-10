@@ -1,3 +1,4 @@
+import { getLogger } from "@logtape/logtape";
 import type {
   AgentRestartConfig,
   AgentProcessManager,
@@ -15,7 +16,10 @@ import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentOfflineResidency } from "./agent-offline-residency";
 import { agentDeliveryRejection } from "./message-composition";
+import { WAKE_FAILURE_STREAK_CAP } from "./wake-launch";
 import { isTrackedMention, type MentionDeliveryTracker } from "./mention-delivery-tracker";
+
+const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 /** What the exited-delivery settlement reads from the runtime. The collaborators the runtime builds
  * after this one are thunks: they are read when a delivery is settled, not when this is made. */
@@ -57,6 +61,19 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
       ports.wakeLaunchFailures.isBlocked(agentId)
         ? ports.wakeLaunchFailures.blockedUntil(agentId)
         : undefined,
+    giveUpWake: (agentId) => {
+      if (!ports.wakeLaunchFailures.exhausted(agentId, WAKE_FAILURE_STREAK_CAP)) return;
+      // No launch is coming: with the wake config gone a later delivery is rejected `no_process`
+      // and the server decides whether to start the Agent.
+      logger.warning("Agent wake given up after repeated launch failures", {
+        event: "agent.wake.given_up",
+        agent_id: agentId,
+        attempts: ports.wakeLaunchFailures.attempts(agentId),
+      });
+      ports.wakeLaunchFailures.reset(agentId);
+      ports.agentProcessManager().forgetRestart(agentId);
+      exited.refuseKept(agentId, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
+    },
     whenCancelled: (agentId, hook) => ports.mentionDeliveries().whenCancelled(agentId, hook),
     enqueueInputDelivery: (agentId, message) =>
       ports.launchCustody().enqueueDelivery(agentId, message),

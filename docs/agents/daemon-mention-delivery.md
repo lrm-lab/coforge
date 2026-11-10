@@ -54,6 +54,14 @@ It never becomes `no_process`.
   cooldown arms one wake for its end (`LaunchFailureBackoff.onFailure`, any failed wake). A launch
   that failed with nothing left to relaunch from (no restart config) refuses what is kept as
   `IDENTITY_UNKNOWN`, as does a failed server Start or a runtime error that takes the Agent offline.
+- Those wakes end. The reference Computer stops relaunching an Agent locally after five failed starts
+  in a row, or at once for a configuration failure (login, install, model setup), and leaves what it
+  buffered to the server. Here the fifth failed wake (`WAKE_FAILURE_STREAK_CAP`; a wait on a named
+  quota reset is not counted), or a failure `isNonRetryableLaunchFailure` names, forgets the Agent's
+  restart config and cooldown and refuses what is still kept as `IDENTITY_UNKNOWN`
+  (`giveUpWake`), after the trigger's own `DELIVERY_REJECTED`. The next delivery is rejected
+  `no_process`, so the server decides whether to start the Agent. The reference Computer reports no
+  outcome for its dropped buffer; ours settles every kept mention exactly once.
 - Refused exactly once, in addition: an inbox purge (`DELIVERY_REJECTED`).
 - A Stop and the daemon stopping report nothing for a tracked mention: the tracker holds every report
   about the Agent's mentions while the Stop runs (a Stop always completes), then forgets what it had
@@ -73,6 +81,10 @@ It never becomes `no_process`.
   (`AgentLaunchCustody.flushSurvivingDeliveries`, or the lazy `carried` input item when the recovery
   pass did not run first), by delivery id and without checking its envelope again, so each is ACKed
   with its latest envelope. The recovery notice for a wake message or resume messages stays its own.
+  The `carried` item does nothing when the recovery pass already told the mentions, and presenting
+  what a launch kept never ends a turn already open: the Agent stays busy (a notice the daemon just
+  wrote, or the provider's `hasLiveTurn`), and a queueing provider's held deliveries wait for the
+  turn's end.
 - A kept mention counts as work parked for the launch, so a cold idle or config-apply stop wakes the
   Agent for it. While any mention of the Agent is open (received, pending or kept) the Agent is not
   idle for those stops (`trackedMentionOpen`).

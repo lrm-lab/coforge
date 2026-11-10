@@ -575,7 +575,7 @@ export class DaemonRuntime {
       runtimeInstanceId: this.#runtimeInstanceId,
       // A process being stopped is not one a Start may adopt: it would rebind to what is dying.
       running: (agentId) =>
-        !this.#stopState.isStopping(agentId) && Boolean(this.#agentProcessManager.session(agentId)),
+        !this.#stopState.isStopping(agentId) && this.#agentProcessManager.isRunning(agentId),
       session: (agentId) => this.#agentProcessManager.session(agentId),
       stopAgent: (agentId) => this.stopAgent(agentId),
       startAgent: (agentId, config, recovery, request) =>

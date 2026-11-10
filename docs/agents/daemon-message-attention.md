@@ -103,7 +103,9 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
 - Never launch an exited Agent for a delivery it has already consumed; ACK it
   instead (a tracked mention, once its identity checks out).
 - A failed message-triggered launch starts the per-Agent wake cooldown
-  (`LaunchFailureBackoff`, no attempt cap); any successful launch ends it.
+  (`LaunchFailureBackoff`); any successful launch ends it. Five failures in a row
+  (`WAKE_FAILURE_STREAK_CAP`), or one no retry can fix, end the wakes: see
+  [tracked mention delivery](daemon-mention-delivery.md).
   Deliveries that wait for the next launch (in the cooldown, in a failed
   launch's input queue, a batched wake launch in flight, or kept by an offline
   Agent) wait in `AgentDeliveryGate`, already ACKed. The next launch presents
