@@ -179,8 +179,10 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
         `Copy notes ${tail}`,
       );
       await shoot(`${label}-subtask-dialog`);
+      // A phone's New sub-task is a page with Create in its top bar; the desktop footer, whose
+      // button submits the form, is hidden there (task #54).
       await mark(
-        `document.querySelector('[role="dialog"][aria-label="New sub-task"] button[type="submit"]')`,
+        `[...document.querySelectorAll('[role="dialog"][aria-label="New sub-task"] button')].find((el) => el.checkVisibility() && (el.type === "submit" || el.textContent.trim() === "Create"))`,
         "create",
       );
       await browser("click", '[data-e2e="create"]');
