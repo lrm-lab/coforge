@@ -131,6 +131,8 @@ export async function readMessageSeenBy(
     }),
     message.threadRootId
       ? db.$queryRaw<{ agentId: string; rootMessageId: string }[]>(Prisma.sql`
+          -- system_messages has @@index([conversationId, workspaceId]); both equality predicates
+          -- keep this historical structured-notice lookup scoped before kind/JSON filtering.
           SELECT DISTINCT sm."params"->>'agentId' AS "agentId",
             sm."params"->>'rootMessageId' AS "rootMessageId"
           FROM "system_messages" sm
@@ -145,6 +147,8 @@ export async function readMessageSeenBy(
       : Promise.resolve([]),
   ]);
   const undeliveredAgents = agentDeliveryBlockers({
+    // ConversationMember has no mute-transition timestamp. `channel_muted` therefore describes
+    // the current-state audience approximation; a mute changed after send cannot be distinguished.
     message: {
       threadRootId: message.threadRootId,
       hasAgentMention: message.mentions.some((mention) => mention.kind === "agent"),
