@@ -1,6 +1,6 @@
 #!/bin/sh
-# CoForge pre-commit hook: runs the hard rules on the commit being made
-# (scripts/ci/hard-rules.ts --staged): the 5,000-token file size ratchet, Markdown links, new
+# CoForge pre-commit hook: checks staged formatting, then runs the hard rules on the commit being
+# made (scripts/ci/hard-rules.ts --staged): the 5,000-token file size ratchet, Markdown links, new
 # suppressions and the author identity; see docs/agents/git-hooks/hard-rules.md.
 # `bun install` enables it (core.hooksPath=.githooks); `git commit --no-verify` skips it.
 # Git runs this from the top of the work tree being committed, which is where the checker
@@ -15,7 +15,13 @@ elif command -v mise >/dev/null 2>&1; then
 fi
 if [ -z "${bun_path:-}" ]; then
   echo "pre-commit: bun was not found, so the hard rules cannot run." >&2
-  echo "Install the toolchain (mise install), or bypass the checks once with git commit --no-verify." >&2
+  echo "Install the toolchain (mise install); do not use --no-verify to bypass the checks." >&2
   exit 1
 fi
-exec "$bun_path" "$scripts/ci/hard-rules.ts" --staged
+format_status=0
+"$bun_path" "$scripts/ci/staged-format.ts" || format_status=$?
+rules_status=0
+"$bun_path" "$scripts/ci/hard-rules.ts" --staged || rules_status=$?
+if [ "$format_status" -ne 0 ] || [ "$rules_status" -ne 0 ]; then
+  exit 1
+fi
