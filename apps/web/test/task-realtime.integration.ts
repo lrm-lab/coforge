@@ -312,3 +312,19 @@ test("a direct conversation without exactly one person and one Agent announces i
   } as Parameters<TaskBoard["execute"]>[1]);
   expect(announced).toEqual([]);
 });
+
+test("a Workspace without Tasks v2 refuses a sub-task, so its create never reads a parent", async () => {
+  // The file's shared Workspace has no Tasks v2: a create there takes `createTasks`, the path
+  // whose announcement also reads the parent. That read can never have a parent to read, because
+  // the board refuses a `parent` before any path runs — so nothing there announces a neighbour.
+  const { run, drain } = await boardFor({ channelName: `realtime-off-${handle}` });
+  const [parent] = (await run({ operation: "create", title: "Parent" })).tasks;
+  expect(drain()).toEqual([
+    { tasks: [[parent!.number, "todo", parent!.revision]], deleted: [], userId: undefined },
+  ]);
+  await expect(
+    run({ operation: "create", title: "Child", parent: { number: parent!.number } }),
+  ).rejects.toMatchObject({ errorId: "task_relations_off" });
+  expect(drain()).toEqual([]);
+  expect((await run({ operation: "list" })).tasks).toHaveLength(1);
+});
