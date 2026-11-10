@@ -71,6 +71,14 @@ These rules apply to `src/features/tasks/`.
   1.2.15 copies every held row into each subset's Query cache on a direct
   write (its docs describe a refetch instead): check that again when upgrading
   it.
+- A command's result names the Tasks it was given, not the ones the write
+  changed beside them: a sub-task's parent, whose progress and tree changed, is
+  a neighbour of the command, and only its announcement carries its new copy.
+  The popup held its pre-create copy and hid its Sub-tasks tab until a reload
+  (task #65). A writer that changes a Task this way reads it again and writes
+  its copy the way its own results are written — `createSubtasks` reads the
+  parent, as `adoptSubtask` reads its tree — rather than leaving the copy to
+  the wire.
 - A Task of another conversation (a label in a message, a related Task) opens
   over the page it was pressed on, never on its conversation's page: the
   Workspace layout's `otherTask` search param (`other-task-search.ts`) and its
