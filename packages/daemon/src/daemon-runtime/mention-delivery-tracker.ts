@@ -282,14 +282,38 @@ export class MentionDeliveryTracker {
     hook?.();
   }
 
-  /** A Stop ends the Agent's waits and forgets the mentions it had not drained, received, pending
-   * or carried, without a report: the cloud owns what becomes of them (a person's Stop settles
-   * them there; any other stop leaves them pending for the server's re-issue to the next launch).
-   * Cancellation is never a drain. */
+  /** The daemon is shutting an Agent down: its waits end and the mentions it had not drained are
+   * forgotten without a report. */
   cancelAgent(agentId: string): void {
     this.#runCancelHook(agentId);
+    this.#forgetUnsettled(agentId, new Set());
+  }
+
+  /** A Stop begins: the Agent's waits end, and every report about its mentions waits for the
+   * Stop's outcome (`endStop`). */
+  beginStop(agentId: string): void {
+    this.#runCancelHook(agentId);
+    this.#reports.hold(agentId);
+  }
+
+  /** The Stop ended. With the process confirmed gone, the mentions it had not drained and the
+   * reports held for them are forgotten: the cloud owns what becomes of them (a person's Stop
+   * settles them there; any other stop leaves them pending for its re-issue to the next launch,
+   * which tells each once). Otherwise the Agent still runs, with its turn interrupted and nobody
+   * left watching it: the held reports go out and each mention told to it is settled as a turn's
+   * end settles it. Cancellation is never a drain. */
+  endStop(agentId: string, stopped: boolean): void {
+    const held = this.#reports.release(agentId, !stopped);
+    if (stopped) this.#forgetUnsettled(agentId, held);
+    else this.settleTurnEnd(agentId);
+  }
+
+  #forgetUnsettled(agentId: string, alsoDrained: ReadonlySet<string>): void {
     for (const { message, state } of this.#entries.all())
-      if (message.agentId === agentId && state !== "drained")
+      if (
+        message.agentId === agentId &&
+        (state !== "drained" || alsoDrained.has(message.deliveryId))
+      )
         this.#entries.forget(message.deliveryId);
   }
 

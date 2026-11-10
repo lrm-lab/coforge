@@ -54,6 +54,8 @@ export async function harness(
     failLaunches?: readonly number[];
     /** Holds every delivery ACK open after it was sent, until it settles. */
     ackGate?: Promise<void>;
+    /** The error the session's `dispose` rejects with, so the process is never confirmed gone. */
+    disposeError?: Error;
   } = {},
 ) {
   const credentials = new InMemoryDaemonCredentialStore();
@@ -110,7 +112,9 @@ export async function harness(
             exitListeners.add(listener);
             return () => exitListeners.delete(listener);
           },
-          async dispose() {},
+          async dispose() {
+            if (options.disposeError) throw options.disposeError;
+          },
         } satisfies AgentSession;
       },
     }),

@@ -13,6 +13,9 @@ const logger = getLogger(["coforge", "daemon", "mention-delivery"]);
 /** The reports the daemon sends the cloud about a tracked mention. A report that fails is logged,
  * never thrown. */
 export class MentionDeliveryReports {
+  /** The reports held for each Agent whose Stop is under way, by delivery. */
+  readonly #held = new Map<string, Map<string, Array<() => Promise<unknown>>>>();
+
   constructor(
     private readonly ports: Pick<
       MentionDeliveryPorts,
@@ -20,29 +23,56 @@ export class MentionDeliveryReports {
     >,
   ) {}
 
+  /** The Agent's Stop begins: its reports wait for the Stop's outcome. */
+  hold(agentId: string): void {
+    if (!this.#held.has(agentId)) this.#held.set(agentId, new Map());
+  }
+
+  /** The Stop ended: the held reports go out in order when the process is still running, and are
+   * dropped when it is gone. Returns the deliveries that had reports held. */
+  release(agentId: string, send: boolean): ReadonlySet<string> {
+    const held = this.#held.get(agentId);
+    this.#held.delete(agentId);
+    if (!held) return new Set();
+    if (send) for (const sends of held.values()) for (const report of sends) void report();
+    return new Set(held.keys());
+  }
+
+  #holds(message: TrackedMentionDelivery, report: () => Promise<unknown>): boolean {
+    const held = this.#held.get(message.agentId);
+    if (!held) return false;
+    held.set(message.deliveryId, [...(held.get(message.deliveryId) ?? []), report]);
+    return true;
+  }
+
   /** Diagnostic only: sent without waiting, so it never delays telling the Agent. */
   transition(
     message: TrackedMentionDelivery,
     stage: MentionDeliveryStage,
     outcome: MentionDeliveryTransitionOutcome,
   ): void {
-    void this.#send("transition", message, () =>
-      this.ports.transition({ ...this.#scope(message), stage, outcome }),
-    );
+    const send = () =>
+      this.#send("transition", message, () =>
+        this.ports.transition({ ...this.#scope(message), stage, outcome }),
+      );
+    if (!this.#holds(message, send)) void send();
   }
 
   async acknowledge(message: TrackedMentionDelivery): Promise<void> {
-    await this.#send("ack", message, () => this.ports.acknowledge(message));
+    const send = () => this.#send("ack", message, () => this.ports.acknowledge(message));
+    if (!this.#holds(message, send)) await send();
   }
 
-  /** Whether the terminal error was sent. */
-  terminalError(
+  /** Whether the terminal error was sent; false while it is held. */
+  async terminalError(
     message: TrackedMentionDelivery,
     code: MentionDeliveryTerminalCode,
   ): Promise<boolean> {
-    return this.#send("terminal_error", message, () =>
-      this.ports.terminalError({ ...this.#scope(message), code }),
-    );
+    const send = () =>
+      this.#send("terminal_error", message, () =>
+        this.ports.terminalError({ ...this.#scope(message), code }),
+      );
+    return this.#holds(message, send) ? false : send();
   }
 
   #scope(message: TrackedMentionDelivery) {

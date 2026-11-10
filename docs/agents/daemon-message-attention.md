@@ -96,9 +96,11 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   end is its only bound. It is refused exactly once if the backoff never gets to end it: an inbox
   purge or a failed wake launch (`DELIVERY_REJECTED`), a failed server Start or a runtime
   error that takes the Agent offline (`IDENTITY_UNKNOWN`). A Stop and the daemon stopping report nothing
-  for a tracked mention, as the reference Computer sends nothing: the tracker forgets what it had not
-  drained (received, pending, kept, queued behind a notice) and drops the Agent's waits, so nothing is
-  told later by mistake. The cloud settles it: a person's Stop settles the Agent's pending mentions as not
+  for a tracked mention, as the reference Computer sends nothing: the tracker holds every report about the
+  Agent's mentions while the Stop runs, and once the process is confirmed gone forgets what it had not
+  drained (received, pending, kept, queued behind a notice) with those reports, so nothing is told later by
+  mistake. A Stop that cannot confirm the process gone sends the held reports and settles each mention as a
+  turn's end does. The cloud settles it: a person's Stop settles the Agent's pending mentions as not
   launched, and any other stop leaves them pending for the cloud to issue again, under the same delivery
   id, to the next launch, which tells each once. A tripped fingerprint fence, an offline record and
   a stopped Agent refuse it as `IDENTITY_UNKNOWN` at once: the reference Computer has no identity to hold it

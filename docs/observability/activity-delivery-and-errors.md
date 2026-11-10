@@ -45,7 +45,7 @@ Stop、进程退出和 Daemon shutdown 撤销计时；就绪后的长任务不�
 待会话清理完成后，停止操作才收尾此前的启动和输入处理，替换会话必须等待停止成功。
 
 取消的普通投递不发送 ACK，仍由云端恢复未读状态。排队中、正在通知、被保留给下一次
-启动或等待回合结束的 tracked mention 被静默遗忘，不发送任何终态报告，也不因取消而
+启动或等待回合结束的 tracked mention 在进程确认退出后被静默遗忘，不发送任何终态报告（无法确认退出时按回合结束的规则结算），也不因取消而
 报告 drained 或发送成功 ACK（与参考 Computer 一致）；Daemon 关闭同理。其结算归云端：
 用户 Stop 把该 Agent 的 pending mention 结算为 not launched，其他停止则保持 pending，
 由云端以同一 delivery id 向下一次启动重新签发。

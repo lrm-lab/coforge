@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
+import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 import type { AgentConsumedSeqState } from "#src/persistence/agent-consumed-seq-store";
 import { seedCursor } from "./fixtures/consumed-cursor";
 import { harness, workspaceRoot, type Frame } from "./fixtures/mention-delivery-harness";
@@ -72,5 +73,22 @@ test("a mention a turn's end drained is drained for a repeat arriving before its
   } finally {
     gate.resolve();
     await runtime.stop();
+  }
+});
+
+test("a Stop that cannot confirm the process gone settles its mention as a turn's end does, reporting only then", async () => {
+  const { runtime, frames, envelope, deliver, emit, frameSent } = await harness({
+    disposeError: new AgentProcessCleanupError(),
+  });
+  try {
+    emit({ type: "progress" });
+    await deliver(1, envelope(1));
+    await expect(runtime.stopAgent("agent-a")).rejects.toBeInstanceOf(AgentProcessCleanupError);
+    await frameSent((frame) => frame.kind === "terminal");
+    expect(frames.filter((frame) => frame.kind !== "transition")).toEqual([
+      { kind: "terminal", deliveryId: "delivery-1", code: "DELIVERY_REJECTED" },
+    ]);
+  } finally {
+    await runtime.stop().catch(() => {});
   }
 });
