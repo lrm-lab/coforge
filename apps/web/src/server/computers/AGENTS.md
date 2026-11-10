@@ -78,10 +78,10 @@ These rules apply to `src/server/computers/`.
   reports separately. The request stays pending for 60 seconds and a stored answer lives 30 seconds,
   both expiring on their own.
 - `computer-runtime-detection.server.ts` marks a Computer as detecting its runtimes; the Computer
-  page and a move's refusal read it. The mark (Redis) names the request that set it, expires after
-  45 seconds (the daemon's probe budget, under the page's 50 second wait), and only that request
-  ends it; a request that begins meanwhile takes the mark over, so the Computer detects until the
-  newest ends. It begins at `start` and ends when the daemon's result for that request arrives
+  page and a move's refusal read it. The mark (Redis, key `v2`: the value became a set) names every
+  request still running there and expires 45 seconds after the last began (the daemon's probe
+  budget, under the page's 50 second wait); a request ends only its own name, so two overlapping
+  requests keep it detecting until both end, in either order. It begins at `start` and ends when the daemon's result for that request arrives
   (`model-refresh-result-method.server.ts`, before the result is stored, so a closed page cannot
   leave it set and a page that reads the result never sees it), or when a failed start sent nothing.
   No daemon state is involved.

@@ -3,22 +3,33 @@ import { RUNTIME_CATALOG_REFRESH_CLIENT_DEADLINE_MS } from "#src/features/comput
 import { RedisComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
 import { MODEL_CATALOG_REFRESH_DETECTING_TTL_SECONDS } from "#src/server/computers/computer-model-catalog-refresh.server";
 
+/** The mark holds the ids of the scans still running on a Computer, so the fake keeps a set per
+ * key plus the key's TTL, and runs the two scripts the detection sends. */
 function fakeRedis() {
-  const values = new Map<string, { value: string; seconds: string }>();
+  const values = new Map<string, { members: Set<string>; seconds: string }>();
   return {
     values,
-    async set(key: string, value: string, _ex: "EX", seconds: string) {
-      values.set(key, { value, seconds });
-    },
-    async get(key: string) {
-      return values.get(key)?.value ?? null;
-    },
-    /** The one script the detection runs: delete the key only if it still holds the argument. */
-    async send(command: string, args: string[]) {
+    async send(command: string, args: string[]): Promise<unknown> {
+      if (command === "SCARD") return values.get(args[0]!)?.members.size ?? 0;
       expect(command).toBe("EVAL");
-      const [, , key, expected] = args as [string, string, string, string];
-      if (values.get(key!)?.value !== expected) return 0;
-      values.delete(key!);
+      const [script, , key, member, seconds] = args as [
+        string,
+        string,
+        string,
+        string,
+        string | undefined,
+      ];
+      if (script.includes("SADD")) {
+        const entry = values.get(key!) ?? { members: new Set<string>(), seconds: seconds! };
+        entry.members.add(member!);
+        entry.seconds = seconds!;
+        values.set(key!, entry);
+        return 1;
+      }
+      const entry = values.get(key!);
+      if (!entry) return 0;
+      entry.members.delete(member!);
+      if (entry.members.size === 0) values.delete(key!);
       return 1;
     },
   };
@@ -60,6 +71,17 @@ test("a refresh that ends does not end another one still running on the Computer
   await detection.begin(scope, "rescan");
   await detection.begin(scope, "single-provider");
   await detection.end(scope, "single-provider");
+  await detection.end(scope, "rescan");
+  expect(await detection.detecting(scope)).toBe(false);
+});
+
+test("a newer scan ending first keeps the Computer detecting while an older scan still runs", async () => {
+  const detection = new RedisComputerRuntimeDetection(fakeRedis());
+  // The Agent form's single-provider refresh starts after the page's rescan and finishes first.
+  await detection.begin(scope, "rescan");
+  await detection.begin(scope, "single-provider");
+  await detection.end(scope, "single-provider");
+  expect(await detection.detecting(scope)).toBe(true);
   await detection.end(scope, "rescan");
   expect(await detection.detecting(scope)).toBe(false);
 });

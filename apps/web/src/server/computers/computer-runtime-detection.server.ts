@@ -9,42 +9,45 @@ type ComputerScope = { workspaceId: string; computerId: string };
  * detecting; then it reads as done. */
 const TTL_SECONDS = String(MODEL_CATALOG_REFRESH_DETECTING_TTL_SECONDS);
 
-// Deletes the mark only while it still names the request ending it, so a refresh that ends never
-// ends another one still running on the Computer.
-const END_IF_OWNER = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+// Adds this scan to the mark and restarts its expiry, so scans that overlap on one Computer all
+// stay named in it.
+const BEGIN = `redis.call('SADD', KEYS[1], ARGV[1])
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+return 1`;
+
+// Removes only this scan, and the mark with the last one: a scan that ends never ends another one
+// still running on the Computer, whichever of the two started later.
+const END_IF_NAMED = `redis.call('SREM', KEYS[1], ARGV[1])
+if redis.call('SCARD', KEYS[1]) == 0 then return redis.call('DEL', KEYS[1]) end
 return 0`;
 
 /**
  * Whether a Computer is detecting its runtimes now: from a rescan the server asked for until its
  * result is stored, as the reference Computer's "Detecting runtimes" reads. The runtimes it
- * reported last are still its confirmed ones meanwhile. The mark names the request that set it and
- * only that request ends it; a request that begins while another is running takes the mark over
- * (the newest wins), so the Computer reads as detecting until the newest request ends. The mark
- * expires on its own, so a result that never arrives cannot leave a Computer detecting for good.
+ * reported last are still its confirmed ones meanwhile. The mark names every scan still running on
+ * the Computer, so two that overlap read as detecting until both end, in either order. The mark
+ * expires on its own, so a scan whose result never arrives cannot leave a Computer detecting for
+ * good.
  */
 export class RedisComputerRuntimeDetection {
   constructor(
-    private readonly redis: {
-      set(key: string, value: string, ex: "EX", seconds: string): Promise<unknown>;
-      get(key: string): Promise<string | null>;
-      send(command: string, args: string[]): Promise<unknown>;
-    },
+    private readonly redis: { send(command: string, args: string[]): Promise<unknown> },
   ) {}
 
   begin(scope: ComputerScope, requestId: string) {
-    return this.redis.set(this.key(scope), requestId, "EX", TTL_SECONDS);
+    return this.redis.send("EVAL", [BEGIN, "1", this.key(scope), requestId, TTL_SECONDS]);
   }
 
   end(scope: ComputerScope, requestId: string) {
-    return this.redis.send("EVAL", [END_IF_OWNER, "1", this.key(scope), requestId]);
+    return this.redis.send("EVAL", [END_IF_NAMED, "1", this.key(scope), requestId]);
   }
 
   async detecting(scope: ComputerScope) {
-    return (await this.redis.get(this.key(scope))) !== null;
+    return Number(await this.redis.send("SCARD", [this.key(scope)])) > 0;
   }
 
   private key({ workspaceId, computerId }: ComputerScope) {
-    return workspaceRedisKey({ workspaceId, computerId, name: "runtime-detection", version: "v1" });
+    return workspaceRedisKey({ workspaceId, computerId, name: "runtime-detection", version: "v2" });
   }
 }
 
