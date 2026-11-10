@@ -202,6 +202,10 @@ test("a viewer opens an original in a channel, or in a DM of theirs, and only wh
         ];
       },
     },
+    // Who sent each original is another lookup (`forwardedSenders`); nobody is found here.
+    message: { findMany: async () => [] },
+    user: { findMany: async () => [] },
+    agent: { findMany: async () => [] },
   } as unknown as Parameters<typeof attachForwardedAccess>[0];
   const channel = mapBrowserMessage(
     browserRow(forwardRow(SOURCE_CHANNEL, SOURCE_MESSAGE)),

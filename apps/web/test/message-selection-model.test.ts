@@ -73,3 +73,15 @@ test("the dialog previews one original as before and several each with its own a
     forwardedPreview({ ...where, messages: [early, late] }).map((one) => one.attachmentIds),
   ).toEqual([["m1-file"], ["m2-file"]]);
 });
+
+test("the dialog preview names each original's sender for the card's avatar", () => {
+  const where = { conversationId: "c1", conversationName: "design" };
+  const person = entry("m3", "2026-11-10T05:00:00.000Z", "hi");
+  (person.message as { senderUserId?: string; senderAvatarUrl?: string }).senderUserId = "u1";
+  (person.message as { senderAvatarUrl?: string }).senderAvatarUrl = "/a/u1.png";
+  const agent = entry("m4", "2026-11-10T05:01:00.000Z", "done", "Scribe");
+  Object.assign(agent.message, { senderKind: "agent", senderAgentId: "a1", senderAvatarUrl: null });
+  const [one, two] = forwardedPreview({ ...where, messages: [person, agent] });
+  expect(one!.sourceSender).toEqual({ kind: "user", id: "u1", avatarUrl: "/a/u1.png" });
+  expect(two!.sourceSender).toEqual({ kind: "agent", id: "a1", avatarUrl: null });
+});
