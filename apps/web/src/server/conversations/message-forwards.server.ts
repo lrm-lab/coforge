@@ -14,9 +14,9 @@ import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { canReadChannel } from "./channel-read-access.server";
 import { agentForwarded } from "./agent-message-view.server";
-import { sendChannel } from "./channel-send.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { DirectConversations } from "./direct-conversations.server";
+import { postUserMessage } from "./user-message-post.server";
 import { loadForwardSource, type ForwardSource } from "./message-forward-source.server";
 import { recordForward } from "./message-forward-view.server";
 import type {
@@ -155,7 +155,7 @@ export class MessageForwards {
     try {
       const copied = await this.copyAttachments(sources, { workspaceId, userId, destination });
       copies = copied;
-      const sent = await this.send(route.kind, {
+      const sent = await this.send({
         ...input,
         idempotencyKey: scope.idempotencyKey,
         originals: sources.map((source, index) => ({
@@ -239,56 +239,37 @@ export class MessageForwards {
     return { kind: "dm" };
   }
 
-  private async send(
-    kind: "channel" | "dm",
-    input: {
-      workspaceId: string;
-      userId: string;
-      destination: string;
-      note?: string;
-      idempotencyKey: string;
-      originals: readonly { source: ForwardSource; attachmentIds: readonly string[] }[];
-    },
-  ): Promise<{ id: string; sequence: number }> {
-    const { db, idempotency, centrifugo, realtime, notifications } = this.ports;
-    const { workspaceId, userId, destination, originals } = input;
-    const attachmentIds = originals.flatMap((original) => original.attachmentIds);
-    // The snapshots are written in the send's own transaction; the Agent reads the same ones.
-    const forwarding = {
-      withinSend: recordForward(originals.map((original) => original.source)),
-      allowEmptyBody: true,
-      forwarded: originals.map((original) =>
-        agentForwarded(
-          original.source,
-          original.attachmentIds.map((id) => ({ id })),
-        ),
-      ),
-    };
-    if (kind === "channel")
-      return sendChannel(
-        { db, idempotency, notifications, realtime, publisher: centrifugo },
-        {
-          workspaceId,
-          userId,
-          channelId: destination,
-          idempotencyKey: input.idempotencyKey,
-          body: input.note ?? "",
-          attachmentIds,
-          ...forwarding,
-        },
-      );
-    await this.ports.prepareDirect?.(workspaceId, userId, destination);
-    return new DirectConversations(db).send(
-      workspaceId,
-      userId,
-      destination,
+  /** The forward's own message, through the one dispatch of a person's send by conversation id
+   * (`postUserMessage`), carrying the copied uploads and the originals. */
+  private async send(input: {
+    workspaceId: string;
+    userId: string;
+    destination: string;
+    note?: string;
+    idempotencyKey: string;
+    originals: readonly { source: ForwardSource; attachmentIds: readonly string[] }[];
+  }): Promise<{ id: string; sequence: number }> {
+    const { db, idempotency, centrifugo, realtime, notifications, prepareDirect } = this.ports;
+    const { originals } = input;
+    return postUserMessage(
+      { db, idempotency, publisher: centrifugo, realtime, notifications, prepareDirect },
       {
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        conversationId: input.destination,
         idempotencyKey: input.idempotencyKey,
         body: input.note ?? "",
-        attachmentIds,
-        ...forwarding,
+        attachmentIds: originals.flatMap((original) => [...original.attachmentIds]),
+        // The snapshots are written in the send's own transaction; the Agent reads the same ones.
+        withinSend: recordForward(originals.map((original) => original.source)),
+        allowEmptyBody: true,
+        forwarded: originals.map((original) =>
+          agentForwarded(
+            original.source,
+            original.attachmentIds.map((id) => ({ id })),
+          ),
+        ),
       },
-      { idempotency, centrifugo, realtime },
     );
   }
 
