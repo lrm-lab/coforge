@@ -44,16 +44,16 @@ const pushCommand = (id: string, base: number) =>
 
 export function formatArtifactCreated(card: Card): string {
   return [
-    `Created document "${card.title}" (id ${card.id}, name ${card.name}), version ${card.currentVersion}.`,
+    `Created artifact "${card.title}" (id ${card.id}, name ${card.name}), version ${card.currentVersion}.`,
     `Read it: ${readCommand(card.id)}`,
     `Save over it: ${pushCommand(card.id, card.currentVersion)}`,
   ].join("\n");
 }
 
-/** The readable documents of a home, newest first: one line each (title, id, version, when), and
+/** The readable artifacts of a home, newest first: one line each (title, id, version, when), and
  * how to read one. */
 export function formatArtifactList(rows: ListRow[]): string {
-  if (rows.length === 0) return "No documents here yet.";
+  if (rows.length === 0) return "No artifacts here yet.";
   const lines = rows.map(
     (row) => `${row.updatedAt}  "${row.title}" (id ${row.id}), version ${row.currentVersion}`,
   );
@@ -61,13 +61,13 @@ export function formatArtifactList(rows: ListRow[]): string {
   return lines.join("\n");
 }
 
-/** The document's version line and how to save over it; then its text, unless it went to a
+/** The artifact's version line and how to save over it; then its text, unless it went to a
  * file. */
 export function formatArtifactRead(read: Read, withText: boolean): string {
   const { artifact, version } = read;
   const shown = version?.number ?? 0;
   const lines = [
-    `Document "${artifact.title}" (id ${artifact.id}), version ${shown} of ${artifact.currentVersion}${version?.label ? `, labelled "${version.label}"` : ""}.`,
+    `Artifact "${artifact.title}" (id ${artifact.id}), version ${shown} of ${artifact.currentVersion}${version?.label ? `, labelled "${version.label}"` : ""}.`,
     `Save over it: ${pushCommand(artifact.id, shown)}`,
   ];
   if (withText) lines.push("---", read.text);
@@ -95,7 +95,7 @@ export function formatArtifactHistory(id: string, page: HistoryPage): string {
 }
 
 /**
- * A save's answer. A conflict prints the document with git-style markers at each place both
+ * A save's answer. A conflict prints the artifact with git-style markers at each place both
  * sides changed (`stdout`, to edit and save again over `currentVersion`), and every setting
  * both changed.
  */
@@ -132,7 +132,7 @@ export function formatArtifactSave(
           `Conflict: version ${current} was saved since version ${base}, changing the same places. Nothing was written.`,
           ...(files.length
             ? [
-                "The document is printed with <<<<<<< yours / ======= / >>>>>>> theirs at each conflict.",
+                "The artifact is printed with <<<<<<< yours / ======= / >>>>>>> theirs at each conflict.",
               ]
             : []),
           ...(settings.length ? ["Settings both sides changed:", ...settings] : []),

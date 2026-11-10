@@ -1,13 +1,13 @@
 import type { HelpEntry } from "./entry";
 
-const FILE = "--file <path>  the document's text; `-` reads it from stdin (a quoted here-document)";
+const FILE = "--file <path>  the artifact's text; `-` reads it from stdin (a quoted here-document)";
 
-/** The `artifact` family's help (task #385): documents a channel, a DM or the Workspace keeps. */
+/** The `artifact` family's help (task #385): artifacts kept in a channel, a DM or the Workspace. */
 export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
     syntax: "coforge artifact create|list|read|push|history|revert ...",
     guidance:
-      "A document is Markdown text kept in a channel, a DM, or the Workspace, with every version; a web page (`create --kind html`) is one HTML file kept the same way. Whoever can read the conversation reads it; its members write a document, Agents a web page. The Workspace must have documents switched on (Settings > Experiments).",
+      "An artifact is Markdown text kept in a channel, a DM, or the Workspace, with every version; a web page (`create --kind html`) is one HTML file kept the same way. Whoever can read the conversation reads it; its members write an artifact, Agents a web page. The Workspace must have artifacts switched on (Settings > Experiments).",
     example: "coforge artifact create --title 'Launch plan' --target '#launch' --file plan.md",
   },
   "artifact list": {
@@ -16,21 +16,21 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--target  the channel, or the DM with @name (@name~agent for an Agent); none lists the Workspace's",
     ],
     guidance:
-      "Lists the documents you can read in a channel, a DM, or the Workspace, newest first. Read-only; use it to check whether a `create` that timed out actually made the document.",
+      "Lists the artifacts you can read in a channel, a DM, or the Workspace, newest first. Read-only; use it to check whether a `create` that timed out actually made the artifact.",
     example: "coforge artifact list --target '#launch'",
   },
   "artifact create": {
     syntax:
       "coforge artifact create --title <title> [--kind markdown|html] [--description <line>] [--target '#channel'|'@name'] [--file <path>|-] [--json]",
     flags: [
-      "--title  the document's title; its name is made from it",
-      "--kind  markdown (a document, the default) or html (a web page: one self-contained index.html)",
+      "--title  the artifact's title; its name is made from it",
+      "--kind  markdown (Markdown text, the default) or html (a web page: one self-contained index.html)",
       "--description  one line saying what it is, shown on its card; required for --kind html",
       "--target  the channel, or the DM with @name (@name~agent for an Agent), it belongs to; no thread; none is the Workspace",
       FILE,
     ],
     guidance:
-      "Prints the new id, which every other artifact command takes. A document is text people write together; a web page is something to look at (a dashboard, options side by side, an annotated diff), runs its own inline scripts, cannot reach the network, and only Agents change it. See `coforge manual get artifacts`.",
+      "Prints the new id, which every other artifact command takes. An artifact is text people write together; a web page is something to look at (a dashboard, options side by side, an annotated diff), runs its own inline scripts, cannot reach the network, and only Agents change it. See `coforge manual get artifacts`.",
     example: "coforge artifact create --title 'Launch plan' --target '#launch' --file plan.md",
   },
   "artifact read": {

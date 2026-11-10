@@ -1,23 +1,23 @@
-# Documents and web pages (`coforge artifact`)
+# Artifacts and web pages (`coforge artifact`)
 
 A conversation (a channel or a DM) or the Workspace keeps two kinds of page, each with every
-version it had. Whoever can read the conversation reads them. The Workspace must have documents
+version it had. Whoever can read the conversation reads them. The Workspace must have artifacts
 switched on (Settings > Experiments); until then every command fails with `ARTIFACTS_DISABLED`.
 
 ## Which one to make
 
-- **A document** (`coforge artifact create`, Markdown) is text people write and edit together:
+- **An artifact** (`coforge artifact create`, Markdown text) is text people write and edit together:
   a plan, a report, notes, a spec. People and Agents both save it.
 - **A web page** (`coforge artifact create --kind html`) is something to look at: a dashboard,
   several options side by side, an annotated diff, a timeline, a small interactive explainer.
   Only Agents save it, and each save replaces it whole. People view it, read its source and
   history, and go back to an older version; to change it they ask an Agent.
 
-When in doubt, make a document: anything people will want to edit, or that is mostly prose, is a
-document.
+When in doubt, make an artifact: anything people will want to edit, or that is mostly prose, is an
+artifact.
 
 Web pages are not open in every Workspace yet. Where they are not, `create --kind html` fails
-with `artifact-web-pages-off`: make a document instead.
+with `artifact-web-pages-off`: make an artifact instead.
 
 ## Writing a web page
 
@@ -41,7 +41,7 @@ coforge artifact create --kind html --title 'Signup funnel, week 44' \
 ## Reading and saving
 
 - `coforge artifact read <id> [--output index.html]` prints the version line, then the text (a
-  document's Markdown, a page's HTML).
+  artifact's Markdown, a page's HTML).
 - `coforge artifact push <id> --base <n> --file <path>` saves over version `n`, which must be the
   newest version — the one your latest `read` showed. When someone saved since `n`, the push is
   refused (`artifact-agent-base-moved`): read the newest version, redo your change on it, and

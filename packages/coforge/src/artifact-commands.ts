@@ -13,10 +13,10 @@ import {
 } from "#src/artifact-format";
 
 /**
- * `coforge artifact create|list|read|push|history|revert` (task #385): the Agent's documents, and
- * web pages (`create --kind html`, task #490). The text (a document's Markdown, a page's HTML)
+ * `coforge artifact create|list|read|push|history|revert` (task #385): the Agent's artifacts, and
+ * web pages (`create --kind html`, task #490). The text (an artifact's Markdown, a page's HTML)
  * comes from `--file <path>`, or stdin with `--file -`; the server applies the web page's rules
- * and merges a document's save with what others saved since its base.
+ * and merges an artifact's save with what others saved since its base.
  */
 export type ArtifactInvocation = {
   command: "artifact";
@@ -95,7 +95,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
     index += 1;
   }
   if (flags.positional && !artifact)
-    throw invalidArgument(command, "Name the document: its id, as create printed it");
+    throw invalidArgument(command, "Name the artifact: its id, as create printed it");
   const need = (flag: string) => {
     if (count[flag] === undefined) throw invalidArgument(command, `${flag} is required`);
     return count[flag]!;
@@ -111,7 +111,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
       if (kind !== undefined && kind !== "markdown" && kind !== "html")
         throw invalidArgument(
           command,
-          `--kind is markdown (a document) or html (a web page), not "${kind}"`,
+          `--kind is markdown (Markdown text) or html (a web page), not "${kind}"`,
         );
       const description = text["--description"]?.trim();
       // A web page says what it is on its card: the line people read before opening it.
@@ -205,7 +205,7 @@ function parseShareArgs(args: readonly string[]): ArtifactInvocation {
     index += 1;
   }
   if (artifactIds.length === 0)
-    throw invalidArgument(command, "Name at least one document: its id");
+    throw invalidArgument(command, "Name at least one artifact: its id");
   if (targets.length === 0) throw invalidArgument(command, "--to is required at least once");
   return {
     command: "artifact",
@@ -233,7 +233,7 @@ export async function runArtifact(
     ...draft,
     ...(text === undefined ? {} : { text }),
     // create, push and revert each carry a key, so a retry after a lost response does not make a
-    // second document or version.
+    // second artifact or version.
     ...(draft.operation === "create" || draft.operation === "push" || draft.operation === "revert"
       ? { idempotencyKey: crypto.randomUUID() }
       : {}),
@@ -308,11 +308,11 @@ async function readArtifactText(file: string): Promise<string> {
   }
 }
 
-/** What the CLI says when the Workspace has not switched documents on: the refusal names the
+/** What the CLI says when the Workspace has not switched artifacts on: the refusal names the
  * switch and the working alternative, so an Agent that tried `artifact` learns to send the file
  * as an attachment instead of retrying or claiming a send that never happened (task #711). */
 export const ARTIFACTS_DISABLED_MESSAGE =
-  "这个工作区没有开启文档（artifacts）：`coforge artifact` 命令不能用。要给人发文件，请用附件：先 `coforge attachment upload --path <文件> --target <会话>` 拿到附件 id，再 `coforge message send --target <会话> --attachment-id <id>` 发出（工作区 owner/admin 可在 设置 → 实验功能 打开文档）。This Workspace has not enabled documents (artifacts), so `coforge artifact` commands cannot be used. To send a file to a person, upload it as an attachment (`coforge attachment upload --path <file> --target <target>`), then send its id (`coforge message send --target <target> --attachment-id <id>`); a Workspace owner or admin can enable documents in Settings > Experiments.";
+  "这个工作区没有开启 artifacts：`coforge artifact` 命令不能用。要给人发文件，请用附件：先 `coforge attachment upload --path <文件> --target <会话>` 拿到附件 id，再 `coforge message send --target <会话> --attachment-id <id>` 发出（工作区 owner/admin 可在 设置 → 实验功能 打开 artifacts）。This Workspace has not enabled artifacts, so `coforge artifact` commands cannot be used. To send a file to a person, upload it as an attachment (`coforge attachment upload --path <file> --target <target>`), then send its id (`coforge message send --target <target> --attachment-id <id>`); a Workspace owner or admin can enable artifacts in Settings > Experiments.";
 
 /** `POST /api/agent/v1/artifacts` through the daemon's proxy, as the Agent. */
 export async function artifactRequest(
@@ -333,7 +333,7 @@ export async function artifactRequest(
       method: route.method,
       headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
       body: JSON.stringify(request),
-      // A save merges up to three 2 MiB documents under the server's 15-second lock.
+      // A save merges up to three 2 MiB artifacts under the server's 15-second lock.
       signal: AbortSignal.timeout(30_000),
     });
   } catch {
@@ -355,9 +355,9 @@ export async function artifactRequest(
     });
   const next =
     json?.code === "NOT_FOUND"
-      ? "The document or conversation does not exist, or you cannot read it."
+      ? "The artifact or conversation does not exist, or you cannot read it."
       : message.includes("(artifact-base-moved)") && "artifact" in request
-        ? `The document has a newer version than --base: read it (coforge artifact read ${request.artifact}) and use the version it prints.`
+        ? `The artifact has a newer version than --base: read it (coforge artifact read ${request.artifact}) and use the version it prints.`
         : writes && response.status >= 500
           ? mayHaveLanded(request)
           : json?.suggested_next_action;
@@ -374,8 +374,8 @@ export async function artifactRequest(
 
 function mayHaveLanded(request: AgentArtifactRequest): string {
   return "artifact" in request
-    ? `The change may have landed: read the document (coforge artifact read ${request.artifact}) before trying again.`
+    ? `The change may have landed: read the artifact (coforge artifact read ${request.artifact}) before trying again.`
     : "artifactIds" in request
       ? "The artifact share may have landed: read the target conversation before trying again."
-      : "The document may have been made, and creating it again makes a second one: check the conversation's documents on the web page first.";
+      : "The artifact may have been made, and creating it again makes a second one: check the conversation's artifacts on the web page first.";
 }

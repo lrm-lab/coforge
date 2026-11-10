@@ -312,13 +312,13 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
 };
 
-/** What `coforge artifact --help` answers in a Workspace whose launch features switched documents
+/** What `coforge artifact --help` answers in a Workspace whose launch features switched artifacts
  * off: the command exists and the server refuses it with the actionable error, so the help says
  * that plainly and points at attachments instead of looking like an unknown command (task #711). */
 const ARTIFACTS_DISABLED_HELP = [
   "coforge artifact",
   "",
-  "Documents are not enabled in this Workspace: `coforge artifact` commands cannot be used here.",
+  "Artifacts are not enabled in this Workspace: `coforge artifact` commands cannot be used here.",
   "To send a file to a person, upload it as an attachment and send its id:",
   "  coforge attachment upload --path <file> --target <target>",
   "  coforge message send --target <target> --attachment-id <id>",
@@ -330,7 +330,7 @@ function isArtifactCommand(name: string): boolean {
 
 /** The command names directly under `prefix` ("" = top level), derived from the COMMANDS keys.
  * `hiddenArtifacts` drops the whole `artifact` family, as a launch whose features switched
- * documents off states through `COFORGE_WORKSPACE_FEATURES`. */
+ * artifacts off states through `COFORGE_WORKSPACE_FEATURES`. */
 function childrenOf(prefix: string, hiddenArtifacts: boolean): string[] {
   const names = new Set<string>();
   for (const key of Object.keys(COMMANDS)) {

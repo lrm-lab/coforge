@@ -185,12 +185,12 @@ test("an unknown subcommand in a self-parsing group names that group's commands"
   expect(taskTypo.suggestedNextAction).toContain("Did you mean `coforge task view`?");
 });
 
-test("artifact help hides when the Workspace's features say documents are off", () => {
+test("artifact help hides when the Workspace's features say artifacts are off", () => {
   const name = "COFORGE_WORKSPACE_FEATURES";
   const previous = Bun.env[name];
   try {
     Bun.env[name] = JSON.stringify({ taskConversations: false, artifacts: false });
-    // The family leaves the listings, and asking for it directly says documents are off and
+    // The family leaves the listings, and asking for it directly says artifacts are off and
     // points at attachments — the command exists, the server refuses it (task #711).
     const disabled = commandHelp(["artifact"]);
     expect(disabled).toContain("not enabled");

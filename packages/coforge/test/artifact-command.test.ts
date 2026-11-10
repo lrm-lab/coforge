@@ -97,7 +97,7 @@ test("create --kind html makes a web page, which needs its one-line description"
     "--kind html needs --description",
   );
   expect(() => parseArgs(["artifact", "create", "--kind", "pdf", "--title", "Funnel"])).toThrow(
-    "--kind is markdown (a document) or html (a web page)",
+    "--kind is markdown (Markdown text) or html (a web page)",
   );
 });
 
@@ -143,7 +143,7 @@ test("a save sends the file's text with a fresh idempotency key and says what it
   const { sent, transport } = transportAnswering({
     status: "created",
     number: 4,
-    merged: ["document.md"],
+    merged: ["artifact.md"],
     mergedSettings: [],
   });
   const said = await runArtifact(
@@ -154,16 +154,16 @@ test("a save sends the file's text with a fresh idempotency key and says what it
   expect(sent[0]).toMatchObject({ operation: "push", baseVersion: 3, text: "text of plan.md" });
   expect(sent[0]).toHaveProperty("idempotencyKey");
   expect(said).toContain("Saved version 4.");
-  expect(said).toContain("Merged with what others saved since version 3: document.md");
+  expect(said).toContain("Merged with what others saved since version 3: artifact.md");
 });
 
-test("a conflict prints the document with markers to stdout and fails", async () => {
+test("a conflict prints the artifact with markers to stdout and fails", async () => {
   const { transport } = transportAnswering({
     status: "conflict",
     currentVersion: 5,
     files: [
       {
-        path: "document.md",
+        path: "artifact.md",
         chunks: [
           { ok: "# Plan\n\n" },
           {
@@ -194,7 +194,7 @@ test("a conflict prints the document with markers to stdout and fails", async ()
   expect(cli.suggestedNextAction).toContain(`coforge artifact push ${ID} --base 5`);
 });
 
-test("list prints a line per document, newest first, and how to read one", async () => {
+test("list prints a line per artifact, newest first, and how to read one", async () => {
   const { sent, transport } = transportAnswering([
     {
       id: ID,
@@ -221,10 +221,10 @@ test("list prints a line per document, newest first, and how to read one", async
   expect(said).toContain(`coforge artifact read <id>`);
 });
 
-test("list says plainly when a home has no documents", async () => {
+test("list says plainly when a home has no artifacts", async () => {
   const { transport } = transportAnswering([]);
   const said = (await runArtifact(invocation(["list"]), transport)) as string;
-  expect(said).toBe("No documents here yet.");
+  expect(said).toBe("No artifacts here yet.");
 });
 
 test("read prints the version to save over, then the text", async () => {
@@ -236,7 +236,7 @@ test("read prints the version to save over, then the text", async () => {
   });
   const said = await runArtifact(invocation(["read", ID]), transport);
   expect(said).toBe(
-    `Document "Plan" (id ${ID}), version 3 of 3.\nSave over it: coforge artifact push ${ID} --base 3 --file <path>\n---\n# Plan\n`,
+    `Artifact "Plan" (id ${ID}), version 3 of 3.\nSave over it: coforge artifact push ${ID} --base 3 --file <path>\n---\n# Plan\n`,
   );
 });
 
@@ -264,10 +264,10 @@ function serveProxy(body: unknown, status: number) {
   };
 }
 
-test("a Workspace without documents is said plainly", async () => {
+test("a Workspace without artifacts is said plainly", async () => {
   const proxy = serveProxy(
     {
-      error: "forbidden (artifacts-disabled): this Workspace has not enabled documents",
+      error: "forbidden (artifacts-disabled): this Workspace has not enabled artifacts",
       code: "ACCESS_DENIED",
       retryable: false,
     },
@@ -278,7 +278,7 @@ test("a Workspace without documents is said plainly", async () => {
     .catch((caught: unknown) => caught)) as CliError;
   expect(error.code).toBe("ARTIFACTS_DISABLED");
   expect(error.message).toBe(ARTIFACTS_DISABLED_MESSAGE);
-  expect(error.message).toStartWith("这个工作区没有开启文档");
+  expect(error.message).toStartWith("这个工作区没有开启 artifacts");
   // The refusal must name the working alternative, so an Agent does not retry artifacts or
   // report a send that never happened (task #711).
   expect(error.message).toContain("attachment");
