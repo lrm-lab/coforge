@@ -65,6 +65,9 @@ test("an old search address opens its conversation at the message", async () => 
     };
     const open = await seed(`e2e-legacy-${suffix}`, "public", true);
     const locked = await seed(`e2e-legacy-locked-${suffix}`, "private", false);
+    // Its own channel, never opened before the message goes: a conversation the page has shown
+    // keeps it in the persisted query cache, and a row deleted in the database sends no event.
+    const later = await seed(`e2e-legacy-later-${suffix}`, "public", true);
     const legacy = (channelId: string, messageId: string) =>
       `${origin}/en/w/${workspace.slug}/search?open=channel:${channelId}&msg=${messageId}`;
     const address = `location.pathname + location.search`;
@@ -90,11 +93,11 @@ test("an old search address opens its conversation at the message", async () => 
     expect(await evaluate<boolean>(shown(locked.messages[0]!.body))).toBe(false);
 
     // A message deleted since: the conversation still opens, with its other messages.
-    const gone = open.messages[2]!;
+    const gone = later.messages[2]!;
     await db.message.delete({ where: { id: gone.id } });
-    await browser("open", legacy(open.channel.id, gone.id));
-    await waitFor(`${pageHydrated} && location.pathname.endsWith("/channel/${open.channel.id}")`);
-    await waitFor(shown(open.messages[0]!.body));
+    await browser("open", legacy(later.channel.id, gone.id));
+    await waitFor(`${pageHydrated} && location.pathname.endsWith("/channel/${later.channel.id}")`);
+    await waitFor(shown(later.messages[0]!.body));
     expect(await evaluate<boolean>(shown(gone.body))).toBe(false);
 
     // Search with no conversation named is still the dialog over the Workspace.
