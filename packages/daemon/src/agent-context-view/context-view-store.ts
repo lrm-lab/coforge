@@ -229,7 +229,14 @@ export class ContextViewStore {
   }
 
   compact(retentionDays = AGENT_CONTEXT_VIEW_RETENTION_DAYS): number {
-    if (!existsSync(this.#indexPath)) return 0;
+    return this.compactWithStats(retentionDays).kept;
+  }
+
+  compactWithStats(retentionDays = AGENT_CONTEXT_VIEW_RETENTION_DAYS): {
+    kept: number;
+    dropped: number;
+  } {
+    if (!existsSync(this.#indexPath)) return { kept: 0, dropped: 0 };
     ownRegularFile(this.#indexPath);
     const cutoff = this.#now() - retentionDays * 24 * 60 * 60 * 1000;
     const parsed = this.#readFileSafely(this.#indexPath)
@@ -243,14 +250,23 @@ export class ContextViewStore {
         } catch {
           return [];
         }
-      })
-      .filter((entry) => Date.parse(entry.sentAt) >= cutoff);
-    const entries = parsed.sort(
-      (left, right) => Date.parse(left.sentAt) - Date.parse(right.sentAt),
+      });
+    const entries = parsed
+      .filter((entry) => Date.parse(entry.sentAt) >= cutoff)
+      .sort((left, right) => Date.parse(left.sentAt) - Date.parse(right.sentAt));
+    let encodedBytes = entries.reduce(
+      (total, entry) => total + Buffer.byteLength(JSON.stringify(entry)) + 1,
+      0,
     );
+    let dropCount = 0;
+    while (encodedBytes > AGENT_CONTEXT_INDEX_MAX_BYTES && dropCount < entries.length) {
+      encodedBytes -= Buffer.byteLength(JSON.stringify(entries[dropCount]!)) + 1;
+      dropCount += 1;
+    }
+    const kept = entries.slice(dropCount);
     const encoded = () =>
-      entries.map((entry) => JSON.stringify(entry)).join("\n") + (entries.length ? "\n" : "");
-    while (Buffer.byteLength(encoded()) > AGENT_CONTEXT_INDEX_MAX_BYTES) entries.shift();
+      kept.map((entry) => JSON.stringify(entry)).join("\n") + (kept.length ? "\n" : "");
+    const dropped = parsed.length - kept.length;
     const temp = `${this.#indexPath}.tmp-${process.pid}`;
     const tempFd = openSync(temp, CONTEXT_VIEW_APPEND_FLAGS | (constants.O_EXCL ?? 0), 0o600);
     try {
@@ -259,7 +275,7 @@ export class ContextViewStore {
       closeSync(tempFd);
     }
     renameSync(temp, this.#indexPath);
-    return entries.length;
+    return { kept: kept.length, dropped };
   }
 
   markOff(now = this.#now()): void {

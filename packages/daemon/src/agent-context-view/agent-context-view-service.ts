@@ -157,16 +157,14 @@ export class AgentContextViewService {
     for (const agentId of ContextViewStore.agentIds(this.#stateDirectory, this.#serverId))
       this.#store(agentId);
     for (const [agentId, store] of this.#stores) {
-      const oldestBefore = store.oldestSentAt();
-      store.compact(this.#retentionDays);
-      const oldestAfter = store.oldestSentAt();
+      const compacted = store.compactWithStats(this.#retentionDays);
       const off = store.sweepOff(this.#now());
       if (off) {
         this.#stores.delete(agentId);
         continue;
       }
       store.sweepRequestLogs(this.#now() - this.#retentionDays * 24 * 60 * 60 * 1000);
-      if (oldestBefore !== oldestAfter) {
+      if (compacted.dropped > 0) {
         const availability = this.#availabilityFacts.get(agentId);
         if (availability?.enabled)
           this.reportAvailability(availability.facts, true, "retention", true);

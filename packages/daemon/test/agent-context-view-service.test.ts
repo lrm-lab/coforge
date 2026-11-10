@@ -9,7 +9,10 @@ import {
   AgentContextViewService,
   agentContextViewAvailabilityRefreshDelay,
 } from "#src/agent-context-view/agent-context-view-service";
-import { ContextViewStore } from "#src/agent-context-view/context-view-store";
+import {
+  AGENT_CONTEXT_INDEX_MAX_BYTES,
+  ContextViewStore,
+} from "#src/agent-context-view/context-view-store";
 
 test("indexes a committed message at the native transcript size and reports availability once", () => {
   const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
@@ -429,6 +432,67 @@ test("reports supported from retained index data when the current transcript is 
         retainedSince: new Date(now).toISOString(),
       }),
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("re-reports retention when the index cap drops duplicate-timestamp rows", () => {
+  const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
+  try {
+    const now = 1_000;
+    const store = new ContextViewStore(root, "server-1", "agent-1", () => now);
+    const sentAt = new Date(now).toISOString();
+    const sample = `${JSON.stringify({
+      messageId: "message-000000",
+      sentAt,
+      runtime: "codex",
+      sessionId: "session-1",
+      transcript: "session.jsonl",
+      offset: 27,
+    })}\n`;
+    const count = Math.ceil((AGENT_CONTEXT_INDEX_MAX_BYTES * 1.1) / Buffer.byteLength(sample));
+    writeFileSync(
+      store.indexPath,
+      Array.from(
+        { length: count },
+        (_, index) =>
+          `${JSON.stringify({
+            messageId: `message-${String(index).padStart(6, "0")}`,
+            sentAt,
+            runtime: "codex",
+            sessionId: "session-1",
+            transcript: "session.jsonl",
+            offset: 27,
+          })}\n`,
+      ).join(""),
+      "utf8",
+    );
+    const transcript = join(root, "session.jsonl");
+    writeFileSync(transcript, '{"type":"additional_tools"}', "utf8");
+    const reports: unknown[] = [];
+    const service = new AgentContextViewService({
+      stateDirectory: root,
+      serverId: "server-1",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      now: () => now,
+      reportAvailability: (value) => reports.push(value),
+    });
+    service.reportAvailability(
+      {
+        agentId: "agent-1",
+        runtime: "codex",
+        sessionId: "session-1",
+        transcript: "session.jsonl",
+        transcriptPath: transcript,
+      },
+      true,
+    );
+    service.compactAndSweep();
+    expect(reports.at(-1)).toEqual(
+      expect.objectContaining({ supported: true, trigger: "retention" }),
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
