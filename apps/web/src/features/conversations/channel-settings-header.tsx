@@ -7,7 +7,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
 import type { ChannelMembersView } from "./channel-members-page";
-import { ChannelTitle } from "./channel-name";
+import { ChannelFace, ChannelTitle } from "./channel-name";
 import { isPrivateChannel } from "./channel-visibility";
 import { useChannelMembers } from "./channel-members-query";
 
@@ -70,13 +70,25 @@ export function MembersPageHeading({
 export function ChannelSettingsTitle({
   conversation,
 }: {
-  conversation: Pick<ChannelConversationView, "name" | "visibility" | "description">;
+  conversation: Pick<
+    ChannelConversationView,
+    "conversationId" | "name" | "visibility" | "description"
+  >;
 }) {
   return (
     <>
       <div className="flex min-w-0 items-center gap-2">
+        <ChannelFace
+          channelId={conversation.conversationId}
+          className="avatar-group-xs"
+          fallback={null}
+        />
         <Heading slot="title" className="truncate text-lg font-semibold text-primary">
-          <ChannelTitle name={conversation.name} visibility={conversation.visibility} />
+          <ChannelTitle
+            name={conversation.name}
+            visibility={conversation.visibility}
+            hash={false}
+          />
         </Heading>
         {/* A private channel's lock already says it. */}
         {!isPrivateChannel(conversation) && (

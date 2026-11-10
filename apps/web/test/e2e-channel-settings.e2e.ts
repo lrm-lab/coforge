@@ -62,7 +62,7 @@ test("the channel settings panel edits info, preferences, archive and membership
         setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
       ),
     ]);
-  const channelHeader = `[...document.querySelectorAll("header")].find((header) => header.querySelector("h1")?.textContent.startsWith("#"))`;
+  const channelHeader = `document.querySelector("header h1[data-channel-title]")?.closest("header")`;
   const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => element.textContent.trim() === ${JSON.stringify(text)})`;
@@ -152,7 +152,8 @@ test("the channel settings panel edits info, preferences, archive and membership
       const panel = document.querySelector('[role="dialog"][aria-label="Channel details and settings"]');
       return { title: panel.querySelector("h2").textContent, text: panel.textContent };
     })()`);
-    expect(identity.title).toBe(`#${channelName}`);
+    // The title reads the channel's group avatar and its name, no `#` (task #74).
+    expect(identity.title).toBe(channelName);
     for (const label of [
       "Public",
       "Members",
@@ -178,7 +179,9 @@ test("the channel settings panel edits info, preferences, archive and membership
     await browser("fill", '[role="dialog"] input[type="text"]', renamed);
     await clickText("button", "Save");
     await waitFor(`${byText("button", "Changes saved")} !== undefined`);
-    await waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${renamed}"`);
+    await waitFor(
+      `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${renamed}"`,
+    );
     expect(
       (await db.conversation.findUniqueOrThrow({ where: { id: channelId } })).channelName,
     ).toBe(renamed);

@@ -278,6 +278,9 @@ html[data-drag-cursor] [data-drop-blocked] * {
      behind its stickers. The member stickers are placed on it by percentage (`collage-layout.ts`), may pass
      its edge a little, and size their initials from `--avatar-group-size`. */
   .avatar-group {
+    /* A span, sized here: it keeps its size outside a flex row too (an inline parent, task #74). */
+    display: inline-block;
+    vertical-align: middle;
     position: relative;
     flex-shrink: 0;
     --avatar-group-size: 3rem;

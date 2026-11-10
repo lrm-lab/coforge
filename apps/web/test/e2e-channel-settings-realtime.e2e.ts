@@ -71,7 +71,7 @@ function tab(session: string) {
   };
 }
 
-const channelHeader = `[...document.querySelectorAll("header")].find((header) => header.querySelector("h1")?.textContent.startsWith("#"))`;
+const channelHeader = `document.querySelector("header h1[data-channel-title]")?.closest("header")`;
 const sidebarHas = (name: string) =>
   `[...document.querySelectorAll("a")].some((link) => link.textContent.trim() === ${JSON.stringify(name)})`;
 const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
@@ -114,7 +114,7 @@ test("another open tab follows a channel's rename, description and archive live"
       await browser.run("set", "viewport", "1440", "900");
       await browser.run("open", url);
       await browser.waitFor(
-        `${channelHeader}?.querySelector("h1").textContent === "#${channelName}"`,
+        `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${channelName}"`,
       );
     }
 
@@ -126,12 +126,16 @@ test("another open tab follows a channel's rename, description and archive live"
     const saveName = async (name: string) => {
       await editor.run("fill", '[role="dialog"] input[type="text"]', name);
       await editor.clickText("button", "Save");
-      await editor.waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${name}"`);
+      await editor.waitFor(
+        `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${name}"`,
+      );
     };
     for (const warm of ["e2e-live-warm", "e2e-live-warmer"]) {
       await saveName(warm);
       try {
-        await watcher.waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${warm}"`);
+        await watcher.waitFor(
+          `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${warm}"`,
+        );
         break;
       } catch {
         // Its subscription was not up yet; the next save publishes the new name afresh.
@@ -140,11 +144,15 @@ test("another open tab follows a channel's rename, description and archive live"
     await editor.run("fill", '[role="dialog"] input[type="text"]', renamed);
     await editor.run("fill", '[role="dialog"] textarea', "Followed live");
     await editor.clickText("button", "Save");
-    await editor.waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${renamed}"`);
+    await editor.waitFor(
+      `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${renamed}"`,
+    );
 
     // The watcher never reloads: its header and sidebar row follow. A description left the
     // header for the settings title, so the panel is where it is checked.
-    await watcher.waitFor(`${channelHeader}?.querySelector("h1").textContent === "#${renamed}"`);
+    await watcher.waitFor(
+      `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${renamed}"`,
+    );
     await watcher.run("click", '[aria-label="Channel details and settings"]');
     await watcher.waitFor(panelOpen);
     await watcher.waitFor(

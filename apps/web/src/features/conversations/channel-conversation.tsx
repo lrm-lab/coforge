@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { SearchLg, Settings01 as Settings } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { ChannelTitle, channelGlyph } from "./channel-name";
+import { ChannelFace, ChannelTitle, channelGlyph } from "./channel-name";
 import { ChannelSettingsPanel } from "./channel-settings-panel";
 import { channelLabel, isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import { ChannelHeaderMemberCluster } from "./channel-header-people";
@@ -94,8 +94,22 @@ export function ChannelConversationHeader({
         identity={
           <>
             <ConversationListButton />
-            <h1 className="min-w-0 flex-1 truncate text-md font-semibold">
-              <ChannelTitle name={conversation.name} visibility={conversation.visibility} />
+            <h1
+              data-channel-title
+              className="flex min-w-0 flex-1 items-center gap-2 text-md font-semibold"
+            >
+              <ChannelFace
+                channelId={conversation.conversationId}
+                className="avatar-group-xs"
+                fallback={null}
+              />
+              <span data-channel-name className="min-w-0 truncate">
+                <ChannelTitle
+                  name={conversation.name}
+                  visibility={conversation.visibility}
+                  hash={false}
+                />
+              </span>
             </h1>
           </>
         }
@@ -331,13 +345,20 @@ export function ChannelConversation({
           : undefined
       }
       emptyState={{
-        title: channelLabel(conversation),
+        title: conversation.name,
         description: !conversation.senderMemberId
           ? m.channel_empty_preview()
           : priv
             ? m.channel_empty_private()
             : m.channel_empty(),
-        media: <Glyph aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />,
+        media: (
+          <ChannelFace
+            channelId={conversation.conversationId}
+            fallback={
+              <Glyph aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />
+            }
+          />
+        ),
       }}
       header={
         <ChannelConversationHeader
