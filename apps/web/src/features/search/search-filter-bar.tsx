@@ -1,19 +1,21 @@
 import { channelLabel } from "#src/features/conversations/channel-visibility";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type FC, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, FilterLines, XClose } from "@untitledui/icons";
-import { Button as AriaButton } from "react-aria-components";
+import { ChevronLeft, ChevronRight, FilterLines, Hash02, User01, XClose } from "@untitledui/icons";
+import {
+  Button as AriaButton,
+  Dialog as AriaDialog,
+  DialogTrigger,
+  Popover as AriaPopover,
+} from "react-aria-components";
 
 import { ActorName } from "#src/features/avatars/actor-name";
-import { messageSlots } from "#src/lib/message-slots";
-import { EntityPicker } from "#src/features/pickers/entity-picker";
+import { PickerMenu } from "#src/features/pickers/entity-picker";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import {
-  clearedFilters,
-  hasActiveFilter,
   isSearchRange,
   SEARCH_RANGES,
   SEARCH_SCOPES,
@@ -104,34 +106,11 @@ export function SearchFilterChips({
   );
 }
 
-/** The filter button beside the search box: it shows or hides the filters under the box. */
-export function SearchFilterToggle({
-  expanded,
-  onToggle,
-}: {
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <ButtonUtility
-      icon={FilterLines}
-      size="sm"
-      color="tertiary"
-      tooltip={m.search_filter_open()}
-      aria-label={m.search_filter_open()}
-      aria-expanded={expanded}
-      aria-controls={SEARCH_FILTER_PANEL_ID}
-      onClick={onToggle}
-    />
-  );
-}
-
-export const SEARCH_FILTER_PANEL_ID = "search-filter-panel";
-
-/** The filters under the search box, laid flat so they never cover the results: time, scope and
- * sort, which have few choices, as one press each; the sender and the channel, which have many, as
- * buttons that open a searchable list. Sort applies only to a query, so it is disabled without one. */
-export function SearchFilterPanel({
+/** The filter button beside the search box and, behind it, the filters (design B, task #46): time
+ * and scope, which have few choices, as pills that wrap; the sender and the channel, which have
+ * many, as rows that turn the menu into their searchable list and come back once one is picked;
+ * the sort last. Sort applies only to a query, so it is disabled without one. */
+export function SearchFilterMenu({
   workspaceId,
   query,
   filters,
@@ -143,146 +122,169 @@ export function SearchFilterPanel({
   onChange: (filters: SearchFilters) => void;
 }) {
   const { directory, senders, sender, channel } = useFilterNames(workspaceId, filters);
+  const [list, setList] = useState<"sender" | "channel">();
 
   return (
-    <div
-      id={SEARCH_FILTER_PANEL_ID}
-      role="group"
-      aria-label={m.search_filters()}
-      data-search-filter-panel=""
-      className="flex flex-col gap-2"
-    >
-      <FilterLine label={m.search_time()}>
-        <ChoiceGroup
-          label={m.search_time()}
-          selected={[filters.range ?? ANY]}
-          options={[
-            { key: ANY, label: m.search_time_any() },
-            ...SEARCH_RANGES.map((range) => ({ key: range, label: RANGE_LABEL[range]() })),
-          ]}
-          onChange={([key]) =>
-            onChange({ ...filters, range: key && isSearchRange(key) ? key : undefined })
-          }
-        />
-      </FilterLine>
-      <FilterLine label={m.search_scope()}>
-        <ChoiceGroup
-          label={m.search_scope()}
-          multiple
-          selected={filters.scope?.length ? filters.scope : [ANY]}
-          options={[
-            { key: ANY, label: m.search_scope_all() },
-            ...SEARCH_SCOPES.map((scope) => ({ key: scope, label: SCOPE_LABEL[scope]() })),
-          ]}
-          onChange={(keys, added) =>
-            // "All" is no scope at all: choosing it clears the rest, choosing any other leaves it.
-            onChange(
-              withScope(
-                filters,
-                added === ANY ? [] : keys.filter((key) => key !== ANY),
-                sender?.kind,
-              ),
-            )
-          }
-        />
-      </FilterLine>
-      <FilterLine label={m.search_from_or_channel()}>
-        <div className="flex min-w-0 flex-wrap gap-2">
-          <EntityPicker
-            trigger={
-              <FilterRow>
-                {sender
-                  ? messageSlots(m.search_from_named, {
-                      // The face before the name in the row (task #521).
-                      name: (
-                        <ActorName
-                          actor={{
-                            kind: sender.kind,
-                            id: sender.id,
-                            name: sender.label,
-                            avatarUrl: sender.avatarUrl,
-                          }}
-                        />
+    <DialogTrigger onOpenChange={() => setList(undefined)}>
+      <ButtonUtility
+        icon={FilterLines}
+        size="sm"
+        color="tertiary"
+        tooltip={m.search_filter_open()}
+        aria-label={m.search_filter_open()}
+      />
+      <AriaPopover
+        placement="bottom end"
+        className="rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt"
+      >
+        <AriaDialog
+          aria-label={m.search_filters()}
+          data-search-filter-menu=""
+          className="flex w-72 flex-col items-stretch p-1.5 outline-hidden"
+        >
+          {list === "sender" ? (
+            <FilterList label={m.search_from()} onBack={() => setList(undefined)}>
+              <PickerMenu
+                label={m.search_find_sender()}
+                searchPlaceholder={m.search_find_sender()}
+                selectedKey={sender?.key ?? ANY}
+                options={[
+                  { id: ANY, label: m.search_from_anyone() },
+                  ...senders.map((candidate) => ({
+                    id: candidate.key,
+                    label: candidate.label,
+                    face: {
+                      kind: "identity" as const,
+                      name: candidate.name,
+                      src: candidate.avatarUrl,
+                      ...(candidate.kind === "agent"
+                        ? { agentId: candidate.id }
+                        : { userId: candidate.id }),
+                    },
+                    addon: candidate.addon,
+                    keywords: candidate.textValue,
+                  })),
+                ]}
+                onSelect={(key) => {
+                  const chosen = senders.find((candidate) => candidate.key === key);
+                  onChange(withSender(filters, chosen && { id: chosen.id, kind: chosen.kind }));
+                }}
+                onClose={() => setList(undefined)}
+              />
+            </FilterList>
+          ) : list === "channel" ? (
+            <FilterList label={m.search_channel()} onBack={() => setList(undefined)}>
+              <PickerMenu
+                label={m.search_find_channel()}
+                searchPlaceholder={m.search_find_channel()}
+                selectedKey={filters.channelId ?? ANY}
+                options={[
+                  { id: ANY, label: m.search_channel_any() },
+                  ...(directory?.channels ?? []).map((candidate) => ({
+                    id: candidate.id,
+                    label: candidate.name,
+                    ariaLabel: channelLabel(candidate),
+                    face: { kind: "channel" as const, visibility: candidate.visibility },
+                    // The row's `#` is an icon; typing it still finds the channel.
+                    keywords: `#${candidate.name} ${candidate.description}`,
+                    addon: candidate.archived ? m.search_archived() : undefined,
+                  })),
+                ]}
+                onSelect={(key) =>
+                  onChange({ ...filters, channelId: key === ANY ? undefined : key })
+                }
+                onClose={() => setList(undefined)}
+              />
+            </FilterList>
+          ) : (
+            <>
+              <FilterSection label={m.search_time()}>
+                <ChoiceGroup
+                  label={m.search_time()}
+                  selected={[filters.range ?? ANY]}
+                  options={[
+                    { key: ANY, label: m.search_time_any() },
+                    ...SEARCH_RANGES.map((range) => ({ key: range, label: RANGE_LABEL[range]() })),
+                  ]}
+                  onChange={([key]) =>
+                    onChange({ ...filters, range: key && isSearchRange(key) ? key : undefined })
+                  }
+                />
+              </FilterSection>
+              <FilterSection label={m.search_scope()}>
+                <ChoiceGroup
+                  label={m.search_scope()}
+                  multiple
+                  selected={filters.scope?.length ? filters.scope : [ANY]}
+                  options={[
+                    { key: ANY, label: m.search_scope_all() },
+                    ...SEARCH_SCOPES.map((scope) => ({ key: scope, label: SCOPE_LABEL[scope]() })),
+                  ]}
+                  onChange={(keys, added) =>
+                    // "All" is no scope at all: choosing it clears the rest, choosing any other leaves it.
+                    onChange(
+                      withScope(
+                        filters,
+                        added === ANY ? [] : keys.filter((key) => key !== ANY),
+                        sender?.kind,
                       ),
-                    })
-                  : m.search_from()}
-              </FilterRow>
-            }
-            label={m.search_find_sender()}
-            searchPlaceholder={m.search_find_sender()}
-            selectedKey={sender?.key ?? ANY}
-            options={[
-              { id: ANY, label: m.search_from_anyone() },
-              ...senders.map((candidate) => ({
-                id: candidate.key,
-                label: candidate.label,
-                face: {
-                  kind: "identity" as const,
-                  name: candidate.name,
-                  src: candidate.avatarUrl,
-                  ...(candidate.kind === "agent"
-                    ? { agentId: candidate.id }
-                    : { userId: candidate.id }),
-                },
-                addon: candidate.addon,
-                keywords: candidate.textValue,
-              })),
-            ]}
-            onSelect={(key) => {
-              const chosen = senders.find((candidate) => candidate.key === key);
-              onChange(withSender(filters, chosen && { id: chosen.id, kind: chosen.kind }));
-            }}
-          />
-          <EntityPicker
-            trigger={<FilterRow>{channel ? channelLabel(channel) : m.search_channel()}</FilterRow>}
-            label={m.search_find_channel()}
-            searchPlaceholder={m.search_find_channel()}
-            selectedKey={filters.channelId ?? ANY}
-            options={[
-              { id: ANY, label: m.search_channel_any() },
-              ...(directory?.channels ?? []).map((candidate) => ({
-                id: candidate.id,
-                label: candidate.name,
-                ariaLabel: channelLabel(candidate),
-                face: { kind: "channel" as const, visibility: candidate.visibility },
-                // The row's `#` is an icon; typing it still finds the channel.
-                keywords: `#${candidate.name} ${candidate.description}`,
-                addon: candidate.archived ? m.search_archived() : undefined,
-              })),
-            ]}
-            onSelect={(key) => onChange({ ...filters, channelId: key === ANY ? undefined : key })}
-          />
-        </div>
-      </FilterLine>
-      <FilterLine label={m.search_sort()}>
-        <div className="flex items-center justify-between gap-3">
-          <ChoiceGroup
-            label={m.search_sort()}
-            disabled={!query}
-            selected={[filters.sort ?? "relevance"]}
-            options={[
-              { key: "relevance", label: m.search_sort_relevant() },
-              { key: "recent", label: m.search_sort_recent() },
-            ]}
-            onChange={([key]) =>
-              onChange({ ...filters, sort: key === "recent" ? "recent" : undefined })
-            }
-          />
-          {hasActiveFilter(filters) && (
-            <Button size="sm" color="link-gray" onClick={() => onChange(clearedFilters(filters))}>
-              {m.search_clear_filters()}
-            </Button>
+                    )
+                  }
+                />
+              </FilterSection>
+              <Separator />
+              <FilterRow
+                icon={User01}
+                label={m.search_from()}
+                value={
+                  sender && (
+                    // The face before the name (task #521).
+                    <ActorName
+                      actor={{
+                        kind: sender.kind,
+                        id: sender.id,
+                        name: sender.label,
+                        avatarUrl: sender.avatarUrl,
+                      }}
+                    />
+                  )
+                }
+                fallback={m.search_from_anyone()}
+                onPress={() => setList("sender")}
+              />
+              <FilterRow
+                icon={Hash02}
+                label={m.search_channel()}
+                value={channel?.name}
+                fallback={m.search_channel_any()}
+                onPress={() => setList("channel")}
+              />
+              <Separator />
+              <FilterSection label={m.search_sort()}>
+                <SortControl
+                  disabled={!query}
+                  selected={filters.sort ?? "relevance"}
+                  onChange={(sort) =>
+                    onChange({ ...filters, sort: sort === "recent" ? "recent" : undefined })
+                  }
+                />
+              </FilterSection>
+            </>
           )}
-        </div>
-      </FilterLine>
-    </div>
+        </AriaDialog>
+      </AriaPopover>
+    </DialogTrigger>
   );
 }
 
-function FilterLine({ label, children }: { label: string; children: ReactNode }) {
+function Separator() {
+  return <div className="-mx-1.5 my-1.5 h-px bg-border-secondary" />;
+}
+
+function FilterSection({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-1 items-center gap-1.5 sm:grid-cols-[6rem_1fr] sm:gap-3">
-      <span aria-hidden="true" className="text-xs font-medium text-tertiary">
+    <div className="flex flex-col gap-1.5 px-2.5 pt-2 pb-1.5">
+      <span aria-hidden="true" className="text-xs text-tertiary">
         {label}
       </span>
       {children}
@@ -290,18 +292,17 @@ function FilterLine({ label, children }: { label: string; children: ReactNode })
   );
 }
 
-/** A filter with few choices, each one press: a single choice, or several (`multiple`). */
+/** A filter with few choices, each a pill of its own that wraps to the next line rather than be
+ * cut short: a single choice, or several (`multiple`). */
 function ChoiceGroup({
   label,
   multiple,
-  disabled,
   selected,
   options,
   onChange,
 }: {
   label: string;
   multiple?: boolean;
-  disabled?: boolean;
   selected: string[];
   options: { key: string; label: string }[];
   /** The keys now chosen, and the one this press added, if any. */
@@ -313,7 +314,6 @@ function ChoiceGroup({
       aria-label={label}
       selectionMode={multiple ? "multiple" : "single"}
       disallowEmptySelection={!multiple}
-      isDisabled={disabled}
       selectedKeys={selected}
       onSelectionChange={(keys) => {
         const next = [...keys].map(String);
@@ -322,16 +322,14 @@ function ChoiceGroup({
           next.find((key) => !selected.includes(key)),
         );
       }}
-      // A segmented control, as Untitled's bordered tabs: a grey track, the chosen part raised
-      // white. Violet stays for the primary action (coforge-theme.css).
-      className="w-full max-w-max gap-0.5 space-x-0 rounded-lg bg-secondary_alt p-0.5 shadow-none ring-1 ring-secondary ring-inset"
+      className="w-full flex-wrap gap-1.5 space-x-0 shadow-none"
     >
       {options.map((option) => (
         <ButtonGroupItem
           key={option.key}
           id={option.key}
-          // Each as wide as its words: the longest ("Last 30 days") shows whole, never cut short.
-          className="flex-auto justify-center rounded-md bg-transparent px-3 py-1.5 text-tertiary shadow-none ring-0 not-last:pr-3 first:rounded-md last:rounded-md hover:bg-transparent hover:text-secondary selected:bg-primary_alt selected:text-secondary selected:shadow-sm"
+          // What is picked is content the person chose: the reference violet, as in the mockup.
+          className="h-7 rounded-lg px-2.5 py-0 font-medium shadow-none ring-secondary not-last:pr-2.5 first:rounded-lg last:rounded-lg selected:bg-(--color-reference-bg) selected:text-(--color-reference-text) selected:ring-(--color-reference-text)/40"
         >
           {option.label}
         </ButtonGroupItem>
@@ -340,11 +338,100 @@ function ChoiceGroup({
   );
 }
 
-/** A filter with many choices: a button naming what is chosen, opening its searchable list. */
-function FilterRow({ children }: { children: ReactNode }) {
+/** Relevance or newest first: a segmented control, as Untitled's bordered tabs. */
+function SortControl({
+  disabled,
+  selected,
+  onChange,
+}: {
+  disabled: boolean;
+  selected: string;
+  onChange: (sort: string) => void;
+}) {
   return (
-    <Button size="sm" color="secondary" iconTrailing={ChevronDown}>
+    <ButtonGroup
+      size="sm"
+      aria-label={m.search_sort()}
+      disallowEmptySelection
+      isDisabled={disabled}
+      selectedKeys={[selected]}
+      onSelectionChange={(keys) => {
+        const [key] = [...keys].map(String);
+        if (key) onChange(key);
+      }}
+      className="w-full gap-0.5 space-x-0 rounded-lg bg-secondary_alt p-0.5 shadow-none ring-1 ring-secondary ring-inset"
+    >
+      {[
+        { key: "relevance", label: m.search_sort_relevant() },
+        { key: "recent", label: m.search_sort_recent() },
+      ].map((option) => (
+        <ButtonGroupItem
+          key={option.key}
+          id={option.key}
+          className="flex-1 justify-center rounded-md bg-transparent px-3 py-1.5 text-tertiary shadow-none ring-0 not-last:pr-3 first:rounded-md last:rounded-md hover:bg-transparent hover:text-secondary selected:bg-primary_alt selected:text-secondary selected:shadow-sm"
+        >
+          {option.label}
+        </ButtonGroupItem>
+      ))}
+    </ButtonGroup>
+  );
+}
+
+/** A filter with many choices: its name, what is chosen, and a chevron to its list. */
+function FilterRow({
+  icon: Icon,
+  label,
+  value,
+  fallback,
+  onPress,
+}: {
+  icon: FC<{ className?: string }>;
+  label: string;
+  value: ReactNode;
+  fallback: string;
+  onPress: () => void;
+}) {
+  return (
+    <AriaButton
+      onPress={onPress}
+      className="flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm text-secondary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
+    >
+      <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+      <span className="shrink-0">{label}</span>
+      <span
+        className={cx(
+          "ml-auto min-w-0 truncate",
+          value ? "font-medium text-(--color-reference-text)" : "text-tertiary",
+        )}
+      >
+        {value ?? fallback}
+      </span>
+      <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+    </AriaButton>
+  );
+}
+
+/** A filter's list in place of the menu, under a row back to it. */
+function FilterList({
+  label,
+  onBack,
+  children,
+}: {
+  label: string;
+  onBack: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <AriaButton
+        onPress={onBack}
+        className="flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm text-secondary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
+      >
+        <ChevronLeft aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+        {label}
+      </AriaButton>
+      <Separator />
       {children}
-    </Button>
+    </>
   );
 }

@@ -45,7 +45,6 @@
   "search_find_sender": "查找成员或 Agent",
   "search_scope": "范围",
   "search_scope_all": "全部",
-  "search_from_or_channel": "发送者和群聊",
   "search_scope_mentioned": "@我",
   "search_scope_humans": "人类",
   "search_scope_agents": "Agent",
