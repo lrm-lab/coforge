@@ -154,7 +154,7 @@ test("a chat page's server HTML holds no conversation, and the browser shows the
     });
     await mkdir(artifacts, { recursive: true });
 
-    // Chat's pages, and the search page, whose preview shows a conversation the URL names.
+    // Chat's pages, and an old search address, which names a conversation to open at a message.
     const pages = {
       channel: {
         path: `${workspacePath}/channel/${open.conversation.id}`,
@@ -171,6 +171,16 @@ test("a chat page's server HTML holds no conversation, and the browser shows the
     const sizes: Record<string, { bytes: number; preloadedJs: number; missingPreloads: string[] }> =
       {};
     for (const [name, page] of Object.entries(pages)) {
+      // The old search address is answered with the conversation's own address, at the message;
+      // that page's HTML is the channel's, checked above.
+      if (name === "search") {
+        const response = await fetch(`${origin}${page.path}`, { redirect: "manual" });
+        expect(response.status).toBe(307);
+        expect(response.headers.get("location")).toContain(
+          `/channel/${open.conversation.id}?message=${open.messages[0]!.id}`,
+        );
+        continue;
+      }
       const html = await serverHtml(page.path);
       await writeFile(join(artifacts, `${name}.html`), html);
       const linked = new Set([...referencedAssets(html)].filter((asset) => asset.endsWith(".js")));

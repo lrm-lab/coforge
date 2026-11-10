@@ -51,4 +51,8 @@ export const searchQuerySchema = z.object({
   sort: z.literal("recent").optional().catch(undefined),
   // Set by "Search this channel": the filters wait for a query before searching.
   defer: z.literal("1").optional().catch(undefined),
+  // The conversation the old search page previewed beside its results (`channel:<id>`), at a
+  // message: such an address now opens that conversation at the message.
+  open: z.string().optional().catch(undefined),
+  msg: z.uuid().optional().catch(undefined),
 });

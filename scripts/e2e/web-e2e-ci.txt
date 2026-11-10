@@ -111,3 +111,4 @@ e2e-mobile-no-horizontal-overflow.e2e.ts 3
 e2e-http-response-types.e2e.ts 1
 e2e-agent-apps-prompt.e2e.ts 1
 workspace-assistant.e2e.ts 1
+e2e-search-legacy-link.e2e.ts 4
