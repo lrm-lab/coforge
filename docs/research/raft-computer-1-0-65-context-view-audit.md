@@ -1,6 +1,6 @@
 # Raft 1.0.65 Context View 对齐审计
 
-审计对象：`/private/tmp/coforge-context-complete`（`feat/context-view-complete` 工作树）。对照包：`/private/tmp/raft-research-current/sea/assets/computer.cjs`。 “已对齐”表示当前源码有直接证据，“未验证”表示还没有真实运行链路证据。
+审计对象：`/private/tmp/coforge-context-complete-next`（`fix/context-view-complete-next` 工作树）。对照包：`/private/tmp/raft-research-current/sea/assets/computer.cjs`。 “已对齐”表示当前源码有直接证据，“未验证”表示还没有真实运行链路证据。
 
 ## 版本与来源
 
@@ -26,7 +26,7 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 1. **Feature wiring 现在包含实时广播。** CoForge 保留 launch identity 和 delivery 两路兼容语义，同时新增版本化 `AgentServerFeatures` publication：flag reload 按 workspace/computer 聚合 active Agents，在 capability lease 存在时经 daemon control channel 广播；daemon 校验 scope、ready 前缓冲、按 revision 去重、即时更新 gate，并在 live Agent gate-on 时以 `trigger: server_features` 重报 availability。旧 server 缺字段和旧 daemon 未知 publication 都保持 no-op。现有 focused tests 覆盖 codec、广播聚合/串行化、daemon route、revision 去重和 availability re-report；真实部署链路仍未验证。
 
-2. **错误码和 trace 已完成本地可诊断映射。** Raft 将 `expired` 用于 viewer/result 生命周期，将 `not_found` 用于 compaction 后不存在的索引；CoForge 不再为 retention compaction 添加 tombstone，以保持这一区分。Web 现在保留 daemon 的 `failed` 结果和 `reason`，并将 publish/pending transport 映射为 `offline`、结果读取/解压映射为 `read_failed`；daemon 对 queued expiry、scope/stopping rejection、source/restore/exception 和 upload outcome 记录统一 `context_view:result` trace，unexpected exception 也上传 `read_failed` result。Raft 的 `posted_bytes`、`compressed_bytes`、`http_status` 等 HTTP 细节仍未进入 CoForge trace。
+2. **错误码和 trace 已完成本地可诊断映射。** Raft 将 `expired` 用于 viewer/result 生命周期，将 `not_found` 用于 compaction 后不存在的索引；CoForge 不再为 retention compaction 添加 tombstone，以保持这一区分。Web 现在保留 daemon 的 `failed` 结果和 `reason`，并将 publish/pending transport 映射为 `offline`、结果读取/解压映射为 `read_failed`；daemon 对 queued expiry、scope/stopping rejection、source/restore/exception 和 upload outcome 记录统一 `context_view:result` trace，unexpected exception 也上传 `read_failed` result。CoForge trace 现在包含 `queued_ms`、`posted_bytes`、`compressed_bytes`、`http_status` 和 `error_class`；真实部署链路仍未验证。
 
 3. **完整链路仍未验证。** 尚无 staging/browser E2E 覆盖：owner action → Server Function → Redis pending → Centrifugo daemon request → real Agent transcript/captured log → child restore → gzip HTTP upload → scoped result acceptance → browser render。现有 Web 测试是纯 principal helper，不能证明真实 auth、transport、Redis 或 provider 行为。Pi/Builtin indexed writer/restore 现在有 fixture 和 child 证据，但真实 provider E2E 仍为 **NOT VERIFIED**。
 
@@ -40,7 +40,7 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 ## 发布前待办
 
-- 为 running Agent 的 launch/delivery/forget/report 时序补 runtime integration assertion。
-- 明确错误码映射（尤其 `expired`、`agent_moved`、`not_recorded`、`old_daemon`）并补跨层测试。
+- 补齐 Kimi SDK 专有的完整 profile rendering、migration registry、anomaly telemetry，以及 provider-native viewer projection 的逐字段 fixture 审计。
+- 完成真实 staging/browser/Redis/Centrifugo/provider E2E（本轮按范围豁免，当前结论仍不把它们描述为已验证）。
 
 真实 staging/browser/Redis/Centrifugo/provider E2E 按本次范围豁免；当前结论不把它们描述为已验证。
