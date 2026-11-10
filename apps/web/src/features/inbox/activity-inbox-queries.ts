@@ -154,7 +154,9 @@ export const activityNavAttentionQuery = (workspaceId: string) =>
     queryFn: (): Promise<ActivityNavAttention> => loadActivityNavAttention(),
     staleTime: 30_000,
     structuralSharing: (held: unknown, next: unknown) =>
-      held && readEarlier(next as ActivityNavAttention, held as ActivityNavAttention) ? held : next,
+      held && readEarlier(next as ActivityNavAttention, held as ActivityNavAttention)
+        ? held
+        : replaceEqualDeep(held, next),
   });
 
 /** Whether `answer` was read at an earlier place in a channel than `than`, in the same epoch. */
@@ -219,18 +221,22 @@ export function activityNavAttentionRealtime(
     // The viewer's channel carries every Workspace's; the count is this one's.
     onMessage: (message, position) => {
       if (message.workspaceId !== workspaceId) return;
-      const current = queryClient.getQueryData<ActivityNavAttention>(queryKey);
+      const current = queryClient.getQueryData<ActivityNavAttention>(queryKey) ?? {
+        hasUnread: false,
+      };
       const {
         state,
         reread: needsRead,
         lights,
-      } = applyActivityMessage(current ?? { hasUnread: false }, message, {
+      } = applyActivityMessage(current, message, {
         viewerUserId: userId,
         isViewing: isViewingItem,
       });
       if (needsRead) rereadThrottled();
       if (!lights) return;
       litBy = { position };
+      // Already counted: the badge holds as it is, and nothing re-renders.
+      if (state === current) return;
       queryClient.setQueryData<ActivityNavAttention>(queryKey, (held) => ({
         streamPositions: {},
         ...held,
