@@ -1,5 +1,5 @@
 import { channelLabel } from "#src/features/conversations/channel-visibility";
-import { useMemo, useState, type FC, type ReactNode } from "react";
+import { useMemo, useState, type FC, type ReactNode, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, FilterLines, Hash02, User01, XClose } from "@untitledui/icons";
 import {
@@ -13,6 +13,7 @@ import { ActorName } from "#src/features/avatars/actor-name";
 import { PickerMenu } from "#src/features/pickers/entity-picker";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import {
@@ -115,12 +116,17 @@ export function SearchFilterMenu({
   query,
   filters,
   onChange,
+  besideRef,
 }: {
   workspaceId: string;
   query: string;
   filters: SearchFilters;
   onChange: (filters: SearchFilters) => void;
+  /** The search dialog: on a wide screen the filters open beside it, level with its top (Frank,
+   * 11-10), not hanging past its edge; a phone has no room beside it, so under the button. */
+  besideRef: RefObject<Element | null>;
 }) {
+  const wide = useBreakpoint("sm");
   const { directory, senders, sender, channel } = useFilterNames(workspaceId, filters);
   const [list, setList] = useState<"sender" | "channel">();
 
@@ -134,7 +140,9 @@ export function SearchFilterMenu({
         aria-label={m.search_filter_open()}
       />
       <AriaPopover
-        placement="bottom end"
+        {...(wide
+          ? { triggerRef: besideRef, placement: "end top" as const }
+          : { placement: "bottom end" as const })}
         className="rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt"
       >
         <AriaDialog
