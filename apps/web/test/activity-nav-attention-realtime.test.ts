@@ -5,13 +5,26 @@ import {
   activityNavAttentionQuery,
   activityNavAttentionRealtime,
 } from "#src/features/inbox/activity-inbox-queries";
+import type { ActivityUnreadMessage } from "#src/features/inbox/activity-unread-count";
 import type { StreamPosition } from "#src/features/realtime/subscription-gap";
 import { dataBecomes, gatedRead, settle } from "./helpers/query-cache-harness";
 
-type Dot = { hasUnread: boolean; streamPositions: Record<string, StreamPosition> };
+type Dot = {
+  hasUnread: boolean;
+  streamPositions: Record<string, StreamPosition>;
+  unreadCount?: number;
+  unreadKeys?: string[];
+};
 const USER = "user-1";
 const CHANNEL = `chat:user:${USER}`;
 const at = (offset: number) => ({ [CHANNEL]: { epoch: "e", offset } });
+/** A message from another person, as the page hears it. */
+const aMessage = (fields: Partial<ActivityUnreadMessage> = {}): ActivityUnreadMessage => ({
+  conversationId: "channel-1",
+  senderUserId: "ada",
+  sender: { kind: "user", name: "Ada" },
+  ...fields,
+});
 
 /**
  * Task #289: the nav Activity dot cleared only in the tab that marked the inbox read. Its realtime
@@ -48,7 +61,7 @@ test("a message lights the nav dot without reading the server", async () => {
   const dot = mountedDot(queryClient, read);
   try {
     const { onMessage } = activityNavAttentionRealtime(queryClient, USER);
-    onMessage(undefined, { epoch: "e", offset: 5 });
+    onMessage(aMessage(), { epoch: "e", offset: 5 });
     expect(dot.data()).toEqual({ hasUnread: true, streamPositions: at(4) });
     expect(reads).toBe(0);
   } finally {
@@ -63,7 +76,7 @@ test("a message in a conversation the viewer muted leaves the nav dot dark (task
     streamPositions: at(4),
   });
   const { onMessage } = activityNavAttentionRealtime(queryClient, USER);
-  onMessage({ muted: true }, { epoch: "e", offset: 5 });
+  onMessage(aMessage({ muted: true }), { epoch: "e", offset: 5 });
   expect(queryClient.getQueryData<Dot>(activityNavAttentionQuery().queryKey)).toEqual({
     hasUnread: false,
     streamPositions: at(4),
@@ -145,7 +158,7 @@ test("a message published after the server's read keeps the dot lit; one before 
   try {
     const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER);
     // Message 7 reached this page before the announcement of a read made at 6, which may lack it.
-    onMessage(undefined, after(7));
+    onMessage(aMessage(), after(7));
     onAttention({ hasUnread: false, streamPosition: after(6) });
     await settle();
     expect(dot.data()?.hasUnread).toBe(true);
@@ -164,7 +177,7 @@ test("a message published right after the announcement lights the dot again", as
     const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER);
     // Both in one frame: the read-all made at 6, then message 7.
     onAttention({ hasUnread: false, streamPosition: after(6) });
-    onMessage(undefined, after(7));
+    onMessage(aMessage(), after(7));
     await settle();
     expect(dot.data()?.hasUnread).toBe(true);
   } finally {
@@ -181,13 +194,13 @@ test("a lit dot reads again when the server's place cannot be compared with its 
   });
   try {
     const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER);
-    onMessage(undefined, after(7));
+    onMessage(aMessage(), after(7));
     // Centrifugo did not answer the write's position read in time.
     onAttention({ hasUnread: false });
     await dataBecomes<Dot>(queryClient, dot.queryKey, (d) => !d.hasUnread);
     expect(reads).toBe(1);
     // The read answered for the message; the next announcement needs no read.
-    onMessage(undefined, after(10));
+    onMessage(aMessage(), after(10));
     onAttention({ hasUnread: false, streamPosition: after(11) });
     await dataBecomes<Dot>(queryClient, dot.queryKey, (d) => !d.hasUnread);
     expect(reads).toBe(1);
@@ -287,6 +300,124 @@ test("a subscribe that missed nothing reads nothing; one that lost publications 
     onSubscribed({ wasRecovering: true, recovered: false });
     await dataBecomes<Dot>(queryClient, dot.queryKey, () => reads === 1);
     expect(reads).toBe(1);
+  } finally {
+    dot.unsubscribe();
+  }
+});
+
+/**
+ * Task #62: the nav badge's number. A server that counts sends `unreadCount` and `unreadKeys` with
+ * the dot; a message adds its item to them without a read, and an announcement replaces them.
+ */
+function countingDot(queryClient: QueryClient, read: () => Promise<Dot>, held: Partial<Dot> = {}) {
+  queryClient.setQueryData(activityNavAttentionQuery().queryKey, {
+    hasUnread: false,
+    unreadCount: 0,
+    unreadKeys: [],
+    streamPositions: at(4),
+    ...held,
+  });
+  return mountedDot(queryClient, read);
+}
+
+test("a message adds its conversation to the count, and a second one in it does not", () => {
+  const queryClient = new QueryClient();
+  const dot = countingDot(queryClient, async () => ({ hasUnread: false, streamPositions: at(4) }));
+  try {
+    const { onMessage } = activityNavAttentionRealtime(queryClient, USER);
+    onMessage(aMessage(), after(5));
+    onMessage(aMessage({ threadRootId: "root-1" }), after(6));
+    onMessage(aMessage(), after(7));
+    expect(dot.data()).toEqual({
+      hasUnread: true,
+      unreadCount: 2,
+      unreadKeys: ["conversation:channel-1", "thread:root-1"],
+      streamPositions: at(4),
+    });
+  } finally {
+    dot.unsubscribe();
+  }
+});
+
+test("a message from a server that sends no count lights the dot alone", () => {
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(activityNavAttentionQuery().queryKey, {
+    hasUnread: false,
+    streamPositions: at(4),
+  });
+  activityNavAttentionRealtime(queryClient, USER).onMessage(aMessage(), after(5));
+  expect(queryClient.getQueryData<Dot>(activityNavAttentionQuery().queryKey)).toEqual({
+    hasUnread: true,
+    streamPositions: at(4),
+  });
+});
+
+test("an announcement replaces the count and its keys, and drops them from a server that sends none", async () => {
+  const queryClient = new QueryClient();
+  const dot = countingDot(queryClient, async () => ({ hasUnread: true, streamPositions: at(4) }), {
+    hasUnread: true,
+    unreadCount: 3,
+    unreadKeys: ["conversation:a", "conversation:b", "conversation:c"],
+  });
+  try {
+    const { onAttention } = activityNavAttentionRealtime(queryClient, USER);
+    onAttention({
+      hasUnread: true,
+      streamPosition: after(6),
+      unreadCount: 1,
+      unreadKeys: ["conversation:c"],
+    });
+    expect(dot.data()).toEqual({
+      hasUnread: true,
+      unreadCount: 1,
+      unreadKeys: ["conversation:c"],
+      streamPositions: at(6),
+    });
+    onAttention({ hasUnread: false, streamPosition: after(8) });
+    expect(dot.data()).toEqual({ hasUnread: false, streamPositions: at(8) });
+  } finally {
+    dot.unsubscribe();
+  }
+});
+
+test("a count announced from before a message that reached this page reads again", async () => {
+  const queryClient = new QueryClient();
+  let reads = 0;
+  const dot = countingDot(queryClient, async () => {
+    reads++;
+    return { hasUnread: true, unreadCount: 2, unreadKeys: ["a", "b"], streamPositions: at(9) };
+  });
+  try {
+    const { onMessage, onAttention } = activityNavAttentionRealtime(queryClient, USER);
+    onMessage(aMessage(), after(7));
+    // The announcement was read at 6, before message 7: its count may lack it.
+    onAttention({ hasUnread: true, streamPosition: after(6), unreadCount: 1, unreadKeys: ["a"] });
+    await dataBecomes<Dot>(queryClient, dot.queryKey, (d) => d.unreadCount === 2);
+    expect(reads).toBe(1);
+  } finally {
+    dot.unsubscribe();
+  }
+});
+
+test("a muted conversation's message leaves the count and reads the server, at most once per interval", async () => {
+  const queryClient = new QueryClient();
+  let reads = 0;
+  const dot = countingDot(queryClient, async () => {
+    reads++;
+    return { hasUnread: true, unreadCount: reads, unreadKeys: [], streamPositions: at(4) };
+  });
+  try {
+    const { onMessage } = activityNavAttentionRealtime(queryClient, USER, {
+      rereadIntervalMs: 20,
+    });
+    // A burst: the first reads at once, the rest wait for one read at the end of the interval.
+    onMessage(aMessage({ muted: true }), after(5));
+    onMessage(aMessage({ muted: true }), after(6));
+    onMessage(aMessage({ muted: true }), after(7));
+    await dataBecomes<Dot>(queryClient, dot.queryKey, (d) => d.unreadCount === 1);
+    expect(reads).toBe(1);
+    await dataBecomes<Dot>(queryClient, dot.queryKey, (d) => d.unreadCount === 2);
+    expect(reads).toBe(2);
   } finally {
     dot.unsubscribe();
   }

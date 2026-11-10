@@ -26,17 +26,21 @@ function emit() {
 
 /**
  * The one place the title is composed. A page without a label shows `workspace | CoForge`, and
- * outside a Workspace only `CoForge`. When the server gives an unread count (task #62), the
- * `(N) ` prefix goes here and `unread` below becomes that count.
+ * outside a Workspace only `CoForge`. Activity's unread count (task #62) leads as `(N) `, and
+ * `(99+) ` at the cap of 100; none, or zero, adds nothing.
  */
 export function composeTabTitle({
   label,
   workspaceName,
+  unreadCount,
 }: {
   label?: string;
   workspaceName?: string;
+  unreadCount?: number;
 }) {
-  return [label, workspaceName, PRODUCT_NAME].filter(Boolean).join(" | ");
+  const title = [label, workspaceName, PRODUCT_NAME].filter(Boolean).join(" | ");
+  if (unreadCount === undefined || unreadCount < 1) return title;
+  return `(${unreadCount > 99 ? "99+" : unreadCount}) ${title}`;
 }
 
 // The pages that have registered a label, in mount order; the latest wins. A stack rather than one
@@ -73,28 +77,40 @@ export function usePageTitleLabel(label: string | undefined) {
  */
 export function useWorkspaceTabTitle(workspaceName: string) {
   const label = useSyncExternalStore(subscribe, currentLabel, () => undefined);
+  const unreadCount = useSyncExternalStore(
+    subscribe,
+    () => activityUnreadCount,
+    () => undefined,
+  );
   useEffect(() => {
-    document.title = composeTabTitle({ label, workspaceName });
+    document.title = composeTabTitle({ label, workspaceName, unreadCount });
     return () => {
       document.title = composeTabTitle({});
     };
-  }, [label, workspaceName]);
+  }, [label, workspaceName, unreadCount]);
 }
 
 // Whether the viewer's Activity has unread items. The signal is computed in the Workspace shell
 // (the same one as the sidebar dot) while the icon is rendered in the root document, outside it.
 let activityUnread = false;
+// How many, when the server counts them (task #62); undefined from an older server.
+let activityUnreadCount: number | undefined;
 
-/** Reports whether Activity has unread items, for the tab icon; cleared when the caller unmounts. */
-export function useReportActivityUnread(unread: boolean) {
+/**
+ * Reports whether Activity has unread items, for the tab icon, and how many, for the title's
+ * `(N) ` prefix; cleared when the caller unmounts.
+ */
+export function useReportActivityUnread(unread: boolean, unreadCount?: number) {
   useEffect(() => {
     activityUnread = unread;
+    activityUnreadCount = unreadCount;
     emit();
     return () => {
       activityUnread = false;
+      activityUnreadCount = undefined;
       emit();
     };
-  }, [unread]);
+  }, [unread, unreadCount]);
 }
 
 /** Whether the tab icon shows the unread dot. False in the server render. */
