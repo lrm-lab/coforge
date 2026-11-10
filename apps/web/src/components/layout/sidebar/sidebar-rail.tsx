@@ -2,7 +2,7 @@ import type { FC, ReactNode } from "react";
 import { Pressable } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
-import { UnreadDot } from "#src/components/ui/unread-marker";
+import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { cx } from "#src/utils/cx";
 
 // Adapted from Untitled's sidebar-slim.tsx (MIT; docs/design/official-components.md §7) —
@@ -17,10 +17,15 @@ import { cx } from "#src/utils/cx";
  */
 export const SIDEBAR_RAIL_WIDTH = "3.5rem";
 
-type RailItemType = NavItemType & { icon: FC<{ className?: string }>; current?: boolean };
+type RailItemType = NavItemType & {
+  icon: FC<{ className?: string }>;
+  current?: boolean;
+  /** The number on the icon's corner; without it a `badge` is the dot. */
+  unreadCount?: number;
+};
 
 /** Icon only. The caption used to live under the icon; the name is now the tooltip. */
-function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
+function RailItem({ href, icon: Icon, label, current, badge, unreadCount }: RailItemType) {
   return (
     <Tooltip title={label} placement="right" offset={4}>
       <Pressable>
@@ -43,7 +48,16 @@ function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
                 current ? "text-nav-fg-current" : "text-nav-fg group-hover:text-secondary",
               )}
             />
-            {badge ? <UnreadDot className="absolute top-1.5 right-1.5" /> : null}
+            {unreadCount ? (
+              // A smaller pill on the corner, ringed in the rail's color, so "99+" leaves the
+              // icon readable.
+              <UnreadBadge
+                count={unreadCount}
+                className="absolute -top-1 -right-1.5 h-4 min-w-4 px-1 ring-2 ring-sidebar"
+              />
+            ) : badge ? (
+              <UnreadDot className="absolute top-1.5 right-1.5" />
+            ) : null}
           </span>
         </a>
       </Pressable>

@@ -2,12 +2,15 @@ import { RollingNumber } from "#src/components/ui/rolling-number";
 import { cx } from "#src/utils/cx";
 
 /** Slack-style badge: the count up to 99, then "99+". Hidden from AT, so the row that owns it
- * names the unread count in its own label. Unread is a near-black pill (dark gray in dark mode), so the multi-colored Agent avatars carry the color. */
-export function UnreadBadge({ count }: { count: number }) {
+ * names the unread count in its own label. `className` only positions it. Unread is a near-black pill (dark gray in dark mode), so the multi-colored Agent avatars carry the color. */
+export function UnreadBadge({ count, className }: { count: number; className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary-solid px-1.5 dark:bg-secondary-solid text-xs font-semibold leading-none text-white tabular-nums"
+      className={cx(
+        "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary-solid px-1.5 dark:bg-secondary-solid text-xs font-semibold leading-none text-white tabular-nums",
+        className,
+      )}
     >
       <RollingNumber value={Math.min(count, 99)} />
       {count > 99 && "+"}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, type FC, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, type FC } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -22,7 +22,7 @@ import {
   SidebarExpanded,
   SidebarMobileDrawer,
 } from "#src/components/layout/sidebar/sidebar-expanded";
-import { UnreadDot } from "#src/components/ui/unread-marker";
+import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
 import {
   activityNavAttentionQuery,
@@ -56,11 +56,11 @@ export type AppUser = {
 };
 
 /**
- * Whether the viewer has unread activity anywhere — the nav Activity dot. A message the server sent
- * to this person's own channel lights it with no read at all; a Done, read-all or mark-unread in
- * any of their pages says where the inbox now stands, which the dot takes; anything else that
- * reaches the inbox (a mention from outside the channel, a Task assignment) re-reads the one
- * boolean (`activityNavAttentionRealtime`).
+ * Whether the viewer has unread activity anywhere, and how many items when the server counts them
+ * — the nav Activity badge. A message the server sent to this person's own channel lights it with
+ * no read at all; a Done, read-all or mark-unread in any of their pages says where the inbox now
+ * stands, which the badge takes; anything else that reaches the inbox (a mention from outside the
+ * channel, a Task assignment) re-reads it (`activityNavAttentionRealtime`).
  */
 function useActivityAttention(user: AppUser, workspaceId: string) {
   const queryClient = useQueryClient();
@@ -77,7 +77,7 @@ function useActivityAttention(user: AppUser, workspaceId: string) {
     onSubscribed,
   });
   const query = useQuery(activityNavAttentionQuery(workspaceId));
-  return query.data?.hasUnread ?? false;
+  return { hasUnread: query.data?.hasUnread ?? false, unreadCount: query.data?.unreadCount };
 }
 
 /** Chat is the Workspace's home page ("") and its conversations. */
@@ -88,9 +88,11 @@ function useNavItems(
   recordsPreview: boolean,
   workspaceId: string,
   aiWorkbench: boolean,
-  activityDot?: ReactNode,
+  activity: { hasUnread: boolean; unreadCount?: number },
 ): (NavItemType & {
   icon: FC<{ className?: string }>;
+  /** The Activity row's number, for the collapsed rail to draw on its icon. */
+  unreadCount?: number;
   bareHref: string;
   /** Sections under `base` this item is also current for. */
   sections?: readonly string[];
@@ -98,6 +100,15 @@ function useNavItems(
   groupLabel?: string;
 })[] {
   const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
+  // The number when the server counts, else the dot; a count of zero shows nothing.
+  const unreadCount =
+    activity.unreadCount && activity.unreadCount > 0 ? activity.unreadCount : undefined;
+  const activityBadge =
+    unreadCount !== undefined ? (
+      <UnreadBadge count={unreadCount} />
+    ) : activity.unreadCount === undefined && activity.hasUnread ? (
+      <UnreadDot className="ml-auto" />
+    ) : undefined;
   const recordsHref = recordsNavHref(workspaceId);
   const item = (section: string) => ({
     bareHref: `${base}/${section}`,
@@ -115,7 +126,8 @@ function useNavItems(
       label: m.navigation_activity(),
       ...item("activity"),
       icon: Activity,
-      badge: activityDot,
+      badge: activityBadge,
+      unreadCount,
     },
     ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
     // What the Workspace shares sits under its own heading, apart from the viewer's own
@@ -222,16 +234,10 @@ export function AppShell({
     // Remembered within the Workspace, so it holds the path under `/w/<slug>`.
     rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${search}`);
   }, [workspaceId, base, pathname, searchStr]);
-  const hasActivityAttention = useActivityAttention(user, workspaceId);
-  useReportActivityUnread(hasActivityAttention);
+  const activityAttention = useActivityAttention(user, workspaceId);
+  useReportActivityUnread(activityAttention.hasUnread, activityAttention.unreadCount);
   useWorkspaceTabTitle(currentWorkspace.name);
-  const navItems = useNavItems(
-    base,
-    recordsPreview,
-    workspaceId,
-    aiWorkbench,
-    hasActivityAttention ? <UnreadDot className="ml-auto" /> : undefined,
-  );
+  const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
   const section = pathname.slice(base.length).split("/")[1] ?? "";
   const activeUrl = navItems.find((item) =>
     item.sections

@@ -118,6 +118,31 @@ describe("conversation realtime", () => {
     expect(() => decodeActivityChangedEvent({ ...changed, workspaceId: "" })).toThrow();
   });
 
+  test("decodes the unread count and the item keys an Activity change announces (task #62)", () => {
+    const changed = { type: "activity.changed.v1" as const, workspaceId: "workspace-a" };
+    const counted = {
+      ...changed,
+      attention: { hasUnread: true, unreadCount: 2, unreadKeys: ["conversation:a", "thread:b"] },
+    };
+    expect(decodeActivityChangedEvent(counted)).toEqual(counted);
+    // An older server omits both.
+    expect(decodeActivityChangedEvent({ ...changed, attention: { hasUnread: true } })).toEqual({
+      ...changed,
+      attention: { hasUnread: true },
+    });
+    const withCount = (unreadCount: unknown, unreadKeys: unknown = []) => ({
+      ...changed,
+      attention: { hasUnread: true, unreadCount, unreadKeys },
+    });
+    expect(decodeActivityChangedEvent(withCount(100)).attention?.unreadCount).toBe(100);
+    expect(() => decodeActivityChangedEvent(withCount(101))).toThrow();
+    expect(() => decodeActivityChangedEvent(withCount(-1))).toThrow();
+    expect(() => decodeActivityChangedEvent(withCount(1.5))).toThrow();
+    expect(() =>
+      decodeActivityChangedEvent(withCount(1, Array(101).fill("conversation:a"))),
+    ).toThrow();
+  });
+
   test("decodes the viewer's own channel events, which name only ids, the unread count and the read cursor", () => {
     const ids = { workspaceId: "workspace-a", conversationId: "conversation-a" };
     const marked = {
