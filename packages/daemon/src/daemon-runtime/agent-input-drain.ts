@@ -239,9 +239,14 @@ export class AgentInputDrain {
         }
         if (item.kind === "delivery") {
           await this.ports.deliverMessage(agentId, item.message);
-          const launchId = this.ports.launchFor(agentId)?.launchId;
-          if (launchId)
-            this.ports.deliveryConsumption?.recordWrite(agentId, launchId, item.message);
+          const launch = this.ports.launchFor(agentId);
+          if (launch)
+            this.ports.deliveryConsumption?.recordWrite(
+              agentId,
+              launch.launchId,
+              launch,
+              item.message,
+            );
           logger.info("Agent delivery indexed", {
             event: "agent.message.delivery_indexed",
             agent_id: agentId,

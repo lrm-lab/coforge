@@ -16,6 +16,9 @@ export type DeliveryConsumptionSnapshot = Readonly<{
 
 type Pending = {
   launchId: string;
+  /** The ActivityLaunch object, not only its reused server launchId. Wake relaunches can reuse
+   * launchId while old provider events are still draining. */
+  generation: object;
   pendingWrites: number;
   firstPendingAtMs?: number;
   lastDeliveryId?: string;
@@ -38,11 +41,12 @@ export class DeliveryConsumptionWatch {
   recordWrite(
     agentId: string,
     launchId: string,
+    generation: object,
     delivery: Pick<AgentMessageDelivery, "deliveryId">,
   ): void {
     let pending = this.#pending.get(agentId);
-    if (!pending || pending.launchId !== launchId) {
-      pending = { launchId, pendingWrites: 0, warned: false };
+    if (!pending || pending.launchId !== launchId || pending.generation !== generation) {
+      pending = { launchId, generation, pendingWrites: 0, warned: false };
       this.#pending.set(agentId, pending);
     }
     pending.pendingWrites += 1;
@@ -61,9 +65,14 @@ export class DeliveryConsumptionWatch {
     });
   }
 
-  observeRuntimeEvent(agentId: string, launchId: string, event: AgentRuntimeEvent): void {
+  observeRuntimeEvent(
+    agentId: string,
+    launchId: string,
+    generation: object,
+    event: AgentRuntimeEvent,
+  ): void {
     if (event.type === "error") {
-      this.recordRuntimeError(agentId, launchId, event.message);
+      this.recordRuntimeError(agentId, launchId, generation, event.message);
       return;
     }
     if (
@@ -74,12 +83,12 @@ export class DeliveryConsumptionWatch {
       event.type === "tool-end" ||
       event.type === "completed"
     )
-      this.recordConsumption(agentId, launchId, event.type);
+      this.recordConsumption(agentId, launchId, generation, event.type);
   }
 
-  recordConsumption(agentId: string, launchId: string, signal: string): void {
+  recordConsumption(agentId: string, launchId: string, generation: object, signal: string): void {
     const pending = this.#pending.get(agentId);
-    if (!pending || pending.launchId !== launchId) return;
+    if (!pending || pending.launchId !== launchId || pending.generation !== generation) return;
     this.#pending.delete(agentId);
     logger.info("Agent delivery consumption observed", {
       event: "daemon.agent.delivery.consumed",
@@ -89,9 +98,9 @@ export class DeliveryConsumptionWatch {
     });
   }
 
-  recordRuntimeError(agentId: string, launchId: string, detail: string): void {
+  recordRuntimeError(agentId: string, launchId: string, generation: object, detail: string): void {
     const pending = this.#pending.get(agentId);
-    if (!pending || pending.launchId !== launchId) return;
+    if (!pending || pending.launchId !== launchId || pending.generation !== generation) return;
     this.#pending.delete(agentId);
     logger.warn("Agent delivery consumption ended with runtime error", {
       event: "daemon.agent.delivery.consumption_error",
