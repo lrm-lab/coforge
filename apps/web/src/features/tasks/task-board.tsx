@@ -262,10 +262,11 @@ export function TaskBoard<T extends BoardTask>({
           where={conversation?.name ? { label: conversation.name } : undefined}
           members={conversation?.members}
           conversationId={conversation?.conversationId}
-          onCreate={async (draft, idempotencyKey) => {
+          onCreate={async (draft, idempotencyKey, { more }) => {
             const created = await onCreateTask(draft, idempotencyKey);
-            // The new Task opens: its message in the chat, or, made without one, its popup.
-            if (created.length === 1) await conversation?.onOpenCreated(created[0]!);
+            // The new Task opens: its message in the chat, or, made without one, its popup. Not
+            // while the viewer keeps creating: the form stays for the next one.
+            if (created.length === 1 && !more) await conversation?.onOpenCreated(created[0]!);
           }}
         />
       )}

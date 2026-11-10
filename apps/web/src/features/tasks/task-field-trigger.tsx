@@ -16,12 +16,12 @@ export function TaskFieldTrigger({
     <AriaButton
       aria-label={label}
       isDisabled={disabled}
-      className="group relative -mx-2 inline-flex any-pointer-coarse:min-h-7 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-y-2 any-pointer-coarse:after:inset-x-0 min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-primary outline-focus-ring transition-colors focus-visible:outline-2 enabled:hover:bg-primary_hover disabled:cursor-not-allowed"
+      className="group relative -mx-2 inline-flex any-pointer-coarse:min-h-7 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-y-2 any-pointer-coarse:after:inset-x-0 min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-primary outline-focus-ring transition-colors focus-visible:outline-2 enabled:hover:bg-primary_hover disabled:cursor-not-allowed [[data-layout=create]_&]:mx-0 [[data-layout=create]_&]:min-h-8 [[data-layout=create]_&]:rounded-lg [[data-layout=create]_&]:px-2.5 [[data-layout=create]_&]:enabled:hover:bg-secondary_hover dark:[[data-layout=create]_&]:enabled:hover:bg-quaternary"
     >
       {children}
       <Edit05
         aria-hidden="true"
-        className="size-3.5 shrink-0 text-fg-quaternary opacity-0 any-pointer-coarse:hidden transition-opacity group-focus-visible:opacity-100 group-enabled:group-hover:opacity-100"
+        className="size-3.5 shrink-0 text-fg-quaternary opacity-0 any-pointer-coarse:hidden transition-opacity group-focus-visible:opacity-100 group-enabled:group-hover:opacity-100 [[data-layout=create]_&]:hidden"
       />
     </AriaButton>
   );

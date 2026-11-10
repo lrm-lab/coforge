@@ -93,7 +93,7 @@ export function BoardNewTaskDialog({
         onStatusChange: setColumn,
         project: boardProject,
       }}
-      onCreate={async (draft, idempotencyKey) => {
+      onCreate={async (draft, idempotencyKey, { more }) => {
         if (!assignTo) throw new Error("no place");
         await execute({
           data: {
@@ -109,7 +109,8 @@ export function BoardNewTaskDialog({
             ...(column !== "todo" && { status: column }),
           },
         });
-        setPicked(undefined);
+        // The next one, while the viewer keeps creating, goes to the same place.
+        if (!more) setPicked(undefined);
         onCreated();
       }}
     />

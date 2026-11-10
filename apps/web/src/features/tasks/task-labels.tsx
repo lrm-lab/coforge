@@ -2,7 +2,7 @@ import type { TaskLabel, TaskView } from "@lrm/coforge-sdk/internal";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Plus } from "@untitledui/icons";
+import { Plus, Tag01 } from "@untitledui/icons";
 import { useRef, useState } from "react";
 import { useFilter } from "react-aria";
 import {
@@ -12,6 +12,7 @@ import {
   Input as AriaInput,
   SearchField as AriaSearchField,
 } from "react-aria-components";
+import { UnsetValue } from "./task-property";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
@@ -160,7 +161,7 @@ export function TaskLabelsField({
             {labels.length ? (
               <Plus aria-hidden="true" className="size-4 text-fg-quaternary" />
             ) : (
-              <span className="text-sm text-tertiary">{m.tasks_labels_add()}</span>
+              <UnsetValue icon={Tag01} text={m.tasks_labels_add()} field={m.tasks_labels()} />
             )}
           </TaskFieldTrigger>
         }

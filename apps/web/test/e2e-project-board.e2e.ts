@@ -325,14 +325,22 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       "eval",
       `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "New task")?.click()`,
     );
-    await browser("wait", "--fn", `document.querySelector('[role="dialog"] input') !== null`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"] [aria-label="Task title"]') !== null`,
+    );
     // On a Project's board a new Task starts under that Project (task #621).
     await browser(
       "wait",
       "--fn",
       `document.querySelector('[role="dialog"] button[aria-label="Change project: ${project.name}"]') !== null`,
     );
-    await browser("fill", '[role="dialog"] input', "Write the launch checklist");
+    await browser(
+      "fill",
+      '[role="dialog"] [aria-label="Task title"]',
+      "Write the launch checklist",
+    );
     await shot(`${prefix}-dialog-1440`);
     // Assign to reaches everyone, not only who is on the board's Tasks (task #621).
     await browser("click", '[role="dialog"] button[aria-label^="Assign to"]');
@@ -363,7 +371,11 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       "eval",
       `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "New task")?.click()`,
     );
-    await browser("wait", "--fn", `document.querySelector('[role="dialog"] input') !== null`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"] [aria-label="Task title"]') !== null`,
+    );
     await browser("press", "Escape");
     await browser("tab", "t1");
     await browser("open", `${origin}/en/w/${workspace.slug}/projects?layout=board`);
@@ -376,8 +388,16 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       "eval",
       `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "New task")?.click()`,
     );
-    await browser("wait", "--fn", `document.querySelector('[role="dialog"] input') !== null`);
-    await browser("fill", '[role="dialog"] input', "Write the launch checklist");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"] [aria-label="Task title"]') !== null`,
+    );
+    await browser(
+      "fill",
+      '[role="dialog"] [aria-label="Task title"]',
+      "Write the launch checklist",
+    );
     await shot(`${prefix}-dialog-390`);
     // Many labels: the popup's picker, whose chips wrap in the form (Frank, 11-06).
     await browser("click", '[role="dialog"] button[aria-label="Edit labels"]');

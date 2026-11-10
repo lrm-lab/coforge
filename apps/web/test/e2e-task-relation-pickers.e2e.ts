@@ -170,7 +170,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
         "new",
       );
       await browser("click", '[data-e2e="new"]');
-      const field = '[role="dialog"] input[placeholder="Task title"]';
+      const field = '[role="dialog"] [aria-label="Task title"]';
       await browser("wait", "--fn", `document.querySelector('${field}') !== null`);
       await browser("fill", field, `Write the copy ${label} ${tail}`);
       await browser(
@@ -180,7 +180,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       );
       await shoot(`${label}-subtask-dialog`);
       await mark(
-        `[...document.querySelectorAll('[role="dialog"] button')].find((el) => el.textContent.trim() === "Create task")`,
+        `document.querySelector('[role="dialog"][aria-label="New sub-task"] button[type="submit"]')`,
         "create",
       );
       await browser("click", '[data-e2e="create"]');

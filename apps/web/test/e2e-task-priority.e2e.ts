@@ -87,6 +87,12 @@ test("a Task's popup and the new Task form set its priority", async () => {
       `${pageHydrated} && document.querySelector('${trigger("High")}') != null`,
     );
     await browser("click", trigger("High"));
+    // The phone's menu comes up as a sheet: wait for it before picking.
+    await browser(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll('[role="menuitemradio"]')].some((el) => el.textContent.includes("Urgent"))`,
+    );
     await browser("find", "role", "menuitemradio", "click", "--name", "Urgent");
     await browser("wait", "--fn", `document.querySelector('${trigger("Urgent")}') != null`);
     expect(await priorityOf(number)).toBe("urgent");
@@ -102,11 +108,7 @@ test("a Task's popup and the new Task form set its priority", async () => {
     );
     await browser("find", "role", "button", "click", "--name", "Create task");
     await browser("wait", "--fn", `document.querySelector('${trigger("No priority")}') != null`);
-    await browser(
-      "fill",
-      '[role="dialog"] input[aria-label="Task title"]',
-      `Book the room ${tail}`,
-    );
+    await browser("fill", '[role="dialog"] [aria-label="Task title"]', `Book the room ${tail}`);
     await browser("click", trigger("No priority"));
     await browser("find", "role", "menuitemradio", "click", "--name", "Low");
     await browser("wait", "--fn", `document.querySelector('${trigger("Low")}') != null`);
@@ -115,7 +117,7 @@ test("a Task's popup and the new Task form set its priority", async () => {
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('[role="dialog"] input[aria-label="Task title"]') == null`,
+      `document.querySelector('[role="dialog"] [aria-label="Task title"]') == null`,
     );
     const made = await db.task.findFirstOrThrow({
       where: { conversationId: channel.id, title: `Book the room ${tail}` },

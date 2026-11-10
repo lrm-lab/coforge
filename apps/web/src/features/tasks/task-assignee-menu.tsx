@@ -5,6 +5,8 @@ import { EntityPicker, memberOption } from "#src/features/pickers/entity-picker"
 import { m } from "#src/paraglide/messages";
 import { TaskPerson } from "./task-owner";
 import { TaskFieldTrigger as EditableTrigger } from "./task-field-trigger";
+import { User01 } from "@untitledui/icons";
+import { UnsetValue } from "./task-property";
 
 const UNASSIGNED = "unassigned";
 const memberKey = (member: { kind: string; id: string }) => `${member.kind}:${member.id}`;
@@ -27,7 +29,7 @@ export function AssigneeMenu({
   const value = task.owner ? (
     <TaskPerson person={task.owner} wrap />
   ) : (
-    <span className="text-tertiary">{name}</span>
+    <UnsetValue icon={User01} text={name} field={m.tasks_overview_owner()} />
   );
   if (!members) return value;
   const ownerKey = task.owner ? memberKey(task.owner) : UNASSIGNED;

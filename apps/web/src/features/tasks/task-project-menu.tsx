@@ -3,6 +3,8 @@ import type { TaskProjectRef, TaskView } from "@lrm/coforge-sdk/internal";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
+import { Folder } from "@untitledui/icons";
+import { UnsetValue } from "./task-property";
 
 import { EntityPicker, Face, projectOption } from "#src/features/pickers/entity-picker";
 import { listProjects } from "#src/features/projects/projects.functions";
@@ -47,7 +49,7 @@ export function TaskProjectMenu({
       <span className="truncate">{current.name}</span>
     </span>
   ) : (
-    <span className="text-tertiary">{m.tasks_project_none()}</span>
+    <UnsetValue icon={Folder} text={m.tasks_project_none()} field={m.tasks_project()} />
   );
   return (
     // A flex item, so a long name truncates inside the property rather than widening it (task #588).

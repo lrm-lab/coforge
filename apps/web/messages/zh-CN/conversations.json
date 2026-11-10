@@ -149,6 +149,7 @@
   "tasks_new_title": "任务标题",
   "tasks_new_description": "添加描述…",
   "tasks_new_submit": "创建任务",
+  "tasks_create_more": "连续创建",
   "tasks_create_error": "任务创建失败，请重试。",
   "tasks_create_cancel": "取消",
   "tasks_create_title_required": "请填写任务标题。",

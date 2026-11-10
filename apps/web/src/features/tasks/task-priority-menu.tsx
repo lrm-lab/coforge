@@ -1,4 +1,6 @@
 import { TASK_PRIORITIES, type TaskPriority } from "@lrm/coforge-sdk/internal";
+import { BarChart07 } from "@untitledui/icons";
+import { UnsetValue } from "./task-property";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
@@ -9,7 +11,9 @@ import { TaskPriorityIcon } from "./task-priority-icon";
 /** A priority by its mark and its name. "None" alone would not say of what, on a phone's chip. */
 function PriorityText({ priority }: { priority: TaskPriority }) {
   if (priority === "none")
-    return <span className="text-sm text-tertiary">{m.tasks_priority_unset()}</span>;
+    return (
+      <UnsetValue icon={BarChart07} text={m.tasks_priority_unset()} field={m.tasks_priority()} />
+    );
   return (
     <span className="inline-flex items-center gap-1.5 text-sm text-primary">
       <TaskPriorityIcon priority={priority} />

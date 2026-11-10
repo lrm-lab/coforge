@@ -1,13 +1,16 @@
 import type { TaskPriority, TaskProjectRef, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
 import { ChevronRight, XClose } from "@untitledui/icons";
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Heading, Input as AriaInput, TextArea } from "react-aria-components";
+import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Heading, TextArea } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { DialogAction, DialogCancel } from "#src/components/ui/dialog-actions";
+import { Toggle } from "#src/components/base/toggle/toggle";
+import { DialogAction } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { isAppError } from "#src/lib/app-error";
+import { isImeComposing } from "#src/lib/ime";
+import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
 import { AssigneeMenu } from "./task-assignee-menu";
@@ -58,7 +61,9 @@ export function CreateTaskDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (draft: TaskDraft, idempotencyKey: string) => Promise<void>;
+  /** `more`: the viewer keeps creating (the form stays open for the next), so the caller does not
+   * open the one just made. */
+  onCreate: (draft: TaskDraft, idempotencyKey: string, options: { more: boolean }) => Promise<void>;
   /** Words a refusal the caller knows the reason for (a sub-task under a Task that cannot take
    * one); anything else reads as the plain failure. */
   describeError?: (cause: unknown) => string | undefined;
@@ -83,8 +88,20 @@ export function CreateTaskDialog({
   const [draft, setDraft] = useState(emptyDraft);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // "Create more" (task #54): after each Task the form stays open, its title and description
+  // cleared and what it was set to kept, for the next one.
+  const [more, setMore] = useState(false);
   const busy = useRef(false);
-  const titleRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  // The title grows with what it holds through `field-sizing: content`. A browser without it would
+  // keep one row and hide the rest of a long title, the very cut the textarea is there to prevent:
+  // there it is sized to its content here instead.
+  useLayoutEffect(() => {
+    const title = titleRef.current;
+    if (!title || CSS.supports("field-sizing", "content")) return;
+    title.style.height = "auto";
+    title.style.height = `${title.scrollHeight}px`;
+  }, [open, draft.title]);
   // A retry of the same Task reuses its idempotency key, so a create that did land is not repeated.
   const submission = useRef<{ key: string; idempotencyKey: string } | undefined>(undefined);
   const { labels: workspaceLabels } = useWorkspaceLabels(draft.labels.length > 0);
@@ -148,10 +165,15 @@ export function CreateTaskDialog({
     setSaving(true);
     setError("");
     try {
-      await onCreate(made, request.idempotencyKey);
+      await onCreate(made, request.idempotencyKey, { more });
       submission.current = undefined;
-      setDraft(emptyDraft());
-      onOpenChange(false);
+      if (more) {
+        setDraft((current) => ({ ...current, title: "", description: "" }));
+        titleRef.current?.focus();
+      } else {
+        setDraft(emptyDraft());
+        onOpenChange(false);
+      }
     } catch (cause) {
       // Assigning others was taken away meanwhile: say so, and offer only oneself from now on.
       if (isAppError(cause) && cause.errorId === TASK_ASSIGNMENT_MANAGER_REQUIRED) {
@@ -175,20 +197,40 @@ export function CreateTaskDialog({
       isDismissable
       className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
     >
-      <Modal className="flex w-full flex-col overflow-hidden max-sm:h-full max-sm:rounded-none max-sm:safe-area-padding sm:w-[min(44rem,calc(100vw-2rem))]">
+      {/* In dark, one surface up from the page, so the form does not sink into it (task #54). */}
+      <Modal className="flex w-full flex-col overflow-hidden max-sm:h-full max-sm:rounded-none max-sm:safe-area-padding sm:w-[min(44rem,calc(100vw-2rem))] dark:bg-secondary">
         <Dialog aria-label={heading} className="flex min-h-0 flex-1 flex-col">
           {({ close }) => (
-            <form onSubmit={(event) => void submit(event)} className="flex min-h-0 flex-1 flex-col">
+            <form
+              onSubmit={(event) => void submit(event)}
+              // ⌘↵ (Ctrl+↵) creates from anywhere in the form, the description included.
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.repeat) {
+                  event.preventDefault();
+                  event.currentTarget.requestSubmit();
+                }
+              }}
+              className="flex min-h-0 flex-1 flex-col"
+            >
               {/* Where it goes, as the popup's trail: the conversation, or the Task above it. */}
-              <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-4 sm:pl-6">
-                <p className="flex min-w-0 flex-1 items-center gap-1 text-sm text-tertiary">
+              <div className="flex shrink-0 items-center gap-1 pt-3 pr-3 pl-4 sm:pl-6">
+                <p className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-tertiary">
                   {(board || where) && (
                     <>
-                      {board?.place ?? <span className="truncate">{where?.label}</span>}
-                      <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
+                      {/* Where it goes, as a block of its own (task #54); a board's is the picker. */}
+                      <span
+                        data-layout="create"
+                        className="inline-flex h-8 min-w-0 items-center rounded-lg bg-secondary text-secondary ring-1 ring-secondary ring-inset dark:bg-tertiary"
+                      >
+                        {board?.place ?? <span className="truncate px-2.5">{where?.label}</span>}
+                      </span>
+                      <ChevronRight
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 text-fg-quaternary"
+                      />
                     </>
                   )}
-                  <span className="shrink-0 text-secondary">{heading}</span>
+                  <span className="shrink-0">{heading}</span>
                 </p>
                 <ButtonUtility
                   icon={XClose}
@@ -203,19 +245,31 @@ export function CreateTaskDialog({
                 <Heading
                   slot="title"
                   level={2}
-                  className="flex items-start gap-2 px-4 pt-3 sm:px-6"
+                  className="flex items-start gap-2 px-4 pt-4 sm:px-6"
                 >
-                  <TaskStatusIcon status={status} className="mt-1.5 size-5" />
-                  <AriaInput
+                  {/* On a board its status is the first chip below. */}
+                  {!board && <TaskStatusIcon status={status} className="mt-1.5 size-5" />}
+                  {/* A long title wraps rather than scrolling out of sight (task #54): one line
+                      that grows. It stays one paragraph: Enter creates, and a pasted line break
+                      becomes a space. */}
+                  <TextArea
                     ref={titleRef}
                     aria-label={m.tasks_new_title()}
                     placeholder={m.tasks_new_title()}
                     value={draft.title}
-                    onChange={(event) => change({ title: event.target.value })}
+                    onChange={(event) =>
+                      change({ title: event.target.value.replace(/\s*\n\s*/g, " ") })
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" || isImeComposing(event)) return;
+                      event.preventDefault();
+                      if (!event.repeat) event.currentTarget.form?.requestSubmit();
+                    }}
                     maxLength={500}
                     disabled={saving}
                     autoFocus
-                    className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-primary outline-hidden placeholder:font-medium placeholder:text-placeholder"
+                    rows={1}
+                    className="min-w-0 flex-1 resize-none bg-transparent text-xl font-semibold text-primary outline-hidden [field-sizing:content] placeholder:font-medium placeholder:text-placeholder"
                   />
                 </Heading>
                 <TextArea
@@ -225,14 +279,14 @@ export function CreateTaskDialog({
                   onChange={(event) => change({ description: event.target.value })}
                   maxLength={50_000}
                   disabled={saving}
-                  rows={4}
-                  className="mt-3 block w-full resize-none bg-transparent px-4 pb-4 text-sm text-primary outline-hidden placeholder:text-placeholder sm:px-6"
+                  rows={3}
+                  className="mt-2 block w-full resize-none bg-transparent px-4 pb-4 text-md text-secondary outline-hidden placeholder:text-placeholder sm:px-6"
                 />
               </div>
               {/* What else it starts with, under what it says, as the popup's chips on a phone. */}
               <div
-                data-layout="chips"
-                className="flex shrink-0 flex-wrap gap-1.5 px-4 pb-3 sm:px-6"
+                data-layout="create"
+                className="flex shrink-0 flex-wrap gap-2 px-4 pt-1 pb-5 sm:px-6"
               >
                 {board && (
                   <TaskProperty label={m.tasks_overview_status()}>
@@ -275,7 +329,7 @@ export function CreateTaskDialog({
                   label={m.tasks_labels()}
                   // As in the popup: labels are chips of their own, not a name to truncate.
                   className={cn(
-                    "[[data-layout=chips]_&]:max-w-none",
+                    "[[data-layout=create]_&]:max-w-none",
                     draft.labels.length > 0 && BARE_CHIP,
                   )}
                 >
@@ -298,12 +352,23 @@ export function CreateTaskDialog({
                   {error}
                 </p>
               )}
-              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-secondary px-4 py-3 sm:px-6">
-                <DialogCancel type="button" isDisabled={saving} onPress={close}>
-                  {m.tasks_create_cancel()}
-                </DialogCancel>
+              {/* Closing is the corner's ✕ and Escape; the row is creating, once or one after another. */}
+              <div className="flex shrink-0 items-center justify-end gap-4 border-t border-secondary px-4 py-3 sm:px-6">
+                <Toggle
+                  size="sm"
+                  label={m.tasks_create_more()}
+                  isSelected={more}
+                  onChange={setMore}
+                  isDisabled={saving}
+                />
                 <DialogAction type="submit" isLoading={saving}>
                   {m.tasks_new_submit()}
+                  <kbd
+                    aria-hidden="true"
+                    className="ml-1 font-body text-xs font-medium opacity-70 any-pointer-coarse:hidden"
+                  >
+                    {isApplePlatform() ? "⌘↵" : "Ctrl ↵"}
+                  </kbd>
                 </DialogAction>
               </div>
             </form>

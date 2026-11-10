@@ -64,13 +64,9 @@ test("a member creates a Task with themselves as owner and a label", async () =>
     await browser("wait", "--fn", `${pageHydrated} && ${byText("button", "Create task")} != null`);
     await mark(byText("button", "Create task"), "create-open");
     await browser("click", '[data-e2e="create-open"]');
-    await browser(
-      "wait",
-      "--fn",
-      `${dialog}?.querySelector('input[aria-label="Task title"]') != null`,
-    );
+    await browser("wait", "--fn", `${dialog}?.querySelector('[aria-label="Task title"]') != null`);
     const title = `Ship the launch ${tail}`;
-    await browser("fill", '[role="dialog"] input[aria-label="Task title"]', title);
+    await browser("fill", '[role="dialog"] [aria-label="Task title"]', title);
 
     // Not a manager: the owner menu offers only the viewer.
     await browser("click", '[role="dialog"] button[aria-label="Change owner: Unassigned"]');
@@ -114,7 +110,7 @@ test("a member creates a Task with themselves as owner and a label", async () =>
     await browser("screenshot", join(artifacts, "member-draft-dark.png"));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
     // Enter in the title sends it, as the button does.
-    await browser("click", '[role="dialog"] input[aria-label="Task title"]');
+    await browser("click", '[role="dialog"] [aria-label="Task title"]');
     await browser("press", "Enter");
     let row = null;
     for (let tries = 0; tries < 40 && !row; tries++) {
@@ -140,16 +136,8 @@ test("a member creates a Task with themselves as owner and a label", async () =>
     await browser("wait", "--fn", `${pageHydrated} && ${byText("button", "Create task")} != null`);
     await mark(byText("button", "Create task"), "create-open");
     await browser("click", '[data-e2e="create-open"]');
-    await browser(
-      "wait",
-      "--fn",
-      `${dialog}?.querySelector('input[aria-label="Task title"]') != null`,
-    );
-    await browser(
-      "fill",
-      '[role="dialog"] input[aria-label="Task title"]',
-      `Call the printer ${tail}`,
-    );
+    await browser("wait", "--fn", `${dialog}?.querySelector('[aria-label="Task title"]') != null`);
+    await browser("fill", '[role="dialog"] [aria-label="Task title"]', `Call the printer ${tail}`);
     await browser("click", '[role="dialog"] button[aria-label="Change owner: Unassigned"]');
     await browser("wait", "--fn", `${menu}?.textContent.includes("Dev User") === true`);
     await mark(byText('[role="menuitemradio"]', "Dev User"), "me");

@@ -61,8 +61,8 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((element) => element.textContent.trim() === ${JSON.stringify(text)}).at(-1)`;
   const bodyHas = (text: string) => `document.body.textContent.includes(${JSON.stringify(text)})`;
-  const dialogOpen = `document.querySelector('[role="dialog"] input[aria-label="Task title"]') !== null`;
-  const titleField = '[role="dialog"] input[aria-label="Task title"]';
+  const dialogOpen = `document.querySelector('[role="dialog"] [aria-label="Task title"]') !== null`;
+  const titleField = '[role="dialog"] [aria-label="Task title"]';
 
   const suffix = `${process.pid}-${Date.now()}`;
   const channelTitle = `Channel work ${suffix}`;
@@ -154,7 +154,10 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     }
 
     // No title at all is refused in place.
-    await browser("eval", `${byText('[role="dialog"] button', "Create task")}.click()`);
+    await browser(
+      "eval",
+      `document.querySelector('[role="dialog"] button[type="submit"]').click()`,
+    );
     await waitFor(
       `document.querySelector('[role="dialog"] [role="alert"]')?.textContent.includes("Add a title for the task.")`,
     );
@@ -174,7 +177,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     expect(await browser("eval", `${lastUsed}.textContent`)).toContain("Last used");
     await browser("eval", `${lastUsed}.click()`);
     await waitFor(
-      `document.querySelector('[role="dialog"] [data-layout="chips"]')?.textContent.includes(${JSON.stringify(project.name)})`,
+      `document.querySelector('[role="dialog"] form > [data-layout="create"]')?.textContent.includes(${JSON.stringify(project.name)})`,
     );
     // One Task per dialog: it lands with what was set, and the dialog closes.
     await browser("fill", titleField, created[0]!);
@@ -189,7 +192,10 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
       await browser("screenshot", join(artifacts, `create-${theme}.png`));
     }
     await browser("eval", `document.documentElement.classList.remove("dark-mode")`);
-    await browser("eval", `${byText('[role="dialog"] button', "Create task")}.click()`);
+    await browser(
+      "eval",
+      `document.querySelector('[role="dialog"] button[type="submit"]').click()`,
+    );
     await waitFor(`!(${dialogOpen})`);
     await waitFor(bodyHas(created[0]!));
     const rows = await db.task.findMany({
