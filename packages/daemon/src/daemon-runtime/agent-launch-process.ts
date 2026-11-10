@@ -261,6 +261,7 @@ export async function launchAgentProcess(
           agentId,
           recoverySignal,
           launch.runtimeErrorClassFence,
+          progress.turnStartedAtMs,
         );
       if (isCurrent) launch.startup?.observe(event);
       const turnActivity =
@@ -293,6 +294,7 @@ export async function launchAgentProcess(
       // was still holding stays queued for the next launch; only explicit Stop discards it
       // (see AgentStopCoordinator.releaseAgentRuntime).
       ports.deliveryGate.onProcessExit(agentId);
+      ports.lifecycle.processClosed(agentId);
       ports.revokeLocalLaunch(agentId, localContext, proxyToken);
       void ports.revokeAgentApiKey(agentId, agentApiKey).catch((revokeError) => {
         // Local access is already revoked; the key stays pending and is retried later.

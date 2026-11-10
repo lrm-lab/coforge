@@ -1,5 +1,7 @@
 import { AGENT_STARTUP_TIMEOUT_MS } from "#src/agent-runtime/agent-startup";
 import { launchFailureLogFields } from "#src/agent-runtime/launch-failure";
+import { credentialInvalidReason } from "#src/agent-runtime/credential-invalid";
+import { classifyRuntimeErrorText } from "#src/agent-runtime/runtime-error-classification";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { AgentControl } from "#src/agent-runtime/agent-control";
@@ -106,7 +108,7 @@ export function reportLaunchFailure(
   ports: AgentLaunchCoordinatorPorts,
   agentId: string,
   launch: OfflineResidencyLaunch,
-  config: Pick<AgentRuntimeConfig, "provider" | "model" | "providerConfig">,
+  config: AgentRuntimeConfig,
   error: unknown,
 ): void {
   if (ports.isStopping() || ports.stops.stopping(agentId)) return;
@@ -133,6 +135,15 @@ export function reportLaunchFailure(
     );
   if (offlineLaunchError && ports.offlineResidency.has(agentId))
     ports.agentProcessManager.forgetRestart(agentId);
+  // A launch that threw a credential failure holds the Agent as one that failed mid-turn does,
+  // with no process to wait for: what it keeps waits for the next probe.
+  const credentialInvalid = credentialInvalidReason(
+    classifyRuntimeErrorText(error instanceof Error ? error.message : String(error)),
+  );
+  if (credentialInvalid) {
+    ports.credentialHolds.record(agentId, config, credentialInvalid);
+    ports.lifecycle.processClosed(agentId);
+  }
   if (!ports.offlineResidency.hasLaunchWait(agentId)) ports.sendAgentStatus(agentId, "inactive");
   ports.activityPublisher.publish(
     agentId,

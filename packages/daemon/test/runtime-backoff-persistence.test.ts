@@ -101,6 +101,7 @@ function holdWith(records: Parameters<RuntimeErrorDeliveryHold["restore"]>[0]) {
       },
       endHoldForNextLaunch: (agentId) => void held.delete(agentId),
       explicitHold: (agentId) => held.get(agentId) as never,
+      credentialHeld: (agentId) => held.get(agentId) === "credential_invalid",
       pending: () => [],
     },
     flush: () => {},

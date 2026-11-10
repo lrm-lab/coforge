@@ -71,10 +71,12 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
       hasCarried: (agentId) => ports.mentionDeliveries().carry.hasCarried(agentId),
       presentKept: (agentId) => ports.launchCustody().flushSurvivingDeliveries(agentId),
       tellCarried: (agentId, alongside) => {
-        // Nothing is told under a runner hold: the kept mentions wait for the restart.
-        const taken = ports.runnerHeld()
-          ? []
-          : ports.mentionDeliveries().carry.takeCarried(agentId);
+        // Nothing is told under a runner hold: the kept mentions wait for the restart. Nor to a
+        // process whose credential is known invalid: they wait for its next launch.
+        const taken =
+          ports.runnerHeld() || ports.deliveryGate().credentialHeld(agentId)
+            ? []
+            : ports.mentionDeliveries().carry.takeCarried(agentId);
         return taken.length
           ? ports.mentionDeliveries().carry.tell(taken, alongside)
           : alongside.length

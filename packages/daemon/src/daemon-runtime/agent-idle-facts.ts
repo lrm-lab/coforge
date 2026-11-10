@@ -17,11 +17,16 @@ export type DaemonIdleFacts = Readonly<{
 export function daemonIdleFacts(
   input: Omit<DaemonIdleFacts, "inputsQueued"> & {
     queue: Readonly<{ items: readonly unknown[]; drain?: unknown }> | undefined;
+    /** The Agent's deliveries wait for its provider credential. What that holds (deliveries, kept
+     * mentions) does not keep the Agent from a restart that may mend it, a pushed model or login. */
+    credentialHeld?: boolean;
   },
 ): DaemonIdleFacts {
-  const { queue, ...facts } = input;
+  const { queue, credentialHeld, ...facts } = input;
   return {
     ...facts,
+    deliveriesQueued: facts.deliveriesQueued && !credentialHeld,
+    trackedMentionOpen: facts.trackedMentionOpen && !credentialHeld,
     inputsQueued: queue !== undefined && (queue.items.length > 0 || queue.drain !== undefined),
   };
 }

@@ -25,6 +25,7 @@ function harness() {
       },
       endHoldForNextLaunch: (agentId) => void held.delete(agentId),
       explicitHold: (agentId) => held.get(agentId) as never,
+      credentialHeld: (agentId) => held.get(agentId) === "credential_invalid",
       pending: (agentId) => queued.get(agentId) ?? [],
     },
     flush: (agentId, deliveries) => void flushed.push({ agentId, count: deliveries.length }),

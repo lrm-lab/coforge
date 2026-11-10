@@ -129,8 +129,7 @@ thinking；重试中断当前 thinking，恢复后的文本或 thinking 立即�
 的恢复时间，`billing_exhausted`；`quota_exhausted` 但没有 `resetsAt`——月度配额或 provider 没说，
 视为不可恢复；或 sticky 的「model not supported/unsupported model」）。滚动窗口的用量上限
 （`window_limit`，或窗口限额措辞）永远不在此列：它等待已知重置或退避重试。一旦发生
-——回合中、启动输入、或启动时 `createAgentSession` 直接抛错——Daemon
-结束进程、发送 `agent:status(inactive)`，并把可见 `detail` 改写为面向人的处理提示
+——回合中、启动输入、或启动时 `createAgentSession` 直接抛错——可见 `detail` 都改写为面向人的处理提示
 （重新登录/换模型或升级套餐；billing 文案提示余额已耗尽、等待中的消息在 Agent 重启后
 会送达、充值或为该 Agent 换模型/provider；无重置时间的配额用另一份文案说明配额耗尽、没有已知
 恢复时间、等待中的消息会保留），`entries` 里附诊断子类
@@ -159,9 +158,10 @@ fence，同样走下线路径：可见 `detail` 为
 `Runtime stopped after <N> consecutive "not found" (HTTP 404) runtime errors with no progress in between. Last error: <redacted msg>. Check the configured model and endpoint, then restart.`。
 class streak 随 launch 隔离，触发后清零，沿用 `runtime_error_fenced` 下线与投递恢复。
 
-下线的错误有：`requiredAction` 非空的（`user_reauth` 重新登录、`user_model_access`
-换模型/升级套餐）、`BillingError`（provider 余额耗尽，无 `requiredAction`）和同一指纹
-连续 3 次或连续 5 次 HTTP 404 触发的熔断（`runtime_error_fenced`，无 `requiredAction`）。下线即终态驻留：
+回合中或启动时直接抛出的 `requiredAction` 非空失败（`user_reauth`、`user_model_access`）和 `BillingError` 不下线：
+进程保留、Agent 保持 `active`，投递被扣住（[凭据失效 hold](agent-status-and-activity/credential-invalid-hold.md)）。
+下线的错误有：sticky 的 model not supported、没有重置时间的配额，
+以及同一指纹连续 3 次或连续 5 次 HTTP 404 触发的熔断（`runtime_error_fenced`，无 `requiredAction`）。下线即终态驻留：
 进程结束后不保留 restart config，Daemon 也不自行重启。后续投递由
 Daemon 接管：排入 `AgentDeliveryGate` 等待下一次 launch 并立即 ACK，同时重发
 `inactive` 与该错误 Activity（更高的 clientSeq）；已消费的投递仍只 ACK、不再排队。

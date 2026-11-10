@@ -107,16 +107,7 @@ import {
   resyncAppConfigs,
 } from "./runtime-app-inbox-sync";
 import { handleAgentMessage } from "./runtime-message-delivery";
-import {
-  flushHeldDeliveries,
-  interruptIfBusy,
-  isWorking,
-  narrateUnavailable,
-  reconcileIdleTurn,
-  releaseSurvivingHolds,
-  releaseTurnEndHolds,
-  showQuietTurn,
-} from "./runtime-turn-management";
+import { RuntimeTurn } from "./runtime-turn-management";
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ColdIdleSweep } from "./cold-idle-sweep";
@@ -151,12 +142,14 @@ import {
   type BusyAgentReport,
 } from "./agent-activity-publisher";
 import { assembleRuntimeErrorDeliveryHold } from "./assemble-runtime-error-hold";
+import { assembleCredentialHolds } from "./assemble-credential-holds";
+import { AgentLifecycle } from "./agent-lifecycle";
 import { consumeResetCredit } from "./reset-credit-consume";
 import type { ActivityLaunch } from "./activity-launch";
 import { AgentOfflineResidency } from "./agent-offline-residency";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
 import { assembleUsageReport } from "./agent-usage-report-wiring";
-import { MentionDeliveryTracker, type RunningMentionIdentity } from "./mention-delivery-tracker";
+import { MentionDeliveryTracker } from "./mention-delivery-tracker";
 import { ReportedSessions } from "./reported-sessions";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
@@ -205,7 +198,10 @@ export class DaemonRuntime {
   readonly agentRequests: AgentRequestForwarder;
   readonly #mentionDeliveries: MentionDeliveryTracker;
   /** Last cloud-reported launch/session identity per Agent. */
-  readonly #reported = new ReportedSessions();
+  readonly #reported = new ReportedSessions(
+    () => this.#agentProcessManager,
+    () => this.#currentActivityLaunches,
+  );
   /** Durable context-view indexing and availability reporting for this Workspace runtime. */
   readonly #contextViewService: AgentContextViewService;
   readonly #localQueries: RuntimeLocalQueries;
@@ -214,7 +210,7 @@ export class DaemonRuntime {
   /** Launch failures of message-triggered wakes, per Agent. */
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
   // Before the ports objects that reference them.
-  #isWorking = (agentId: string): boolean => isWorking(this.#turnPorts(), agentId);
+  readonly #turn = new RuntimeTurn(() => this.#turnPorts());
   #sendAgentStatus = (agentId: string, status: "active" | "inactive"): void =>
     sendAgentStatus(this.#statusReportPorts, agentId, status);
   readonly #exitedDelivery: AgentExitedDelivery = assembleExitedDelivery({
@@ -249,15 +245,15 @@ export class DaemonRuntime {
     activity: (agentId, kind, level, detail, extra) =>
       this.#activity(agentId, kind, level, detail, extra),
     inputDrain: () => this.#inputDrain,
-    working: this.#isWorking,
+    working: this.#turn.isWorking,
     deliveryGate: () => this.#deliveryGate,
     agentLaunches: () => this.#agentLaunches,
     stopState: () => this.#stopState,
     runnerHold: () => this.#runnerHold,
     migrations: () => this.#migrations,
-    runningMentionIdentity: (agentId) => this.#runningMentionIdentity(agentId),
+    runningMentionIdentity: (agentId) => this.#reported.identity(agentId),
     noticeActionClocks: () => this.#messageAttention.noticeActionClocks,
-    releaseSurvivingHolds: (agentId) => this.#releaseSurvivingHolds(agentId),
+    releaseSurvivingHolds: (agentId) => this.#turn.releaseSurvivingHolds(agentId),
     wakeAgent: (agentId, restart) => this.#wakeAgent(agentId, restart),
     mentionDeliveries: () => this.#mentionDeliveries,
   });
@@ -274,6 +270,7 @@ export class DaemonRuntime {
     processManager: () => this.#agentProcessManager,
     agentLaunches: () => this.#agentLaunches,
     activityLaunches: () => this.#currentActivityLaunches,
+    credentialHolds: () => this.#credentialHolds,
   });
   readonly #stalledRecoverySweep = stalledRecoverySweep({
     agentIds: () => this.#agentProcessManager.runningAgentIds(),
@@ -300,11 +297,28 @@ export class DaemonRuntime {
     inputQueue: (agentId) => this.#inputDrain.get(agentId),
     hasQueuedDeliveries: (agentId) => this.#deliveryGate.hasQueued(agentId),
   });
+  /** The events of an Agent's life more than one module follows. */
+  readonly #lifecycle = new AgentLifecycle();
+  /** Which Agents' provider credential is known invalid, and the files whose change ends it. */
+  readonly #credentialHolds = assembleCredentialHolds({
+    deliveryGate: this.#deliveryGate,
+    lifecycle: this.#lifecycle,
+    errorHold: () => this.#runtimeErrorHold,
+    processManager: () => this.#agentProcessManager,
+    launches: () => this.#currentActivityLaunches,
+    activityPublisher: () => this.#activityPublisher,
+    activity: (agentId, kind, level, detail) => this.#activity(agentId, kind, level, detail),
+    workspaceId: () => this.#connection.workspaceId,
+    presentKept: (agentId) => void this.#launchCustody.flushSurvivingDeliveries(agentId),
+    wake: (agentId) => this.#exitedDelivery.backoffEnded(agentId),
+    transport: () => this.#transport,
+  });
   readonly #runtimeErrorHold = assembleRuntimeErrorDeliveryHold({
     stateDirectory: () => this.stateDirectory,
     deliveryGate: this.#deliveryGate,
-    flush: (agentId, held) => flushHeldDeliveries(this.#turnPorts(), agentId, held),
+    flush: this.#turn.flushHeld,
     backoffEnded: (agentId) => this.#exitedDelivery.backoffEnded(agentId),
+    credential: this.#credentialHolds,
   });
   readonly #reminders: ReminderScheduler;
   readonly #appConfigs: AgentAppConfigSync;
@@ -461,7 +475,7 @@ export class DaemonRuntime {
       },
       recordClientSeq: (agentId, clientSeq) =>
         this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
-      reconcileIdleTurn: this.#reconcileIdleTurn,
+      reconcileIdleTurn: this.#turn.reconcileIdleTurn,
     });
     this.#connection = connection;
     this.#contextViewService = new AgentContextViewService({
@@ -526,13 +540,12 @@ export class DaemonRuntime {
       sync: this.#sync,
       contexts: this.#contexts,
       memoryAgent: (agentId) => this.memoryFence(agentId),
-      reconcileIdleTurn: this.#reconcileIdleTurn,
+      reconcileIdleTurn: this.#turn.reconcileIdleTurn,
       startAgent: (agentId, config, sessionId) =>
         this.#startAgent(agentId, config, undefined, { sessionId }),
       assertRunning: () => this.#assertRunning(),
       agentIdForContext: (context) => agentIdForContext(this.#agentContexts, context),
-      runningMentionIdentity: (agentId, reported) =>
-        this.#runningMentionIdentity(agentId, reported),
+      runningMentionIdentity: (agentId, reported) => this.#reported.identity(agentId, reported),
     });
     this.agentRequests = assembleAgentRequests({
       transport: () => runtime.#transport,
@@ -555,7 +568,7 @@ export class DaemonRuntime {
           (await this.#inboxCoordinator.appInbox(agentId)).upsert(item),
         remove: (agentId, itemId) => this.#inboxCoordinator.removeAppItem(agentId, itemId),
       },
-      isWorking: (agentId) => this.#isWorking(agentId),
+      isWorking: (agentId) => this.#turn.isWorking(agentId),
       notifyAppItem: (agentId, itemId) =>
         this.#inboxCoordinator.notifyAppItem(agentId, itemId, { startStopped: false }),
       acceptReminderDue: (job, late) => this.#acceptReminderDue(job, late),
@@ -600,6 +613,7 @@ export class DaemonRuntime {
       usageReport: this.#usageReport,
       phaseBookkeeping: this.#phaseBookkeeping,
       runtimeErrorHold: this.#runtimeErrorHold,
+      credentialHolds: this.#credentialHolds,
       mentionDeliveries: this.#mentionDeliveries,
       agentSessions: this.#agentSessions,
       systemCleaner: this.systemCleaner,
@@ -612,12 +626,12 @@ export class DaemonRuntime {
       activityDraft: this.#activity,
       runtimeErrorActivity: this.#drafts.runtimeError,
       interruptedActivity: this.#drafts.interrupted,
-      showQuietTurn: this.#showQuietTurn,
-      reconcileIdleTurn: this.#reconcileIdleTurn,
+      showQuietTurn: this.#turn.showQuietTurn,
+      reconcileIdleTurn: this.#turn.reconcileIdleTurn,
       wakeFinishedSubagents: (agentId) => runtime.#launchCoordinator.wakeFinishedSubagents(agentId),
       rememberUsage: (snapshot) => rememberUsage(this.#observedUsage, snapshot),
-      releaseTurnEndHolds: this.#releaseTurnEndHolds,
-      isWorking: this.#isWorking,
+      releaseTurnEndHolds: this.#turn.releaseTurnEndHolds,
+      isWorking: this.#turn.isWorking,
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
       failCollectorRunningSlots: (agentId, reason) =>
         this.#failCollectorRunningSlots(agentId, reason),
@@ -645,6 +659,7 @@ export class DaemonRuntime {
       messageAttention: this.#messageAttention,
       deliveryGate: this.#deliveryGate,
       runtimeErrorHold: this.#runtimeErrorHold,
+      lifecycle: this.#lifecycle,
       offlineResidency: this.#offlineResidency,
       sendAgentStatus: this.#sendAgentStatus,
       publishStopped: (agentId, launch) =>
@@ -678,6 +693,8 @@ export class DaemonRuntime {
       agentControl: this.#agentControl,
       agentSessions: this.#agentSessions,
       runtimeErrorHold: this.#runtimeErrorHold,
+      credentialHolds: this.#credentialHolds,
+      lifecycle: this.#lifecycle,
       replyIntents: this.#replyIntents,
       offlineResidency: this.#offlineResidency,
       drafts: this.#drafts,
@@ -692,11 +709,11 @@ export class DaemonRuntime {
       scheduleStartupFailure: this.#scheduleStartupFailure,
       observeRuntimeEvent: (agentId, launch, config, runtime, managed, event) =>
         this.#observeRuntimeEvent(agentId, launch, config, runtime, managed, event),
-      reconcileIdleTurn: this.#reconcileIdleTurn,
+      reconcileIdleTurn: this.#turn.reconcileIdleTurn,
       activity: (agentId, detailKind, level, detail, extra) =>
         this.#activity(agentId, detailKind, level, detail, extra),
       narrateUnavailable: (agentId, launch, activity) =>
-        this.#narrateUnavailable(agentId, launch, activity),
+        this.#turn.narrateUnavailable(agentId, launch, activity),
       disposeLaunchObservations: this.#disposeLaunchObservations,
       revokeLocalLaunch: (agentId, context, proxyToken) =>
         revokeLocalLaunch(
@@ -754,6 +771,7 @@ export class DaemonRuntime {
       operatingSystem: this.#operatingSystem,
       upgradeResults: this.#upgradeResults,
       runtimeAuth: this.#runtimeAuth,
+      credentialHolds: this.#credentialHolds,
       runtimeAuthFactory: this.runtimeAuthFactory,
       codeAgentInventory: this.#codeAgentInventory,
       scanUsage: (provider) => this.scanUsage(provider),
@@ -801,7 +819,7 @@ export class DaemonRuntime {
       launchCustody: this.#launchCustody,
       processManager: this.#agentProcessManager,
       stops: this.#stopState,
-      interruptIfBusy: (agentId, launch) => this.#interruptIfBusy(agentId, launch),
+      interruptIfBusy: (agentId, launch) => this.#turn.interruptIfBusy(agentId, launch),
       disposeLaunchObservations: this.#disposeLaunchObservations,
       revokeLocalLaunch: (agentId) =>
         revokeLocalLaunch(this.#agentContexts, this.#agentProxyTokens, this.#agentProxy, agentId),
@@ -987,7 +1005,7 @@ export class DaemonRuntime {
         wakeLaunchFailures: this.#wakeLaunchFailures,
         launchCoordinator: this.#launchCoordinator,
         exitedDelivery: this.#exitedDelivery,
-        releaseSurvivingHolds: (id) => this.#releaseSurvivingHolds(id),
+        releaseSurvivingHolds: (id) => this.#turn.releaseSurvivingHolds(id),
         sessions: this.#stopState,
         configApply: this.#configApply,
       },
@@ -1058,7 +1076,7 @@ export class DaemonRuntime {
       inputDrain: this.#inputDrain,
       currentActivityLaunches: this.#currentActivityLaunches,
       interruptIfBusy: (id: string, current: ActivityLaunch | undefined) =>
-        this.#interruptIfBusy(id, current),
+        this.#turn.interruptIfBusy(id, current),
       activityPublisher: this.#activityPublisher,
       disposeLaunchObservations: this.#disposeLaunchObservations,
       revokeLocalLaunch: (id: string) =>
@@ -1172,13 +1190,6 @@ export class DaemonRuntime {
     return handleAgentMessage(this.#messageDeliveryPorts(), message);
   }
 
-  /** Launch/session identity used by tracked mentions. */
-  #runningMentionIdentity(agentId: string, reported?: true): RunningMentionIdentity | undefined {
-    return reported
-      ? this.#reported.last(agentId)
-      : this.#reported.running(agentId, this.#agentProcessManager, this.#currentActivityLaunches);
-  }
-
   /** Sends a session report, and remembers the launch and session it names for tracked
    * mentions. */
   async #reportAgentSession(report: AgentSessionReport): Promise<void> {
@@ -1278,26 +1289,8 @@ export class DaemonRuntime {
       detail: string,
       extra?: Partial<ActivityDraft>,
     ) => this.#activity(agentId, kind, level, detail, extra),
-    isWorking: (agentId: string) => isWorking(this.#turnPorts(), agentId),
+    isWorking: this.#turn.isWorking,
   });
-
-  #narrateUnavailable = (
-    agentId: string,
-    launch: ActivityLaunch,
-    { detail, entryText }: { detail: string; entryText?: string },
-  ): void => narrateUnavailable(this.#turnPorts(), agentId, launch, detail, entryText);
-  #interruptIfBusy = (agentId: string, activityLaunch: ActivityLaunch | undefined): void =>
-    interruptIfBusy(this.#turnPorts(), agentId, activityLaunch);
-  #showQuietTurn = (
-    agentId: string,
-    launch: ActivityLaunch,
-    publish: (agentId: string, launch: ActivityLaunch, activity: ActivityDraft) => void,
-  ): void => showQuietTurn(this.#turnPorts(), agentId, launch, publish);
-  #reconcileIdleTurn = (agentId: string, launch: ActivityLaunch): boolean =>
-    reconcileIdleTurn(this.#turnPorts(), agentId, launch);
-  #releaseSurvivingHolds = (agentId: string): void =>
-    releaseSurvivingHolds(this.#turnPorts(), agentId);
-  #releaseTurnEndHolds = (agentId: string): void => releaseTurnEndHolds(this.#turnPorts(), agentId);
 
   /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
   #forgetLocalAgent = (agentId: string): void =>

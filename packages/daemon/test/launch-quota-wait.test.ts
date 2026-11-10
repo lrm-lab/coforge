@@ -73,7 +73,7 @@ test("a window usage limit with no recovery time on a thrown launch keeps ordina
   expect(current.offlineError).toBeUndefined();
 });
 
-test("an exhausted balance with no recovery time on a thrown launch is offline", () => {
+test("an exhausted balance with no recovery time on a thrown launch is held, not offline", () => {
   const offline = residency();
   const current = launch();
   const activity = offline.thrownLaunchActivity(
@@ -84,9 +84,24 @@ test("an exhausted balance with no recovery time on a thrown launch is offline",
     new Error("insufficient credits"),
   );
   expect(activity?.detail).toContain("stopped retrying");
-  expect(offline.has("a")).toBe(true);
+  expect(offline.has("a")).toBe(false);
   expect(offline.hasLaunchWait("a")).toBe(false);
-  expect(current.offlineError).toBe(activity);
+  expect(current.offlineError).toBeUndefined();
+});
+
+test("a sign-in failure on a thrown launch is held, with the wording that says what to fix", () => {
+  const offline = residency();
+  const current = launch();
+  const activity = offline.thrownLaunchActivity(
+    "a",
+    current,
+    "Codex",
+    { provider: "codex", model: "gpt" } as typeof config,
+    new Error("Your access token could not be refreshed. Please log out and sign in again."),
+  );
+  expect(activity?.runtimeError?.requiredAction).toBe("user_reauth");
+  expect(offline.has("a")).toBe(false);
+  expect(current.offlineError).toBeUndefined();
 });
 
 test("a call-stack throw is not a quota wait", () => {

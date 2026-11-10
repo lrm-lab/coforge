@@ -36,6 +36,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
   deliveryGate(): {
     queuedForMs(agentId: string): number | undefined;
     explicitHold(agentId: string): DeliveryHoldReason | undefined;
+    credentialHeld(agentId: string): boolean;
     hasQueued(agentId: string): boolean;
     hasHeldAppItems(agentId: string): boolean;
     discardPending(agentId: string): readonly AgentMessageDelivery[];
@@ -77,9 +78,11 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     isStopping: (agentId) => input.stopState().stopping(agentId),
     queuedForMs: (agentId) => input.deliveryGate().queuedForMs(agentId),
     explicitHold: (agentId) => input.deliveryGate().explicitHold(agentId),
+    credentialHeld: (agentId) => input.deliveryGate().credentialHeld(agentId),
     daemonIdleFacts: (agentId) =>
       daemonIdleFacts({
         queue: input.inputDrain().get(agentId),
+        credentialHeld: input.deliveryGate().credentialHeld(agentId),
         working: input.working(agentId),
         deliveriesQueued: input.deliveryGate().hasQueued(agentId),
         deliveryInFlight: input.deliveryGate().consumption?.snapshot(agentId) !== undefined,

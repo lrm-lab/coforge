@@ -16,7 +16,7 @@ import { logStalledRecovery } from "./agent-failure-logs";
 import { idleBlocker, type ColdIdleAgent } from "./cold-idle-sweep";
 import type { DaemonIdleFacts } from "./agent-idle-facts";
 import type { BusyActivity } from "./agent-activity-publisher";
-import type { DeliveryHoldReason } from "./agent-delivery-gate";
+import { waitsOnProvider, type DeliveryHoldReason } from "./agent-delivery-gate";
 import type { LaunchRequest } from "./runtime-launch-types";
 import {
   coldIdleRuntimePlan,
@@ -35,12 +35,6 @@ import {
 } from "./stalled-recovery";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
-
-/** Whether the Agent's deliveries are held waiting out a retryable failure. A fingerprint fence
- * holds them too, but that hold does not end on its own, so it must not silence the judgment. */
-function heldForRetry(reason: DeliveryHoldReason | undefined): boolean {
-  return reason === "rate_limit_backoff" || reason === "runtime_error_backoff";
-}
 
 /** What ending a live runtime needs of the Agent's current launch. */
 export type ReleasableLaunch = {
@@ -84,6 +78,8 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   queuedForMs(agentId: string): number | undefined;
   /** Why the Agent's deliveries are explicitly held right now, if they are. */
   explicitHold?(agentId: string): DeliveryHoldReason | undefined;
+  /** The Agent's deliveries wait for its provider credential: no reason to wake it for them. */
+  credentialHeld?(agentId: string): boolean;
   /** When the Agent's process last accepted an inbox notice; undefined when none was accepted —
    * the clock for the frozen-after-notice judgment (task #318). */
   noticeAcceptedAt?(agentId: string): number | undefined;
@@ -164,7 +160,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
         hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
         resumable: this.#ports.resumable(agentId),
         noticeAcceptedForMs: ageOf(this.#ports.noticeAcceptedAt?.(agentId)),
-        recoveryHold: heldForRetry(this.#ports.explicitHold?.(agentId)),
+        recoveryHold: waitsOnProvider(this.#ports.explicitHold?.(agentId)),
         // The running session declares whether a notice can steer its live turn; an adapter
         // that does not declare is read as queue-only (the longer fuse).
         steersBusyTurn: session.steersBusyTurn === true,
@@ -294,7 +290,8 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     plan: RuntimeReleasePlan,
   ): Promise<boolean> {
     return this.#endThen(agentId, launch, session, plan, false, async (current, join) => {
-      if (plan.wake.onlyIfParked && !this.#ports.hasParkedWork(agentId)) return;
+      const parked = !this.#ports.credentialHeld?.(agentId) && this.#ports.hasParkedWork(agentId);
+      if (plan.wake.onlyIfParked && !parked) return;
       const sessionId = this.#ports.sessionId(agentId) ?? current.sessionId;
       join();
       const resumePrompt = plan.wake.resumePrompt;

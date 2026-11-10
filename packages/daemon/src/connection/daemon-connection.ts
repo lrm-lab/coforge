@@ -4,6 +4,7 @@ import type {
   DaemonConnectionClient,
   ReceivedAgentMigrationLease,
 } from "./daemon-connection-client";
+import { ownedIntent } from "./owned-intent";
 import {
   type AgentContextViewResult,
   type AgentServerFeatures,
@@ -134,6 +135,7 @@ import {
   decodeComputerUpgradeIntent,
   encodeAgentActivity,
   encodeAgentStatus,
+  type AgentCredentialRestored,
   type AgentMentionDeliveryTransition,
   type AgentMentionDeliveryTerminalError,
   type MachineStatusReport,
@@ -841,6 +843,10 @@ export class DaemonConnection
     return this.#notices.sendMentionDeliveryTerminalError(report);
   }
 
+  sendAgentCredentialRestored(report: AgentCredentialRestored): Promise<void> {
+    return this.#notices.sendCredentialRestored(report);
+  }
+
   /** The server's Agent migration route, over HTTPS with this daemon's API key. */
   agentMigrationServer(): AgentMigrationServer {
     return new AgentMigrationHttpClient({
@@ -1298,21 +1304,21 @@ export class DaemonConnection
         decode: () =>
           this.#readyPublications.deliver(
             this.#agentMessage,
-            this.#ownedIntent(decodeAgentMessageDelivery(data), workspaceId),
+            ownedIntent(decodeAgentMessageDelivery(data), workspaceId),
             "notice",
           ),
       },
       {
         kind: "agent_stop",
         decode: () => {
-          const intent = this.#ownedIntent(decodeAgentStopIntent(data), workspaceId);
+          const intent = ownedIntent(decodeAgentStopIntent(data), workspaceId);
           this.#readyPublications.deliver(this.#agentStop, intent, "stop");
         },
       },
       {
         kind: "agent_turn_interrupt",
         decode: () => {
-          const intent = this.#ownedIntent(decodeAgentTurnInterruptIntent(data), workspaceId);
+          const intent = ownedIntent(decodeAgentTurnInterruptIntent(data), workspaceId);
           if (!this.#readyPublications.holding)
             this.#readyPublications.deliver(this.#agentTurnInterrupt, intent);
         },
@@ -1320,7 +1326,7 @@ export class DaemonConnection
       {
         kind: "agent_start",
         decode: () => {
-          const intent = this.#ownedIntent(decodeAgentStartIntent(data), workspaceId);
+          const intent = ownedIntent(decodeAgentStartIntent(data), workspaceId);
           this.#readyPublications.deliver(this.#agentStart, intent, "start");
         },
       },
@@ -1352,15 +1358,6 @@ export class DaemonConnection
       error_code: diagnosticErrorCode(rejections.at(-1)?.error),
       outcome: "rejected",
     });
-  }
-
-  #ownedIntent<Intent extends { protocolMajor: number; workspaceId: string }>(
-    intent: Intent,
-    workspaceId: string,
-  ): Intent {
-    if (intent.protocolMajor !== 1 || intent.workspaceId !== workspaceId)
-      throw new Error("agent intent targets another Workspace");
-    return intent;
   }
 
   async sendAgentControlResult(result: AgentControlResult) {

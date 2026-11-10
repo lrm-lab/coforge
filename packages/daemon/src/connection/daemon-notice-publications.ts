@@ -1,12 +1,15 @@
 import {
+  AGENT_CREDENTIAL_RESTORED_METHOD,
   AGENT_MENTION_DELIVERY_TERMINAL_ERROR_METHOD,
   AGENT_MENTION_DELIVERY_TRANSITION_METHOD,
   AGENT_MESSAGE_ACK_METHOD,
   AGENT_MESSAGE_REJECT_METHOD,
+  encodeAgentCredentialRestored,
   encodeAgentMentionDeliveryTerminalError,
   encodeAgentMentionDeliveryTransition,
   encodeAgentMessageDeliveryAck,
   encodeAgentMessageDeliveryRejection,
+  type AgentCredentialRestored,
   type AgentMentionDeliveryTerminalError,
   type AgentMentionDeliveryTransition,
   type AgentMessageDeliveryAck,
@@ -51,6 +54,12 @@ export class DaemonNoticePublications {
       AGENT_MENTION_DELIVERY_TERMINAL_ERROR_METHOD,
       encodeAgentMentionDeliveryTerminalError(report),
     ).then(() => undefined);
+  }
+
+  sendCredentialRestored(report: AgentCredentialRestored): Promise<void> {
+    return this.rpc(AGENT_CREDENTIAL_RESTORED_METHOD, encodeAgentCredentialRestored(report)).then(
+      () => undefined,
+    );
   }
 
   sendMachineDiskStatus(report: MachineStatusReport): Promise<void> {

@@ -78,6 +78,10 @@ test("a delivery held for another retryable failure waits out its delay too", ()
   expect(subject("runtime_error_backoff").release.stalled("agent-a")).toBeUndefined();
 });
 
+test("a delivery held for an invalid credential is not restarted: a new process would meet it again", () => {
+  expect(subject("credential_invalid").release.stalled("agent-a")).toBeUndefined();
+});
+
 test("without a hold, the same queued delivery is still a stall", () => {
   expect(subject(undefined).release.stalled("agent-a")).toBeDefined();
 });

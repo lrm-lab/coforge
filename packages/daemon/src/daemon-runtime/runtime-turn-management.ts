@@ -180,3 +180,31 @@ export function narrateUnavailable(
     ),
   );
 }
+
+/** The turn-management functions bound to the runtime's turn ports, which are read at each call
+ * because the runtime builds the collaborators they hold after the objects that use these. */
+export class RuntimeTurn {
+  constructor(private readonly ports: () => RuntimeTurnPorts) {}
+
+  readonly flushHeld = (agentId: string, held: AgentMessageDelivery[]): void =>
+    flushHeldDeliveries(this.ports(), agentId, held);
+  readonly isWorking = (agentId: string): boolean => isWorking(this.ports(), agentId);
+  readonly narrateUnavailable = (
+    agentId: string,
+    launch: ActivityLaunch,
+    { detail, entryText }: { detail: string; entryText?: string },
+  ): void => narrateUnavailable(this.ports(), agentId, launch, detail, entryText);
+  readonly interruptIfBusy = (agentId: string, activityLaunch: ActivityLaunch | undefined): void =>
+    interruptIfBusy(this.ports(), agentId, activityLaunch);
+  readonly showQuietTurn = (
+    agentId: string,
+    launch: ActivityLaunch,
+    publish: (agentId: string, launch: ActivityLaunch, activity: ActivityDraft) => void,
+  ): void => showQuietTurn(this.ports(), agentId, launch, publish);
+  readonly reconcileIdleTurn = (agentId: string, launch: ActivityLaunch): boolean =>
+    reconcileIdleTurn(this.ports(), agentId, launch);
+  readonly releaseSurvivingHolds = (agentId: string): void =>
+    releaseSurvivingHolds(this.ports(), agentId);
+  readonly releaseTurnEndHolds = (agentId: string): void =>
+    releaseTurnEndHolds(this.ports(), agentId);
+}

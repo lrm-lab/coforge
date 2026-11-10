@@ -10,7 +10,7 @@ import { MENTION_DELIVERY_TERMINAL_CODES } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { logAgentOperationFailure } from "./agent-failure-logs";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
-import type { AgentDeliveryGate } from "./agent-delivery-gate";
+import { waitsOnProvider, type AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
@@ -44,10 +44,7 @@ export type ExitedDeliveryCollaborators = {
 export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): AgentExitedDelivery {
   const exited = new AgentExitedDelivery({
     hasRuntimeErrorHold: (agentId) => ports.deliveryGate.explicitHold(agentId) !== undefined,
-    backoffHeld: (agentId) => {
-      const reason = ports.deliveryGate.explicitHold(agentId);
-      return reason === "rate_limit_backoff" || reason === "runtime_error_backoff";
-    },
+    providerHeld: (agentId) => waitsOnProvider(ports.deliveryGate.explicitHold(agentId)),
     holdRuntimeErrorDelivery: (message) => ports.messageAttention().receive(message),
     hasConsumed: (message) => ports.messageAttention().hasConsumed(message),
     logConsumed: (message) => ports.messageAttention().logDecision(message, "consumed"),

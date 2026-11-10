@@ -9,6 +9,7 @@ import type { AgentOfflineResidency } from "./agent-offline-residency";
 import type { AgentUsageReport } from "./agent-usage-report";
 import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
 import type { PhaseBookkeeping } from "./phase-bookkeeping";
+import type { CredentialInvalidHolds } from "./credential-invalid-holds";
 import type { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import type { SystemCleaner } from "#src/system-cleaner/system-cleaner";
 import type { TaskIdleNudge } from "./task-idle-nudge";
@@ -29,6 +30,8 @@ export type RuntimeEventObservationPorts = Readonly<{
   usageReport: AgentUsageReport;
   phaseBookkeeping: PhaseBookkeeping;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
+  /** Told of a failure that shows the Agent's provider credential unusable. */
+  credentialHolds: Pick<CredentialInvalidHolds, "record">;
   mentionDeliveries: MentionDeliveryTracker;
   agentSessions: AgentSessions;
   systemCleaner: SystemCleaner;

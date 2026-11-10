@@ -7,6 +7,7 @@ import {
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
+import { credentialInvalidReason } from "#src/agent-runtime/credential-invalid";
 import { endsStalledTurn, stalledTurnObservation } from "./stalled-turn-indicator";
 import {
   buildRuntimeErrorFenceActivity,
@@ -262,27 +263,35 @@ export function observeRuntimeEvent(
     // Classified once here: the Activity's fallback class/reason and this failure's retry
     // decision are the same reading of the same failure.
     const classification = classifyRuntimeError(event);
-    // A failure only a person can fix (re-auth, a model the plan does not include), an
-    // exhausted billing balance, or a sticky model-config one ends the process and takes the
-    // Agent offline — whenever in the launch it is observed.
-    if (classification.takesAgentOffline) {
-      ports.offlineResidency.takeOffline(
-        agentId,
-        launch,
-        config.provider,
-        ports.offlineResidency.buildActivity(
-          config,
-          runtimeDisplayName(config.provider),
-          event,
-          classification,
-        ),
-        {
-          event: "agent_runtime:error_requires_user_action",
+    // A failure only a person can fix (re-auth, a model the plan does not include) or an
+    // exhausted billing balance is a known-invalid credential: the process is kept and the
+    // Agent's deliveries are held, as the reference Computer does. A sticky model-config failure
+    // or a quota with no known reset ends the process and takes the Agent offline, whenever in
+    // the launch it is observed.
+    const credentialInvalid = credentialInvalidReason(classification);
+    if (credentialInvalid || classification.takesAgentOffline) {
+      const built = ports.offlineResidency.buildActivity(
+        config,
+        runtimeDisplayName(config.provider),
+        event,
+        classification,
+      );
+      if (credentialInvalid) {
+        ports.credentialHolds.record(agentId, config, credentialInvalid);
+        publish(
+          agentId,
+          launch,
+          ports.activityDraft(agentId, built.detailKind, built.level, built.detail, {
+            entries: built.entries,
+            runtimeError: built.runtimeError,
+          }),
+        );
+      } else
+        ports.offlineResidency.takeOffline(agentId, launch, config.provider, built, {
+          event: "agent_runtime:error_not_retryable",
           errorClass: classification.errorClass,
           errorReason: classification.errorReason,
-          requiredAction: classification.requiredAction,
-        },
-      );
+        });
       return;
     }
     // Retry policy reads that classification, never free-form provider hints.
@@ -304,7 +313,6 @@ export function observeRuntimeEvent(
           event: fence.event,
           errorClass: classification.errorClass,
           errorReason: "runtime_error_fenced",
-          requiredAction: "none",
         },
       );
       return;

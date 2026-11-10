@@ -5,6 +5,20 @@ import type { RunningMentionIdentity } from "./mention-delivery-ports";
 export class ReportedSessions {
   readonly #byAgent = new Map<string, RunningMentionIdentity>();
 
+  /** The thunks read the process manager and launches the runtime builds after this field. */
+  constructor(
+    private readonly agents: () => { session(agentId: string): unknown },
+    private readonly currentLaunches: () => ReadonlyMap<string, { launchId?: string }>,
+  ) {}
+
+  /** What tracked mentions are judged against: the latest reported pair when `reported`, else the
+   * pair of a running Agent. */
+  identity(agentId: string, reported?: true): RunningMentionIdentity | undefined {
+    return reported
+      ? this.last(agentId)
+      : this.running(agentId, this.agents(), this.currentLaunches());
+  }
+
   remember({ agentId, launchId, sessionId }: RunningMentionIdentity & { agentId: string }): void {
     this.#byAgent.set(agentId, { launchId, sessionId });
   }

@@ -96,4 +96,18 @@ It never becomes `no_process`.
 A runner hold queues a tracked mention unacknowledged like any delivery; one still queued for an Agent
 without a session when the hold lifts is refused `IDENTITY_UNKNOWN`. A tripped fingerprint fence, an
 offline record and a stopped Agent refuse at once as `IDENTITY_UNKNOWN`: the reference Computer has no
-identity to hold it for either. The credential-invalid hold has no equivalent here.
+identity to hold it for either.
+
+While the Agent's provider credential is known invalid (`credential_invalid`,
+[the hold](../observability/agent-status-and-activity/credential-invalid-hold.md)) its process is
+kept and a mention for it is kept too, as the reference Computer's `credentialInvalidHold` does: the
+identity checks run as for any live process, then the entry is carried for the next launch
+(`carry.hold`, which keeps even a mention already told) with `daemon_received` and no ACK and no terminal
+error. This comes before the busy and backoff checks, so a mention arriving mid-turn is kept too, and a
+repeat adopts the newest envelope and is reported `coalesced`. A closed Agent keeps it the same way
+(`providerHeld`), without waking. The hold ends when the credential is known usable again (a Stop, a
+login or changed credentials, a model change, model output of a later turn) or an hour after the
+process closed; the Agent is then told what it kept once, in the same notice as the deliveries held
+for it (a live one by `flushSurvivingDeliveries`, a closed one by its launch). A Stop forgets them
+without a report, an inbox purge refuses them `DELIVERY_REJECTED`, and the held Agent is not busy for a
+pushed configuration or the cold idle stop, which do not wake it.

@@ -26,7 +26,7 @@ function subject(
     restartConfig: () => ("restart" in state ? state.restart : restart),
     offline: { has: () => state.offline === true, restate: () => {} },
     hasRuntimeErrorHold: () => state.hold !== undefined,
-    backoffHeld: () => state.hold === "backoff",
+    providerHeld: () => state.hold === "backoff",
     keepMention: () => (calls.kept++, true),
     dropMentionAsUnknown: () => (calls.dropped++, true),
     refuseMention: () => void calls.dropped++,

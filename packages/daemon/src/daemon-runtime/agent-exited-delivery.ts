@@ -16,7 +16,7 @@ export type AgentExitedDeliveryPorts = Readonly<{
   /** A runtime-error backoff that must survive an unexpected process exit. */
   hasRuntimeErrorHold(agentId: string): boolean;
   /** The hold is a retryable-error backoff, which ends by itself; a tripped fence's does not. */
-  backoffHeld(agentId: string): boolean;
+  providerHeld(agentId: string): boolean;
   /** Records a delivery in attention and the daemon-owned hold without waking a process. */
   holdRuntimeErrorDelivery(message: AgentMessageDelivery): Promise<void>;
   /** The consumed cursor already covers this delivery. */
@@ -125,7 +125,7 @@ export class AgentExitedDelivery {
     if (
       !restart ||
       this.#ports.offline.has(agentId) ||
-      (held && !this.#ports.backoffHeld(agentId))
+      (held && !this.#ports.providerHeld(agentId))
     ) {
       // No identity to check it against, so not even a consumed mention is ACKed.
       this.#ports.refuseMention(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
@@ -136,12 +136,14 @@ export class AgentExitedDelivery {
     else this.#wakeForKept(agentId, restart, message);
   }
 
-  /** The Agent's runtime-error backoff ran its course. Mentions kept through it, which waited for
-   * the Agent to be able to run again, wake it now (after a launch-failure cooldown, when one
+  /** The Agent's runtime-error backoff, or its provider credential's hold, ran its course. What
+   * was kept through it (mentions, deliveries), which waited for the Agent to be able to run
+   * again, wakes it now (after a launch-failure cooldown, when one
    * runs); with nothing left to relaunch from they are refused as unknown. A running or coming
    * launch tells them already. */
   backoffEnded(agentId: string): void {
-    if (!this.#ports.hasKeptMentions(agentId) || this.#ports.launchComing(agentId)) return;
+    const kept = this.#ports.hasKeptMentions(agentId) || this.#ports.hasQueued(agentId);
+    if (!kept || this.#ports.launchComing(agentId)) return;
     const restart = this.#ports.restartConfig(agentId);
     if (!restart)
       this.#ports.refuseKeptMentions(agentId, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);

@@ -3,7 +3,7 @@ import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { assembleInputDrain } from "#src/daemon-runtime/assemble-input-drain";
 
 /** An input drain whose Agent has a mention kept for its launch. */
-function drain(runnerHeld: boolean) {
+function drain(runnerHeld: boolean, hold?: "credential_invalid") {
   const calls = { taken: 0, told: 0, flushed: [] as string[][] };
   const input = assembleInputDrain({
     runnerHeld: () => runnerHeld,
@@ -18,7 +18,10 @@ function drain(runnerHeld: boolean) {
       flush: async (_: string, held: AgentMessageDelivery[]) =>
         void calls.flushed.push(held.map(({ deliveryId }) => deliveryId)),
     }),
-    deliveryGate: () => ({ inboxes: undefined }),
+    deliveryGate: () => ({
+      inboxes: undefined,
+      credentialHeld: () => hold === "credential_invalid",
+    }),
   } as never);
   return { input, calls };
 }
@@ -33,6 +36,12 @@ test("the mentions kept for a launch are told with the deliveries held for it", 
 
 test("under a runner hold the kept mentions stay kept and only the held deliveries are presented", async () => {
   const { input, calls } = drain(true);
+  await input.tellCarried("agent-a", held);
+  expect(calls).toEqual({ taken: 0, told: 0, flushed: [["delivery-2"]] });
+});
+
+test("a process whose credential is known invalid is told nothing: the kept mentions stay kept", async () => {
+  const { input, calls } = drain(false, "credential_invalid");
   await input.tellCarried("agent-a", held);
   expect(calls).toEqual({ taken: 0, told: 0, flushed: [["delivery-2"]] });
 });

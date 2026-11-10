@@ -8,7 +8,12 @@ import type {
   AgentSession,
   AgentSessionOptions,
 } from "@lrm/coforge-anvil";
-import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
+import type {
+  AgentActivity,
+  AgentCredentialRestored,
+  AgentStatus,
+  MentionDeliveryEnvelope,
+} from "@lrm/coforge-sdk/internal";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 import { messageRecord } from "./message-record";
@@ -53,10 +58,14 @@ export async function harness(
     launchGate?: Promise<void>;
     /** The launches (1 is the first) whose session creation fails. */
     failLaunches?: readonly number[];
+    /** What a failing launch says; absent, it says the provider would not start. */
+    launchError?: string;
     /** Holds every delivery ACK open after it was sent, until it settles. */
     ackGate?: Promise<void>;
     /** The error the session's `dispose` rejects with, so the process is never confirmed gone. */
     disposeError?: Error;
+    /** What the session reports as `hasLiveTurn`; absent, it reports nothing. */
+    hasLiveTurn?: boolean;
     /** The sequences of `#general` the Agent's `check` returns. */
     checkSequences?: readonly number[];
   } = {},
@@ -72,6 +81,10 @@ export async function harness(
       else waiters.push(waiter);
   };
   const notices: string[] = [];
+  const activities: AgentActivity[] = [];
+  const statuses: AgentStatus[] = [];
+  const restored: AgentCredentialRestored[] = [];
+  let disposals = 0;
   /** The tracked deliveries each notice carried, as the session was told them. */
   const noticeDeliveryIds: Array<readonly string[] | undefined> = [];
   const noticeWritten = Promise.withResolvers<void>();
@@ -91,9 +104,11 @@ export async function harness(
           launchStarted.resolve();
           await options.launchGate;
         }
-        if (options.failLaunches?.includes(launch)) throw new Error("the provider would not start");
+        if (options.failLaunches?.includes(launch))
+          throw new Error(options.launchError ?? "the provider would not start");
         if (options.reportSession !== false) await sessionOptions.onSessionId?.("native-1");
         return {
+          ...(options.hasLiveTurn !== undefined ? { hasLiveTurn: options.hasLiveTurn } : {}),
           async sendMessage() {
             // Mention delivery starts from a ready Agent, after its startup turn has ended.
             for (const listener of listeners) listener({ type: "completed", status: "completed" });
@@ -116,7 +131,10 @@ export async function harness(
             return () => exitListeners.delete(listener);
           },
           async dispose() {
+            disposals++;
             if (options.disposeError) throw options.disposeError;
+            // A real process is gone once disposed.
+            for (const listener of exitListeners) listener();
           },
         } satisfies AgentSession;
       },
@@ -131,7 +149,15 @@ export async function harness(
           return { agentApiKey: `sk_agent_${"a".repeat(43)}` };
         },
         async revokeAgentApiKey() {},
-        sendAgentActivity() {},
+        sendAgentActivity(activity) {
+          activities.push(activity);
+        },
+        sendAgentStatus(status) {
+          statuses.push(status);
+        },
+        async sendAgentCredentialRestored(report) {
+          restored.push(report);
+        },
         async sendAgentControlResult() {},
         async reportAgentSession(report) {
           launchIds.push(report.launchId);
@@ -194,6 +220,11 @@ export async function harness(
     runtime,
     frames,
     notices,
+    /** Every Activity and status the daemon sent, and how many times a process was disposed. */
+    activities,
+    statuses,
+    restored,
+    disposals: () => disposals,
     noticeDeliveryIds,
     /** Resolves once the session has been handed its first notice. */
     noticeWritten: noticeWritten.promise,

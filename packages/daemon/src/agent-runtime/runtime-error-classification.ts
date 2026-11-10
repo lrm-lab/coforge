@@ -42,8 +42,10 @@ export { isRuntimePlanAccessText } from "./runtime-error-rules";
  * 463fd642-65db-4902-ae9b-c22fbae0e6a0, sha256 364ec010…c78e, observed 2026-10-21): an
  * action-required failure (`requiredAction` other than `none`), an exhausted billing balance or a
  * plan quota with no known reset, or a sticky model-config failure
- * ends the process and reports the Agent `inactive` until a person fixes the cause and starts it
- * again. A quota or 402 that names its reset instead waits behind that time, showing it in the
+ * takes the Agent offline until a person fixes the cause and starts it again. An
+ * action-required failure or exhausted balance, mid-turn or at launch, is a known-invalid
+ * credential instead (`credential-invalid.ts`): the reference Computer 1.0.67 keeps the process
+ * and holds the Agent's deliveries. A quota or 402 that names its reset instead waits behind that time, showing it in the
  * Activity, rather than taking the Agent offline. A rolling window's usage cap (`window_limit`,
  * or window wording in free text) is never offline: it waits for a named reset or backs off,
  * because the window lifts on its own. `TimeoutError` stays terminal-but-wakeable deliberately: a timeout is handled by the

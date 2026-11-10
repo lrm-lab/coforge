@@ -1,4 +1,5 @@
 import type { AgentActivity, AgentRuntimeEvent } from "@coforge/agent";
+import type { CredentialInvalidReason } from "./credential-invalid";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
   RUNTIME_PROVIDER,
@@ -157,7 +158,7 @@ function runtimeActionRequiredSubtype(
 
 /** The person-facing wording an action-required failure shows, mirroring the reference
  * Computer's `formatRuntimeActionRequiredMessage`. */
-function runtimeActionRequiredMessage(
+export function runtimeActionRequiredMessage(
   requiredAction: ClassifiedRuntimeErrorAction,
   message: string,
   context: RuntimeActionRequiredContext,
@@ -249,19 +250,31 @@ function offlineLimitActivity(
   };
 }
 
-/** The Activity an exhausted provider billing/credit balance reports: the same offline semantics
- * as an action-required failure. Mirrors the reference Computer's
+/** The Activity an exhausted provider billing/credit balance reports: the same credential-invalid
+ * semantics as an action-required failure. Mirrors the reference Computer's
  * `formatRuntimeBillingExhaustedMessage`. */
 export function buildRuntimeBillingExhaustedActivity(
   event: RuntimeErrorEvent,
   classified: RuntimeErrorClassification,
   providerLabel: string,
 ): AgentActivity {
-  return offlineLimitActivity(
-    event,
-    classified,
-    `${providerLabel} reported that the provider's billing or credit balance is exhausted. CoForge stopped retrying because retries cannot succeed until the balance is restored. Messages that were waiting are kept and will be delivered when the agent starts again. Add credits or switch this agent to another model or provider, then restart the agent.`,
-  );
+  return offlineLimitActivity(event, classified, runtimeBillingExhaustedMessage(providerLabel));
+}
+
+export function runtimeBillingExhaustedMessage(providerLabel: string): string {
+  return `${providerLabel} reported that the provider's billing or credit balance is exhausted. CoForge stopped retrying because retries cannot succeed until the balance is restored. Messages that were waiting are kept and will be delivered when the agent starts again. Add credits or switch this agent to another model or provider, then restart the agent.`;
+}
+
+/** What an Agent on a shared sign-in is shown when another Agent found it unusable. */
+export function credentialInvalidNoticeText(
+  reason: CredentialInvalidReason,
+  context: RuntimeActionRequiredContext,
+): string {
+  const text =
+    reason === "BillingError"
+      ? runtimeBillingExhaustedMessage(context.providerLabel)
+      : runtimeActionRequiredMessage(reason, "", context);
+  return `${text} (Reported by another agent on the same sign-in.)`;
 }
 
 /** The Activity an exhausted quota with no known reset reports — a monthly plan quota, or a

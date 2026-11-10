@@ -32,7 +32,8 @@ export const RUNTIME_ERROR_RETRY_DECISION = {
   RETRY: "retry",
   /**
    * Do not hold a delivery behind a backoff for this occurrence. When `takesAgentOffline` is also
-   * set the daemon ends the process and reports the Agent inactive; otherwise the Agent stays
+   * set the daemon ends the process and reports the Agent inactive (a known-invalid credential holds
+   * the Agent's deliveries instead, `credential-invalid.ts`); otherwise the Agent stays
    * wakeable (a `TimeoutError`, for example, is left to the stall watchdog — a stuck provider
    * needs a kill/restart, not a redelivered message).
    */

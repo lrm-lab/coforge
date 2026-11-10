@@ -18,6 +18,8 @@ import { AgentUsageReport } from "./agent-usage-report";
 import { PhaseBookkeeping } from "./phase-bookkeeping";
 import { ReplyIntentPublisher } from "./reply-intent-publisher";
 import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
+import type { CredentialInvalidHolds } from "./credential-invalid-holds";
+import type { AgentLifecycle } from "./agent-lifecycle";
 import { WakeRecycle } from "./wake-recycle";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import type { ActivityLaunch } from "./activity-launch";
@@ -91,6 +93,9 @@ export type AgentLaunchCoordinatorPorts = {
   agentControl: AgentControl;
   agentSessions: AgentSessions;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
+  /** Told when a launch fails with a provider credential known unusable. */
+  credentialHolds: Pick<CredentialInvalidHolds, "record">;
+  lifecycle: Pick<AgentLifecycle, "processClosed">;
   replyIntents: ReplyIntentPublisher<ActivityLaunch>;
   offlineResidency: AgentOfflineResidency;
   drafts: Drafts;

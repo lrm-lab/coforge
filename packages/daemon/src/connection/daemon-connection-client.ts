@@ -47,6 +47,7 @@ import type {
   ComputerFilePullRequest,
   ComputerFilePullResult,
   ComputerUpgradeResult,
+  AgentCredentialRestored,
   AgentMentionDeliveryTransition,
   AgentMentionDeliveryTerminalError,
   RuntimeAuthStatusReport,
@@ -256,6 +257,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   sendAgentMentionDeliveryTransition?(report: AgentMentionDeliveryTransition): Promise<void>;
   /** The final result of a tracked @mention delivery the daemon will not drain. */
   sendAgentMentionDeliveryTerminalError?(report: AgentMentionDeliveryTerminalError): Promise<void>;
+  /** An Agent's provider credential works again; best-effort. */
+  sendAgentCredentialRestored?(report: AgentCredentialRestored): Promise<void>;
   agentMessage?(
     request: AgentMessageRequest,
     agentApiKey: string,

@@ -14,6 +14,7 @@ function harness() {
       release: (agentId) => (held.delete(agentId), []),
       endHoldForNextLaunch: (agentId) => void held.delete(agentId),
       explicitHold: (agentId) => held.get(agentId) as never,
+      credentialHeld: (agentId) => held.get(agentId) === "credential_invalid",
       pending: () => [],
     },
     flush: () => {},

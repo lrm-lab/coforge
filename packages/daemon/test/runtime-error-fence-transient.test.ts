@@ -31,6 +31,7 @@ function harness() {
       },
       endHoldForNextLaunch: (id) => void held.delete(id),
       explicitHold: (id) => held.get(id),
+      credentialHeld: (id) => held.get(id) === "credential_invalid",
       pending: () => [],
     },
     flush() {
@@ -118,6 +119,7 @@ test("every backoff step logs its rung, its wait and the queue depth, never the 
         release: () => [],
         endHoldForNextLaunch: () => {},
         explicitHold: () => undefined,
+        credentialHeld: () => false,
         pending: () => [{ body: "the wording nobody may log" }, { body: "nor this" }] as never,
       },
       flush() {

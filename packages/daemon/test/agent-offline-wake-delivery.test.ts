@@ -4,7 +4,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentActivity, AgentStatus } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeConfig, AgentSession } from "@lrm/coforge-anvil";
+import type { AgentRuntimeConfig, AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
@@ -27,6 +27,7 @@ afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
 
 test("a wake launch that fails login-required keeps later deliveries from relaunching", async () => {
   const exitListeners = new Set<() => void>();
+  const listeners = new Set<(event: AgentRuntimeEvent) => void>();
   const activities: AgentActivity[] = [];
   const statuses: AgentStatus[] = [];
   const rejections: { reason: string }[] = [];
@@ -38,8 +39,9 @@ test("a wake launch that fails login-required keeps later deliveries from relaun
     async notify(notice: string) {
       notices.push(notice);
     },
-    subscribe() {
-      return () => {};
+    subscribe(listener: (event: AgentRuntimeEvent) => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
     async interrupt() {},
     onExit(listener: () => void) {
@@ -131,17 +133,21 @@ test("a wake launch that fails login-required keeps later deliveries from relaun
     expect(launches).toBe(2);
     expect(rejections).toEqual([]);
     expect(acknowledgements).toEqual(["delivery-1", "delivery-2", "delivery-3"]);
-    // An App Inbox notice reaches the same dead end: no wake config survives the offline
-    // record, so minting and draining it launches nothing and the item waits.
+    // An App Inbox notice reaches the same dead end: the hold keeps the closed Agent from being
+    // started for it, so minting and draining it launches nothing and the item waits.
     await runtime.mintAppItem("agent-a", appItem);
     await runtime.drainAppInboxNotices("agent-a");
     expect(launches).toBe(2);
     expect(notices).toEqual([]);
-    // A person's Start clears the offline record on `active`; the held notice is then
-    // delivered to the new session.
+    // A person's Start launches it again; once its model answers, the credential works and the
+    // held notice is delivered to the new session.
     await runtime.startAgent("agent-a", config);
-    await Bun.sleep(10);
     expect(launches).toBe(3);
+    for (const listener of listeners) listener({ type: "progress" });
+    for (const listener of listeners) listener({ type: "text-delta", text: "hello" });
+    await Bun.sleep(10);
+    for (const listener of listeners) listener({ type: "completed", status: "completed" });
+    await Bun.sleep(10);
     expect(notices).toContain("New app item available. Run coforge inbox check.");
   } finally {
     await runtime.stop();

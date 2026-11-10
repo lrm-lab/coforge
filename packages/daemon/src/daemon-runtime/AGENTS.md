@@ -114,6 +114,14 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 
 Read the [message attention and delivery rules](../../../../docs/agents/daemon-message-attention.md) when changing that behavior.
 
+## Credential-invalid hold
+
+Behaviour: [credential-invalid hold](../../../../docs/observability/agent-status-and-activity/credential-invalid-hold.md).
+
+- `credential-invalid-ledger.ts` records which credential is known invalid, keyed `shared:<runtime>` for a sign-in Agents share or `agent:<id>` for an Agent's own; `provider-credentials.ts` is the one table of which provider settings make a credential an Agent's own.
+- `credential-invalid-holds.ts` holds and releases the Agents on a record through the delivery gate's `credential_invalid` reason; who is held is read from the gate, never mirrored. Only a person's Stop, a delete or an operator stop releases through `agent-lifecycle.ts`; a launch the daemon tears down never does.
+- `credential-disk-watch.ts` polls each watched credential (files by stat, then digest; on macOS the Keychain item's attributes, never its secret) and reports a change; `assemble-credential-holds.ts` wires the holds, the watch and the `agent:credential:restored` report.
+
 ## Agent HTTPS forwarding
 
 See [https-forwarding.md](./https-forwarding.md).

@@ -21,6 +21,7 @@ import {
   type RuntimeErrorRecoverySignal,
 } from "#src/agent-runtime/runtime-error-recovery";
 import type { AgentDeliveryGate } from "./agent-delivery-gate";
+import type { CredentialInvalidHolds } from "./credential-invalid-holds";
 
 /** The longest delay one `setTimeout` honours (a signed 32-bit millisecond count). */
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
@@ -44,7 +45,7 @@ export type RuntimeErrorDeliveryHoldPorts = Readonly<{
   /** Owns the explicit hold; this module only decides when it starts and ends. */
   deliveryGate: Pick<
     AgentDeliveryGate,
-    "hold" | "release" | "endHoldForNextLaunch" | "explicitHold" | "pending"
+    "hold" | "release" | "endHoldForNextLaunch" | "explicitHold" | "credentialHeld" | "pending"
   >;
   /** Attempts delivery of what a released hold gave back, never blocking the caller. */
   flush(agentId: string, held: AgentMessageDelivery[]): void;
@@ -54,6 +55,9 @@ export type RuntimeErrorDeliveryHoldPorts = Readonly<{
   backoffEnded?(agentId: string): void;
   /** Where a backoff outlives the process; absent when the caller keeps it in memory only. */
   store?: RuntimeErrorBackoffPersistence;
+  /** The Agents whose provider credential is known invalid, told when one of them produces model
+   * output, is forgotten, or the Daemon stops. */
+  credential?: Pick<CredentialInvalidHolds, "modelOutput" | "forget" | "dispose">;
 }>;
 
 /**
@@ -112,6 +116,8 @@ export class RuntimeErrorDeliveryHold {
       this.#holdFenced(agentId);
       return fence;
     }
+    // A known-invalid credential holds until it is usable again, whatever this failure would add.
+    if (this.#ports.deliveryGate.credentialHeld(agentId)) return undefined;
     if (classification.retryDecision !== RUNTIME_ERROR_RETRY_DECISION.RETRY) {
       this.#endBackoff(agentId);
       return undefined;
@@ -153,6 +159,20 @@ export class RuntimeErrorDeliveryHold {
       outcome: "held",
     });
     return undefined;
+  }
+
+  /**
+   * Holds one Agent's deliveries for a provider credential known invalid (`CredentialInvalidHolds`
+   * decides which Agents and when it ends). A backoff the Agent had ends with the failure that
+   * replaces it; a tripped fence's hold stays, and false says so.
+   */
+  holdCredentialInvalid(agentId: string): boolean {
+    if (this.#isFenced(agentId)) return false;
+    this.#clearReleaseTimer(agentId);
+    this.#backoff.reset(agentId);
+    this.#ports.store?.clear(agentId);
+    this.#ports.deliveryGate.hold(agentId, "credential_invalid");
+    return true;
   }
 
   /**
@@ -224,7 +244,11 @@ export class RuntimeErrorDeliveryHold {
     agentId: string,
     signal: RuntimeErrorRecoverySignal,
     classFence?: RuntimeErrorClassFence,
+    turnStartedAtMs?: number,
   ): void {
+    // Model output of the Agent's own turn shows its credential works (a turn begun since the
+    // credential was found invalid; the failing turn's own output never counts).
+    if (signal === "output") this.#ports.credential?.modelOutput(agentId, turnStartedAtMs);
     const effects = RUNTIME_ERROR_RECOVERY_EFFECTS[signal];
     if (effects.resetsFence) {
       this.#fence.reset(agentId);
@@ -269,6 +293,7 @@ export class RuntimeErrorDeliveryHold {
    * fence from a process that no longer exists. The delivery queue's own `clearAgent`, called
    * first, drops the hold (the fence's included) and what it held. */
   forget(agentId: string): void {
+    this.#ports.credential?.forget(agentId);
     this.#clearReleaseTimer(agentId);
     this.#backoff.reset(agentId);
     this.#fence.reset(agentId);
@@ -282,6 +307,7 @@ export class RuntimeErrorDeliveryHold {
    * boundary recovers it on the next Start. The streaks and a fence's hold stay, as before.
    */
   disposeAll(): void {
+    this.#ports.credential?.dispose();
     for (const [agentId, { timer }] of this.#releaseTimers) {
       clearTimeout(timer);
       this.#ports.deliveryGate.release(agentId);

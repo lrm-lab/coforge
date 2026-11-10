@@ -15,6 +15,7 @@ import {
   type RuntimeErrorClassification,
 } from "#src/agent-runtime/runtime-error-classification";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
+import { credentialInvalidReason } from "#src/agent-runtime/credential-invalid";
 import type { ActivityDraft, PublishedActivityLaunch } from "./agent-activity-publisher";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -147,7 +148,6 @@ export class AgentOfflineResidency {
       event: string;
       errorClass: string;
       errorReason: string;
-      requiredAction: string;
     }>,
   ): void {
     launch.offlineError = built;
@@ -157,14 +157,13 @@ export class AgentOfflineResidency {
     this.#ports.keepInputDeliveriesForNextLaunch(agentId, ending);
     this.#ports.closeAgentInputQueue(agentId, ending);
     this.#ports.forgetRuntimeErrorHold(agentId);
-    logger.warning("Agent runtime error requires user action; terminating the process", {
+    logger.warning("Agent runtime error cannot be retried; terminating the process", {
       event: log.event,
       agent_id: agentId,
       provider,
       launch_id: launch.launchId,
       runtime_error_class: log.errorClass,
       runtime_error_reason: log.errorReason,
-      runtime_error_action: log.requiredAction,
       outcome: "failed",
     });
     this.#ports.publish(agentId, launch, draft);
@@ -174,7 +173,7 @@ export class AgentOfflineResidency {
     launch.stopping = true;
     this.#ports.sendAgentStatus(agentId, "inactive");
     void this.#ports.stopProcess(agentId).catch((error: unknown) => {
-      logger.warning("Agent process did not stop after an action-required error", {
+      logger.warning("Agent process did not stop after an error that cannot be retried", {
         event: "agent_runtime:offline_stop_failed",
         agent_id: agentId,
         launch_id: launch.launchId,
@@ -187,7 +186,8 @@ export class AgentOfflineResidency {
    * A launch that failed before its error events could flow — the provider threw while the
    * session was being created — never reaches `#observeRuntimeEvent`. When the thrown error's
    * own text names a future recovery time, this records that wait and returns the quota
-   * Activity; the caller must not report the Agent inactive. When it classifies as an offline
+   * Activity; the caller must not report the Agent inactive. A credential failure returns its
+   * Activity without a record. When it classifies as an offline
    * failure this is the same `takeOffline` record: the Agent stays offline and a later custody
    * delivery restates this Activity. Returns undefined for an ordinary launch failure (which
    * keeps the launcher wording).
@@ -207,6 +207,10 @@ export class AgentOfflineResidency {
       this.#launchWaits.set(agentId, { untilMs: Date.now() + waitMs, provider: config.provider });
       return buildRuntimeErrorActivity(event, classification);
     }
+    // A credential only a person can mend is held (`CredentialInvalidHolds`), not taken offline:
+    // what the Agent kept waits for the next probe. Its Activity says what to fix.
+    if (credentialInvalidReason(classification))
+      return this.buildActivity(config, providerLabel, event, classification);
     if (!classification.takesAgentOffline) return undefined;
     const built = this.buildActivity(config, providerLabel, event, classification);
     launch.offlineError = built;

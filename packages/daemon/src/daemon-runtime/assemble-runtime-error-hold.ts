@@ -1,6 +1,9 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import type { AgentDeliveryGate } from "./agent-delivery-gate";
-import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
+import {
+  RuntimeErrorDeliveryHold,
+  type RuntimeErrorDeliveryHoldPorts,
+} from "./runtime-error-delivery-hold";
 import { AgentRuntimeBackoffStore } from "#src/persistence/agent-runtime-backoff-store";
 
 /**
@@ -14,10 +17,12 @@ export function assembleRuntimeErrorDeliveryHold(input: {
   stateDirectory(): string;
   deliveryGate: Pick<
     AgentDeliveryGate,
-    "hold" | "release" | "endHoldForNextLaunch" | "explicitHold" | "pending"
+    "hold" | "release" | "endHoldForNextLaunch" | "explicitHold" | "credentialHeld" | "pending"
   >;
   flush(agentId: string, held: AgentMessageDelivery[]): void;
   backoffEnded(agentId: string): void;
+  /** Follows the Agents whose provider credential is known invalid. */
+  credential?: RuntimeErrorDeliveryHoldPorts["credential"];
 }): RuntimeErrorDeliveryHold {
   const store = new AgentRuntimeBackoffStore(input.stateDirectory);
   const hold = new RuntimeErrorDeliveryHold({
@@ -25,6 +30,7 @@ export function assembleRuntimeErrorDeliveryHold(input: {
     flush: input.flush,
     backoffEnded: input.backoffEnded,
     store,
+    ...(input.credential ? { credential: input.credential } : {}),
   });
   // The runtime's state directory is assigned after its field initializers, so the restore runs
   // as soon as the constructor returns — still before any delivery can reach the runtime.

@@ -66,6 +66,7 @@ function fixture() {
     deliveryGate: () => ({
       queuedForMs: () => undefined,
       explicitHold: () => undefined,
+      credentialHeld: () => false,
       hasQueued: () => false,
       hasHeldAppItems: () => false,
       discardPending: () => [],

@@ -60,6 +60,7 @@ async function stopWithCarriedMention(carried: boolean) {
     deliveryGate: () => ({
       queuedForMs: () => undefined,
       explicitHold: () => undefined,
+      credentialHeld: () => false,
       hasQueued: () => false,
       hasHeldAppItems: () => false,
       discardPending: () => [],

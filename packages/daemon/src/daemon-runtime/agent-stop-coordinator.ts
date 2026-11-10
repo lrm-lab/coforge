@@ -6,6 +6,7 @@ import type { AgentOfflineResidency } from "./agent-offline-residency";
 import type { ActivityLaunch } from "./activity-launch";
 import type { AgentActivityPublisher } from "./agent-activity-publisher";
 import type { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
+import type { AgentLifecycle } from "./agent-lifecycle";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 import { logAgentApiKeyRevokeFailed } from "./agent-failure-logs";
 import {
@@ -26,6 +27,7 @@ export type AgentStopCoordinatorPorts = {
   messageAttention: AgentMessageAttentionIndex;
   deliveryGate: AgentDeliveryGate;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
+  lifecycle: Pick<AgentLifecycle, "stopped">;
   offlineResidency: AgentOfflineResidency;
   sendAgentStatus: (agentId: string, status: "active" | "inactive") => void;
   publishStopped: (agentId: string, launch: ActivityLaunch) => void;
@@ -35,7 +37,10 @@ export type AgentStopCoordinatorPorts = {
 export class AgentStopCoordinator {
   constructor(private readonly ports: AgentStopCoordinatorPorts) {}
 
+  /** A person's (or an operator's) Stop, or the Agent's delete: the only end that tells the
+   * lifecycle, because a launch the Daemon tears down (`releaseAgentRuntime`) is not one. */
   async stopAgent(agentId: string): Promise<void> {
+    this.ports.lifecycle.stopped(agentId);
     const launch = this.ports.agentLaunches.get(agentId);
     const activityLaunch = this.ports.currentActivityLaunches.get(agentId);
     const inputDrain = this.ports.inputDrain.get(agentId)?.drain;

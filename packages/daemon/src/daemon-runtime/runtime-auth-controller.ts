@@ -55,8 +55,16 @@ export class RuntimeAuthController {
   readonly #logins = new Map<string, Login>();
   readonly #logouts = new Map<RuntimeAuthProvider, Promise<void>>();
   readonly #seen = new Set<string>();
+  readonly #signedIn = new Set<(provider: RuntimeAuthProvider) => void>();
   #stopped = false;
   constructor(private readonly ports: Ports) {}
+
+  /** Told when a login signed in, once its status was read again: what was known not to work with
+   * the old login may now. Returns the unsubscribe. */
+  onSignedIn(listener: (provider: RuntimeAuthProvider) => void): () => void {
+    this.#signedIn.add(listener);
+    return () => this.#signedIn.delete(listener);
+  }
 
   /** Closes admission and releases pending prompts before the transport is stopped. */
   stop(): void {
@@ -359,6 +367,7 @@ export class RuntimeAuthController {
           event: "runtime_auth:refresh_failed",
         });
       });
+      if (result.kind === "logged_in") for (const tell of this.#signedIn) tell(login.provider);
     } finally {
       login.terminal = true;
       login.prompt?.reject(new Error("Runtime authentication ended"));

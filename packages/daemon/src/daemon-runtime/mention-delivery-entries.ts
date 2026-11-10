@@ -6,12 +6,30 @@ import {
 import type { MentionDeliveryBlock, RunningMentionIdentity } from "./mention-delivery-ports";
 import type { TrackedMentionDelivery } from "./mention-delivery-tracker";
 
-export const BLOCKED_CODES: Readonly<Record<MentionDeliveryBlock, MentionDeliveryTerminalCode>> = {
+const REFUSED_AS: Readonly<
+  Record<Exclude<MentionDeliveryBlock, "credential_invalid">, MentionDeliveryTerminalCode>
+> = {
   rate_limit_backoff: MENTION_DELIVERY_TERMINAL_CODES.QUOTA_LIMITED,
   runtime_error_backoff: MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
   fingerprint_fence: MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
   queued_until_idle: MENTION_DELIVERY_TERMINAL_CODES.UNSUPPORTED_DELIVERY_PATH,
 };
+
+/**
+ * What a block does to a mention about to be told to a running process. A process mid-turn is told
+ * whatever backoff holds it (the mention settles at the turn's end); only an idle one, or a
+ * runtime that takes notices between turns alone, refuses it, with the code the block maps to. A
+ * process whose credential is known invalid is told nothing, busy or not: the mention is kept
+ * (`"keep"`) for the next launch, unanswered, as the reference Computer queues it pending.
+ */
+export function blockOutcome(
+  blocked: MentionDeliveryBlock | undefined,
+  busy: boolean,
+): MentionDeliveryTerminalCode | "keep" | undefined {
+  if (blocked === "credential_invalid") return "keep";
+  if (!blocked || (busy && blocked !== "queued_until_idle")) return undefined;
+  return REFUSED_AS[blocked];
+}
 
 export type TrackedState = "received" | "pending" | "drained";
 export type Tracked = {

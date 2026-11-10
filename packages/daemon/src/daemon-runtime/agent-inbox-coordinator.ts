@@ -187,6 +187,11 @@ export class AgentInboxCoordinator {
       let session = this.ports.processManager.session(agentId);
       if (!session) {
         if (!startStopped) return false;
+        // A credential known invalid is no reason to start the Agent: the item waits with the rest.
+        if (this.ports.deliveryGate.credentialHeld(agentId)) {
+          this.ports.deliveryGate.holdAppItem(agentId, itemId);
+          return false;
+        }
         const wakeable = this.ports.processManager.restartConfig(agentId);
         if (!wakeable) return false;
         session = (await this.ports.startAgent(agentId, wakeable.config, wakeable.sessionId))

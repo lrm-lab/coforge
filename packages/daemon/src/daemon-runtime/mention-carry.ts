@@ -5,7 +5,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { AgentWakeupUnavailableError } from "./agent-wakeup-unavailable-error";
 import {
-  BLOCKED_CODES,
+  blockOutcome,
   namesLaunch,
   type MentionEntries,
   type Tracked,
@@ -72,8 +72,13 @@ export class MentionCarry {
       }
       // Back from an ended runtime's input, it waits for the next launch to take it again. One
       // told to a process that has since gone has nobody left to settle it: the launch tells it.
+      // Under a known-invalid credential a running process is told nothing: whatever state the
+      // mention was in, it waits for the next launch.
       if (existing.state !== "drained")
-        if (existing.carried ? fromQueue : !existing.undelivered && !this.#running(message.agentId))
+        if (
+          this.ports.blocked(message.agentId) === "credential_invalid" ||
+          (existing.carried ? fromQueue : !existing.undelivered && !this.#running(message.agentId))
+        )
           this.#keep(existing);
       return existing.state !== "drained";
     }
@@ -202,15 +207,15 @@ export class MentionCarry {
       this.entries.uncarry(entry);
       const { message } = entry;
       const busy = this.ports.busy(message.agentId, message.conversationId);
-      const blocked = this.ports.blocked(message.agentId);
+      const outcome = blockOutcome(this.ports.blocked(message.agentId), busy);
       if (this.ports.consumed(message)) {
         this.ports.decided?.(message, "consumed");
         settling.push(this.settle.drain(message));
       } else if (this.ports.told(message)) {
         this.ports.decided?.(message, "already_notified");
         settling.push(busy ? this.#pend(message) : this.settle.drain(message));
-      } else if (blocked && !(busy && blocked !== "queued_until_idle"))
-        settling.push(this.settle.refuse(message, BLOCKED_CODES[blocked]));
+      } else if (outcome === "keep") this.#keep(entry);
+      else if (outcome) settling.push(this.settle.refuse(message, outcome));
       else live.push({ entry, busy });
     }
     if (live.length || alongside.length) settling.push(this.#announce(live, alongside));

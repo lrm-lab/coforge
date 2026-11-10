@@ -90,7 +90,11 @@ export class AgentOperations {
     }
     const unread = ports.messageAttention.unreadDeliveries(probe.agentId);
     const hold = ports.deliveryGate.explicitHold(probe.agentId);
-    if (unread.length && hold !== "fingerprint_fence") {
+    if (
+      unread.length &&
+      hold !== "fingerprint_fence" &&
+      !ports.deliveryGate.credentialHeld(probe.agentId)
+    ) {
       logger.info("Activity probe answered for an Agent with unread messages", {
         event: "agent_activity_probe:pending_delivery",
         request_id: probe.requestId,

@@ -9,7 +9,7 @@ import type { MentionDeliveryPorts } from "./mention-delivery-ports";
 import { MentionDeliveryReports } from "./mention-delivery-reports";
 import { MentionCarry } from "./mention-carry";
 import {
-  BLOCKED_CODES,
+  blockOutcome,
   MentionEntries,
   namesLaunch,
   REMEMBERED_MENTIONS,
@@ -132,12 +132,9 @@ export class MentionDeliveryTracker {
     }
     // Read before the notice: writing it marks the Agent busy.
     const busy = this.ports.busy(message.agentId, message.conversationId);
-    // A process mid-turn is told whatever backoff holds it, and settles the mention at the turn's
-    // end (as the reference Computer queues it); only an idle one, or a runtime that takes notices
-    // between turns alone, refuses.
-    const blocked = this.ports.blocked(message.agentId);
-    if (blocked && !(busy && blocked !== "queued_until_idle"))
-      return this.refuse(message, BLOCKED_CODES[blocked]);
+    const blocked = blockOutcome(this.ports.blocked(message.agentId), busy);
+    if (blocked === "keep") return void this.carry.hold(message, true);
+    if (blocked) return this.refuse(message, blocked);
     const process = this.ports.process?.(message.agentId);
     if (receiving) receiving.inflight = true;
     let outcome: "told" | "gone";

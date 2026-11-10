@@ -157,13 +157,12 @@ const entryTexts = (activity: AgentActivity | undefined) =>
     .map((entry) => ("text" in entry ? entry.text : ""))
     .filter((text) => text.length > 0);
 
-test("an auth failure ends the process, reports inactive, and shows the re-auth prompt", async () => {
+test("an auth failure keeps the process and the Agent active, and shows the re-auth prompt", async () => {
   const h = await harness();
   try {
     h.emit({ type: "error", message: "access token could not be refreshed" });
-    await h.disposed;
-    const status = h.statuses.findLast((s) => s.agentId === "agent-a");
-    expect(status?.status).toBe("inactive");
+    expect(h.wasDisposed()).toBe(false);
+    expect(h.statuses.some((s) => s.status === "inactive")).toBe(false);
     const activity = runtimeErrors(h.activities)[0]!;
     expect(activity.runtimeError?.errorClass).toBe("AuthError");
     expect(activity.runtimeError?.requiredAction).toBe("user_reauth");
@@ -182,7 +181,6 @@ test("a plan-access failure reports user_model_access and names the configured m
       type: "error",
       message: "Your plan does not include access to this model",
     });
-    await h.disposed;
     const activity = runtimeErrors(h.activities)[0]!;
     expect(activity.runtimeError?.errorClass).toBe("ModelConfigError");
     expect(activity.runtimeError?.requiredAction).toBe("user_model_access");
@@ -347,12 +345,12 @@ test("provider output between identical errors resets the fence streak, keeping 
   }
 });
 
-test("a billing-exhausted failure takes the Agent offline with balance wording and no action", async () => {
+test("a billing-exhausted failure holds the Agent with balance wording and no action", async () => {
   const h = await harness();
   try {
     h.emit({ type: "error", message: "HTTP 402 Payment Required: insufficient balance" });
-    await h.disposed;
-    expect(h.statuses.at(-1)?.status).toBe("inactive");
+    expect(h.wasDisposed()).toBe(false);
+    expect(h.statuses.some((s) => s.status === "inactive")).toBe(false);
     const activity = runtimeErrors(h.activities)[0]!;
     expect(activity.runtimeError?.errorClass).toBe("BillingError");
     expect(activity.runtimeError?.errorReason).toBe("billing_exhausted");
@@ -376,7 +374,7 @@ test("a billing-exhausted failure takes the Agent offline with balance wording a
 test("a delivery to an Agent taken offline is kept for the next launch and restates the failure", async () => {
   const h = await harness();
   try {
-    h.emit({ type: "error", message: "not logged in" });
+    h.emit({ type: "error", message: "The requested model is not supported" });
     await h.disposed;
     const sentBefore = h.activities.length;
     await h.deliver(1);
@@ -385,7 +383,7 @@ test("a delivery to an Agent taken offline is kept for the next launch and resta
     expect(h.launches()).toBe(1);
     expect(h.statuses.at(-1)?.status).toBe("inactive");
     const restated = h.activities.slice(sentBefore).find((a) => a.detailKind === "runtime_error");
-    expect(restated?.runtimeError?.requiredAction).toBe("user_reauth");
+    expect(restated?.runtimeError?.errorClass).toBe("ModelConfigError");
 
     // The next launch presents the kept delivery in its first notice.
     const before = h.notices.length;
@@ -425,7 +423,7 @@ test("deliveries held when the Agent went offline are kept and presented by the 
 test("an already-consumed delivery to an offline Agent is ACKed and dropped, not queued", async () => {
   const h = await harness();
   try {
-    h.emit({ type: "error", message: "not logged in" });
+    h.emit({ type: "error", message: "The requested model is not supported" });
     await h.disposed;
     // The consumed cursor already covers this delivery (durable, outlives the process).
     await seedCursor(
@@ -468,7 +466,7 @@ test("an already-consumed delivery to an offline Agent is ACKed and dropped, not
 test("an explicit Stop after an offline error clears the record: a delivery is no_process again", async () => {
   const h = await harness();
   try {
-    h.emit({ type: "error", message: "not logged in" });
+    h.emit({ type: "error", message: "The requested model is not supported" });
     await h.disposed;
     await h.runtime.stopAgent("agent-a");
     const sentBefore = h.activities.length;

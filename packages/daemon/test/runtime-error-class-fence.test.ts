@@ -23,6 +23,7 @@ function harness() {
       },
       endHoldForNextLaunch: (id) => void held.delete(id),
       explicitHold: (id) => held.get(id),
+      credentialHeld: (id) => held.get(id) === "credential_invalid",
       pending: () => [],
     },
     flush() {

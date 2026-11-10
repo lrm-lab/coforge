@@ -1,3 +1,4 @@
+import type { CredentialInvalidHolds } from "./credential-invalid-holds";
 import { getLogger } from "@logtape/logtape";
 import { mkdirSync } from "node:fs";
 import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
@@ -85,6 +86,8 @@ export type RuntimeStartupPorts = {
   operatingSystem: Pick<OperatingSystemInfo, "read" | "current">;
   upgradeResults: Pick<UpgradeResultReporter, "start" | "report" | "stop">;
   runtimeAuth: Pick<RuntimeAuthReporter, "refresh" | "refreshProvider" | "usageScanned">;
+  /** Told when a login signed in, so what a bad login held can go on. */
+  credentialHolds: Pick<CredentialInvalidHolds, "signedIn">;
   runtimeAuthFactory: (provider: RuntimeAuthProvider) => RuntimeAuthAdapter;
   codeAgentInventory: Pick<
     CodeAgentInventorySync,
@@ -237,6 +240,9 @@ export class RuntimeStartup {
           ports.runtimeAuth.refreshProvider(provider, options),
       });
       this.#authControl = auth?.controller;
+      this.#subscribe(
+        auth?.controller.onSignedIn((provider) => ports.credentialHolds.signedIn(provider)),
+      );
       this.#subscribe(auth?.unsubscribe);
       ports.upgradeResults.start();
       this.#subscribe(

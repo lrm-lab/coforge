@@ -29,11 +29,22 @@ export type FallbackNotice = Readonly<{
 }>;
 
 /** Why deliveries to an Agent are explicitly held: a runtime-error backoff after a rate limit or
- * after another retryable error, or the fingerprint fence after the same failure repeated. */
+ * after another retryable error, the fingerprint fence after the same failure repeated, or a
+ * provider credential known invalid (`credential_invalid`: no timer; it ends when the credential is
+ * known usable again). */
 export type DeliveryHoldReason =
   | "rate_limit_backoff"
   | "runtime_error_backoff"
-  | "fingerprint_fence";
+  | "fingerprint_fence"
+  | "credential_invalid";
+
+/** Whether a hold waits for the provider to recover (a backoff, or a credential that must change)
+ * and ends by itself or by a change of the provider's state. A fingerprint fence does not: it holds
+ * until a person acts. */
+export const waitsOnProvider = (reason: DeliveryHoldReason | undefined): boolean =>
+  reason === "rate_limit_backoff" ||
+  reason === "runtime_error_backoff" ||
+  reason === "credential_invalid";
 
 /** Scope decision: moving Claude/Codex/Pi steering into the daemon itself, so this
  * table could eventually replace every provider's own busy handling, is a later cleanup. This PR
@@ -265,9 +276,28 @@ export class AgentDeliveryGate {
 
   /** An unexpected process exit: the running turn is gone, so busy no longer applies, but
    * anything held (deliveries, app items, and fallback notices alike) stays held for the next
-   * launch — only explicit Stop (`clearAgent`) discards it. */
+   * launch — only explicit Stop (`clearAgent`) discards it. A `credential_invalid` hold outlives the
+   * process too: it ends when the credential is known usable again (`CredentialInvalidHolds`). */
   onProcessExit(agentId: string): void {
     this.#busy.delete(agentId);
+  }
+
+  /** Whether the Agent's deliveries wait for its provider credential to be usable again. */
+  credentialHeld(agentId: string): boolean {
+    return this.#explicitHolds.get(agentId) === "credential_invalid";
+  }
+
+  /** The Agents whose deliveries are explicitly held for `reason`. */
+  heldFor(reason: DeliveryHoldReason): string[] {
+    return [...this.#explicitHolds].flatMap(([agentId, held]) =>
+      held === reason ? [agentId] : [],
+    );
+  }
+
+  /** Ends the explicit hold if it is a hold for `reason`, leaving what it held queued. A hold that
+   * replaced it since is not the caller's to end. */
+  endHold(agentId: string, reason: DeliveryHoldReason): void {
+    if (this.#explicitHolds.get(agentId) === reason) this.#explicitHolds.delete(agentId);
   }
 
   /** A runtime error took the Agent offline and its process is ending: like `onProcessExit`,

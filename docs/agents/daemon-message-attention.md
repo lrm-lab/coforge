@@ -71,6 +71,15 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   which keeps custody even while a restart config still stands: ACKed,
   queued in `AgentDeliveryGate`, `inactive` and its Activity restated.
   A failed server Start leaves no restart config or failure record.
+- A failure, mid-turn or thrown by the launch, that shows the provider credential unusable (`credentialInvalidReason`: a
+  required re-login, a plan without the model, an exhausted balance) does not take the Agent offline:
+  `CredentialInvalidHolds.record` (`credential-invalid-holds.ts`, over `credential-invalid-ledger.ts`)
+  keeps the process and holds the deliveries of the Agent and of the others on the same sign-in under
+  `DeliveryHoldReason` `credential_invalid`, with no timer; it ends when the credential is known usable
+  again, not with the process. Untracked deliveries wait ACKed in `AgentDeliveryGate`, tracked mentions
+  are kept ([tracked mention delivery](daemon-mention-delivery.md)), and the probe, the stall sweep
+  and the idle checks of a pushed configuration ignore what it holds
+  ([credential-invalid hold](../observability/agent-status-and-activity/credential-invalid-hold.md)).
 - A failure that takes an Agent offline also drops its restart config
   (`AgentProcessManager.forgetRestart` in `reportLaunchFailure`), so no
   delivery or App Inbox notice can wake it again — there is no

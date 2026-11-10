@@ -139,6 +139,12 @@ export function handleTrackedMention(
       ports.exitedDelivery.deliverMention(message);
       return Promise.resolve();
     }
+    // A process whose credential is known invalid is told nothing: the mention is kept for the
+    // launch that follows, a repeat adopting its newer envelope.
+    if (ports.deliveryGate.credentialHeld(agentId)) {
+      ports.mentionDeliveries.carry.hold(message);
+      return Promise.resolve();
+    }
   }
   const delivery = ports.launchCustody.enqueueDelivery(agentId, message);
   if (ports.runnerHold !== undefined) {
