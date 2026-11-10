@@ -30,12 +30,25 @@ export function canForwardMessage(
   return message.senderKind !== "system" && !message.actionCard && !message.forwarded;
 }
 
+/** The row's sender as the card's avatar reads it; none for a server notice. */
+function senderOf(
+  message: Pick<MessageView, "senderKind" | "senderUserId" | "senderAgentId" | "senderAvatarUrl">,
+): Pick<ForwardedMessageView, "sourceSender"> {
+  const avatarUrl = message.senderAvatarUrl ?? null;
+  if (message.senderKind === "agent" && message.senderAgentId)
+    return { sourceSender: { kind: "agent", id: message.senderAgentId, avatarUrl } };
+  if (message.senderKind === "user" && message.senderUserId)
+    return { sourceSender: { kind: "user", id: message.senderUserId, avatarUrl } };
+  return {};
+}
+
 /** The snapshots the dialog previews: what the server will freeze, read from the rows on screen,
  * each original with its own attachments when there are several. */
 export function forwardedPreview(source: ForwardSource): ForwardedMessageView[] {
   const several = source.messages.length > 1;
   return source.messages.map(({ message, plainBody }) => ({
     sourceSenderHandle: message.senderHandle ?? message.senderName,
+    ...senderOf(message),
     sourceCreatedAt: new Date(message.createdAt).toISOString(),
     sourceBody: plainBody,
     sourceConversation: {
