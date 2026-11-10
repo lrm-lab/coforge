@@ -170,9 +170,14 @@ function applyRecord(state: KimiCanonicalState, record: RecordValue): void {
     if (event.type === "step.end") {
       if (typeof event.uuid === "string") state.openSteps.delete(event.uuid);
       if (state.openSteps.size === 0) {
-        const open = state.messages.findLast(
-          (message) => message.role === "assistant" && message.partial === true,
-        );
+        let open: RecordValue | undefined;
+        for (let index = state.messages.length - 1; index >= 0; index -= 1) {
+          const candidate = state.messages[index];
+          if (candidate?.role === "assistant" && candidate.partial === true) {
+            open = candidate;
+            break;
+          }
+        }
         if (open) delete open.partial;
       }
       flushDeferredMessages(state);
@@ -377,9 +382,14 @@ export function responseAfterKimiRequest(
   latestLoopIndex: number,
   state: KimiCanonicalState,
 ): RecordValue | undefined {
-  const responseIndex = state.messages.findLastIndex(
-    (message) => message.role === "assistant" && message.partial === true,
-  );
+  let responseIndex = -1;
+  for (let index = state.messages.length - 1; index >= 0; index -= 1) {
+    const candidate = state.messages[index];
+    if (candidate?.role === "assistant" && candidate.partial === true) {
+      responseIndex = index;
+      break;
+    }
+  }
   if (responseIndex < 0) return undefined;
   const after: KimiCanonicalState = {
     ...state,
