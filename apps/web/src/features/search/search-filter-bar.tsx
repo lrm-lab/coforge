@@ -322,14 +322,16 @@ function ChoiceGroup({
           next.find((key) => !selected.includes(key)),
         );
       }}
-      className="w-full max-w-max"
+      // A segmented control, as Untitled's bordered tabs: a grey track, the chosen part raised
+      // white. Violet stays for the primary action (coforge-theme.css).
+      className="w-full max-w-max gap-0.5 space-x-0 rounded-lg bg-secondary_alt p-0.5 shadow-none ring-1 ring-secondary ring-inset"
     >
       {options.map((option) => (
         <ButtonGroupItem
           key={option.key}
           id={option.key}
           // Each as wide as its words: the longest ("Last 30 days") shows whole, never cut short.
-          className="flex-auto justify-center px-3 selected:bg-brand-primary_alt selected:text-fg-brand-primary"
+          className="flex-auto justify-center rounded-md bg-transparent px-3 py-1.5 text-tertiary shadow-none ring-0 not-last:pr-3 first:rounded-md last:rounded-md hover:bg-transparent hover:text-secondary selected:bg-primary_alt selected:text-secondary selected:shadow-sm"
         >
           {option.label}
         </ButtonGroupItem>
