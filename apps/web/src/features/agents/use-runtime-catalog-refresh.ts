@@ -1,7 +1,6 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
-import { refreshComputerRuntimeCatalog } from "#src/features/computers/computers.functions";
+import { useRuntimeCatalogRefreshRequest } from "#src/features/computers/use-runtime-catalog-refresh-request";
 import type { RuntimeOptions } from "./agent-runtime-fields-state";
 
 /**
@@ -30,7 +29,7 @@ export function useRuntimeCatalogRefresh({
     code?: RuntimeUnavailableCode;
     diagnostic?: string;
   }>();
-  const requestRefresh = useServerFn(refreshComputerRuntimeCatalog);
+  const requestRefresh = useRuntimeCatalogRefreshRequest();
 
   const refresh = async () => {
     if (!open || !computerId || refreshingComputer.current || isLoading(computerId)) return;
@@ -38,7 +37,7 @@ export function useRuntimeCatalogRefresh({
     setRefreshingComputerId(computerId);
     setRefreshFailure(undefined);
     try {
-      const result = await requestRefresh({ data: { computerId, provider } });
+      const result = await requestRefresh({ computerId, provider });
       if (result.status !== "refreshed" || !("catalog" in result) || !result.catalog) {
         setRefreshFailure({
           computerId,

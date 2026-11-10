@@ -5,8 +5,8 @@ These rules apply to `src/features/agents/`.
 ## Agent state in the browser
 
 - Opening the runtime model list reads the stored catalog. Only the explicit
-  refresh button probes the Computer; it waits for that request's terminal
-  reply. A failed probe retains the old list and names the runtime's classified reason; a timeout shows an error.
+  refresh button probes the Computer: it starts the probe and polls for that
+  request's terminal reply (`useRuntimeCatalogRefreshRequest`). A failed probe retains the old list and names the runtime's classified reason; a timeout shows an error.
 
 - `WorkspaceAgentsProvider` (`workspace-agents-realtime.tsx`) is the app
   shell's one Agent status subscription and one Activity subscription.

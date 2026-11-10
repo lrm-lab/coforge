@@ -105,8 +105,12 @@ export const consumeResetCreditInputSchema = runtimeInput.extend({
 /** The request a start returned; the answer is read with it, scoped to the Computer and runtime. */
 export const readResetCreditInputSchema = runtimeInput.extend({ requestId: z.uuid() });
 export const readUsageInputSchema = runtimeInput;
-export const refreshRuntimeCatalogInputSchema = computerIdInputSchema.extend({
+export const startRuntimeCatalogRefreshInputSchema = computerIdInputSchema.extend({
   provider: z.enum(RUNTIME_PROVIDER).optional(),
+});
+/** The request a start returned; the outcome is read with it, scoped to the Computer. */
+export const readRuntimeCatalogRefreshInputSchema = startRuntimeCatalogRefreshInputSchema.extend({
+  requestId: z.uuid(),
 });
 export const scanAgentWorkspacesInputSchema = computerIdInputSchema;
 export const deleteAgentWorkspaceInputSchema = computerIdInputSchema.extend({

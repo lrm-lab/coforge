@@ -10,14 +10,35 @@ import {
 import { createDaemonRuntimeProviderModelRefreshResultMethod } from "#src/server/centrifugo/rpc-handler.server";
 import { RedisPendingResults } from "#src/server/centrifugo/redis-pending-results.server";
 import { RedisModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
+import { RedisComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
 import {
   ComputerModelCatalogRefresh,
-  MODEL_CATALOG_REFRESH_TIMEOUT_MS,
+  MODEL_CATALOG_REFRESH_PENDING_TTL_SECONDS,
 } from "#src/server/computers/computer-model-catalog-refresh.server";
 
 const redisUrl = Bun.env.MODEL_CATALOG_TEST_REDIS_URL;
 if (!redisUrl || !["127.0.0.1", "localhost"].includes(new URL(redisUrl).hostname))
   throw new Error("MODEL_CATALOG_TEST_REDIS_URL must target isolated local Redis");
+
+const viewer = { userId: "user-1", workspaceId: "workspace-1" };
+const principal = { userId: "user-1", workspaceId: "workspace-1", computerId: "computer-1" };
+
+const computerScope = { workspaceId: "workspace-1", computerId: "computer-1" };
+
+/** The refresh over the real results store, publishing into the test instead of a Computer. */
+function refreshOver(
+  results: RedisModelCatalogRefreshResults,
+  detection: RedisComputerRuntimeDetection,
+  publish: (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>,
+) {
+  return new ComputerModelCatalogRefresh({
+    results,
+    detection,
+    publish,
+    authorize: async () => true,
+    visibleProviders: async () => new Set(["antigravity"]),
+  });
+}
 
 test("a model refresh makes its own terminal catalog observable to the waiting request", async () => {
   const redis = new RedisClient(redisUrl);
@@ -41,7 +62,9 @@ test("a model refresh makes its own terminal catalog observable to the waiting r
   });
   try {
     await results.begin({ request, userId: "user-1", revision: "" });
-    const method = createDaemonRuntimeProviderModelRefreshResultMethod(results);
+    const method = createDaemonRuntimeProviderModelRefreshResultMethod(results, {
+      end: async () => undefined,
+    });
     await method(
       encodeDaemonRuntimeProviderModelRefreshResponse({
         ...request,
@@ -54,13 +77,7 @@ test("a model refresh makes its own terminal catalog observable to the waiting r
           },
         ],
       }),
-      {
-        principal: {
-          userId: "user-1",
-          workspaceId: request.workspaceId,
-          computerId: request.computerId,
-        },
-      },
+      { principal },
     );
     expect(await results.read(request.requestId)).toMatchObject({
       requestId: request.requestId,
@@ -79,56 +96,38 @@ test("a model refresh makes its own terminal catalog observable to the waiting r
   }
 });
 
-test("a terminal probe error and a missing reply stay failures and clear pending state", async () => {
+test("a terminal probe error settles the read, and a second reply cannot change it", async () => {
   const redis = new RedisClient(redisUrl);
   const results = new RedisModelCatalogRefreshResults(redis);
-  const receive = createDaemonRuntimeProviderModelRefreshResultMethod(results);
+  const detection = new RedisComputerRuntimeDetection(redis);
+  const receive = createDaemonRuntimeProviderModelRefreshResultMethod(results, detection);
   let request: DaemonRuntimeProviderModelRefreshRequest | undefined;
   try {
-    for (const outcome of ["error", "timeout"] as const) {
-      let now = 0;
-      const refresh = new ComputerModelCatalogRefresh(
-        {
-          results,
-          detection: { begin: async () => {}, end: async () => {} },
-          async publish(value) {
-            request = value;
-            if (outcome === "error")
-              await receive(
-                encodeDaemonRuntimeProviderModelRefreshResponse({
-                  ...value,
-                  accepted: false,
-                  results: [],
-                }),
-                {
-                  principal: {
-                    userId: "user-1",
-                    workspaceId: value.workspaceId,
-                    computerId: value.computerId,
-                  },
-                },
-              );
-          },
-        },
-        {
-          now: () => now,
-          timeoutMs: 1,
-          wait: async () => {
-            now = 1;
-          },
-        },
+    const refresh = refreshOver(results, detection, async (value) => {
+      request = value;
+    });
+    const started = await refresh.start(viewer, { computerId: "computer-1" });
+    if (started.status !== "started") throw new Error("not started");
+    const ask = () =>
+      refresh.read(viewer, { computerId: "computer-1", requestId: started.requestId });
+    // Nothing has answered: the read asks again, and the Computer is still detecting.
+    expect(await ask()).toEqual({ status: "pending" });
+    expect(await detection.detecting(computerScope)).toBe(true);
+    const reply = (accepted: boolean) =>
+      receive(
+        encodeDaemonRuntimeProviderModelRefreshResponse({
+          ...request!,
+          accepted,
+          results: [],
+        }),
+        { principal },
       );
-      const result = await refresh.execute(
-        { userId: "user-1", workspaceId: "workspace-1" },
-        "computer-1",
-      );
-      expect(result).toEqual(
-        outcome === "error" ? { status: "error", results: [] } : { status: outcome },
-      );
-      expect(await results.read(request!.requestId)).toBeUndefined();
-      await results.accept({ ...request!, accepted: true, results: [] });
-      expect(await results.read(request!.requestId)).toBeUndefined();
-    }
+    await reply(false);
+    // Storing the result ends the detecting, with no page asking.
+    expect(await detection.detecting(computerScope)).toBe(false);
+    await reply(true);
+    expect(await detection.detecting(computerScope)).toBe(false);
+    expect(await ask()).toEqual({ status: "settled", outcome: { status: "error" } });
   } finally {
     if (request) await results.clear(request.requestId);
     redis.close();
@@ -160,7 +159,9 @@ test("foreign scope and unauthorized replies cannot complete a model refresh", a
       await results.accept(foreign);
       expect(await results.read(request.requestId)).toBeUndefined();
     }
-    const receive = createDaemonRuntimeProviderModelRefreshResultMethod(results);
+    const receive = createDaemonRuntimeProviderModelRefreshResultMethod(results, {
+      end: async () => undefined,
+    });
     expect(
       await receive(encodeDaemonRuntimeProviderModelRefreshResponse(result), {
         principal: { userId: "user-1", workspaceId: "workspace-1", computerId: "computer-2" },
@@ -176,77 +177,60 @@ test("foreign scope and unauthorized replies cannot complete a model refresh", a
   }
 });
 
-test("a refresh waits past another request's report and returns only its own fresh catalog", async () => {
+test("a read stays pending past another request's report and returns only its own fresh catalog", async () => {
   const redis = new RedisClient(redisUrl);
   const results = new RedisModelCatalogRefreshResults(redis);
-  const receive = createDaemonRuntimeProviderModelRefreshResultMethod(results);
+  const detection = new RedisComputerRuntimeDetection(redis);
+  const receive = createDaemonRuntimeProviderModelRefreshResultMethod(results, detection);
   let request: DaemonRuntimeProviderModelRefreshRequest | undefined;
-  const fresh: CodeAgentModelCatalog[] = [
-    {
-      provider: "antigravity",
-      models: [
+  const fresh: CodeAgentModelCatalog = {
+    provider: "antigravity",
+    models: [
+      {
+        id: "gemini-4-fixture",
+        modelProvider: "",
+        displayName: "New fixture model",
+        reasoningEfforts: [],
+        defaultReasoning: "",
+        description: "",
+        recommended: false,
+      },
+    ],
+  };
+  const reply = (value: DaemonRuntimeProviderModelRefreshResponse) =>
+    receive(encodeDaemonRuntimeProviderModelRefreshResponse(value), { principal });
+  try {
+    const refresh = refreshOver(results, detection, async (value) => {
+      request = value;
+    });
+    const started = await refresh.start(viewer, { computerId: "computer-1" });
+    if (started.status !== "started") throw new Error("not started");
+    const ask = () =>
+      refresh.read(viewer, { computerId: "computer-1", requestId: started.requestId });
+    // Another request's report is not this request's answer.
+    await reply({
+      ...request!,
+      requestId: crypto.randomUUID(),
+      accepted: true,
+      results: [
         {
-          id: "gemini-4-fixture",
-          modelProvider: "",
-          displayName: "New fixture model",
-          reasoningEfforts: [],
-          defaultReasoning: "",
-          description: "",
-          recommended: false,
+          provider: "antigravity",
+          status: "refreshed",
+          catalog: { provider: "antigravity", models: [] },
         },
       ],
-    },
-  ];
-  const reply = (value: DaemonRuntimeProviderModelRefreshResponse) =>
-    receive(encodeDaemonRuntimeProviderModelRefreshResponse(value), {
-      principal: { userId: "user-1", workspaceId: "workspace-1", computerId: "computer-1" },
     });
-  let waits = 0;
-  let now = 0;
-  try {
-    const refresh = new ComputerModelCatalogRefresh(
-      {
-        results,
-        detection: { begin: async () => {}, end: async () => {} },
-        async publish(value) {
-          request = value;
-          await reply({
-            ...value,
-            requestId: crypto.randomUUID(),
-            accepted: true,
-            results: [
-              {
-                provider: "antigravity",
-                status: "refreshed",
-                catalog: { provider: "antigravity", models: [] },
-              },
-            ],
-          });
-          expect(await results.read(value.requestId)).toBeUndefined();
-        },
-      },
-      {
-        now: () => now,
-        timeoutMs: MODEL_CATALOG_REFRESH_TIMEOUT_MS,
-        async wait() {
-          waits += 1;
-          now = 21_000;
-          await reply({
-            ...request!,
-            accepted: true,
-            results: [{ provider: "antigravity", status: "refreshed", catalog: fresh[0] }],
-          });
-        },
-      },
-    );
-    expect(
-      await refresh.execute({ userId: "user-1", workspaceId: "workspace-1" }, "computer-1"),
-    ).toEqual({
-      status: "refreshed",
-      results: [{ provider: "antigravity", status: "refreshed", catalog: fresh[0] }],
+    expect(await ask()).toEqual({ status: "pending" });
+    expect(await detection.detecting(computerScope)).toBe(true);
+    await reply({
+      ...request!,
+      accepted: true,
+      results: [{ provider: "antigravity", status: "refreshed", catalog: fresh }],
     });
-    expect(waits).toBe(1);
-    expect(await results.read(request!.requestId)).toBeUndefined();
+    expect(await ask()).toEqual({
+      status: "settled",
+      outcome: { status: "refreshed", catalogs: [fresh] },
+    });
   } finally {
     if (request) await results.clear(request.requestId);
     redis.close();
@@ -268,8 +252,34 @@ test("pending model refreshes outlive the normal slow-probe budget", async () =>
       await redis.send("TTL", [`coforge:model-catalog-refresh:v1:${request.requestId}:pending`]),
     );
     expect(ttl).toBeGreaterThan(45);
+    expect(ttl).toBeLessThanOrEqual(MODEL_CATALOG_REFRESH_PENDING_TTL_SECONDS);
   } finally {
     await results.clear(request.requestId);
+    redis.close();
+  }
+});
+
+test("overlapping refreshes keep the Computer detecting until the newest one ends", async () => {
+  const redis = new RedisClient(redisUrl);
+  const detection = new RedisComputerRuntimeDetection(redis);
+  const scope = { workspaceId: `workspace-${crypto.randomUUID()}`, computerId: "computer-1" };
+  const [rescan, single] = [crypto.randomUUID(), crypto.randomUUID()];
+  try {
+    await detection.begin(scope, rescan);
+    await detection.begin(scope, single);
+    await detection.end(scope, rescan);
+    expect(await detection.detecting(scope)).toBe(true);
+    await detection.end(scope, single);
+    expect(await detection.detecting(scope)).toBe(false);
+    // A request that ends after the newest has ended, or one never begun, ends nothing new.
+    await detection.begin(scope, single);
+    await detection.end(scope, crypto.randomUUID());
+    expect(await detection.detecting(scope)).toBe(true);
+    await detection.end(scope, single);
+    expect(await detection.detecting(scope)).toBe(false);
+  } finally {
+    await detection.end(scope, single);
+    await detection.end(scope, rescan);
     redis.close();
   }
 });

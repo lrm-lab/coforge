@@ -65,14 +65,26 @@ These rules apply to `src/server/computers/`.
 - `computer-workspace-files.server.ts` requests one local Daemon workspace scan
   for the Computer owner's detail inventory; the Daemon owns directory traversal.
 - `computer-local-sessions.server.ts` and its production composition own the Computer-owner gate and short-lived request/reply flow for bounded local Claude Code and Codex Session discovery; `local-session-capability.server.ts` rejects old daemons before publication.
-- `computer-model-catalog-refresh.server.ts` waits for the terminal reply to
-  an explicit model probe — scoped to one provider when the request names it; ordinary catalog
-  reads use the stored inventory. Each provider's outcome reports separately.
-  The same probe is the Computer page's "Rescan runtimes": the daemon re-runs
-  runtime discovery before it re-reports.
-- `computer-runtime-detection.server.ts` marks a Computer as detecting its
-  runtimes while a rescan waits (Redis, expiring); the Computer page and a
-  move's refusal read it. No daemon state is involved.
+- `computer-model-catalog-refresh.server.ts` is an explicit model probe — scoped to one provider when
+  the request names it; ordinary catalog reads use the stored inventory. The same probe is the
+  Computer page's "Rescan runtimes": the daemon re-runs runtime discovery before it re-reports.
+  Production closes a request idle for about ten seconds and a whole-Computer rescan runs its
+  runtimes one after another, so, as the reference Computer acknowledges a rescan and reports it
+  separately, it is two calls like the reset credit: `start` publishes and returns a request id (or
+  `refused` for a Computer the viewer does not reach, or `failed` with nothing sent), and `read`
+  returns pending or the settled per-provider outcome. `read` answers only a request that names the
+  caller's Workspace and Computer, says pending without authorizing until an answer exists, and
+  then re-checks the Computer link and the viewer's runtime visibility. Each provider's outcome
+  reports separately. The request stays pending for 60 seconds and a stored answer lives 30 seconds,
+  both expiring on their own.
+- `computer-runtime-detection.server.ts` marks a Computer as detecting its runtimes; the Computer
+  page and a move's refusal read it. The mark (Redis) names the request that set it, expires after
+  45 seconds (the daemon's probe budget, under the page's 50 second wait), and only that request
+  ends it; a request that begins meanwhile takes the mark over, so the Computer detects until the
+  newest ends. It begins at `start` and ends when the daemon's result for that request arrives
+  (`model-refresh-result-method.server.ts`, before the result is stored, so a closed page cannot
+  leave it set and a page that reads the result never sees it), or when a failed start sent nothing.
+  No daemon state is involved.
 - `computer-workspace-files.server.ts` is the owner scope for that inventory's
   scan and for workspace delete: the owned-Computer lookup, the Agent
   assignment rule, and the Workspace Files query both server functions use.

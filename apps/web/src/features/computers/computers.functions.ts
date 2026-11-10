@@ -1,9 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import {
-  encodeDaemonRuntimeProviderModelRefreshRequest,
-  requireRuntimeProvider,
-  type RuntimeProvider,
-} from "@lrm/coforge-sdk/internal";
+import { requireRuntimeProvider, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { modelMetadata } from "#src/features/computers/computer-model-metadata";
 import { machineStatusView } from "#src/features/computers/computer-machine-status";
 import { readCloudComputerImages } from "#src/server/hosts/cloud-image-inventory.server";
@@ -13,7 +9,6 @@ import { HostJobError } from "#src/server/hosts/host-jobs.server";
 
 import {
   computerIdInputSchema,
-  refreshRuntimeCatalogInputSchema,
   readRestartStatusInputSchema,
   upgradeComputerInputSchema,
   scanAgentWorkspacesInputSchema,
@@ -28,16 +23,10 @@ import {
 } from "#src/features/auth/function-auth";
 import {
   createCentrifugoServerApi,
-  daemonControlChannel,
   reconnectDaemon,
 } from "#src/server/centrifugo/server-api.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getComputerConnectRefusals } from "#src/server/centrifugo/computer-connect-refusals.server";
-import { getModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
-import {
-  ComputerModelCatalogRefresh,
-  refreshOutcomeFor,
-} from "#src/server/computers/computer-model-catalog-refresh.server";
 import { getComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
 import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
@@ -309,42 +298,6 @@ export const getComputerRuntimeCatalog = createServerFn({ method: "GET" })
       }))
       .filter((catalog) => catalog.models !== undefined)
       .map((catalog) => ({ ...catalog, models: catalog.models! }));
-  });
-
-/** Explicitly probes the Computer and waits for this request's terminal response. Like ordinary
- * catalog reads, only this Workspace's Computer and visible runtimes may be returned. */
-export const refreshComputerRuntimeCatalog = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(refreshRuntimeCatalogInputSchema)
-  .handler(async ({ context, data }) => {
-    const { user, db, workspaceId } = context;
-    declareNoStore();
-    const connection = await db.workspaceComputer.findUnique({
-      where: { workspaceId_computerId: { workspaceId, computerId: data.computerId } },
-      select: { computerId: true },
-    });
-    if (!connection) throw new Error("Computer is not available");
-    const api = createCentrifugoServerApi();
-    const refreshed = await new ComputerModelCatalogRefresh({
-      results: getModelCatalogRefreshResults(),
-      detection: getComputerRuntimeDetection(),
-      publish: (request) =>
-        api.publish(
-          daemonControlChannel(workspaceId, data.computerId),
-          encodeDaemonRuntimeProviderModelRefreshRequest(request),
-        ),
-    }).execute({ userId: user.id, workspaceId }, data.computerId, data.provider);
-    if (refreshed.status !== "refreshed") return refreshed;
-    const runtimes = await runtimeVisibility(db).list({ workspaceId, userId: user.id });
-    return refreshOutcomeFor(
-      refreshed.results,
-      new Set(
-        runtimes
-          .filter((runtime) => runtime.computerId === data.computerId)
-          .map((runtime) => runtime.provider),
-      ),
-      data.provider,
-    );
   });
 
 export const setRuntimeVisibility = createServerFn({ method: "POST" })

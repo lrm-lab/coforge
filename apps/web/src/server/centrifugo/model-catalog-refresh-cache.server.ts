@@ -6,6 +6,7 @@ import {
   type DaemonRuntimeProviderModelRefreshRequest,
   type DaemonRuntimeProviderModelRefreshResponse,
 } from "@lrm/coforge-sdk/internal";
+import { MODEL_CATALOG_REFRESH_PENDING_TTL_SECONDS } from "#src/server/computers/computer-model-catalog-refresh.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { RedisPendingResults } from "./redis-pending-results.server";
 
@@ -16,7 +17,7 @@ export class RedisModelCatalogRefreshResults extends RedisPendingResults<
   constructor(redis: Pick<RedisClient, "get" | "set" | "send">) {
     super(redis, {
       prefix: "coforge:model-catalog-refresh:v1",
-      pendingTtlSeconds: 60,
+      pendingTtlSeconds: MODEL_CATALOG_REFRESH_PENDING_TTL_SECONDS,
       encode: encodeDaemonRuntimeProviderModelRefreshResponse,
       decode: decodeDaemonRuntimeProviderModelRefreshResponse,
       sameScope: (pending, result) =>

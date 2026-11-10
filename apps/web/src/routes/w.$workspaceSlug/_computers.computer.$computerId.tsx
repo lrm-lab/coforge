@@ -14,6 +14,7 @@ import {
   readComputerRestartStatus,
   restartComputer,
 } from "#src/features/computers/computer-restart.functions";
+import { useRuntimeCatalogRefreshRequest } from "#src/features/computers/use-runtime-catalog-refresh-request";
 import { runtimeUnavailableReason } from "#src/features/computers/runtime-unavailable-reason";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -26,7 +27,6 @@ import {
   scanAgentWorkspaces,
   scanAgentWorkspaceStats,
   deleteComputer,
-  refreshComputerRuntimeCatalog,
   formatCloudComputer,
   setRuntimeVisibility,
   updateComputerDisplayName,
@@ -96,7 +96,7 @@ function ComputerDetailPage() {
   const create = useServerFn(createAgent);
   const executeControl = useServerFn(executeAgentControl);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
-  const rescanRuntimes = useServerFn(refreshComputerRuntimeCatalog);
+  const rescanRuntimes = useRuntimeCatalogRefreshRequest();
 
   /** Merges the Daemon's budgeted measurements into the snapshot they were taken for. */
   const statisticsRequested = useRef<number | null>(null);
@@ -215,7 +215,7 @@ function ComputerDetailPage() {
           // As the reference Computer: its creator, or whoever manages the Workspace's Computers.
           computer.ownedByCurrentUser || computer.canManageAgents
             ? async () => {
-                const result = await rescanRuntimes({ data: { computerId } });
+                const result = await rescanRuntimes({ computerId });
                 await router.invalidate({ sync: true });
                 return result.status === "error"
                   ? {
