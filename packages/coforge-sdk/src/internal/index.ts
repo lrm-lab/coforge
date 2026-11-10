@@ -23,6 +23,7 @@ export const DAEMON_RUNTIME_MODEL_REFRESH_RESULT_METHOD = RPC_METHODS.daemonMode
 export const DAEMON_RUNTIME_EFFORT_READ_METHOD = RPC_METHODS.daemonEffortRead;
 export const DAEMON_RUNTIME_EFFORT_READ_RESULT_METHOD = RPC_METHODS.daemonEffortReadResult;
 export {
+  AGENT_CONTEXT_VIEW_FAILURE_REASONS,
   AGENT_CONTEXT_VIEW_CAPABILITY,
   AGENT_CONTEXT_VIEW_METHOD,
   AGENT_CONTEXT_VIEW_RESULT_METHOD,
@@ -37,6 +38,7 @@ export {
 export * from "./agent-server-features";
 export * from "./agent-config-sync";
 export type {
+  AgentContextViewFailureReason,
   AgentContextViewRequest,
   AgentContextViewResult,
   AgentContextViewStatus,

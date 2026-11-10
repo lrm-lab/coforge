@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { create, toBinary } from "@bufbuild/protobuf";
 import {
+  AGENT_CONTEXT_VIEW_FAILURE_REASONS,
   decodeAgentContextViewAvailability,
   decodeAgentContextViewRequest,
   decodeAgentContextViewResult,
@@ -7,6 +9,7 @@ import {
   encodeAgentContextViewResult,
   encodeAgentContextViewAvailability,
 } from "./agent-context-view";
+import { AgentContextViewResultSchema } from "./gen/coforge/rpc/v1/agent_context_view_pb";
 
 const request = {
   protocolMajor: 1,
@@ -20,6 +23,24 @@ const request = {
 };
 
 describe("agent context view wire codec", () => {
+  test("exports Raft's closed failure-reason set", () => {
+    expect(AGENT_CONTEXT_VIEW_FAILURE_REASONS).toEqual([
+      "offline",
+      "old_daemon",
+      "agent_moved",
+      "not_found",
+      "expired",
+      "unsupported_runtime",
+      "too_large",
+      "read_failed",
+      "no_computer",
+      "context_mismatch",
+      "media_removed",
+      "newer_session_format",
+      "not_recorded",
+    ]);
+  });
+
   test("round trips scoped requests", () => {
     expect(decodeAgentContextViewRequest(encodeAgentContextViewRequest(request))).toEqual(request);
   });
@@ -96,6 +117,32 @@ describe("agent context view wire codec", () => {
         tooLargeCause: "session_file",
       }),
     ).toThrow();
+    expect(() =>
+      encodeAgentContextViewResult({
+        ...request,
+        status: "failed",
+        reason: "future_reason" as never,
+        createdAtMs: 1,
+        content: new Uint8Array(),
+        encoding: "identity",
+      }),
+    ).toThrow();
+  });
+
+  test("rejects an unknown failure reason received on the wire", () => {
+    const bytes = toBinary(
+      AgentContextViewResultSchema,
+      create(AgentContextViewResultSchema, {
+        ...request,
+        messageType: "coforge.rpc.v1.AgentContextViewResult",
+        status: "failed",
+        reason: "future_reason",
+        createdAtMs: 1n,
+        content: new Uint8Array(),
+        encoding: "identity",
+      }),
+    );
+    expect(() => decodeAgentContextViewResult(bytes)).toThrow("Invalid context view reason");
   });
 
   test("round trips availability and requires an explicit unsupported reason", () => {

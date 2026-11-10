@@ -19,7 +19,7 @@ const REQUEST_ID = /^ctxv_[A-Za-z0-9_-]{16,64}$/;
 const MESSAGE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const STATUSES = new Set(["ok", "unavailable", "failed"]);
-const REASONS = new Set([
+export const AGENT_CONTEXT_VIEW_FAILURE_REASONS = [
   "offline",
   "old_daemon",
   "agent_moved",
@@ -33,7 +33,9 @@ const REASONS = new Set([
   "media_removed",
   "newer_session_format",
   "not_recorded",
-]);
+] as const;
+export type AgentContextViewFailureReason = (typeof AGENT_CONTEXT_VIEW_FAILURE_REASONS)[number];
+const REASONS = new Set<string>(AGENT_CONTEXT_VIEW_FAILURE_REASONS);
 const ENCODINGS = new Set(["identity", "gzip"]);
 const VERIFICATIONS = new Set(["verified", "count_matched"]);
 const TOO_LARGE_CAUSES = new Set(["session_file", "request", "restore_limit"]);
@@ -51,7 +53,7 @@ export type AgentContextViewRequest = {
 export type AgentContextViewStatus = "ok" | "unavailable" | "failed";
 export type AgentContextViewResult = AgentContextViewRequest & {
   status: AgentContextViewStatus;
-  reason?: string;
+  reason?: AgentContextViewFailureReason;
   provider?: string;
   createdAtMs: number;
   content: Uint8Array;
@@ -147,6 +149,10 @@ function result(value: AgentContextViewResult): void {
   if (!ENCODINGS.has(value.encoding)) throw new Error("Invalid context view encoding");
 }
 
+function parseFailureReason(value: string): AgentContextViewFailureReason | undefined {
+  return REASONS.has(value) ? (value as AgentContextViewFailureReason) : undefined;
+}
+
 export function encodeAgentContextViewRequest(value: AgentContextViewRequest): Uint8Array {
   scope(value);
   return toBinary(
@@ -189,6 +195,8 @@ export function encodeAgentContextViewResult(value: AgentContextViewResult): Uin
 export function decodeAgentContextViewResult(bytes: Uint8Array): AgentContextViewResult {
   const value = fromBinary(AgentContextViewResultSchema, bytes);
   if (value.messageType !== RESULT_TYPE) throw new Error("Invalid context view result");
+  const reason = value.reason ? parseFailureReason(value.reason) : undefined;
+  if (value.reason && reason === undefined) throw new Error("Invalid context view reason");
   const resultValue: AgentContextViewResult = {
     protocolMajor: value.protocolMajor,
     requestId: value.requestId,
@@ -199,7 +207,7 @@ export function decodeAgentContextViewResult(bytes: Uint8Array): AgentContextVie
     sessionId: value.sessionId,
     maxBytes: value.maxBytes,
     status: value.status as AgentContextViewStatus,
-    reason: value.reason || undefined,
+    reason,
     provider: value.provider || undefined,
     createdAtMs: Number(value.createdAtMs),
     content: value.content,
