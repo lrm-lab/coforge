@@ -191,22 +191,34 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
       expect(await cardWidth()).toBe(636);
     }
 
-    // While a password is typed the agent smiles with its eyes shut; leaving the field opens them.
+    // One screen at common laptop heights, the browser's toolbar taken: nothing to scroll.
+    for (const [w, h] of [
+      [1366, 657],
+      [1440, 790],
+    ] as const) {
+      await browser("set", "viewport", String(w), String(h));
+      await browser("wait", "300");
+      expect(await evaluate<boolean>(`document.documentElement.scrollHeight <= innerHeight`)).toBe(
+        true,
+      );
+    }
+
+    // While a password is typed the agent shuts its eyes; leaving the field opens them.
     await setViewport(1440);
     await browser("eval", `${passwordTab}.click()`);
     await waitFor(`!!document.querySelector(${JSON.stringify(passwordFieldSelector)})`);
-    const smiling = () =>
+    const eyesShut = () =>
       evaluate<boolean>(
-        `document.querySelector(".login-art__face--smile").hasAttribute("data-shown")`,
+        `document.querySelector(".login-art__face--shut").hasAttribute("data-shown")`,
       );
-    expect(await smiling()).toBe(false);
+    expect(await eyesShut()).toBe(false);
     await browser("click", passwordFieldSelector);
     await browser("type", passwordFieldSelector, "hunter22");
     await browser("wait", "300");
-    expect(await smiling()).toBe(true);
+    expect(await eyesShut()).toBe(true);
     await browser("eval", `document.activeElement.blur()`);
     await browser("wait", "300");
-    expect(await smiling()).toBe(false);
+    expect(await eyesShut()).toBe(false);
     await browser("eval", `${codeTab}.click()`);
 
     // The agent floats and the shadow breathes on one beat, unless motion is reduced.

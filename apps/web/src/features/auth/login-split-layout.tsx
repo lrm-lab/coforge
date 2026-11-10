@@ -16,7 +16,8 @@ const PAIR = "90rem";
  * (126dp) either side of the fields, so the card is as wide as the form and never stretches with
  * the screen. The illustration and the card are centred as a pair; up to 90rem the card keeps 4rem
  * from the right edge. Below `xl` the card would leave the illustration too little room, so only the
- * form is left, under the logo. The invite pages keep `AuthSplitLayout`.
+ * form is left, under the logo. At any common laptop height, the toolbar's share taken, the page
+ * fits one screen without scrolling. The invite pages keep `AuthSplitLayout`.
  */
 export function LoginSplitLayout({ children }: { children: ReactNode }) {
   return (
@@ -30,8 +31,10 @@ export function LoginSplitLayout({ children }: { children: ReactNode }) {
           <Link to="/" aria-label="CoForge" className="self-start xl:hidden">
             <CoForgeMark className="h-7" />
           </Link>
-          {/* From the top, not centred, so the title stays put when the tabs differ in height. */}
-          <main className="flex flex-1 items-start justify-center pt-12 pb-12 xl:rounded-[1.875rem] xl:bg-primary xl:px-[7.875rem] xl:pt-[16vh]">
+          {/* From the top, not centred, so the title stays put when the tabs differ in height; on
+              the card the form starts about where centring would put it (it is some 25rem tall),
+              and never so low that the page has to scroll (jing, 11-10: one screen). */}
+          <main className="flex flex-1 items-start justify-center pt-12 pb-12 xl:rounded-[1.875rem] xl:bg-primary xl:px-[7.875rem] xl:pt-[max(2rem,calc(50dvh-16.5rem))] xl:pb-8">
             <div className="w-full max-w-sm xl:w-sm">{children}</div>
           </main>
         </div>

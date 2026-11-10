@@ -32,9 +32,9 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
  * on the ground. The motion is `login-art.css`.
  *
  * The agent answers the forms beside it (jing, 11-10; `login-art-state.tsx`): while a password is
- * typed it smiles with its eyes shut and leans away; once signed in it sways hello with a bubble
- * that says "welcome back", or "welcome aboard" to an account just made. Her smiling face is its
- * own layer, crossfaded over the open-eyed one.
+ * typed it shuts its eyes and leans away; once signed in it smiles and sways hello with a bubble
+ * that says "welcome back", or "welcome aboard" to an account just made. Her two faces, eyes shut
+ * and smiling, are layers crossfaded over the open-eyed one.
  */
 export function LoginArt() {
   const attach = useAttachLoginArt();
@@ -81,7 +81,9 @@ export function LoginArt() {
     return () => attach(null);
   }, [attach]);
 
-  const smiling = away || greeting !== null;
+  // The greeting's smile wins over eyes shut: pressing Enter in the field greets at once.
+  const smiling = greeting !== null;
+  const shut = away && !smiling;
   return (
     <div ref={root} className="login-art" aria-hidden="true">
       <img src="/login/frame.webp" alt="" className="login-art__frame" />
@@ -91,9 +93,15 @@ export function LoginArt() {
         <div className="login-art__float">
           <img src="/login/agent.webp" alt="" className="login-art__face" />
           <img
+            src="/login/agent-eyes-shut.webp"
+            alt=""
+            className="login-art__face login-art__face--over login-art__face--shut"
+            data-shown={shut || undefined}
+          />
+          <img
             src="/login/agent-smile.webp"
             alt=""
-            className="login-art__face login-art__face--smile"
+            className="login-art__face login-art__face--over login-art__face--smile"
             data-shown={smiling || undefined}
           />
         </div>

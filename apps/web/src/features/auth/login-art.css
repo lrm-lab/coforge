@@ -7,7 +7,7 @@
  * door further in on its right-edge hinge. Both are off when the person asked for less motion.
  */
 .login-art {
-  --w: min(23rem, 40vh);
+  --w: min(23rem, 38dvh);
   position: relative;
   width: var(--w);
   /* The box the agent and shadow are placed in: the frame plus the ground below it. */
@@ -64,13 +64,13 @@
   height: auto;
 }
 
-.login-art__face--smile {
+.login-art__face--over {
   position: absolute;
   inset: 0;
   opacity: 0;
 }
 
-.login-art__face--smile[data-shown] {
+.login-art__face--over[data-shown] {
   opacity: 1;
 }
 
@@ -206,7 +206,7 @@
     animation: login-float 4.8s ease-in-out infinite;
   }
 
-  .login-art__face--smile {
+  .login-art__face--over {
     transition: opacity 120ms linear;
   }
 

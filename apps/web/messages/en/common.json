@@ -24,6 +24,7 @@
   "login_submit": "Sign in",
   "login_welcome_back": "Welcome back!",
   "login_welcome_joined": "Welcome aboard!",
+  "login_agents_supported": "{count} code agents, {first} and {second} among them",
   "login_heading": "Welcome back",
   "login_tab_phone": "Phone",
   "login_tab_email_code": "Email code",

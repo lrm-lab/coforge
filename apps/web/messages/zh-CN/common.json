@@ -24,6 +24,7 @@
   "login_submit": "立即登录",
   "login_welcome_back": "欢迎回来！",
   "login_welcome_joined": "欢迎加入！",
+  "login_agents_supported": "支持 {first}、{second} 等 {count} 种代码 Agent",
   "login_heading": "欢迎登录",
   "login_tab_phone": "手机号登录",
   "login_tab_email_code": "邮箱验证码登录",
