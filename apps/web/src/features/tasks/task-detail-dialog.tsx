@@ -162,6 +162,9 @@ type TaskDetailDialogProps = {
  * the conversation, the Task message's thread, which `thread` renders around the section), the
  * sub-tasks and History.
  */
+/** A phone top bar's button: 44px to touch, its icon centred. */
+const PHONE_BAR_BUTTON = "max-sm:size-11 max-sm:justify-center";
+
 export function TaskDetailDialog({
   task,
   open,
@@ -257,7 +260,10 @@ export function TaskDetailDialog({
         >
           <div className="contents" onKeyDown={stepOnEscape}>
             <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-2 sm:pl-4">
+              {/* On a phone the bar is the page's top bar (task #70): close on the left, where a
+                  page's way out is, the Task's place centred, More on the right, each 44px to
+                  touch, as task #54's New task page. */}
+              <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-2 max-sm:h-11 max-sm:gap-0 max-sm:p-0 sm:pl-4">
                 <TaskTrail
                   task={task}
                   conversationName={conversationName}
@@ -271,6 +277,7 @@ export function TaskDetailDialog({
                       icon={MoreHorizontal}
                       size="sm"
                       color="tertiary"
+                      className={PHONE_BAR_BUTTON}
                     />
                     <Dropdown.Popover placement="bottom end">
                       <Dropdown.Menu
@@ -307,6 +314,7 @@ export function TaskDetailDialog({
                   color="tertiary"
                   aria-label={m.tasks_close()}
                   onClick={() => onOpenChange(false)}
+                  className={cn(PHONE_BAR_BUTTON, "max-sm:order-first")}
                 />
               </div>
               <TaskDetailTabs
@@ -321,10 +329,10 @@ export function TaskDetailDialog({
                       level={2}
                       className="flex items-start gap-2 px-4 pt-2 text-lg font-semibold break-words text-primary sm:px-6"
                     >
-                      <TaskStatusIcon status={task.status} className="mt-1 size-5" />
-                      <span className={cn("min-w-0", sidebar ? "line-clamp-3" : "line-clamp-2")}>
-                        {task.title}
-                      </span>
+                      {/* On a phone the status is the first block right under the title, so the
+                          title does not say it again; three lines, as beside the pages. */}
+                      <TaskStatusIcon status={task.status} className="mt-1 size-5 max-sm:hidden" />
+                      <span className="line-clamp-3 min-w-0">{task.title}</span>
                     </Heading>
                     {/* On a phone the properties are one row of chips under the title, each its
                         own control, so the discussion keeps the screen (Frank, 11-04). */}
