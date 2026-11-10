@@ -320,6 +320,7 @@ function PendingChoice({
         <div className="flex items-center gap-3 px-2.5 pt-2 pb-1">
           {!view.other && canAnswer && (
             <AriaButton
+              data-chat-hint=""
               onPress={(event) => focusComposerOf(event.target)}
               className="rounded-sm text-left text-xs text-quaternary outline-focus-ring hover:text-tertiary focus-visible:outline-2"
             >
