@@ -148,6 +148,7 @@ export const waitingChoiceCardsQuery = (workspaceId: string) =>
  * tab ends after that write's announcement (`ActivityAttention`), and keeps it. */
 export const activityNavAttentionQuery = (workspaceId: string) =>
   queryOptions({
+    // Per Workspace: the server counts the one the page is in.
     queryKey: [...ACTIVITY_INBOX_QUERY_PREFIX, "nav-attention", workspaceId],
     // An older server's answer has no count; the type says so, whichever fields the read has.
     queryFn: (): Promise<ActivityNavAttention> => loadActivityNavAttention(),
@@ -183,9 +184,12 @@ export function activityNavAttentionRealtime(
   workspaceId: string,
   { rereadIntervalMs = 10_000 }: { rereadIntervalMs?: number } = {},
 ): {
-  onMessage: (message: ActivityUnreadMessage, position: StreamPosition | undefined) => void;
+  onMessage: (
+    message: ActivityUnreadMessage & { workspaceId: string },
+    position: StreamPosition | undefined,
+  ) => void;
   onActivity: () => void;
-  onAttention: (attention: ActivityAttention) => void;
+  onAttention: (attention: ActivityAttention, workspaceId: string) => void;
   onSubscribed: (recovery: SubscribedRecovery) => void;
 } {
   const queryKey = activityNavAttentionQuery(workspaceId).queryKey;
@@ -212,11 +216,9 @@ export function activityNavAttentionRealtime(
   let litBy: { position: StreamPosition | undefined } | undefined;
   return {
     // The read's stream positions stay: a message delivered here moved the dot without a read.
+    // The viewer's channel carries every Workspace's; the count is this one's.
     onMessage: (message, position) => {
-      const eventWorkspaceId = (message as { workspaceId?: unknown } | undefined)?.workspaceId;
-      // Keep accepting callbacks without workspaceId for older callers; the subscription hook
-      // only forwards decoded v1 events, which always carry the workspace scope.
-      if (typeof eventWorkspaceId === "string" && eventWorkspaceId !== workspaceId) return;
+      if (message.workspaceId !== workspaceId) return;
       const current = queryClient.getQueryData<ActivityNavAttention>(queryKey);
       const {
         state,
@@ -236,7 +238,8 @@ export function activityNavAttentionRealtime(
       }));
     },
     onActivity: reread,
-    onAttention: ({ hasUnread, streamPosition, unreadCount, unreadKeys }) => {
+    onAttention: ({ hasUnread, streamPosition, unreadCount, unreadKeys }, from) => {
+      if (from !== workspaceId) return;
       let lateCount = false;
       if (litBy) {
         // The message that lit the dot here, next to the server's read: past it, it may be
@@ -249,7 +252,12 @@ export function activityNavAttentionRealtime(
             litBy = undefined;
             return reread();
           }
-          if (streamPosition.offset < lit.offset) return;
+          // The dot stays lit; the count it held still has the items just read, so ask again.
+          if (streamPosition.offset < lit.offset) {
+            const held = queryClient.getQueryData<ActivityNavAttention>(queryKey);
+            if (held?.unreadCount !== undefined) reread();
+            return;
+          }
           litBy = undefined;
         } else if (comparable && streamPosition.offset >= lit.offset) {
           litBy = undefined;
@@ -266,7 +274,7 @@ export function activityNavAttentionRealtime(
           ? { [channel]: streamPosition }
           : (current?.streamPositions ?? {}),
       }));
-      if (lateCount) rereadThrottled();
+      if (lateCount) reread();
     },
     // A message published after the dot was read but before the subscription started reaches it
     // only through a read.

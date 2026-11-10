@@ -47,11 +47,11 @@ export function applyActivityMessage(
   if (message.senderUserId === viewerUserId || message.sender.kind === "system") return ignored;
   // A muted channel counts only with an unread mention of the viewer, which only the server can
   // tell from the message.
-  if (message.muted) return { ...ignored, reread: true };
   const key = message.threadRootId
     ? `thread:${message.threadRootId}`
     : `conversation:${message.conversationId}`;
   if (isViewing?.(key)) return ignored;
+  if (message.muted) return { ...ignored, reread: true };
   const { unreadCount, unreadKeys = [] } = state;
   // An older server counts nothing: the dot alone. A key held, or a count at its cap (whose key
   // set may be incomplete), is counted already.

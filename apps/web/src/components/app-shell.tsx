@@ -100,13 +100,18 @@ function useNavItems(
   groupLabel?: string;
 })[] {
   const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
-  // The number when the server counts, else the dot; a count of zero shows nothing.
+  // The number when the server counts some, else the dot while anything is unread (an item the
+  // count leaves out, such as a Task, or a server that counts nothing).
   const unreadCount =
     activity.unreadCount && activity.unreadCount > 0 ? activity.unreadCount : undefined;
   const activityBadge =
     unreadCount !== undefined ? (
-      <UnreadBadge count={unreadCount} />
-    ) : activity.unreadCount === undefined && activity.hasUnread ? (
+      <>
+        <UnreadBadge count={unreadCount} />
+        {/* The badge is hidden from assistive tech, so the row names its count here. */}
+        <span className="sr-only">{m.conversation_thread_unread({ count: unreadCount })}</span>
+      </>
+    ) : activity.hasUnread ? (
       <UnreadDot className="ml-auto" />
     ) : undefined;
   const recordsHref = recordsNavHref(workspaceId);
