@@ -273,8 +273,15 @@ test("backfill is repeatable for existing memberships", async () => {
     orderBy: { userId: "asc" },
     select: { agentId: true, userId: true },
   });
-  await backfillWorkspaceAssistants(db);
-  await backfillWorkspaceAssistants(db);
+  // The deployment backfill pages every membership in the database. This Workspace's are the ones
+  // under test; the rest are already provided, so the run says so instead of provisioning them —
+  // otherwise the test would take as long as the whole shared scratch database is big.
+  const assistants = new WorkspaceAssistants(db);
+  const provision = async (workspaceId: string, userId: string) => {
+    if (workspaceId === workspace.id) await assistants.ensure(workspaceId, userId);
+  };
+  await backfillWorkspaceAssistants(db, provision);
+  await backfillWorkspaceAssistants(db, provision);
   const after = await db.workspaceAssistantSession.findMany({
     where: { workspaceId: workspace.id },
     orderBy: { userId: "asc" },
