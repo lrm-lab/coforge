@@ -361,3 +361,43 @@ test("reconstructs the Kimi system prompt from a profile/config fold", () => {
   );
   expect(result).toMatchObject({ ok: true, view: { verification: "verified" } });
 });
+
+test("restores a Kimi response that seals a partial assistant after the request", () => {
+  const records = [
+    {
+      type: "context.append_message",
+      sessionId: "s1",
+      message: {
+        role: "assistant",
+        partial: true,
+        content: [{ type: "text", text: "partial" }],
+        toolCalls: [],
+      },
+    },
+    {
+      type: "llm.request",
+      kind: "loop",
+      sessionId: "s1",
+      message_id: "m1",
+      request: { toolSelect: true, messageCount: 0, messagesHash: messagesHash([]) },
+    },
+    {
+      type: "context.append_loop_event",
+      sessionId: "s1",
+      event: { type: "step.end" },
+    },
+    {
+      type: "context.append_loop_event",
+      sessionId: "s1",
+      event: { type: "tool.call", toolCallId: "send", name: "shell", args: {} },
+    },
+    {
+      type: "context.append_loop_event",
+      sessionId: "s1",
+      event: { type: "tool.result", toolCallId: "send", output: "Message ID: m1" },
+    },
+  ];
+  const result = restore(records, "m1");
+  expect(result).toMatchObject({ ok: true, view: { responseFound: true } });
+  if (result.ok) expect(JSON.stringify(result.view.messages)).toContain("partial");
+});

@@ -162,6 +162,12 @@ function applyRecord(state: KimiCanonicalState, record: RecordValue): void {
     }
     if (event.type === "step.end") {
       if (typeof event.uuid === "string") state.openSteps.delete(event.uuid);
+      if (state.openSteps.size === 0) {
+        const open = state.messages.findLast(
+          (message) => message.role === "assistant" && message.partial === true,
+        );
+        if (open) delete open.partial;
+      }
       flushDeferredMessages(state);
       return;
     }
