@@ -70,6 +70,47 @@
   }
 }
 
+/* iOS Safari zooms the whole page into a focused text field whose text is under 16px and leaves
+   it zoomed, so on a touch screen no text field is smaller than 16px (docs/design/typography.md).
+   The two sizes under it, `xs` and `sm`, become `md` (16/24) inside a field: its own `text-*`
+   class, the editor CSS that reads those tokens, and a note's paragraphs all follow, while a
+   field designed larger (a title) keeps its size. A field with no size class of its own, which
+   inherits the page's, gets 16px from the base layer, under every utility. */
+@media (pointer: coarse) {
+  :is(
+    input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="color"],
+      [type="file"],
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="image"]
+    ),
+    textarea,
+    select,
+    [contenteditable]:not([contenteditable="false"])
+  ) {
+    --text-xs: max(1rem, 16px);
+    --text-xs--line-height: 1.5rem;
+    --text-sm: max(1rem, 16px);
+    --text-sm--line-height: 1.5rem;
+  }
+}
+
+@layer base {
+  @media (pointer: coarse) {
+    input,
+    textarea,
+    select,
+    [contenteditable]:not([contenteditable="false"]) {
+      font-size: max(1rem, 16px);
+    }
+  }
+}
+
 /* The bar across the top of an Agent panel tab (Activity, Chat); an empty state under it starts
    this much higher, so it sits where it sits in a tab without one (agent-tab-empty.tsx). */
 @theme {
