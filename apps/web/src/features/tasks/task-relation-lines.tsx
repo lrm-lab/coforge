@@ -8,7 +8,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
 
-import { taskMetaLabel } from "./task-chip";
+import { TaskLocator } from "./task-chip";
 import { TaskLinkRow } from "./task-relations";
 import { TaskStatusIcon } from "./task-status-icon";
 import {
@@ -35,7 +35,7 @@ function InlineTask({ task }: { task: TaskLink }) {
     <>
       <TaskStatusIcon status={task.status} className="size-3.5" />
       <span className="min-w-0 truncate text-primary">{task.title}</span>
-      <span className="shrink-0 text-xs text-tertiary tabular-nums">{taskMetaLabel(task)}</span>
+      <TaskLocator task={task} />
     </>
   );
 }

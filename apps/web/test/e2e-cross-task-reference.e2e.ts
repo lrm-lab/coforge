@@ -205,7 +205,8 @@ test("another conversation's Task reads as its live label, or as a Task the read
 
     // The peek from the keyboard (task #472): focus on the label opens it, the whole title and
     // where the Task lives.
-    const peekShown = `[...document.querySelectorAll("p")].some((el) => el.textContent === "#${launchTask} · #${renamed}")`;
+    // Where it lives reads the channel's group avatar and name, no `#` before it (task #74).
+    const peekShown = `[...document.querySelectorAll("[data-task-locator]")].some((el) => el.textContent === "#${launchTask}·${renamed}" && el.querySelector(".avatar-group") !== null)`;
     await evaluate(`${chip(launchTitle)}.focus() ?? true`);
     await browser("press", "Shift+Tab");
     await browser("press", "Tab");
@@ -220,11 +221,7 @@ test("another conversation's Task reads as its live label, or as a Task the read
     await browser("click", "textarea[data-composer]");
     await evaluate(`${chip(launchTitle)}.setAttribute("data-e2e-launch", "") ?? true`);
     await browser("hover", "[data-e2e-launch]");
-    await browser(
-      "wait",
-      "--fn",
-      `[...document.querySelectorAll("p")].some((el) => el.textContent === "#${launchTask} · #${renamed}")`,
-    );
+    await browser("wait", "--fn", peekShown);
     await browser("screenshot", join(artifacts, "labels.png"));
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
     await settled();

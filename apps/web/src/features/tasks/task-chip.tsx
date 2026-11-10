@@ -1,9 +1,12 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 import { Lock01 } from "@untitledui/icons";
+import type { ReactNode } from "react";
 import { Focusable } from "react-aria-components";
 
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { HoverPopover } from "#src/components/ui/hover-popover";
+import { useChannelMembers } from "#src/features/conversations/channel-members";
+import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { m } from "#src/paraglide/messages";
 import { priorityLabel } from "./task-history-more";
 import { TaskPriorityIcon } from "./task-priority-icon";
@@ -14,9 +17,40 @@ import { TaskStatusIcon, statusLabel } from "./task-status-icon";
 type ChipTask = Pick<TaskView, "number" | "title" | "status" | "owner"> &
   Partial<Pick<TaskView, "priority" | "labels">>;
 
-/** A Task's grey locator after its title: `#7`, or `#7 · #design` for another channel's. */
+/** A Task's grey locator after its title, as text (a tooltip, a label): `#7`, or `#7 · #design`
+ * for another channel's. */
 export function taskMetaLabel(task: { number: number; channel?: string | null }) {
   return task.channel ? `#${task.number} · #${task.channel}` : `#${task.number}`;
+}
+
+/** The same locator drawn: `#7`, or `#7 ·` then another channel's group avatar and name, no `#`
+ * (Frank, 11-10, task #74). A channel no one is in reads `#design`. */
+export function TaskLocator({ task }: { task: { number: number; channel?: string | null } }) {
+  return (
+    <span
+      data-task-locator
+      className="flex shrink-0 items-center gap-1 text-xs text-tertiary tabular-nums"
+    >
+      #{task.number}
+      {task.channel && (
+        <>
+          <span aria-hidden="true">·</span>
+          <ChannelPlace name={task.channel} />
+        </>
+      )}
+    </span>
+  );
+}
+
+/** A channel named in a locator: its group avatar and its name. */
+function ChannelPlace({ name }: { name: string }) {
+  const members = useChannelMembers({ name });
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      {members?.length ? <GroupAvatar members={members} className="avatar-group-xs" /> : "#"}
+      <span className="max-w-[12em] truncate">{name}</span>
+    </span>
+  );
 }
 
 /**
@@ -29,19 +63,26 @@ export function taskMetaLabel(task: { number: number; channel?: string | null })
  */
 export function TaskChip({
   task,
+  channel,
   place,
   underMessage = false,
   onPress,
 }: {
   task: ChipTask;
-  /** Where the Task lives, for another conversation's (`#design`, `DM with @ada`). */
+  /** The channel it lives in, for another channel's (`design`). */
+  channel?: string;
+  /** Where it lives, for another DM's (`DM with @ada`). */
   place?: string;
   /** Under its own message, whose words the title only repeats: its number and its holder's
    * avatar, the shape of Raft's (v1.21.56, Frank 11-07). */
   underMessage?: boolean;
   onPress?: () => void;
 }) {
-  const meta = place ? `#${task.number} · ${place}` : `#${task.number}`;
+  const meta = channel
+    ? taskMetaLabel({ number: task.number, channel })
+    : place
+      ? `#${task.number} · ${place}`
+      : `#${task.number}`;
   return (
     <HoverPopover
       label={`${task.title}, ${statusLabel(task.status)}, ${meta}`}
@@ -62,7 +103,7 @@ export function TaskChip({
         </>
       }
     >
-      <TaskPeek task={task} meta={meta} />
+      <TaskPeek task={task} meta={channel ? <TaskLocator task={{ ...task, channel }} /> : meta} />
     </HoverPopover>
   );
 }
@@ -72,7 +113,7 @@ export function TaskChip({
  * one line its status, priority and who holds it, each led by its icon rather than a label, then
  * its labels (task #449, Frank 11-04).
  */
-function TaskPeek({ task, meta }: { task: ChipTask; meta: string }) {
+function TaskPeek({ task, meta }: { task: ChipTask; meta: ReactNode }) {
   return (
     <div className="flex flex-col">
       <p className="text-xs font-medium text-tertiary tabular-nums">{meta}</p>

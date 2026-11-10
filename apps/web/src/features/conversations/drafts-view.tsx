@@ -17,7 +17,7 @@ import { overviewTaskQuery } from "#src/features/tasks/use-finished-tasks";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { channelGlyph } from "./channel-name";
-import { channelLabel } from "./channel-visibility";
+import { GroupAvatar } from "./group-avatar";
 import { draftRoute, type DraftRow } from "./drafts-model";
 import { useDraftRows } from "./use-drafts";
 import { useDraftsOn } from "./use-drafts-on";
@@ -90,9 +90,9 @@ function TaskDraftTitle({ conversationId, number }: { conversationId: string; nu
   return task.data?.title || m.tasks_details_title({ number });
 }
 
-/** The channel as text, or the DM's peer. */
+/** The channel's name, or the DM's peer: the face beside it says which (no `#`, Frank 11-10). */
 function homeLabel({ home }: DraftRow): string {
-  return home.kind === "channel" ? channelLabel(home.channel) : home.direct.name;
+  return home.kind === "channel" ? home.channel.name : home.direct.name;
 }
 
 function DraftListItem({ row }: { row: DraftRow }) {
@@ -140,7 +140,8 @@ function DraftListItem({ row }: { row: DraftRow }) {
   );
 }
 
-/** The place's face: a person's or Agent's avatar for a DM, the channel's `#` or lock otherwise. */
+/** The place's face: a person's or Agent's avatar for a DM, the channel's group avatar (its `#` or
+ * lock while no one is in it). */
 function DraftFace({ row }: { row: DraftRow }) {
   const { home } = row;
   if (home.kind === "dm") {
@@ -151,6 +152,8 @@ function DraftFace({ row }: { row: DraftRow }) {
       <ActorAvatar size="sm" presence agentId={peer.agentId} name={name} src={peer.avatarUrl} />
     );
   }
+  if (home.channel.members?.length)
+    return <GroupAvatar members={home.channel.members} className="avatar-group-row" />;
   const Glyph = channelGlyph(home.channel);
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">

@@ -85,7 +85,7 @@ function ChannelTaskReference({
   return (
     <TaskChip
       task={task}
-      place={`#${task.source.channelName}`}
+      channel={task.source.channelName}
       onPress={() => open({ kind: "channel", conversationId, number })}
     />
   );

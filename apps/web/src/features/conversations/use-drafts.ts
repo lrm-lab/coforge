@@ -47,7 +47,14 @@ function useDraftHomes(): ReadonlyMap<string, DraftHome> {
         .filter((channel) => !channel.archived)
         .map((channel): [string, DraftHome] => [
           channel.id,
-          { kind: "channel", channel: { name: channel.name, visibility: channel.visibility } },
+          {
+            kind: "channel",
+            channel: {
+              name: channel.name,
+              visibility: channel.visibility,
+              members: channel.members,
+            },
+          },
         ]),
     [channelNames],
   );
