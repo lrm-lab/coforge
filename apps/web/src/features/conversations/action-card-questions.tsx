@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, SlashCircle01 } from "@untitledui/icons";
 import type { OpenPersonProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
@@ -18,6 +18,8 @@ import { dropDrafts, keepDrafts, keptDrafts } from "./action-card-questions-draf
 import { QuestionsStepper } from "./action-card-questions-stepper";
 import { WaitingOn } from "./action-card-waiting-on";
 import { cardActor } from "./action-card-actor";
+import { focusIgnore, IgnoredLine } from "./action-card-ignored";
+import { useUndoableIgnore } from "./use-undoable-ignore";
 
 /** One question's answer, as `commitQuestionsActionCard` takes it. */
 export type QuestionsAnswer = { questionId: string; selection: string[]; text?: string };
@@ -52,6 +54,7 @@ export function QuestionsActionCard({
   cancelling,
   onSubmit,
   onCancel,
+  onIgnore,
   onOpenPersonProfile,
 }: {
   view: QuestionsView;
@@ -60,6 +63,8 @@ export function QuestionsActionCard({
   /** Resolves once the answers are stored (or failed); the card then shows what the server says. */
   onSubmit: (answers: QuestionsAnswer[]) => Promise<void>;
   onCancel: () => void;
+  /** Cancels the card for the asked person, once their ignore has not been undone. */
+  onIgnore: (options: { keepalive: boolean }) => Promise<void>;
   /** Opens a person's profile from the card, where the conversation can. */
   onOpenPersonProfile?: OpenPersonProfile;
 }) {
@@ -74,6 +79,23 @@ export function QuestionsActionCard({
   const canAnswer = pending && view.canCommit;
   const waitingOn = pending && !canAnswer ? view.asked : undefined;
   const withdrawable = pending && view.canCancel && !canAnswer;
+  const canIgnore = canAnswer && view.canCancel;
+  const { ignored: ignoredNow, ignore, undo } = useUndoableIgnore(onIgnore);
+  const ignored = canIgnore && ignoredNow;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const wasIgnored = useRef(false);
+  const [announcement, setAnnouncement] = useState("");
+  // The collapsed line takes focus on Undo; coming back (undone, or the cancel failed), on Ignore.
+  useEffect(() => {
+    if (ignored) {
+      focusIgnore(cardRef.current, "undo");
+      setAnnouncement(m.action_card_ignored_status());
+    } else if (wasIgnored.current) {
+      focusIgnore(cardRef.current, "ignore");
+      setAnnouncement("");
+    }
+    wasIgnored.current = ignored;
+  }, [ignored]);
   // Answered, the same pages as while answering, each pick marked (Frank, 11-04).
   const answeredView = view.state === "executed" ? recordedDrafts(view) : undefined;
   // Asked of someone else, the same pages to look through, nothing to pick (Frank, 11-04: a list
@@ -121,89 +143,113 @@ export function QuestionsActionCard({
 
   return (
     <div
+      ref={cardRef}
       role="group"
       aria-label={view.prompt || view.questions[0]?.prompt}
       data-questions-card=""
       data-no-row-tap
       className={cn(
-        "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary px-1.5 pt-3 pb-1.5",
-        canAnswer || pagesOnly ? "gap-2" : "gap-4",
+        "mt-1 flex max-w-md flex-col gap-2 rounded-xl border border-secondary bg-primary px-1.5 pt-3 pb-1.5",
       )}
     >
-      {view.prompt && (
-        // While it is being answered the question leads; the card's own title stays small.
-        <p
-          className={cn(
-            "wrap-anywhere",
-            canAnswer || pagesOnly
-              ? "px-2 text-xs text-tertiary"
-              : "px-2.5 text-sm font-semibold text-primary",
-          )}
-        >
-          {view.prompt}
-        </p>
+      {ignored && (
+        <>
+          <p className="px-2.5 text-sm font-semibold wrap-anywhere text-primary">
+            {view.prompt || view.questions[0]?.prompt}
+          </p>
+          <IgnoredLine onUndo={undo} />
+        </>
       )}
-      {pagesOnly && (
-        <QuestionsStepper
-          questions={view.questions}
-          drafts={pagesOnly}
-          disabled={false}
-          canSubmit={false}
-          submitting={false}
-          onChange={() => undefined}
-          onSubmit={() => undefined}
-          readOnly
-        />
-      )}
-      {!canAnswer &&
-        !pagesOnly &&
-        view.questions.map((question, index) => (
-          <section key={question.id} data-question={question.id} className="flex flex-col">
-            <div className="flex items-baseline gap-2 px-2.5 pb-2 text-sm">
-              {pending && view.questions.length > 1 && (
-                <span className="shrink-0 text-tertiary tabular-nums">{index + 1}.</span>
-              )}
-              {/* Handled, the question in gray over its answer, as a handled choice card reads. */}
-              <p
-                className={cn(
-                  "min-w-0 flex-1 font-semibold wrap-anywhere",
-                  pending ? "text-primary" : "text-secondary",
+      {/* Kept mounted while collapsed, so an Undo restores the card as it was. */}
+      <div
+        hidden={ignored}
+        className={cn("flex flex-col", canAnswer || pagesOnly ? "gap-2" : "gap-4")}
+      >
+        {view.prompt && (
+          // While it is being answered the question leads; the card's own title stays small.
+          <p
+            className={cn(
+              "wrap-anywhere",
+              canAnswer || pagesOnly
+                ? "px-2 text-xs text-tertiary"
+                : "px-2.5 text-sm font-semibold text-primary",
+            )}
+          >
+            {view.prompt}
+          </p>
+        )}
+        {pagesOnly && (
+          <QuestionsStepper
+            questions={view.questions}
+            drafts={pagesOnly}
+            disabled={false}
+            canSubmit={false}
+            submitting={false}
+            onChange={() => undefined}
+            onSubmit={() => undefined}
+            readOnly
+          />
+        )}
+        {!canAnswer &&
+          !pagesOnly &&
+          view.questions.map((question, index) => (
+            <section key={question.id} data-question={question.id} className="flex flex-col">
+              <div className="flex items-baseline gap-2 px-2.5 pb-2 text-sm">
+                {pending && view.questions.length > 1 && (
+                  <span className="shrink-0 text-tertiary tabular-nums">{index + 1}.</span>
                 )}
-              >
-                {question.prompt}
-              </p>
-              {canAnswer && question.select === "many" && (
-                <span className="shrink-0 text-xs text-tertiary">
-                  {m.action_card_questions_many()}
-                </span>
-              )}
-            </div>
-            {pending ? (
-              <QuestionRows
-                question={question}
-                draft={drafts[question.id]}
-                canAnswer={canAnswer}
-                disabled={submitting}
-                onChange={(draft) => setDrafts((all) => ({ ...all, [question.id]: draft }))}
-              />
-            ) : null}
-          </section>
-        ))}
-      {canAnswer ? (
-        <QuestionsStepper
-          questions={view.questions}
-          drafts={drafts}
-          disabled={submitting}
-          canSubmit={canSubmit}
-          submitting={submitting}
-          onChange={(questionId, draft) => setDrafts((all) => ({ ...all, [questionId]: draft }))}
-          onSubmit={() => void submit()}
-          notice={errorLine}
-        />
-      ) : (
-        footer
-      )}
-      {!pending && <ClosedReason view={view} />}
+                {/* Handled, the question in gray over its answer, as a handled choice card reads. */}
+                <p
+                  className={cn(
+                    "min-w-0 flex-1 font-semibold wrap-anywhere",
+                    pending ? "text-primary" : "text-secondary",
+                  )}
+                >
+                  {question.prompt}
+                </p>
+                {canAnswer && question.select === "many" && (
+                  <span className="shrink-0 text-xs text-tertiary">
+                    {m.action_card_questions_many()}
+                  </span>
+                )}
+              </div>
+              {pending ? (
+                <QuestionRows
+                  question={question}
+                  draft={drafts[question.id]}
+                  canAnswer={canAnswer}
+                  disabled={submitting}
+                  onChange={(draft) => setDrafts((all) => ({ ...all, [question.id]: draft }))}
+                />
+              ) : null}
+            </section>
+          ))}
+        {canAnswer ? (
+          <QuestionsStepper
+            questions={view.questions}
+            drafts={drafts}
+            disabled={submitting}
+            canSubmit={canSubmit}
+            submitting={submitting}
+            onChange={(questionId, draft) => setDrafts((all) => ({ ...all, [questionId]: draft }))}
+            onSubmit={() => void submit()}
+            notice={errorLine}
+          />
+        ) : (
+          footer
+        )}
+        {canIgnore && (
+          <div className="flex px-2.5 pb-1">
+            <Button data-ignore="" size="sm" color="link-gray" onPress={ignore} className="ml-auto">
+              {m.action_card_ignore()}
+            </Button>
+          </div>
+        )}
+        {!pending && <ClosedReason view={view} />}
+      </div>
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
     </div>
   );
 }

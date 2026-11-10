@@ -198,6 +198,23 @@ function KnownActionCard({
     }
   }
 
+  /** The asked person's ignore, once its undo window has run out. Sent as the page goes away
+   * (`keepalive`), there is no card left to show the result on, so it only refreshes Activity. */
+  async function doIgnore({ keepalive }: { keepalive: boolean }) {
+    setFailure(null);
+    try {
+      await cancel({
+        data: { messageId: view.messageId },
+        fetch: keepalive ? (input, init) => fetch(input, { ...init, keepalive: true }) : undefined,
+      });
+      void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
+      if (!keepalive) await refetch();
+    } catch (cause) {
+      if (!keepalive) setFailure({ message: m.action_card_error(), retry: false, from: "cancel" });
+      throw cause;
+    }
+  }
+
   async function pickChoice(optionId: string, text?: string) {
     setFailure(null);
     try {
@@ -340,6 +357,7 @@ function KnownActionCard({
         cancelling={cancelling}
         onSubmit={submitQuestions}
         onCancel={() => void doCancel()}
+        onIgnore={doIgnore}
         onOpenPersonProfile={onOpenPersonProfile}
       />
     );
@@ -351,6 +369,7 @@ function KnownActionCard({
         cancelling={cancelling}
         onPick={pickChoice}
         onCancel={() => void doCancel()}
+        onIgnore={doIgnore}
         onOpenPersonProfile={onOpenPersonProfile}
       />
     );

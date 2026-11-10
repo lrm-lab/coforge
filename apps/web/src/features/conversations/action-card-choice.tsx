@@ -15,6 +15,8 @@ import { focusDraftEnd } from "./composer-field";
 import { HandledChoice, chosenAnswer } from "./action-card-choice-handled";
 import { WaitingOn } from "./action-card-waiting-on";
 import { FAILED_RING, KEY_HINT, OtherRow } from "./action-card-choice-other";
+import { focusIgnore, IgnoredLine } from "./action-card-ignored";
+import { useUndoableIgnore } from "./use-undoable-ignore";
 
 type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
 type Pick = { optionId: string; text?: string };
@@ -37,11 +39,14 @@ export function ChoiceActionCard({
   cancelling,
   onPick,
   onCancel,
+  onIgnore,
   onOpenPersonProfile,
 }: {
   view: ChoiceView;
   error: string;
   cancelling: boolean;
+  /** Cancels the card for the asked person, once their ignore has not been undone. */
+  onIgnore: (options: { keepalive: boolean }) => Promise<void>;
   /** Resolves once the pick is stored (or failed); the card then shows what the server says. The
    * person's own answer is `_other` with their words. */
   onPick: (optionId: string, text?: string) => Promise<void>;
@@ -59,6 +64,21 @@ export function ChoiceActionCard({
   const [announcement, setAnnouncement] = useState("");
   const answer = chosenAnswer(view);
   const isAsked = view.asked?.isViewer === true;
+  const canIgnore = pending && view.canCommit && view.canCancel;
+  const { ignored: ignoredNow, ignore, undo } = useUndoableIgnore(onIgnore);
+  const ignored = canIgnore && ignoredNow;
+  const wasIgnored = useRef(false);
+  // The collapsed line takes focus on Undo; coming back (undone, or the cancel failed), on Ignore.
+  useEffect(() => {
+    if (ignored) {
+      focusIgnore(cardRef.current, "undo");
+      setAnnouncement(m.action_card_ignored_status());
+    } else if (wasIgnored.current) {
+      focusIgnore(cardRef.current, "ignore");
+      setAnnouncement("");
+    }
+    wasIgnored.current = ignored;
+  }, [ignored]);
   // The asked person's pick replaces the card with its one line, unmounting the pressed row: focus
   // goes on to the next card waiting on them, or else to this line, which a screen reader reads.
   useEffect(() => {
@@ -103,7 +123,7 @@ export function ChoiceActionCard({
   /** With the card itself focused, as it is when the card before it was just answered: a number
    * picks its option, and an arrow key goes to the first or last row (task #457). */
   function onCardKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.target !== cardRef.current || !pending || !view.canCommit) return;
+    if (event.target !== cardRef.current || !pending || !view.canCommit || ignored) return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     const rows = [...(cardRef.current?.querySelectorAll<HTMLElement>(ROW) ?? [])];
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -126,7 +146,7 @@ export function ChoiceActionCard({
       tabIndex={-1}
       onKeyDown={onCardKeyDown}
       data-no-row-tap
-      data-choice-waiting={pending && view.canCommit ? "" : undefined}
+      data-choice-waiting={pending && view.canCommit && !ignored ? "" : undefined}
       className={cn(
         "outline-focus-ring focus-visible:outline-2",
         "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary",
@@ -136,17 +156,27 @@ export function ChoiceActionCard({
       {pending ? (
         // The scope gives the rows' arrow keys React Aria's focus manager.
         <FocusScope>
-          <PendingChoice
-            view={view}
-            picking={picking}
-            failed={error ? lastPick : undefined}
-            error={error}
-            cancelling={cancelling}
-            onPick={pick}
-            onRetry={retry}
-            onCancel={onCancel}
-            onOpenPersonProfile={onOpenPersonProfile}
-          />
+          {ignored && (
+            <>
+              <ChoicePrompt prompt={view.prompt} />
+              <IgnoredLine onUndo={undo} />
+            </>
+          )}
+          {/* Kept mounted while collapsed, so an Undo restores the card as it was. */}
+          <div hidden={ignored}>
+            <PendingChoice
+              view={view}
+              picking={picking}
+              failed={error ? lastPick : undefined}
+              error={error}
+              cancelling={cancelling}
+              onPick={pick}
+              onRetry={retry}
+              onCancel={onCancel}
+              onIgnore={canIgnore ? ignore : undefined}
+              onOpenPersonProfile={onOpenPersonProfile}
+            />
+          </div>
         </FocusScope>
       ) : (
         <HandledChoice view={view} answer={answer} />
@@ -167,6 +197,7 @@ function PendingChoice({
   onPick,
   onRetry,
   onCancel,
+  onIgnore,
   error,
   onOpenPersonProfile,
 }: {
@@ -180,6 +211,8 @@ function PendingChoice({
   onPick: (pick: Pick) => Promise<void>;
   onRetry: () => void;
   onCancel: () => void;
+  /** Set for the asked person, who may ignore the card (and undo it for a few seconds). */
+  onIgnore?: () => void;
   onOpenPersonProfile?: OpenPersonProfile;
 }) {
   const canAnswer = view.canCommit;
@@ -280,14 +313,30 @@ function PendingChoice({
         </ul>
       )}
       {/* With no row of their own (the Agent turned it off), the asked person is pointed at the
-          chat: the hint puts the caret in this conversation's composer, and the card waits on. */}
-      {!view.other && canAnswer && (
-        <AriaButton
-          onPress={(event) => focusComposerOf(event.target)}
-          className="self-start rounded-sm px-2.5 pt-2 pb-1 text-left text-xs text-quaternary outline-focus-ring hover:text-tertiary focus-visible:outline-2"
-        >
-          {m.action_card_choice_chat_hint()}
-        </AriaButton>
+          chat: the hint puts the caret in this conversation's composer, and the card waits on.
+          Ignore sits at the right end of the same row, or alone on it. */}
+      {((!view.other && canAnswer) || onIgnore) && (
+        <div className="flex items-center gap-3 px-2.5 pt-2 pb-1">
+          {!view.other && canAnswer && (
+            <AriaButton
+              onPress={(event) => focusComposerOf(event.target)}
+              className="rounded-sm text-left text-xs text-quaternary outline-focus-ring hover:text-tertiary focus-visible:outline-2"
+            >
+              {m.action_card_choice_chat_hint()}
+            </AriaButton>
+          )}
+          {onIgnore && (
+            <Button
+              data-ignore=""
+              size="sm"
+              color="link-gray"
+              onPress={onIgnore}
+              className="ml-auto"
+            >
+              {m.action_card_ignore()}
+            </Button>
+          )}
+        </div>
       )}
       {error && !failed && (
         <p role="alert" className="px-2.5 pt-2 pb-1 text-sm text-error-primary">
