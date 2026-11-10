@@ -43,6 +43,8 @@ import {
   type ChannelCommand,
 } from "#src/cli/release-channel-command";
 import { registerUpdateCommands } from "#src/cli/update-command-registration";
+import { registerRunnersCommand } from "#src/cli/runners-command";
+import { createRunnerCommand, type RunnerCommand } from "#src/runners/runner-command";
 
 export interface LoginCommand {
   run(serverUrl: string, options: { json: boolean }): Promise<void>;
@@ -129,6 +131,7 @@ interface CliDependencies {
   doctor?: DoctorCommand;
   host?: HostCommand;
   channel?: ChannelCommand;
+  runners?: RunnerCommand;
 }
 
 export async function runCli(
@@ -268,6 +271,9 @@ export async function runCli(
       exitCode = value;
     },
   );
+  registerRunnersCommand(program, dependencies.runners, (value) => {
+    json = value;
+  });
   program
     .command("host")
     .description("Run the Swarm manager process that places cloud Computer services.")
@@ -417,6 +423,20 @@ export async function runComputer(): Promise<void> {
           },
         },
         host: { run: runHostProcess },
+        runners: createRunnerCommand({
+          daemon: createDaemonLauncher(
+            platform.os,
+            installDirectory,
+            stateDirectory,
+            COFORGE_SERVER_URL,
+          ),
+          resolveWorkspace: async (selector) => {
+            const binding = await config.loadRegistration(selector);
+            if (!binding) throw new Error(`Workspace '${selector}' is not registered locally`);
+            return { id: binding.id, slug: binding.slug };
+          },
+          write: io.stdout,
+        }),
       },
       io,
     );

@@ -1,19 +1,11 @@
 import { daemonStartupOptions } from "#src/daemon-startup-options";
-import {
-  type LocalInboxRequest,
-  type RunnerHoldReason,
-  diagnosticErrorCode,
-} from "@lrm/coforge-sdk/internal";
+import { type LocalInboxRequest, diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { dispose, getLogger, withContext } from "@logtape/logtape";
 import { startDaemonLocalRpcServer } from "#src/local-rpc";
 import { startAgentProxy } from "#src/agent-proxy";
 import { daemonAgentProxyRuntime } from "#src/agent-proxy-daemon-runtime";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
-import {
-  DaemonRuntime,
-  type BusyAgentReport,
-  type DaemonConfig,
-} from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { upgradeOperationsInConfig } from "#src/daemon-runtime/upgrade-result-reporter";
 import { agentApiKeyRegistry } from "#src/agent-api-key-registry";
 import { defaultCodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventory-sync";
@@ -42,6 +34,7 @@ import { guardWorkspaceRunnerStart } from "#src/supervisor/workspace-runner-guar
 import { writeWorkspaceInstanceRecord } from "#src/supervisor/process-workspace-instance";
 import { holdWorkspaceDaemonLock } from "#src/supervisor/workspace-daemon-lock";
 import { requestWorkspaceUpgrade } from "#src/supervisor/request-workspace-upgrade";
+import { operatorRunnerPorts } from "#src/daemon-runtime/operator-runner-identities";
 export { FileBindingStore } from "#src/supervisor/binding-store";
 export {
   WORKSPACE_HEALTH_CRASH_WINDOW_MS,
@@ -384,18 +377,8 @@ export async function runDaemon(
         },
         inbox: async (context: string, request: LocalInboxRequest) =>
           requireRuntime().inbox(context, request),
-        // Runner hold. A Workspace with no configured runtime has nothing to drain and
-        // reports itself quiescent, so it never holds a restart up.
-        async hold(reason: RunnerHoldReason) {
-          return { held: true, busyAgents: stampWorkspace(runtime?.holdRunners(reason)) };
-        },
-        async release() {
-          return { held: false, busyAgents: stampWorkspace(runtime?.releaseRunners()) };
-        },
+        ...operatorRunnerPorts(runtime, config?.workspaceId),
       };
-      function stampWorkspace(agents: BusyAgentReport[] = []) {
-        return agents.map((agent) => ({ ...agent, workspaceId: config?.workspaceId ?? "" }));
-      }
       // In place before the Coordinator can start the runtime; sessions inherit it via Bun.env.
       await loginShellEnv;
       // The Coordinator polls this socket for readiness within a 30s budget after spawning the

@@ -36,6 +36,8 @@ message DaemonCommandRequest {
   // its own registration.
   optional string computer_id = 8;
   optional string server_http_url = 9;
+  // Operator-only runner target. This field never crosses the cloud transport.
+  optional string agent_id = 10;
 }
 
 message DaemonCommandResponse {
@@ -53,6 +55,7 @@ message DaemonCommandResponse {
   // the local registration is gone but the machine may still be attached under a newer key, so
   // the CLI says "key revoked", not "detached".
   optional bool detach_key_revoked = 8;
+  repeated ManagedRunnerIdentity runners = 9;
 }
 
 message ManagedRuntimeIdentity {
@@ -72,4 +75,17 @@ message ManagedRuntimeIdentity {
   // A start, restart, or configure of this Workspace is queued or running in the Coordinator. A
   // lifecycle state, not a cloud connection state.
   optional bool lifecycle_under_way = 10;
+}
+
+// A locally supervised Agent runner. This shape is exchanged only over the Computer/Daemon
+// Unix-socket RPC; it is deliberately not an Agent capability or cloud message.
+message ManagedRunnerIdentity {
+  string workspace_id = 1;
+  string agent_id = 2;
+  string provider = 3;
+  string model = 4;
+  string state = 5;
+  optional string launch_id = 6;
+  optional string session_id = 7;
+  optional bool has_live_turn = 8;
 }

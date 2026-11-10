@@ -26,6 +26,7 @@ import {
   type LocalInboxRequest,
   type DaemonCommandRequest,
   type ManagedRuntimeIdentity,
+  type ManagedRunnerIdentity,
   type WorkspaceCloudConnection,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
@@ -73,8 +74,15 @@ type DaemonRuntimePort = Partial<{
     method: string,
     request: DaemonCommandRequest,
   ): Promise<
-    ManagedRuntimeIdentity[] | { runtimes: ManagedRuntimeIdentity[]; detachKeyRevoked?: boolean }
+    | ManagedRuntimeIdentity[]
+    | {
+        runtimes: ManagedRuntimeIdentity[];
+        detachKeyRevoked?: boolean;
+        runners?: ManagedRunnerIdentity[];
+      }
   >;
+  runnerIdentities?(): ManagedRunnerIdentity[];
+  stopAgent?(agentId: string): Promise<void>;
   hold(reason: RunnerHoldReason): Promise<DaemonHoldReport>;
   release(): Promise<DaemonHoldReport>;
   /** Where a Workspace daemon's latest cloud connect stands; see `WorkspaceParking`. */
@@ -103,6 +111,8 @@ const LIFECYCLE_METHODS: ReadonlySet<string> = new Set([
   LOCAL_RPC_METHODS.UPGRADE,
   LOCAL_RPC_METHODS.COMPUTER_UPGRADE,
   LOCAL_RPC_METHODS.UPGRADE_ACKNOWLEDGE,
+  LOCAL_RPC_METHODS.RUNNERS_LIST,
+  LOCAL_RPC_METHODS.RUNNERS_STOP,
 ]);
 
 export async function startDaemonLocalRpcServer(
@@ -296,6 +306,7 @@ class LocalRpcDispatcher {
         requestId: request.requestId,
         accepted: true,
         runtimes,
+        runners: !result || Array.isArray(result) ? undefined : result.runners,
         detachKeyRevoked: !result || Array.isArray(result) ? undefined : result.detachKeyRevoked,
       });
     } catch (error) {
@@ -328,11 +339,24 @@ class LocalRpcDispatcher {
     request: DaemonCommandRequest,
   ): Promise<
     | ManagedRuntimeIdentity[]
-    | { runtimes: ManagedRuntimeIdentity[]; detachKeyRevoked?: boolean }
+    | {
+        runtimes: ManagedRuntimeIdentity[];
+        detachKeyRevoked?: boolean;
+        runners?: ManagedRunnerIdentity[];
+      }
     | undefined
   > {
     const { runtime } = this.input;
     if (runtime.command) return runtime.command(method, request);
+    if (method === LOCAL_RPC_METHODS.RUNNERS_LIST) {
+      if (!runtime.runnerIdentities) throw new Error("runner listing is unavailable");
+      return { runtimes: [], runners: runtime.runnerIdentities() };
+    }
+    if (method === LOCAL_RPC_METHODS.RUNNERS_STOP) {
+      if (!request.agentId || !runtime.stopAgent) throw new Error("runner stop is unavailable");
+      await runtime.stopAgent(request.agentId);
+      return { runtimes: [], runners: runtime.runnerIdentities?.() ?? [] };
+    }
     if (request.workspaceId) throw new Error("scoped lifecycle requires supervisor");
     const unscoped: Partial<Record<string, (() => Promise<void>) | undefined>> = {
       [LOCAL_RPC_METHODS.START]: runtime.start,

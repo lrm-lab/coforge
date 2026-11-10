@@ -35,6 +35,8 @@ export const LOCAL_RPC_METHODS = {
    * admission with no Workspace in the request. */
   COMPUTER_UPGRADE: "daemon:computer_upgrade",
   UPGRADE_ACKNOWLEDGE: "daemon:upgrade_ack",
+  RUNNERS_LIST: "daemon:runners:list",
+  RUNNERS_STOP: "daemon:runners:stop",
   HOLD: "daemon:hold",
   RELEASE: "daemon:release",
   AGENT_INBOX: "agent:inbox",
@@ -279,6 +281,8 @@ export type DaemonCommandRequest = {
    * supervisor has no binding for can still be told to unlink. */
   computerId?: string;
   serverHttpUrl?: string;
+  /** Operator-only local runner target; never forwarded to the cloud. */
+  agentId?: string;
 };
 /** Where a Workspace daemon's latest cloud connect stands. */
 export const WORKSPACE_CLOUD_CONNECTION_STATES = [
@@ -307,6 +311,16 @@ export type ManagedRuntimeIdentity = {
   /** A start, restart, or configure of this Workspace is queued or running in the Coordinator. */
   lifecycleUnderWay?: boolean;
 };
+export type ManagedRunnerIdentity = {
+  workspaceId: string;
+  agentId: string;
+  provider: string;
+  model: string;
+  state: "running" | "stopping" | "idle";
+  launchId?: string;
+  sessionId?: string;
+  hasLiveTurn?: boolean;
+};
 export type DaemonCommandResponse = {
   protocolMajor: number;
   requestId: string;
@@ -323,6 +337,7 @@ export type DaemonCommandResponse = {
   /** `daemon:detach` (task #417): the server had already revoked the key — the local
    * registration is gone but the machine may still be attached under a newer key. */
   detachKeyRevoked?: boolean;
+  runners?: ManagedRunnerIdentity[];
 };
 export type LocalRpcRequest = { method: string; payload: Uint8Array };
 export type LocalRpcResponse = { method: string; payload: Uint8Array };
@@ -400,6 +415,7 @@ export function decodeDaemonCommandRequest(bytes: Uint8Array): DaemonCommandRequ
     releaseChannel: value.releaseChannel,
     computerId: value.computerId,
     serverHttpUrl: value.serverHttpUrl,
+    agentId: value.agentId,
   };
 }
 export function encodeDaemonCommandResponse(value: DaemonCommandResponse): Uint8Array {
@@ -426,6 +442,20 @@ export function decodeDaemonCommandResponse(bytes: Uint8Array): DaemonCommandRes
     ...(value.errorCode ? { errorCode: value.errorCode } : {}),
     ...(value.workspaceId ? { workspaceId: value.workspaceId } : {}),
     ...(value.detachKeyRevoked ? { detachKeyRevoked: true } : {}),
+    ...(value.runners.length
+      ? {
+          runners: value.runners.map((runner) => ({
+            workspaceId: runner.workspaceId,
+            agentId: runner.agentId,
+            provider: runner.provider,
+            model: runner.model,
+            state: runner.state as ManagedRunnerIdentity["state"],
+            ...(runner.launchId ? { launchId: runner.launchId } : {}),
+            ...(runner.sessionId ? { sessionId: runner.sessionId } : {}),
+            ...(runner.hasLiveTurn !== undefined ? { hasLiveTurn: runner.hasLiveTurn } : {}),
+          })),
+        }
+      : {}),
   };
 }
 

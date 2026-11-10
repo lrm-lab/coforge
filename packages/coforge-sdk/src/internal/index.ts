@@ -191,6 +191,7 @@ export const COMPUTER_CLI_COMMANDS = [
   "status",
   "doctor",
   "host",
+  "runners",
 ] as const;
 export type ComputerCliCommand = (typeof COMPUTER_CLI_COMMANDS)[number];
 export * from "./computer-agent-messages";
@@ -380,6 +381,7 @@ export type {
   DaemonCommandRequest,
   DaemonCommandResponse,
   ManagedRuntimeIdentity,
+  ManagedRunnerIdentity,
   WorkspaceCloudConnection,
   LocalAgentMessageRequest,
   AgentMessageResponse,

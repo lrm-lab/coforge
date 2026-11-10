@@ -6,7 +6,7 @@ import { startDaemonLocalRpcServer, type DaemonHoldReport } from "#src/local-rpc
 import { captureStopSignal } from "#src/platform/stop-signal";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { createComputerSelfClient } from "#src/connection/computer-self-client";
-import { runWorkspaceCommand } from "./run-supervisor-command";
+import { runWorkspaceCommand, runnerCommandPort } from "./run-supervisor-command";
 import { scheduleRetireSession } from "./retire-session";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
 import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
@@ -327,7 +327,7 @@ async function runWithSupervisorLock(
     // Only finished Workspaces are asked: one still restarting may be answered by its old process.
     const outcomes = await awaitCloudConnections(startPorts, started, deadline);
     const answered = new Map(outcomes.map((outcome) => [outcome.workspaceId, outcome]));
-    return (await view()).map((runtime) => {
+    return (await runtimes(await supervisor.view())).map((runtime) => {
       if (pending.includes(runtime.workspaceId)) return { ...runtime, lifecycleUnderWay: true };
       const outcome = answered.get(runtime.workspaceId);
       if (!outcome) return runtime;
@@ -340,9 +340,13 @@ async function runWithSupervisorLock(
   };
   /** Each binding's live identity, or processId 0 while its OS instance is gone, plus why it is
    * parked, when it is. */
-  const runtimes = async (bindings: Awaited<ReturnType<typeof supervisor.snapshot>>) =>
+  const runtimes = async (
+    bindings:
+      | Awaited<ReturnType<typeof supervisor.snapshot>>
+      | Promise<Awaited<ReturnType<typeof supervisor.snapshot>>>,
+  ) =>
     Promise.all(
-      bindings.map(async (binding) => {
+      (await bindings).map(async (binding) => {
         await adoptions.adoptLive(binding);
         return workspaceRuntimeView(
           binding,
@@ -351,11 +355,6 @@ async function runWithSupervisorLock(
         );
       }),
     );
-  /** After every lifecycle mutation queued so far: what the Coordinator's own steps act on. */
-  const snapshot = async () => runtimes(await supervisor.snapshot());
-  /** What an operator reads (`status`, a command's answer), without waiting behind a mutation,
-   * so it never outlasts the local lifecycle client. */
-  const view = async () => runtimes(await supervisor.view());
   const completeUpgrade = async (
     workspaceId: string,
     requestId: string,
@@ -445,7 +444,9 @@ async function runWithSupervisorLock(
     operation: "hold" | "release",
     reason?: RunnerHoldReason,
   ): Promise<DaemonHoldReport> => {
-    const running = (await snapshot()).filter((runtime) => runtime.processId > 0);
+    const running = (await runtimes(await supervisor.snapshot())).filter(
+      (runtime) => runtime.processId > 0,
+    );
     const reports = await Promise.all(
       running.map(({ workspaceId }) =>
         holdWorkspaceRunners(workspaceId, operation, reason, "restart"),
@@ -543,8 +544,12 @@ async function runWithSupervisorLock(
               watchPendingUpgrade,
               launchComputerUpgrade,
               makeSelfClient: createComputerSelfClient,
-              view,
+              view: () => runtimes(supervisor.view()),
               startForOperator,
+              runnerCommand: runnerCommandPort({
+                observe: () => runtimes(supervisor.view()),
+                childClient,
+              }),
             }),
         },
       });

@@ -1,8 +1,6 @@
 import { dirname, join, win32 } from "node:path";
 import {
   decodeDaemonHandshakeResponse,
-  decodeDaemonCommandResponse,
-  encodeDaemonCommandRequest,
   decodeDaemonRuntimeConfigureResponse,
   encodeDaemonHandshakeRequest,
   encodeDaemonRuntimeConfigureRequest,
@@ -14,6 +12,7 @@ import {
   decodeDaemonHoldResponse,
   LOCAL_RPC_METHODS,
   type RunnerHoldReason,
+  type ManagedRunnerIdentity,
 } from "@lrm/coforge-sdk/internal";
 import type {
   DaemonHandshakeResponse,
@@ -24,6 +23,9 @@ import { DaemonConfigStore } from "#src/persistence/daemon-config";
 import { COFORGE_DAEMON_SERVER_URL } from "#src/connection/built-server";
 import { FileBindingStore } from "#src/supervisor/binding-store";
 import type { WorkspaceCloudConnectionReport } from "#src/supervisor/workspace-start-outcome";
+import { runRunnerCommand } from "./runner-command";
+import { runControlCommand } from "./control-command";
+export { DaemonCommandRejectedError } from "./daemon-command-rejected-error";
 
 /** A Workspace configuration the Daemon took; `lifecycleUnderWay` when its start was still under
  * way at the Coordinator's deadline and finishes behind the answer. */
@@ -87,6 +89,12 @@ export interface DaemonCommandRunner {
     expectedVersion: string,
     releaseChannel?: string,
   ): Promise<ManagedRuntimeIdentity[]>;
+  /** Operator-only runner listing and scoped stop over the local Unix socket. */
+  runners?(
+    operation: "list" | "stop",
+    workspaceId?: string,
+    agentId?: string,
+  ): Promise<ManagedRunnerIdentity[]>;
 }
 export type DaemonWorkspaceConfig = {
   /** `daemon:configure` from a login-style setup (task #417): only it retires the login the
@@ -109,19 +117,6 @@ export type LocalDaemonConnection = {
  * across the local process boundary instead of a bare "did not accept" message. `code`, when
  * present, is one of `UPGRADE_ERROR_CODE`'s values (the only vocabulary a lifecycle refusal
  * currently uses) - but may be a well-formed value this build does not know the name of yet. */
-export class DaemonCommandRejectedError extends Error {
-  constructor(
-    readonly operation: string,
-    message: string,
-    readonly code?: string,
-    /** The Workspace the refusal is about, when it is about one (a parked Workspace). */
-    readonly workspaceId?: string,
-  ) {
-    super(message);
-    this.name = "DaemonCommandRejectedError";
-  }
-}
-
 export type LocalDaemonLauncherOptions = {
   executablePath: string;
   socketPath: string;
@@ -225,6 +220,25 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     return this.control(operation, workspaceId, undefined, undefined, undefined, detachTarget);
   }
 
+  async runners(
+    operation: "list" | "stop",
+    workspaceId?: string,
+    agentId?: string,
+  ): Promise<ManagedRunnerIdentity[]> {
+    return runRunnerCommand({
+      operation,
+      workspaceId,
+      agentId,
+      ensureRunning: () => this.ensureRunning(),
+      serverUrl: this.#serverUrl,
+      request: (method, payload) =>
+        this.#withConnection(async (connection) => {
+          await this.#verifyHandshake(connection);
+          return this.#request(connection, method, payload);
+        }),
+    });
+  }
+
   async control(
     operation:
       | "start"
@@ -243,41 +257,19 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
      * supervisor has no binding for can still be told to unlink. */
     detachTarget?: { computerId: string; serverHttpUrl: string },
   ) {
-    return this.#withConnection(async (connection) => {
-      await this.#verifyHandshake(connection);
-      const method = `daemon:${operation}`;
-      const response = await this.#request(
-        connection,
-        method,
-        encodeDaemonCommandRequest({
-          protocolMajor: 1,
-          requestId,
-          workspaceId,
-          expectedServerUrl: this.#serverUrl,
-          expectedVersion,
-          releaseChannel,
-          computerId: detachTarget?.computerId,
-          serverHttpUrl: detachTarget?.serverHttpUrl,
+    return runControlCommand({
+      operation,
+      workspaceId,
+      requestId,
+      expectedVersion,
+      releaseChannel,
+      detachTarget,
+      serverUrl: this.#serverUrl,
+      request: (method, payload) =>
+        this.#withConnection(async (connection) => {
+          await this.#verifyHandshake(connection);
+          return this.#request(connection, method, payload);
         }),
-      );
-      const commandResponse = decodeDaemonCommandResponse(response.payload);
-      if (response.method !== method || commandResponse.protocolMajor !== 1)
-        throw new Error(`coforge-daemon did not accept ${operation}`);
-      if (commandResponse.requestId !== requestId || !commandResponse.accepted) {
-        throw new DaemonCommandRejectedError(
-          operation,
-          commandResponse.error || `coforge-daemon did not accept ${operation}`,
-          commandResponse.errorCode,
-          commandResponse.workspaceId,
-        );
-      }
-      const runtimes = commandResponse.runtimes ?? [];
-      // `daemon:detach` (task #417): the answer's detach_key_revoked rides the array as a
-      // property, so every non-detach caller keeps the ManagedRuntimeIdentity[] shape.
-      if (operation === "detach")
-        (runtimes as ManagedRuntimeIdentity[] & { detachKeyRevoked?: boolean }).detachKeyRevoked =
-          commandResponse.detachKeyRevoked;
-      return runtimes;
     });
   }
 

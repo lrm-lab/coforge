@@ -37,6 +37,31 @@ test("the CLI's actual registered commands match the shared COMPUTER_CLI_COMMAND
   expect([...names].sort()).toEqual([...COMPUTER_CLI_COMMANDS].sort());
 });
 
+test("runners commands stay operator-only and delegate through the local runner port", async () => {
+  const calls: string[] = [];
+  const output: string[] = [];
+  const exitCode = await runCli(
+    ["runners", "list", "--json"],
+    {
+      login: { async run() {} },
+      setup: { async run() {} },
+      runners: {
+        async list(workspace, options) {
+          calls.push(`list:${workspace ?? "all"}:${options.json}`);
+          output.push(JSON.stringify({ runners: [] }));
+        },
+        async stop(agentId, workspace, options) {
+          calls.push(`stop:${agentId}:${workspace ?? "missing"}:${options.json}`);
+        },
+      },
+    },
+    { stdout: (line) => output.push(line), stderr: (line) => output.push(line) },
+  );
+  expect(exitCode).toBe(0);
+  expect(calls).toEqual(["list:all:true"]);
+  expect(output).toEqual(['{"runners":[]}']);
+});
+
 test("the upgrade CLI's next-command hint names the real commands for each outcome", () => {
   expect(nextUpgradeCommandHint(new Error("boom"))).toContain("coforge-computer status");
   expect(nextUpgradeCommandHint(new Error("boom"))).toContain("coforge-computer upgrade");

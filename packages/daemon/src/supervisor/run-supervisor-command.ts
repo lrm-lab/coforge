@@ -1,9 +1,15 @@
-import type { DaemonCommandRequest, ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
+import { LOCAL_RPC_METHODS } from "@lrm/coforge-sdk/internal";
+import type {
+  DaemonCommandRequest,
+  ManagedRuntimeIdentity,
+  ManagedRunnerIdentity,
+} from "@lrm/coforge-sdk/internal";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
 import type { ComputerUpgradeReceipt } from "#src/platform/computer-upgrade-receipts";
 import type { MachineSupervisor } from "./machine-supervisor";
 import { runWorkspaceLifecycleCommand } from "./run-supervisor-workspace-lifecycle";
 import { OPERATOR_COMMAND_BUDGET_MS } from "./workspace-start-outcome";
+export { runnerCommandPort } from "./runner-command";
 
 /**
  * `command()`'s workspace-scoped lifecycle dispatch (task #417): the upgrade records, the
@@ -24,6 +30,7 @@ export async function runWorkspaceCommand({
   makeSelfClient,
   view,
   startForOperator,
+  runnerCommand,
   ownServerUrl,
 }: {
   method: string;
@@ -50,10 +57,20 @@ export async function runWorkspaceCommand({
     workspaceId: string | undefined,
     requestId: string,
   ) => Promise<ManagedRuntimeIdentity[]>;
+  runnerCommand?: (
+    operation: "list" | "stop",
+    workspaceId: string | undefined,
+    agentId: string | undefined,
+  ) => Promise<ManagedRunnerIdentity[]>;
   /** This Coordinator's own server — the only origin a detach's `serverHttpUrl` may name. */
   ownServerUrl: string;
 }): Promise<
-  ManagedRuntimeIdentity[] | { runtimes: ManagedRuntimeIdentity[]; detachKeyRevoked?: boolean }
+  | ManagedRuntimeIdentity[]
+  | {
+      runtimes: ManagedRuntimeIdentity[];
+      detachKeyRevoked?: boolean;
+      runners?: ManagedRunnerIdentity[];
+    }
 > {
   const handled = await runWorkspaceLifecycleCommand({
     method,
@@ -70,6 +87,16 @@ export async function runWorkspaceCommand({
     view,
   });
   if (handled !== undefined) return handled;
+  if (method === LOCAL_RPC_METHODS.RUNNERS_LIST || method === LOCAL_RPC_METHODS.RUNNERS_STOP) {
+    const operation = method.endsWith(":stop") ? "stop" : "list";
+    if (operation === "stop" && (!request.workspaceId || !request.agentId))
+      throw new Error("runner stop requires a Workspace and Agent id");
+    if (!runnerCommand) throw new Error("runner control is unavailable");
+    return {
+      runtimes: [],
+      runners: await runnerCommand(operation, request.workspaceId, request.agentId),
+    };
+  }
   // upgrade, computer_upgrade, upgrade_ack and detach ran inside
   // `runWorkspaceLifecycleCommand` (each returns undefined — the detach's keyed marker came
   // back through `handled`); the view is their answer.

@@ -56,6 +56,7 @@ relative to `src/`.
 | `host/`                                    | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them                     |
 | `status/`                                  | Read-only `status` report through per-platform ports                                                |
 | `doctor/`                                  | Read-only diagnostic checks built from the status report                                            |
+| `runners/`                                 | Operator-only Agent runner listing and scoped stop through local Daemon RPC                         |
 | `logging/`                                 | Computer LogTape configuration and the `logs` follower                                              |
 | `updater.ts`                               | Reads the installed version; zod contract schemas and launcher text shared with the installer       |
 | `release/upgrade-runner.ts`                | Runs the installer for one upgrade, or `repair` on the terminal                                     |

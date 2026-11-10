@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
+import type { ManagedRuntimeIdentity, ManagedRunnerIdentity } from "@lrm/coforge-sdk/internal";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
 import { runWorkspaceCommand } from "#src/supervisor/run-supervisor-command";
 import type { MachineSupervisor } from "#src/supervisor/machine-supervisor";
@@ -123,4 +123,29 @@ test("upgrade, upgrade_ack and detach answer the view; the snapshot does too", a
   expect(recorded).toEqual(["recorded"]);
   expect(acknowledged).toEqual(["acknowledged"]);
   expect(detached).toEqual(["detached"]);
+});
+
+test("runner commands stay scoped to the requested Workspace and Agent", async () => {
+  const calls: string[] = [];
+  const runners: ManagedRunnerIdentity[] = [
+    {
+      workspaceId: "ws-1",
+      agentId: "agent-1",
+      provider: "pi",
+      model: "default",
+      state: "running",
+    },
+  ];
+  const result = await runWorkspaceCommand(
+    deps({
+      method: "daemon:runners:stop",
+      runnerCommand: async (operation, workspaceId, agentId) => {
+        calls.push(`${operation}:${workspaceId}:${agentId}`);
+        return runners;
+      },
+      request: { ...request("daemon:runners:stop"), agentId: "agent-1" },
+    }),
+  );
+  expect(calls).toEqual(["stop:ws-1:agent-1"]);
+  expect(result).toEqual({ runtimes: [], runners });
 });
