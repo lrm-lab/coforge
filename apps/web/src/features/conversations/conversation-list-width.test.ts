@@ -23,7 +23,7 @@ describe("list column width", () => {
   test("clamps to the column's range and ignores garbage", () => {
     expect(clampListWidth(CHAT, 100)).toBe(200);
     expect(clampListWidth(CHAT, 999)).toBe(400);
-    expect(clampListWidth(LIST, 100)).toBe(240);
+    expect(clampListWidth(LIST, 100)).toBe(288);
     expect(clampListWidth(LIST, 999)).toBe(640);
     expect(parseListWidth(CHAT, "350")).toBe(350);
     expect(parseListWidth(CHAT, "50")).toBe(200);
@@ -50,7 +50,7 @@ describe("list column width", () => {
     expect(keyListWidth(CHAT, key("ArrowLeft"), 205)).toBe(200);
     expect(keyListWidth(CHAT, key("Home"), 288)).toBe(200);
     expect(keyListWidth(CHAT, key("End"), 288)).toBe(400);
-    expect(keyListWidth(LIST, key("Home"), 380)).toBe(240);
+    expect(keyListWidth(LIST, key("Home"), 380)).toBe(288);
     expect(keyListWidth(LIST, key("End"), 380)).toBe(640);
     expect(keyListWidth(CHAT, key("Enter"), 288)).toBeUndefined();
     expect(keyListWidth(CHAT, key("ArrowLeft", { metaKey: true }), 288)).toBeUndefined();
@@ -79,7 +79,7 @@ describe("list column width", () => {
     ).toEqual({
       "--list-column-width": "500px",
     });
-    expect(run({ "coforge-list-column-width": "100" })).toEqual({ "--list-column-width": "240px" });
+    expect(run({ "coforge-list-column-width": "100" })).toEqual({ "--list-column-width": "288px" });
     expect(run({})).toEqual({});
   });
 

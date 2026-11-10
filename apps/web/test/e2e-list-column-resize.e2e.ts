@@ -7,7 +7,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
  * The list beside an open conversation on Activity (and Search, which shares its width) can be
- * resized. It starts at 380px; a drag on its right-edge handle sets any width from 240 to 640,
+ * resized. It starts at 380px; a drag on its right-edge handle sets any width from 288 to 640,
  * at most half the page, and keeps it apart from the Chat list's width; double-click resets it,
  * the keys step it, and a reload keeps it.
  *
@@ -126,8 +126,8 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     expect(await stored("coforge-list-column-width")).toBe("500");
     expect(await stored("coforge-conversation-list-width")).toBe("300");
     await dragListTo(40);
-    await waitForWidth(240);
-    expect(await stored("coforge-list-column-width")).toBe("240");
+    await waitForWidth(288);
+    expect(await stored("coforge-list-column-width")).toBe("288");
 
     // Past half the page the conversation keeps its half: the list stops at it, and the next drag
     // starts from the edge that is seen.
@@ -155,17 +155,17 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     await browser("press", "ArrowRight");
     await waitForWidth(396);
     await browser("press", "Home");
-    await waitForWidth(240);
+    await waitForWidth(288);
 
     // A reload keeps the width, and the first paint already has it.
     await browser("reload");
     await waitFor(`document.querySelector('${HANDLE}') !== null`);
-    await waitForWidth(240);
+    await waitForWidth(288);
     expect(
       await evaluate<string>(
         `document.documentElement.style.getPropertyValue("--list-column-width")`,
       ),
-    ).toBe("240px");
+    ).toBe("288px");
   } finally {
     await browser(
       "eval",
