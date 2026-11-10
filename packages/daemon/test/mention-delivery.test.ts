@@ -106,25 +106,20 @@ test("a running Agent that never reported its session refuses the mention as unk
   }
 });
 
-test("stop settles a mention pending in a busy turn as rejected, never as drained", async () => {
+test("stop forgets a mention pending in a busy turn, never draining it", async () => {
   const h = await harness();
   try {
     h.emit({ type: "progress" });
     await h.deliver(1, h.envelope(1));
     await h.runtime.stopAgent("agent-a");
-    expect(h.frames.at(-1)).toEqual({
-      kind: "terminal",
-      deliveryId: "delivery-1",
-      code: "DELIVERY_REJECTED",
-    });
     h.emit({ type: "completed", status: "interrupted" });
-    expect(h.frames.some((frame) => frame.kind === "ack")).toBe(false);
+    expect(h.frames.some((frame) => frame.kind === "terminal" || frame.kind === "ack")).toBe(false);
   } finally {
     await h.runtime.stop();
   }
 });
 
-test("stop rejects tracked mentions still queued behind a blocked notice", async () => {
+test("stop forgets tracked mentions still queued behind a blocked notice", async () => {
   const pending = Promise.withResolvers<void>();
   const h = await harness({ noticeGate: pending.promise });
   const first = h.deliver(1, h.envelope(1));
@@ -135,11 +130,7 @@ test("stop rejects tracked mentions still queued behind a blocked notice", async
   try {
     await h.runtime.stopAgent("agent-a");
     await Promise.allSettled([first, queued]);
-    expect(h.frames.filter((frame) => frame.kind === "terminal")).toEqual([
-      { kind: "terminal", deliveryId: "delivery-2", code: "DELIVERY_REJECTED" },
-      { kind: "terminal", deliveryId: "delivery-1", code: "DELIVERY_REJECTED" },
-    ]);
-    expect(h.frames.some((frame) => frame.kind === "ack")).toBe(false);
+    expect(h.frames.some((frame) => frame.kind === "terminal" || frame.kind === "ack")).toBe(false);
     await h.runtime.startAgent("agent-a", config);
     pending.resolve();
     h.emit({ type: "completed", status: "completed" });

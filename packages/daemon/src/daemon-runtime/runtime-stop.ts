@@ -119,9 +119,11 @@ export class RuntimeStop {
       ...ports.agentProcessManager.activeAgentIds(),
     ])) {
       ports.stops.beginAll([agentId]);
-      ports.inputDrain.close(agentId, new Error("daemon runtime is stopping"));
+      ports.inputDrain.close(agentId, new Error("daemon runtime is stopping"), {
+        forgetMentions: true,
+      });
       ports.messageAttention.clearAgent(agentId, { cancelNotices: true });
-      void ports.mentionDeliveries.cancelAgent(agentId);
+      ports.mentionDeliveries.cancelAgent(agentId);
       ports.agentProcessManager.session(agentId)?.cancelPendingNotices?.();
     }
     ports.mentionDeliveries.cancelAll();

@@ -305,13 +305,15 @@ export class AgentInputDrain {
     }
   }
 
-  close(agentId: string, error: unknown): void {
+  /** Rejects what waits in the queue and closes it. A queued tracked mention is refused, unless
+   * `forgetMentions` says a Stop is ending the Agent: the cloud settles those, so none is reported. */
+  close(agentId: string, error: unknown, { forgetMentions = false } = {}): void {
     this.ports.forgetIntroduced(agentId);
     const queue = this.get(agentId);
     if (!queue) return;
     queue.closed = true;
     for (const item of queue.items.splice(0)) {
-      if (item.kind === "delivery") this.ports.dropMention(item.message);
+      if (item.kind === "delivery" && !forgetMentions) this.ports.dropMention(item.message);
       item.completion.reject(error);
     }
     if (!queue.drain) this.#delete(agentId);

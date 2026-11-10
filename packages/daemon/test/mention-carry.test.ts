@@ -13,6 +13,7 @@ const AGENT = "agent-a";
 function subject(options: { process?: object; busy?: boolean } = {}) {
   const state = {
     process: options.process as object | undefined,
+    busy: options.busy === true,
     remembered: { launchId: "l1", sessionId: "s1" },
     acks: [] as TrackedMentionDelivery[],
     terminals: [] as string[],
@@ -25,7 +26,7 @@ function subject(options: { process?: object; busy?: boolean } = {}) {
     consumed: () => false,
     told: () => false,
     announce: async () => "told",
-    busy: () => options.busy === true,
+    busy: () => state.busy,
     blocked: () => undefined,
     process: () => state.process,
     relaunching: () => false,
@@ -156,10 +157,30 @@ test("a mention settled while carried is no longer carried", async () => {
   await tracker.deliver(taken!);
 
   expect(carry.hasCarried(AGENT)).toBe(false);
+});
+
+test("an Agent's cancellation forgets what it had not settled, and reports nothing", async () => {
+  const { tracker, carry, state } = subject({ process: {}, busy: true });
+  await tracker.deliver(mention(1));
   carry.hold(mention(2));
-  await tracker.cancelAgent(AGENT);
+  carry.hold(mention(3, { agentId: "agent-b" }));
+
+  tracker.cancelAgent(AGENT);
   expect(carry.hasCarried(AGENT)).toBe(false);
   expect(carry.takeCarried(AGENT)).toEqual([]);
+  expect(carry.hasCarried("agent-b")).toBe(true);
+
+  // The turn that was told it ends: nothing is left to settle.
+  tracker.settleTurnEnd(AGENT);
+  await Promise.resolve();
+  expect(state.terminals).toEqual([]);
+  expect(state.acks).toEqual([]);
+
+  // The server issues it again for a later launch: it is told afresh, once.
+  state.remembered = { launchId: "l2", sessionId: "s2" };
+  state.busy = false;
+  await tracker.deliver(mention(1, { launchId: "l2", sessionId: "s2" }));
+  expect(state.acks.map((ack) => ack.mentionDelivery.launchId)).toEqual(["l2"]);
 });
 
 test("an Agent's cancellation runs the hook its waits registered, once", async () => {
@@ -168,10 +189,21 @@ test("an Agent's cancellation runs the hook its waits registered, once", async (
   tracker.whenCancelled(AGENT, () => cancelled.push(AGENT));
   tracker.whenCancelled("agent-b", () => cancelled.push("agent-b"));
 
-  await tracker.cancelAgent(AGENT);
-  await tracker.cancelAgent(AGENT);
+  tracker.cancelAgent(AGENT);
+  tracker.cancelAgent(AGENT);
   expect(cancelled).toEqual([AGENT]);
 
   tracker.cancelAll();
   expect(cancelled).toEqual([AGENT, "agent-b"]);
+});
+
+test("the daemon stopping forgets every carried mention and reports nothing", () => {
+  const { tracker, carry, state } = subject();
+  carry.hold(mention(1));
+  carry.hold(mention(2, { agentId: "agent-b" }));
+
+  tracker.cancelAll();
+  expect(carry.hasCarried(AGENT)).toBe(false);
+  expect(carry.hasCarried("agent-b")).toBe(false);
+  expect(state.terminals).toEqual([]);
 });

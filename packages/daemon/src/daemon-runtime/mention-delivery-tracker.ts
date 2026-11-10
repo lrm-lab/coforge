@@ -43,7 +43,8 @@ const BLOCKED_CODES: Readonly<Record<MentionDeliveryBlock, MentionDeliveryTermin
  * Agent was idle, told during a turn that has since ended, or already consumed. Otherwise the
  * daemon reports the terminal error that explains why it will not be. State lives in memory
  * only: the server issues a pending envelope again with the same delivery id, and a daemon restart
- * starts over. Nothing is reported when a process exits.
+ * starts over. Nothing is reported when a process exits, when an Agent is stopped or when the daemon
+ * stops.
  */
 export class MentionDeliveryTracker {
   /** Terminal reports already sent, by delivery and envelope: the same issue is refused once, even
@@ -268,11 +269,11 @@ export class MentionDeliveryTracker {
     this.#cancelHooks.set(agentId, hook);
   }
 
-  /** The daemon is stopping: every Agent's waits are cancelled, and no launch is coming for the
-   * mentions kept for one. */
+  /** The daemon is stopping: every Agent's waits are cancelled, and the mentions kept for a launch
+   * are forgotten without a report. */
   cancelAll(): void {
     for (const agentId of this.#cancelHooks.keys()) this.#runCancelHook(agentId);
-    this.carry.refuseAllCarried(MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+    this.carry.forgetAllCarried();
   }
 
   #runCancelHook(agentId: string): void {
@@ -281,17 +282,15 @@ export class MentionDeliveryTracker {
     hook?.();
   }
 
-  /** Explicit Stop cancels received and pending notices; cancellation is never a drain. */
-  async cancelAgent(agentId: string): Promise<void> {
+  /** A Stop ends the Agent's waits and forgets the mentions it had not drained, received, pending
+   * or carried, without a report: the cloud owns what becomes of them (a person's Stop settles
+   * them there; any other stop leaves them pending for the server's re-issue to the next launch).
+   * Cancellation is never a drain. */
+  cancelAgent(agentId: string): void {
     this.#runCancelHook(agentId);
-    const unsettled = this.#entries
-      .all()
-      .filter((tracked) => tracked.message.agentId === agentId && tracked.state !== "drained");
-    await Promise.all(
-      unsettled.map(({ message }) =>
-        this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
-      ),
-    );
+    for (const { message, state } of this.#entries.all())
+      if (message.agentId === agentId && state !== "drained")
+        this.#entries.forget(message.deliveryId);
   }
 
   /** Already told in the current session: pending while that turn runs, drained once idle. */

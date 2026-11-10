@@ -262,7 +262,7 @@ test("a cold start that fails refuses the mention it was to tell, at once", asyn
   }
 });
 
-test("a person's Stop refuses a mention kept while the runtime ends", async () => {
+test("a person's Stop forgets a mention kept while the runtime ends, without a report", async () => {
   const gate = Promise.withResolvers<void>();
   const h = await harness({ resume: "stored-1", disposeGate: gate.promise });
   try {
@@ -275,7 +275,7 @@ test("a person's Stop refuses a mention kept while the runtime ends", async () =
     gate.resolve();
     await stopping;
 
-    expect(h.terminalErrors).toEqual(["DELIVERY_REJECTED"]);
+    expect(h.terminalErrors).toEqual([]);
   } finally {
     gate.resolve();
     await h.runtime.stop();

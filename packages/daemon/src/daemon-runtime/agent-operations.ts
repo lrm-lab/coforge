@@ -192,11 +192,13 @@ export class AgentOperations {
     if (existingStop) return existingStop;
     // Close this Agent's launch gate and local capabilities before the first await.
     ports.stops.beginStop(agentId);
-    ports.inputDrain.close(agentId, new Error(`Agent runtime is stopping: ${agentId}`));
+    ports.inputDrain.close(agentId, new Error(`Agent runtime is stopping: ${agentId}`), {
+      forgetMentions: true,
+    });
     // Invalidate acceptance before disposal: a late native reply cannot acknowledge a cancelled
     // delivery or attach its attention to the replacement session.
     ports.messageAttention.clearAgent(agentId, { cancelNotices: true });
-    void ports.mentionDeliveries.cancelAgent(agentId);
+    ports.mentionDeliveries.cancelAgent(agentId);
     ports.processManager.session(agentId)?.cancelPendingNotices?.();
     const activityLaunch = ports.currentActivityLaunch(agentId);
     activityLaunch?.startup?.dispose();

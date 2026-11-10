@@ -71,20 +71,36 @@ test("a held mention whose wake fails is refused once", async () => {
   }
 });
 
-test("a Stop refuses a held mention once, and the end of the backoff then launches nothing", async () => {
+test("a Stop forgets a held mention without a report, and the end of the backoff launches nothing", async () => {
   backoffEndingIn(300);
+  const { runtime, frames, envelope, deliver, exit, launches } = await harness();
+  try {
+    exit();
+    await deliver(1, envelope(1));
+    await runtime.stopAgent("agent-a");
+
+    await sleep(500);
+    expect(launches()).toBe(1);
+    expect(frames.filter((frame) => frame.kind !== "transition")).toEqual([]);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("the server's re-issue of a mention a Stop forgot is told once by the next launch", async () => {
+  backoffEndingIn(60_000);
   const { runtime, frames, envelope, deliver, exit, launches, frameSent } = await harness();
   try {
     exit();
     await deliver(1, envelope(1));
     await runtime.stopAgent("agent-a");
-    await frameSent((frame) => frame.kind === "terminal");
+    await runtime.startAgent("agent-a", config);
+    await deliver(1, envelope(1));
+    await frameSent((frame) => frame.kind === "ack");
 
-    await sleep(500);
-    expect(launches()).toBe(1);
-    expect(frames.filter((frame) => frame.kind !== "transition")).toEqual([
-      { kind: "terminal", deliveryId: "delivery-1", code: "DELIVERY_REJECTED" },
-    ]);
+    expect(launches()).toBe(2);
+    expect(frames.filter((frame) => frame.kind === "terminal")).toEqual([]);
+    expect(frames.filter((frame) => frame.kind === "ack")).toHaveLength(1);
   } finally {
     await runtime.stop();
   }
@@ -116,7 +132,7 @@ test("an inbox purge refuses a held mention of the purged conversation once", as
   }
 });
 
-test("a Daemon that stops refuses a held mention once", async () => {
+test("a Daemon that stops forgets a held mention without a report", async () => {
   backoffEndingIn(60_000);
   const { runtime, frames, envelope, deliver, exit } = await harness();
   exit();
@@ -124,9 +140,7 @@ test("a Daemon that stops refuses a held mention once", async () => {
 
   await runtime.stop();
 
-  expect(frames.filter((frame) => frame.kind !== "transition")).toEqual([
-    { kind: "terminal", deliveryId: "delivery-1", code: "DELIVERY_REJECTED" },
-  ]);
+  expect(frames.filter((frame) => frame.kind !== "transition")).toEqual([]);
 });
 
 test("a held mention repeated for the same launch is coalesced, not held twice", async () => {
