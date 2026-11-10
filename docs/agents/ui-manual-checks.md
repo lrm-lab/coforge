@@ -21,7 +21,7 @@
 
 - [ ] 普通成员看到只读 Profile，无编辑铅笔和 Actions；有管理权限者看到允许的编辑项与 Actions。头像、名称、状态和 @handle 只在面板头部出现，不在 tab 内重复。
 - [ ] Actions 随运行状态切换 Start/Stop：已停止 Agent 提供 Start；运行中的 Agent 提供对应停止操作。操作可用性与当前权限一致。
-- [ ] 无用量查看权限或不支持 Usage 的运行时只显示普通 Runtime 标签；有权限且支持 Usage 时显示带运行时名称的 Usage 入口，不向其他查看者暴露用量。
+- [ ] 无用量查看权限或不支持 Usage 的运行时只显示普通 Runtime 标签；有权限（该 Computer 的 owner，或 Workspace owner/admin）且支持 Usage 时显示带运行时名称的 Usage 入口，不向普通成员暴露用量。以 Workspace owner/admin（不是 Computer 的 owner）打开他人 Agent 的 Profile：Runtime 标签可打开 Usage 弹出层，所见的用量与 Computer 页面相同，但没有登录/退出与 Reset 等账号按钮；该 Agent 在他人的默认云 Computer 上、或其运行时是他人未公开（Private）的运行时、或该运行时无法启动（Computer 页面显示原因的那种）时，admin 看到的仍是普通 Runtime 标签；运行时设为 Public 后 admin 才能打开 Usage。
 - [ ] 未读取 context、没有 Computer 或已删除 Agent 不提供不可用的 context 卡片；有权限且具备用量/context 数据时可打开用量卡片、健康状态和 context 页脚。
 - [ ] Runtime pill 不塞入 context 数字或单独 context 行：普通、超限及已钳制的数据状态都保持 pill 简洁，详细信息在卡片里看。
 - [ ] 有管理权限且提供运行时编辑入口时显示 Runtime config 铅笔，即使 Agent 尚未绑定 Computer；非管理者或没有编辑入口时不显示。

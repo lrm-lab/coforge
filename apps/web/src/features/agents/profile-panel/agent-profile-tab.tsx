@@ -318,9 +318,9 @@ function AgentProfileTabBody({
           {runtimeConfig && (
             <>
               <FactRow label={m.agent_runtime_field()}>
-                {/* The pill names the runtime only; its card holds the usage (owner only) and the
-              Agent's context. A runtime with neither has no peek: RuntimeUsage would hand back
-              the bare trigger content, not a button. */}
+                {/* The pill names the runtime only; its card holds the usage, for who may manage the
+              runtime, and the Agent's context. A runtime with neither has no peek: RuntimeUsage
+              would hand back the bare trigger content, not a button. */}
                 <FactBadge>
                   {usageComputer ? (
                     <RuntimeUsage

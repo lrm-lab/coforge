@@ -14,10 +14,13 @@ export function defaultCloudComputerHiddenFromViewer(
   );
 }
 
+/** A Computer that has not been removed (`markDeleted` in `host-jobs.server.ts`). */
+export const liveComputerWhere = { deletedAt: null } satisfies Prisma.ComputerWhereInput;
+
 /** Prisma filter for Computers a Workspace member may see on list and search. */
 export function listedWorkspaceComputerWhere(viewerId: string): Prisma.ComputerWhereInput {
   return {
-    deletedAt: null,
+    ...liveComputerWhere,
     OR: [{ ownerId: viewerId }, { kind: "local" }, { kind: "cloud", cloudSlot: "extra" }],
   };
 }

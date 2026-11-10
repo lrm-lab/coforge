@@ -1,5 +1,3 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
-import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
 
 export type ComputerRuntimeRecord = {
@@ -41,6 +39,15 @@ export interface ComputerRuntimeVisibilityRepository {
 
 type RuntimePrincipal = { userId: string; workspaceId: string };
 
+/** Whether a viewer sees a runtime on the Computer page: its owner always, anyone else only once
+ * the owner has made it public. */
+export function runtimeVisibleToViewer(
+  viewerId: string,
+  runtime: { ownerId: string; isPublic: boolean },
+): boolean {
+  return runtime.ownerId === viewerId || runtime.isPublic;
+}
+
 export type RuntimeSelectionCheck =
   | { ok: true }
   | {
@@ -62,7 +69,7 @@ export class ComputerRuntimeVisibility {
   /** The runtimes this person may see, on `computerIds` only when given. */
   async list(principal: RuntimePrincipal, computerIds?: string[]) {
     return (await this.runtimes.listInWorkspace(principal.workspaceId, computerIds)).filter(
-      (runtime) => runtime.ownerId === principal.userId || runtime.isPublic,
+      (runtime) => runtimeVisibleToViewer(principal.userId, runtime),
     );
   }
 
@@ -91,7 +98,7 @@ export class ComputerRuntimeVisibility {
         error: `the configured runtime is not usable on this Computer (${runtime.unavailableCode})`,
       };
     }
-    if (runtime.ownerId !== principal.userId && !runtime.isPublic) {
+    if (!runtimeVisibleToViewer(principal.userId, runtime)) {
       return {
         ok: false,
         code: "RUNTIME_PRIVATE",
@@ -106,17 +113,6 @@ export class ComputerRuntimeVisibility {
   async canSelect(principal: RuntimePrincipal, computerId: string, provider: RuntimeProvider) {
     const check = await this.checkSelection(principal, computerId, provider);
     return check.ok;
-  }
-
-  /** The runtime row itself, only when the current user owns it — so a caller that also needs
-   * its fields (e.g. `version`) never runs a second lookup just to get them. */
-  async ownedRuntime(principal: RuntimePrincipal, computerId: string, provider: RuntimeProvider) {
-    const runtime = await this.runtimes.findInWorkspace(
-      principal.workspaceId,
-      computerId,
-      provider,
-    );
-    return runtime?.ownerId === principal.userId ? runtime : undefined;
   }
 
   async setPublic(principal: RuntimePrincipal, runtimeId: string, isPublic: boolean) {
@@ -137,21 +133,4 @@ export class ComputerRuntimeVisibility {
     }
     return { ...runtime, isPublic };
   }
-}
-
-/** The one runtime an Agent profile's usage popover gate and CLI-version header share: the
- * Agent's own Computer + runtime, only while both read. One lookup answers both. */
-export async function loadAgentOwnedRuntime(
-  db: PrismaClient,
-  workspaceId: string,
-  userId: string,
-  agent: { computer?: { id: string } | null },
-  runtimeConfig: { runtime: RuntimeProvider } | undefined,
-) {
-  if (!agent.computer || !runtimeConfig) return undefined;
-  return new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db)).ownedRuntime(
-    { workspaceId, userId },
-    agent.computer.id,
-    runtimeConfig.runtime,
-  );
 }

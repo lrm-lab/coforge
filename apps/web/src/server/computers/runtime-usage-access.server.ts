@@ -7,18 +7,20 @@ import type {
   UsageResultRecord,
   UsageSnapshot,
 } from "#src/server/centrifugo/usage-cache.server";
-import { defaultCloudComputerHiddenFromViewer } from "./computer-list-visibility.server";
-import type { ComputerRuntimeVisibilityRepository } from "./computer-runtime-visibility.server";
+import {
+  runtimeVisibleToViewer,
+  type ComputerRuntimeVisibilityRepository,
+} from "./computer-runtime-visibility.server";
 import type { Principal, RuntimeAuthAuthorization } from "./runtime-auth.server";
 
 /**
  * Who may read, and ask the Computer to scan, one runtime's account usage: whoever may sign that
  * runtime in or out (`canManage`: the Computer's owner, or an owner or admin of a Workspace the
- * Computer is connected to), and only for a runtime the Computer has reported on a Computer the
- * viewer may see: another member's default cloud Computer is off the Computer list
- * (`computer-list-visibility.server.ts`) and off this too. A plain member gets nothing, not even
- * the cached reading. The usage cache holds only account labels the Computer masked
- * (`usage-snapshot-decode.server.ts` refuses a label with no `*`).
+ * Computer is connected to, never for another member's default cloud Computer, which is off the
+ * Computer list too), and only for a runtime the Computer has reported and the viewer sees on the
+ * Computer page (`runtimeVisibleToViewer`: another member's only once public). A plain member gets
+ * nothing, not even the cached reading. The usage cache holds only account labels the Computer
+ * masked (`usage-snapshot-decode.server.ts` refuses a label with no `*`).
  *
  * The Computer's owner reads the cached reading whole. Anyone else reads only what the popover
  * draws (`drawnReading`): the owner's account details stay the owner's.
@@ -28,16 +30,20 @@ export class RuntimeUsageAccess {
     private readonly dependencies: {
       authorization: RuntimeAuthAuthorization;
       runtimes: Pick<ComputerRuntimeVisibilityRepository, "findInWorkspace">;
-      computers: {
-        find(
-          computerId: string,
-        ): Promise<{ kind: string; cloudSlot: string | null; ownerId: string } | null>;
-      };
       readCache(target: UsageCacheKey): Promise<UsageReadResult>;
       /** Records the pending scan and asks the Computer; returns the scan id. */
       startScan(target: UsageCacheKey): Promise<string>;
     },
   ) {}
+
+  /** What the Agent profile's popover draws of a runtime, decided exactly as `read` and `scan`
+   * decide: its row (the version in the header) when this viewer may read its usage, and whether
+   * the usage itself is offered, which the Computer page withholds from a runtime that cannot
+   * start (`unavailableCode`). Reads and changes nothing else. */
+  async usageOffer(principal: Principal, input: { computerId: string; provider: RuntimeProvider }) {
+    const runtime = (await this.authorized(principal, input))?.runtime;
+    return { runtime, offered: runtime ? !runtime.unavailableCode : false };
+  }
 
   /** Asks the Computer to scan the runtime; the answer arrives through `read`. */
   async scan(principal: Principal, input: { computerId: string; provider: RuntimeProvider }) {
@@ -56,23 +62,33 @@ export class RuntimeUsageAccess {
     principal: Principal,
     input: { computerId: string; provider: RuntimeProvider },
   ) {
+    const authorized = await this.authorized(principal, input);
+    if (!authorized) throw new Error("runtime is not available");
+    return authorized;
+  }
+
+  private async authorized(
+    principal: Principal,
+    input: { computerId: string; provider: RuntimeProvider },
+  ) {
     const target = {
       workspaceId: principal.workspaceId,
       computerId: input.computerId,
       provider: input.provider,
     };
-    const { authorization, runtimes, computers } = this.dependencies;
+    const { authorization, runtimes } = this.dependencies;
     const [allowed, runtime] = await Promise.all([
-      authorization.canManage({ userId: principal.userId, ...target }),
+      authorization.canManage({
+        userId: principal.userId,
+        workspaceId: target.workspaceId,
+        computerId: target.computerId,
+      }),
       runtimes.findInWorkspace(target.workspaceId, target.computerId, target.provider),
     ]);
-    if (!allowed || !runtime) throw new Error("runtime is not available");
-    // The owner sees their own Computer; the page polls this every 100ms during a scan.
-    if (runtime.ownerId !== principal.userId) {
-      const computer = await computers.find(target.computerId);
-      if (!computer || defaultCloudComputerHiddenFromViewer(principal.userId, computer))
-        throw new Error("runtime is not available");
-    }
+    // Visibility is decided on the row already read, so a poll every 100ms costs no second lookup;
+    // `canManage` does the same with a `provider` for the callers that hold no row.
+    if (!allowed || !runtime || !runtimeVisibleToViewer(principal.userId, runtime))
+      return undefined;
     return { target, runtime };
   }
 }

@@ -100,8 +100,9 @@ These rules apply to `src/server/computers/`.
 
 - `runtime-reset-credit.server.ts` spends one Codex rate-limit reset credit on a Computer for the
   usage popover. The server authority is `PrismaRuntimeAuthAuthorization.canManage` (the
-  Computer's owner, or a Workspace owner or admin), the same rule that lets them read and scan the
-  usage that shows the button (`runtime-usage-access.server.ts`).
+  Computer's owner, or a Workspace owner or admin who sees the runtime on the Computer page; never
+  another member's default cloud Computer), the same rule that lets them read and scan the usage
+  that shows the button (`runtime-usage-access.server.ts`).
   - `start` never waits: production closes a request idle for about ten seconds and the Computer
     can take up to about 90, so the page polls `read`. Refusals are values, in this order:
     `forbidden`, `offline`, `needs_upgrade` (the `runtime-usage:reset-credit:v1` lease).
@@ -118,14 +119,27 @@ These rules apply to `src/server/computers/`.
     before the outcome is readable; a page that finds another scan id in the cache scans itself.
     The result RPC also ends any usage scan in flight, with or without a reading, so that scan
     never joins one that began before the spend and reads the old count.
+- `runtime-auth-authorization.server.ts` (`PrismaRuntimeAuthAuthorization.canManage`) is the one
+  rule for managing a runtime: sign-in and sign-out (`runtime-auth.server.ts`), the reset credit,
+  and reading and scanning usage all ask it, and nothing restates it. The Computer's owner, or an
+  owner or admin of a Workspace the Computer is connected to, and never a removed Computer
+  (`liveComputerWhere`, the list's own condition); another member's default cloud Computer is
+  refused to everyone but its owner (`defaultCloudComputerHiddenFromViewer`, the list's rule too),
+  so an admin who holds its id reaches none of them by API either.
+  - A call that names the runtime (`provider`: start of a sign-in, a status re-read, sign-out, the
+    reset credit) also needs the runtime visible to the viewer as the Computer page lists it
+    (`runtimeVisibleToViewer`, which `ComputerRuntimeVisibility.list` uses): the Computer owner's
+    always, an admin another member's only once public. The continuing calls of a login (code,
+    cancel, reads) are asked again with the provider stored on the login, so a runtime made private
+    mid-login ends the admin's login. Usage names no provider: it already reads the runtime row and
+    applies `runtimeVisibleToViewer` to it, which saves a query on a poll every 100 ms.
+  - Whether a runtime can start (`unavailableCode`) is not part of it: the Computer page withholds
+    usage and sign-in from such a runtime, and only the Agent profile's `usageOffer` repeats that.
 - `runtime-usage-access.server.ts` is the gate for reading and scanning one runtime's usage
   (`readUsage` / `scanUsage`): `canManage`, on a runtime the Computer reported. Usage carries the
-  account and plan, so never read the usage cache outside it for a viewer.
-  - Another member's default cloud Computer is refused to everyone but its owner
-    (`defaultCloudComputerHiddenFromViewer`, the Computer list's own rule), though `canManage`
-    still says yes to an admin who holds its id: sign-in and the reset credit
-    (`runtime-auth.server.ts`, `runtime-reset-credit.server.ts`) check `canManage` alone and still
-    reach it by API, though no page offers them.
+  account and plan, so never read the usage cache outside it for a viewer. What offers the usage
+  asks `usageOffer`, never its own rule: the Agent profile's `runtimeUsageVisible` (readable and
+  able to start, as the Computer page) and runtime version come from it (`runtime-usage-composition.server.ts` builds it for both).
   - Only the Computer's owner (the runtime row's `ownerId`) reads the cached reading whole. Anyone
     else gets `drawnReading`: the fields the popover draws, named one by one, so a field a newer
     Computer reports reaches them only once the popover draws it and it is added there. The credit

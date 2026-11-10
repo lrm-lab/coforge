@@ -10,6 +10,7 @@ import {
   type RuntimeAuthLogoutReport,
   type RuntimeAuthLogoutResult,
   type RuntimeAuthProvider,
+  type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 
 import { runtimeAuthChannel } from "#src/features/computers/runtime-auth-realtime";
@@ -25,8 +26,11 @@ import type {
 export type Principal = { userId: string; workspaceId: string };
 
 export interface RuntimeAuthAuthorization {
-  /** The Computer's owner, or an owner or admin of a Workspace the Computer is connected to. */
-  canManage(scope: Scope & { userId: string }): Promise<boolean>;
+  /** The Computer's owner, or an owner or admin of a Workspace the Computer is connected to; not
+   * for another member's default cloud Computer, which only its owner manages. With a `provider`,
+   * the runtime must also be one the viewer sees on the Computer page: the owner's always,
+   * anyone else's once public. */
+  canManage(scope: Scope & { userId: string; provider?: RuntimeProvider }): Promise<boolean>;
 }
 
 /** What a sign-in or sign-out cannot start on: the Computer is away, or too old to take it. */
@@ -108,7 +112,7 @@ export class RuntimeAuth {
       antigravityMethodId?: "oauth-personal" | "oauth-business";
     },
   ): Promise<{ status: "started"; loginId: string } | { status: "busy" | RuntimeAuthUnavailable }> {
-    const scope = await this.authorize(principal, input.computerId);
+    const scope = await this.authorize(principal, input.computerId, input.provider);
     const kiroIdentityCenter = runtimeAuthKiroOptions(input.provider, input.kiroIdentityCenter);
     const unavailable = await this.unavailable(scope, input.provider);
     if (unavailable) return { status: unavailable };
@@ -146,7 +150,7 @@ export class RuntimeAuth {
     principal: Principal,
     input: { computerId: string; provider: RuntimeAuthProvider },
   ): Promise<"requested" | RuntimeAuthUnavailable> {
-    const scope = await this.authorize(principal, input.computerId);
+    const scope = await this.authorize(principal, input.computerId, input.provider);
     const [online, supported] = await Promise.all([
       this.computerStatus.get(scope),
       this.capability.supportsStatusRead(scope.workspaceId, scope.computerId),
@@ -166,8 +170,7 @@ export class RuntimeAuth {
     principal: Principal,
     input: { computerId: string; loginId: string; code: string },
   ): Promise<"sent" | "invalid_code" | "not_available"> {
-    const scope = await this.authorize(principal, input.computerId);
-    const login = await this.ownLogin(scope, principal, input.loginId);
+    const { scope, login } = await this.authorizeOwnLogin(principal, input);
     if (!login || login.result) return "not_available";
     // The same rule as the daemon's: a pasted code is one run of characters, whitespace is not part.
     const code = input.code.replace(/\s/gu, "");
@@ -184,8 +187,7 @@ export class RuntimeAuth {
     principal: Principal,
     input: { computerId: string; loginId: string },
   ): Promise<"sent" | "not_available"> {
-    const scope = await this.authorize(principal, input.computerId);
-    const login = await this.ownLogin(scope, principal, input.loginId);
+    const { scope, login } = await this.authorizeOwnLogin(principal, input);
     if (!login || login.result) return "not_available";
     try {
       await this.publishIntent(scope, { kind: "login_cancel", loginId: input.loginId });
@@ -200,8 +202,7 @@ export class RuntimeAuth {
     principal: Principal,
     input: { computerId: string; loginId: string },
   ): Promise<RuntimeAuthLoginView | undefined> {
-    const scope = await this.authorize(principal, input.computerId);
-    const login = await this.ownLogin(scope, principal, input.loginId);
+    const { login } = await this.authorizeOwnLogin(principal, input);
     return login && loginView(login);
   }
 
@@ -210,7 +211,7 @@ export class RuntimeAuth {
     principal: Principal,
     input: { computerId: string; provider: RuntimeAuthProvider; requestId: string },
   ): Promise<RuntimeAuthLogoutView | { status: RuntimeAuthUnavailable }> {
-    const scope = await this.authorize(principal, input.computerId);
+    const scope = await this.authorize(principal, input.computerId, input.provider);
     const existing = await this.store.readLogout(scope, input.requestId);
     if (existing) return this.ownLogoutView(principal, existing);
     const unavailable = await this.unavailable(scope, input.provider);
@@ -240,8 +241,10 @@ export class RuntimeAuth {
     principal: Principal,
     input: { computerId: string; requestId: string },
   ): Promise<RuntimeAuthLogoutView | undefined> {
-    const scope = await this.authorize(principal, input.computerId);
+    const scope = { workspaceId: principal.workspaceId, computerId: input.computerId };
     const record = await this.store.readLogout(scope, input.requestId);
+    // The runtime the request signed out, as it stands now: the owner may have made it private.
+    await this.authorize(principal, input.computerId, record?.provider);
     return record && this.ownLogoutView(principal, record);
   }
 
@@ -282,9 +285,27 @@ export class RuntimeAuth {
     return true;
   }
 
-  private async authorize(principal: Principal, computerId: string): Promise<Scope> {
+  /** The login's starter picking it up again (the code, the cancel, the read): authorized again,
+   * for the runtime it was started on as it stands now. A login that is not theirs is not found,
+   * and still needs the Computer. */
+  private async authorizeOwnLogin(
+    principal: Principal,
+    input: { computerId: string; loginId: string },
+  ) {
+    const scope = { workspaceId: principal.workspaceId, computerId: input.computerId };
+    const login = await this.ownLogin(scope, principal, input.loginId);
+    await this.authorize(principal, input.computerId, login?.provider);
+    return { scope, login };
+  }
+
+  /** `provider` when the call names a runtime. */
+  private async authorize(
+    principal: Principal,
+    computerId: string,
+    provider?: RuntimeProvider,
+  ): Promise<Scope> {
     const scope = { workspaceId: principal.workspaceId, computerId };
-    if (!(await this.authorization.canManage({ ...scope, userId: principal.userId })))
+    if (!(await this.authorization.canManage({ ...scope, userId: principal.userId, provider })))
       throw new Error("Computer is not available");
     return scope;
   }

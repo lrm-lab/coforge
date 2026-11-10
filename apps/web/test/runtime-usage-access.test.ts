@@ -43,25 +43,32 @@ function fullReading(status: "available" | "unsupported" = "available"): UsageRe
 
 type Connection = { ownerId: string; role: string | undefined } | undefined;
 
-/** The real who-may-manage rule over a Computer connection row, played the way
- * `runtime-auth-authorization.test.ts` plays it, with the usage cache and the scan publisher
- * recorded. */
+/** The real who-may-manage rule (hidden default cloud Computers included) over a Computer
+ * connection row, played the way `runtime-auth-authorization.test.ts` plays it, with the usage
+ * cache and the scan publisher recorded. */
 function access(
   connection: Connection,
   options: {
     runtimeInstalled?: boolean;
     cached?: UsageReadResult;
     computer?: { kind: string; cloudSlot: string | null };
+    /** The runtime row's `isPublic`; public by default. */
+    isPublic?: boolean;
+    unavailableCode?: string | null;
   } = {},
 ) {
   const calls: string[] = [];
-  const computerLookups = { count: 0 };
   const usage = new RuntimeUsageAccess({
     authorization: new PrismaRuntimeAuthAuthorization({
       workspaceComputer: {
         findFirst: async () =>
           connection && {
-            computer: { ownerId: connection.ownerId },
+            computer: {
+              kind: "local",
+              cloudSlot: null,
+              ...options.computer,
+              ownerId: connection.ownerId,
+            },
             workspace: { members: connection.role ? [{ role: connection.role }] : [] },
           },
       },
@@ -70,18 +77,11 @@ function access(
       findInWorkspace: async () =>
         options.runtimeInstalled === false
           ? undefined
-          : ({ ownerId: connection?.ownerId ?? "" } as never),
-    },
-    computers: {
-      find: async () => {
-        computerLookups.count += 1;
-        return {
-          kind: "local",
-          cloudSlot: null,
-          ...options.computer,
-          ownerId: connection?.ownerId ?? "",
-        };
-      },
+          : ({
+              ownerId: connection?.ownerId ?? "",
+              isPublic: options.isPublic ?? true,
+              unavailableCode: options.unavailableCode ?? null,
+            } as never),
     },
     readCache: async () => {
       calls.push("read");
@@ -92,7 +92,7 @@ function access(
       return "scan-1";
     },
   });
-  return { usage, calls, computerLookups };
+  return { usage, calls };
 }
 
 const computerOwner = { ownerId: "u", role: "member" };
@@ -107,15 +107,6 @@ test("the Computer's owner, and a Workspace owner or admin, read and scan a runt
     expect(await usage.scan(principal, scope)).toEqual({ scanId: "scan-1", status: "pending" });
     expect(calls).toEqual(["read", "scan"]);
   }
-});
-
-test("only a viewer who is not the owner costs a Computer lookup, since a poll reads every 100ms", async () => {
-  const owner = access(computerOwner);
-  await owner.usage.read(principal, scope);
-  expect(owner.computerLookups.count).toBe(0);
-  const admin = access(workspaceAdmin);
-  await admin.usage.read(principal, scope);
-  expect(admin.computerLookups.count).toBe(1);
 });
 
 test("a plain Workspace member neither reads nor scans, and reaches neither the cache nor the Computer", async () => {
@@ -236,4 +227,68 @@ test("a scan hands back only its id and no reading, whoever asks", async () => {
     const result = await access(connection, { cached: fullReading() }).usage.scan(principal, scope);
     expect(result).toEqual({ scanId: "scan-1", status: "pending" });
   }
+});
+
+/** The runtime row the profile is handed, `undefined` for who may not read its usage. */
+async function runtimeOf(usage: ReturnType<typeof access>["usage"]) {
+  return (await usage.usageOffer(principal, scope)).runtime;
+}
+
+test("the runtime row is handed only to who may read its usage, and never thrown for", async () => {
+  for (const connection of [computerOwner, workspaceAdmin, workspaceOwner]) {
+    expect(await runtimeOf(access(connection).usage)).toMatchObject({
+      ownerId: connection.ownerId,
+    });
+  }
+  const { usage, calls } = access(plainMember);
+  expect(await runtimeOf(usage)).toBeUndefined();
+  for (const connection of [undefined, { ownerId: "x", role: "weird" }]) {
+    expect(await runtimeOf(access(connection).usage)).toBeUndefined();
+  }
+  expect(
+    await runtimeOf(access(workspaceAdmin, { runtimeInstalled: false }).usage),
+  ).toBeUndefined();
+  // Asking reads neither the cache nor starts a scan.
+  expect(calls).toEqual([]);
+});
+
+test("another member's default cloud Computer hands an admin no runtime row, its owner and other Computers do", async () => {
+  const defaultCloud = { kind: "cloud", cloudSlot: "default" };
+  for (const connection of [workspaceAdmin, workspaceOwner]) {
+    expect(await runtimeOf(access(connection, { computer: defaultCloud }).usage)).toBeUndefined();
+  }
+  expect(await runtimeOf(access(computerOwner, { computer: defaultCloud }).usage)).toBeDefined();
+  expect(
+    await runtimeOf(
+      access(workspaceAdmin, { computer: { kind: "cloud", cloudSlot: "extra" } }).usage,
+    ),
+  ).toBeDefined();
+});
+
+test("another member's private runtime is as hidden from usage as from the Computer page; its owner still reads it", async () => {
+  for (const connection of [workspaceAdmin, workspaceOwner]) {
+    const { usage, calls } = access(connection, { isPublic: false });
+    await expect(usage.read(principal, scope)).rejects.toThrow("runtime is not available");
+    await expect(usage.scan(principal, scope)).rejects.toThrow("runtime is not available");
+    expect(await runtimeOf(usage)).toBeUndefined();
+    expect(calls).toEqual([]);
+  }
+  const owner = access(computerOwner, { isPublic: false });
+  expect(await owner.usage.read(principal, scope)).toBe(reading);
+  expect(await runtimeOf(owner.usage)).toBeDefined();
+});
+
+test("the profile offers usage as the Computer page does: not for a runtime that cannot start", async () => {
+  for (const connection of [computerOwner, workspaceAdmin]) {
+    const usable = await access(connection).usage.usageOffer(principal, scope);
+    expect(usable.offered).toBe(true);
+    const unusable = await access(connection, {
+      unavailableCode: "start_failed",
+    }).usage.usageOffer(principal, scope);
+    // The version stays for the popover's header; the usage itself is withheld.
+    expect(unusable.offered).toBe(false);
+    expect(unusable.runtime).toBeDefined();
+  }
+  const refused = await access(plainMember).usage.usageOffer(principal, scope);
+  expect(refused).toEqual({ runtime: undefined, offered: false });
 });

@@ -11,7 +11,7 @@ import {
   readableRuntimeConfig,
 } from "#src/server/agents/agent-runtime-config.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
-import { loadAgentOwnedRuntime } from "#src/server/computers/computer-runtime-visibility.server";
+import { userRuntimeUsage } from "#src/server/computers/runtime-usage-composition.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
 import { humanLabel } from "#src/lib/human-label";
@@ -72,13 +72,23 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
   const canChangeVisibility = live && (ownedByCurrentUser || canManageAgentRole);
   // Best-effort: the Agent profile panel's Computer meta line ("Connected · v0.1.0-dev.35"). Redis
   // unavailability degrades to "unknown" (`undefined`), never a false "offline".
-  const computerOnline = result.computer
-    ? await getComputerStatusCache()
-        .get({ workspaceId, computerId: result.computer.id })
-        .catch(() => undefined)
-    : undefined;
   const runtimeConfig = readableRuntimeConfig(result.runtimeConfig);
-  const ownedRuntime = await loadAgentOwnedRuntime(db, workspaceId, user.id, result, runtimeConfig);
+  const { computer } = result;
+  const [computerOnline, usage] = await Promise.all([
+    computer
+      ? getComputerStatusCache()
+          .get({ workspaceId, computerId: computer.id })
+          .catch(() => undefined)
+      : undefined,
+    // The Agent's own Computer + runtime as the Computer page offers its usage (decided by
+    // `RuntimeUsageAccess`): the usage popover's gate and CLI-version header share this lookup.
+    computer && runtimeConfig
+      ? userRuntimeUsage(db).usageOffer(
+          { userId: user.id, workspaceId },
+          { computerId: computer.id, provider: runtimeConfig.runtime },
+        )
+      : undefined,
+  ]);
   return {
     ...result,
     // The Creator row renders the same identity the rest of the product does (avatar image +
@@ -106,8 +116,8 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
     // `"public"` displays as private, since that is also how the authorization seam treats it.
     visibility: normalizeAgentVisibility(result.visibility),
     canChangeVisibility,
-    runtimeUsageVisible: Boolean(ownedRuntime),
-    runtimeVersion: ownedRuntime?.version,
+    runtimeUsageVisible: usage?.offered ?? false,
+    runtimeVersion: usage?.runtime?.version,
     // Always the same shape (`online` present, possibly `undefined`) whether or not a Computer is
     // assigned, so callers never have to narrow a union between "has computer without online" and
     // "has computer with online".

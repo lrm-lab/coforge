@@ -12,7 +12,9 @@ import { getResetCreditCapabilityLease } from "./reset-credit-capability.server"
 import { RuntimeResetCredit } from "./runtime-reset-credit.server";
 
 /** The `RuntimeResetCredit` the signed-in user's Server Function goes through. */
-export function userRuntimeResetCredit(db: Pick<PrismaClient, "workspaceComputer">) {
+export function userRuntimeResetCredit(
+  db: Pick<PrismaClient, "workspaceComputer" | "computerRuntime">,
+) {
   return new RuntimeResetCredit({
     authorization: new PrismaRuntimeAuthAuthorization(db),
     computerStatus: getComputerStatusCache(),

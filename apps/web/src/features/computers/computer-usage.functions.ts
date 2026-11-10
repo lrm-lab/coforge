@@ -7,32 +7,8 @@ import {
 } from "./computer.schemas";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
-import { getUsageCache } from "#src/server/centrifugo/usage-cache.server";
-import {
-  createCentrifugoServerApi,
-  createUsageScan,
-} from "#src/server/centrifugo/server-api.server";
-import type { PrismaClient } from "#src/generated/prisma/client";
-import { PrismaRuntimeAuthAuthorization } from "#src/server/computers/runtime-auth-authorization.server";
+import { userRuntimeUsage } from "#src/server/computers/runtime-usage-composition.server";
 import { userRuntimeResetCredit } from "#src/server/computers/runtime-reset-credit-composition.server";
-import { RuntimeUsageAccess } from "#src/server/computers/runtime-usage-access.server";
-import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
-
-// The cache and the Centrifugo API are opened on use, so a refused call never reaches them.
-const runtimeUsage = (db: PrismaClient) =>
-  new RuntimeUsageAccess({
-    authorization: new PrismaRuntimeAuthAuthorization(db),
-    runtimes: new PrismaComputerRuntimeRepository(db),
-    computers: {
-      find: (id) =>
-        db.computer.findUnique({
-          where: { id },
-          select: { kind: true, cloudSlot: true, ownerId: true },
-        }),
-    },
-    readCache: (target) => getUsageCache().read(target),
-    startScan: (target) => createUsageScan(createCentrifugoServerApi(), target),
-  });
 
 /** Asks the Computer to scan one runtime's usage; the answer arrives through `readUsage`. Allowed
  * to whoever may sign the runtime in or out (`RuntimeUsageAccess`). */
@@ -40,7 +16,7 @@ export const scanUsage = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(scanUsageInputSchema)
   .handler(({ context, data }) =>
-    runtimeUsage(context.db).scan(
+    userRuntimeUsage(context.db).scan(
       { userId: context.user.id, workspaceId: context.workspaceId },
       data,
     ),
@@ -51,7 +27,7 @@ export const readUsage = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(readUsageInputSchema)
   .handler(({ context, data }) =>
-    runtimeUsage(context.db).read(
+    userRuntimeUsage(context.db).read(
       { userId: context.user.id, workspaceId: context.workspaceId },
       data,
     ),

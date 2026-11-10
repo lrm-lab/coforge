@@ -35,7 +35,7 @@ export class RuntimeResetCredit {
   constructor(
     private readonly dependencies: {
       authorization: {
-        canManage(scope: Scope & { userId: string }): Promise<boolean>;
+        canManage(scope: Scope & { userId: string; provider: RuntimeProvider }): Promise<boolean>;
       };
       computerStatus: { get(scope: Scope): Promise<boolean> };
       /** Whether the Computer's daemon takes the request; an older one is never sent it. */
@@ -60,7 +60,13 @@ export class RuntimeResetCredit {
       throw new Error("invalid reset credit idempotency key");
     const { authorization, computerStatus, capability, results, publish } = this.dependencies;
     const scope = { workspaceId: principal.workspaceId, computerId: input.computerId };
-    if (!(await authorization.canManage({ ...scope, userId: principal.userId })))
+    if (
+      !(await authorization.canManage({
+        ...scope,
+        userId: principal.userId,
+        provider: input.provider,
+      }))
+    )
       return { status: "refused", reason: "forbidden" };
     const [online, supported] = await Promise.all([
       computerStatus.get(scope),
@@ -108,7 +114,13 @@ export class RuntimeResetCredit {
       answer.provider !== input.provider
     )
       return { status: "pending" };
-    if (!(await this.dependencies.authorization.canManage({ ...scope, userId: principal.userId })))
+    if (
+      !(await this.dependencies.authorization.canManage({
+        ...scope,
+        userId: principal.userId,
+        provider: input.provider,
+      }))
+    )
       return { status: "refused", reason: "forbidden" };
     return { status: "settled", outcome: answer.outcome };
   }

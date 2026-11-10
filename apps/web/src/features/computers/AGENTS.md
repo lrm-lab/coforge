@@ -54,9 +54,12 @@ These rules apply to `src/features/computers/`.
 - The reset credit button (Codex only) sits immediately left of Sign Out in the `accountAction`
   cluster of `computer-runtimes.tsx`. `RuntimeUsage` hands `accountAction` the usage snapshot it
   read, so the count (`resetCreditsAvailable`) and the account label come from the popover's own
-  reading. That reading, the usage popover (`showUsage` is `canSignIn`) and the button all follow
-  the server's `canManage`: the Computer's owner and Workspace owners and admins
-  (`server/computers/AGENTS.md`); a plain member sees none of them. Anyone but the Computer's
+  reading. That reading, the usage popover (`showUsage` is `canSignIn`; on the Agent profile
+  `runtimeUsageVisible`, which the server decides through `RuntimeUsageAccess`) and the button all
+  follow the server's `canManage`: the Computer's owner and Workspace owners and admins
+  (`server/computers/AGENTS.md`) over a runtime they see on the page (another member's only once
+  public); a plain member sees none of them. Neither the page nor the profile offers usage for a
+  runtime that cannot start (`unavailableCode`). Anyone but the Computer's
   owner reads only the fields the popover draws, never the credit balance. The dialog is a third
   `AuthDialog` kind, rendered outside the popover with parent-held state; the count and label it
   names are fixed when it opens.
