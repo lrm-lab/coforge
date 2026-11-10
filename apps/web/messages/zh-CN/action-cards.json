@@ -77,5 +77,6 @@
   "action_card_undo": "撤销",
   "action_card_ignore_row": "忽略：{prompt}",
   "action_card_ignored_short": "已忽略",
+  "action_card_ignore_failed": "没能忽略，请重试。",
   "action_card_unknown": "这张卡片需要更新 CoForge 后才能显示。"
 }

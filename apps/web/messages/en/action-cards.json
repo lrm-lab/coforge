@@ -77,5 +77,6 @@
   "action_card_undo": "Undo",
   "action_card_ignore_row": "Ignore: {prompt}",
   "action_card_ignored_short": "Ignored",
+  "action_card_ignore_failed": "Couldn't ignore. Try again.",
   "action_card_unknown": "This card needs a newer version of CoForge to show."
 }

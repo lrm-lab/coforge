@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
@@ -41,12 +41,19 @@ export function WaitingChoiceRow({
 }) {
   const cancel = useServerFn(cancelActionCard);
   const rowRef = useRef<HTMLLIElement>(null);
+  // The timed cancel failed: the row is back, and says so where its time was until the next try.
+  const [failed, setFailed] = useState(false);
   const { ignored, ignore, undo } = useUndoableIgnore(async ({ keepalive }) => {
-    await cancel({
-      data: { messageId: card.messageId },
-      // Sent as the page goes away, the request must outlive it.
-      fetch: keepalive ? (input, init) => fetch(input, { ...init, keepalive: true }) : undefined,
-    });
+    try {
+      await cancel({
+        data: { messageId: card.messageId },
+        // Sent as the page goes away, the request must outlive it.
+        fetch: keepalive ? (input, init) => fetch(input, { ...init, keepalive: true }) : undefined,
+      });
+    } catch (cause) {
+      if (!keepalive) setFailed(true);
+      throw cause;
+    }
     onIgnored();
   });
   const wasIgnored = useRef(false);
@@ -107,15 +114,21 @@ export function WaitingChoiceRow({
             <span className="min-w-0 truncate text-md font-semibold text-primary">
               {card.prompt}
             </span>
-            <RelativeTime
-              value={card.createdAt}
-              plain
-              // Gives way to the Ignore button wherever it shows (hover, focus), and to "Ignored · Undo".
-              className={cn(
-                "ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0",
-                ignored && "invisible",
-              )}
-            />
+            {failed && !ignored ? (
+              <span className="ml-auto shrink-0 pl-2 text-xs text-error-primary transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0">
+                {m.action_card_ignore_failed()}
+              </span>
+            ) : (
+              <RelativeTime
+                value={card.createdAt}
+                plain
+                // Gives way to the Ignore button wherever it shows (hover, focus), and to "Ignored · Undo".
+                className={cn(
+                  "ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0",
+                  ignored && "invisible",
+                )}
+              />
+            )}
           </span>
           <span className="truncate text-sm text-tertiary">
             {place && <>{place} · </>}
@@ -129,7 +142,10 @@ export function WaitingChoiceRow({
         size="sm"
         color="link-gray"
         aria-label={m.action_card_ignore_row({ prompt: card.prompt })}
-        onPress={ignore}
+        onPress={() => {
+          setFailed(false);
+          ignore();
+        }}
         className={cn(
           "absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:hidden",
           ignored && "hidden",
@@ -145,6 +161,10 @@ export function WaitingChoiceRow({
           </Button>
         </span>
       )}
+      {/* Read out as it changes: ignored (with its undo window), or the cancel that failed. */}
+      <span role="status" className="sr-only">
+        {ignored ? m.action_card_ignored_status() : failed ? m.action_card_ignore_failed() : ""}
+      </span>
     </li>
   );
 }
