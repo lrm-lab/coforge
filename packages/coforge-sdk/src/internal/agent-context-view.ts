@@ -251,9 +251,7 @@ function validateAvailability(value: AgentContextViewAvailability): void {
     throw new Error("Missing context view unsupported reason");
   if (
     value.trigger !== undefined &&
-    !new Set(["startup", "message", "server_features", "periodic", "retention"]).has(
-      value.trigger,
-    )
+    !new Set(["startup", "message", "server_features", "periodic", "retention"]).has(value.trigger)
   )
     throw new Error("Invalid context view availability trigger");
 }
