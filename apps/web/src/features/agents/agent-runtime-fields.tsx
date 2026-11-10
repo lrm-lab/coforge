@@ -401,7 +401,9 @@ export function AgentRuntimeFields({
               />
             </div>
           </div>
-          {catalogRefresh.note && <RuntimeRefreshOutcome note={catalogRefresh.note} />}
+          {catalogRefresh.note && (
+            <RuntimeRefreshOutcome note={catalogRefresh.note} runtime={provider} />
+          )}
         </>
       )}
       {piConfigured && customModelActive && (

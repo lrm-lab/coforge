@@ -1,4 +1,8 @@
-import type { RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
+import {
+  type RuntimeProvider,
+  type RuntimeUnavailableCode,
+  RUNTIME_PROVIDER,
+} from "@lrm/coforge-sdk/internal";
 import type { RuntimeCatalogRefreshResult } from "#src/features/computers/runtime-catalog-refresh-poll";
 
 /** What one settled catalog refresh tells the person: how many models the provider offers now, or
@@ -16,4 +20,16 @@ export function runtimeRefreshNote(result: RuntimeCatalogRefreshResult): Runtime
     code: "code" in result ? result.code : undefined,
     diagnostic: "diagnostic" in result ? result.diagnostic : undefined,
   };
+}
+
+/** Which "up to date" sentence the count belongs in. Pi reports only the providers this Computer
+ * holds credentials for, so its count can stay the same while a provider someone expects is simply
+ * not configured; that line says so instead of leaving the gap to look like a failed refresh
+ * (task #13). Every other runtime keeps the plain count. */
+export function refreshLatestNoteKey(
+  runtime: RuntimeProvider | undefined,
+): "agent_form_model_refresh_latest" | "agent_form_model_refresh_latest_pi" {
+  return runtime === RUNTIME_PROVIDER.PI
+    ? "agent_form_model_refresh_latest_pi"
+    : "agent_form_model_refresh_latest";
 }

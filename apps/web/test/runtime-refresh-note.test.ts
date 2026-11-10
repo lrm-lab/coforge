@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { runtimeRefreshNote } from "#src/features/agents/runtime-refresh-note";
+import {
+  refreshLatestNoteKey,
+  runtimeRefreshNote,
+} from "#src/features/agents/runtime-refresh-note";
 
 const catalog = (models: number) => ({
   provider: "pi" as const,
@@ -29,4 +32,9 @@ test("a refresh that never answered is a plain failure, not a silent no-op", () 
     code: undefined,
     diagnostic: undefined,
   });
+});
+
+test("only Pi's latest line says that Pi lists what this Computer is configured for", () => {
+  expect(refreshLatestNoteKey("pi")).toBe("agent_form_model_refresh_latest_pi");
+  expect(refreshLatestNoteKey("codex")).toBe("agent_form_model_refresh_latest");
 });
