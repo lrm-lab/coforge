@@ -141,3 +141,73 @@ test("finds a person by the name they are shown by, never by username, and keeps
     await searchForwardTargets(db, { workspaceId, userId: alice.id, q: "", limit: 2 }),
   ).toHaveLength(2);
 });
+
+let sequence = 1_000;
+/** `times` forwards by `user` into a conversation, at `at` (later ones a second apart). */
+async function forwardInto(user: { id: string }, conversationId: string, times: number, at: Date) {
+  const member = await db.conversationMember.findFirstOrThrow({
+    where: { conversationId, userId: user.id },
+  });
+  for (let index = 0; index < times; index += 1)
+    await db.message.create({
+      data: {
+        workspaceId,
+        conversationId,
+        senderMemberId: member.id,
+        sequence: (sequence += 1),
+        body: "",
+        createdAt: new Date(at.getTime() + index * 1_000),
+        forwards: {
+          create: {
+            position: 0,
+            sourceConversationId: conversationId,
+            sourceSenderName: "Source",
+            sourceSenderHandle: "source",
+            sourceCreatedAt: at,
+            sourceBody: "forwarded",
+          },
+        },
+      },
+    });
+}
+
+test("puts where the viewer forwards most first, and never a place they can no longer reach", async () => {
+  const busy = await channel("busy", [alice, bob]);
+  const quiet = await channel("quiet", [alice, bob]);
+  const secret = await channel("secret", [alice, bob], undefined, "private");
+  const earlier = new Date("2026-01-01T00:00:00Z");
+  const later = new Date("2026-02-01T00:00:00Z");
+  // Busy and the DM with Bob tie on three; the DM's are later. Quiet has one of Alice's, and many
+  // of Bob's, which are his, not hers.
+  await forwardInto(alice, busy.id, 3, earlier);
+  await forwardInto(alice, dmWithBob, 3, later);
+  await forwardInto(alice, quiet.id, 1, earlier);
+  await forwardInto(bob, quiet.id, 10, later);
+  // The most of all went to a private channel Alice has since left.
+  await forwardInto(alice, secret.id, 5, later);
+  await db.conversationMember.updateMany({
+    where: { conversationId: secret.id, userId: alice.id },
+    data: { leftAt: new Date() },
+  });
+
+  const all = await searchForwardTargets(db, { workspaceId, userId: alice.id, q: "", limit: 50 });
+  const key = (target: (typeof all)[number]) =>
+    target.kind === "channel"
+      ? target.conversationId
+      : target.kind === "person"
+        ? target.userId
+        : target.agentId;
+  expect(all.slice(0, 3).map(key)).toEqual([bob.id, busy.id, quiet.id]);
+  // Forwarded to, but no longer theirs to reach: not listed at all.
+  expect(
+    all.some((target) => target.kind === "channel" && target.conversationId === secret.id),
+  ).toBe(false);
+  // A search keeps the order among what it matches.
+  const found = await searchForwardTargets(db, {
+    workspaceId,
+    userId: alice.id,
+    q: "u",
+    limit: 50,
+  });
+  expect(found.slice(0, 2).map(key)).toEqual([busy.id, quiet.id]);
+});
