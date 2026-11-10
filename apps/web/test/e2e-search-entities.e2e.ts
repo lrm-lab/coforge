@@ -82,6 +82,14 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
       `JSON.stringify([...document.querySelectorAll('[role="dialog"] [data-search-entity]')].map((row) => row.dataset.searchEntity)) === ${JSON.stringify(JSON.stringify(expected))}`,
     );
   }
+  /** Searches and waits until `entity` is listed under the `group` heading, whatever else the
+   * shared database adds to the results. */
+  async function searchFinds(query: string, group: string, entity: string) {
+    await browser("open", `${origin}${workspacePath}/search?q=${encodeURIComponent(query)}`);
+    await waitFor(
+      `document.querySelector('[role="dialog"] section[aria-label="${group}"] [data-search-entity="${entity}"]') !== null`,
+    );
+  }
   /** Opens a result by clicking its row, which closes the dialog. */
   async function openResult(entity: string) {
     await browser("click", `[role="dialog"] [data-search-entity="${entity}"]`);
@@ -194,8 +202,9 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
     await searchFor("#lighthouse", [`channel:${channelId}`]);
     await searchFor("@lighthouse", [`agent:${agentId}`, `agent:${othersAgentId}`]);
 
-    // A Computer matches by its name.
-    await searchFor("mac studio", [`computer:${computer.id}`]);
+    // A Computer matches by its name. Other e2es leave Computers of the same name behind, so
+    // only this one's place in the Computers group is pinned.
+    await searchFinds("mac studio", "Computers", `computer:${computer.id}`);
 
     // Opening closes the dialog and goes there: a channel opens itself, the viewer's own Agent
     // their DM with it, a Computer its page. Each opens search afresh, as the dialog keeps
@@ -213,7 +222,7 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
     await waitFor(
       `location.pathname === "${workspacePath}/members" && new URLSearchParams(location.search).get("profile") === "agent:${othersAgentId}"`,
     );
-    await searchFor("mac studio", [`computer:${computer.id}`]);
+    await searchFinds("mac studio", "Computers", `computer:${computer.id}`);
     await openResult(`computer:${computer.id}`);
     await waitFor(`location.pathname === "${workspacePath}/computer/${computer.id}"`);
   } finally {
