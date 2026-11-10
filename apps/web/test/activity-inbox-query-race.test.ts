@@ -121,6 +121,29 @@ test("a message makes preloaded Activity filters stale until their own page is r
   queryClient.clear();
 });
 
+test("a pinned conversation Done hides from the Pinned section while the write is in flight", () => {
+  const pinnedDone = { ...item("conversation:pinned"), pinned: true };
+  const data = {
+    pages: [
+      {
+        items: [],
+        pinned: [pinnedDone],
+        unreadItemCount: 1,
+        unreadMentionItemCount: 1,
+        activeItemCount: 1,
+      },
+    ],
+    pageParams: [0],
+  };
+  const pending = startActivityDone(new Map(), pinnedDone);
+
+  // The row is shown once, in the Pinned section; hiding it hides it there, and the header's
+  // "N active" counts it out with the row.
+  expect(
+    projectPendingActivityCompletions(data as never, pendingActivityDoneItems(pending)).pages[0],
+  ).toMatchObject({ pinned: [], unreadItemCount: 0, activeItemCount: 0 });
+});
+
 test("kept filter data is reprojected when a Done starts", () => {
   const completed = item("thread:placeholder");
   const keptData = activityData([completed]);

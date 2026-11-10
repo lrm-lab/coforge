@@ -6,17 +6,24 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./helpers/browser-e2e";
 import {
+  activeCount,
   inPane,
   openParam,
   pinnedItems,
-  rowItems,
   seedChannel,
 } from "./helpers/activity-inbox-e2e";
 
 /**
+ * The rows below Pinned: since the Activity redesign (task #30) they group by day, so this test's
+ * rows (all seeded today) sit under the "Today" heading's section, not an ol named "Activity".
+ */
+const rowItems = JSON.stringify('ol[aria-label="Today"] > li');
+
+/**
  * The Activity page's Pinned section in a real browser: a pinned channel lists under Pinned,
- * before All conversations, and stays there after Done; it opens beside the list. Split from
- * `e2e-activity-inbox.e2e.ts`, whose setup it shares (`helpers/activity-inbox-e2e.ts`).
+ * before the day's rows, Done takes it out like every row, and something new lists it again; it
+ * opens beside the list. Split from `e2e-activity-inbox.e2e.ts`, whose setup it shares
+ * (`helpers/activity-inbox-e2e.ts`).
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Screenshots are written
  * under `.amp/e2e/activity-inbox/` (`pinned.png`).
@@ -24,7 +31,7 @@ import {
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
 
-test("a pinned channel lists under Pinned, before All conversations, and stays there after Done", async () => {
+test("a pinned channel lists under Pinned, before the day's rows; Done takes it out; new activity lists it again", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-pinned-${process.pid}`;
   const { browser, evaluate } = browserSession(browserPath, session);
@@ -75,16 +82,20 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     expect(threadRow).toContain("E2E pinned root");
     expect(threadRow).toContain("#e2e-activity-pinned · ");
     expect(threadRow).not.toContain("E2E pinned hello");
-    // Pinned, its rows, then All conversations and the rest of the list.
+    // Pinned, its rows, then the day's heading and its rows: since the Activity redesign (task
+    // #30) the rest of the list groups by day, and every seeded message falls on "Today".
     expect(
       await evaluate<boolean>(`(() => {
         const pinned = document.querySelector('ol[aria-label="Pinned"]');
-        const [pinnedHeading, allHeading] = pinned.parentElement.querySelectorAll(":scope > h2");
-        if (pinnedHeading?.textContent.trim() !== "Pinned") return false;
-        if (allHeading?.textContent.trim() !== "All conversations") return false;
-        const all = document.querySelector('ol[aria-label="Activity"]');
+        const pinnedHeading = [...pinned.parentElement.querySelectorAll(":scope > h2")]
+          .find((heading) => heading.textContent.trim() === "Pinned");
+        if (!pinnedHeading) return false;
+        const today = document.querySelector('ol[aria-label="Today"]');
+        if (!today) return false;
+        const dayHeading = today.previousElementSibling;
+        if (dayHeading?.tagName !== "H2" || dayHeading.textContent.trim() !== "Today") return false;
         const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-        return follows(pinnedHeading, pinned) && follows(pinned, allHeading) && follows(allHeading, all);
+        return follows(pinnedHeading, pinned) && follows(pinned, dayHeading) && follows(dayHeading, today);
       })()`),
     ).toBe(true);
     await browser("screenshot", join(artifacts, "pinned.png"));
@@ -102,24 +113,46 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
     ).toBe(true);
     await browser("find", "role", "tab", "click", "--name", "All");
     await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1`);
+    expect(await evaluate<number>(activeCount)).toBe(2);
 
-    // Done keeps a pinned row under Pinned. Done reads the row too, and Pinned keeps its badge
-    // until the refetch, so the badge leaving means the server took the Done.
+    // Done takes the pinned row out like every row (Raft's Activity rule): the projection hides
+    // it at once, and the refetch's page no longer lists it, so the Pinned section goes away.
     await evaluate(`(() => {
       const row = [...document.querySelectorAll(${pinnedItems})].find((item) =>
         item.textContent.includes("E2E pinned hello"));
       row.querySelector('[aria-label="Mark as done"]').click();
       return true;
     })()`);
+    await browser("wait", "--fn", `document.querySelector('ol[aria-label="Pinned"]') === null`);
+    expect(await evaluate<boolean>(`!document.querySelector('[role="alert"]')`)).toBe(true);
+    expect(await evaluate<number>(activeCount)).toBe(1);
+    await browser("reload");
     await browser(
       "wait",
       "--fn",
-      `${rowsIn(pinnedItems)}.length === 1 && !${rowsIn(pinnedItems)}[0].includes("1 new")`,
+      `document.querySelector('ol[aria-label="Pinned"]') === null && ${pageHydrated}`,
     );
-    expect(await evaluate<boolean>(`!document.querySelector('[role="alert"]')`)).toBe(true);
+    expect(await evaluate<string[]>(rowsIn(pinnedItems))).toEqual([]);
+    expect(await evaluate<number>(activeCount)).toBe(1);
+
+    // Something new in the conversation lists it again under Pinned; the header's count follows.
+    const peerMember = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channelId, userId: seededUuid("e2e-activity-inbox:peer") },
+    });
+    await db.message.create({
+      data: {
+        id: seededUuid("e2e-activity-inbox:pinned-again"),
+        body: "E2E pinned again",
+        senderMemberId: peerMember.id,
+        conversationId: channelId,
+        workspaceId,
+        sequence: 4,
+      },
+    });
     await browser("reload");
     await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1 && ${pageHydrated}`);
-    expect((await evaluate<string[]>(rowsIn(pinnedItems)))[0]).toContain("E2E pinned hello");
+    expect((await evaluate<string[]>(rowsIn(pinnedItems)))[0]).toContain("E2E pinned again");
+    expect(await evaluate<number>(activeCount)).toBe(2);
     expect(await evaluate<string[]>(rowsIn(rowItems))).toEqual([
       expect.stringContaining("E2E pinned root"),
     ]);

@@ -81,7 +81,7 @@ export type ActivityCompletionItem = Pick<
 type ActivityCompletionPage<Item extends ActivityCompletionItem = ActivityCompletionItem> = Pick<
   ActivityInboxPage,
   "unreadItemCount" | "unreadMentionItemCount" | "activeItemCount"
-> & { items: Item[] };
+> & { items: Item[]; pinned?: Item[] };
 
 /** Cancels list reads that predate a Done action. A pending projection below also fences reads
  * started later, while another Done action settles or realtime invalidates the list. */
@@ -92,7 +92,9 @@ export async function cancelActivityInboxListReads(
   await queryClient.cancelQueries({ queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId] });
 }
 
-/** Hides every pending Done item from fetched data until its write and canonical refresh settle. */
+/** Hides every pending Done item from fetched data until its write and canonical refresh settle.
+ * A pinned conversation hides from the Pinned section, where its row alone shows, and counts out
+ * of "N active" with the row. */
 export function projectPendingActivityCompletions<
   Item extends ActivityCompletionItem,
   Page extends ActivityCompletionPage<Item>,
@@ -111,12 +113,13 @@ function withoutItem<
     pages: data.pages.map((page) => ({
       ...page,
       items: page.items.filter((entry) => entry.key !== item.key),
+      ...(page.pinned ? { pinned: page.pinned.filter((entry) => entry.key !== item.key) } : {}),
       unreadItemCount: Math.max(0, page.unreadItemCount - (item.unreadCount > 0 ? 1 : 0)),
       unreadMentionItemCount: Math.max(
         0,
         page.unreadMentionItemCount - (item.unreadMention ? 1 : 0),
       ),
-      activeItemCount: Math.max(0, page.activeItemCount - (item.pinned ? 0 : 1)),
+      activeItemCount: Math.max(0, page.activeItemCount - 1),
     })),
   };
 }

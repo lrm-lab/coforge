@@ -47,7 +47,10 @@ import { announceActivityAttention, navHasUnread } from "./activity-attention.se
  * outside that channel, until they mark it Done. A message between members stores no mentions and
  * notifies nobody outside the DM, so a DM between members only ever lists as itself or a thread.
  * The All view lists the viewer's pinned conversations (the Chat sidebar's Pinned) apart, in pin
- * order and whatever their Done, and leaves their conversation items out of its list.
+ * order, and leaves their conversation items out of its list. They list by the same
+ * activity-past-Done rule as every row (Raft's Activity, docs.raft.build/features/messaging/
+ * activity: Done takes a row out until something new arrives), so a Done pin leaves with the
+ * rest and returns when the conversation has something new, the pin itself untouched.
  *
  * Unread is the Chat sidebar's rule (`HUMAN_UNREAD_BASE_SQL`), so the two surfaces agree. A
  * conversation item covers top-level messages only; a thread item covers its replies and keeps its
@@ -146,7 +149,8 @@ export class ActivityInbox {
       items,
       /**
        * The viewer's pinned conversations in their pin order, on the All view's first page only
-       * (empty otherwise): listed whatever their Done boundary, with the item's usual fields.
+       * (empty otherwise), listed by the same activity-past-Done rule as every row, with the
+       * item's usual fields.
        */
       pinned,
       /** How many items have something unread, whatever the filter: the Unread tab's count. */
@@ -155,7 +159,7 @@ export class ActivityInbox {
       unreadMentionItemCount: counts.unreadMentionItemCount,
       /**
        * How many items the All view lists, pinned conversations included, whatever the filter:
-       * the header's "N active".
+       * the header's "N active". Listed rows only: a Done pin counts out with its row.
        */
       activeItemCount: counts.activeItemCount,
       /** Where the next page starts, or null on the last page. */
