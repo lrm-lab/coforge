@@ -138,7 +138,7 @@ test("the asked person answers a choice card in its own last row", async () => {
 
     // Without that row, the asked person is pointed at the chat: the hint puts the caret in the
     // composer, and the card still waits. Someone else's card never shows the hint.
-    const hint = `${card(closed)} > div > button`;
+    const hint = `${card(closed)} [data-chat-hint]`;
     expect(await evaluate<boolean>(`document.querySelector('${input(closed)}') === null`)).toBe(
       true,
     );
@@ -146,7 +146,9 @@ test("the asked person answers a choice card in its own last row", async () => {
       "or answer in the chat below",
     );
     expect(
-      await evaluate<boolean>(`document.querySelector('${card(others)} > div > button') === null`),
+      await evaluate<boolean>(
+        `document.querySelector('${card(others)} [data-chat-hint]') === null`,
+      ),
     ).toBe(true);
     // Four cards overflow the pane; the last one's hint starts under the composer.
     await browser("eval", `document.querySelector('${hint}').scrollIntoView({ block: "center" })`);
