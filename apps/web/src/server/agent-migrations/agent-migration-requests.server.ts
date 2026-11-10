@@ -187,7 +187,7 @@ export class AgentMigrationRequests {
       throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "agent-migration-unavailable" });
     // Before anything stops: an old daemon on either side would ignore the move, leaving the
     // Agent stopped until its lease ran out. This is the only check: the dialog lists every
-    // Computer, as Raft does, and says what this refusal names.
+    // Computer, as the update note specifies, and says what this refusal names.
     const source = directPlacement
       ? null
       : await this.#agentComputerReadiness(principal.workspaceId, input.agentId);
@@ -206,7 +206,7 @@ export class AgentMigrationRequests {
       input.agentId,
       input.targetComputerId,
     );
-    // Raft checks only whether the target can run the selected runtime; the selection is passed
+    // The update note checks only whether the target can run the selected runtime; the selection is passed
     // with `requireModel: false`, so no model catalog can stop a move or hide a later refusal.
     if (runtimeRefusal) {
       // A runtime not reported yet may be what a rescan in flight is about to report.
