@@ -32,7 +32,7 @@
   不再按暂存重复计数。没有待读时走普通启动输入。
 - **tracked @mention 不重复告知**：结束 runtime 时，未结算的 tracked @mention 不再交还 server，而是
   由 `mention-carry.ts` 留给下一次 launch（进程退出后才留；runtime 不退出则原样不动）。冷启动时，turn 内
-  已告知但还没 drain 的也一并留下，新 session 由 launch 的输入逐条单独告知一次（不经恢复通知），并以最新
+  已告知但还没 drain 的也一并留下，新 session 由 launch 与排队的投递一起在同一条通知里按投递 id 告知一次（不经恢复通知），并以最新
   envelope ACK；已 drain 的照常计入 `unreadSummary`。留下的 mention 若已被 `check()` 的待读计数统计，
   就从该 target 的计数里扣掉（按投递 id 精确，不依赖待读窗口），避免新 session 被同一条告知两次。
   `notice-undelivered` 的 mention 由那条通知的重发告知，同样扣掉。

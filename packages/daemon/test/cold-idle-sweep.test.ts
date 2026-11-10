@@ -20,6 +20,7 @@ const idleFacts: AgentIdleFacts = {
   working: false,
   deliveriesQueued: false,
   inputsQueued: false,
+  trackedMentionOpen: false,
   openToolCall: false,
   backgroundTasks: 0,
   launching: false,
@@ -44,6 +45,7 @@ test("an Agent is idle only when every guard of the daemon's own state holds", (
     [{ working: true }, "working"],
     [{ deliveriesQueued: true }, "queued_delivery"],
     [{ inputsQueued: true }, "queued_input"],
+    [{ trackedMentionOpen: true }, "tracked_mention"],
     [{ openToolCall: true }, "open_tool_call"],
     [{ backgroundTasks: 2 }, "background_tasks"],
   ];

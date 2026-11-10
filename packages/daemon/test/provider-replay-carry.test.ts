@@ -244,18 +244,19 @@ test("a notice that settles after the new launch is registered leaves its mentio
   }
 });
 
-test("a cold start that fails refuses the mention it was to tell, at once", async () => {
+test("a cold start that fails leaves the mention pending, and the launch after its cooldown tells it once", async () => {
   const h = await harness({ resume: "stored-1", failSessions: [2] });
   const { open, telling } = await mentionInFlight(h);
   try {
     h.failTurn(h.sessions[0]!);
-    await h.until(() => h.terminalErrors.length > 0);
     open();
     await telling;
+    await h.until(() => h.sessions.length === 2 && inboxNotices(h.sessions[1]!.notices).length > 0);
 
-    // No launch is coming for it: rejected, not left waiting for the next Start.
-    expect(h.terminalErrors).toEqual(["DELIVERY_REJECTED"]);
-    expect(mentionAcks(h, "delivery-2")).toEqual([]);
+    // Nothing is refused: no delivery started that launch, so no delivery is the one to reject.
+    expect(h.terminalErrors).toEqual([]);
+    expect(inboxNotices(h.sessions[1]!.notices)).toHaveLength(1);
+    await endTurn(h, 1, "delivery-2");
   } finally {
     open();
     await h.runtime.stop();

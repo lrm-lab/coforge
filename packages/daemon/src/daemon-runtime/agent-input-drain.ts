@@ -37,8 +37,14 @@ export type AgentInputDrainPorts = Readonly<{
   publishStartupError(agentId: string, launch: ActivityLaunch, message: string): void;
   forgetIntroduced(agentId: string): void;
   dropMention(message: AgentMessageDelivery): void;
-  /** Takes the tracked mentions kept for the Agent's next launch, as delivery inputs to enqueue. */
-  takeCarried(agentId: string): AgentMessageDelivery[];
+  /** Whether tracked mentions are kept for the Agent's next launch. */
+  hasCarried(agentId: string): boolean;
+  /** Tells the tracked mentions kept for the Agent's launch in one notice with the deliveries held
+   * `alongside` them. */
+  tellCarried(agentId: string, alongside: readonly AgentMessageDelivery[]): Promise<void>;
+  /** Presents what the Agent's launch kept: the deliveries held for it and the tracked mentions,
+   * in one notice. */
+  presentKept(agentId: string): Promise<void>;
 }>;
 
 /**
@@ -187,13 +193,21 @@ export class AgentInputDrain {
     return completion;
   }
 
+  /** Tells the mentions kept for the Agent's launch with `held`, the deliveries held for it, in
+   * one notice: how a launch presents what it kept. */
+  tellCarried(agentId: string, held: readonly AgentMessageDelivery[]): Promise<void> {
+    return this.ports.tellCarried(agentId, held);
+  }
+
   ensure(agentId: string): void {
     if (this.ports.runnerHeld() || !this.ports.sessionFor(agentId)) return;
-    // Behind the launch's own input: what an earlier process left for this one.
-    for (const message of this.ports.takeCarried(agentId))
-      void this.enqueue(agentId, (completion) => ({ kind: "delivery", message, completion })).catch(
-        () => {},
-      );
+    // Behind the launch's own input: what an earlier process left for this one. The launch's
+    // recovery pass tells them too when it runs first, and this finds nothing left to tell.
+    if (
+      this.ports.hasCarried(agentId) &&
+      !this.get(agentId)?.items.some((i) => i.kind === "carried")
+    )
+      void this.enqueue(agentId, (completion) => ({ kind: "carried", completion })).catch(() => {});
     const queue = this.get(agentId);
     if (!queue || queue.closed || queue.drain) return;
     queue.drain = this.#drain(agentId, queue).finally(() => {
@@ -231,6 +245,8 @@ export class AgentInputDrain {
             target: item.message.target,
             sequence: item.message.sequence,
           });
+        } else if (item.kind === "carried") {
+          await this.ports.presentKept(agentId);
         } else if (item.kind === "startup") {
           const session = this.ports.sessionFor(agentId);
           const launch = this.ports.launchFor(agentId);

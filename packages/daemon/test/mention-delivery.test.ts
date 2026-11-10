@@ -6,13 +6,7 @@ import type { AgentConsumedSeqState } from "#src/persistence/agent-consumed-seq-
 import { MentionDeliveryTracker } from "#src/daemon-runtime/mention-delivery-tracker";
 import { seedCursor } from "./fixtures/consumed-cursor";
 import { captureDaemonLogs } from "./log-capture";
-import {
-  config,
-  connection,
-  harness,
-  workspaceRoot,
-  type Frame,
-} from "./fixtures/mention-delivery-harness";
+import { config, harness, workspaceRoot, type Frame } from "./fixtures/mention-delivery-harness";
 
 afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
 afterEach(() => jest.useRealTimers());
@@ -361,38 +355,6 @@ test("a mention whose process exits while it is being told is rejected, not left
   }
 });
 
-test("a mention for an Agent whose server Start is still launching is refused as unknown", async () => {
-  const launchGate = Promise.withResolvers<void>();
-  const { runtime, frames, envelope, deliver, launchStarted } = await harness({
-    launchGate: launchGate.promise,
-  });
-  try {
-    await runtime.stopAgent("agent-a");
-    const start = runtime.handleAgentStart({
-      protocolMajor: 1,
-      requestId: "start-2",
-      workspaceId: connection.workspaceId,
-      computerId: connection.computerId,
-      agentId: "agent-a",
-      ...config,
-      controlEpoch: 1,
-      launchId: "launch-2",
-    });
-    await launchStarted;
-    await deliver(1, envelope(1, { launchId: "launch-2" }));
-    expect(frames).toEqual([
-      { kind: "terminal", deliveryId: "delivery-1", code: "IDENTITY_UNKNOWN" },
-    ]);
-
-    launchGate.resolve();
-    await start;
-    // Nothing held it for the Start: the launch that came up is told nothing about it.
-    expect(frames).toHaveLength(1);
-  } finally {
-    await runtime.stop();
-  }
-});
-
 test("a mention a runner hold kept for an Agent whose process exited is refused when the hold lifts", async () => {
   const { runtime, frames, envelope, deliver, exit } = await harness();
   try {
@@ -496,7 +458,7 @@ test("a mention drained as already consumed logs why the Agent was not told", as
   }
 });
 
-test("a mention the Agent already consumed is drained even when its envelope names an older launch", async () => {
+test("a mention the Agent already consumed is refused as drift when its envelope names an older launch", async () => {
   await seed({
     targets: { "#general": { conversationId: "conversation-a", seq: 5 } },
     aliases: {},
@@ -504,18 +466,11 @@ test("a mention the Agent already consumed is drained even when its envelope nam
   });
   const { runtime, frames, notices, envelope, deliver } = await harness();
   try {
-    const mention = envelope(2, { launchId: "launch-before" });
-    await deliver(2, mention);
+    await deliver(2, envelope(2, { launchId: "launch-before" }));
 
     expect(notices).toEqual([]);
     expect(frames).toEqual([
-      {
-        kind: "transition",
-        deliveryId: "delivery-2",
-        stage: "daemon_drained",
-        outcome: "accepted",
-      },
-      { kind: "ack", deliveryId: "delivery-2", mentionDelivery: mention },
+      { kind: "terminal", deliveryId: "delivery-2", code: "IDENTITY_DRIFT" },
     ]);
   } finally {
     await runtime.stop();
@@ -660,6 +615,7 @@ test("group completion settles only that group's tracked mentions", async () => 
     consumed: () => false,
     told: () => true,
     announce: async () => "told",
+    announceBatch: async () => "told",
     busy: () => true,
     blocked: () => undefined,
   });
@@ -706,6 +662,7 @@ test("a new group can finish during notice admission without inheriting another 
       await tracker.settleTurnEnd("memory", "beta");
       return "told";
     },
+    announceBatch: async () => "told",
     busy: (_agent, conversationId) => conversationId !== "beta",
     blocked: () => undefined,
   });
@@ -752,6 +709,7 @@ test.each(["accepted", "rejected"] as const)(
       consumed: () => false,
       told: () => false,
       announce: () => (attempts++ === 0 ? previous.promise : current.promise),
+      announceBatch: async () => "told",
       busy: () => false,
       blocked: () => undefined,
       process: () => process,

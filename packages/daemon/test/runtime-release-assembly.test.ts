@@ -25,6 +25,7 @@ async function stopWithCarriedMention(carried: boolean) {
     consumed: () => false,
     told: () => false,
     announce: async () => "told",
+    announceBatch: async () => "told",
     busy: () => false,
     blocked: () => undefined,
     remembered: () => ({ launchId: "l1", sessionId: "s1" }),

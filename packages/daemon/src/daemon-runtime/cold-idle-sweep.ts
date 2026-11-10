@@ -22,6 +22,9 @@ export type AgentIdleFacts = Readonly<{
   working: boolean;
   deliveriesQueued: boolean;
   inputsQueued: boolean;
+  /** A tracked @mention of the Agent is not settled: received, told in a turn that has not ended,
+   * or kept for its next launch. */
+  trackedMentionOpen: boolean;
   openToolCall: boolean;
   backgroundTasks: number;
   launching: boolean;
@@ -44,6 +47,7 @@ export type IdleBlocker =
   | "working"
   | "queued_delivery"
   | "queued_input"
+  | "tracked_mention"
   | "open_tool_call"
   | "background_tasks";
 
@@ -61,6 +65,7 @@ export function idleBlocker(facts: AgentIdleFacts): IdleBlocker | undefined {
   if (facts.working) return "working";
   if (facts.deliveriesQueued) return "queued_delivery";
   if (facts.inputsQueued) return "queued_input";
+  if (facts.trackedMentionOpen) return "tracked_mention";
   if (facts.openToolCall) return "open_tool_call";
   if (facts.backgroundTasks > 0) return "background_tasks";
   return undefined;

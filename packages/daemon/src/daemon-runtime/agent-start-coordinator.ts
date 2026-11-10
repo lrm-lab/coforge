@@ -213,14 +213,14 @@ export function startAgent(
       },
       (error: unknown) => {
         // A server Start that failed leaves the server to start the Agent again (unknown); a wake
-        // or restart that failed rejects the mentions it was woken for.
-        ports.exitedDelivery.keepInputDeliveriesForNextLaunch(
-          agentId,
-          error,
-          startRequest.fromStart
-            ? MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN
-            : MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
-        );
+        // or restart that failed keeps the mentions for the next launch, refusing none here.
+        if (startRequest.fromStart)
+          ports.exitedDelivery.keepInputDeliveriesForNextLaunch(
+            agentId,
+            error,
+            MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN,
+          );
+        else ports.exitedDelivery.keepAfterFailedLaunch(agentId, error);
         ports.inputDrain.close(agentId, error);
         throw error;
       },

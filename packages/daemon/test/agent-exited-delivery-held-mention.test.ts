@@ -29,6 +29,7 @@ function subject(
     backoffHeld: () => state.hold === "backoff",
     keepMention: () => (calls.kept++, true),
     dropMentionAsUnknown: () => (calls.dropped++, true),
+    refuseMention: () => void calls.dropped++,
     hasKeptMentions: () => state.kept ?? calls.kept > 0,
     refuseKeptMentions: () => void calls.refused++,
     hasQueued: () => false,

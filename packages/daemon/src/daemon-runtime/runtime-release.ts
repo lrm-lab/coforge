@@ -13,7 +13,8 @@ import type { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import type { ColdIdleStop } from "#src/agent-runtime/wake-session-recycle";
 import { UnattendedRecoveries, reportUnattendedLimit } from "./stalled-recovery-unattended";
 import { logStalledRecovery } from "./agent-failure-logs";
-import { idleBlocker, type AgentIdleFacts, type ColdIdleAgent } from "./cold-idle-sweep";
+import { idleBlocker, type ColdIdleAgent } from "./cold-idle-sweep";
+import type { DaemonIdleFacts } from "./agent-idle-facts";
 import type { BusyActivity } from "./agent-activity-publisher";
 import type { DeliveryHoldReason } from "./agent-delivery-gate";
 import type { LaunchRequest } from "./runtime-launch-types";
@@ -96,18 +97,7 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   /** An explicit Stop is under way, so nothing may relaunch. */
   isStopping(agentId: string): boolean;
   /** The idle evidence only the runtime holds. */
-  daemonIdleFacts(
-    agentId: string,
-  ): Pick<
-    AgentIdleFacts,
-    | "working"
-    | "deliveriesQueued"
-    | "inputsQueued"
-    | "launching"
-    | "stopping"
-    | "runnerHold"
-    | "migrating"
-  >;
+  daemonIdleFacts(agentId: string): DaemonIdleFacts;
   /** Messages, app-item notices or tracked mentions kept for the Agent's next launch. */
   hasParkedWork(agentId: string): boolean;
   /** The runtime stayed up: presents what was kept as it would at a turn's end. */

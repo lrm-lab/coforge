@@ -39,6 +39,8 @@ export type AgentInput =
       told?: () => void;
     }
   | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
+  /** The tracked mentions kept for this launch, told in one notice when the item is reached. */
+  | { kind: "carried"; completion: AgentInputCompletion }
   | { kind: "startup"; text: string; completion: AgentInputCompletion }
   | { kind: "prompt"; text: string; introduction?: true; completion: AgentInputCompletion }
   /** A MEMORY.md block ahead of a fresh session's or a compacted context's next real input: a
@@ -51,6 +53,7 @@ export function queueHasInputContent(items: readonly AgentInput[]): boolean {
   return items.some(
     (item) =>
       item.kind === "delivery" ||
+      item.kind === "carried" ||
       item.kind === "prompt" ||
       item.kind === "memory" ||
       (item.kind === "recovery" && recoveryHasContent(item.context)),

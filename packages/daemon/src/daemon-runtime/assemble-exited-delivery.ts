@@ -38,7 +38,7 @@ export type ExitedDeliveryCollaborators = {
 
 /** Settles a delivery for an Agent with no hold, session or launch in flight (`AgentExitedDelivery`). */
 export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): AgentExitedDelivery {
-  return new AgentExitedDelivery({
+  const exited = new AgentExitedDelivery({
     hasRuntimeErrorHold: (agentId) => ports.deliveryGate.explicitHold(agentId) !== undefined,
     backoffHeld: (agentId) => {
       const reason = ports.deliveryGate.explicitHold(agentId);
@@ -70,6 +70,9 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
     closeAgentInputQueue: (agentId, error) => ports.inputDrain().close(agentId, error),
     dropMentionAsUnknown: (message) =>
       ports.mentionDeliveries().drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
+    refuseMention: (message, code) => void ports.mentionDeliveries().refuse(message, code),
+    refuseKeptMention: (message, code) =>
+      ports.mentionDeliveries().carry.refuseKeptOne(message, code),
     keepMention: (message) =>
       isTrackedMention(message) && ports.mentionDeliveries().carry.hold(message),
     hasKeptMentions: (agentId) => ports.mentionDeliveries().carry.hasCarried(agentId),
@@ -96,4 +99,7 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
           logAgentOperationFailure(ports.computerId(), "message_delivery", message, error),
         ),
   });
+  // Every failed wake, whoever started it, leaves the mentions still kept to the cooldown wake.
+  ports.wakeLaunchFailures.onFailure((agentId) => exited.wakeFailed(agentId));
+  return exited;
 }

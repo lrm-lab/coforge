@@ -11,6 +11,7 @@ import type {
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
+import { messageRecord } from "./message-record";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -56,6 +57,8 @@ export async function harness(
     ackGate?: Promise<void>;
     /** The error the session's `dispose` rejects with, so the process is never confirmed gone. */
     disposeError?: Error;
+    /** The sequences of `#general` the Agent's `check` returns. */
+    checkSequences?: readonly number[];
   } = {},
 ) {
   const credentials = new InMemoryDaemonCredentialStore();
@@ -83,12 +86,12 @@ export async function harness(
       provider: "pi",
       async createAgentSession(sessionOptions: AgentSessionOptions) {
         launches++;
-        if (options.failLaunches?.includes(launches))
-          throw new Error("the provider would not start");
-        if (launches > 1 && options.launchGate) {
+        const launch = launches;
+        if (launch > 1 && options.launchGate) {
           launchStarted.resolve();
           await options.launchGate;
         }
+        if (options.failLaunches?.includes(launch)) throw new Error("the provider would not start");
         if (options.reportSession !== false) await sessionOptions.onSessionId?.("native-1");
         return {
           async sendMessage() {
@@ -132,6 +135,20 @@ export async function harness(
         async sendAgentControlResult() {},
         async reportAgentSession(report) {
           launchIds.push(report.launchId);
+        },
+        async agentMessage(request) {
+          return {
+            idempotencyKey: request.idempotencyKey,
+            accepted: true,
+            attentionCount: 0,
+            hasMore: false,
+            messages:
+              request.operation === "check"
+                ? (options.checkSequences ?? []).map((sequence) =>
+                    messageRecord(sequence, "@ada", "#general"),
+                  )
+                : [],
+          };
         },
         async sendAgentDeliveryAck(ack) {
           record({
@@ -183,6 +200,15 @@ export async function harness(
     /** Resolves once a launch after the first has reached `launchGate`. */
     launchStarted: launchStarted.promise,
     launches: () => launches,
+    /** The Agent runs `coforge message check`. */
+    check: () => {
+      const context = runtime.issueAgentContext("agent-a");
+      return runtime.agentMessage(
+        context,
+        { idempotencyKey: crypto.randomUUID(), context, operation: "check" },
+        `sk_agent_${"a".repeat(43)}`,
+      );
+    },
     envelope,
     emit(event: AgentRuntimeEvent) {
       for (const listener of listeners) listener(event);

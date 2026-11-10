@@ -49,8 +49,13 @@ export type AgentExitedDeliveryPorts = Readonly<{
    * queue, resolving each kept item's completion — they are kept, not failed. */
   drainInputDeliveries(agentId: string): AgentMessageDelivery[];
   closeAgentInputQueue(agentId: string, error: unknown): void;
-  /** Settles a tracked @mention as `IDENTITY_UNKNOWN`; true when the delivery was one. */
+  /** Settles a tracked @mention as `IDENTITY_UNKNOWN`, draining it instead when the Agent already
+   * consumed it; true when the delivery was one. */
   dropMentionAsUnknown(message: AgentMessageDelivery): boolean;
+  /** Refuses a tracked @mention that just arrived, whether or not the Agent consumed it. */
+  refuseMention(message: TrackedMentionDelivery, code: MentionDeliveryTerminalCode): void;
+  /** Refuses one tracked @mention kept for the next launch, when it still is. */
+  refuseKeptMention(message: TrackedMentionDelivery, code: MentionDeliveryTerminalCode): void;
   /** Keeps a tracked @mention for the launch that is coming; true when the delivery was one. */
   holdMention(message: AgentMessageDelivery): boolean;
   /** Keeps a tracked @mention that arrived for an Agent with no process; true when it is kept. */
@@ -89,6 +94,18 @@ export class AgentExitedDelivery {
   }
 
   /**
+   * A tracked @mention that arrives while a server Start is pending, whatever else is true of the
+   * Agent: it is buffered unacknowledged, as any delivery is, and replayed through the ordinary
+   * handler once the Start launched (identity checked then, against the launch it started); a
+   * Start that does not launch drops it without a report. False when no Start is pending.
+   */
+  holdMentionForStart(message: TrackedMentionDelivery): boolean {
+    if (!this.#ports.startPending(message.agentId)) return false;
+    this.#holdForPendingStart(message);
+    return true;
+  }
+
+  /**
    * A tracked @mention for an Agent with no process and no launch in flight. It is kept against the
    * launch and session the Agent last reported and wakes the Agent, as an ordinary delivery does,
    * the launch it starts telling the mention once. A wake that fails refuses it. Under a retryable
@@ -107,12 +124,13 @@ export class AgentExitedDelivery {
       this.#ports.offline.has(agentId) ||
       (held && !this.#ports.backoffHeld(agentId))
     ) {
-      this.#ports.dropMentionAsUnknown(message);
+      // No identity to check it against, so not even a consumed mention is ACKed.
+      this.#ports.refuseMention(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
       return;
     }
     if (!this.#ports.keepMention(message) || held) return;
     if (this.#ports.wakeBlockedUntil(agentId) !== undefined) this.#wakeAfterCooldown(agentId);
-    else this.#wakeForKept(agentId, restart);
+    else this.#wakeForKept(agentId, restart, message);
   }
 
   /** The Agent's runtime-error backoff ran its course. Mentions kept through it, which waited for
@@ -128,10 +146,24 @@ export class AgentExitedDelivery {
     else this.#wakeForKept(agentId, restart);
   }
 
-  #wakeForKept(agentId: string, restart: AgentRestartConfig): void {
-    // A launch that fails refuses the mentions kept for it (`startAgent`); the cooldown it starts
-    // is waited out for whatever still waits.
-    this.#ports.wakeAgent(agentId, restart).catch(() => this.#wakeAfterCooldown(agentId));
+  /** Wakes the Agent for what is kept. A launch that fails refuses only `trigger`, the mention
+   * whose arrival started it; the rest stay kept, and the cooldown the failure starts is waited
+   * out for them (`wakeFailed`). */
+  #wakeForKept(
+    agentId: string,
+    restart: AgentRestartConfig,
+    trigger?: TrackedMentionDelivery,
+  ): void {
+    this.#ports.wakeAgent(agentId, restart).catch(() => {
+      if (trigger)
+        this.#ports.refuseKeptMention(trigger, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+    });
+  }
+
+  /** A wake launch failed and its cooldown stands: whatever tracked mention is still kept gets a
+   * wake armed for the end of that cooldown, so it is not left until another delivery arrives. */
+  wakeFailed(agentId: string): void {
+    if (this.#ports.hasKeptMentions(agentId)) this.#wakeAfterCooldown(agentId);
   }
 
   /** No launch is coming for the tracked @mentions kept for the Agent: each is refused with `code`. */
@@ -151,7 +183,9 @@ export class AgentExitedDelivery {
         async () => {
           this.#cooldownWakes.delete(agentId);
           const restart = this.#ports.restartConfig(agentId);
-          if (!restart || this.#ports.launchComing(agentId)) return;
+          // A backoff holds the mentions kept: `backoffEnded` wakes the Agent when it is over.
+          const held = this.#ports.hasRuntimeErrorHold(agentId) && !this.#ports.hasQueued(agentId);
+          if (!restart || this.#ports.launchComing(agentId) || held) return;
           if (this.#ports.wakeBlockedUntil(agentId) !== undefined)
             return this.#wakeAfterCooldown(agentId);
           if (this.#ports.hasQueued(agentId) || this.#ports.hasKeptMentions(agentId))
@@ -299,6 +333,15 @@ export class AgentExitedDelivery {
   ): void {
     this.keepDeliveries(agentId, this.#ports.drainInputDeliveries(agentId), error);
     this.#ports.refuseKeptMentions(agentId, refusal);
+  }
+
+  /** A launch the Agent's wake started failed: its input queue goes to custody as for any failed
+   * launch, and the tracked @mentions it had taken, like the ones kept, stay pending for the next
+   * launch. With nothing left to relaunch from they are refused as unknown instead. */
+  keepAfterFailedLaunch(agentId: string, error: unknown): void {
+    this.keepDeliveries(agentId, this.#ports.drainInputDeliveries(agentId), error, true);
+    if (!this.#ports.restartConfig(agentId))
+      this.#ports.refuseKeptMentions(agentId, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
   }
 
   /** The same custody for deliveries the caller already took. Any other than a tracked mention is

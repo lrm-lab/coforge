@@ -21,6 +21,12 @@ const delivery = (id: string, target: string): AgentMessageDelivery => ({
 
 /** A custody over a real delivery queue that holds `held`, and an attention that records what it
  * was asked to announce (`recover`) and to flush. */
+/** The input drain's `tellCarried` with no mention kept: it presents the held deliveries. */
+const presentHeld =
+  (attention: { flush(agentId: string, held: AgentMessageDelivery[]): Promise<void> }) =>
+  (agentId: string, held: AgentMessageDelivery[]) =>
+    held.length ? attention.flush(agentId, held) : Promise.resolve();
+
 function custody(held: AgentMessageDelivery[]) {
   const deliveryGate = new AgentDeliveryGate();
   for (const message of held) deliveryGate.enqueue("agent-1", message);
@@ -46,6 +52,7 @@ function custody(held: AgentMessageDelivery[]) {
   const subject = new AgentLaunchCustody({
     messageAttention,
     deliveryGate,
+    inputDrain: { tellCarried: presentHeld(messageAttention) },
     releaseHeldAppItems: () => {},
     releaseFallbackNotices: () => {},
   } as never);
@@ -128,16 +135,18 @@ test("a delivery newer than a message the Agent already read is still presented"
   deliveryGate.enqueue("agent-1", held);
   // The custody flushes without waiting; keep the flushes to wait on them.
   const flushing: Promise<void>[] = [];
-  const subject = new AgentLaunchCustody({
-    messageAttention: {
-      recover: (...args: Parameters<typeof index.recover>) => index.recover(...args),
-      flush: (...args: Parameters<typeof index.flush>) => {
-        const flush = index.flush(...args);
-        flushing.push(flush);
-        return flush;
-      },
+  const messageAttention = {
+    recover: (...args: Parameters<typeof index.recover>) => index.recover(...args),
+    flush: (...args: Parameters<typeof index.flush>) => {
+      const flush = index.flush(...args);
+      flushing.push(flush);
+      return flush;
     },
+  };
+  const subject = new AgentLaunchCustody({
+    messageAttention,
     deliveryGate,
+    inputDrain: { tellCarried: presentHeld(messageAttention) },
     releaseHeldAppItems: () => {},
     releaseFallbackNotices: () => {},
   } as never);

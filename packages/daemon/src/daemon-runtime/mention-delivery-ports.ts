@@ -1,4 +1,5 @@
 import type {
+  AgentMessageDelivery,
   AgentMentionDeliveryTerminalError,
   AgentMentionDeliveryTransition,
 } from "@lrm/coforge-sdk/internal";
@@ -31,6 +32,14 @@ export type MentionDeliveryPorts = {
   /** Writes the delivery's notice to the Agent's session: `gone` when its process went away before
    * the notice was accepted. Rejects when the session refused it. */
   announce(message: TrackedMentionDelivery): Promise<"told" | "gone">;
+  /** Writes one notice for these mentions together with the deliveries held `alongside` them, as
+   * a launch presents what it kept: `gone` when the Agent's process went away before the notice
+   * was accepted. Rejects when the session refused it. With no mention it only presents what is
+   * held. */
+  announceBatch(
+    messages: readonly TrackedMentionDelivery[],
+    alongside: readonly AgentMessageDelivery[],
+  ): Promise<"told" | "gone">;
   /** Whether the Agent is mid-turn: a notice written now lands in the turn in progress. */
   busy(agentId: string, conversationId?: string): boolean;
   blocked(agentId: string): MentionDeliveryBlock | undefined;

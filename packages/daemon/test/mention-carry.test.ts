@@ -26,6 +26,7 @@ function subject(options: { process?: object; busy?: boolean } = {}) {
     consumed: () => false,
     told: () => false,
     announce: async () => "told",
+    announceBatch: async () => "told",
     busy: () => state.busy,
     blocked: () => undefined,
     process: () => state.process,

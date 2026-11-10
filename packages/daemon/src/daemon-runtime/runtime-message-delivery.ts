@@ -98,7 +98,8 @@ export async function handleAgentMessage(
 }
 
 /**
- * A tracked @mention: ACKed only once drained (`MentionDeliveryTracker`). With a running session it
+ * A tracked @mention: ACKed only once drained (`MentionDeliveryTracker`). While a server Start is
+ * pending it is buffered unacknowledged and replayed once that Start launched. With a running session it
  * is told only if its envelope names that launch and session. A runtime being restarted, or a
  * launch not yet up, keeps it for the launch that follows, which tells it once. With no process
  * it is kept against the launch and session the Agent last reported and wakes the Agent
@@ -116,6 +117,9 @@ export function handleTrackedMention(
   const refusal = ports.mentionDeliveries.admissionRefusal(message);
   if (refusal) return ports.mentionDeliveries.refuse(message, refusal);
   if (ports.runnerHold === undefined) {
+    // A server Start in flight takes every delivery, unacknowledged, and replays it once launched.
+    if (!ports.stops.stopping(agentId) && ports.exitedDelivery.holdMentionForStart(message))
+      return Promise.resolve();
     const launching =
       ports.agentLaunches.has(agentId) && !ports.agentProcessManager.session(agentId);
     if (

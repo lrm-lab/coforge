@@ -78,63 +78,15 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   Only a person's Start launches it; the new `active` session clears the
   record and the next launch delivers what waited. A quota wait keeps the
   restart config — its cooldown, not custody, governs the next launch.
-- A tracked @mention delivery (it carries a `mentionDelivery` envelope) is
-  settled by `mention-delivery-tracker.ts`, in memory only. It is ACKed, with
-  its envelope echoed, only once drained: already consumed (whatever launch the
-  envelope names), or told to the launch and native session the daemon last
-  reported, at a moment the Agent is idle or in a turn that has ended. It
-  never becomes `no_process`. An Agent with no process but a restart config and a remembered launch
-  accepts it against that launch, keeps it unacknowledged and wakes the Agent as an untracked delivery
-  would (`AgentExitedDelivery.deliverMention`); a launch that fails refuses it `DELIVERY_REJECTED` (a
-  failed server Start, or a runtime error that takes the Agent offline, `IDENTITY_UNKNOWN`); while a
-  launch-failure cooldown runs, one timer wakes the Agent when it ends (waiting out an extension, and dropped by a Stop, a purge or the daemon stopping) if anything still waits.
-  Under a retryable runtime-error backoff (`rate_limit_backoff` or `runtime_error_backoff`) with the process
-  gone it is kept the same way but wakes nobody, as the reference Computer holds a mention through a
-  provider-limit wait: `RuntimeErrorDeliveryHold` tells `AgentExitedDelivery.backoffEnded` when the backoff
-  runs its course (its time is up, a lifted limit or an observed recovery ends it), and that wakes the Agent
-  once (after a launch-failure cooldown, if one runs); the launch tells each kept mention once. The backoff's
-  end is its only bound. It is refused exactly once if the backoff never gets to end it: an inbox
-  purge or a failed wake launch (`DELIVERY_REJECTED`), a failed server Start or a runtime
-  error that takes the Agent offline (`IDENTITY_UNKNOWN`). A Stop and the daemon stopping report nothing
-  for a tracked mention, as the reference Computer sends nothing: the tracker holds every report about the
-  Agent's mentions while the Stop runs (a Stop always completes), then forgets what it had not drained
-  (received, pending, kept, queued behind a notice) with those reports, so nothing is told later by
-  mistake. The cloud settles it: a person's Stop settles the Agent's pending mentions as not
-  launched, and any other stop leaves them pending for the cloud to issue again, under the same delivery
-  id, to the next launch, which tells each once. A tripped fingerprint fence, an offline record and
-  a stopped Agent refuse it as `IDENTITY_UNKNOWN` at once: the reference Computer has no identity to hold it
-  for either. Otherwise
-  the daemon reports a terminal error: `IDENTITY_DRIFT` (another Computer,
-  launch or session), `INSTRUMENT_FAILED` (another message), `IDENTITY_UNKNOWN`
-  (no running session and nothing to relaunch from: stopped by a person, taken offline, held by a
-  tripped fence, or never launched here, including a pending server Start),
-  `QUOTA_LIMITED` (rate-limit backoff), `UNSUPPORTED_DELIVERY_PATH` (a provider
-  that takes notices only between turns, while busy), or `DELIVERY_REJECTED`
-  (another backoff, a refused notice, a process gone before it accepted the
-  notice, an inbox purge). Told during a turn, it stays pending until the
-  turn ends, then is drained if the current session was told it and
-  rejected otherwise, every pending mention in one synchronous pass over the tracker's state (the
-  reports follow unawaited, so none delays another's settlement); one named by `notice-undelivered` is settled instead by
-  the redelivery of that notice (drained once accepted). A runner hold queues it
-  unacknowledged; one still queued for an Agent without a session when the
-  hold lifts is refused. Nothing is reported when a process exits. A restart of the process
-  (`RuntimeRelease`) keeps the mentions it had not settled for the next launch (`mention-carry.ts`):
-  after the process is gone, one still being told, or waiting, always; one already told during a turn
-  only when the next launch starts a fresh session (a resumed session holds its notice; it settles at
-  that session's turn end as usual). A mention arriving while the runtime ends or a launch is in flight is
-  held against the launch and session last reported (another is `IDENTITY_DRIFT`; none is
-  `IDENTITY_UNKNOWN`), and a repeat adopts its newer envelope and is reported coalesced. The next launch's
-  input tells each carried mention once, in its own notice, without checking its envelope again, so it
-  is ACKed with the latest envelope. A carried mention counts as work parked for the launch, so a cold idle or config-apply stop wakes the Agent for it, and a repeat of a mention told to a process that has since gone is carried the same way. A notice that settles for a process the restart replaced never refuses
-  its mention (compared by process identity, not only while the restart is under way). A process that will not exit
-  leaves everything as it was; an inbox purge rejects the carried and queued mentions of the purged
-  conversations.
+- A tracked @mention delivery (it carries a `mentionDelivery` envelope) is settled by
+  `mention-delivery-tracker.ts`, not by the rules above; read
+  [tracked @mention delivery](daemon-mention-delivery.md).
 - While a server Start is pending for such an Agent
   (`AgentControl.startPending`: from the `start` call through every
-  launch-retry cooldown), its untracked deliveries are held, unacknowledged, instead of
-  rejected. When the Start settles, a launched Agent receives them as ordinary
-  deliveries; otherwise they are dropped unacknowledged and stay unread in the
-  cloud.
+  launch-retry cooldown), its deliveries are held, unacknowledged, instead of
+  rejected (a tracked @mention too, see the document above). When the Start
+  settles, a launched Agent receives them as ordinary deliveries; otherwise they
+  are dropped unacknowledged and stay unread in the cloud.
 - An inbox purge (`agent:v1:inbox:purge`) drops the waiting deliveries and
   pending attention of channels the Agent can no longer read, threads
   included; an untracked delivery it drops is ACKed, so a later rejoin does not replay it on
@@ -149,7 +101,7 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   A hold waiting out a retryable failure also keeps the stall sweep away
   (`stalled-recovery.ts`).
 - Never launch an exited Agent for a delivery it has already consumed; ACK it
-  instead.
+  instead (a tracked mention, once its identity checks out).
 - A failed message-triggered launch starts the per-Agent wake cooldown
   (`LaunchFailureBackoff`, no attempt cap); any successful launch ends it.
   Deliveries that wait for the next launch (in the cooldown, in a failed
@@ -169,7 +121,7 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   session. `stalled-recovery-sweep.ts` applies the same judgment every five
   minutes to every live Agent with queued deliveries, so a stall whose last
   message already waits is recovered without another arrival; a runner hold, a
-  mid-stop Agent or a recovery in flight suppresses the judgment. A tracked mention is kept for the relaunch (see the tracked @mention rules above).
+  mid-stop Agent or a recovery in flight suppresses the judgment. A tracked mention is kept for the relaunch ([tracked @mention delivery](daemon-mention-delivery.md)).
 - Thread follow state is cloud-persisted. The Daemon only forwards the Agent's
   explicit unfollow operation.
 - What an Agent has already been shown lives in `AgentContextLedger` (`state.db`,

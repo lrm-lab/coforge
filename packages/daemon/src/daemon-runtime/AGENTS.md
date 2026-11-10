@@ -39,7 +39,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `runtime-lifecycle.ts` declares the restart, upgrade and refusal hooks the Computer lends one `DaemonRuntime` (`DaemonRuntimeLifecycle`); `runtime-connection-config.ts` declares the Workspace connection identity (`DaemonConfig`) it is constructed with.
 - `launch-inbox.ts` is the per-Agent store of the daemon's undelivered input: the deliveries held behind `AgentDeliveryGate` (mode, busy, explicit hold, app items, fallback notices), the debt a cold start owes (`OwedRecovery`) and the input queue `AgentInputDrain` drains. It outlives launches and exists only while it holds something.
 - `mention-delivery-ports.ts` declares what the tracked-mention tracker (`mention-delivery-tracker.ts`) reads from the runtime; `mention-delivery-reports.ts` sends its transition, ACK and terminal-error reports.
-- `mention-carry.ts` keeps the tracked mentions a restart of the process leaves unsettled (and those arriving meanwhile, or kept through a runtime-error backoff) as entries for the next launch's input to tell once; `mention-delivery-entries.ts` is the tracker's memory of accepted mentions; `reported-sessions.ts` holds the launch and session each Agent last reported.
+- `mention-carry.ts` keeps the tracked mentions a restart of the process leaves unsettled (and those arriving meanwhile, or kept through a runtime-error backoff) as entries the next launch tells once, in one notice with the deliveries held for it; `mention-delivery-entries.ts` is the tracker's memory of accepted mentions; `reported-sessions.ts` holds the launch and session each Agent last reported.
 - `assemble-input-drain.ts` builds the `AgentInputDrain` over the runtime's collaborators, each a thunk.
 - `agent-message-attention-recovery.ts` plans a recovery notice (validation, what is already read or notified, the wording); the index writes it.
 - `agent-input-drain.ts` owns each Agent's serialized input queue: enqueue is admission, one drain loop is the only consumer, and a closed queue settles its live drain. A new launch retires the queue (`startAgent`): the ended runtime's waiting deliveries go to `AgentDeliveryGate` custody (tracked mentions are kept as carried entries for the launch), its prompts carry over (an introduction always, a resume prompt only if the launch has none), and a retired loop's failures never touch the launch that replaced it. `agent-launch-custody.ts` owns what the daemon owes a launch at its boundary: delivery custody acknowledgment, the recovery pass that reconciles held state, and turn-open bookkeeping.
@@ -81,7 +81,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   `sessionRecovery`, acted on after the failed turn ends, spent only once the Session was replaced) and
   what the fresh Session carries: the rejected launch's own start input plus the unread summary
   (the Agent's unread and deliveries parked while the runtime ends, less the tracked @mentions
-  `RuntimeRelease.endAndReplace` carries to the fresh launch, which tells each on its own). `AgentLaunchCoordinator`
+  `RuntimeRelease.endAndReplace` carries to the fresh launch, which tells them in one notice). `AgentLaunchCoordinator`
   ends the runtime through `endAndReplace` and cold-starts through the same path as the early crash.
   What it carries is owed (`OwedRecovery`, kept in the Agent's `LaunchInbox`) until a launch for the Agent
   has told it: `startAgent` merges it into the next launch that spawns a process and pays it after

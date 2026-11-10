@@ -104,6 +104,12 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     pull: (agentId) => ports.launchCustody().ensureInput(agentId),
     decided: (message, outcome) => messageAttention.logDecision(message, outcome),
     announce: (message) => messageAttention.announce(message),
+    announceBatch: async (messages, alongside) => {
+      const batch = [...alongside, ...messages];
+      if (batch.length === 0) return "told";
+      await messageAttention.flush(batch[0]!.agentId, batch);
+      return messages.every((message) => messageAttention.wasNotified(message)) ? "told" : "gone";
+    },
     busy: (agentId, conversationId) => {
       const session = ports.processManager.session(agentId);
       return (
@@ -158,7 +164,14 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         const launch = ports.currentActivityLaunch(agentId);
         if (launch) ports.reconcileIdleTurn(agentId, launch);
       },
-      consumedSeqs: ports.consumedSeqs,
+      // Every change of what the Agent has consumed ends in this write: the mentions it settles.
+      consumedSeqs: {
+        read: (agentId) => ports.consumedSeqs.read(agentId),
+        write: (agentId, state) => {
+          ports.consumedSeqs.write(agentId, state);
+          mentionDeliveries.settleConsumed(agentId);
+        },
+      },
       noticePrefix: (agentId) => ports.sync.noticePrefix(agentId),
     },
   );

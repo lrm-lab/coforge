@@ -100,11 +100,11 @@ export class AgentLaunchCustody {
 
   /** Flushes whatever `AgentDeliveryGate` held for `agentId` across an unexpected
    * exit, treating the (fresh or just-recovered) session as idle — used when nothing else has
-   * told the Agent about it. */
-  flushSurvivingDeliveries(agentId: string): void {
+   * told the Agent about it. The tracked mentions kept for the launch are told in the same notice,
+   * by delivery id, as the launch's starting inbox. */
+  flushSurvivingDeliveries(agentId: string): Promise<void> {
     const held = this.ports.deliveryGate.idle(agentId);
-    if (!held.length) return;
-    void this.ports.messageAttention.flush(agentId, held).catch((error: unknown) => {
+    return this.ports.inputDrain.tellCarried(agentId, held).catch((error: unknown) => {
       // Already acknowledged when held: they come back as unread on the next Start or daemon
       // restart, not from a `ready` replay.
       logger.warn("Held Agent deliveries were not accepted at launch", {

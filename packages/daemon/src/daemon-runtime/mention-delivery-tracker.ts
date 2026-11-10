@@ -5,10 +5,11 @@ import {
   type MentionDeliveryEnvelope,
   type MentionDeliveryTerminalCode,
 } from "@lrm/coforge-sdk/internal";
-import type { MentionDeliveryBlock, MentionDeliveryPorts } from "./mention-delivery-ports";
+import type { MentionDeliveryPorts } from "./mention-delivery-ports";
 import { MentionDeliveryReports } from "./mention-delivery-reports";
 import { MentionCarry } from "./mention-carry";
 import {
+  BLOCKED_CODES,
   MentionEntries,
   namesLaunch,
   REMEMBERED_MENTIONS,
@@ -29,13 +30,6 @@ export type TrackedMentionDelivery = AgentMessageDelivery & {
 export function isTrackedMention(message: AgentMessageDelivery): message is TrackedMentionDelivery {
   return message.mentionDelivery !== undefined;
 }
-
-const BLOCKED_CODES: Readonly<Record<MentionDeliveryBlock, MentionDeliveryTerminalCode>> = {
-  rate_limit_backoff: MENTION_DELIVERY_TERMINAL_CODES.QUOTA_LIMITED,
-  runtime_error_backoff: MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
-  fingerprint_fence: MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
-  queued_until_idle: MENTION_DELIVERY_TERMINAL_CODES.UNSUPPORTED_DELIVERY_PATH,
-};
 
 /**
  * The daemon's side of tracked @mention delivery. A tracked delivery is ACKed, with its envelope
@@ -80,28 +74,23 @@ export class MentionDeliveryTracker {
   }
 
   /**
-   * Tells a tracked mention to the Agent's running session and settles what follows. A consumed
-   * message is drained whatever launch the envelope names; otherwise the envelope must name the
-   * running launch and session. A repeat of a drained mention is ACKed again, and of one still
-   * being told for the same launch is reported coalesced; one issued for a newer launch is told
-   * afresh. Told while the Agent is idle, it is drained; told during a turn, it stays pending until
-   * that turn ends. Rejects only when the session refused the notice (after reporting it).
+   * Tells a tracked mention to the Agent's running session and settles what follows. The envelope
+   * must name the running launch and session before anything else is asked, as the reference
+   * Computer does: only then is a repeat of a drained mention ACKed again, and a repeat of one
+   * still being told coalesced. A consumed message is drained, and otherwise the mention is told.
+   * Told while the Agent is idle, it is drained; told during a turn, it stays pending until that
+   * turn ends. Rejects only when the session refused the notice (after reporting it).
    */
   async deliver(message: TrackedMentionDelivery): Promise<void> {
-    if (this.ports.consumed(message)) {
-      this.ports.decided?.(message, "consumed");
-      return this.#drain(message);
-    }
-    const envelope = message.mentionDelivery;
     const kept = this.#entries.get(message.deliveryId);
     if (kept?.carried && kept.message.agentId === message.agentId) {
       // Told as the newest issue the server made while it waited, which the entry holds.
       this.#entries.uncarry(kept);
-      return this.#tell(kept.message, kept);
+      return this.#drainIfConsumed(kept.message) ?? this.#tell(kept.message, kept);
     }
     const running = this.ports.running(message.agentId);
     if (!running) return this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
-    if (!namesLaunch(running, envelope))
+    if (!namesLaunch(running, message.mentionDelivery))
       return this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_DRIFT);
     const existing = this.#entries.get(message.deliveryId);
     if (existing) {
@@ -114,15 +103,24 @@ export class MentionDeliveryTracker {
         existing.message = message;
         return this.#reports.acknowledge(message);
       }
-      if (existing.state === "pending" || namesLaunch(existing.message.mentionDelivery, envelope)) {
-        existing.message = message;
-        this.#reports.transition(message, "daemon_pending", "coalesced");
-        return;
-      }
+      // Still pending or being told: the repeat is coalesced into it with the newest envelope,
+      // whatever launch it names (it names the running one, checked above).
+      existing.message = message;
+      this.#reports.transition(message, "daemon_pending", "coalesced");
+      return;
     }
+    const consumed = this.#drainIfConsumed(message);
+    if (consumed) return consumed;
     this.#entries.set(message, "received");
     this.#reports.transition(message, "daemon_received", "accepted");
     return this.#tell(message, this.#entries.get(message.deliveryId));
+  }
+
+  /** Drains the mention when the Agent's consumed cursor already covers it. */
+  #drainIfConsumed(message: TrackedMentionDelivery): Promise<void> | undefined {
+    if (!this.ports.consumed(message)) return undefined;
+    this.ports.decided?.(message, "consumed");
+    return this.#drain(message);
   }
 
   /** Tells the Agent's running session about an admitted mention and settles what follows. */
@@ -132,10 +130,14 @@ export class MentionDeliveryTracker {
       this.ports.decided?.(message, "already_notified");
       return this.#told(message);
     }
-    const blocked = this.ports.blocked(message.agentId);
-    if (blocked) return this.refuse(message, BLOCKED_CODES[blocked]);
     // Read before the notice: writing it marks the Agent busy.
     const busy = this.ports.busy(message.agentId, message.conversationId);
+    // A process mid-turn is told whatever backoff holds it, and settles the mention at the turn's
+    // end (as the reference Computer queues it); only an idle one, or a runtime that takes notices
+    // between turns alone, refuses.
+    const blocked = this.ports.blocked(message.agentId);
+    if (blocked && !(busy && blocked !== "queued_until_idle"))
+      return this.refuse(message, BLOCKED_CODES[blocked]);
     const process = this.ports.process?.(message.agentId);
     if (receiving) receiving.inflight = true;
     let outcome: "told" | "gone";
@@ -173,9 +175,13 @@ export class MentionDeliveryTracker {
     }
     // Native acceptance can arrive after the turn's completion callback. Recheck before
     // entering pending, since that earlier callback could not settle an unaccepted delivery.
-    return busy && this.ports.busy(message.agentId, message.conversationId)
-      ? this.#markPending(message)
-      : this.#drain(message);
+    // A repeat that arrived meanwhile was coalesced into the entry: settle with its envelope.
+    const newest = receiving?.message ?? message;
+    return busy &&
+      this.ports.busy(message.agentId, message.conversationId) &&
+      !this.ports.consumed(newest)
+      ? this.#markPending(newest)
+      : this.#drain(newest);
   }
 
   /**
@@ -207,6 +213,31 @@ export class MentionDeliveryTracker {
       if (conversationId !== undefined && message.conversationId !== conversationId) continue;
       if (this.ports.told(message) || this.ports.consumed(message)) void this.#drain(message);
       else void this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+    }
+  }
+
+  /** Whether a mention of the Agent is open: its idle checks wait for it to settle. */
+  hasOpen(agentId: string): boolean {
+    return this.#entries.hasOpen(agentId);
+  }
+
+  /** The Agent's consumed cursor moved: each mention it was told in a turn, or that waits for its
+   * next launch, drains as soon as the model has seen the message, not when the turn ends. A
+   * mention whose notice is still being written settles when the write does. */
+  settleConsumed(agentId: string): void {
+    const open = [
+      ...[...(this.#entries.pending(agentId) ?? [])].flatMap((id) => this.#entries.get(id) ?? []),
+      ...this.#entries.carriedOf(agentId),
+    ];
+    for (const entry of open) {
+      const { message } = entry;
+      // Asking whether it is consumed can bind a conversation and write the cursor, which settles
+      // again: an entry a nested pass already settled is not settled twice.
+      if (entry.inflight || this.#entries.get(message.deliveryId) !== entry) continue;
+      if (!this.ports.consumed(message) || this.#entries.get(message.deliveryId) !== entry)
+        continue;
+      this.ports.decided?.(message, "consumed");
+      void this.#drain(message);
     }
   }
 

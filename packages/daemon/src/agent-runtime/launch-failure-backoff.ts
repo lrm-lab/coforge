@@ -52,6 +52,8 @@ export class LaunchFailureBackoff {
     { attempts: number; untilMs: number; recoveryWait: boolean }
   >();
 
+  readonly #listeners: Array<(agentId: string) => void> = [];
+
   constructor(
     private readonly baseMs: number = LAUNCH_FAILURE_BACKOFF_BASE_MS,
     private readonly capMs: number = LAUNCH_FAILURE_BACKOFF_CAP_MS,
@@ -75,7 +77,13 @@ export class LaunchFailureBackoff {
       : launchFailureCooldownMs(attempts, this.baseMs, this.capMs);
     const untilMs = now + cooldown;
     this.#failures.set(agentId, { attempts, untilMs, recoveryWait });
+    for (const listener of this.#listeners) listener(agentId);
     return { attempts, cooldownMs: cooldown, untilMs };
+  }
+
+  /** Calls `listener` with the Agent each time a failure has been recorded. */
+  onFailure(listener: (agentId: string) => void): void {
+    this.#listeners.push(listener);
   }
 
   /**

@@ -68,7 +68,19 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
           .activityPublisher()
           .publish(agentId, launch, ports.drafts().runtimeError(agentId, message)),
       forgetIntroduced: (agentId) => ports.introducedAgents().delete(agentId),
-      takeCarried: (agentId) => ports.mentionDeliveries().carry.takeCarried(agentId),
+      hasCarried: (agentId) => ports.mentionDeliveries().carry.hasCarried(agentId),
+      presentKept: (agentId) => ports.launchCustody().flushSurvivingDeliveries(agentId),
+      tellCarried: (agentId, alongside) => {
+        // Nothing is told under a runner hold: the kept mentions wait for the restart.
+        const taken = ports.runnerHeld()
+          ? []
+          : ports.mentionDeliveries().carry.takeCarried(agentId);
+        return taken.length
+          ? ports.mentionDeliveries().carry.tell(taken, alongside)
+          : alongside.length
+            ? ports.messageAttention().flush(agentId, alongside)
+            : Promise.resolve();
+      },
       dropMention: (message) =>
         ports.mentionDeliveries().drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
     },

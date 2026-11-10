@@ -21,7 +21,7 @@
 会被回收；seam 给不出的任何事实都按恢复处理。Memory Agent 不参与。
 
 - **停止**：`daemon-runtime/cold-idle-sweep.ts` 每个 sweep 周期（默认 10 分钟）检查一次运行中的
-  Agent。Daemon 自身状态的每个空闲条件都成立（没有 live turn、排队投递或输入、未结束的工具调用、
+  Agent。Daemon 自身状态的每个空闲条件都成立（没有 live turn、排队投递或输入、未结算 mention、未结束的工具调用、
   后台 task、launch、stop、卡住重启、runner hold 或迁移），且 runtime 最近事件和 session 自身
   记录都早于冷却间隔时，结束进程，不报 stopped/crashed，Agent 保持 `active`。停止前上报一条
   info 级 `idle`：“Stopped idle <Runtime> runtime (idle Nm, ~Xk context) to free memory; it

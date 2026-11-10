@@ -1,8 +1,15 @@
 import {
   MENTION_DELIVERY_TERMINAL_CODES,
+  type AgentMessageDelivery,
   type MentionDeliveryTerminalCode,
 } from "@lrm/coforge-sdk/internal";
-import { namesLaunch, type MentionEntries, type Tracked } from "./mention-delivery-entries";
+import { AgentWakeupUnavailableError } from "./agent-wakeup-unavailable-error";
+import {
+  BLOCKED_CODES,
+  namesLaunch,
+  type MentionEntries,
+  type Tracked,
+} from "./mention-delivery-entries";
 import type { MentionDeliveryPorts } from "./mention-delivery-ports";
 import type { MentionDeliveryReports } from "./mention-delivery-reports";
 import type { TrackedMentionDelivery } from "./mention-delivery-tracker";
@@ -24,7 +31,17 @@ export class MentionCarry {
     private readonly entries: MentionEntries,
     private readonly ports: Pick<
       MentionDeliveryPorts,
-      "consumed" | "remembered" | "process" | "relaunching" | "pull"
+      | "consumed"
+      | "remembered"
+      | "process"
+      | "relaunching"
+      | "pull"
+      | "told"
+      | "busy"
+      | "blocked"
+      | "running"
+      | "decided"
+      | "announceBatch"
     >,
     private readonly reports: MentionDeliveryReports,
     private readonly settle: MentionSettlement,
@@ -34,14 +51,11 @@ export class MentionCarry {
    * Keeps a mention for the launch that is starting or about to start, instead of telling a
    * session: it is checked once, against the launch and session the Agent last reported, and told
    * by that launch's input without being checked again. A repeat of one already known adopts its
-   * newer envelope and is reported coalesced, or ACKed again once drained; `fromQueue` says the
-   * mention was waiting in an ended runtime's input, which only moves it, so nothing is reported.
+   * newer envelope and is reported coalesced, or ACKed again once drained. The Agent's consumed
+   * cursor is asked only of a mention that names that launch. `fromQueue` says the mention was
+   * waiting in an ended runtime's input, which only moves it, so nothing is reported.
    */
   hold(message: TrackedMentionDelivery, fromQueue = false): boolean {
-    if (this.ports.consumed(message)) {
-      void this.settle.drain(message);
-      return false;
-    }
     const existing = this.entries.get(message.deliveryId);
     if (existing) {
       if (
@@ -71,6 +85,11 @@ export class MentionCarry {
           ? MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_DRIFT
           : MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN,
       );
+      return false;
+    }
+    // Only a mention that names the Agent's launch is asked whether the Agent consumed it.
+    if (this.ports.consumed(message)) {
+      void this.settle.drain(message);
       return false;
     }
     this.entries.set(message, "received");
@@ -139,6 +158,12 @@ export class MentionCarry {
       void this.settle.refuse(entry.message, code);
   }
 
+  /** The mention is refused with `code` if it is still kept for a launch; a settled one is left. */
+  refuseKeptOne(message: TrackedMentionDelivery, code: MentionDeliveryTerminalCode): void {
+    const entry = this.entries.get(message.deliveryId);
+    if (entry?.carried) void this.settle.refuse(entry.message, code);
+  }
+
   /** The Daemon is stopping: whatever any Agent's next launch would have told is forgotten, with no
    * report. */
   forgetAllCarried(): void {
@@ -155,6 +180,100 @@ export class MentionCarry {
         taken.push(entry.message);
       }
     return taken;
+  }
+
+  /**
+   * Tells the mentions taken for the launch in one notice with the deliveries held `alongside`
+   * them, which is how a launch presents what it kept, and settles each mention as telling it
+   * alone would: a consumed one is drained, one the session already accepted a notice of is
+   * pending or drained by whether the Agent is mid-turn, the rest are told by delivery id. A
+   * mention a Stop, a purge or a refusal settled meanwhile is left. Rejects when the session
+   * refused the notice, after refusing the mentions.
+   */
+  async tell(
+    messages: readonly TrackedMentionDelivery[],
+    alongside: readonly AgentMessageDelivery[],
+  ): Promise<void> {
+    const live: Array<{ entry: Tracked; busy: boolean }> = [];
+    const settling: Promise<void>[] = [];
+    for (const { deliveryId } of messages) {
+      const entry = this.entries.get(deliveryId);
+      if (!entry?.carried) continue;
+      this.entries.uncarry(entry);
+      const { message } = entry;
+      const busy = this.ports.busy(message.agentId, message.conversationId);
+      const blocked = this.ports.blocked(message.agentId);
+      if (this.ports.consumed(message)) {
+        this.ports.decided?.(message, "consumed");
+        settling.push(this.settle.drain(message));
+      } else if (this.ports.told(message)) {
+        this.ports.decided?.(message, "already_notified");
+        settling.push(busy ? this.#pend(message) : this.settle.drain(message));
+      } else if (blocked && !(busy && blocked !== "queued_until_idle"))
+        settling.push(this.settle.refuse(message, BLOCKED_CODES[blocked]));
+      else live.push({ entry, busy });
+    }
+    if (live.length || alongside.length) settling.push(this.#announce(live, alongside));
+    await Promise.all(settling);
+  }
+
+  async #announce(
+    live: ReadonlyArray<{ entry: Tracked; busy: boolean }>,
+    alongside: readonly AgentMessageDelivery[],
+  ): Promise<void> {
+    const agentId = (live[0]?.entry.message ?? alongside[0]!).agentId;
+    const process = this.ports.process?.(agentId);
+    for (const { entry } of live) entry.inflight = true;
+    let outcome: "told" | "gone";
+    try {
+      outcome = await this.ports.announceBatch(
+        live.map(({ entry }) => entry.message),
+        alongside,
+      );
+    } catch (error) {
+      for (const { entry } of live) {
+        delete entry.inflight;
+        if (this.entries.get(entry.message.deliveryId) !== entry) continue;
+        if (this.replaced(entry, agentId, process)) continue;
+        // A session that went away mid-notice is transient: the server wakes the Agent again.
+        void this.settle.refuse(
+          entry.message,
+          error instanceof AgentWakeupUnavailableError
+            ? MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN
+            : MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
+        );
+      }
+      throw error;
+    }
+    const settling: Promise<void>[] = [];
+    for (const { entry, busy } of live) {
+      delete entry.inflight;
+      const { message } = entry;
+      if (this.entries.get(message.deliveryId) !== entry || this.replaced(entry, agentId, process))
+        continue;
+      if (outcome === "gone") {
+        const now = this.ports.running(agentId);
+        settling.push(
+          this.settle.refuse(
+            message,
+            now && !namesLaunch(now, message.mentionDelivery)
+              ? MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_DRIFT
+              : MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
+          ),
+        );
+      } else
+        settling.push(
+          busy && this.ports.busy(agentId, message.conversationId) && !this.ports.consumed(message)
+            ? this.#pend(message)
+            : this.settle.drain(message),
+        );
+    }
+    await Promise.all(settling);
+  }
+
+  async #pend(message: TrackedMentionDelivery): Promise<void> {
+    this.entries.set(message, "pending");
+    this.reports.transition(message, "daemon_pending", "accepted");
   }
 
   /** An inbox purge: the Agent can no longer read these conversations, so their unsettled

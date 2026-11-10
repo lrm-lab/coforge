@@ -53,19 +53,20 @@ test("a mention held by a backoff waits for it, then wakes the Agent and is told
   }
 });
 
-test("a held mention whose wake fails is refused once", async () => {
+test("a held mention whose wake fails stays pending and is told by the launch after the cooldown", async () => {
   backoffEndingIn(300);
-  const { runtime, frames, envelope, deliver, exit, frameSent } = await harness({
+  const { runtime, frames, notices, envelope, deliver, exit, launches, frameSent } = await harness({
     failLaunches: [2],
   });
   try {
     exit();
     await deliver(1, envelope(1));
-    await frameSent((frame) => frame.kind === "terminal");
+    await frameSent((frame) => frame.kind === "ack");
 
-    expect(frames.filter((frame) => frame.kind === "terminal")).toEqual([
-      { kind: "terminal", deliveryId: "delivery-1", code: "DELIVERY_REJECTED" },
-    ]);
+    // No delivery started the failed launch, so none was the one to refuse.
+    expect(launches()).toBe(3);
+    expect(notices).toHaveLength(1);
+    expect(frames.filter((frame) => frame.kind === "terminal")).toEqual([]);
   } finally {
     await runtime.stop();
   }
