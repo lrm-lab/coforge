@@ -1,16 +1,19 @@
 import { getLogger } from "@logtape/logtape";
 import {
   MENTION_DELIVERY_TERMINAL_CODES,
-  type AgentMentionDeliveryTerminalError,
-  type AgentMentionDeliveryTransition,
   type AgentMessageDelivery,
   type MentionDeliveryEnvelope,
-  type MentionDeliveryStage,
   type MentionDeliveryTerminalCode,
-  type MentionDeliveryTransitionOutcome,
 } from "@lrm/coforge-sdk/internal";
-import type { DeliveryHoldReason } from "./agent-delivery-gate";
-import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
+import type {
+  MentionDeliveryBlock,
+  MentionDeliveryPorts,
+  RunningMentionIdentity,
+} from "./mention-delivery-ports";
+import { MentionDeliveryReports } from "./mention-delivery-reports";
+
+/** The running identity a tracked mention is checked against, as the runtime names it. */
+export type { RunningMentionIdentity } from "./mention-delivery-ports";
 import { AgentWakeupUnavailableError } from "./agent-wakeup-unavailable-error";
 
 const logger = getLogger(["coforge", "daemon", "mention-delivery"]);
@@ -24,42 +27,11 @@ export function isTrackedMention(message: AgentMessageDelivery): message is Trac
   return message.mentionDelivery !== undefined;
 }
 
-/** The launch and native session the daemon reported for an Agent's running process: what a
- * tracked mention's envelope must name to be told to it. */
-export type RunningMentionIdentity = Readonly<{ launchId: string; sessionId: string }>;
-
-/** Why an Agent cannot be told a notice right now: an explicit delivery hold, or a busy runtime
- * that only takes notices between turns. */
-export type MentionDeliveryBlock = DeliveryHoldReason | "queued_until_idle";
-
 const BLOCKED_CODES: Readonly<Record<MentionDeliveryBlock, MentionDeliveryTerminalCode>> = {
   rate_limit_backoff: MENTION_DELIVERY_TERMINAL_CODES.QUOTA_LIMITED,
   runtime_error_backoff: MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
   fingerprint_fence: MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
   queued_until_idle: MENTION_DELIVERY_TERMINAL_CODES.UNSUPPORTED_DELIVERY_PATH,
-};
-
-/** What the tracker needs from the rest of the runtime. */
-export type MentionDeliveryPorts = {
-  /** Reports sent over the daemon's WSS RPC. */
-  transition(report: AgentMentionDeliveryTransition): Promise<void>;
-  terminalError(report: AgentMentionDeliveryTerminalError): Promise<void>;
-  /** ACKs the delivery with its envelope echoed. */
-  acknowledge(message: TrackedMentionDelivery): Promise<void>;
-  /** The launch and session last reported for the Agent's running process, if one runs. */
-  running(agentId: string): RunningMentionIdentity | undefined;
-  /** Whether the Agent's consumed cursor already covers the message. */
-  consumed(message: TrackedMentionDelivery): boolean;
-  /** Whether the Agent's current session already accepted a notice of this delivery. */
-  told(message: TrackedMentionDelivery): boolean;
-  /** Logs a decision that tells the session nothing (`agent.message.attention_decision`). */
-  decided?(message: TrackedMentionDelivery, outcome: "consumed" | "already_notified"): void;
-  /** Writes the delivery's notice to the Agent's session: `gone` when its process went away before
-   * the notice was accepted. Rejects when the session refused it. */
-  announce(message: TrackedMentionDelivery): Promise<"told" | "gone">;
-  /** Whether the Agent is mid-turn: a notice written now lands in the turn in progress. */
-  busy(agentId: string, conversationId?: string): boolean;
-  blocked(agentId: string): MentionDeliveryBlock | undefined;
 };
 
 type TrackedState = "received" | "pending" | "drained";
@@ -95,10 +67,14 @@ export class MentionDeliveryTracker {
   /** Delivery ids pending per Agent: told during a turn that has not ended. */
   readonly #pending = new Map<string, Set<string>>();
 
+  readonly #reports: MentionDeliveryReports;
+
   constructor(
     private readonly computerId: string,
     private readonly ports: MentionDeliveryPorts,
-  ) {}
+  ) {
+    this.#reports = new MentionDeliveryReports(ports);
+  }
 
   /** Why the envelope cannot belong to this delivery on this Computer, checked on receipt before
    * the delivery is queued anywhere; undefined when it can. */
@@ -137,16 +113,16 @@ export class MentionDeliveryTracker {
         return this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.INSTRUMENT_FAILED);
       if (existing.state === "drained") {
         existing.message = message;
-        return this.#acknowledge(message);
+        return this.#reports.acknowledge(message);
       }
       if (namesLaunch(existing.message.mentionDelivery, envelope)) {
         existing.message = message;
-        this.#transition(message, "daemon_pending", "coalesced");
+        this.#reports.transition(message, "daemon_pending", "coalesced");
         return;
       }
     }
     this.#set(message, "received");
-    this.#transition(message, "daemon_received", "accepted");
+    this.#reports.transition(message, "daemon_received", "accepted");
     if (this.ports.told(message)) {
       this.ports.decided?.(message, "already_notified");
       return this.#told(message);
@@ -275,9 +251,7 @@ export class MentionDeliveryTracker {
       code,
       ...(detail ? { detail } : {}),
     });
-    return this.#send("terminal_error", message, () =>
-      this.ports.terminalError({ ...this.#scope(message), code }),
-    );
+    return this.#reports.terminalError(message, code);
   }
 
   /** Explicit Stop cancels received and pending notices; cancellation is never a drain. */
@@ -319,15 +293,15 @@ export class MentionDeliveryTracker {
 
   async #markPending(message: TrackedMentionDelivery): Promise<void> {
     this.#set(message, "pending");
-    this.#transition(message, "daemon_pending", "accepted");
+    this.#reports.transition(message, "daemon_pending", "accepted");
   }
 
   async #drain(message: TrackedMentionDelivery): Promise<void> {
     if (this.#tracked.get(message.deliveryId)?.state !== "drained") {
       this.#set(message, "drained");
-      this.#transition(message, "daemon_drained", "accepted");
+      this.#reports.transition(message, "daemon_drained", "accepted");
     }
-    await this.#acknowledge(message);
+    await this.#reports.acknowledge(message);
   }
 
   #set(message: TrackedMentionDelivery, state: TrackedState): void {
@@ -355,53 +329,5 @@ export class MentionDeliveryTracker {
     const pending = this.#pending.get(tracked.message.agentId);
     pending?.delete(deliveryId);
     if (pending?.size === 0) this.#pending.delete(tracked.message.agentId);
-  }
-
-  /** Diagnostic only: sent without waiting, so it never delays telling the Agent. */
-  #transition(
-    message: TrackedMentionDelivery,
-    stage: MentionDeliveryStage,
-    outcome: MentionDeliveryTransitionOutcome,
-  ): void {
-    void this.#send("transition", message, () =>
-      this.ports.transition({ ...this.#scope(message), stage, outcome }),
-    );
-  }
-
-  async #acknowledge(message: TrackedMentionDelivery): Promise<void> {
-    await this.#send("ack", message, () => this.ports.acknowledge(message));
-  }
-
-  #scope(message: TrackedMentionDelivery) {
-    return {
-      protocolMajor: message.protocolMajor,
-      requestId: crypto.randomUUID(),
-      workspaceId: message.workspaceId,
-      agentId: message.agentId,
-      deliveryId: message.deliveryId,
-      mentionDelivery: message.mentionDelivery,
-    };
-  }
-
-  /** A report that fails is logged, never thrown: the server still holds the mention pending and
-   * issues it again. Whether it was sent. */
-  async #send(
-    kind: "transition" | "terminal_error" | "ack",
-    message: TrackedMentionDelivery,
-    send: () => Promise<void>,
-  ): Promise<boolean> {
-    try {
-      await send();
-      return true;
-    } catch (error) {
-      logger.warn("Tracked mention delivery report was not sent", {
-        event: "agent.mention_delivery.report_failed",
-        report: kind,
-        agent_id: message.agentId,
-        delivery_id: message.deliveryId,
-        error_code: diagnosticErrorName(error),
-      });
-      return false;
-    }
   }
 }
