@@ -475,6 +475,7 @@ export * from "./mime-type";
 export * from "./json-record";
 export * from "./agent-environment";
 export * from "./mention-delivery";
+export * from "./credential-restored";
 
 export {
   weeklyReportWorkflowSchema,

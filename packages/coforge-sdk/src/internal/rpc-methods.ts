@@ -70,6 +70,7 @@ export const RPC_METHODS = {
   agentMessageReject: "agent:v1:message:reject",
   agentMentionDeliveryTransition: "agent:v1:mention_delivery:transition",
   agentMentionDeliveryTerminalError: "agent:v1:mention_delivery:terminal_error",
+  agentCredentialRestored: "agent:v1:credential:restored",
   agentChannelMute: "agent:v1:channel:mute",
   agentChannelUnmute: "agent:v1:channel:unmute",
   agentThreadUnfollow: "agent:v1:thread:unfollow",
