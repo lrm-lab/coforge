@@ -3,8 +3,10 @@ import {
   existsSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   rmdirSync,
   symlinkSync,
+  unlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -33,6 +35,65 @@ describe("ContextViewStore", () => {
     expect(store.find("message-1")).toEqual(entry);
   });
 
+  test("keeps the validated index in memory without exposing mutable entries", () => {
+    const root = mkdtempSync(join(tmpdir(), "coforge-context-view-"));
+    try {
+      const store = new ContextViewStore(root, "server-1", "agent-1", () => 2_000);
+      store.record(entry);
+
+      const found = store.find("message-1");
+      found!.offset = 999;
+      expect(store.find("message-1")).toEqual(entry);
+
+      const replacement = { ...entry, offset: 84 };
+      store.record(replacement);
+      // The old implementation returned the first matching JSONL row; preserve that behavior.
+      expect(store.find("message-1")).toEqual(entry);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("reloads after an external append or atomic replacement", () => {
+    const root = mkdtempSync(join(tmpdir(), "coforge-context-view-"));
+    try {
+      const store = new ContextViewStore(root, "server-1", "agent-1", () => 2_000);
+      store.record(entry);
+      expect(store.find("message-1")).toEqual(entry);
+
+      const appended = { ...entry, messageId: "message-2", offset: 84 };
+      writeFileSync(store.indexPath, `${JSON.stringify(appended)}\n`, { flag: "a" });
+      expect(store.find("message-2")).toEqual(appended);
+
+      const replaced = { ...entry, messageId: "message-3", offset: 126 };
+      writeFileSync(store.indexPath, `${JSON.stringify(replaced)}\n`, "utf8");
+      expect(store.find("message-1")).toBeUndefined();
+      expect(store.find("message-3")).toEqual(replaced);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("does not serve a cached entry after the index becomes a symlink", () => {
+    const root = mkdtempSync(join(tmpdir(), "coforge-context-view-"));
+    const outside = mkdtempSync(join(tmpdir(), "coforge-context-view-outside-"));
+    try {
+      const store = new ContextViewStore(root, "server-1", "agent-1", () => 2_000);
+      store.record(entry);
+      expect(store.find("message-1")).toEqual(entry);
+
+      const replacement = join(outside, "index.jsonl");
+      writeFileSync(replacement, `${JSON.stringify(entry)}\n`, "utf8");
+      const indexPath = store.indexPath;
+      unlinkSync(indexPath);
+      symlinkSync(replacement, indexPath);
+      expect(() => store.find("message-1")).toThrow("Context view file is not private");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   test("compacts old entries and enforces the index cap", () => {
     const root = mkdtempSync(join(tmpdir(), "coforge-context-view-"));
     const now = 31 * 24 * 60 * 60 * 1000;
@@ -43,6 +104,25 @@ describe("ContextViewStore", () => {
     const current = { ...entry, messageId: "message-2", sentAt: new Date(now).toISOString() };
     store.record(current);
     expect(readFileSync(store.indexPath).length).toBeLessThanOrEqual(AGENT_CONTEXT_INDEX_MAX_BYTES);
+  });
+
+  test("invalidates retained lookups after compaction", () => {
+    const root = mkdtempSync(join(tmpdir(), "coforge-context-view-"));
+    try {
+      const now = 31 * 24 * 60 * 60 * 1000;
+      const store = new ContextViewStore(root, "server-1", "agent-1", () => now);
+      const current = { ...entry, messageId: "message-2", sentAt: new Date(now).toISOString() };
+      store.record(entry);
+      store.record(current);
+      expect(store.find("message-1")).toEqual(entry);
+      expect(store.find("message-2")).toEqual(current);
+
+      expect(store.compact(30)).toBe(1);
+      expect(store.find("message-1")).toBeUndefined();
+      expect(store.find("message-2")).toEqual(current);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("keeps disabled data for 24 hours and rejects symlinked state", () => {
