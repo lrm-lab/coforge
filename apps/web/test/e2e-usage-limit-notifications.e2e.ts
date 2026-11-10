@@ -10,7 +10,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
- * The bell by the user card (task #641): an owner sees one card per Computer and provider, opening
+ * The bell (task #641): an owner sees one card per Computer and provider, opening
  * the list marks them seen, Dismiss hides one, and a close on the owner's channel takes the card
  * away live. Seeds a Computer, its Agents and two events, and removes them after the run.
  * Screenshots, light, dark and phone, are written under `.amp/e2e/usage-limit-notifications/`.
@@ -109,26 +109,16 @@ test("usage-limit cards count, get seen, get dismissed and leave live", async ()
   try {
     await mkdir(artifacts, { recursive: true });
 
-    // A phone: the dot on the menu button, then the bell inside the drawer, then a sheet.
+    // A phone: the bell in a tab home's header carries the unseen count, then opens a sheet.
     await browser("set", "viewport", "390", "844");
-    await browser("open", page);
+    await browser("open", `${proxy.origin}/en/w/${workspace.slug}/activity`);
+    const phoneBell = `[...document.querySelectorAll(${JSON.stringify(bell)})].find((el) => el.getBoundingClientRect().width > 0)`;
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector('button[aria-label="Open menu"]') !== null`,
+      `${pageHydrated} && ${phoneBell}?.getAttribute("aria-label") === "Notifications, 2 unread"`,
     );
-    await browser(
-      "wait",
-      "--fn",
-      `document.querySelector('button[aria-label="Open menu"]').parentElement.querySelector(".bg-error-solid") !== null`,
-    );
-    await shots("phone-menu");
-    await clickFirst('button[aria-label="Open menu"]');
-    await browser(
-      "wait",
-      "--fn",
-      `[...document.querySelectorAll(${JSON.stringify(bell)})].some((el) => el.getBoundingClientRect().width > 0)`,
-    );
+    await shots("phone-bell");
     await clickFirst(bell);
     await browser("wait", "--fn", hasCards(2));
     await browser("wait", "400");

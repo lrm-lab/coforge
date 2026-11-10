@@ -70,12 +70,14 @@ import { Route as WWorkspaceSlugChatRouteImport } from './routes/w.$workspaceSlu
 import { Route as WWorkspaceSlugComputersRouteImport } from './routes/w.$workspaceSlug/_computers'
 import { Route as WWorkspaceSlugActivityRouteImport } from './routes/w.$workspaceSlug/activity'
 import { Route as WWorkspaceSlugAppReviewRouteImport } from './routes/w.$workspaceSlug/app-review'
+import { Route as WWorkspaceSlugMeRouteImport } from './routes/w.$workspaceSlug/me'
 import { Route as WWorkspaceSlugMembersRouteImport } from './routes/w.$workspaceSlug/members'
 import { Route as WWorkspaceSlugPiChatRouteImport } from './routes/w.$workspaceSlug/pi-chat'
 import { Route as WWorkspaceSlugRecordsRouteImport } from './routes/w.$workspaceSlug/records'
 import { Route as WWorkspaceSlugSearchRouteImport } from './routes/w.$workspaceSlug/search'
 import { Route as WWorkspaceSlugSettingsRouteImport } from './routes/w.$workspaceSlug/settings'
 import { Route as WWorkspaceSlugTasksRouteImport } from './routes/w.$workspaceSlug/tasks'
+import { Route as WWorkspaceSlugWorkspaceRouteImport } from './routes/w.$workspaceSlug/workspace'
 import { Route as ApiAgentV1ArtifactsRouteImport } from './routes/api/agent/v1/artifacts'
 import { Route as ApiAgentV1ChannelsRouteImport } from './routes/api/agent/v1/channels'
 import { Route as ApiAgentV1EventsRouteImport } from './routes/api/agent/v1/events'
@@ -506,6 +508,11 @@ const WWorkspaceSlugAppReviewRoute = WWorkspaceSlugAppReviewRouteImport.update({
   path: '/app-review',
   getParentRoute: () => WWorkspaceSlugRoute,
 } as any)
+const WWorkspaceSlugMeRoute = WWorkspaceSlugMeRouteImport.update({
+  id: '/me',
+  path: '/me',
+  getParentRoute: () => WWorkspaceSlugRoute,
+} as any)
 const WWorkspaceSlugMembersRoute = WWorkspaceSlugMembersRouteImport.update({
   id: '/members',
   path: '/members',
@@ -534,6 +541,11 @@ const WWorkspaceSlugSettingsRoute = WWorkspaceSlugSettingsRouteImport.update({
 const WWorkspaceSlugTasksRoute = WWorkspaceSlugTasksRouteImport.update({
   id: '/tasks',
   path: '/tasks',
+  getParentRoute: () => WWorkspaceSlugRoute,
+} as any)
+const WWorkspaceSlugWorkspaceRoute = WWorkspaceSlugWorkspaceRouteImport.update({
+  id: '/workspace',
+  path: '/workspace',
   getParentRoute: () => WWorkspaceSlugRoute,
 } as any)
 const ApiAgentV1ArtifactsRoute = ApiAgentV1ArtifactsRouteImport.update({
@@ -1236,12 +1248,14 @@ export interface FileRoutesByFullPath {
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
+  '/w/$workspaceSlug/me': typeof WWorkspaceSlugMeRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
   '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsRouteWithChildren
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
+  '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
   '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
   '/api/agent/v1/events': typeof ApiAgentV1EventsRoute
@@ -1414,11 +1428,13 @@ export interface FileRoutesByTo {
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
+  '/w/$workspaceSlug/me': typeof WWorkspaceSlugMeRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
   '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
+  '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
   '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
   '/api/agent/v1/events': typeof ApiAgentV1EventsRoute
@@ -1593,12 +1609,14 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/_computers': typeof WWorkspaceSlugComputersRouteWithChildren
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
+  '/w/$workspaceSlug/me': typeof WWorkspaceSlugMeRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
   '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsRouteWithChildren
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
+  '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
   '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
   '/api/agent/v1/events': typeof ApiAgentV1EventsRoute
@@ -1773,12 +1791,14 @@ export interface FileRouteTypes {
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
+    | '/w/$workspaceSlug/me'
     | '/w/$workspaceSlug/members'
     | '/w/$workspaceSlug/pi-chat'
     | '/w/$workspaceSlug/records'
     | '/w/$workspaceSlug/search'
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
+    | '/w/$workspaceSlug/workspace'
     | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
     | '/api/agent/v1/events'
@@ -1951,11 +1971,13 @@ export interface FileRouteTypes {
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
+    | '/w/$workspaceSlug/me'
     | '/w/$workspaceSlug/members'
     | '/w/$workspaceSlug/pi-chat'
     | '/w/$workspaceSlug/search'
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
+    | '/w/$workspaceSlug/workspace'
     | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
     | '/api/agent/v1/events'
@@ -2129,12 +2151,14 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/_computers'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
+    | '/w/$workspaceSlug/me'
     | '/w/$workspaceSlug/members'
     | '/w/$workspaceSlug/pi-chat'
     | '/w/$workspaceSlug/records'
     | '/w/$workspaceSlug/search'
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
+    | '/w/$workspaceSlug/workspace'
     | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
     | '/api/agent/v1/events'
@@ -2814,6 +2838,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugAppReviewRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
     }
+    '/w/$workspaceSlug/me': {
+      id: '/w/$workspaceSlug/me'
+      path: '/me'
+      fullPath: '/w/$workspaceSlug/me'
+      preLoaderRoute: typeof WWorkspaceSlugMeRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
     '/w/$workspaceSlug/members': {
       id: '/w/$workspaceSlug/members'
       path: '/members'
@@ -2854,6 +2885,13 @@ declare module '@tanstack/react-router' {
       path: '/tasks'
       fullPath: '/w/$workspaceSlug/tasks'
       preLoaderRoute: typeof WWorkspaceSlugTasksRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
+    '/w/$workspaceSlug/workspace': {
+      id: '/w/$workspaceSlug/workspace'
+      path: '/workspace'
+      fullPath: '/w/$workspaceSlug/workspace'
+      preLoaderRoute: typeof WWorkspaceSlugWorkspaceRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
     }
     '/api/agent/v1/artifacts': {
@@ -3748,12 +3786,14 @@ interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugComputersRoute: typeof WWorkspaceSlugComputersRouteWithChildren
   WWorkspaceSlugActivityRoute: typeof WWorkspaceSlugActivityRoute
   WWorkspaceSlugAppReviewRoute: typeof WWorkspaceSlugAppReviewRoute
+  WWorkspaceSlugMeRoute: typeof WWorkspaceSlugMeRoute
   WWorkspaceSlugMembersRoute: typeof WWorkspaceSlugMembersRoute
   WWorkspaceSlugPiChatRoute: typeof WWorkspaceSlugPiChatRoute
   WWorkspaceSlugRecordsRoute: typeof WWorkspaceSlugRecordsRouteWithChildren
   WWorkspaceSlugSearchRoute: typeof WWorkspaceSlugSearchRoute
   WWorkspaceSlugSettingsRoute: typeof WWorkspaceSlugSettingsRoute
   WWorkspaceSlugTasksRoute: typeof WWorkspaceSlugTasksRoute
+  WWorkspaceSlugWorkspaceRoute: typeof WWorkspaceSlugWorkspaceRoute
   WWorkspaceSlugAgentAgentIdRoute: typeof WWorkspaceSlugAgentAgentIdRoute
   WWorkspaceSlugArtifactsArtifactIdRoute: typeof WWorkspaceSlugArtifactsArtifactIdRoute
   WWorkspaceSlugProjectsProjectSlugRoute: typeof WWorkspaceSlugProjectsProjectSlugRoute
@@ -3767,12 +3807,14 @@ const WWorkspaceSlugRouteChildren: WWorkspaceSlugRouteChildren = {
   WWorkspaceSlugComputersRoute: WWorkspaceSlugComputersRouteWithChildren,
   WWorkspaceSlugActivityRoute: WWorkspaceSlugActivityRoute,
   WWorkspaceSlugAppReviewRoute: WWorkspaceSlugAppReviewRoute,
+  WWorkspaceSlugMeRoute: WWorkspaceSlugMeRoute,
   WWorkspaceSlugMembersRoute: WWorkspaceSlugMembersRoute,
   WWorkspaceSlugPiChatRoute: WWorkspaceSlugPiChatRoute,
   WWorkspaceSlugRecordsRoute: WWorkspaceSlugRecordsRouteWithChildren,
   WWorkspaceSlugSearchRoute: WWorkspaceSlugSearchRoute,
   WWorkspaceSlugSettingsRoute: WWorkspaceSlugSettingsRoute,
   WWorkspaceSlugTasksRoute: WWorkspaceSlugTasksRoute,
+  WWorkspaceSlugWorkspaceRoute: WWorkspaceSlugWorkspaceRoute,
   WWorkspaceSlugAgentAgentIdRoute: WWorkspaceSlugAgentAgentIdRoute,
   WWorkspaceSlugArtifactsArtifactIdRoute:
     WWorkspaceSlugArtifactsArtifactIdRoute,

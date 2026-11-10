@@ -1,7 +1,7 @@
 import { Plus, SearchLg as Search } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
-import { MobileNavigationButton } from "#src/components/layout/sidebar/mobile-header";
+import { PageBackButton } from "#src/components/layout/page-back-button";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 
@@ -11,7 +11,7 @@ export function AgentsPending() {
       <section className="@container/members flex min-w-0 flex-1 flex-col overflow-hidden bg-primary">
         <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-page @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           <div className="flex h-12 min-w-0 flex-1 items-center gap-3">
-            <MobileNavigationButton />
+            <PageBackButton />
             <h1 className="truncate text-lg font-semibold text-primary">
               {m.member_directory_title()}
             </h1>

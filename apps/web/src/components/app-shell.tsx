@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, type FC } from "react";
-import { useRouter, useRouterState } from "@tanstack/react-router";
+import { useEffect, useMemo, useState, type FC } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -17,11 +17,11 @@ import { Button as AriaButton } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
-import { MobileDrawerProvider } from "#src/components/layout/sidebar/mobile-header";
-import {
-  SidebarExpanded,
-  SidebarMobileDrawer,
-} from "#src/components/layout/sidebar/sidebar-expanded";
+import { SidebarExpanded } from "#src/components/layout/sidebar/sidebar-expanded";
+import { PhoneShellContext, type PhoneShell } from "#src/components/layout/phone-shell";
+import { PhoneTabBar } from "#src/components/layout/phone-tab-bar";
+import { ShellLinks } from "#src/components/layout/shell-links";
+import { tabHomeOf } from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
 import {
@@ -40,12 +40,12 @@ import type { CreateWorkspaceInput } from "#src/features/workspaces/create-works
 import { useReportActivityUnread, useWorkspaceTabTitle } from "#src/lib/browser-tab";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
-import { SearchButton } from "#src/features/search/search-button";
 import { TopBarBusyAgents } from "#src/features/agents/top-bar-busy-agents";
 import { SearchField } from "#src/features/search/search-field";
 import { AppTopBar } from "#src/components/layout/app-top-bar";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { cx } from "#src/utils/cx";
 
 export type AppUser = {
   id: string;
@@ -98,6 +98,8 @@ function useNavItems(
   sections?: readonly string[];
   /** A heading that starts a new group at this item. */
   groupLabel?: string;
+  /** The phone's tab bar carries this item itself; the Workspace tab lists the rest. */
+  tab?: "chat" | "activity";
 })[] {
   const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
   // The number when the server counts some, else the dot while anything is unread (an item the
@@ -126,6 +128,7 @@ function useNavItems(
       href: localizeHref(base),
       sections: CHAT_SECTIONS,
       icon: MessageChatSquare,
+      tab: "chat" as const,
     },
     {
       label: m.navigation_activity(),
@@ -133,6 +136,7 @@ function useNavItems(
       icon: Activity,
       badge: activityBadge,
       unreadCount,
+      tab: "activity" as const,
     },
     ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
     // What the Workspace shares sits under its own heading, apart from the viewer's own
@@ -163,37 +167,6 @@ function useNavItems(
       icon: Monitor,
     },
   ];
-}
-
-/** Official nav components render plain `<a href>` with no onClick hook, so
- * this routes same-origin, unmodified clicks through the router instead. */
-function useSpaNavigation() {
-  const router = useRouter();
-  return useCallback(
-    (event: React.MouseEvent<HTMLElement>) => {
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-        return;
-      }
-      const anchor = (event.target as HTMLElement).closest("a[href]");
-      if (!(anchor instanceof HTMLAnchorElement)) return;
-      if (anchor.target && anchor.target !== "_self") return;
-      const url = new URL(anchor.href, window.location.href);
-      if (url.origin !== window.location.origin) return;
-      event.preventDefault();
-      void router.navigate({ href: url.pathname + url.search + url.hash });
-    },
-    [router],
-  );
-}
-
-/** The shell's own links (the top bar's and the sidebars'), routed through the router. */
-function ShellLinks({ children }: { children: React.ReactNode }) {
-  const onClickCapture = useSpaNavigation();
-  return (
-    <div onClickCapture={onClickCapture} className="contents">
-      {children}
-    </div>
-  );
 }
 
 export function AppShell({
@@ -231,19 +204,24 @@ export function AppShell({
   const searchStr = useRouterState({
     select: (state) => state.location.searchStr,
   });
+  const search = useRouterState({ select: (state) => state.location.search });
   const workspaceId = currentWorkspace.id;
   const base = workspacePath(currentWorkspace.slug);
   useEffect(() => {
     if (!pathname.startsWith(`${base}/records`)) return;
-    const search = !searchStr ? "" : searchStr.startsWith("?") ? searchStr : `?${searchStr}`;
+    const query = !searchStr ? "" : searchStr.startsWith("?") ? searchStr : `?${searchStr}`;
     // Remembered within the Workspace, so it holds the path under `/w/<slug>`.
-    rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${search}`);
+    rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${query}`);
   }, [workspaceId, base, pathname, searchStr]);
   const activityAttention = useActivityAttention(user, workspaceId);
   useReportActivityUnread(activityAttention.hasUnread, activityAttention.unreadCount);
   useWorkspaceTabTitle(currentWorkspace.name);
   const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
   const section = pathname.slice(base.length).split("/")[1] ?? "";
+  // The phone's tab bar shows on a tab home only; Chat's list is on screen without its own address
+  // when a conversation's back arrow brings it back, which the page reports.
+  const [chatListOpen, setChatListOpen] = useState(false);
+  const tabHome = tabHomeOf({ section, search, chatListOpen });
   const activeUrl = navItems.find((item) =>
     item.sections
       ? item.sections.includes(section)
@@ -257,12 +235,37 @@ export function AppShell({
       onCreate={onCreateWorkspace}
     />
   );
+  const chatItem = navItems.find((item) => item.tab === "chat");
+  const activityItem = navItems.find((item) => item.tab === "activity");
+  const phoneShell: PhoneShell = {
+    workspaceSwitcher: (
+      <WorkspaceSwitcher
+        workspaces={workspaces}
+        current={currentWorkspace}
+        onSelect={onSelectWorkspace}
+        onCreate={onCreateWorkspace}
+        trigger="mark"
+      />
+    ),
+    workspaceItems: navItems.filter(
+      (item): item is typeof item & { href: string } => !item.tab && item.href !== undefined,
+    ),
+    user,
+    onSignOut,
+    setChatListOpen,
+  };
 
   return (
     <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>
-      <MobileDrawerProvider>
-        {/* Clears the notch and the home indicator on a phone. */}
-        <div className="flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:bg-sidebar">
+      <PhoneShellContext value={phoneShell}>
+        {/* Clears the notch on a phone, and its home indicator unless the tab bar, which has its own
+        padding for it, is showing. */}
+        <div
+          className={cx(
+            "flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:bg-sidebar",
+            tabHome && "max-lg:pb-0!",
+          )}
+        >
           <ShellLinks>
             <AppTopBar
               workspace={workspaceSwitcher}
@@ -277,28 +280,10 @@ export function AppShell({
             />
           </ShellLinks>
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-            {/* `contents` keeps the sidebars direct flex items of this row. The drawer is mobile only;
-            on desktop `sidebar-collapsed` on <html> picks the expanded one or the rail. */}
+            {/* `contents` keeps the sidebars direct flex items of this row. On desktop
+            `sidebar-collapsed` on <html> picks the expanded one or the rail; a phone has neither, its
+            tab bar below the content takes their place. */}
             <ShellLinks>
-              {/* The phone drawer keeps the Workspace, search and the user's own controls, which on
-            desktop sit in the top bar. */}
-              <SidebarMobileDrawer
-                activeUrl={activeUrl}
-                items={navItems}
-                subheader={workspaceSwitcher}
-                actions={<SearchButton />}
-                footer={
-                  <>
-                    <WhatsNewRow />
-                    <div className="flex min-w-0 items-center gap-1">
-                      <div className="min-w-0 flex-1">
-                        <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
-                      </div>
-                      <NotificationBell workspaceSlug={currentWorkspace.slug} />
-                    </div>
-                  </>
-                }
-              />
               <SidebarExpanded activeUrl={activeUrl} items={navItems} footer={<WhatsNewRow />} />
               <SidebarRail activeUrl={activeUrl} items={navItems} footer={<WhatsNewRailButton />} />
             </ShellLinks>
@@ -312,8 +297,23 @@ export function AppShell({
               </div>
             </div>
           </div>
+          {tabHome && chatItem?.href && activityItem?.href && (
+            <ShellLinks>
+              <PhoneTabBar
+                current={tabHome}
+                chatHref={chatItem.href}
+                activityHref={activityItem.href}
+                activityUnread={{
+                  count: activityItem.unreadCount,
+                  lit: Boolean(activityItem.badge),
+                }}
+                base={base}
+                user={user}
+              />
+            </ShellLinks>
+          )}
         </div>
-      </MobileDrawerProvider>
+      </PhoneShellContext>
     </SystemNotificationsProvider>
   );
 }

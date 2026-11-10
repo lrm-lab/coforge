@@ -13,6 +13,7 @@ export function ActivityInboxPending() {
     >
       {/* The tabs' place, so the list does not move when the page lands. */}
       <PageHeader
+        leading={null}
         heading={m.navigation_activity()}
         tabs={<Skeleton className="mb-3 h-6 w-64" />}
         tabsStart

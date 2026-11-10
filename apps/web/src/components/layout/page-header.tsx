@@ -1,11 +1,12 @@
 import type { FC } from "react";
 
-import { MobileNavigationButton } from "#src/components/layout/sidebar/mobile-header";
+import { PageBackButton } from "#src/components/layout/page-back-button";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { cn } from "#src/lib/utils";
 
 /**
- * The 48px header band every page owns. On mobile it carries the drawer button.
+ * The 48px header band every page owns. On a phone it carries the back button, which a tab
+ * home (no `leading`, `null`) leaves out.
  *
  * With `tabs` it is the conversation header's row (`TabbedHeader`): title on the left, the tabs
  * centered (or, with `tabsStart`, after it), actions on the right.
@@ -21,7 +22,8 @@ export function PageHeader({
   tabsStart,
   headingClassName,
 }: {
-  /** A control that belongs before the title, such as a panel's way back. */
+  /** A control that belongs before the title, such as a panel's way back. Left out, a phone gets
+   * `PageBackButton`; `null` shows nothing. */
   leading?: React.ReactNode;
   /** The icon that goes with the heading, shown before it. */
   icon?: FC<{ className?: string }>;
@@ -40,7 +42,7 @@ export function PageHeader({
 }) {
   const title = (
     <>
-      {leading ?? <MobileNavigationButton />}
+      {leading === undefined ? <PageBackButton /> : leading}
       {Icon && <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-secondary" />}
       {breadcrumb}
       <h1 className={cn("truncate text-lg font-semibold text-primary", headingClassName)}>

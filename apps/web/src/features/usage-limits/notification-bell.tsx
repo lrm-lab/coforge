@@ -129,7 +129,7 @@ function NoticeList({
   );
 }
 
-/** A phone's panel: a sheet up from the bottom, over the drawer the bell sits in. */
+/** A phone's panel: a sheet up from the bottom, over the page the bell sits in. */
 function NoticeSheet({ children }: { children: ReactNode }) {
   return (
     <AriaModalOverlay
@@ -158,8 +158,8 @@ function NoticeSheet({ children }: { children: ReactNode }) {
 }
 
 /**
- * The bell by the user card (task #641), with the unread count, for a viewer who has notifications
- * to see. In the desktop top bar it drops below the bell; on a phone, beside the user card in the drawer, it opens as a sheet. What
+ * The bell (task #641), with the unread count, for a viewer who has notifications
+ * to see. In the desktop top bar it drops below the bell; on a phone, in a tab home's header, it opens as a sheet. What
  * was open counts as seen once the panel closes, so its dots stay for as long as it is read.
  */
 export function NotificationBell({ workspaceSlug }: { workspaceSlug: string }) {

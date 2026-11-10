@@ -62,7 +62,8 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     "task-labels": "Labels for tasks",
   };
 
-  // The drawer, the sidebar and the rail are all in the page; the one meant is the one on screen.
+  // The sidebar, the rail and the Me page's row can all be in the page; the one meant is the one on
+  // screen.
   const entry = `[...document.querySelectorAll('button')].find((el) => (el.textContent === "What's new" || el.getAttribute("aria-label") === "What's new") && el.getBoundingClientRect().width > 0)`;
   const dot = `(${entry})?.querySelector("span.size-2.rounded-full") != null`;
   const dialog = `([...document.querySelectorAll('[role="dialog"]')].find((el) => el.getAttribute("aria-label") === "What's new") ?? null)`;
@@ -160,13 +161,11 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     await shoot(first, "desktop-3-rail");
     await press(first, visible("Expand sidebar"));
 
-    // On a phone the row sits at the foot of the menu; the dialog comes up from the bottom.
+    // On a phone the row is on the Me tab's page; the dialog comes up from the bottom.
     await first.browser("set", "viewport", "390", "844");
     await open(first);
     expect(await first.evaluate(`(${entry}) == null`)).toBe(true);
-    await first.evaluate(
-      `([...document.querySelectorAll('[aria-label="Open menu"]')].find((el) => el.getBoundingClientRect().width > 0).click(), true)`,
-    );
+    await first.browser("open", `${origin}/en/w/${workspace.slug}/me`);
     await first.browser("wait", "--fn", `(${entry}) != null`);
     await shoot(first, "phone-1-menu");
     await press(first, entry);
