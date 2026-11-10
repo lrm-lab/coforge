@@ -42,7 +42,7 @@ export function useActivityInboxRealtime({
   onActivity: () => void;
   /** Where the inbox stands after a clearing write (`ActivityAttention`), at once and in place of
    * `onActivity`. */
-  onAttention?: (attention: ActivityAttention) => void;
+  onAttention?: (attention: ActivityAttention, workspaceId: string) => void;
   /** The channel became `subscribed`, and may have missed what was published before (see
    * `queryMissedBySubscribe`). */
   onSubscribed?: (recovery: SubscribedRecovery) => void;
@@ -78,8 +78,9 @@ export function useActivityInboxRealtime({
         return;
       }
       let attention: ActivityAttention | undefined;
+      let workspaceId = "";
       try {
-        ({ attention } = decodeActivityChangedEvent(publication.data));
+        ({ attention, workspaceId } = decodeActivityChangedEvent(publication.data));
       } catch {
         // Neither a message nor an Activity signal (the channels also carry other events): only a
         // pin or mute change the caller asked for refreshes.
@@ -88,7 +89,8 @@ export function useActivityInboxRealtime({
         if (event?.type !== "pref.changed.v1" || (event.name !== "pins" && event.name !== "muted"))
           return;
       }
-      if (attention && onAttentionRef.current) return onAttentionRef.current(attention);
+      if (attention && onAttentionRef.current)
+        return onAttentionRef.current(attention, workspaceId);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => onActivityRef.current(), REFRESH_DELAY_MS);
     },

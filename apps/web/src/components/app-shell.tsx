@@ -62,14 +62,14 @@ export type AppUser = {
  * stands, which the badge takes; anything else that reaches the inbox (a mention from outside the
  * channel, a Task assignment) re-reads it (`activityNavAttentionRealtime`).
  */
-function useActivityAttention(user: AppUser) {
+function useActivityAttention(user: AppUser, workspaceId: string) {
   const queryClient = useQueryClient();
   const { onMessage, onActivity, onAttention, onSubscribed } = useMemo(
-    () => activityNavAttentionRealtime(queryClient, user.id),
-    [queryClient, user.id],
+    () => activityNavAttentionRealtime(queryClient, user.id, workspaceId),
+    [queryClient, user.id, workspaceId],
   );
   useActivityInboxRealtime({ userId: user.id, onMessage, onActivity, onAttention, onSubscribed });
-  const query = useQuery(activityNavAttentionQuery());
+  const query = useQuery(activityNavAttentionQuery(workspaceId));
   return { hasUnread: query.data?.hasUnread ?? false, unreadCount: query.data?.unreadCount };
 }
 
@@ -93,13 +93,18 @@ function useNavItems(
   groupLabel?: string;
 })[] {
   const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
-  // The number when the server counts, else the dot; a count of zero shows nothing.
+  // The number when the server counts some, else the dot while anything is unread (an item the
+  // count leaves out, such as a Task, or a server that counts nothing).
   const unreadCount =
     activity.unreadCount && activity.unreadCount > 0 ? activity.unreadCount : undefined;
   const activityBadge =
     unreadCount !== undefined ? (
-      <UnreadBadge count={unreadCount} />
-    ) : activity.unreadCount === undefined && activity.hasUnread ? (
+      <>
+        <UnreadBadge count={unreadCount} />
+        {/* The badge is hidden from assistive tech, so the row names its count here. */}
+        <span className="sr-only">{m.conversation_thread_unread({ count: unreadCount })}</span>
+      </>
+    ) : activity.hasUnread ? (
       <UnreadDot className="ml-auto" />
     ) : undefined;
   const recordsHref = recordsNavHref(workspaceId);
@@ -227,7 +232,7 @@ export function AppShell({
     // Remembered within the Workspace, so it holds the path under `/w/<slug>`.
     rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${search}`);
   }, [workspaceId, base, pathname, searchStr]);
-  const activityAttention = useActivityAttention(user);
+  const activityAttention = useActivityAttention(user, workspaceId);
   useReportActivityUnread(activityAttention.hasUnread, activityAttention.unreadCount);
   useWorkspaceTabTitle(currentWorkspace.name);
   const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
