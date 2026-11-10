@@ -10,7 +10,9 @@
 export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
 /**
- * Ceiling for owner uploads that land in a Computer's `uploads/` directory via OSS direct upload
- * + Daemon pull. Larger than chat attachments because bytes never transit the web process.
+ * Ceiling for owner uploads that land in a Computer's `uploads/` directory: the page posts the
+ * file to the web server, which stores it for the Daemon to pull. It stays under the 128 MiB
+ * request body the web server's Bun.serve accepts by default, so a file the page offers is never
+ * refused before this limit can name itself.
  */
-export const COMPUTER_FILE_MAX_BYTES = 500 * 1024 * 1024;
+export const COMPUTER_FILE_MAX_BYTES = 100 * 1024 * 1024;

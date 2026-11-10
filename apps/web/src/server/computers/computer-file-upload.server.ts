@@ -94,7 +94,7 @@ export class ComputerFileUploads {
     } = {
       now: Date.now,
       wait: (ms) => Bun.sleep(ms),
-      // 500 MiB on a modest Computer uplink can take several minutes; keep the browser wait and
+      // 100 MiB on a modest Computer uplink can take minutes; keep the browser wait and
       // the signed GET alive for the same window.
       timeoutMs: 600_000,
       sessionExpiresInSeconds: COMPUTER_FILE_SESSION_SECONDS,

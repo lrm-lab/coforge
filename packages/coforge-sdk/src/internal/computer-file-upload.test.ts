@@ -43,7 +43,14 @@ test("exports capability and method names", () => {
   expect(COMPUTER_FILE_UPLOAD_CAPABILITY).toBe("computer-file-upload:v1");
   expect(COMPUTER_FILE_PULL_METHOD).toBe("daemon:v1:computer_file:pull");
   expect(COMPUTER_FILE_PULL_RESULT_METHOD).toBe("daemon:v1:computer_file:pull_result");
-  expect(COMPUTER_FILE_MAX_BYTES).toBe(500 * 1024 * 1024);
+  expect(COMPUTER_FILE_MAX_BYTES).toBe(100 * 1024 * 1024);
+});
+
+test("a Computer file the page accepts fits in one request the web server accepts", () => {
+  // The upload passes through the web process, which runs Bun.serve with its default
+  // maxRequestBodySize of 128 MiB (https://bun.com/docs/runtime/http/server); the multipart
+  // framing adds a little to the file.
+  expect(COMPUTER_FILE_MAX_BYTES).toBeLessThan(128 * 1024 * 1024 - 1024 * 1024);
 });
 
 test("sanitizes file names and refuses path escape", () => {
