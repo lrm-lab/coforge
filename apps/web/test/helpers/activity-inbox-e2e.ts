@@ -6,8 +6,10 @@ import { seededUuid } from "./browser-e2e";
 /**
  * The Activity list's rows, as a selector literal for page expressions. Scoped to the list: a
  * conversation open beside it renders its messages, with the same seeded text, as list items too.
+ * The list's rows sit in per-section lists (Waiting on you, Pinned, one per day since the #30
+ * revamp), so the rows are every list row under the column, in DOM order.
  */
-export const rowItems = JSON.stringify('ol[aria-label="Activity"] > li');
+export const rowItems = JSON.stringify("[data-activity-list] ol > li");
 
 /** The Pinned section's rows, as a selector literal for page expressions. */
 export const pinnedItems = JSON.stringify('ol[aria-label="Pinned"] > li');
