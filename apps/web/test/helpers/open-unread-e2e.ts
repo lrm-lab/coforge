@@ -48,7 +48,9 @@ export function inView(id: string) {
 
 /** The Activity row whose text includes `text`, or null. */
 export function row(text: string) {
-  return `([...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)}))?.textContent ?? null)`;
+  // With its names: since the row's redesign (11-09) its unread count shows the number alone and is
+  // named "N new".
+  return `((item) => item ? item.textContent + " " + [...item.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" ") : null)([...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)})))`;
 }
 
 /**
