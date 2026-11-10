@@ -356,3 +356,80 @@ test("uses Raft's 20-to-24-hour availability refresh jitter", () => {
       Math.floor(0.999999 * AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_JITTER_MS),
   );
 });
+
+test("re-reports availability when retention drops indexed rows", () => {
+  const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
+  try {
+    const transcript = join(root, "session.jsonl");
+    writeFileSync(transcript, '{"type":"additional_tools"}', "utf8");
+    const now = 31 * 24 * 60 * 60 * 1000;
+    const store = new ContextViewStore(root, "server-1", "agent-1", () => now);
+    store.record({
+      messageId: "message-old",
+      sentAt: new Date(0).toISOString(),
+      runtime: "codex",
+      sessionId: "session-1",
+      transcript: "session.jsonl",
+      offset: 27,
+    });
+    const reports: unknown[] = [];
+    const service = new AgentContextViewService({
+      stateDirectory: root,
+      serverId: "server-1",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      now: () => now,
+      reportAvailability: (value) => reports.push(value),
+    });
+    service.reportAvailability(
+      {
+        agentId: "agent-1",
+        runtime: "codex",
+        sessionId: "session-1",
+        transcript: "session.jsonl",
+        transcriptPath: transcript,
+      },
+      true,
+    );
+    service.compactAndSweep();
+    expect(reports.at(-1)).toEqual(
+      expect.objectContaining({ supported: true, trigger: "retention" }),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("reports supported from retained index data when the current transcript is unavailable", () => {
+  const root = mkdtempSync(join(tmpdir(), "coforge-context-service-"));
+  try {
+    const now = 1_000;
+    const store = new ContextViewStore(root, "server-1", "agent-1", () => now);
+    store.record({
+      messageId: "message-retained",
+      sentAt: new Date(now).toISOString(),
+      runtime: "codex",
+      sessionId: "session-1",
+      transcript: "session.jsonl",
+      offset: 27,
+    });
+    const reports: unknown[] = [];
+    const service = new AgentContextViewService({
+      stateDirectory: root,
+      serverId: "server-1",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      now: () => now,
+      reportAvailability: (value) => reports.push(value),
+    });
+    service.reportAvailability({ agentId: "agent-1", runtime: "codex" }, true);
+    expect(reports).toEqual([
+      expect.objectContaining({
+        supported: true,
+        retainedSince: new Date(now).toISOString(),
+      }),
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

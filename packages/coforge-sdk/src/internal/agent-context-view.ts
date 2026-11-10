@@ -80,7 +80,7 @@ export type AgentContextViewAvailability = {
   retentionDays: number;
   supported: boolean;
   unsupportedReason?: "unsupported_runtime" | "no_session";
-  trigger?: "startup" | "message" | "server_features" | "periodic";
+  trigger?: "startup" | "message" | "server_features" | "periodic" | "retention";
 };
 
 function text(value: string, pattern: RegExp, label: string): void {
@@ -251,7 +251,9 @@ function validateAvailability(value: AgentContextViewAvailability): void {
     throw new Error("Missing context view unsupported reason");
   if (
     value.trigger !== undefined &&
-    !new Set(["startup", "message", "server_features", "periodic"]).has(value.trigger)
+    !new Set(["startup", "message", "server_features", "periodic", "retention"]).has(
+      value.trigger,
+    )
   )
     throw new Error("Invalid context view availability trigger");
 }
