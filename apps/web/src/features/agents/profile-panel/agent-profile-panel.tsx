@@ -265,12 +265,15 @@ export function AgentProfilePanel({
       <AgentProfileHeader
         canMessage={Boolean(profile?.canMessage)}
         deleted={deleted}
+        // Until the profile arrives, the face the lists show (the live roster's), not the one the
+        // Agent's id would choose: an Agent given another mascot otherwise opens with the wrong
+        // face for a frame (task #66).
         agent={{
           id: agentId,
           displayName: knownName,
-          avatarUrl: profile?.avatarUrl,
+          avatarUrl: profile?.avatarUrl ?? liveAgent?.avatarUrl,
         }}
-        mascot={profile?.mascot}
+        mascot={profile?.mascot ?? liveAgent?.mascot}
         appBot={Boolean(profile?.appBot)}
         display={display}
         controls={controls}
