@@ -1,8 +1,12 @@
 {
   "search_title": "Search",
-  "search_placeholder": "Search channels, Agents, Computers and messages…",
+  "search_placeholder": "Search channels, members, messages",
   "search_empty_title": "Search everything",
   "search_empty_description": "Search channels, Agents, Computers and the messages in every channel and your direct messages.",
+  "search_empty_title_in": "Search in {channel}",
+  "search_empty_description_in": "Search the messages in this channel.",
+  "search_hint_select": "Select",
+  "search_hint_open": "Open",
   "search_searching": "Searching…",
   "search_messages_heading": "Messages",
   "search_no_results_title": "No results for “{query}”",

@@ -25,6 +25,7 @@ import { searchDirectoryQuery } from "./search-queries";
  */
 export function SearchHome({
   workspaceId,
+  channel,
   loaded,
   history,
   usage,
@@ -34,6 +35,9 @@ export function SearchHome({
   onOpen,
 }: {
   workspaceId: string;
+  /** The channel the search is limited to, by its label (`#name`, or a private one's), as "Search
+   * this channel" opens it. */
+  channel?: string;
   /** False until this browser's memory has been read after mount. */
   loaded: boolean;
   history: readonly string[];
@@ -57,8 +61,12 @@ export function SearchHome({
             <EmptyMedia variant="icon">
               <SearchLg aria-hidden="true" />
             </EmptyMedia>
-            <EmptyTitle>{m.search_empty_title()}</EmptyTitle>
-            <EmptyDescription>{m.search_empty_description()}</EmptyDescription>
+            <EmptyTitle>
+              {channel ? m.search_empty_title_in({ channel }) : m.search_empty_title()}
+            </EmptyTitle>
+            <EmptyDescription>
+              {channel ? m.search_empty_description_in() : m.search_empty_description()}
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       </div>

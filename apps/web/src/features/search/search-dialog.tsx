@@ -4,12 +4,14 @@ import { Input as AriaInput } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { isImeComposing } from "#src/lib/ime";
 import { m } from "#src/paraglide/messages";
 import type { SearchIntent } from "./search-dialog-context";
-import { SearchFilterChips, SearchFilterMenu } from "./search-filter-bar";
+import { SearchFilterChips, SearchFilterMenu, useSearchChannel } from "./search-filter-bar";
 import { clearedFilters, hasActiveFilter, type SearchFilters } from "./search-filters";
 import { SearchHome } from "./search-home";
+import { SearchKeyHints } from "./search-key-hints";
 import { searchEntityKey } from "./search-memory";
 import { SearchResults } from "./search-results";
 import { SEARCH_FOCUS_EVENT } from "./search-shortcut";
@@ -53,6 +55,7 @@ export function SearchDialog({
   const [query, setQuery] = useState(text.trim());
   const [filters, setFilters] = useState<SearchFilters>(intent.filters ?? {});
   const [deferred, setDeferred] = useState(Boolean(intent.deferred));
+  const scopedChannel = useSearchChannel(workspaceId, filters.channelId);
   const [composing, setComposing] = useState(false);
   const box = useRef<HTMLInputElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -123,9 +126,14 @@ export function SearchDialog({
       isOpen
       isDismissable
       onOpenChange={(open) => !open && onClose()}
-      className="max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px] sm:items-start sm:[--modal-pt:12vh]"
+      // With the top bar (lg), the panel opens where its field is, over it, rather than mid-screen
+      // (Frank, 11-10, design A); without it, high on the screen. Search opens hundreds of times a
+      // day, from the keyboard as often as not, so it neither fades nor zooms, and the page behind
+      // only dims: flat, no frosted glass (docs/design/ui-principles.md).
+      className="bg-overlay/30 backdrop-blur-none max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px] sm:items-start sm:[--modal-pt:12vh] lg:animate-none lg:[--modal-pt:0.125rem]"
     >
-      <Modal className="flex w-full flex-col max-sm:h-full max-sm:rounded-none sm:max-w-[37.5rem]">
+      {/* In dark, one surface up from the page with a hairline edge, as the New task window. */}
+      <Modal className="flex w-full flex-col max-sm:h-full max-sm:rounded-none sm:max-w-[40rem] lg:animate-none dark:bg-secondary dark:ring-1 dark:ring-secondary_alt">
         <Dialog
           aria-label={m.search_title()}
           className="group/search min-h-0 flex-1 overflow-hidden"
@@ -136,11 +144,14 @@ export function SearchDialog({
             className="flex max-h-[inherit] h-full min-h-0 flex-col"
           >
             <div
-              className="flex flex-col gap-3 border-b border-secondary p-4"
+              // With the top bar, the first row is 44px and the panel opens 2px from the window's
+              // top, so the row's middle is the field's (6px down, 36px tall): the text stays on
+              // the line it was typed toward.
+              className="flex flex-col gap-3 border-b border-secondary p-4 lg:gap-0 lg:py-0"
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 lg:h-11">
                 <SearchLg aria-hidden="true" className="size-5 shrink-0 text-fg-brand-primary" />
                 <AriaInput
                   type="search"
@@ -198,6 +209,7 @@ export function SearchDialog({
               ) : (
                 <SearchHome
                   workspaceId={workspaceId}
+                  channel={scopedChannel ? channelLabel(scopedChannel) : undefined}
                   loaded={memory.loaded}
                   history={memory.history}
                   usage={memory.usage}
@@ -221,6 +233,7 @@ export function SearchDialog({
                 />
               )}
             </div>
+            <SearchKeyHints />
           </div>
         </Dialog>
       </Modal>

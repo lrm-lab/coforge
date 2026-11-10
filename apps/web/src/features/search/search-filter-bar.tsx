@@ -15,6 +15,8 @@ import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { GroupAvatar } from "#src/features/conversations/group-avatar";
+import { useLiveChannelRow } from "#src/features/conversations/sidebar-lists";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import {
@@ -44,6 +46,15 @@ const SCOPE_LABEL: Record<SearchScope, () => string> = {
   agents: () => m.search_scope_agents(),
 };
 
+/** The channel a search is limited to, as the directory names it. */
+export function useSearchChannel(workspaceId: string, channelId: string | undefined) {
+  return useQuery({
+    ...searchDirectoryQuery(workspaceId),
+    select: (directory) => directory.channels.find((candidate) => candidate.id === channelId),
+    enabled: channelId !== undefined,
+  }).data;
+}
+
 function useFilterNames(workspaceId: string, filters: SearchFilters) {
   const directory = useQuery(searchDirectoryQuery(workspaceId)).data;
   const senders = useMemo<Sender[]>(
@@ -70,7 +81,7 @@ export function SearchFilterChips({
   onChange: (filters: SearchFilters) => void;
 }) {
   const { sender, channel } = useFilterNames(workspaceId, filters);
-  const chips = [
+  const chips: { name: string; next: SearchFilters; channelId?: string }[] = [
     sender && {
       name: m.search_chip_sender({ name: sender.label }),
       next: withSender(filters, undefined),
@@ -83,7 +94,12 @@ export function SearchFilterChips({
         sender?.kind,
       ),
     })),
-    channel && { name: channelLabel(channel), next: { ...filters, channelId: undefined } },
+    channel && {
+      // As the sidebar draws it: its group avatar and its name, no `#` (Frank, 11-10).
+      name: channel.name,
+      next: { ...filters, channelId: undefined },
+      channelId: channel.id,
+    },
     filters.range && { name: RANGE_LABEL[filters.range](), next: { ...filters, range: undefined } },
     filters.sort === "recent" && {
       name: m.search_sort_recent(),
@@ -92,7 +108,7 @@ export function SearchFilterChips({
   ].filter((chip) => !!chip);
   if (chips.length === 0) return null;
   return (
-    <div role="group" aria-label={m.search_filters()} className="flex flex-wrap gap-2">
+    <div role="group" aria-label={m.search_filters()} className="flex flex-wrap gap-2 lg:pb-3">
       {chips.map((chip) => (
         <AriaButton
           key={chip.name}
@@ -100,12 +116,19 @@ export function SearchFilterChips({
           onPress={() => onChange(chip.next)}
           className="inline-flex max-w-[16rem] cursor-pointer items-center gap-1 rounded-lg bg-brand-primary_alt px-2 py-1 text-xs font-medium text-fg-brand-primary outline-focus-ring focus-visible:outline-2"
         >
+          {chip.channelId && <ChannelChipAvatar channelId={chip.channelId} />}
           <span className="truncate">{chip.name}</span>
           <XClose aria-hidden="true" className="size-3 shrink-0" />
         </AriaButton>
       ))}
     </div>
   );
+}
+
+/** A channel chip's group avatar, from the sidebar's row; none until the row is known. */
+function ChannelChipAvatar({ channelId }: { channelId: string }) {
+  const members = useLiveChannelRow(channelId)?.members;
+  return members?.length ? <GroupAvatar members={members} className="avatar-group-xs" /> : null;
 }
 
 /** The filter button beside the search box and, behind it, the filters (design B, task #46): time
@@ -123,11 +146,14 @@ export function SearchFilterMenu({
   query: string;
   filters: SearchFilters;
   onChange: (filters: SearchFilters) => void;
-  /** The search dialog: on a wide screen the filters open beside it, level with its top (Frank,
-   * 11-10), not hanging past its edge; a phone has no room beside it, so under the button. */
+  /** The search dialog: where the window has room on its side, the filters open beside it, level
+   * with its top (Frank, 11-10), not hanging past its edge; otherwise under the button. */
   besideRef: RefObject<Element | null>;
 }) {
   const wide = useBreakpoint("sm");
+  // The 40rem panel is centered, so each side keeps half of what is left: the 18rem menu and its
+  // gap fit there from `xl`. Below that, beside the panel it was cut off at the window's edge.
+  const beside = useBreakpoint("xl");
   const { directory, senders, sender, channel } = useFilterNames(workspaceId, filters);
   const [list, setList] = useState<"sender" | "channel">();
 
@@ -282,8 +308,8 @@ export function SearchFilterMenu({
       {trigger}
       {wide ? (
         <AriaPopover
-          triggerRef={besideRef}
-          placement="end top"
+          triggerRef={beside ? besideRef : undefined}
+          placement={beside ? "end top" : "bottom end"}
           className="rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt"
         >
           <AriaDialog
