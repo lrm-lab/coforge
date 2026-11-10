@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -51,7 +51,8 @@ export function ConversationSplit({
   }, []);
   const splitShown = wideViewport && splitFits;
   // Each layout renders its own measured wrapper, so observe again whenever the layout switches.
-  useEffect(() => {
+  // Before paint, so a window too narrow for both panes never flashes the squeezed split.
+  useLayoutEffect(() => {
     const element = splitRef.current;
     if (!element) return;
     measureSplit();
