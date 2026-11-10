@@ -43,6 +43,7 @@ import {
 import type { CreateWorkspaceInput } from "#src/features/workspaces/create-workspace-form";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
+import { SearchBar } from "#src/features/search/search-bar";
 import { useOpenSearch } from "#src/features/search/search-dialog-context";
 import { splitWorkspacePath, workspacePath } from "#src/features/workspaces/workspace-url";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
@@ -87,6 +88,8 @@ function useNavItems(
   bareHref: string;
   /** Sections under `base` this item is also current for. */
   sections?: readonly string[];
+  /** Only in the phone drawer: the desktop has its own place for it. */
+  drawerOnly?: boolean;
 })[] {
   const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
   const recordsHref = recordsNavHref(workspaceId);
@@ -95,7 +98,8 @@ function useNavItems(
     href: localizeHref(`${base}/${section}`),
   });
   return [
-    { label: m.search_title(), ...item("search"), icon: SearchLg },
+    // The desktop's search is the bar at the top of every page.
+    { label: m.search_title(), ...item("search"), icon: SearchLg, drawerOnly: true },
     {
       label: m.navigation_chat(),
       bareHref: base,
@@ -223,6 +227,7 @@ export function AppShell({
     aiWorkbench,
     hasActivityAttention ? <UnreadDot className="ml-auto" /> : undefined,
   );
+  const desktopItems = navItems.filter((item) => !item.drawerOnly);
   const section = pathname.slice(base.length).split("/")[1] ?? "";
   const activeUrl = navItems.find((item) =>
     item.sections
@@ -256,50 +261,56 @@ export function AppShell({
     <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>
       <MobileDrawerProvider>
         {/* Clears the notch and the home indicator on a phone. */}
-        <div className="flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:flex-row lg:bg-(image:--sidebar-gradient)">
-          {/* Each sidebar is `fixed` + a spacer div reserving its width in flow;
-          `contents` keeps that pair as direct flex items of this `lg:flex` shell. The drawer is
-          mobile only; on desktop `sidebar-collapsed` on <html> picks the expanded one or the rail. */}
-          <SidebarLinks>
-            <SidebarMobileDrawer
-              activeUrl={activeUrl}
-              items={navItems}
-              subheader={workspaceSwitcher}
-              footer={expandedFooter}
-            />
-            <SidebarExpanded
-              activeUrl={activeUrl}
-              items={navItems}
-              subheader={workspaceSwitcher}
-              footer={expandedFooter}
-            />
-            <SidebarRail
-              activeUrl={activeUrl}
-              items={navItems}
-              subheader={
-                <WorkspaceSwitcher
-                  compact
-                  workspaces={workspaces}
-                  current={currentWorkspace}
-                  onSelect={onSelectWorkspace}
-                  onCreate={onCreateWorkspace}
-                />
-              }
-              footer={
-                <div className="flex w-full flex-col items-center gap-2">
-                  <WhatsNewRailButton />
-                  <NotificationBell rail workspaceSlug={currentWorkspace.slug} />
-                  <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
-                </div>
-              }
-            />
-          </SidebarLinks>
+        <div className="flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:bg-(image:--sidebar-gradient) lg:[--app-top-bar:2.75rem]">
+          {/* Search, centred over the whole window; the fixed sidebars start below it. */}
+          <div className="hidden h-(--app-top-bar) shrink-0 items-center justify-center px-2 lg:flex">
+            <SearchBar />
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+            {/* Each sidebar is `fixed` + a spacer div reserving its width in flow;
+              `contents` keeps that pair as direct flex items of this row. The drawer is mobile
+              only; on desktop `sidebar-collapsed` on <html> picks the expanded one or the rail. */}
+            <SidebarLinks>
+              <SidebarMobileDrawer
+                activeUrl={activeUrl}
+                items={navItems}
+                subheader={workspaceSwitcher}
+                footer={expandedFooter}
+              />
+              <SidebarExpanded
+                activeUrl={activeUrl}
+                items={desktopItems}
+                subheader={workspaceSwitcher}
+                footer={expandedFooter}
+              />
+              <SidebarRail
+                activeUrl={activeUrl}
+                items={desktopItems}
+                subheader={
+                  <WorkspaceSwitcher
+                    compact
+                    workspaces={workspaces}
+                    current={currentWorkspace}
+                    onSelect={onSelectWorkspace}
+                    onCreate={onCreateWorkspace}
+                  />
+                }
+                footer={
+                  <div className="flex w-full flex-col items-center gap-2">
+                    <WhatsNewRailButton />
+                    <NotificationBell rail workspaceSlug={currentWorkspace.slug} />
+                    <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
+                  </div>
+                }
+              />
+            </SidebarLinks>
 
-          {/* On desktop the content is one white card inset 8px from the sidebar's background; a page
+            {/* On desktop the content is one white card inset 8px from the sidebar's background; a page
             made of several panels (Chat) marks itself `data-panel-cards` and draws a card per panel. */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
-              {children}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pt-0 lg:pl-0">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
+                {children}
+              </div>
             </div>
           </div>
         </div>

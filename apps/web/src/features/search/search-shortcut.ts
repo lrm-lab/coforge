@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { isApplePlatform } from "#src/lib/platform";
 
@@ -31,4 +31,20 @@ export function useSearchShortcut(onShortcut: () => void) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+}
+
+/** The shortcut as the viewer's keyboard names it, and as `aria-keyshortcuts` names it; unknown
+ * until mounted, as the server can't tell. */
+export function useSearchShortcutLabel(): { label: string; keys: string } | undefined {
+  const [shortcut, setShortcut] = useState<{ label: string; keys: string }>();
+  useEffect(
+    () =>
+      setShortcut(
+        isApplePlatform()
+          ? { label: "⌘K", keys: "Meta+K" }
+          : { label: "Ctrl+K", keys: "Control+K" },
+      ),
+    [],
+  );
+  return shortcut;
 }

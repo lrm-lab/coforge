@@ -8,7 +8,7 @@ const SearchDialog = lazy(() =>
 );
 
 /**
- * Holds the Workspace's search dialog, which Cmd/Ctrl+K, the rail's Search and a channel's "Search
+ * Holds the Workspace's search dialog, which Cmd/Ctrl+K, the search bar at the top (the phone drawer's Search) and a channel's "Search
  * this channel" open over whatever page is showing. The open state stays out of the URL: opening
  * search never changes the page's address.
  */

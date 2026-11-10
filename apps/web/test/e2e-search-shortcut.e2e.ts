@@ -7,9 +7,9 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
- * Search as a dialog over the current page: Cmd/Ctrl+K, the rail's Search and a channel's "Search
- * this channel" open it without leaving the page; focus starts in the box, Up and Down walk the
- * results, Enter opens one (a message lands on it, however old), Esc closes and returns focus. An
+ * Search as a dialog over the current page: Cmd/Ctrl+K, the search bar at the top and a channel's
+ * "Search this channel" open it without leaving the page; focus starts in the box, Up and Down walk
+ * the results, Enter opens one (a message lands on it, however old), Esc closes and returns focus. An
  * old search address opens the dialog with its search.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser` (Chromium on macOS, so the
@@ -204,21 +204,21 @@ test("search opens over the page, walks by keyboard and lands on the message", a
     await browser("press", "Escape");
     await waitFor(`${dialog} === null`);
 
-    // The rail's Search opens the dialog fresh, staying on the page.
-    await browser("click", `aside a[href="${workspacePath}/search"]`);
+    // The search bar opens the dialog fresh, staying on the page.
+    await browser("click", "[data-search-bar]");
     await waitFor(`${box} !== null && ${box}.value === ""`);
     expect(await evaluate<string>("location.pathname")).toBe(channelPath);
     await browser("press", "Escape");
     await waitFor(`${dialog} === null`);
 
     // Esc gives the focus back to what had it before the dialog opened.
-    const rail = `document.querySelector('aside a[href="${workspacePath}/search"]')`;
+    const bar = `document.querySelector("[data-search-bar]")`;
     await settled();
-    await browser("eval", `${rail}.focus()`);
+    await browser("eval", `${bar}.focus()`);
     await browser("press", "Meta+k");
     await waitFor(`${box} !== null && document.activeElement === ${box}`);
     await browser("press", "Escape");
-    await waitFor(`${dialog} === null && document.activeElement === ${rail}`);
+    await waitFor(`${dialog} === null && document.activeElement === ${bar}`);
 
     // The first row shows as chosen from the box, and stays so as the results change; Down from
     // the box goes to the row after it, Up back along the list and into the box.

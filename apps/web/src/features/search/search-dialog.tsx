@@ -123,9 +123,9 @@ export function SearchDialog({
       isOpen
       isDismissable
       onOpenChange={(open) => !open && onClose()}
-      className="max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px] sm:items-start sm:[--modal-pt:12vh]"
+      className="max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px] sm:items-start sm:[--modal-pt:12vh] lg:[--modal-pt:0.375rem]"
     >
-      <Modal className="flex w-full flex-col max-sm:h-full max-sm:rounded-none sm:max-w-[37.5rem]">
+      <Modal className="flex w-full flex-col max-sm:h-full max-sm:rounded-none sm:max-w-[37.5rem] lg:origin-top">
         <Dialog
           aria-label={m.search_title()}
           className="group/search min-h-0 flex-1 overflow-hidden"
