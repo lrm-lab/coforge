@@ -106,12 +106,16 @@ describe("conversation realtime", () => {
         unreadKeys: ["conversation:conversation-a", "thread:root-a"],
       },
     });
-    expect(() =>
+    // A server may count beyond the display cap; the client keeps the announcement usable.
+    expect(
       decodeActivityChangedEvent({
         ...changed,
         attention: { hasUnread: true, unreadCount: 101, unreadKeys: [] },
       }),
-    ).toThrow();
+    ).toEqual({
+      ...changed,
+      attention: { hasUnread: true, unreadCount: 101, unreadKeys: [] },
+    });
     expect(() =>
       decodeActivityChangedEvent({ ...changed, attention: { hasUnread: "no" } }),
     ).toThrow();

@@ -197,12 +197,10 @@ export type ActivityAttention = z.infer<typeof activityAttention>;
 
 const activityAttention = z.object({
   hasUnread: z.boolean(),
-  unreadCount: z.number().int().min(0).max(100).optional(),
-  unreadKeys: z.array(z.string()).max(100).optional(),
-  streamPosition: streamPositionSchema.optional(),
   // No upper bound here: a server that counts past the cap must not cost the whole announcement.
   unreadCount: z.number().int().nonnegative().optional(),
   unreadKeys: z.array(z.string()).optional(),
+  streamPosition: streamPositionSchema.optional(),
 });
 
 /**
