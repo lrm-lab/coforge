@@ -17,6 +17,7 @@ function subject(
     offline?: boolean;
     restart?: AgentRestartConfig;
     session?: boolean;
+    launching?: boolean;
     kept?: boolean;
   } = {},
 ) {
@@ -32,6 +33,7 @@ function subject(
     refuseKeptMentions: () => void calls.refused++,
     hasQueued: () => false,
     hasSession: () => state.session === true,
+    launchComing: () => state.session === true || state.launching === true,
     wakeBlockedUntil: () => undefined,
     wakeAgent: async () => void calls.woken++,
     whenCancelled: () => {},
@@ -71,8 +73,8 @@ test("the end of the backoff wakes the Agent once for the mentions it kept", asy
   expect(calls.woken).toBe(1);
 });
 
-test("the end of a backoff wakes nobody when no mention is kept or a process runs", () => {
-  for (const state of [{ kept: false }, { kept: true, session: true }]) {
+test("the end of a backoff wakes nobody when no mention is kept or a launch is already coming", () => {
+  for (const state of [{ kept: false }, { kept: true, session: true }, { kept: true, launching: true }]) {
     const { exited, calls } = subject(state);
     exited.backoffEnded(AGENT);
     expect(calls).toEqual({ kept: 0, dropped: 0, woken: 0, refused: 0 });

@@ -85,6 +85,10 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
       ports.transport().sendAgentDeliveryRejection?.(agentDeliveryRejection(message, reason)) ??
       Promise.resolve(),
     hasSession: (agentId) => ports.agentProcessManager().session(agentId) !== undefined,
+    launchComing: (agentId) =>
+      ports.agentProcessManager().session(agentId) !== undefined ||
+      ports.inputDrain().isLaunching(agentId) ||
+      ports.agentControl().startPending(agentId),
     redeliver: (message) =>
       void ports
         .handleAgentMessage(message)

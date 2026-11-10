@@ -63,6 +63,9 @@ export type AgentExitedDeliveryPorts = Readonly<{
   sendAgentDeliveryRejection(message: AgentMessageDelivery, reason: "no_process"): Promise<void>;
   /** The Agent's session is registered (a pending-Start buffer releases only into one). */
   hasSession(agentId: string): boolean;
+  /** A session is registered, a launch is in flight or a server Start is pending: that launch
+   * tells what is kept, so a wake would only join it. */
+  launchComing(agentId: string): boolean;
   /** Re-admits a buffered delivery through the ordinary delivery path. */
   redeliver(message: AgentMessageDelivery): void;
 }>;
@@ -114,10 +117,10 @@ export class AgentExitedDelivery {
 
   /** The Agent's runtime-error backoff ran its course. Mentions kept through it, which waited for
    * the Agent to be able to run again, wake it now (after a launch-failure cooldown, when one
-   * runs); with nothing left to relaunch from they are refused as unknown. A running process
-   * has its launch telling them already. */
+   * runs); with nothing left to relaunch from they are refused as unknown. A running or coming
+   * launch tells them already. */
   backoffEnded(agentId: string): void {
-    if (!this.#ports.hasKeptMentions(agentId) || this.#ports.hasSession(agentId)) return;
+    if (!this.#ports.hasKeptMentions(agentId) || this.#ports.launchComing(agentId)) return;
     const restart = this.#ports.restartConfig(agentId);
     if (!restart)
       this.#ports.refuseKeptMentions(agentId, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
@@ -148,7 +151,7 @@ export class AgentExitedDelivery {
         async () => {
           this.#cooldownWakes.delete(agentId);
           const restart = this.#ports.restartConfig(agentId);
-          if (!restart || this.#ports.hasSession(agentId)) return;
+          if (!restart || this.#ports.launchComing(agentId)) return;
           if (this.#ports.wakeBlockedUntil(agentId) !== undefined)
             return this.#wakeAfterCooldown(agentId);
           if (this.#ports.hasQueued(agentId) || this.#ports.hasKeptMentions(agentId))

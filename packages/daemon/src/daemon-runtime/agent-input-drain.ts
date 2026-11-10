@@ -58,6 +58,11 @@ export class AgentInputDrain {
     private readonly inboxes = new LaunchInboxes(),
   ) {}
 
+  /** A launch for the Agent is in flight. */
+  isLaunching(agentId: string): boolean {
+    return this.ports.isLaunching(agentId);
+  }
+
   get(agentId: string): AgentInputQueue | undefined {
     return this.inboxes.peek(agentId)?.input;
   }

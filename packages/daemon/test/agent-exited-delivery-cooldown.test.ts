@@ -24,6 +24,7 @@ function subject(cooldownMs: number) {
     hasKeptMentions: () => true,
     hasQueued: () => false,
     hasSession: () => false,
+    launchComing: () => false,
     wakeBlockedUntil: () => (state.blockedUntil! > Date.now() ? state.blockedUntil : undefined),
     wakeAgent: async () => void state.wokenAt.push(Date.now()),
     whenCancelled: (_agentId: string, hook: () => void) => {
