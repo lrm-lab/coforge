@@ -4,17 +4,12 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import {
-  browserSession,
-  escapeOpenMenu,
-  localBrowserE2e,
-  pageWaiter,
-  seededUuid,
-} from "./helpers/browser-e2e";
+import { browserSession, localBrowserE2e, pageWaiter, seededUuid } from "./helpers/browser-e2e";
 
 /**
- * The search dialog's filters in a real browser. From, Scope, Channel and Time narrow the results,
- * and each chip names its value. They live in the dialog only: an old `/search` address opens it
+ * The search dialog's filters in a real browser. From, Scope, Channel and Time narrow the results.
+ * Time, Scope and Sort are one press each and show what is chosen; From and Channel are rows that
+ * name their value. They live in the dialog only: an old `/search` address opens it
  * with its filters set.
  * A Scope that contradicts the sender drops the sender, and a sender that contradicts the Scope
  * drops that part of it. Filters search on their own without a query; Sort needs a query and
@@ -35,13 +30,13 @@ test("search filters narrow results, name their values, and clear together", asy
   const waitFor = pageWaiter(browserPath)(session, browser);
   const find = (selector: string, predicate: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => ${predicate})`;
-  /** A filter chip: a button in the dialog's filter bar whose text starts with `prefix`. */
+  /** A filter row or button in the filter popover whose text starts with `prefix`. */
   const chip = (prefix: string) =>
     find(
       '[role="dialog"][aria-label="Search filters"] button',
       `element.textContent.trim().startsWith(${JSON.stringify(prefix)})`,
     );
-  /** The text a chip shows: the filter's name, or its chosen value. */
+  /** The text a row shows: the filter's name, or its chosen value. */
   const chipText = (prefix: string) => `${chip(prefix)}?.textContent.trim()`;
   const option = (text: string) =>
     find(
@@ -49,6 +44,19 @@ test("search filters narrow results, name their values, and clear together", asy
       // A person's row also shows an avatar initial before the name.
       `element.textContent.includes(${JSON.stringify(text)})`,
     );
+  /** One choice of a one-press filter (Time, Scope, Sort). */
+  const choice = (group: string, label: string) =>
+    find(
+      `[role="dialog"][aria-label="Search filters"] [aria-label="${group}"] button`,
+      `element.textContent.trim() === ${JSON.stringify(label)}`,
+    );
+  /** What a one-press filter has chosen, in its order, as JSON. */
+  const chosen = (group: string) =>
+    `JSON.stringify([...document.querySelectorAll('[role="dialog"][aria-label="Search filters"] [aria-label="${group}"] button')].filter((button) => button.getAttribute("aria-checked") === "true" || button.getAttribute("aria-pressed") === "true").map((button) => button.textContent.trim()))`;
+  const isChosen = (group: string, labels: string[]) =>
+    `${chosen(group)} === ${JSON.stringify(JSON.stringify(labels))}`;
+  const press = (group: string, label: string) =>
+    browser("eval", `${choice(group, label)}.click()`);
   async function pick(chipPrefix: string, optionText: string) {
     await browser("eval", `${chip(chipPrefix)}.click()`);
     await waitFor(`${option(optionText)} !== undefined`);
@@ -68,7 +76,7 @@ test("search filters narrow results, name their values, and clear together", asy
       `document.querySelector('[role="dialog"] input[type="search"]')?.value === ${JSON.stringify(phrase)}`,
     );
     await browser("click", '[aria-label="Filter results"]');
-    await waitFor(`${chipText("Sort")} !== undefined`);
+    await waitFor(`${choice("Sort", "Relevant")} !== undefined`);
   }
   /** Waits for a settled list of `count` rows; zero means the no-results state is showing. */
   const waitForResults = (count: number) =>
@@ -87,6 +95,8 @@ test("search filters narrow results, name their values, and clear together", asy
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      // Other e2es leave the dev user in Workspaces of their own; the seed made the first one.
+      orderBy: { workspace: { createdAt: "asc" } },
       include: { workspace: { select: { slug: true } } },
     });
     workspacePath = `/en/w/${membership.workspace.slug}`;
@@ -196,12 +206,12 @@ test("search filters narrow results, name their values, and clear together", asy
     await browser("set", "viewport", "1440", "900");
     await openSearch();
     await waitForResults(3);
-    // Sorting applies to a query; the chip starts on Relevant, which ranks the long newest last.
-    expect(await evaluate<boolean>(`${chip("Sort")}.disabled`)).toBe(false);
-    expect(await evaluate<string>(chipText("Sort"))).toBe("Sort: Relevant");
+    // Sorting applies to a query; it starts on Relevant, which ranks the long newest last.
+    expect(await evaluate<boolean>(`${choice("Sort", "Recent")}.disabled`)).toBe(false);
+    await waitFor(isChosen("Sort", ["Relevant"]));
     expect((await resultIds()).at(-1)).toBe(humanToday.id);
 
-    // From: only the chosen sender, named on the chip.
+    // From: only the chosen sender, named on its row.
     await pick("From", "Search Bot");
     await waitFor(`${chipText("From")}?.startsWith("From: Search Bot")`);
     await waitForResults(2);
@@ -209,20 +219,18 @@ test("search filters narrow results, name their values, and clear together", asy
     await browser("screenshot", join(artifacts, "from.png"));
 
     // Scope Humans contradicts an Agent sender, so the sender goes.
-    await pick("Scope", "Humans");
-    await browser("eval", escapeOpenMenu);
-    await waitFor(`document.querySelector('[role="menu"]') === null`);
-    await waitFor(`${chipText("Scope")} === "Scope 1" && ${chipText("From")} === "From"`);
+    await press("Scope", "Humans");
+    await waitFor(`${isChosen("Scope", ["Humans"])} && ${chipText("From")} === "From"`);
     await waitForResults(1);
     expect(await resultIds()).toEqual([humanToday.id]);
 
     // An Agent sender contradicts a Humans-only scope, so that part of the scope goes.
     await openSearch("&scope=mentioned,humans");
-    await waitFor(`${chipText("Scope")} === "Scope 2"`);
+    await waitFor(isChosen("Scope", ["@ Me", "Humans"]));
     await waitForResults(0);
     await pick("From", "Search Bot");
     await waitFor(
-      `${chipText("Scope")} === "Scope 1" && ${chipText("From")}?.startsWith("From: Search Bot")`,
+      `${isChosen("Scope", ["@ Me"])} && ${chipText("From")}?.startsWith("From: Search Bot")`,
     );
     await waitForResults(1);
     expect(await resultIds()).toEqual([agentOld.id]);
@@ -232,47 +240,42 @@ test("search filters narrow results, name their values, and clear together", asy
     const unknownSender = seededUuid("e2e-search-filters:unknown-sender");
     await openSearch(`&senderId=${unknownSender}`);
     await waitForResults(0);
-    await pick("Scope", "Humans");
-    await browser("eval", escapeOpenMenu);
-    await waitFor(`document.querySelector('[role="menu"]') === null`);
-    await waitFor(`${chipText("Scope")} === "Scope 1"`);
+    await press("Scope", "Humans");
+    await waitFor(isChosen("Scope", ["Humans"]));
     await waitForResults(1);
     expect(await resultIds()).toEqual([humanToday.id]);
 
     // Recent orders newest first; the sort is kept by Clear all, every filter goes.
-    await pick("Sort", "Recent");
-    await waitFor(`${chipText("Sort")} === "Sort: Recent"`);
+    await press("Sort", "Recent");
+    await waitFor(isChosen("Sort", ["Recent"]));
     await browser("eval", `${chip("Clear all")}.click()`);
-    await waitFor(`${chipText("Scope")} === "Scope" && ${chipText("Sort")} === "Sort: Recent"`);
+    await waitFor(`${isChosen("Scope", ["All"])} && ${isChosen("Sort", ["Recent"])}`);
     await waitForResults(3);
     expect(await resultIds()).toEqual([humanToday.id, agentInB.id, agentOld.id]);
 
     // @ Me: only the message that mentions the viewer.
-    await pick("Scope", "@ Me");
-    await browser("eval", escapeOpenMenu);
-    await waitFor(`document.querySelector('[role="menu"]') === null`);
-    await waitFor(`${chipText("Scope")} === "Scope 1"`);
+    await press("Scope", "@ Me");
+    await waitFor(isChosen("Scope", ["@ Me"]));
     await waitForResults(1);
     expect(await resultIds()).toEqual([agentOld.id]);
     await browser("eval", `${chip("Clear all")}.click()`);
 
     // Time: the last 7 days leave out the ten-day-old message; Today leaves out yesterday's.
-    await pick("Time", "Last 7 days");
-    await waitFor(`${chip("Last 7 days")} !== undefined`);
+    await press("Time", "Last 7 days");
+    await waitFor(isChosen("Time", ["Last 7 days"]));
     await waitForResults(2);
     expect((await resultIds()).sort()).toEqual([humanToday.id, agentInB.id].sort());
-    await pick("Last 7 days", "Today");
-    await waitFor(`${chip("Today")} !== undefined`);
+    await press("Time", "Today");
+    await waitFor(isChosen("Time", ["Today"]));
     await waitForResults(1);
     expect(await resultIds()).toEqual([humanToday.id]);
 
-    // Every filter is named on its chip.
-    await pick("Scope", "Humans");
-    await browser("eval", escapeOpenMenu);
-    await waitFor(`document.querySelector('[role="menu"]') === null`);
+    // Every one-press filter shows what it has chosen.
+    await press("Scope", "Humans");
     await waitFor(
-      `${chipText("Scope")} === "Scope 1" && ${chip("Today")} !== undefined && ${chip("Sort: Recent")} !== undefined`,
+      `${isChosen("Scope", ["Humans"])} && ${isChosen("Time", ["Today"])} && ${isChosen("Sort", ["Recent"])}`,
     );
+    await browser("screenshot", join(artifacts, "filters-chosen.png"));
     await waitForResults(1);
     await browser("eval", `${chip("Clear all")}.click()`);
 
@@ -291,7 +294,7 @@ test("search filters narrow results, name their values, and clear together", asy
         input.dispatchEvent(new InputEvent("input", { bubbles: true }));
       })()`,
     );
-    await waitFor(`${chip("Sort")}.disabled === true`);
+    await waitFor(`${choice("Sort", "Recent")}.disabled === true`);
     await waitForResults(1);
     expect(await resultIds()).toEqual([agentInB.id]);
     await browser("screenshot", join(artifacts, "filter-only.png"));

@@ -46,7 +46,7 @@
   "search_from_anyone": "Anyone",
   "search_find_sender": "Find a person or Agent",
   "search_scope": "Scope",
-  "search_scope_count": "Scope {count}",
+  "search_scope_all": "All",
   "search_scope_mentioned": "@ Me",
   "search_scope_humans": "Humans",
   "search_scope_agents": "Agents",
