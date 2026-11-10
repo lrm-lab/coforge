@@ -36,6 +36,27 @@ export type ComposeFile = {
   configs?: Record<string, { content?: string }>;
 };
 
+/**
+ * A `timeout` shim for remote-deploy.sh fixtures: it records the call in `$FIXTURE_ROOT/calls`
+ * and runs the command. It must not depend on a host `timeout`: macOS ships none (GNU coreutils
+ * is not guaranteed), so `Bun.which` returns null. Without one it drops timeout's own options and
+ * duration (remote-deploy.sh always calls `<options> <duration> <command>`) and runs the command
+ * directly; fixture commands are instant, so no deadline is needed. A fixture that asserts its
+ * recorded calls without timeout's passes `record: false`.
+ */
+export function timeoutShim({ record = true }: { record?: boolean } = {}): string {
+  const realTimeout = Bun.which("timeout");
+  const run = realTimeout
+    ? `exec ${JSON.stringify(realTimeout)} "$@"`
+    : `while [[ "$1" == -* ]]; do shift; done
+shift
+exec "$@"`;
+  const recording = record ? `echo "timeout $*" >> "$FIXTURE_ROOT/calls"\n` : "";
+  return `#!/bin/bash
+${recording}${run}
+`;
+}
+
 export const readCompose = async (environment: string) =>
   Bun.YAML.parse(
     await Bun.file(
