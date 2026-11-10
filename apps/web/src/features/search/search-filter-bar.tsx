@@ -1,7 +1,7 @@
 import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, FilterLines, XClose } from "@untitledui/icons";
+import { ChevronRight, FilterLines, XClose } from "@untitledui/icons";
 import {
   Button as AriaButton,
   Dialog as AriaDialog,
@@ -12,9 +12,9 @@ import {
 import { ActorName } from "#src/features/avatars/actor-name";
 import { messageSlots } from "#src/lib/message-slots";
 import { EntityPicker } from "#src/features/pickers/entity-picker";
+import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
 import {
   clearedFilters,
@@ -109,8 +109,9 @@ export function SearchFilterChips({
   );
 }
 
-/** The filter button beside the search box and, behind it, the sender, scope, channel, time and
- * sort. Sort applies only to a query, so it is disabled without one. */
+/** The filter button beside the search box and, behind it, the filters laid flat: time, scope and
+ * sort, which have few choices, as one press each; the sender and the channel, which have many, as
+ * rows that open a searchable list. Sort applies only to a query, so it is disabled without one. */
 export function SearchFilterMenu({
   workspaceId,
   query,
@@ -123,7 +124,6 @@ export function SearchFilterMenu({
   onChange: (filters: SearchFilters) => void;
 }) {
   const { directory, senders, sender, channel } = useFilterNames(workspaceId, filters);
-  const scopeCount = filters.scope?.length ?? 0;
 
   return (
     <DialogTrigger>
@@ -140,14 +140,49 @@ export function SearchFilterMenu({
       >
         <AriaDialog
           aria-label={m.search_filters()}
-          className="flex w-60 flex-col items-stretch gap-2 p-2 outline-hidden"
+          className="flex w-80 flex-col items-stretch gap-1 p-2 outline-hidden"
         >
+          <FilterSection label={m.search_time()}>
+            <ChoiceGroup
+              label={m.search_time()}
+              selected={[filters.range ?? ANY]}
+              options={[
+                { key: ANY, label: m.search_time_any() },
+                ...SEARCH_RANGES.map((range) => ({ key: range, label: RANGE_LABEL[range]() })),
+              ]}
+              onChange={([key]) =>
+                onChange({ ...filters, range: key && isSearchRange(key) ? key : undefined })
+              }
+            />
+          </FilterSection>
+          <FilterSection label={m.search_scope()}>
+            <ChoiceGroup
+              label={m.search_scope()}
+              multiple
+              selected={filters.scope?.length ? filters.scope : [ANY]}
+              options={[
+                { key: ANY, label: m.search_scope_all() },
+                ...SEARCH_SCOPES.map((scope) => ({ key: scope, label: SCOPE_LABEL[scope]() })),
+              ]}
+              onChange={(keys, added) =>
+                // "All" is no scope at all: choosing it clears the rest, choosing any other leaves it.
+                onChange(
+                  withScope(
+                    filters,
+                    added === ANY ? [] : keys.filter((key) => key !== ANY),
+                    sender?.kind,
+                  ),
+                )
+              }
+            />
+          </FilterSection>
+          <div className="my-1 h-px bg-border-secondary" />
           <EntityPicker
             trigger={
-              <Chip>
+              <FilterRow>
                 {sender
                   ? messageSlots(m.search_from_named, {
-                      // The face before the name in the chip (task #521).
+                      // The face before the name in the row (task #521).
                       name: (
                         <ActorName
                           actor={{
@@ -160,7 +195,7 @@ export function SearchFilterMenu({
                       ),
                     })
                   : m.search_from()}
-              </Chip>
+              </FilterRow>
             }
             label={m.search_find_sender()}
             searchPlaceholder={m.search_find_sender()}
@@ -187,34 +222,8 @@ export function SearchFilterMenu({
               onChange(withSender(filters, chosen && { id: chosen.id, kind: chosen.kind }));
             }}
           />
-          <Dropdown.Root>
-            <Chip>
-              {scopeCount ? m.search_scope_count({ count: scopeCount }) : m.search_scope()}
-            </Chip>
-            <Dropdown.Popover placement="bottom start" className="w-56">
-              <Dropdown.Menu
-                aria-label={m.search_scope()}
-                selectionMode="multiple"
-                selectedKeys={filters.scope ?? []}
-                shouldCloseOnSelect={false}
-                onSelectionChange={(keys) => {
-                  if (keys === "all") return;
-                  onChange(withScope(filters, keys, sender?.kind));
-                }}
-              >
-                {SEARCH_SCOPES.map((scope) => (
-                  <Dropdown.Item
-                    key={scope}
-                    id={scope}
-                    label={SCOPE_LABEL[scope]()}
-                    selectionIndicator="checkbox"
-                  />
-                ))}
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </Dropdown.Root>
           <EntityPicker
-            trigger={<Chip>{channel ? channelLabel(channel) : m.search_channel()}</Chip>}
+            trigger={<FilterRow>{channel ? channelLabel(channel) : m.search_channel()}</FilterRow>}
             label={m.search_find_channel()}
             searchPlaceholder={m.search_find_channel()}
             selectedKey={filters.channelId ?? ANY}
@@ -232,33 +241,21 @@ export function SearchFilterMenu({
             ]}
             onSelect={(key) => onChange({ ...filters, channelId: key === ANY ? undefined : key })}
           />
-          <SingleChoiceChip
-            ariaLabel={m.search_time()}
-            label={filters.range ? RANGE_LABEL[filters.range]() : m.search_time()}
-            selectedKey={filters.range ?? ANY}
-            options={[
-              { key: ANY, label: m.search_time_any() },
-              ...SEARCH_RANGES.map((range) => ({ key: range, label: RANGE_LABEL[range]() })),
-            ]}
-            onSelect={(key) =>
-              onChange({ ...filters, range: isSearchRange(key) ? key : undefined })
-            }
-          />
-          <SingleChoiceChip
-            ariaLabel={m.search_sort()}
-            label={m.search_sort_named({
-              order: filters.sort === "recent" ? m.search_sort_recent() : m.search_sort_relevant(),
-            })}
-            disabled={!query}
-            selectedKey={filters.sort ?? "relevance"}
-            options={[
-              { key: "relevance", label: m.search_sort_relevant() },
-              { key: "recent", label: m.search_sort_recent() },
-            ]}
-            onSelect={(key) =>
-              onChange({ ...filters, sort: key === "recent" ? "recent" : undefined })
-            }
-          />
+          <div className="my-1 h-px bg-border-secondary" />
+          <FilterSection label={m.search_sort()}>
+            <ChoiceGroup
+              label={m.search_sort()}
+              disabled={!query}
+              selected={[filters.sort ?? "relevance"]}
+              options={[
+                { key: "relevance", label: m.search_sort_relevant() },
+                { key: "recent", label: m.search_sort_recent() },
+              ]}
+              onChange={([key]) =>
+                onChange({ ...filters, sort: key === "recent" ? "recent" : undefined })
+              }
+            />
+          </FilterSection>
           {hasActiveFilter(filters) && (
             <Button size="sm" color="link-gray" onClick={() => onChange(clearedFilters(filters))}>
               {m.search_clear_filters()}
@@ -270,54 +267,74 @@ export function SearchFilterMenu({
   );
 }
 
-/**
- * A filter chip: the trigger button of its menu. A toolbar button stays secondary (design §11),
- * so the label, which names the chosen value, is what shows a filter is set.
- */
-function Chip({ disabled, children }: { disabled?: boolean; children: ReactNode }) {
+function FilterSection({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5 px-1 py-1">
+      <span aria-hidden="true" className="text-xs font-medium text-tertiary">
+        {label}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+/** A filter with few choices, each one press: a single choice, or several (`multiple`). */
+function ChoiceGroup({
+  label,
+  multiple,
+  disabled,
+  selected,
+  options,
+  onChange,
+}: {
+  label: string;
+  multiple?: boolean;
+  disabled?: boolean;
+  selected: string[];
+  options: { key: string; label: string }[];
+  /** The keys now chosen, and the one this press added, if any. */
+  onChange: (keys: string[], added: string | undefined) => void;
+}) {
+  return (
+    <ButtonGroup
+      size="sm"
+      aria-label={label}
+      selectionMode={multiple ? "multiple" : "single"}
+      disallowEmptySelection={!multiple}
+      isDisabled={disabled}
+      selectedKeys={selected}
+      onSelectionChange={(keys) => {
+        const next = [...keys].map(String);
+        onChange(
+          next,
+          next.find((key) => !selected.includes(key)),
+        );
+      }}
+      className="w-full"
+    >
+      {options.map((option) => (
+        <ButtonGroupItem
+          key={option.key}
+          id={option.key}
+          className="min-w-0 flex-1 justify-center px-2"
+        >
+          <span className="truncate">{option.label}</span>
+        </ButtonGroupItem>
+      ))}
+    </ButtonGroup>
+  );
+}
+
+/** A filter with many choices: a row naming what is chosen, opening its searchable list. */
+function FilterRow({ children }: { children: ReactNode }) {
   return (
     <Button
       size="sm"
-      color="secondary"
-      iconTrailing={ChevronDown}
-      isDisabled={disabled}
+      color="tertiary"
+      iconTrailing={ChevronRight}
       className="w-full justify-between"
     >
       {children}
     </Button>
-  );
-}
-
-function SingleChoiceChip({
-  ariaLabel,
-  label,
-  disabled,
-  selectedKey,
-  options,
-  onSelect,
-}: {
-  ariaLabel: string;
-  label: string;
-  disabled?: boolean;
-  selectedKey: string;
-  options: { key: string; label: string }[];
-  onSelect: (key: string) => void;
-}) {
-  return (
-    <Dropdown.Root>
-      <Chip disabled={disabled}>{label}</Chip>
-      <Dropdown.Popover placement="bottom start" className="w-48">
-        <Dropdown.Menu
-          aria-label={ariaLabel}
-          selectionMode="single"
-          selectedKeys={[selectedKey]}
-          onAction={(key) => onSelect(String(key))}
-        >
-          {options.map((option) => (
-            <Dropdown.Item key={option.key} id={option.key} label={option.label} />
-          ))}
-        </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown.Root>
   );
 }
