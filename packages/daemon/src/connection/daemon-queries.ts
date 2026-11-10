@@ -47,6 +47,7 @@ class DaemonQuery<Request extends Scope, Result> {
     private readonly encode: (value: Result) => Uint8Array,
     private readonly method: string,
     private readonly rpc: Rpc,
+    private readonly onInvalid?: () => void,
   ) {}
   readonly onRequest = (listener: (request: Request) => Promise<void>) => {
     this.#listener = listener;
@@ -62,6 +63,7 @@ class DaemonQuery<Request extends Scope, Result> {
     try {
       request = this.decode(bytes);
     } catch {
+      this.onInvalid?.();
       return false;
     }
     if (request.workspaceId === scope.workspaceId && request.computerId === scope.computerId)
@@ -143,6 +145,10 @@ export class DaemonQueries {
       encodeAgentContextViewResult,
       AGENT_CONTEXT_VIEW_RESULT_METHOD,
       rpc,
+      () =>
+        logger.error("Agent context view request invalid", {
+          event: "daemon.agent_context_view.request_invalid",
+        }),
     );
     this.computerFilePull = new DaemonQuery(
       decodeComputerFilePullRequest,

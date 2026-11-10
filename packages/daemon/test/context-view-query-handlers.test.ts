@@ -25,6 +25,7 @@ test("context view failures emit the same diagnostic result trace as successful 
     },
     async postAgentContextViewResult(result: AgentContextViewResult) {
       results.push(result);
+      return { postedBytes: 321, compressedBytes: 123, httpStatus: 204 };
     },
   } as unknown as DaemonConnectionClient;
 
@@ -51,6 +52,9 @@ test("context view failures emit the same diagnostic result trace as successful 
     outcome: "failed",
     failure_detail: "not_found",
     post_outcome: "accepted",
+    posted_bytes: 321,
+    compressed_bytes: 123,
+    http_status: 204,
     request_id: request.requestId,
     duration_ms: expect.any(Number),
   });
@@ -102,4 +106,41 @@ test("unexpected restore exceptions upload a read_failed result before tracing",
     post_outcome: "accepted",
     error_class: "Error",
   });
+});
+
+test("queued requests emit the Raft request_expired event with queued_ms", async () => {
+  let receive: ((request: AgentContextViewRequest) => Promise<void>) | undefined;
+  const transport = {
+    onAgentContextView(callback: (request: AgentContextViewRequest) => Promise<void>) {
+      receive = callback;
+      return () => {};
+    },
+  } as unknown as DaemonConnectionClient;
+  const originalNow = Date.now;
+  try {
+    Date.now = () => 0;
+    const { records } = await captureDaemonLogs(async () => {
+      subscribeContextViewQueries(transport, {
+        connection: {
+          workspaceId: request.workspaceId,
+          computerId: request.computerId,
+          workspaceRoot: "/tmp/workspace",
+        } as never,
+        stateDirectory: "/tmp/state",
+        contextView: { find: () => undefined },
+        currentTransport: () => transport,
+        isStopping: () => false,
+      });
+      const pending = receive?.(request);
+      Date.now = () => 23_000;
+      await pending;
+    });
+    expect(
+      records.find(
+        (record) => record.properties.event === "daemon.agent_context_view.request_expired",
+      )?.properties,
+    ).toMatchObject({ agent_id: request.agentId, queued_ms: 23_000 });
+  } finally {
+    Date.now = originalNow;
+  }
 });

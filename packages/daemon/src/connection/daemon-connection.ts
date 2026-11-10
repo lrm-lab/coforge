@@ -726,11 +726,8 @@ export class DaemonConnection
     this.#observations.sendContextViewAvailability(message, this.#activeClient());
   }
 
-  async postAgentContextViewResult(
-    result: AgentContextViewResult,
-    agentApiKey?: string,
-  ): Promise<void> {
-    await postAgentContextViewResult(this.#serverHttpUrl, this.#token, result, agentApiKey);
+  async postAgentContextViewResult(result: AgentContextViewResult, agentApiKey?: string) {
+    return postAgentContextViewResult(this.#serverHttpUrl, this.#token, result, agentApiKey);
   }
 
   #activeClient(): CentrifugeWorkspaceClient | undefined {

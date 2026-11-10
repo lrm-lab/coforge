@@ -1,4 +1,5 @@
 import type { AgentApiConnectionClient } from "./agent-api-connection-client";
+import type { AgentContextViewUploadMetadata } from "./agent-context-view-upload";
 import type {
   RuntimeAuthIntent,
   RuntimeAuthLoginReport,
@@ -170,7 +171,10 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   ): () => void;
   sendLocalSessionExcerptResult?(result: LocalSessionExcerptResult): Promise<void>;
   onAgentContextView?(callback: (request: AgentContextViewRequest) => Promise<void>): () => void;
-  postAgentContextViewResult?(result: AgentContextViewResult, agentApiKey?: string): Promise<void>;
+  postAgentContextViewResult?(
+    result: AgentContextViewResult,
+    agentApiKey?: string,
+  ): Promise<AgentContextViewUploadMetadata | void>;
   onComputerFilePull?(callback: (request: ComputerFilePullRequest) => Promise<void>): () => void;
   sendComputerFilePullResult?(result: ComputerFilePullResult): Promise<void>;
   onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;

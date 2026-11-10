@@ -1,5 +1,9 @@
 import { join } from "node:path";
-import type { AgentContextViewRequest, AgentContextViewResult } from "@lrm/coforge-sdk/internal";
+import {
+  encodeAgentContextViewResult,
+  type AgentContextViewRequest,
+  type AgentContextViewResult,
+} from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { readContextViewSource } from "#src/agent-context-view/context-view-source";
 import {
@@ -10,6 +14,7 @@ import { runContextViewRestoreInChild } from "#src/agent-context-view/context-vi
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view-store";
 import type { DaemonConfig } from "./runtime";
+import type { AgentContextViewUploadError } from "#src/connection/agent-context-view-upload";
 import { getLogger } from "@logtape/logtape";
 
 const MAX_RESULT_BYTES = 32 * 1024 * 1024;
@@ -47,22 +52,40 @@ async function sendResult(
   transport: DaemonConnectionClient,
   result: AgentContextViewResult,
   agentApiKey?: string,
-): Promise<"accepted" | "failed"> {
+): Promise<Record<string, unknown>> {
+  const postedBytes = encodeAgentContextViewResult(result).byteLength;
   try {
     if (!agentApiKey) throw new Error("context view Agent API key unavailable");
     if (transport.postAgentContextViewResult) {
-      await transport.postAgentContextViewResult(result, agentApiKey);
-      return "accepted";
+      const upload = await transport.postAgentContextViewResult(result, agentApiKey);
+      return {
+        post_outcome: "accepted",
+        posted_bytes: upload?.postedBytes ?? postedBytes,
+        ...(upload?.compressedBytes === undefined
+          ? {}
+          : { compressed_bytes: upload.compressedBytes }),
+        ...(upload?.httpStatus === undefined ? {} : { http_status: upload.httpStatus }),
+      };
     }
     throw new Error("context view HTTP result upload is unavailable");
   } catch (error) {
+    const uploadError = error as AgentContextViewUploadError;
     logger.warning("Context view result upload failed", {
       event: "context_view:result_upload_failed",
       request_id: result.requestId,
       error_code: error instanceof Error ? error.name : "unknown",
     });
     // The request has already been logged; no local state is mutated by a failed upload.
-    return "failed";
+    return {
+      post_outcome: "failed",
+      posted_bytes: uploadError.postedBytes ?? postedBytes,
+      ...(uploadError.compressedBytes === undefined
+        ? {}
+        : { compressed_bytes: uploadError.compressedBytes }),
+      ...(uploadError.httpStatus === undefined
+        ? { error_class: error instanceof Error ? error.name : "unknown" }
+        : { http_status: uploadError.httpStatus }),
+    };
   }
 }
 
@@ -92,27 +115,30 @@ export function subscribeContextViewQueries(
     const run = requestChain.then(async () => {
       // Leave the final five seconds of Raft's 30 second viewer window for upload and polling.
       if (Date.now() - receivedAt >= 23_000) {
+        logger.error("Context view request expired", {
+          event: "daemon.agent_context_view.request_expired",
+          agent_id: request.agentId,
+          queued_ms: Math.max(0, Date.now() - receivedAt),
+        });
         logRequestTrace(request, receivedAt, {
           outcome: "expired",
           failure_detail: "queue_deadline",
           post_outcome: "skipped",
+          queued_ms: Math.max(0, Date.now() - receivedAt),
         });
         return;
       }
       try {
-        await answer(request);
+        await answer(request, receivedAt);
       } catch (error) {
         const result = failure(request, "read_failed", "exception");
-        const postOutcome = await sendResult(
-          transport,
-          result,
-          ports.agentApiKey?.(request.agentId),
-        );
+        const postTrace = await sendResult(transport, result, ports.agentApiKey?.(request.agentId));
         logRequestTrace(request, receivedAt, {
           outcome: result.status,
           failure_detail: result.failureDetail,
           error_class: error instanceof Error ? error.name : "unknown",
-          post_outcome: postOutcome,
+          queued_ms: Math.max(0, Date.now() - receivedAt),
+          ...postTrace,
           status: result.status,
           reason: result.reason,
           failure: result.reason,
@@ -122,13 +148,14 @@ export function subscribeContextViewQueries(
     requestChain = run.catch(() => undefined);
     return run;
   };
-  const answer = async (request: AgentContextViewRequest) => {
+  const answer = async (request: AgentContextViewRequest, receivedAt: number) => {
     const startedAt = Date.now();
     if (ports.isStopping()) {
       logRequestTrace(request, startedAt, {
         outcome: "rejected",
         failure_detail: "daemon_stopping",
         post_outcome: "skipped",
+        queued_ms: Math.max(0, startedAt - receivedAt),
       });
       return;
     }
@@ -140,6 +167,7 @@ export function subscribeContextViewQueries(
         outcome: "rejected",
         failure_detail: "scope_mismatch",
         post_outcome: "skipped",
+        queued_ms: Math.max(0, startedAt - receivedAt),
       });
       return;
     }
@@ -147,12 +175,13 @@ export function subscribeContextViewQueries(
       result: AgentContextViewResult,
       fields: Record<string, unknown> = {},
     ): Promise<void> => {
-      const postOutcome = await sendResult(transport, result, ports.agentApiKey?.(request.agentId));
+      const postTrace = await sendResult(transport, result, ports.agentApiKey?.(request.agentId));
       logRequestTrace(request, startedAt, {
         ...fields,
+        queued_ms: Math.max(0, startedAt - receivedAt),
         outcome: result.status,
         failure_detail: result.failureDetail ?? result.reason,
-        post_outcome: postOutcome,
+        ...postTrace,
         status: result.status,
         reason: result.reason,
         failure: result.reason,
@@ -279,9 +308,11 @@ export function subscribeContextViewQueries(
     else
       logRequestTrace(request, startedAt, {
         ...fields,
+        queued_ms: Math.max(0, startedAt - receivedAt),
         outcome: result.status,
         failure_detail: result.failureDetail ?? result.reason,
         post_outcome: "skipped",
+        posted_bytes: encodeAgentContextViewResult(result).byteLength,
         status: result.status,
         reason: result.reason,
         failure: result.reason,
