@@ -6,6 +6,7 @@ import type {
 } from "@lrm/coforge-sdk/agent";
 import { runContextViewRestoreInChild } from "#src/agent-context-view/context-view-restore-runner";
 import { readContextViewSource } from "#src/agent-context-view/context-view-source";
+import { ContextViewRestoreCache } from "#src/agent-context-view/context-view-restore-cache";
 import {
   providerTranscriptRoot,
   resolveProviderTranscriptToken,
@@ -25,13 +26,19 @@ export type AgentContextQueryPorts = Readonly<{
   resolveProviderSource?(agentId: string, entry: ContextViewIndexEntry): string | undefined;
   currentSessionId(agentId: string): string | undefined;
   contextViewEnabled?(agentId: string): boolean | undefined;
+  restoreCache?: ContextViewRestoreCache;
+  restoreInChild?: typeof runContextViewRestoreInChild;
 }>;
 
 function refuse(message: string, code: string): never {
   throw new AgentPreflightError(message, code, { retryable: false });
 }
 
-function sourceFor(ports: AgentContextQueryPorts, agentId: string, entry: ContextViewIndexEntry) {
+function sourceCandidates(
+  ports: AgentContextQueryPorts,
+  agentId: string,
+  entry: ContextViewIndexEntry,
+) {
   const providerPath =
     ports.resolveProviderSource?.(agentId, entry) ??
     resolveProviderTranscriptToken(entry.runtime, entry.transcript);
@@ -48,11 +55,7 @@ function sourceFor(ports: AgentContextQueryPorts, agentId: string, entry: Contex
     join(ports.workspaceRoot, entry.transcript),
     join(ports.stateDirectory, entry.transcript),
   ];
-  const source =
-    candidates.map((path) => readContextViewSource(path, allowedRoots)).find((item) => item.ok) ??
-    readContextViewSource(candidates[0]!, allowedRoots);
-  if (!source.ok) refuse("context source is unavailable", "CONTEXT_SOURCE_UNAVAILABLE");
-  return source;
+  return { candidates, allowedRoots };
 }
 
 /** Own-Agent context query: authorization precedes index lookup and every filesystem operation. */
@@ -84,15 +87,49 @@ export async function queryAgentContext(
   if (entry.sessionId !== request.sessionId)
     refuse("context message belongs to another session", "CONTEXT_SESSION_MISMATCH");
 
-  const source = sourceFor(ports, agentId, entry);
-  const restored = await runContextViewRestoreInChild({
-    runtime: entry.runtime,
-    sessionId: entry.sessionId,
-    messageId: entry.messageId,
-    buffer: source.buffer,
-    offset: entry.offset,
-    maxBytes: 32 * 1024 * 1024,
-  });
+  const { candidates, allowedRoots } = sourceCandidates(ports, agentId, entry);
+  const maxBytes = 32 * 1024 * 1024;
+  const cacheKey = (path: string) =>
+    JSON.stringify([agentId, entry.sessionId, entry.messageId, entry.offset, maxBytes, path]);
+  let source:
+    | { ok: true; buffer: Buffer; sourceBytes: number }
+    | { ok: false; failure: "missing" | "outside_root" | "unsafe" | "too_large" | "read_failed" }
+    | undefined;
+  let sourcePath: string | undefined;
+  let restored: Awaited<ReturnType<typeof runContextViewRestoreInChild>> | undefined;
+  for (const path of candidates) {
+    const cached = ports.restoreCache?.get({ key: cacheKey(path), path, allowedRoots });
+    if (cached) {
+      sourcePath = path;
+      source = { ok: true, buffer: cached.source, sourceBytes: cached.sourceBytes };
+      restored = cached.restored;
+      break;
+    }
+    const candidate = readContextViewSource(path, allowedRoots);
+    if (candidate.ok) {
+      sourcePath = path;
+      source = candidate;
+      break;
+    }
+  }
+  source ??= readContextViewSource(candidates[0]!, allowedRoots);
+  if (!source.ok) refuse("context source is unavailable", "CONTEXT_SOURCE_UNAVAILABLE");
+  if (!restored) {
+    restored = await (ports.restoreInChild ?? runContextViewRestoreInChild)({
+      runtime: entry.runtime,
+      sessionId: entry.sessionId,
+      messageId: entry.messageId,
+      buffer: source.buffer,
+      offset: entry.offset,
+      maxBytes,
+    });
+    if (sourcePath && ports.restoreCache)
+      ports.restoreCache.set(
+        { key: cacheKey(sourcePath), path: sourcePath, allowedRoots },
+        source.buffer,
+        restored,
+      );
+  }
   if (ports.currentSessionId(agentId) !== request.sessionId)
     refuse("context session changed while it was being restored", "CONTEXT_SESSION_MISMATCH");
   if (!restored.ok)
