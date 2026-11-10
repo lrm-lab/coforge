@@ -185,6 +185,8 @@ export function activityNavAttentionRealtime(
     // The read's stream positions stay: a message delivered here moved the dot without a read.
     onMessage: (event, position) => {
       const eventWorkspaceId = (event as { workspaceId?: unknown } | undefined)?.workspaceId;
+      // Keep accepting callbacks without workspaceId for older callers; the subscription hook
+      // only forwards decoded v1 events, which always carry the workspace scope.
       if (typeof eventWorkspaceId === "string" && eventWorkspaceId !== workspaceId) return;
       // A muted conversation's message counts on its own row only.
       if ((event as { muted?: true } | undefined)?.muted) return;
