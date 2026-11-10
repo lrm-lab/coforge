@@ -7,15 +7,11 @@ import { SETTINGS_SECTION_GROUPS } from "./settings-sections";
 
 export function SettingsPending() {
   return (
-    <main
-      aria-busy="true"
-      data-panel-cards
-      className="flex h-full min-w-0 bg-primary lg:gap-2 lg:bg-transparent"
-    >
+    <main aria-busy="true" className="flex h-full min-w-0 bg-primary">
       <p role="status" className="sr-only">
         {m.settings_loading()}
       </p>
-      <nav className="flex w-full min-w-0 flex-col overflow-hidden border-r border-secondary bg-primary md:w-60 md:shrink-0 lg:rounded-xl lg:border-r-0">
+      <nav className="flex w-full min-w-0 flex-col overflow-hidden border-r border-secondary bg-primary md:w-60 md:shrink-0">
         <PageHeader heading={m.settings_title()} />
         <div className="space-y-5 overflow-y-auto p-3">
           {SETTINGS_SECTION_GROUPS.map((group) => (
@@ -29,7 +25,7 @@ export function SettingsPending() {
           ))}
         </div>
       </nav>
-      <section className="@container/settings hidden min-w-0 flex-1 flex-col overflow-hidden bg-primary md:flex lg:rounded-xl">
+      <section className="@container/settings hidden min-w-0 flex-1 flex-col overflow-hidden bg-primary md:flex">
         <PageHeader icon={UserCircle} heading={m.settings_account()} />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-page pb-8">
           <section>

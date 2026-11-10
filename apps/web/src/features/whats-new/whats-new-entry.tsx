@@ -43,11 +43,11 @@ export function WhatsNewRow() {
       {entry.visible && (
         <AriaButton
           onPress={entry.open}
-          className="group mb-2 flex h-11 w-full items-center gap-3.5 rounded-lg px-3 text-sm font-medium text-nav-fg outline-focus-ring transition-colors duration-100 ease-linear hover:bg-sidebar-item-active hover:text-secondary focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="group mb-0.5 flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-nav-fg outline-focus-ring transition-colors duration-100 ease-linear hover:bg-sidebar-item-active hover:text-secondary focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           <Announcement02
             aria-hidden="true"
-            className="size-6 shrink-0 stroke-[2px] text-nav-fg transition-colors duration-100 ease-linear group-hover:text-secondary"
+            className="size-5 shrink-0 text-nav-fg transition-colors duration-100 ease-linear group-hover:text-secondary"
           />
           <span className="min-w-0 flex-1 truncate text-left">{m.whats_new_entry()}</span>
           <UnreadDot />

@@ -1,13 +1,8 @@
 import type { FC, ReactNode } from "react";
-import { LayoutLeft } from "@untitledui/icons";
 import { Pressable } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { UnreadDot } from "#src/components/ui/unread-marker";
-import { writeSidebarExpanded } from "#src/features/settings/sidebar-expanded";
-import { SidebarToggleTooltip } from "#src/features/settings/sidebar-shortcut";
-import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
 // Adapted from Untitled's sidebar-slim.tsx (MIT; docs/design/official-components.md §7) —
@@ -59,13 +54,11 @@ function RailItem({ href, icon: Icon, label, current, badge }: RailItemType) {
 interface SidebarRailProps {
   activeUrl?: string;
   items: RailItemType[];
-  /** Compact workspace switcher, in the top 48px band. */
-  subheader?: ReactNode;
-  /** Avatar + user menu at the bottom — the only Settings entry point. */
+  /** What sits at the bottom (What's new). */
   footer: ReactNode;
 }
 
-export const SidebarRail = ({ activeUrl, items, subheader, footer }: SidebarRailProps) => {
+export const SidebarRail = ({ activeUrl, items, footer }: SidebarRailProps) => {
   const rail = (
     // [data-sidebar] retints official components' bg-primary/bg-secondary/etc
     // via src/styles/coforge-theme.css.
@@ -74,44 +67,18 @@ export const SidebarRail = ({ activeUrl, items, subheader, footer }: SidebarRail
       style={{ width: SIDEBAR_RAIL_WIDTH }}
       className="flex h-full max-h-full w-full flex-col items-center justify-between overflow-x-hidden overflow-y-auto pb-4"
     >
-      <div className="flex w-full flex-col items-center gap-3">
-        <div className="mt-2 flex h-12 shrink-0 items-center justify-center">
-          <Tooltip
-            title={<SidebarToggleTooltip label={m.navigation_expand_sidebar()} />}
-            placement="right"
-          >
-            <ButtonUtility
-              icon={LayoutLeft}
-              size="sm"
-              color="tertiary"
-              aria-label={m.navigation_expand_sidebar()}
-              onClick={() => writeSidebarExpanded(true)}
-            />
-          </Tooltip>
-        </div>
-        <div className="flex h-10 shrink-0 items-center justify-center">{subheader}</div>
-        <ul className="flex w-full flex-col gap-1">
-          {items.map((item) => (
-            <li key={item.label} className="flex w-full min-w-0 justify-center">
-              <RailItem {...item} current={item.href === activeUrl} />
-            </li>
-          ))}
-        </ul>
-      </div>
+      <ul className="mt-2 flex w-full flex-col gap-1">
+        {items.map((item) => (
+          <li key={item.label} className="flex w-full min-w-0 justify-center">
+            <RailItem {...item} current={item.href === activeUrl} />
+          </li>
+        ))}
+      </ul>
       {footer}
     </aside>
   );
 
   return (
-    <>
-      <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:pt-safe-top lg:pb-safe-bottom lg:pl-safe-left lg:[html:not(.sidebar-collapsed)_&]:hidden">
-        {rail}
-      </div>
-      {/* Spacer: the real aside is `fixed`, so this reserves its width in flow. */}
-      <div
-        style={{ paddingLeft: SIDEBAR_RAIL_WIDTH }}
-        className="invisible hidden lg:sticky lg:top-0 lg:bottom-0 lg:left-0 lg:block lg:[html:not(.sidebar-collapsed)_&]:hidden"
-      />
-    </>
+    <div className="hidden shrink-0 lg:flex lg:[html:not(.sidebar-collapsed)_&]:hidden">{rail}</div>
   );
 };

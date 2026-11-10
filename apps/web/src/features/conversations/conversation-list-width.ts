@@ -55,7 +55,8 @@ const KEY_STEP_LARGE = 64;
  * script and the resize handle set on `<html>`, so the server markup never depends on the stored
  * width. Tailwind reads the string as written, so it repeats `CONVERSATION_LIST_COLUMN.property`.
  * `w-list-column` in `styles.css` does the same for `LIST_COLUMN`. */
-export const LIST_COLUMN_CLASS = "lg:w-(--conversation-list-width,18rem)";
+export const LIST_COLUMN_CLASS =
+  "lg:w-(--conversation-list-width,18rem) lg:border-r lg:border-secondary";
 
 const PLAIN_NUMBER = /^\d+(\.\d+)?$/;
 

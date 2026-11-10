@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building07 as Building, Check, ChevronSelectorVertical, Plus } from "@untitledui/icons";
+import { Building07 as Building, Check, ChevronDown, Plus } from "@untitledui/icons";
 import {
   Button as AriaButton,
   Header as AriaHeader,
@@ -26,14 +26,11 @@ export function WorkspaceSwitcher({
   current,
   onSelect,
   onCreate,
-  compact = false,
 }: {
   workspaces: WorkspaceOption[];
   current: WorkspaceOption | null;
   onSelect?: (slug: string) => Promise<void> | void;
   onCreate?: (input: CreateWorkspaceInput) => Promise<void>;
-  /** Icon-only trigger for the collapsed sidebar rail. */
-  compact?: boolean;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const toast = useAppToast();
@@ -50,34 +47,17 @@ export function WorkspaceSwitcher({
   return (
     <>
       <Dropdown.Root>
-        {compact ? (
-          <AriaButton
-            aria-label={`${m.workspace_switcher()}: ${label}`}
-            className="flex size-8 items-center justify-center rounded-lg bg-transparent outline-none transition-colors hover:bg-primary_hover focus-visible:ring-2 focus-visible:ring-brand"
-          >
-            <WorkspaceMark workspace={current} />
-          </AriaButton>
-        ) : (
-          <AriaButton
-            aria-label={m.workspace_switcher()}
-            className="flex h-11 w-full items-center gap-2.5 rounded-lg bg-transparent px-2 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-brand"
-          >
-            <WorkspaceIcon
-              name={label}
-              url={current?.iconUrl ?? null}
-              className="size-7 rounded-lg bg-quaternary text-secondary"
-            />
-            <span
-              data-workspace-name
-              className="min-w-0 flex-1 truncate text-sm font-semibold text-primary"
-            >
-              {label}
-            </span>
-            <ChevronSelectorVertical aria-hidden="true" className="size-4 shrink-0 text-tertiary" />
-          </AriaButton>
-        )}
+        <AriaButton
+          aria-label={m.workspace_switcher()}
+          className="flex h-8 max-w-full min-w-0 items-center gap-1 rounded-lg bg-transparent px-1.5 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-brand"
+        >
+          <span data-workspace-name className="min-w-0 truncate text-sm font-semibold text-primary">
+            {label}
+          </span>
+          <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+        </AriaButton>
         <Dropdown.Popover
-          placement={compact ? "right top" : "bottom start"}
+          placement="bottom start"
           offset={6}
           className="w-(--trigger-width) min-w-56 rounded-xl p-1.5 shadow-lg"
         >

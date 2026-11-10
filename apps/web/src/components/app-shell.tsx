@@ -8,7 +8,6 @@ import {
   LogOut01 as LogOut,
   MessageChatSquare,
   Monitor01 as Monitor,
-  SearchLg,
   Settings01,
   Stars01,
   Users01 as Users,
@@ -18,10 +17,7 @@ import { Button as AriaButton } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
-import {
-  MobileDrawerProvider,
-  useCloseMobileDrawer,
-} from "#src/components/layout/sidebar/mobile-header";
+import { MobileDrawerProvider } from "#src/components/layout/sidebar/mobile-header";
 import {
   SidebarExpanded,
   SidebarMobileDrawer,
@@ -43,8 +39,11 @@ import {
 import type { CreateWorkspaceInput } from "#src/features/workspaces/create-workspace-form";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
-import { useOpenSearch } from "#src/features/search/search-dialog-context";
-import { splitWorkspacePath, workspacePath } from "#src/features/workspaces/workspace-url";
+import { SearchButton } from "#src/features/search/search-button";
+import { TopBarBusyAgents } from "#src/features/agents/top-bar-busy-agents";
+import { SearchField } from "#src/features/search/search-field";
+import { AppTopBar } from "#src/components/layout/app-top-bar";
+import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 export type AppUser = {
@@ -87,6 +86,8 @@ function useNavItems(
   bareHref: string;
   /** Sections under `base` this item is also current for. */
   sections?: readonly string[];
+  /** A heading that starts a new group at this item. */
+  groupLabel?: string;
 })[] {
   const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
   const recordsHref = recordsNavHref(workspaceId);
@@ -95,7 +96,6 @@ function useNavItems(
     href: localizeHref(`${base}/${section}`),
   });
   return [
-    { label: m.search_title(), ...item("search"), icon: SearchLg },
     {
       label: m.navigation_chat(),
       bareHref: base,
@@ -110,7 +110,14 @@ function useNavItems(
       badge: activityDot,
     },
     ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
-    { label: m.projects_title(), ...item("projects"), icon: Folder },
+    // What the Workspace shares sits under its own heading, apart from the viewer's own
+    // conversations and activity.
+    {
+      label: m.projects_title(),
+      ...item("projects"),
+      icon: Folder,
+      groupLabel: m.navigation_workspace_group(),
+    },
     {
       label: m.navigation_agents(),
       ...item("members"),
@@ -137,8 +144,6 @@ function useNavItems(
  * this routes same-origin, unmodified clicks through the router instead. */
 function useSpaNavigation() {
   const router = useRouter();
-  const openSearch = useOpenSearch();
-  const closeDrawer = useCloseMobileDrawer();
   return useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
@@ -150,20 +155,14 @@ function useSpaNavigation() {
       const url = new URL(anchor.href, window.location.href);
       if (url.origin !== window.location.origin) return;
       event.preventDefault();
-      // Search is a dialog over the page, not a place to go.
-      if (splitWorkspacePath(url.pathname)?.rest === "/search") {
-        closeDrawer();
-        openSearch();
-        return;
-      }
       void router.navigate({ href: url.pathname + url.search + url.hash });
     },
-    [router, openSearch, closeDrawer],
+    [router],
   );
 }
 
-/** Inside the drawer's provider, which its Search link closes. */
-function SidebarLinks({ children }: { children: React.ReactNode }) {
+/** The shell's own links (the top bar's and the sidebars'), routed through the router. */
+function ShellLinks({ children }: { children: React.ReactNode }) {
   const onClickCapture = useSpaNavigation();
   return (
     <div onClickCapture={onClickCapture} className="contents">
@@ -238,68 +237,58 @@ export function AppShell({
     />
   );
 
-  // The expanded sidebar and the drawer share one footer: "What's new" above the user card. The
-  // collapsed rail has the same two as icons.
-  const expandedFooter = (
-    <>
-      <WhatsNewRow />
-      <div className="flex min-w-0 items-center gap-1">
-        <div className="min-w-0 flex-1">
-          <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
-        </div>
-        <NotificationBell workspaceSlug={currentWorkspace.slug} />
-      </div>
-    </>
-  );
-
   return (
     <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>
       <MobileDrawerProvider>
         {/* Clears the notch and the home indicator on a phone. */}
-        <div className="flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:flex-row lg:bg-(image:--sidebar-gradient)">
-          {/* Each sidebar is `fixed` + a spacer div reserving its width in flow;
-          `contents` keeps that pair as direct flex items of this `lg:flex` shell. The drawer is
-          mobile only; on desktop `sidebar-collapsed` on <html> picks the expanded one or the rail. */}
-          <SidebarLinks>
-            <SidebarMobileDrawer
-              activeUrl={activeUrl}
-              items={navItems}
-              subheader={workspaceSwitcher}
-              footer={expandedFooter}
-            />
-            <SidebarExpanded
-              activeUrl={activeUrl}
-              items={navItems}
-              subheader={workspaceSwitcher}
-              footer={expandedFooter}
-            />
-            <SidebarRail
-              activeUrl={activeUrl}
-              items={navItems}
-              subheader={
-                <WorkspaceSwitcher
-                  compact
-                  workspaces={workspaces}
-                  current={currentWorkspace}
-                  onSelect={onSelectWorkspace}
-                  onCreate={onCreateWorkspace}
-                />
-              }
-              footer={
-                <div className="flex w-full flex-col items-center gap-2">
-                  <WhatsNewRailButton />
-                  <NotificationBell rail workspaceSlug={currentWorkspace.slug} />
+        <div className="flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:bg-sidebar">
+          <ShellLinks>
+            <AppTopBar
+              workspace={workspaceSwitcher}
+              agents={<TopBarBusyAgents />}
+              search={<SearchField />}
+              end={
+                <>
+                  <NotificationBell workspaceSlug={currentWorkspace.slug} />
                   <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
-                </div>
+                </>
               }
             />
-          </SidebarLinks>
+          </ShellLinks>
+          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+            {/* `contents` keeps the sidebars direct flex items of this row. The drawer is mobile only;
+            on desktop `sidebar-collapsed` on <html> picks the expanded one or the rail. */}
+            <ShellLinks>
+              {/* The phone drawer keeps the Workspace, search and the user's own controls, which on
+            desktop sit in the top bar. */}
+              <SidebarMobileDrawer
+                activeUrl={activeUrl}
+                items={navItems}
+                subheader={workspaceSwitcher}
+                actions={<SearchButton />}
+                footer={
+                  <>
+                    <WhatsNewRow />
+                    <div className="flex min-w-0 items-center gap-1">
+                      <div className="min-w-0 flex-1">
+                        <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
+                      </div>
+                      <NotificationBell workspaceSlug={currentWorkspace.slug} />
+                    </div>
+                  </>
+                }
+              />
+              <SidebarExpanded activeUrl={activeUrl} items={navItems} footer={<WhatsNewRow />} />
+              <SidebarRail activeUrl={activeUrl} items={navItems} footer={<WhatsNewRailButton />} />
+            </ShellLinks>
 
-          {/* On desktop the content is one white card inset 8px from the sidebar's background; a page
-            made of several panels (Chat) marks itself `data-panel-cards` and draws a card per panel. */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
-              {children}
+            {/* On desktop the content is one white card under the top bar, inset 8px from the sidebar's
+            background; a page made of several panels (Chat) divides the card with hairlines, never
+            separate cards, so what belongs together reads as one block. */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pt-0 lg:pl-0">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl">
+                {children}
+              </div>
             </div>
           </div>
         </div>
@@ -318,19 +307,20 @@ function UserMenuCard({
   base: string;
   user: AppUser;
   onSignOut: () => Promise<void> | void;
+  /** The avatar alone, in the desktop top bar; the menu drops below it. */
   compact?: boolean;
 }) {
   const avatar = (
     <ActorAvatar
       presence={false}
-      size={compact ? "sm" : "md"}
+      size="xs"
       name={user.name}
       alt={user.name}
       src={user.avatarUrl}
-      // An uploaded photo is a rounded square in the full card, a circle in the rail; a sticker
+      // An uploaded photo is a rounded square in the full card, a circle in the top bar; a sticker
       // is bare either way.
       rounded={compact}
-      className={compact ? undefined : "rounded-lg"}
+      className={compact ? undefined : "rounded-md"}
     />
   );
   return (
@@ -345,14 +335,14 @@ function UserMenuCard({
       ) : (
         <AriaButton
           aria-label={m.controls_current_user()}
-          className="relative flex w-full items-center gap-3 rounded-xl p-2 text-left outline-focus-ring transition duration-100 ease-linear hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 aria-expanded:bg-sidebar-accent"
+          className="relative flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left outline-focus-ring transition duration-100 ease-linear hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 aria-expanded:bg-sidebar-accent"
         >
           {avatar}
           <UserIdentity user={user} />
         </AriaButton>
       )}
       <Dropdown.Popover
-        placement={compact ? "right bottom" : "top left"}
+        placement={compact ? "bottom end" : "top left"}
         className={compact ? "w-64" : "w-(--trigger-width) min-w-56"}
       >
         <div className="flex items-center gap-3 border-b border-secondary px-3.5 py-3">

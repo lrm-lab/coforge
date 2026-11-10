@@ -1,6 +1,8 @@
 import { DialogTrigger as AriaDialogTrigger } from "react-aria-components";
 
-import { Button } from "#src/components/base/buttons/button";
+import { ChevronDown } from "@untitledui/icons";
+
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 
 import { AgentListPopover, AgentListRow, AgentListRows } from "./agent-list-popover";
@@ -24,31 +26,26 @@ function BusyAgentRow({ agent, onOpen }: { agent: BusyAgent; onOpen: () => void 
 }
 
 /**
- * The count at the end of the chat list header's stage: how many busy Agents wait off stage. It
- * opens every busy Agent, most relevant first, in the thread's following-Agents popover; a row
+ * The button at the end of the busy Agents' stage while some wait off stage: no number, the
+ * mascots carry it, and the tooltip says how many are busy. It opens every busy Agent, most relevant first, in the thread's following-Agents popover; a row
  * opens that Agent's profile.
  */
-export function BusyAgentsCount({
+export function BusyAgentsMore({
   agents,
-  waiting,
   onOpenAgent,
 }: {
   agents: readonly BusyAgent[];
-  waiting: number;
   onOpenAgent: OpenAgentProfile;
 }) {
   return (
     <AriaDialogTrigger>
-      <Button
+      <ButtonUtility
+        icon={ChevronDown}
+        size="xs"
         color="tertiary"
-        size="sm"
-        aria-label={m.agent_busy_agents_count({ count: agents.length })}
-        className="shrink-0 px-1.5 [&>[data-text]]:flex [&>[data-text]]:items-center"
-      >
-        <span aria-hidden="true" className="tabular-nums">
-          {waiting}
-        </span>
-      </Button>
+        tooltip={m.agent_busy_agents_count({ count: agents.length })}
+        className="shrink-0"
+      />
       <AgentListPopover label={m.agent_busy_agents()}>
         {(close) => (
           <AgentListRows>
