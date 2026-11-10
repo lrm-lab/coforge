@@ -24,6 +24,11 @@ import {
   loadWaitingChoiceCards,
 } from "./activity-inbox.functions";
 import type { ActivityInboxCursor, ActivityInboxFilter } from "./activity-inbox.schemas";
+import {
+  applyActivityMessage,
+  type ActivityUnreadMessage,
+  type ActivityUnreadState,
+} from "./activity-unread-count";
 
 /** Every cached page of every view shares this prefix, so one invalidation refreshes them all. */
 export const ACTIVITY_INBOX_QUERY_PREFIX = ["activity-inbox"] as const;
@@ -143,7 +148,8 @@ export const waitingChoiceCardsQuery = (workspaceId: string) =>
 export const activityNavAttentionQuery = (workspaceId: string) =>
   queryOptions({
     queryKey: [...ACTIVITY_INBOX_QUERY_PREFIX, "nav-attention", workspaceId],
-    queryFn: () => loadActivityNavAttention(),
+    // An older server's answer has no count; the type says so, whichever fields the read has.
+    queryFn: (): Promise<ActivityNavAttention> => loadActivityNavAttention(),
     staleTime: 30_000,
     structuralSharing: (held: unknown, next: unknown) =>
       held && readEarlier(next as ActivityNavAttention, held as ActivityNavAttention) ? held : next,
@@ -158,20 +164,26 @@ function readEarlier(answer: StreamRead, than: StreamRead) {
 }
 
 /**
- * The nav dot's realtime reactions. A message the server already filtered to the viewer can only
- * add attention, so it lights the dot without a read. A write of theirs that can clear it, in any
- * of their pages, announces where the inbox stands (`ActivityAttention`), and the dot takes that
+ * The nav badge's realtime reactions. A message the server already filtered to the viewer can only
+ * add attention, so it lights the dot, and counts its item when the server counts
+ * (`applyActivityMessage`), without a read; a muted conversation's message asks for a read, at most
+ * once per `rereadIntervalMs`. A write of theirs that can clear it, in any
+ * of their pages, announces where the inbox stands (`ActivityAttention`), and the badge takes that
  * as it is, unless a message lit it here past the place the server read from, which keeps it lit;
  * when the two places cannot be compared, the dot reads again. Any other `activity.changed.v1` (a
  * mention from outside the channel, a Task assignment) says nothing of which way it went, so it
  * re-reads.
+ *
+ * `viewingKey` (the conversation or thread open in front of the viewer, whose messages count for
+ * nothing) is not given yet: nothing here knows which one is open.
  */
 export function activityNavAttentionRealtime(
   queryClient: QueryClient,
   userId: string,
   workspaceId: string,
+  { rereadIntervalMs = 10_000 }: { rereadIntervalMs?: number } = {},
 ): {
-  onMessage: (event: unknown, position: StreamPosition | undefined) => void;
+  onMessage: (message: ActivityUnreadMessage, position: StreamPosition | undefined) => void;
   onActivity: () => void;
   onAttention: (attention: ActivityAttention) => void;
   onSubscribed: (recovery: SubscribedRecovery) => void;
@@ -179,46 +191,79 @@ export function activityNavAttentionRealtime(
   const queryKey = activityNavAttentionQuery(workspaceId).queryKey;
   const channel = userConversationChannel(userId);
   const reread = () => void queryClient.invalidateQueries({ queryKey });
+  // A muted conversation's messages ask for a read in a burst: the first reads at once, the rest
+  // share one read when the interval ends.
+  let lastThrottledRead = Number.NEGATIVE_INFINITY;
+  let waiting: ReturnType<typeof setTimeout> | undefined;
+  const rereadThrottled = () => {
+    if (waiting) return;
+    const wait = lastThrottledRead + rereadIntervalMs - Date.now();
+    if (wait <= 0) {
+      lastThrottledRead = Date.now();
+      return reread();
+    }
+    waiting = setTimeout(() => {
+      waiting = undefined;
+      lastThrottledRead = Date.now();
+      reread();
+    }, wait);
+  };
   // The newest message that lit the dot here, by where it stands in the viewer's channel.
   let litBy: { position: StreamPosition | undefined } | undefined;
   return {
     // The read's stream positions stay: a message delivered here moved the dot without a read.
-    onMessage: (event, position) => {
-      const eventWorkspaceId = (event as { workspaceId?: unknown } | undefined)?.workspaceId;
+    onMessage: (message, position) => {
+      const eventWorkspaceId = (message as { workspaceId?: unknown } | undefined)?.workspaceId;
       // Keep accepting callbacks without workspaceId for older callers; the subscription hook
       // only forwards decoded v1 events, which always carry the workspace scope.
       if (typeof eventWorkspaceId === "string" && eventWorkspaceId !== workspaceId) return;
-      // A muted conversation's message counts on its own row only.
-      if ((event as { muted?: true } | undefined)?.muted) return;
+      const current = queryClient.getQueryData<ActivityNavAttention>(queryKey);
+      const {
+        state,
+        reread: needsRead,
+        lights,
+      } = applyActivityMessage(current ?? { hasUnread: false }, message, { viewerUserId: userId });
+      if (needsRead) rereadThrottled();
+      if (!lights) return;
       litBy = { position };
-      queryClient.setQueryData<ActivityNavAttention>(queryKey, (current) => ({
+      queryClient.setQueryData<ActivityNavAttention>(queryKey, (held) => ({
         streamPositions: {},
-        ...current,
-        hasUnread: true,
+        ...held,
+        ...state,
       }));
     },
     onActivity: reread,
-    onAttention: ({ hasUnread, unreadCount, unreadKeys, streamPosition }) => {
-      if (!hasUnread && litBy) {
+    onAttention: ({ hasUnread, streamPosition, unreadCount, unreadKeys }) => {
+      let lateCount = false;
+      if (litBy) {
         // The message that lit the dot here, next to the server's read: past it, it may be
         // missing from the answer and keeps the dot lit; where they cannot be compared, only a
         // read of the dot settles it.
         const lit = litBy.position;
-        if (!streamPosition || !lit || streamPosition.epoch !== lit.epoch) {
+        const comparable = streamPosition && lit && streamPosition.epoch === lit.epoch;
+        if (!hasUnread) {
+          if (!comparable) {
+            litBy = undefined;
+            return reread();
+          }
+          if (streamPosition.offset < lit.offset) return;
           litBy = undefined;
-          return reread();
+        } else if (comparable && streamPosition.offset >= lit.offset) {
+          litBy = undefined;
+        } else if (unreadCount !== undefined) {
+          // A count read before the message, or from no place to compare, may lack its item.
+          lateCount = true;
         }
-        if (streamPosition.offset < lit.offset) return;
       }
-      if (!hasUnread) litBy = undefined;
       queryClient.setQueryData<ActivityNavAttention>(queryKey, (current) => ({
         hasUnread,
-        unreadCount,
-        unreadKeys,
+        ...(unreadCount !== undefined ? { unreadCount } : {}),
+        ...(unreadKeys ? { unreadKeys } : {}),
         streamPositions: streamPosition
           ? { [channel]: streamPosition }
           : (current?.streamPositions ?? {}),
       }));
+      if (lateCount) rereadThrottled();
     },
     // A message published after the dot was read but before the subscription started reaches it
     // only through a read.
@@ -227,4 +272,6 @@ export function activityNavAttentionRealtime(
   };
 }
 
-type ActivityNavAttention = Awaited<ReturnType<typeof loadActivityNavAttention>>;
+/** What the nav badge holds: the server's answer, with the count it may carry. */
+type ActivityNavAttention = Awaited<ReturnType<typeof loadActivityNavAttention>> &
+  Pick<ActivityUnreadState, "unreadCount" | "unreadKeys">;

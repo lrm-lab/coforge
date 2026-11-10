@@ -190,7 +190,8 @@ export function decodeMemberChangedEvent(input: unknown): MemberChangedEvent {
  * Where one person's Activity stands after a write of theirs that can clear it (a Done, a read-all,
  * a mention read or unread, a conversation marked unread or read): whether anything is still unread,
  * and where their own channel's stream stood before that was read. A message published past
- * `streamPosition` may be missing from `hasUnread`.
+ * `streamPosition` may be missing from `hasUnread`. `unreadCount` (0 to 100, 100 meaning "100 or
+ * more") and the `unreadKeys` it counted come from a server that counts them; an older one omits both.
  */
 export type ActivityAttention = z.infer<typeof activityAttention>;
 
@@ -199,6 +200,8 @@ const activityAttention = z.object({
   unreadCount: z.number().int().min(0).max(100).optional(),
   unreadKeys: z.array(z.string()).max(100).optional(),
   streamPosition: streamPositionSchema.optional(),
+  unreadCount: z.number().int().min(0).max(100).optional(),
+  unreadKeys: z.array(z.string()).max(100).optional(),
 });
 
 /**
