@@ -16,21 +16,21 @@ function sortedKeys(keys: string[] | undefined) {
   return [...(keys ?? [])].sort();
 }
 
-function comparableState(state: {
-  hasUnread: boolean;
-  unreadCount?: number;
-  unreadKeys?: string[];
-}) {
+function comparableState(
+  state: { hasUnread: boolean; unreadCount?: number; unreadKeys?: string[] },
+  mapKey: (key: string) => string = (key) => key,
+) {
   return {
     hasUnread: state.hasUnread,
     unreadCount: state.unreadCount,
-    ...(state.unreadCount !== 100 ? { unreadKeys: sortedKeys(state.unreadKeys) } : {}),
+    ...(state.unreadCount !== 100 ? { unreadKeys: sortedKeys(state.unreadKeys?.map(mapKey)) } : {}),
   };
 }
 
 async function setupCase(db: Database, seeded: Seeded, item: UnreadCountCase) {
   const channels = new Map<string, Channel>();
   const threadRoots = new Map<string, { channel: Channel; rootId: string }>();
+  const seededKeys = new Map<string, string>();
   let agentMember: { channelId: string; memberId: string } | undefined;
 
   const ensureChannel = async (conversationId: string) => {
@@ -38,6 +38,7 @@ async function setupCase(db: Database, seeded: Seeded, item: UnreadCountCase) {
     if (held) return held;
     const created = await seeded.channel(`case-${conversationId}`);
     channels.set(conversationId, created);
+    seededKeys.set(`conversation:${conversationId}`, `conversation:${created.conversation.id}`);
     return created;
   };
 
@@ -60,6 +61,7 @@ async function setupCase(db: Database, seeded: Seeded, item: UnreadCountCase) {
     });
     const result = { channel, rootId: root.id };
     threadRoots.set(rootName, result);
+    seededKeys.set(`thread:${rootName}`, `thread:${root.id}`);
     if (withUnread)
       await seeded.post(channel.conversation.id, channel.bobMember.id, `reply ${rootName}`, {
         threadRootId: root.id,
@@ -114,13 +116,19 @@ async function setupCase(db: Database, seeded: Seeded, item: UnreadCountCase) {
   const thread = item.message.threadRootId
     ? await ensureThread(item.message.threadRootId, messageChannel)
     : undefined;
-  return async () => {
-    await seeded.post(
-      messageChannel.conversation.id,
-      senderMemberId,
-      "case message",
-      thread ? { threadRootId: thread.rootId } : {},
-    );
+  return {
+    keyFor: (key: string) => {
+      const seededKey = seededKeys.get(key);
+      if (!seededKey) throw new Error(`Fixture key was not seeded: ${key}`);
+      return seededKey;
+    },
+    postMessage: () =>
+      seeded.post(
+        messageChannel.conversation.id,
+        senderMemberId,
+        "case message",
+        thread ? { threadRootId: thread.rootId } : {},
+      ),
   };
 }
 
@@ -132,15 +140,15 @@ test("the server nav count follows the shared Activity unread case table", async
       const caseSuffix = `${suffix}-${index}`;
       const seeded = await seed(db, caseSuffix);
       try {
-        const postMessage = await setupCase(db, seeded, item);
+        const { postMessage, keyFor } = await setupCase(db, seeded, item);
         const inbox = new ActivityInbox(db, {});
         const before = await inbox.navAttention(seeded.workspace.id, seeded.alice.id);
         expect(comparableState(before), `${item.name} before`).toEqual(
-          comparableState(item.before),
+          comparableState(item.before, keyFor),
         );
         await postMessage();
         const actual = await inbox.navAttention(seeded.workspace.id, seeded.alice.id);
-        expect(comparableState(actual), item.name).toEqual(comparableState(item.after));
+        expect(comparableState(actual), item.name).toEqual(comparableState(item.after, keyFor));
       } finally {
         await db.workspace.delete({ where: { id: seeded.workspace.id } });
         await db.user.deleteMany({
