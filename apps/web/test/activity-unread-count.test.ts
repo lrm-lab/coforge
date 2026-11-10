@@ -10,7 +10,10 @@ import { unreadCountCases, VIEWER } from "./fixtures/activity-unread-cases";
  */
 for (const { name, before, message, viewingKey, after, reread } of unreadCountCases) {
   test(name, () => {
-    const next = applyActivityMessage(before, message, { viewerUserId: VIEWER, viewingKey });
+    const next = applyActivityMessage(before, message, {
+      viewerUserId: VIEWER,
+      isViewing: (key) => key === viewingKey,
+    });
     expect({ state: next.state, reread: next.reread }).toEqual({ state: after, reread });
   });
 }
@@ -25,7 +28,10 @@ test("only a message the dot counts lights it, whether or not it changed the sta
   const held = { hasUnread: true, unreadCount: 1, unreadKeys: ["conversation:channel-1"] };
   const ada = { conversationId: "channel-1", sender: { kind: "user", name: "Ada" } } as const;
   const lights = (message: Parameters<typeof applyActivityMessage>[1], viewingKey?: string) =>
-    applyActivityMessage(held, message, { viewerUserId: VIEWER, viewingKey }).lights;
+    applyActivityMessage(held, message, {
+      viewerUserId: VIEWER,
+      isViewing: (key) => key === viewingKey,
+    }).lights;
   expect(lights(ada)).toBe(true);
   expect(lights({ ...ada, senderUserId: VIEWER })).toBe(false);
   expect(lights({ ...ada, sender: { kind: "system", name: "CoForge" } })).toBe(false);
