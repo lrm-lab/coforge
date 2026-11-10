@@ -50,14 +50,12 @@ test("the Agent finishes all assigned work before it stops", () => {
   expect(instructions).toContain("coforge task list --mine");
 });
 
-test("facts are written when a human decides, and the Active Context is overwritten as work moves", () => {
+test("memory is written for the next session, as reference rather than a log", () => {
   expect(instructions).toContain("it arrives with every fresh session");
-  expect(instructions).toContain("When a human decides or prefers something, or you hit a pitfall");
-  expect(instructions).toContain("merging duplicates and dropping stale facts in the same edit");
-  expect(instructions).toContain(
-    "Overwrite notes/active-context.md when work starts, finishes or blocks",
-  );
-  expect(instructions).toContain("never task lists");
+  expect(instructions).toContain("It is what the next session resumes from");
+  expect(instructions).toContain("within its size limit");
+  expect(instructions).toContain("notes/active-context.md overwritten as the current state");
+  expect(instructions).toContain("Check MEMORY.md before asking a human");
   expect(instructions).toContain("Check MEMORY.md before asking a human");
 });
 

@@ -15,8 +15,6 @@ test("buildInitialMemoryMd renders the displayName, rules, a facts area and poin
 -
 
 ## Facts
-<!-- One fact per line. When a human decides or prefers something, or you hit a pitfall, edit the
-line here and merge duplicates. -->
 
 ## Pointers
 - notes/active-context.md   current state: next step, blocker, progress (overwrite it as work moves)

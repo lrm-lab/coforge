@@ -24,10 +24,11 @@ Current state, not a log: overwrite it when work starts, finishes or blocks — 
 
 /**
  * Builds the content of a freshly seeded MEMORY.md for one Agent: a title, a Rules slot, a Facts
- * area written one fact per line, and Pointers for what is too long to keep here — the shape the
- * Agent Manual's memory topic tells the Agent to keep. MEMORY.md holds the index and the facts
- * themselves; only long material (procedures, reports, reference) lives in notes/<topic>.md
- * behind a one-line pointer, and the Active Context stays in notes/active-context.md.
+ * area, and Pointers for what is too long to keep here — the shape the Agent Manual's memory topic
+ * tells the Agent to keep. What goes in the Facts area is the Agent's own judgement: the topic says
+ * what the file is for and how large it may grow, not how to word a line. MEMORY.md holds the index
+ * and the facts themselves; only long material (procedures, reports, reference) lives in
+ * notes/<topic>.md behind a pointer, and the Active Context stays in notes/active-context.md.
  *
  * There is no Role section: a role is the Agent's description, which the standing prompt carries
  * from the server on every launch, and a copy here would disagree with it after one edit.
@@ -44,8 +45,6 @@ export function buildInitialMemoryMd(identity: AgentMemorySeedIdentity): string 
 -
 
 ## Facts
-<!-- One fact per line. When a human decides or prefers something, or you hit a pitfall, edit the
-line here and merge duplicates. -->
 
 ## Pointers
 - notes/active-context.md   current state: next step, blocker, progress (overwrite it as work moves)

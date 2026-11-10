@@ -94,7 +94,7 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     slug: "memory",
     title: "MEMORY.md: the index and the facts",
     summary:
-      "Keep the durable facts in MEMORY.md itself (one per line, about 12 KB — 3,000 tokens), put only long material in notes/<topic>.md behind a pointer, overwrite notes/active-context.md as the current state (about 4 KB), and treat both as the recovery point after context compaction.",
+      "Memory is what the next session resumes from, within limits: MEMORY.md (3,000 tokens, about 12 KB per fresh session), notes/active-context.md (the current state, overwritten, about 4 KB), and notes/<topic>.md for long material behind a pointer; both ride in after compaction.",
     body: memoryBody,
   },
   {

@@ -153,7 +153,9 @@ test("the memory topic keeps the facts in MEMORY.md instead of a reference-only 
   const body = findManualTopic("memory")?.body ?? "";
   expect(body).toContain("## Facts");
   expect(body).toContain("## Pointers");
-  expect(body).toContain("one fact per line");
+  // What the file is for and how large it may grow, not how to word a line in it (task #10).
+  expect(body).toContain("what the next you resumes from");
+  expect(body).toContain("3,000 tokens");
   expect(body).not.toContain("holds references only");
   expect(body).not.toContain("directory card");
   expect(body).not.toContain("work-log");

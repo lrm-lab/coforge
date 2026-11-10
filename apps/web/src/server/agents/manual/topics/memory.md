@@ -1,20 +1,22 @@
-# Workspace memory: MEMORY.md holds the index and the facts
+# Workspace memory: MEMORY.md is what the next session starts with
 
 Your Agent workspace is a persistent, agent-owned working area; files you create here survive
-across turns. **MEMORY.md** carries two things: a short index, and the durable facts themselves —
-one fact per line. Only long material lives elsewhere, and only as a pointer.
+across turns. **MEMORY.md** is your memory of the work. It arrives with every fresh session — and
+again after the provider compacts the context — so it is what the next you resumes from: the
+decisions, preferences and traps that would otherwise mean asking a person twice. Write for that
+reader, and write what you would want to find.
 
-## Layout
+## Layout and limits
 
-- `MEMORY.md` — the index and the facts; a fresh session carries its first 3,000 tokens (about
-  12 KB), which is also the System Cleaner's limit for it
-- `notes/active-context.md` — the current state: next step, blocker, progress (about 1,000 tokens
-  ≈ 4 KB, which is also its cleaner limit; not a log)
-- `notes/<topic>.md` — long material only: procedures, reports, reference, exported data
-- `notes/` — also what you produce: reports, exported data, images
-- `code/` — repositories you clone
+- `MEMORY.md` — the index and the facts. A fresh session carries its first 3,000 tokens (about
+  12 KB), which is also the System Cleaner's limit for it.
+- `notes/active-context.md` — the current state: next step, blocker, progress, overwritten as work
+  moves (about 1,000 tokens ≈ 4 KB, which is also its cleaner limit).
+- `notes/<topic>.md` — long material only: procedures, reports, reference, exported data, and
+  what you produce.
+- `code/` — repositories you clone.
 
-## MEMORY.md template
+## A shape that works
 
 ```markdown
 # <Your Name>
@@ -25,7 +27,7 @@ one fact per line. Only long material lives elsewhere, and only as a pointer.
 
 ## Facts
 
-- <one durable fact per line>
+-
 
 ## Pointers
 
@@ -33,48 +35,20 @@ one fact per line. Only long material lives elsewhere, and only as a pointer.
 - notes/<topic>.md
 ```
 
-## Your role is not kept here
-
-Your role is your **description**, which the system prompt carries on every launch — it is not
-copied into `MEMORY.md`. Do not keep a role section in this file: an owner can change the
-description at any time, and a copy here would disagree with it. `coforge whoami` prints the
-current description when you need to see it.
-
-## What belongs where
-
-- **A fact** is one line: a decision a human made, a preference they stated, a project convention,
-  an environment quirk, a pitfall you hit. Write it in `MEMORY.md` itself, not in a note behind a
-  pointer. A fact about a status, a number or a decision ends with the date and the task or
-  message it came from; a preference or a rule needs no source, and older entries are not
-  backfilled.
-- **Long material** — a procedure with many steps, a reference table, a report — goes in
-  `notes/<topic>.md`, with one pointer line in `MEMORY.md` saying what it is for. Do not copy the
-  material itself into `MEMORY.md`.
-- **The current state** — what you are doing, the next step, what blocks you — goes in
-  `notes/active-context.md`, overwritten as it changes. It is not a log and holds no task list.
-- Do not put PIDs, numeric results, hashes, timestamps, or message ids in `MEMORY.md`.
-
-## When to write
-
-- Write or change a fact only from its source — a conversation, task or file — not from what
-  your context holds; what you cannot verify is not written as fact.
-- When a human decides something or states a preference, edit the matching fact in `MEMORY.md` at
-  that moment.
-- When you hit a pitfall (a command that failed for a non-obvious reason, an environment quirk), add
-  that fact.
-- In the same edit, merge duplicates and drop facts that are no longer true; a fact that changed is
-  rewritten in place, not appended.
-- Overwrite `notes/active-context.md` when work starts, finishes or blocks.
-- Check `MEMORY.md` before asking a human: the answer may already be there.
-- No reminder will ask you to tidy memory. The only signal that a file is over its limit is the
-  System Cleaner item described in the `workspace-cleanup` topic — act on it then.
+Your role is not kept here: a role is the Agent's **description**, which the system prompt carries
+on every launch, so a copy would disagree with it after one edit. `coforge whoami` prints it when
+you need to see it.
 
 ## Recovery
 
-Both files arrive with every fresh session (and again after the provider compacts the context), so
-you do not need to read them first. Read other notes only when a specific task needs them:
-`notes/active-context.md` says where you were.
+Both files arrive with every fresh session, so you do not need to read them first. Read other notes
+only when a task needs them: `notes/active-context.md` says where you were. Check `MEMORY.md`
+before asking a person — the answer may already be there, including a decision or a preference they
+already gave you.
 
 Clone repositories into `code/` and keep what you produce in `notes/`, not the Agent workspace
 root. If you are moved to another Computer, `notes/` moves with you but `code/` does not: you clone
 it again there, so push code changes you want to keep.
+
+No reminder will ask you to tidy memory: the only signal that a file is over its limit is the
+System Cleaner item described in the `workspace-cleanup` topic — act on it then.

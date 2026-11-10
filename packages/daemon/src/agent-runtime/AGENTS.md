@@ -145,14 +145,15 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   overwrites one the Agent already wrote. A seed failure is logged and never fails the launch.
 - The seed no longer writes `notes/work-log.md`: a chronological log is not what the Agent is told
   to keep. A workspace from before that change keeps its file; nothing deletes it.
-- `MEMORY.md` holds the index _and_ the facts — one fact per line — with a `## Pointers` line for
-  each `notes/<topic>.md` that holds long material. A role is the description the standing prompt
+- `MEMORY.md` holds the index _and_ the facts, with a `## Pointers` line for each
+  `notes/<topic>.md` that holds long material. A role is the description the standing prompt
   carries, never a section here. The Active Context lives in `notes/active-context.md`; older
   workspaces get the missing notes files, and an existing `MEMORY.md` is never migrated or rewritten.
-- The standing instructions say when to write: a fact goes in at the moment a human decides or
-  the Agent hits a pitfall, merging duplicates and dropping stale facts in the same edit; the
-  Active Context is overwritten when work starts, finishes or blocks; and `MEMORY.md` is checked
-  before asking a human. Never per-turn maintenance.
+- The instructions say what the file is for — the next session resumes from it, so it holds what a
+  later reader needs to continue without asking again — and its limits; what goes in it, and how a
+  line is worded, is the Agent's own judgement (task #10, following Anthropic's "tell the Agent what
+  memory is for, do not teach it how to use it"). The Active Context is overwritten as the current
+  state, and `MEMORY.md` is checked before asking a human. Never per-turn maintenance.
 - No tidy-up reminder is scheduled and none is created: writing is event-driven, a file over its
   limit is only the cleaner's hint, and an owner's existing reminder is never cleaned up.
 
