@@ -153,7 +153,13 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       },
     });
     await browser("reload");
-    await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1 && ${pageHydrated}`);
+    // Today's list too: right after hydration the rows are one undated list until the days are
+    // named (task #64), so reading "Today" before then finds nothing.
+    await browser(
+      "wait",
+      "--fn",
+      `${rowsIn(pinnedItems)}.length === 1 && ${rowsIn(todayRows)}.length > 0 && ${pageHydrated}`,
+    );
     expect((await evaluate<string[]>(rowsIn(pinnedItems)))[0]).toContain("E2E pinned again");
     expect(await evaluate<number>(activeCount)).toBe(active);
     expect(await evaluate<string[]>(rowsIn(todayRows))).toEqual([

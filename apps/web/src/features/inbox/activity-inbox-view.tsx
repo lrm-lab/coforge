@@ -280,6 +280,7 @@ export function ActivityInboxView({
   // another.
   const sections: ActivitySection[] = [
     {
+      key: "waiting",
       label: m.activity_inbox_waiting(),
       icon: MessageQuestionCircle,
       // However many wait, they never push the conversations off the screen: the first few show,
@@ -309,9 +310,17 @@ export function ActivityInboxView({
         </div>
       ),
     },
-    { label: m.conversation_pinned_section(), icon: Pin01, rows: pinned.map((item) => row(item)) },
-    // The rest, a heading for each day (none before hydration, when no day can be named yet).
-    ...days.map((day) => ({
+    {
+      key: "pinned",
+      label: m.conversation_pinned_section(),
+      icon: Pin01,
+      rows: pinned.map((item) => row(item)),
+    },
+    // The rest, a heading for each day (none before hydration, when no day can be named yet). The
+    // first day keeps the one undated list's key, so naming the days after hydration keeps its rows
+    // mounted: a row remounted between a press and its release gets no click (task #64).
+    ...days.map((day, index) => ({
+      key: index === 0 ? "days" : day.key,
       label: day.label ?? m.navigation_activity(),
       heading: day.label,
       dated: day.label !== undefined,
@@ -406,7 +415,7 @@ export function ActivityInboxView({
           <ActivityInboxEmpty filter={filter} onShowAll={() => onFilterChange("all")} />
         ) : (
           sections.map((section, index) => (
-            <Fragment key={section.label}>
+            <Fragment key={section.key}>
               {(section.icon || index > 0 || section.dated) && (
                 <ActivityInboxSectionHeading
                   icon={section.icon}
@@ -465,6 +474,7 @@ export function ActivityInboxView({
 const WAITING_SHOWN = 3;
 
 type ActivitySection = {
+  key: string;
   label: string;
   heading?: string;
   icon?: typeof Pin01;
