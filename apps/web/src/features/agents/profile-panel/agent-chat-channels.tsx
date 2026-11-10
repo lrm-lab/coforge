@@ -4,6 +4,7 @@ import { BellOff01, Hash01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import type { getAgentChannels } from "#src/features/agents/agent-channels.functions";
@@ -26,9 +27,14 @@ export function AgentChannelList({ channels }: { channels: AgentChannelRow[] }) 
             key={channel.id}
             className="relative flex min-w-0 items-center gap-3 rounded-lg px-1 py-1 hover:bg-primary_hover"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-secondary text-tertiary">
-              <Hash01 aria-hidden="true" className="size-4" />
-            </span>
+            {/* Its group avatar, as every list of channels (Frank, 11-10, task #55). */}
+            {channel.members.length > 0 ? (
+              <GroupAvatar members={channel.members} className="avatar-group-row" />
+            ) : (
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-secondary text-tertiary">
+                <Hash01 aria-hidden="true" className="size-4" />
+              </span>
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-1.5">
                 {/* The link stretches over the whole row; the mute tooltip sits above it. */}

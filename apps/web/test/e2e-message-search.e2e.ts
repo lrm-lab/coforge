@@ -133,17 +133,21 @@ test("the search dialog finds a message and opens it in its channel", async () =
     const result = await evaluate<{
       marks: string[];
       text: string;
+      place: string | undefined;
       count: string;
     }>(`(() => {
       const row = document.querySelector('[role="dialog"] ol li');
       return {
         marks: [...row.querySelectorAll("mark")].map((mark) => mark.textContent),
         text: row.textContent,
+        place: row.querySelector("[data-channel-name]")?.textContent,
         count: document.querySelector('[role="dialog"] [role="status"]').textContent,
       };
     })()`);
     expect(result.marks).toEqual(["蓝鲸"]);
-    expect(result.text).toContain("#e2e-search");
+    // The place is the channel's group avatar and name, no `#` (task #55).
+    expect(result.place).toBe("e2e-search");
+    expect(result.text).not.toContain("#e2e-search");
     expect(result.text).toContain(`今天的${phrase}已经确认`);
     expect(result.count).toBe("1 result");
     await browser("screenshot", join(artifacts, "results.png"));
