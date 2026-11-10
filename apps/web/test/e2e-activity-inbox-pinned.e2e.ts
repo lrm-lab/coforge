@@ -113,7 +113,10 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     ).toBe(true);
     await browser("find", "role", "tab", "click", "--name", "All");
     await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1`);
-    expect(await evaluate<number>(activeCount)).toBe(2);
+    // The header counts the whole workspace, which other tests share: each step is checked against
+    // this reading, the pinned channel and its thread both active.
+    const active = await evaluate<number>(activeCount);
+    expect(active).toBeGreaterThanOrEqual(2);
 
     // Done takes the pinned row out like every row (Raft's Activity rule): the projection hides
     // it at once, and the refetch's page no longer lists it, so the Pinned section goes away.
@@ -125,7 +128,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     })()`);
     await browser("wait", "--fn", `document.querySelector('ol[aria-label="Pinned"]') === null`);
     expect(await evaluate<boolean>(`!document.querySelector('[role="alert"]')`)).toBe(true);
-    expect(await evaluate<number>(activeCount)).toBe(1);
+    expect(await evaluate<number>(activeCount)).toBe(active - 1);
     await browser("reload");
     await browser(
       "wait",
@@ -133,7 +136,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       `document.querySelector('ol[aria-label="Pinned"]') === null && ${pageHydrated}`,
     );
     expect(await evaluate<string[]>(rowsIn(pinnedItems))).toEqual([]);
-    expect(await evaluate<number>(activeCount)).toBe(1);
+    expect(await evaluate<number>(activeCount)).toBe(active - 1);
 
     // Something new in the conversation lists it again under Pinned; the header's count follows.
     const peerMember = await db.conversationMember.findFirstOrThrow({
@@ -152,7 +155,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     await browser("reload");
     await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1 && ${pageHydrated}`);
     expect((await evaluate<string[]>(rowsIn(pinnedItems)))[0]).toContain("E2E pinned again");
-    expect(await evaluate<number>(activeCount)).toBe(2);
+    expect(await evaluate<number>(activeCount)).toBe(active);
     expect(await evaluate<string[]>(rowsIn(rowItems))).toEqual([
       expect.stringContaining("E2E pinned root"),
     ]);
