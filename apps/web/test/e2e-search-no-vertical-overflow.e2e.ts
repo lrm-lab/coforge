@@ -68,6 +68,8 @@ test("search never scrolls the document, empty or with results", async () => {
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      // Other e2es leave the dev user in Workspaces of their own; the seed made the first one.
+      orderBy: { workspace: { createdAt: "asc" } },
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${membership.workspace.slug}`;
