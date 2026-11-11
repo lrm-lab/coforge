@@ -12,8 +12,15 @@ import { executeTask } from "./tasks.functions";
 /** A channel a new Task can go in. */
 export type NewTaskPlace = { conversationId: string; label: string };
 
-/** The columns a new Task can start in; Closed is for work that was dropped. */
-const STATUSES = ["todo", "in_progress", "in_review", "done"] as const satisfies TaskStatus[];
+/** The columns a new Task can start in, Backlog first — "note it down, schedule it later" is
+ * the most common place a new Task goes (task #61); Closed is for work that was dropped. */
+const STATUSES = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+] as const satisfies TaskStatus[];
 export const canCreateIn = (status: TaskStatus) =>
   (STATUSES as readonly TaskStatus[]).includes(status);
 

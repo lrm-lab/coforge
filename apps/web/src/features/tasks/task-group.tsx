@@ -99,7 +99,7 @@ export function TaskGroup({
       className={
         board
           ? cn(
-              "flex min-w-0 flex-col rounded-xl bg-secondary md:max-w-80 md:min-w-52 md:flex-1",
+              "flex min-w-0 flex-col rounded-xl bg-secondary md:max-w-80 md:min-w-48 md:flex-1",
               hidable && HIDDEN_COLUMN_CLASS[status],
               !expanded && "md:self-start",
               dropTargetClass(dropState, drop.isOver),

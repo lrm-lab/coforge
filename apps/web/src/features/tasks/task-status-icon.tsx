@@ -53,8 +53,10 @@ export const TASK_STATUS_COLOR = {
  * Closed a filled cross. Colours follow `TASK_STATUS_COLOR`, so the icon, the popup's badge and
  * the history timeline agree.
  */
-const RING: Record<TaskStatus, { fill: number; mark?: string }> = {
-  backlog: { fill: 0 },
+const RING: Record<TaskStatus, { fill: number; mark?: string; dashed?: boolean }> = {
+  // Backlog a dashed ring: "not scheduled yet", distinct from To do's solid one in grey and
+  // for colour-blind eyes (ui's review of the vocabulary, task #61).
+  backlog: { fill: 0, dashed: true },
   todo: { fill: 0 },
   in_progress: { fill: 0.5 },
   in_review: { fill: 0.75 },
@@ -90,6 +92,7 @@ export function TaskStatusIcon({ status, className }: { status: TaskStatus; clas
         fill={ring.mark ? "currentColor" : "none"}
         stroke="currentColor"
         strokeWidth="1.5"
+        {...(ring.dashed ? { strokeDasharray: "2.5 2.5" } : {})}
       />
       {!ring.mark && ring.fill > 0 && (
         <circle
