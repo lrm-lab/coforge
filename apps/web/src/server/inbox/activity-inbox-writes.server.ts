@@ -15,7 +15,10 @@ import {
 import { announceActivityAttention, announceReadMoved } from "./activity-attention.server";
 
 /** What the Activity inbox's writes may announce: a moved read cursor, and where the inbox stands. */
-export type ActivityInboxRealtime = Pick<ConversationRealtime, "viewerChanged" | "activityChanged">;
+export type ActivityInboxRealtime = Pick<
+  ConversationRealtime,
+  "viewerChanged" | "viewerEventsChanged" | "activityChanged"
+>;
 
 /**
  * The Activity inbox's two clearing writes: Done on one item, and read-all. Both read through the

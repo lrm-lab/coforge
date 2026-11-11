@@ -12,7 +12,7 @@ import {
 import { pendingOpStore } from "./helpers/agent-control-store";
 import { coordinatorChangeNotice } from "#src/server/conversations/channel-coordination.server";
 import { DELIVERY_RETRY_DELAYS_MS } from "#src/server/conversations/agent-delivery.server";
-import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
+import { quietCentrifugo, withPublishBatch, withPublishJsonBatch } from "./helpers/fake-centrifugo";
 
 test("a coordinator notice is one sentence naming who changed it", () => {
   expect(coordinatorChangeNotice("team", "Frank An", undefined, "lead")).toBe(
@@ -357,14 +357,16 @@ test.skipIf(!connectionString)(
       const channels = new PublicChannels(
         f.db,
         undefined,
-        withPublishBatch({
-          async publish() {
-            attempts++;
-            throw new Error("offline");
-          },
-          publishJson: async () => {},
-          broadcast: async () => {},
-        }),
+        withPublishJsonBatch(
+          withPublishBatch({
+            async publish() {
+              attempts++;
+              throw new Error("offline");
+            },
+            publishJson: async () => {},
+            broadcast: async () => {},
+          }),
+        ),
       );
       await channels.setCoordinator(f.workspace.id, f.owner.id, f.team.id, f.lead.id);
       // The one failed push is retried per the delivery-retry policy, not re-publication.
@@ -418,15 +420,17 @@ test.skipIf(!connectionString)(
       const channels = new PublicChannels(
         f.db,
         undefined,
-        withPublishBatch({
-          publish: async () => {},
-          async publishJson(_channel: string, event: unknown) {
-            events.push(event);
-          },
-          async broadcast(_channels: string[], event: unknown) {
-            broadcasts.push(event);
-          },
-        }),
+        withPublishJsonBatch(
+          withPublishBatch({
+            publish: async () => {},
+            async publishJson(_channel: string, event: unknown) {
+              events.push(event);
+            },
+            async broadcast(_channels: string[], event: unknown) {
+              broadcasts.push(event);
+            },
+          }),
+        ),
       );
       await channels.setCoordinator(f.workspace.id, f.owner.id, f.team.id, f.lead.id);
       expect(events).toEqual([

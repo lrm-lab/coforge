@@ -3,11 +3,13 @@ import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.serv
 
 /** A Centrifugo whose every call succeeds and publishes nothing, for a test that ignores realtime. */
 export function quietCentrifugo(): CentrifugoServerApi {
-  return withPublishBatch({
-    publish: async () => {},
-    publishJson: async () => {},
-    broadcast: async () => {},
-  });
+  return withPublishJsonBatch(
+    withPublishBatch({
+      publish: async () => {},
+      publishJson: async () => {},
+      broadcast: async () => {},
+    }),
+  );
 }
 
 /**
@@ -23,6 +25,24 @@ export function withPublishBatch<T extends Pick<CentrifugoServerApi, "publish">>
     unsubscribe: (api as Partial<CentrifugoServerApi>).unsubscribe ?? (async () => {}),
     publishBatch: (publications: Parameters<CentrifugoServerApi["publishBatch"]>[0]) =>
       Promise.allSettled(publications.map(async ({ channel, data }) => api.publish(channel, data))),
+  });
+}
+
+/**
+ * `withPublishBatch`'s JSON twin: each publication goes through the fake's own `publishJson`, key
+ * included, and settles on its own, so a test recording `publishJson` sees batched pushes exactly
+ * as it saw one-by-one ones.
+ */
+export function withPublishJsonBatch<T extends Pick<CentrifugoServerApi, "publishJson">>(
+  api: T,
+): NoInfer<T> & Pick<CentrifugoServerApi, "publishJsonBatch"> {
+  return Object.assign(api, {
+    publishJsonBatch: (publications: Parameters<CentrifugoServerApi["publishJsonBatch"]>[0]) =>
+      Promise.allSettled(
+        publications.map(async ({ channel, data, idempotencyKey }) =>
+          api.publishJson(channel, data, idempotencyKey),
+        ),
+      ),
   });
 }
 

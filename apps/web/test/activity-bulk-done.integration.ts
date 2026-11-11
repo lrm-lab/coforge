@@ -155,3 +155,46 @@ test("another member's Undo payload changes nothing", async () => {
     await cleanup(db, suffix);
   }
 });
+
+test("Mark all done announces every moved conversation's badge in one batched call", async () => {
+  const db = database();
+  const suffix = crypto.randomUUID();
+  try {
+    const { alice, workspace, channel, post } = await seed(db, suffix);
+    const first = await channel("first");
+    const second = await channel("second");
+    await post(first.conversation.id, first.bobMember.id, "one");
+    await post(second.conversation.id, second.bobMember.id, "two");
+    const singleCalls: unknown[] = [];
+    const batchCalls: { userIds: readonly string[]; events: readonly unknown[] }[] = [];
+    const inbox = new ActivityInbox(db, {
+      viewerChanged: async (input: unknown) => void singleCalls.push(input),
+      viewerEventsChanged: async (input: {
+        userIds: readonly string[];
+        events: readonly unknown[];
+      }) => void batchCalls.push(input),
+      activityChanged: async () => {},
+    });
+
+    await inbox.markAllDone(workspace.id, alice.id, { before: new Date() });
+
+    expect(singleCalls).toEqual([]);
+    expect(batchCalls).toHaveLength(1);
+    expect(batchCalls[0]?.userIds).toEqual([alice.id]);
+    expect(batchCalls[0]?.events).toHaveLength(2);
+    expect(batchCalls[0]?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "channel.marked.v1",
+          conversationId: first.conversation.id,
+        }),
+        expect.objectContaining({
+          type: "channel.marked.v1",
+          conversationId: second.conversation.id,
+        }),
+      ]),
+    );
+  } finally {
+    await cleanup(db, suffix);
+  }
+});

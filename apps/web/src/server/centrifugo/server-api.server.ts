@@ -24,6 +24,11 @@ export type CentrifugoServerApi = {
   publishBatch(
     publications: readonly { channel: string; data: Uint8Array; skipHistory?: boolean }[],
   ): Promise<PromiseSettledResult<void>[]>;
+  /** `publishBatch` for JSON payloads, each with its own `idempotencyKey` like `publishJson`'s;
+   * same per-publication settlement. */
+  publishJsonBatch(
+    publications: readonly { channel: string; data: unknown; idempotencyKey?: string }[],
+  ): Promise<PromiseSettledResult<void>[]>;
   /** Ends every subscription each user's clients hold to the paired channel, for people who can
    * no longer read it (https://centrifugal.dev/docs/server/server_api#unsubscribe), in one `batch`
    * call. A no-op when the list is empty; any refused pair fails the call. */
@@ -166,6 +171,18 @@ export function createCentrifugoServerApi(
             channel,
             b64data: base64(data),
             ...(skipHistory ? { skip_history: true } : {}),
+          },
+        })),
+      );
+    },
+    async publishJsonBatch(publications) {
+      if (publications.length === 0) return [];
+      return publishCommands(
+        publications.map(({ channel, data, idempotencyKey }) => ({
+          publish: {
+            channel,
+            data,
+            ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
           },
         })),
       );

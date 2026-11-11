@@ -9,7 +9,7 @@ import { enrollGeneralChannel } from "#src/server/conversations/general-channel.
 import { RedisClient } from "bun";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import { withPublishBatch } from "./helpers/fake-centrifugo";
+import { withPublishBatch, withPublishJsonBatch } from "./helpers/fake-centrifugo";
 
 function enrollGeneral(db: PrismaClient, workspaceId: string) {
   return db.$transaction((tx) => enrollGeneralChannel(tx, workspaceId));
@@ -69,13 +69,15 @@ test("channel members add humans and Agents; a Workspace member outside the chan
     const channels = new PublicChannels(
       db,
       new RedisMessageRequestIdempotency(redis),
-      withPublishBatch({
-        publish: async (_channel, payload) => {
-          published.push(decodeAgentMessageDelivery(payload));
-        },
-        publishJson: async () => {},
-        broadcast: async () => {},
-      }),
+      withPublishJsonBatch(
+        withPublishBatch({
+          publish: async (_channel, payload) => {
+            published.push(decodeAgentMessageDelivery(payload));
+          },
+          publishJson: async () => {},
+          broadcast: async () => {},
+        }),
+      ),
     );
 
     // A plain Workspace member creates the channel (Slack: any member can create a channel).
@@ -252,13 +254,15 @@ test("channel leave and member removal: owner/admin removes a human and an Agent
     const channels = new PublicChannels(
       db,
       new RedisMessageRequestIdempotency(redis),
-      withPublishBatch({
-        publish: async (_channel, payload) => {
-          published.push(decodeAgentMessageDelivery(payload));
-        },
-        publishJson: async () => {},
-        broadcast: async () => {},
-      }),
+      withPublishJsonBatch(
+        withPublishBatch({
+          publish: async (_channel, payload) => {
+            published.push(decodeAgentMessageDelivery(payload));
+          },
+          publishJson: async () => {},
+          broadcast: async () => {},
+        }),
+      ),
     );
 
     const ops = await channels.create(workspace.id, owner.id, "ops");

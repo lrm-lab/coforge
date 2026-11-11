@@ -3,6 +3,7 @@ import { userConversationChannel } from "#src/features/conversations/conversatio
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
 import { cleanup, database, kindOf, seed } from "./helpers/activity-inbox-fixture";
+import { withPublishJsonBatch } from "./helpers/fake-centrifugo";
 
 /**
  * The Activity inbox's clearing writes (`activity-inbox-writes.server.ts`) against PostgreSQL:
@@ -53,12 +54,15 @@ test("the inbox a person's pages write through publishes to their channel", asyn
     const general = await channel("general");
     await post(general.conversation.id, general.bobMember.id, "hello");
     const published: { channel: string; data: unknown }[] = [];
-    const inbox = browserActivityInbox(db, {
-      publishJson: async (channel: string, data: unknown) => {
-        published.push({ channel, data });
-      },
-      broadcast: async () => {},
-    } as never);
+    const inbox = browserActivityInbox(
+      db,
+      withPublishJsonBatch({
+        publishJson: async (channel: string, data: unknown) => {
+          published.push({ channel, data });
+        },
+        broadcast: async () => {},
+      }) as never,
+    );
 
     await inbox.markAllRead(workspace.id, alice.id, { before: new Date() });
     expect(published).toContainEqual({
@@ -68,6 +72,15 @@ test("the inbox a person's pages write through publishes to their channel", asyn
         workspaceId: workspace.id,
         attention: expect.objectContaining({ hasUnread: false }),
       },
+    });
+    // The moved conversation's badge event rides the same batched publish (`publishJsonBatch`
+    // settles each publication through this fake's `publishJson`).
+    expect(published).toContainEqual({
+      channel: userConversationChannel(alice.id),
+      data: expect.objectContaining({
+        type: "channel.marked.v1",
+        conversationId: general.conversation.id,
+      }),
     });
   } finally {
     await cleanup(db, suffix);

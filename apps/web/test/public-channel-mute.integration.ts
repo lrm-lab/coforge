@@ -18,7 +18,7 @@ import {
   muteAgentChannel,
   readAgentMessages,
 } from "#src/server/agents/agent-messages.server";
-import { withPublishBatch } from "./helpers/fake-centrifugo";
+import { withPublishBatch, withPublishJsonBatch } from "./helpers/fake-centrifugo";
 import { CHANNEL_MEMBER_CONTEXT, subscriptionsOf } from "./helpers/public-channel-helpers";
 
 test("Agent channel mute suppresses ordinary notices, preserves mentions and read access, and never backfills", async () => {
@@ -59,16 +59,18 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
     const channels = new PublicChannels(
       db,
       new RedisMessageRequestIdempotency(redis),
-      withPublishBatch({
-        publish: async (_channel, payload) => {
-          if (publishOutage) {
-            throw new Error("controlled publish outage");
-          }
-          published.push(decodeAgentMessageDelivery(payload));
-        },
-        publishJson: async () => {},
-        broadcast: async () => {},
-      }),
+      withPublishJsonBatch(
+        withPublishBatch({
+          publish: async (_channel, payload) => {
+            if (publishOutage) {
+              throw new Error("controlled publish outage");
+            }
+            published.push(decodeAgentMessageDelivery(payload));
+          },
+          publishJson: async () => {},
+          broadcast: async () => {},
+        }),
+      ),
     );
     const general = (await channels.list(workspace.id, user.id))[0]!;
     await db.userPreference.create({
@@ -171,17 +173,19 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
       ),
     ).toEqual([mentioned.id, ordinary.id]);
     const scope = { workspaceId: workspace.id, agentId: agent.id };
-    const failingCentrifugo: CentrifugoServerApi = withPublishBatch({
-      publish: async () => {
-        throw new Error("Agent reply must not publish");
-      },
-      publishJson: async () => {
-        throw new Error("Agent reply must not publish");
-      },
-      broadcast: async () => {
-        throw new Error("Agent reply must not publish");
-      },
-    });
+    const failingCentrifugo: CentrifugoServerApi = withPublishJsonBatch(
+      withPublishBatch({
+        publish: async () => {
+          throw new Error("Agent reply must not publish");
+        },
+        publishJson: async () => {
+          throw new Error("Agent reply must not publish");
+        },
+        broadcast: async () => {
+          throw new Error("Agent reply must not publish");
+        },
+      }),
+    );
     const agentSender = new SendDirectMessage(
       repo,
       new RedisMessageRequestIdempotency(redis),

@@ -139,6 +139,13 @@ export type ConversationRealtime = {
   /** A push telling each named person's own pages that their place in a conversation changed
    * (`ViewerEvent`). Optional: a port without it announces nothing. */
   viewerChanged?(input: { userIds: readonly string[]; event: ViewerEvent }): Promise<void>;
+  /** Several `ViewerEvent`s to the same named people in one announcement, where `viewerChanged`
+   * sends one: each event still goes to every person's own channel. Optional: a port without it
+   * announces each event on its own (`announceViewerEvents`). */
+  viewerEventsChanged?(input: {
+    userIds: readonly string[];
+    events: readonly ViewerEvent[];
+  }): Promise<void>;
   /** `MessageReactionEvent`; optional, like the above. */
   reactionChanged?(input: ReactionSignal): Promise<void>;
   /** A member's monotone conversation read position, scoped to one conversation. */
@@ -225,6 +232,24 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
       input.event,
       crypto.randomUUID(),
     );
+  }
+
+  async viewerEventsChanged(input: { userIds: readonly string[]; events: readonly ViewerEvent[] }) {
+    // One batch for every (person, event) pair, each publication with its own key as a lone
+    // `viewerChanged` publish has; a refused publication fails the announcement like a failed
+    // publish did, and the pages catch up on their next read.
+    const results = await this.centrifugo.publishJsonBatch(
+      input.userIds.flatMap((userId) =>
+        input.events.map((event) => ({
+          channel: userConversationChannel(userId),
+          data: event,
+          idempotencyKey: crypto.randomUUID(),
+        })),
+      ),
+    );
+    for (const result of results) {
+      if (result.status === "rejected") throw result.reason;
+    }
   }
 
   async reactionChanged(input: ReactionSignal) {
@@ -407,6 +432,35 @@ export async function announceViewerEvent(
     workspace_id: input.event.workspaceId,
     viewer_event: input.event.type,
   });
+}
+
+/**
+ * `announceViewerEvent` for several events at once, to the same people: a port with
+ * `viewerEventsChanged` sends them in one batch; any other port gets each event on its own, the
+ * way it always has. Best effort like the single form.
+ */
+export async function announceViewerEvents(
+  realtime: Pick<ConversationRealtime, "viewerChanged" | "viewerEventsChanged"> | undefined,
+  input: { userIds: readonly string[]; events: readonly ViewerEvent[] },
+): Promise<void> {
+  if (input.userIds.length === 0 || input.events.length === 0) return;
+  await announceBestEffort(
+    realtime,
+    async (port) => {
+      if (port.viewerEventsChanged) {
+        await port.viewerEventsChanged(input);
+        return;
+      }
+      await Promise.all(
+        input.events.map((event) => port.viewerChanged?.({ userIds: input.userIds, event })),
+      );
+    },
+    {
+      name: "viewer_events_changed",
+      workspace_id: input.events[0]?.workspaceId ?? "",
+      viewer_event_count: input.events.length,
+    },
+  );
 }
 
 /**

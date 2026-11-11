@@ -2,7 +2,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 import {
   announceBestEffort,
-  announceViewerEvent,
+  announceViewerEvents,
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
 import { humanReadStates } from "#src/server/conversations/human-unread.server";
@@ -71,7 +71,9 @@ export async function announceActivityAttention(
  */
 export async function announceReadMoved(
   db: Pick<PrismaClient, "$queryRaw">,
-  realtime: Pick<ConversationRealtime, "viewerChanged" | "activityChanged"> | undefined,
+  realtime:
+    | Pick<ConversationRealtime, "viewerChanged" | "viewerEventsChanged" | "activityChanged">
+    | undefined,
   workspaceId: string,
   userId: string,
   moved: readonly { conversationId: string; channel: boolean }[],
@@ -83,19 +85,17 @@ export async function announceReadMoved(
       userId,
       moved.map((row) => row.conversationId),
     );
-    await Promise.all(
-      moved.map(({ conversationId, channel }) =>
-        announceViewerEvent(realtime, {
-          userIds: [userId],
-          event: {
-            type: channel ? "channel.marked.v1" : "dm.marked.v1",
-            workspaceId,
-            conversationId,
-            ...(states.get(conversationId) ?? { unreadCount: 0, readThroughSequence: 0 }),
-          },
-        }),
-      ),
-    );
+    // One announcement for every moved conversation: each keeps its own badge event, but they
+    // ride a single Centrifugo batch instead of one HTTP call apiece.
+    await announceViewerEvents(realtime, {
+      userIds: [userId],
+      events: moved.map(({ conversationId, channel }) => ({
+        type: channel ? ("channel.marked.v1" as const) : ("dm.marked.v1" as const),
+        workspaceId,
+        conversationId,
+        ...(states.get(conversationId) ?? { unreadCount: 0, readThroughSequence: 0 }),
+      })),
+    });
   };
   await Promise.all([
     announceMarked(),

@@ -13,7 +13,7 @@ import {
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
 import { decodeAgentInboxPurge, type AgentInboxPurgeReason } from "@lrm/coforge-sdk/internal";
-import { withPublishBatch } from "./helpers/fake-centrifugo";
+import { withPublishBatch, withPublishJsonBatch } from "./helpers/fake-centrifugo";
 
 /**
  * An Agent that leaves a channel, is removed from one, or goes private stops receiving that
@@ -31,17 +31,19 @@ const TIMEOUT_MS = 30_000;
 function recordingCentrifugo() {
   const published: Array<{ channel: string; payload: Uint8Array }> = [];
   let failNext = false;
-  const api: CentrifugoServerApi = withPublishBatch({
-    async publish(channel, payload) {
-      if (failNext) {
-        failNext = false;
-        throw new Error("controlled publish outage");
-      }
-      published.push({ channel, payload });
-    },
-    async publishJson() {},
-    async broadcast() {},
-  });
+  const api: CentrifugoServerApi = withPublishJsonBatch(
+    withPublishBatch({
+      async publish(channel, payload) {
+        if (failNext) {
+          failNext = false;
+          throw new Error("controlled publish outage");
+        }
+        published.push({ channel, payload });
+      },
+      async publishJson() {},
+      async broadcast() {},
+    }),
+  );
   const purges = () =>
     published.flatMap(({ channel, payload }) => {
       try {
