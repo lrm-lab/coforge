@@ -4,7 +4,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { MARKDOWN_CHUNK_THRESHOLD } from "#src/features/records/report-editor/utils/parse-markdown-chunked";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * A note past `MARKDOWN_CHUNK_THRESHOLD` opens (found in task #385's check of the shared editor):
@@ -20,10 +25,7 @@ const { origin, browserPath, databaseUrl } = localBrowserE2e();
 test("a note past the chunk threshold opens with its text and saves nothing", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `note-large-${process.pid}`);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const notes = recordAssistantCatalog(db);
   const sections = Array.from(
     { length: 600 },

@@ -24,6 +24,7 @@ test("a refused Computer says why on the list and its page, and recovers when cl
   const suffix = `${process.pid}-${Date.now()}`;
   const { workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: true },
   });
   const other = await db.user.create({

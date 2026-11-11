@@ -24,6 +24,7 @@ test("a signed-out runtime's Agent says so, and what to do", async () => {
   const suffix = `${process.pid}-${Date.now().toString(36)}`;
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const computer = await db.computer.create({

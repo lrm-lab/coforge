@@ -29,6 +29,7 @@ test("an Agent's error on the Computer roster wraps to two lines and stays reada
   const suffix = `${process.pid}-${Date.now()}`;
   const { workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: true },
   });
   const computer = await db.computer.create({

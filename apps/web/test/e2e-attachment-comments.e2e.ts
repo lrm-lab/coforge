@@ -58,6 +58,7 @@ async function runBrowser(script: string) {
 beforeAll(async () => {
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: true },
   });
   workspaceId = membership.workspaceId;

@@ -65,6 +65,7 @@ test("an owner hides #general from its panel and restores it from Settings → M
 
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const workspacePath = `/en/w/${membership.workspace.slug}`;

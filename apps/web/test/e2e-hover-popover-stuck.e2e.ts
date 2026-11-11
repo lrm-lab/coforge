@@ -68,6 +68,7 @@ test("a peek replaced by another one never comes back stuck at the top left", as
   const suffix = `${process.pid}-${Date.now()}`;
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const workspaceId = membership.workspaceId;

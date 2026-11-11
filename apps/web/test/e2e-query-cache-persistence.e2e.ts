@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { storedShapeBuster } from "#src/features/cache-persistence/persisted-queries";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { devBrowserWorkspace } from "./helpers/browser-e2e";
 import { openReadLanded } from "./helpers/open-unread-e2e";
 import { serverFunctionIds, serverFunctionOf } from "./helpers/server-function-ids";
 
@@ -234,12 +235,9 @@ const first = `First message ${process.pid}`;
 const second = `Second message ${process.pid}`;
 
 beforeAll(async () => {
-  const membership = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id, role: "owner" },
-    include: { workspace: { select: { slug: true } } },
-  });
-  workspacePath = `/en/w/${membership.workspace.slug}`;
-  workspaceId = membership.workspaceId;
+  const own = await devBrowserWorkspace(db);
+  workspacePath = `/en/w/${own.workspace.slug}`;
+  workspaceId = own.workspaceId;
   const channel = await db.conversation.create({
     data: { workspaceId, channelName, description: "" },
   });

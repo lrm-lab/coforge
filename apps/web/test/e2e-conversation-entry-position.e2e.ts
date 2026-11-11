@@ -89,7 +89,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await browser("close");
+  await browser("close").catch(() => undefined);
   if (workspaceId) await db.workspace.delete({ where: { id: workspaceId } });
   if (writerId) await db.user.delete({ where: { id: writerId } });
   await db.$disconnect();

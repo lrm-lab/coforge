@@ -190,7 +190,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await browser("close");
+  await browser("close").catch(() => undefined);
   proxy.stop();
   if (workspaceId) await db.workspace.delete({ where: { id: workspaceId } });
   if (computerId) await db.computer.delete({ where: { id: computerId } });

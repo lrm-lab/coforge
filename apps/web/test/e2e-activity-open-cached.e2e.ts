@@ -3,11 +3,11 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import {
   browserSession,
+  devBrowserWorkspace,
   hydratedElement,
   localBrowserE2e,
   pageHydrated,
@@ -36,10 +36,7 @@ test("a channel read in Chat and opened from Activity after messages came shows 
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const { origin } = proxy;
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     // Short enough that the window never evicts its live end, as on #teste-testa, so what comes
     // in while the channel is open reaches the pane.
     const read = Array.from({ length: 40 }, (_, index) => ({
@@ -110,10 +107,7 @@ test("a channel opened from Activity round after round shows each round's divide
       `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith(${JSON.stringify(name)})).click()`,
     );
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const read = Array.from({ length: 40 }, (_, index) => ({
       from: "peer" as const,
       body: `E2E open-rounds read ${index + 1}`,

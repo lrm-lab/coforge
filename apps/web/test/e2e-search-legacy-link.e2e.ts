@@ -2,7 +2,12 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * An address from the old search page (`/search?open=channel:<id>&msg=<id>`), which previewed a
@@ -22,10 +27,7 @@ test("an old search address opens its conversation at the message", async () => 
   const suffix = `${process.pid}-${Date.now()}`;
   const created: string[] = [];
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const owner = await db.user.create({
       data: { username: `e2e-legacy-owner-${suffix}`, displayName: "Legacy Owner" },
     });

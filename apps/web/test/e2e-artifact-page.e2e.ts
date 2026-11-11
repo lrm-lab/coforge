@@ -8,7 +8,12 @@ import { productionArtifacts } from "#src/server/artifacts/artifact-composition.
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -59,10 +64,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
   const { browser, evaluate } = browserSession(browserPath, `artifact-page-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
   const { documents } = productionArtifacts(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.findFirstOrThrow({

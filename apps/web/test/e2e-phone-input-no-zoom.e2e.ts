@@ -49,6 +49,7 @@ test("on a touch screen no text field is under 16px, so iOS never zooms into it"
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     await browser("set", "viewport", "390", "844");

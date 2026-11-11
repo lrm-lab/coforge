@@ -3,8 +3,12 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 import { rowItems } from "./helpers/activity-inbox-e2e";
 import { seedActivityKeys } from "./helpers/activity-keys-seed";
 
@@ -28,10 +32,7 @@ test("Activity list, keyboard selection and Done tooltip in each locale and them
   /** The seeded rows' links, in page order. */
   const seeded = `[...document.querySelectorAll(${rowItems})].filter((row) => row.textContent.includes("e2e-keys"))`;
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     await seedActivityKeys(db, workspaceId);
     await mkdir(out, { recursive: true });
     await browser("set", "viewport", "1440", "900");

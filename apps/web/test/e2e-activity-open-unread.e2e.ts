@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated, pageWaiter } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+  pageWaiter,
+} from "./helpers/browser-e2e";
 import { inPane, waitFor } from "./helpers/activity-inbox-e2e";
 import { dividerBetween, inView, postLive, row, seedChannel } from "./helpers/open-unread-e2e";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -29,10 +35,7 @@ test("a channel and a thread opened from Activity land on the first message unre
   const { browser, evaluate } = browserSession(browserPath, `activity-open-unread-${process.pid}`);
   const wait = pageWaiter(browserPath)(`activity-open-unread-${process.pid}`, browser);
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const activity = `${origin}/en/w/${workspace.slug}/activity`;
     // Read through the first message; the viewer then wrote, and the peer twice after them.
     const channel = await seedChannel(db, workspaceId, "e2e-open-unread-channel", 1, [
@@ -110,10 +113,7 @@ test("a channel with a mention already read opens on its new unread message, not
   const { browser, evaluate } = browserSession(browserPath, `activity-open-mention-${process.pid}`);
   const wait = pageWaiter(browserPath)(`activity-open-mention-${process.pid}`, browser);
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const viewer = await db.user.findUniqueOrThrow({ where: { id: DEV_BROWSER_USER.id } });
     // A screenful and more of read messages, the second of them mentioning the viewer, then one
     // unread message (QA's #video-gen, task #358).
@@ -171,10 +171,7 @@ test("a channel opened again from Activity, with a message that came live since,
   const wait = pageWaiter(browserPath)(`activity-open-again-${process.pid}`, browser);
   const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const read = Array.from({ length: 150 }, (_, index) => ({
       from: "peer" as const,
       body: `E2E open-again read ${index + 1}`,

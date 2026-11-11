@@ -77,6 +77,7 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id, role: { in: ["owner", "admin"] } },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true, id: true } } },
     });
     // An Agent of this run's own, so the test needs nothing seeded: the viewer may archive it.

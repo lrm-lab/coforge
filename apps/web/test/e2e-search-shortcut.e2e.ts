@@ -83,6 +83,7 @@ test("search opens over the page, walks by keyboard and lands on the message", a
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${membership.workspace.slug}`;

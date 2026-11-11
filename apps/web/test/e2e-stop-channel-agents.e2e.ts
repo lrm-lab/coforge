@@ -69,6 +69,7 @@ test("a member stops every Agent in a channel, then resumes them with new guidan
 
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const workspacePath = `/en/w/${membership.workspace.slug}`;

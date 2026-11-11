@@ -28,6 +28,7 @@ test("an artifact's Share: a public link on and off", async () => {
   const { documents } = productionArtifacts(db);
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const before = (await experiments.read(workspaceId)).artifacts;

@@ -8,7 +8,12 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -39,10 +44,7 @@ test("another conversation's Task reads as its live label, or as a Task the read
   });
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const viewer = await db.user.findUniqueOrThrow({ where: { id: DEV_BROWSER_USER.id } });
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   const channel = (name: string, visibility = "public") =>

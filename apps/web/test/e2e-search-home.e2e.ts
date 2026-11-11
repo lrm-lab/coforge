@@ -108,6 +108,7 @@ test("the empty search dialog offers recent searches and frequently used places"
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     workspacePath = `/en/w/${membership.workspace.slug}`;
@@ -265,6 +266,7 @@ test("frequently used shows ten usable places and keeps opens from a clock sligh
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${membership.workspace.slug}`;

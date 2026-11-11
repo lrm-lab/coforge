@@ -52,6 +52,7 @@ beforeAll(async () => {
   if (discovery.status !== 200) throw new Error("the Web must run with COFORGE_OIDC_ISSUER set");
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
   });
   own = `e2e-own-${suffix}`;
   await createAppRegistry(db).registerApp(

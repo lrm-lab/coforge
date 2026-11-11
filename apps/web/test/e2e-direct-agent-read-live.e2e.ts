@@ -35,6 +35,7 @@ beforeAll(async () => {
   await mkdir(artifacts, { recursive: true });
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: true },
   });
   slug = membership.workspace.slug;

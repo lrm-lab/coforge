@@ -20,6 +20,7 @@ test("the Record side panel fills the page below the width it can sit beside the
   const { browser, evaluate } = browserSession(browserPath, `record-panel-${process.pid}`);
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   // A year no real cycle uses, so the unique (workspace, year, week) never collides.

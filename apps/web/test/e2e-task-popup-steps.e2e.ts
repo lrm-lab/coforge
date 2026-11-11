@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * A Task popup opened from another's is a step down from it (task #464): a sub-task in another
@@ -27,10 +32,7 @@ test("a Task popup opened from another steps back to it", async () => {
   const { browser, evaluate } = browserSession(browserPath, `task-popup-${process.pid}`);
   const board = new TaskBoard(db);
   const experiments = new PrismaExperimentsRepository(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   for (const name of ["task-deps", "web-launch"])
     if (await db.conversation.findFirst({ where: { workspaceId, channelName: name } }))

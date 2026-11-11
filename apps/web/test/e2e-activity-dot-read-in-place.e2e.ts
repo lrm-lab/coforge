@@ -9,7 +9,12 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -32,10 +37,7 @@ test("a DM message read where it arrives leaves the Activity dot dark", async ()
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `activity-dot-${process.pid}`);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const mei = await db.user.create({ data: { username: `mei-${tail}`, displayName: "Mei Chen" } });
   await db.workspaceMembership.create({ data: { workspaceId, userId: mei.id } });

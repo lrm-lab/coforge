@@ -79,6 +79,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     await mkdir(artifacts, { recursive: true });

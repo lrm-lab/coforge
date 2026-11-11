@@ -68,6 +68,7 @@ test("a DM with another member's public Agent is listed in the sidebar", async (
     await mkdir(artifacts, { recursive: true });
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     const { workspaceId } = membership;

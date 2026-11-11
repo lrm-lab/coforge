@@ -26,6 +26,7 @@ test("notification settings: this device, a pause of one's own, and settings tha
   const { browser, evaluate } = browserSession(browserPath, `notif-settings-${process.pid}`);
   const { workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const userId = DEV_BROWSER_USER.id;

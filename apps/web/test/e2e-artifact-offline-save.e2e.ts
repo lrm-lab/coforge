@@ -5,6 +5,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
+import { devBrowserWorkspace } from "./helpers/browser-e2e";
 
 /**
  * Task #514, item 10 (QA on staging, 11-05): a document edited while offline says it could not
@@ -29,10 +30,7 @@ test("a document typed in offline says it could not save, and saves once back on
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const experiments = new PrismaExperimentsRepository(db);
   const { documents } = productionArtifacts(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const channel = await db.conversation.create({

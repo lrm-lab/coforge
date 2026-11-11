@@ -28,6 +28,7 @@ test("the AI Workbench switch controls the sidebar entry and the route, across s
   const second = browserSession(browserPath, `workbench-b-${process.pid}`);
   const { workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const before = (

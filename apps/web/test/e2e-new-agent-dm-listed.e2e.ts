@@ -22,6 +22,7 @@ test("a new Agent's DM stays in the sidebar without a reload", async () => {
   const name = `e2e-dm-${process.pid}-${Date.now().toString(36)}`;
   const { workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   try {

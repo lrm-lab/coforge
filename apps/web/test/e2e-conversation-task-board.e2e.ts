@@ -81,6 +81,7 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
   const directTitle = `Direct work ${suffix}`;
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const workspacePath = `/en/w/${membership.workspace.slug}`;
