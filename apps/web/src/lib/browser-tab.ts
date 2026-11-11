@@ -56,7 +56,7 @@ function currentLabel() {
 
 /**
  * Names the page in the tab title for as long as the calling component is mounted; `undefined`
- * registers nothing. The text is what the page is called (`#general`, `@Ada`, `#general - Thread`),
+ * registers nothing. The text is what the page is called (`general`, `@Ada`, `general - Thread`),
  * without the Workspace or product name.
  */
 export function usePageTitleLabel(label: string | undefined) {

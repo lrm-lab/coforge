@@ -238,6 +238,13 @@ test("a private channel goes without `#` wherever another page names it", async 
     await both("6-mention-strip.png");
     expect(await evaluate(namesVaultBare)).toBe(true);
     expect(await evaluate(vaultLocked)).toBe(true);
+
+    // The browser tab names a public channel by its bare name too, unread count or not (task #55).
+    await browser("open", `${origin}${workspacePath}/channel/${plaza.id}`);
+    await waitFor(`document.title.includes(${JSON.stringify(plazaName)})`);
+    expect(await evaluate<string>("document.title.replace(/^\\(\\d+\\+?\\) /, '')")).toBe(
+      `${plazaName} | E2E private labels | CoForge`,
+    );
   } catch (failure) {
     await browser("screenshot", join(artifacts, "failure.png")).catch(() => undefined);
     throw failure;

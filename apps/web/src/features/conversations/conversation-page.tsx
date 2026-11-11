@@ -106,6 +106,7 @@ function ChannelConversationPage({
       // join prompt. The viewer is always a member of their own direct conversation.
       isMember={Boolean(conversation.senderMemberId)}
       name={channelLabel(conversation)}
+      tabLabel={conversation.name}
       readCursor={{
         key: `channel:${channelId}`,
         advance: (throughSequence) => advanceReadCursor({ data: { channelId, throughSequence } }),
@@ -256,6 +257,7 @@ function DirectConversationPageBody({
       taskView={taskView}
       isMember
       direct
+      tabLabel={`@${props.name}`}
       readCursor={{
         key: `dm:${conversationId}`,
         advance: (throughSequence) =>
@@ -283,6 +285,9 @@ type ConversationPageBodyProps = {
   direct?: boolean;
   /** The conversation's name on its Task board. */
   name: string;
+  /** What the browser tab calls the conversation: a channel's bare name (its face is the group
+   * avatar, never a `#`), or `@Name` for a direct message. */
+  tabLabel: string;
   readCursor: { key: string; advance: (throughSequence: number) => Promise<unknown> };
   header: (tabs: HeaderTabs, openAgentProfile: (agentId: string) => void) => ReactNode;
   conversation: (
@@ -336,6 +341,7 @@ function ConversationPageMain({
   isMember,
   direct,
   name,
+  tabLabel,
   readCursor,
   header,
   conversation: renderConversation,
@@ -369,7 +375,7 @@ function ConversationPageMain({
   usePageTitleLabel(
     hosted && !threadAlone
       ? undefined
-      : `${direct ? "@" : ""}${name}${threadOpen ? ` - ${m.conversation_thread()}` : ""}`,
+      : `${tabLabel}${threadOpen ? ` - ${m.conversation_thread()}` : ""}`,
   );
   const readEnd = rowReadEnd(conversation, direct === true);
   useEffect(() => {
