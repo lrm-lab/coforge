@@ -16,6 +16,7 @@ import {
 } from "#src/connection/agent-config-request";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { RUNTIME_ERROR_CLASS } from "./runtime-error-classification";
+import { isRefusedCredentialText } from "./launch-credential-refusal";
 
 /**
  * Reads the classified launch evidence the agent SDK attaches to a `PiLaunchError` (see
@@ -116,6 +117,13 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_MEMORY_UNSUPPORTED,
 ];
 
+/** The reasons a launch failure carries when no typed error named the cause, so the runtime's own
+ * words are the only evidence of why it would not start (`launch-credential-refusal.ts`). */
+const TEXT_ONLY_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[] = [
+  LAUNCH_FAILURE_REASON.RUNTIME_START_FAILED,
+  LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED,
+];
+
 /**
  * Launch failure reasons a managed Start does not retry: no attempt can succeed until a person
  * changes something on the Computer. Every other reason keeps the same attempts and backoff
@@ -187,10 +195,16 @@ export function launchFailureReason(error: unknown): LaunchFailureReason {
   if (upstream === "RUNTIME_NOT_INSTALLED") return LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED;
   if (upstream === "RUNTIME_UNUSABLE") return LAUNCH_FAILURE_REASON.RUNTIME_UNUSABLE;
   if (upstream === "RUNTIME_UNAVAILABLE") return LAUNCH_FAILURE_REASON.RUNTIME_UNAVAILABLE;
-  return (
+  const typed =
     TYPED_REASONS.find((reason) => hasErrorCode(error, reason)) ??
-    LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED
-  );
+    LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED;
+  // A rejected API key or a login the runtime lost reaches the daemon as the provider's words in a
+  // start failure. No retry can fix it: the launch ladder would spend its attempts on a sign-in
+  // only a person can restore, and the Agent's page would say the launch failed where it has the
+  // words for the sign-in (task #39).
+  if (TEXT_ONLY_LAUNCH_FAILURE_REASONS.includes(typed) && isRefusedCredentialText(error))
+    return LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED;
+  return typed;
 }
 
 /** Longest model name a launch failure repeats back. */

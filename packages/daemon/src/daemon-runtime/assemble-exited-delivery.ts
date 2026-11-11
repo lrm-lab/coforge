@@ -71,6 +71,10 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
         ? ports.wakeLaunchFailures.blockedUntil(agentId)
         : undefined,
     giveUpWake: (agentId) => {
+      // An Agent held for a credential a person must renew is waiting, not given up on: its hold
+      // runs a probe of its own, so what it kept is delivered by that launch and must not be
+      // refused here (task #39: the launch ladder stops at the refused key, the hold goes on).
+      if (waitsOnProvider(ports.deliveryGate.explicitHold(agentId))) return;
       const deadlineMs = startupDeadlineMs(ports, agentId);
       if (
         !ports.wakeLaunchFailures.exhausted(

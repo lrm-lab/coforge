@@ -8,6 +8,7 @@ import {
   AgentAuthorizationError,
   isNonRetryableLaunchFailure,
   launchFailureActivity,
+  launchFailureReason,
   launchFailureTrace,
 } from "#src/agent-runtime/launch-failure";
 import { AgentConfigRequestError } from "#src/connection/agent-config-request";
@@ -81,6 +82,40 @@ test("a runtime whose login is not usable names the login as the thing to fix", 
     "Kiro CLI needs you to log in on this Computer before it can start. Log in to Kiro CLI " +
       "there, then start the Agent again.",
   );
+});
+
+test("a start whose own words refuse the credential is a sign-in, not a launch to retry", () => {
+  // The typed login error covers only the providers whose adapter can read their own sign-in
+  // state; the rest arrive as a start failure carrying the provider's refusal (task #39).
+  const rejected = new RuntimeStartFailedError(
+    "claude exited 1 before it was ready",
+    "Invalid API key · Please run /login",
+  );
+  expect(launchFailureReason(rejected)).toBe("runtime_login_required");
+  expect(isNonRetryableLaunchFailure(rejected)).toBe(true);
+  // The Activity then says what a person does about it, not just that the launch failed.
+  expect(launchFailureActivity(rejected, "Claude Code").detail).toContain("log in");
+
+  const unauthorized = new Error("401 Unauthorized: invalid api key provided");
+  expect(launchFailureReason(unauthorized)).toBe("runtime_login_required");
+  expect(isNonRetryableLaunchFailure(unauthorized)).toBe(true);
+
+  // Words that name no refused credential leave the generic reason and its retries alone.
+  const crashed = new RuntimeStartFailedError(
+    "claude exited 1 before it was ready",
+    "segmentation fault",
+  );
+  expect(launchFailureReason(crashed)).toBe("runtime_start_failed");
+  expect(isNonRetryableLaunchFailure(crashed)).toBe(false);
+});
+
+test("a typed reason outranks any wording beside it", () => {
+  // A provider that says why in a typed error is never second-guessed by its own text: only a
+  // reason that named no cause is read for a refused credential.
+  const memoryUnsupported = new RuntimeMemoryUnsupportedError(
+    "Unauthorized: this runtime cannot run a Memory Agent",
+  );
+  expect(launchFailureReason(memoryUnsupported)).toBe("runtime_memory_unsupported");
 });
 
 test("only a reason no retry can fix skips the launch retries", () => {

@@ -89,7 +89,7 @@ test.each([true, false])(
           if (intent.sessionId)
             throw recoverable
               ? new AgentSessionRecoveryError("session_missing")
-              : new Error("unauthorized");
+              : new Error("ECONNRESET");
           return { sessionId: "fresh", state: "empty" };
         },
         async result(result) {
