@@ -114,3 +114,4 @@ e2e-agent-apps-prompt.e2e.ts 1
 workspace-assistant.e2e.ts 1
 e2e-search-legacy-link.e2e.ts 4
 e2e-activity-rows-stable.e2e.ts 3
+e2e-phone-task-row.e2e.ts 15
