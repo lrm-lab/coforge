@@ -10,7 +10,7 @@ import { listedDirectAgentIds, type directListsOf } from "./sidebar-rows";
  * The busy Agents in the Chat list's header. The Agents the viewer has an open Direct message with
  * come first, and opening one outside a conversation goes to that Direct message
  * (`listedDirectAgentIds`). On a phone only: a desktop shows them in the top bar
- * (`TopBarBusyAgents`). Live agent activity off hides them.
+ * (`ShellBusyAgents`). Live agent activity off hides them.
  */
 export function ChatHeaderBusyAgents({
   directs,

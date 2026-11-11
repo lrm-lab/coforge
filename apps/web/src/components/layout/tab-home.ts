@@ -4,13 +4,19 @@ export type TabHome = "chat" | "activity" | "workspace" | "me";
 /** The Chat pages whose list can be on screen while their own address is a conversation's. */
 const CHAT_PAGES: readonly string[] = ["channel", "dm", "saved", "drafts"];
 
+/** The first path segment under the Workspace (`""` for its home), for a de-localized pathname
+ * under `base` (`/w/<slug>`). */
+export function sectionOf(pathname: string, base: string): string {
+  return pathname.slice(base.length).split("/")[1] ?? "";
+}
+
 /**
  * Which tab's home page is on a phone's screen, or null when the bar is hidden: only a tab's home
  * shows it, never a conversation, thread, task, project, settings or any other inner page.
  *
- * `section` is the first path segment under the Workspace (`""` for its home). Chat's list is
- * the Workspace home, and also what a conversation's back arrow brings back over that
- * conversation's own address (`chatListOpen`). Activity opens an item full screen through `open`.
+ * Chat's list is the Workspace home (`section` `""`), and also what a conversation's back arrow
+ * brings back over that conversation's own address (`chatListOpen`). Activity opens an item full
+ * screen through `open`.
  */
 export function tabHomeOf({
   section,

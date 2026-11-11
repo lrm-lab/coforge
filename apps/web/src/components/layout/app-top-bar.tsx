@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { LayoutLeft } from "@untitledui/icons";
 
-import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { SIDEBAR_EXPANDED_WIDTH } from "#src/components/layout/sidebar/sidebar-expanded";
@@ -33,9 +32,9 @@ export function AppTopBar({
         where the sidebar does; a long Workspace name truncates inside it. */}
         <div
           style={{ width: SIDEBAR_EXPANDED_WIDTH }}
-          className="flex min-w-0 shrink-0 items-center gap-2 pr-3 pl-6"
+          // The switcher's own 6px inset puts its mark on the nav icons' axis, 24px in.
+          className="flex min-w-0 shrink-0 items-center gap-2 pr-3 pl-4.5"
         >
-          <CoForgeMark className="size-5 shrink-0" />
           <div className="flex min-w-0">{workspace}</div>
           <SidebarToggle />
         </div>

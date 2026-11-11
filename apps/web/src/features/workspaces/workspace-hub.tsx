@@ -1,7 +1,6 @@
-import { PageHeader } from "#src/components/layout/page-header";
 import { usePhoneShell } from "#src/components/layout/phone-shell";
 import { ShellLinks } from "#src/components/layout/shell-links";
-import { TabHomeHeader } from "#src/components/layout/tab-home-header";
+import { TabPageHeader } from "#src/components/layout/tab-home-header";
 import { TabPageRow } from "#src/components/layout/tab-page-row";
 import { m } from "#src/paraglide/messages";
 
@@ -15,10 +14,7 @@ export function WorkspaceHub() {
   return (
     <ShellLinks>
       <div className="flex min-h-0 flex-1 flex-col">
-        <TabHomeHeader title={m.navigation_workspace_group()} />
-        <div className="max-lg:hidden">
-          <PageHeader leading={null} heading={m.navigation_workspace_group()} />
-        </div>
+        <TabPageHeader title={m.navigation_workspace_group()} />
         <ul className="min-h-0 flex-1 divide-y divide-secondary overflow-y-auto lg:max-w-2xl">
           {workspaceItems.map((item) => (
             <TabPageRow

@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 
+import { PageHeader } from "#src/components/layout/page-header";
 import { usePhoneShell } from "#src/components/layout/phone-shell";
-import { PhoneBusyAgents } from "#src/features/agents/shell-busy-agents";
+import { ShellBusyAgents } from "#src/features/agents/shell-busy-agents";
 import { NotificationBell } from "#src/features/usage-limits/notification-bell";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
 /**
  * The header every tab home shows on a phone, below `lg`: the CoForge mark that opens the
@@ -14,7 +16,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 export function TabHomeHeader({
   title,
   meta,
-  agents = <PhoneBusyAgents />,
+  agents = <ShellBusyAgents placement="tab-home" />,
   actions,
 }: {
   title: string;
@@ -37,5 +39,15 @@ export function TabHomeHeader({
         {actions}
       </div>
     </header>
+  );
+}
+
+/** A tab page's one header (Workspace, Me): the tab home's below `lg`, the plain page header from
+ * `lg` up, where the page is an ordinary page beside the sidebar. */
+export function TabPageHeader({ title }: { title: string }) {
+  return useBreakpoint("lg") ? (
+    <PageHeader leading={null} heading={title} />
+  ) : (
+    <TabHomeHeader title={title} />
   );
 }
