@@ -42,7 +42,7 @@ function service() {
         published.push({ channel, bytes });
       },
     },
-    { get: async () => online },
+    async () => online,
     {
       supports: async (_workspaceId, _computerId, provider) =>
         provider === "kiro" ? kiroCapable : capable,
@@ -244,6 +244,21 @@ test("cancelling is the starter's, and only while the login is open", async () =
   expect(await auth.cancelLogin(bob, { computerId, loginId })).toBe("not_available");
   expect(await auth.cancelLogin(alice, { computerId, loginId })).toBe("sent");
   expect(intents().at(-1)).toMatchObject({ kind: "login_cancel", loginId });
+});
+
+test("a code or a cancel for a Computer nobody is listening on reaches nothing", async () => {
+  const auth = service();
+  const { loginId } = (await auth.startLogin(alice, { computerId, provider: "claude-code" })) as {
+    loginId: string;
+  };
+  online = false;
+  expect(await auth.submitCode(alice, { computerId, loginId, code: "abc-123" })).toBe(
+    "not_available",
+  );
+  expect(await auth.cancelLogin(alice, { computerId, loginId })).toBe("not_available");
+  expect(
+    intents().filter((intent) => intent.kind === "login_code" || intent.kind === "login_cancel"),
+  ).toEqual([]);
 });
 
 test("a login nothing has answered in the start window fails and frees the provider", async () => {

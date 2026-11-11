@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { createCentrifugoServerApi, daemonOnline } from "#src/server/centrifugo/server-api.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
@@ -19,7 +19,7 @@ export function userRuntimeAuth(db: PrismaClient) {
     new PrismaRuntimeAuthAuthorization(db),
     store,
     createCentrifugoServerApi(),
-    getComputerStatusCache(),
+    daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     runtimeAuthCapabilitySupport,
     () => `rtl_${randomBytes(24).toString("base64url")}`,
   );

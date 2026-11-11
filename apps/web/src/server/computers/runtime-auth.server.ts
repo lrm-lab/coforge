@@ -89,7 +89,9 @@ export class RuntimeAuth {
     private readonly authorization: RuntimeAuthAuthorization,
     private readonly store: RuntimeAuthStore,
     private readonly api: Pick<CentrifugoServerApi, "publish">,
-    private readonly computerStatus: { get(scope: Scope): Promise<boolean> },
+    /** Whether a live daemon is on the Computer's control channel right now (status cache and
+     * channel presence, fail open); a publish into an empty channel is dropped unheard. */
+    private readonly online: (scope: Scope) => Promise<boolean>,
     private readonly capability: {
       supports(
         workspaceId: string,
@@ -152,7 +154,7 @@ export class RuntimeAuth {
   ): Promise<"requested" | RuntimeAuthUnavailable> {
     const scope = await this.authorize(principal, input.computerId, input.provider);
     const [online, supported] = await Promise.all([
-      this.computerStatus.get(scope),
+      this.online(scope),
       this.capability.supportsStatusRead(scope.workspaceId, scope.computerId),
     ]);
     if (!online) return "offline";
@@ -175,6 +177,7 @@ export class RuntimeAuth {
     // The same rule as the daemon's: a pasted code is one run of characters, whitespace is not part.
     const code = input.code.replace(/\s/gu, "");
     if (!isRuntimeAuthCode(code)) return "invalid_code";
+    if (!(await this.online(scope))) return "not_available";
     try {
       await this.publishIntent(scope, { kind: "login_code", loginId: input.loginId, code });
     } catch {
@@ -189,6 +192,7 @@ export class RuntimeAuth {
   ): Promise<"sent" | "not_available"> {
     const { scope, login } = await this.authorizeOwnLogin(principal, input);
     if (!login || login.result) return "not_available";
+    if (!(await this.online(scope))) return "not_available";
     try {
       await this.publishIntent(scope, { kind: "login_cancel", loginId: input.loginId });
     } catch {
@@ -315,7 +319,7 @@ export class RuntimeAuth {
     provider: RuntimeAuthProvider,
   ): Promise<RuntimeAuthUnavailable | undefined> {
     const [online, supported] = await Promise.all([
-      this.computerStatus.get(scope),
+      this.online(scope),
       this.capability.supports(scope.workspaceId, scope.computerId, provider),
     ]);
     if (!online) return "offline";
