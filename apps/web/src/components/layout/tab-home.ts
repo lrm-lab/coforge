@@ -1,13 +1,14 @@
+import { splitWorkspacePath } from "#src/features/workspaces/workspace-url";
+
 /** The four pages the phone's bottom tab bar leads to. */
 export type TabHome = "chat" | "activity" | "workspace" | "me";
 
 /** The Chat pages whose list can be on screen while their own address is a conversation's. */
 const CHAT_PAGES: readonly string[] = ["channel", "dm", "saved", "drafts"];
 
-/** The first path segment under the Workspace (`""` for its home), for a de-localized pathname
- * under `base` (`/w/<slug>`). */
-export function sectionOf(pathname: string, base: string): string {
-  return pathname.slice(base.length).split("/")[1] ?? "";
+/** The first path segment under the Workspace (`""` for its home or outside one). */
+export function sectionOf(pathname: string): string {
+  return splitWorkspacePath(pathname)?.rest.split("/")[1] ?? "";
 }
 
 /**
@@ -16,20 +17,21 @@ export function sectionOf(pathname: string, base: string): string {
  *
  * Chat's list is the Workspace home (`section` `""`), and also what a conversation's back arrow
  * brings back over that conversation's own address (`chatListOpen`). Activity opens an item full
- * screen through `open`.
+ * screen (`itemOpen`).
  */
 export function tabHomeOf({
   section,
-  search,
+  itemOpen,
   chatListOpen,
 }: {
   section: string;
-  search: { readonly open?: unknown };
+  /** Activity's `open` param is set: an item fills the screen. */
+  itemOpen: boolean;
   chatListOpen: boolean;
 }): TabHome | null {
   if (section === "") return "chat";
   if (CHAT_PAGES.includes(section)) return chatListOpen ? "chat" : null;
-  if (section === "activity") return search.open === undefined ? "activity" : null;
+  if (section === "activity") return itemOpen ? null : "activity";
   if (section === "workspace" || section === "me") return section;
   return null;
 }

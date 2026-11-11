@@ -214,7 +214,9 @@ export function AppShell({
   const searchStr = useRouterState({
     select: (state) => state.location.searchStr,
   });
-  const search = useRouterState({ select: (state) => state.location.search });
+  const itemOpen = useRouterState({
+    select: (state) => (state.location.search as { open?: unknown }).open !== undefined,
+  });
   const workspaceId = currentWorkspace.id;
   const base = workspacePath(currentWorkspace.slug);
   useEffect(() => {
@@ -227,11 +229,11 @@ export function AppShell({
   useReportActivityUnread(activityAttention.hasUnread, activityAttention.unreadCount);
   useWorkspaceTabTitle(currentWorkspace.name);
   const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
-  const section = sectionOf(pathname, base);
+  const section = sectionOf(pathname);
   // The phone's tab bar shows on a tab home only; Chat's list is on screen without its own address
   // when a conversation's back arrow brings it back, which the page reports.
   const [chatListOpen, setChatListOpen] = useState(false);
-  const tabHome = tabHomeOf({ section, search, chatListOpen });
+  const tabHome = tabHomeOf({ section, itemOpen, chatListOpen });
   // The tab bar is mounted on a phone's tab home only, never hidden by CSS on a desktop.
   const phone = !useBreakpoint("lg");
   const activeUrl = navItems.find((item) =>
@@ -249,7 +251,9 @@ export function AppShell({
   );
   const chatItem = navItems.find((item) => item.tab === "chat");
   const activityItem = navItems.find((item) => item.tab === "activity");
-  const tabBar = phone && tabHome && chatItem?.href && activityItem?.href ? tabHome : null;
+  const chatHref = chatItem?.href;
+  const activityHref = activityItem?.href;
+  const tabBar = phone && chatHref && activityHref ? tabHome : null;
   // The Workspace layout hands its handlers and user over inline, so the tab pages' context keeps
   // them stable itself: it changes only with what the pages show.
   const selectWorkspace = useLatestCallback(onSelectWorkspace);
@@ -301,7 +305,14 @@ export function AppShell({
             <ShellLinks>
               <AppTopBar
                 workspace={workspaceSwitcher}
-                agents={<ShellBusyAgents placement="top-bar" />}
+                agents={
+                  // The top bar shows from `lg` up; a phone's tab homes carry their own.
+                  phone ? null : (
+                    <div className="flex h-12 w-48 min-w-0">
+                      <ShellBusyAgents />
+                    </div>
+                  )
+                }
                 search={<SearchField />}
                 end={
                   <>
@@ -333,15 +344,15 @@ export function AppShell({
                 </div>
               </div>
             </div>
-            {tabBar && chatItem?.href && activityItem?.href && (
+            {tabBar && chatHref && activityHref && (
               <ShellLinks>
                 <PhoneTabBar
                   current={tabBar}
-                  chatHref={chatItem.href}
-                  activityHref={activityItem.href}
+                  chatHref={chatHref}
+                  activityHref={activityHref}
                   activityUnread={{
-                    count: activityItem.unreadCount,
-                    lit: Boolean(activityItem.badge),
+                    count: activityItem?.unreadCount,
+                    lit: Boolean(activityItem?.badge),
                   }}
                   base={base}
                   user={user}
