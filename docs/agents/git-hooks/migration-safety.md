@@ -16,7 +16,8 @@ remote falls back to `HEAD`.
 One exception exists, and it is a list, not a rule: `APPROVED_UNAPPLIED_DELETIONS` in
 `scripts/ci/migration-immutable.ts` names the seven drop migrations Frank approved deleting on
 2026-11-05 (tasks #494/#501) after production and staging `_prisma_migrations` were verified to
-hold none of them. The list is removed by the release that actually drops the columns.
+hold none of them, plus the task #78 forward backfill (2026-11-11), which no environment had
+deployed. The list is removed by the release that actually drops the columns.
 
 Part of [Git hooks](README.md), the rule `migration-safety` of the [hard rules](hard-rules.md).
 

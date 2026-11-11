@@ -55,6 +55,9 @@ const APPROVED_UNAPPLIED_DELETIONS = new Set([
   "apps/web/prisma/migrations/20261105151639_drop_conversations_project_idx/migration.sql",
   "apps/web/prisma/migrations/20261105151640_drop_conversations_project_id/migration.sql",
   "apps/web/prisma/migrations/20261105151641_drop_tasks_project_pinned/migration.sql",
+  // Task #78: the forward backfill reads `messages`, which migration-safety refuses in production;
+  // staging and production never deployed it (their last images predate 1ff35a271).
+  "apps/web/prisma/migrations/20261111033020_message_forward_backfill/migration.sql",
 ]);
 
 /** A migration file the base already had may not be edited, renamed or deleted: an environment
