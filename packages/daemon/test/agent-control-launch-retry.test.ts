@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AgentControl, type LaunchRetryScheduler } from "#src/agent-runtime/agent-control";
+import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState, type AgentRuntimeRecord } from "#src/agent-runtime/agent-runtime-state";
 import type {
@@ -8,98 +8,11 @@ import type {
   SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
 import { LAUNCH_FAILURE_MAX_ATTEMPTS } from "#src/agent-runtime/launch-failure-backoff";
-import { RuntimeLoginRequiredError, RuntimeModelNotFoundError } from "@lrm/coforge-anvil";
+import { RuntimeModelNotFoundError } from "@lrm/coforge-anvil";
 import { AgentAuthorizationError } from "#src/agent-runtime/launch-failure";
 import { AgentConfigRequestError } from "#src/connection/agent-config-request";
+import { harness, manualScheduler, settle, startIntent } from "./fixtures/launch-retry";
 import { captureDaemonLogs } from "./log-capture";
-
-/** A scheduler that only records what `AgentControl` asked for, so a test drives every retry
- * itself instead of sleeping through real cooldowns. */
-function manualScheduler() {
-  type Entry = { callback: () => void; delayMs: number; cancelled: boolean };
-  const entries: Entry[] = [];
-  const scheduler: LaunchRetryScheduler = {
-    schedule(callback, delayMs) {
-      const entry: Entry = { callback, delayMs, cancelled: false };
-      entries.push(entry);
-      return entry;
-    },
-    cancel(handle) {
-      (handle as Entry).cancelled = true;
-    },
-  };
-  const live = () => entries.filter((entry) => !entry.cancelled);
-  return {
-    scheduler,
-    entries,
-    live,
-    delays: () => entries.map((entry) => entry.delayMs),
-    /** Fires the most recently armed retry and lets its `state.run` chain settle. */
-    async fireLatest(): Promise<void> {
-      const entry = live().at(-1);
-      if (!entry) throw new Error("no retry armed");
-      entry.callback();
-      await settle();
-    },
-  };
-}
-
-/** Lets the fire-and-forget retry chain in `AgentControl` finish (its store is in memory, so a
- * few macrotask turns are enough). */
-async function settle(): Promise<void> {
-  for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-const startIntent: AgentStartIntent = {
-  protocolMajor: 1,
-  requestId: "r",
-  workspaceId: "w",
-  computerId: "c",
-  agentId: "a",
-  provider: "pi",
-  model: "default",
-  reasoning: "",
-  controlEpoch: 1,
-  launchId: "launch-1",
-};
-
-function harness(launch: (attempt: number) => Promise<SessionIdentity | undefined>) {
-  let record: AgentRuntimeRecord | undefined;
-  const results: AgentControlResult[] = [];
-  const launches: number[] = [];
-  const settled: string[] = [];
-  const state = new AgentRuntimeState({
-    listAgentIds: async () => [],
-    read: async () => record && structuredClone(record),
-    write: async (_id, value) => {
-      record = structuredClone(value);
-    },
-    clearWorkspace: async () => {},
-  });
-  const timers = manualScheduler();
-  const control = new AgentControl(
-    "daemon",
-    state,
-    new AgentSessions(state, async () => {}),
-    {
-      running: () => false,
-      rebind: async () => undefined,
-      stop: async () => undefined,
-      startSettled(agentId) {
-        settled.push(agentId);
-      },
-      async launch() {
-        launches.push(launches.length + 1);
-        return launch(launches.length);
-      },
-      async result(result) {
-        results.push(result);
-      },
-    },
-    timers.scheduler,
-  );
-  return { control, results, launches, timers, settled, record: () => record };
-}
 
 test("a failed launch is counted, retried after the cooldown, and reports started once it succeeds", async () => {
   const h = harness(async (attempt) => {
@@ -174,22 +87,6 @@ test("consecutive failures back off 1s, 2s, 4s... 30s and then report launch_fai
   expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "runtime_spawn_failed" });
   expect(h.record()?.phase).toBe("failed");
   expect(h.record()?.lastResult?.phase).toBe("failed");
-});
-
-test("a login no retry can fix ends the launch on its first failure, without a cooldown", async () => {
-  const h = harness(async () => {
-    throw new RuntimeLoginRequiredError("Kiro CLI is not logged in on this Computer");
-  });
-
-  await h.control.start(startIntent);
-
-  // One attempt, no retry armed, and the server's Start operation is answered right away instead
-  // of staying pending for the whole retry window.
-  expect(h.launches).toEqual([1]);
-  expect(h.timers.delays()).toEqual([]);
-  expect(h.results).toHaveLength(1);
-  expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "runtime_login_required" });
-  expect(h.record()?.phase).toBe("failed");
 });
 
 test("an authorization refusal (e.g. RUNTIME_UNAVAILABLE) ends the launch on its first failure, without a cooldown", async () => {

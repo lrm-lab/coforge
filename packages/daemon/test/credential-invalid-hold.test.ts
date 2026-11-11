@@ -294,3 +294,40 @@ test("a launch that throws a credential failure holds the Agent as a mid-turn on
     await h.runtime.stop();
   }
 });
+
+test("a launch refused for its key keeps probing, and reaches the Agent once the key works", async () => {
+  // A provider that refuses the credential in its own words and cannot report a typed error
+  // (Pi-style, where the adapter reads no login state): the hold may not depend on the adapter
+  // knowing, or a held message would wait for a probe nobody runs. The probe is the hold's own.
+  const h = await failed(AUTH, { failLaunches: [2], launchError: AUTH, checkSequences: [1] });
+  try {
+    await h.deliver(1, h.envelope(1));
+    jest.useFakeTimers();
+    h.exit();
+    jest.advanceTimersByTime(CLOSED_HOLD_MS);
+    jest.useRealTimers();
+
+    // The probe launch is refused in its own words too: still held, still nothing refused.
+    while (h.launches() < 2) await Bun.sleep(5);
+    await Bun.sleep(50);
+    await h.deliver(2);
+    expect(h.launches()).toBe(2);
+    expect(h.notices).toEqual([]);
+    expect(terminals(h.frames)).toEqual([]);
+
+    // A person fixes the key: the next probe starts, what the hold kept is in that Session for
+    // the Agent to read, and its check acknowledges it — so nothing waits on a hold nobody
+    // probes, nor on a launch that took the mention and died before telling it.
+    jest.useFakeTimers();
+    jest.advanceTimersByTime(CLOSED_HOLD_MS);
+    jest.useRealTimers();
+    while (h.launches() < 3) await Bun.sleep(5);
+    h.emit({ type: "completed", status: "completed" });
+    await h.check();
+    await h.frameSent((frame) => frame.kind === "ack" && frame.deliveryId === "delivery-1");
+    expect(terminals(h.frames)).toEqual([]);
+  } finally {
+    jest.useRealTimers();
+    await h.runtime.stop();
+  }
+});
