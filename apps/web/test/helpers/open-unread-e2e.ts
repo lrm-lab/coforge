@@ -79,11 +79,13 @@ export async function seedChannel(
     update: {},
     create: { workspaceId, userId: peer.id },
   });
-  const channelId = seededUuid(`${key}${name}`);
-  await db.conversation.upsert({
-    where: { id: channelId },
+  // A channel is its name in this Workspace: one an earlier run seeded in another Workspace is a
+  // different row, never this one with another Workspace's messages (task #82).
+  const { id: channelId } = await db.conversation.upsert({
+    where: { workspaceId_channelName: { workspaceId, channelName: name } },
     update: { archivedAt: null },
-    create: { id: channelId, workspaceId, channelName: name },
+    create: { id: seededUuid(`${key}${workspaceId}${name}`), workspaceId, channelName: name },
+    select: { id: true },
   });
   await db.message.deleteMany({ where: { conversationId: channelId } });
   const [viewer, other] = await Promise.all(
@@ -106,7 +108,7 @@ export async function seedChannel(
       }),
     ),
   );
-  const ids = messages.map((_, index) => seededUuid(`${key}${name}:${index}`));
+  const ids = messages.map((_, index) => seededUuid(`${key}${channelId}:${index}`));
   for (const [index, message] of messages.entries())
     await db.message.create({
       data: {

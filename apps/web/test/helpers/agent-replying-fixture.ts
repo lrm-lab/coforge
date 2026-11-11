@@ -261,6 +261,7 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
   beforeAll(async () => {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     fx.workspacePath = `/en/w/${membership.workspace.slug}`;
