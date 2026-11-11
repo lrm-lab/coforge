@@ -116,6 +116,24 @@ export function createCentrifugoServerApi(
     if (error) throw failure("batch", error);
     return replies ?? [];
   }
+  /** The shared settle of `publishBatch`/`publishJsonBatch`: one parallel batch, each command's
+   * reply settling its own publication; a batch Centrifugo did not answer fails them all. */
+  async function publishCommands(
+    commands: Record<string, unknown>[],
+  ): Promise<PromiseSettledResult<void>[]> {
+    let replies: Awaited<ReturnType<typeof batch>>;
+    try {
+      replies = await batch(commands);
+    } catch (error) {
+      return commands.map(() => ({ status: "rejected", reason: error }));
+    }
+    return commands.map((_, index) => {
+      const reply = replies[index];
+      return reply && !reply.error
+        ? { status: "fulfilled", value: undefined }
+        : { status: "rejected", reason: failure("publish", reply?.error) };
+    });
+  }
   async function send(channel: string, publication: Record<string, unknown>) {
     await call("publish", { channel, ...publication });
   }
@@ -142,26 +160,15 @@ export function createCentrifugoServerApi(
     },
     async publishBatch(publications) {
       if (publications.length === 0) return [];
-      let replies: Awaited<ReturnType<typeof batch>>;
-      try {
-        replies = await batch(
-          publications.map(({ channel, data, skipHistory }) => ({
-            publish: {
-              channel,
-              b64data: base64(data),
-              ...(skipHistory ? { skip_history: true } : {}),
-            },
-          })),
-        );
-      } catch (error) {
-        return publications.map(() => ({ status: "rejected", reason: error }));
-      }
-      return publications.map((_, index) => {
-        const reply = replies[index];
-        return reply && !reply.error
-          ? { status: "fulfilled", value: undefined }
-          : { status: "rejected", reason: failure("publish", reply?.error) };
-      });
+      return publishCommands(
+        publications.map(({ channel, data, skipHistory }) => ({
+          publish: {
+            channel,
+            b64data: base64(data),
+            ...(skipHistory ? { skip_history: true } : {}),
+          },
+        })),
+      );
     },
     async streamPositions(channels) {
       if (channels.length === 0) return {};
