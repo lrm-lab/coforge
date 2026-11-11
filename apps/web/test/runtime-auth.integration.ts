@@ -47,6 +47,7 @@ function service() {
       supports: async (_workspaceId, _computerId, provider) =>
         provider === "kiro" ? kiroCapable : capable,
       supportsStatusRead: async () => statusReadCapable,
+      supportsKiroFree: async () => kiroCapable,
     },
     () => `rtl_${String(++ids).padStart(20, "0")}`,
     () => clock,

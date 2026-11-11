@@ -36,6 +36,9 @@ export interface RuntimeAuthAuthorization {
 /** What a sign-in or sign-out cannot start on: the Computer is away, or too old to take it. */
 export type RuntimeAuthUnavailable = "offline" | "needs_upgrade";
 
+/** The capability a `needs_upgrade` names when the Computer can sign in, just not this way. */
+export type RuntimeAuthMissingCapability = "kiro_free";
+
 /** A login as its starter may see it: everything but who started it. */
 export type RuntimeAuthLoginView = {
   loginId: string;
@@ -100,6 +103,8 @@ export class RuntimeAuth {
       ): Promise<boolean>;
       /** Whether the Computer takes `status_read`; one that does not is never asked. */
       supportsStatusRead(workspaceId: string, computerId: string): Promise<boolean>;
+      /** Whether the Computer's daemon can run Kiro's free sign-in at all (`kiro-free:v1`). */
+      supportsKiroFree(workspaceId: string, computerId: string): Promise<boolean>;
     },
     private readonly newLoginId: () => string,
     private readonly now: () => number = Date.now,
@@ -115,11 +120,22 @@ export class RuntimeAuth {
       kiroLicense?: "pro" | "free";
       antigravityMethodId?: "oauth-personal" | "oauth-business";
     },
-  ): Promise<{ status: "started"; loginId: string } | { status: "busy" | RuntimeAuthUnavailable }> {
+  ): Promise<
+    | { status: "started"; loginId: string }
+    | { status: "busy" | "offline" }
+    | { status: "needs_upgrade"; missing?: RuntimeAuthMissingCapability }
+  > {
     const scope = await this.authorize(principal, input.computerId, input.provider);
     const kiro = runtimeAuthKiroLogin(input.provider, input.kiroIdentityCenter, input.kiroLicense);
     const unavailable = await this.unavailable(scope, input.provider);
     if (unavailable) return { status: unavailable };
+    // The free sign-in is a daemon feature the page hides when it is absent; a caller that asks
+    // anyway is refused here rather than sending an intent an old Computer cannot run (task #615).
+    if (
+      kiro?.license === "free" &&
+      !(await this.capability.supportsKiroFree(scope.workspaceId, scope.computerId))
+    )
+      return { status: "needs_upgrade", missing: "kiro_free" };
     const loginId = this.newLoginId();
     const began = await this.store.begin(
       scope,
