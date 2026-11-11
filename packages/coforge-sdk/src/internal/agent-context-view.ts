@@ -166,15 +166,20 @@ export function encodeAgentContextViewRequest(value: AgentContextViewRequest): U
 /**
  * Whether these bytes announce themselves as a context view request. The channel carries many
  * publications and no envelope, so a request that fails to decode may simply be another kind of
- * message (task #34); the type field it sets is the only claim it makes. Bytes too broken to read
- * at all claim nothing.
+ * message (task #34); the type field it sets is the only claim it makes, and a message that claims
+ * nothing is not this request.
+ *
+ * A request that is cut short or carries a field this build cannot read still claims it: the type is
+ * a length-delimited string, so its bytes survive a broken tail, and a malformed request of ours is
+ * exactly what the invalid-request report exists for.
  */
 export function isAgentContextViewRequest(bytes: Uint8Array): boolean {
   try {
-    return fromBinary(AgentContextViewRequestSchema, bytes).messageType === REQUEST_TYPE;
+    if (fromBinary(AgentContextViewRequestSchema, bytes).messageType === REQUEST_TYPE) return true;
   } catch {
-    return false;
+    // Fall through: a tail this build cannot read does not hide the claim before it.
   }
+  return new TextDecoder("latin1").decode(bytes).includes(REQUEST_TYPE);
 }
 export function decodeAgentContextViewRequest(bytes: Uint8Array): AgentContextViewRequest {
   const value = fromBinary(AgentContextViewRequestSchema, bytes);
