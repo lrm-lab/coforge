@@ -16,7 +16,7 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 export function TabHomeHeader({
   title,
   meta,
-  agents = <ShellBusyAgents placement="tab-home" />,
+  agents = <ShellBusyAgents />,
   actions,
 }: {
   title: string;
@@ -29,7 +29,7 @@ export function TabHomeHeader({
   const { workspaceSwitcher } = usePhoneShell();
   const workspaceSlug = useWorkspaceSlug();
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-page lg:hidden">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-page">
       <span className="-ml-1.5 flex shrink-0">{workspaceSwitcher}</span>
       <h1 className="min-w-0 truncate text-lg font-semibold text-primary">{title}</h1>
       {meta}

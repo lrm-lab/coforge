@@ -4,7 +4,6 @@ import { ArrowLeft } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { backTargetOf, sectionOf } from "#src/components/layout/tab-home";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { m } from "#src/paraglide/messages";
 
 /**
@@ -18,9 +17,7 @@ export function PageBackButton() {
   const navigate = useNavigate();
   const workspaceSlug = useWorkspaceSlug();
   const goBack = () => {
-    const target = backTargetOf(
-      sectionOf(router.state.location.pathname, workspacePath(workspaceSlug)),
-    );
+    const target = backTargetOf(sectionOf(router.state.location.pathname));
     if (target === "workspace")
       void navigate({ to: "/w/$workspaceSlug/workspace", params: { workspaceSlug } });
     else if (target === "me")
