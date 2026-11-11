@@ -117,8 +117,10 @@ export function BoardNewTaskDialog({
   );
 }
 
-/** The board's newest channel the viewer can still post in; an archived one cannot (task #621). */
-function defaultTarget(
+/** The board's newest channel the viewer can still post in; an archived one cannot (task #621). A
+ * board that holds no Task yet has learned no channel its Tasks were filed in (task #60), so the
+ * viewer's own channels stand in, the server's order putting the joined ones first. */
+export function defaultTarget(
   places: readonly NewTaskPlace[],
   targets: readonly ForwardTarget[],
 ): ForwardTarget | undefined {
@@ -141,8 +143,16 @@ function defaultTarget(
       canSend: true,
     };
   }
-  return undefined;
+  return targets.find((target) => target.kind === "channel" && target.canSend);
 }
+
+/** Whether the board can file a new Task at all: a channel its own Tasks were filed in, or, before
+ * it holds one, a channel the viewer can post in (task #60). A board that offers neither has
+ * nowhere to put a Task, and says so by not offering the control. */
+export const canFileNewTask = (
+  places: readonly NewTaskPlace[],
+  targets: readonly ForwardTarget[],
+) => places.length > 0 || targets.some((target) => target.kind === "channel" && target.canSend);
 
 /**
  * What the dialog offers on a board, read from the Tasks the board shows: their channels, the one

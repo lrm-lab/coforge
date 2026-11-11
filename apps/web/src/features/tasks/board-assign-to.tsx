@@ -39,7 +39,7 @@ function targetName(target: ForwardTarget) {
 /** Everyone a new Task can go to, searched on the server: a Workspace can hold more than a list
  * can send. Those the viewer cannot post to (an archived channel) stay in, so a default can be
  * judged; `BoardAssignTo` does not offer them. */
-export function useAssignTargets() {
+export function useAssignTargets({ enabled = true }: { enabled?: boolean } = {}) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const search = useServerFn(searchForwardDestinations);
   const [query, setQuery] = useState("");
@@ -53,6 +53,7 @@ export function useAssignTargets() {
     queryFn: () => search({ data: { q: term, limit: LIMIT } }),
     placeholderData: keepPreviousData,
     staleTime: 60_000,
+    enabled,
   });
   return { targets: targets.data ?? [], setQuery };
 }
