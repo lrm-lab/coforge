@@ -37,3 +37,22 @@ export function appLogoUrl(
 export function appLogoObjectKey(ownerWorkspaceId: string, appKey: string): string {
   return `workspaces/${ownerWorkspaceId}/apps/${appKey}/logos/${crypto.randomUUID()}/original`;
 }
+
+/**
+ * The face an app's bot shows: its app's logo wherever a surface would otherwise draw the
+ * mascot the bot's id chooses (task #67). Null without a logo — the surface's monogram stands
+ * in, as every app surface does; the mascot never does.
+ */
+export function appBotAvatarUrl(
+  bot:
+    | {
+        installation: {
+          app: { key: string; ownerWorkspaceId: string; logoObjectKey: string | null };
+        };
+      }
+    | null
+    | undefined,
+): string | null {
+  const app = bot?.installation.app;
+  return app ? appLogoUrl(app.ownerWorkspaceId, app.key, app.logoObjectKey) : null;
+}

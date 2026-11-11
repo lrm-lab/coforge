@@ -102,7 +102,9 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
       ),
     },
     mascot: agentMascot(result.id, result.avatarMascot),
-    avatarUrl: agentAvatarUrl(result.id, result.avatarMascot ?? null),
+    // An app's bot wears its app's logo, never the mascot its id would choose (task #67): the
+    // profile header reads this, so the face it waits with is already the app's.
+    avatarUrl: result.appBot?.logoUrl ?? agentAvatarUrl(result.id, result.avatarMascot ?? null),
     runtimeConfig: publicAgentRuntimeConfig(runtimeConfig),
     // A stored config the read could not parse: the Agent's owner re-selects its runtime
     // rather than seeing an empty section (task #517).
