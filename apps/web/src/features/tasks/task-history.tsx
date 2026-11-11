@@ -17,13 +17,13 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { LaterEventDetail, laterEventTitle } from "./task-history-more";
 import { taskTimeline } from "./task-history-timeline";
-import { statusLabel, TASK_STATUS_COLOR } from "./task-workflow";
+import { statusLabel, taskStatusColor } from "./task-workflow";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
 export function StatusBadge({ status }: { status: TaskStatus }) {
   return (
-    <Badge type="color" size="sm" color={TASK_STATUS_COLOR[status].badge}>
+    <Badge type="color" size="sm" color={taskStatusColor(status).badge}>
       {statusLabel(status)}
     </Badge>
   );
@@ -79,7 +79,7 @@ function TaskTimeline({
               aria-hidden="true"
               className={cn(
                 "absolute top-4 bottom-0 left-1.5 w-px -translate-x-1/2",
-                lineStatus ? TASK_STATUS_COLOR[lineStatus].line : "bg-border-secondary",
+                lineStatus ? taskStatusColor(lineStatus).line : "bg-border-secondary",
               )}
             />
           )}
@@ -87,7 +87,7 @@ function TaskTimeline({
             aria-hidden="true"
             className={cn(
               "relative mt-1 size-3 shrink-0 rounded-full",
-              status ? TASK_STATUS_COLOR[status].dot : "border-2 border-primary bg-primary",
+              status ? taskStatusColor(status).dot : "border-2 border-primary bg-primary",
             )}
           />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">

@@ -54,18 +54,28 @@ const RING: Record<TaskStatus, { fill: number; mark?: string }> = {
   done: { fill: 1, mark: "M5.2 8.2l1.9 1.9 3.7-3.9" },
   closed: { fill: 1, mark: "M6 6l4 4M10 6l-4 4" },
 };
+/** The colour set a status draws with: a status this build does not know — a newer server's,
+ * met while an older bundle is still live (task #61) — takes To do's neutral set instead of
+ * crashing the chip, badge or timeline. */
+export const taskStatusColor = (status: TaskStatus) =>
+  (TASK_STATUS_COLOR as Record<string, (typeof TASK_STATUS_COLOR)[TaskStatus] | undefined>)[
+    status as string
+  ] ?? TASK_STATUS_COLOR.todo;
 
 // The inner pie is a circle of radius 3 stroked 6 wide: its dash length is the filled share.
 const PIE = 2 * Math.PI * 3;
 
 export function TaskStatusIcon({ status, className }: { status: TaskStatus; className?: string }) {
-  const ring = RING[status];
+  // A status this build does not know draws To do's ring and colour, the neutral fallback, until
+  // this bundle learns the newer vocabulary (task #61).
+  const ring =
+    (RING as Record<string, { fill: number; mark?: string } | undefined>)[status as string] ??
+    RING.todo;
+  const color =
+    (TASK_STATUS_COLOR as Record<string, { text: string } | undefined>)[status as string]?.text ??
+    TASK_STATUS_COLOR.todo.text;
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      className={cn("size-4 shrink-0", TASK_STATUS_COLOR[status].text, className)}
-    >
+    <svg aria-hidden="true" viewBox="0 0 16 16" className={cn("size-4 shrink-0", color, className)}>
       <circle
         cx="8"
         cy="8"
@@ -105,7 +115,7 @@ export function TaskStatusIcon({ status, className }: { status: TaskStatus; clas
 const ringIcon =
   (status: TaskStatus): IconComponentType =>
   ({ className }) => (
-    <TaskStatusIcon status={status} className={cn(className, TASK_STATUS_COLOR[status].text)} />
+    <TaskStatusIcon status={status} className={cn(className, taskStatusColor(status).text)} />
   );
 const STATUS_BADGE_ICON: Record<TaskStatus, IconComponentType> = {
   todo: ringIcon("todo"),
@@ -116,14 +126,21 @@ const STATUS_BADGE_ICON: Record<TaskStatus, IconComponentType> = {
 };
 
 export function statusLabel(status: TaskStatus) {
-  return {
-    todo: m.tasks_status_todo,
-    in_progress: m.tasks_status_in_progress,
-    in_review: m.tasks_status_in_review,
-    done: m.tasks_status_done,
-    closed: m.tasks_status_closed,
-  }[status]();
+  // A status this build does not know — a newer server's, met while an older bundle is still
+  // live — renders as its raw key with To do's neutral ring, instead of crashing the chip
+  // (task #61; the newer vocabulary labels it properly).
+  const label = (LABELS as Record<string, (() => string) | undefined>)[status as string];
+  return (label ?? (() => status as string))();
 }
+
+/** The localized status names, by status; a status this build does not know reads as its key. */
+const LABELS: Record<TaskStatus, () => string> = {
+  todo: m.tasks_status_todo,
+  in_progress: m.tasks_status_in_progress,
+  in_review: m.tasks_status_in_review,
+  done: m.tasks_status_done,
+  closed: m.tasks_status_closed,
+};
 
 /** A task as `#N` on its status's colour badge, the status ring leading: how a message body shows a
  * task reference. Another conversation's names its conversation too (`label`: `#design:#7`). */
@@ -140,8 +157,11 @@ export function TaskNumberBadge({
     <BadgeWithIcon
       type="color"
       size="sm"
-      color={TASK_STATUS_COLOR[status].badge}
-      iconLeading={STATUS_BADGE_ICON[status]}
+      color={taskStatusColor(status).badge}
+      iconLeading={
+        (STATUS_BADGE_ICON as Record<string, IconComponentType | undefined>)[status as string] ??
+        STATUS_BADGE_ICON.todo
+      }
       className="inline-flex"
     >
       {label ?? `#${number}`}

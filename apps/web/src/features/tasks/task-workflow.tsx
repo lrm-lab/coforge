@@ -315,7 +315,7 @@ function DragHandle({ task, disabled }: { task: TaskView; disabled: boolean }) {
 }
 
 // The status colours and labels live with the icon; the popup and timeline read them from here too.
-export { TASK_STATUS_COLOR, statusLabel } from "./task-status-icon";
+export { TASK_STATUS_COLOR, statusLabel, taskStatusColor } from "./task-status-icon";
 
 function parseTaskStatus(value: string | null): TaskStatus | undefined {
   return TASK_STATUSES.find((status) => status === value);
