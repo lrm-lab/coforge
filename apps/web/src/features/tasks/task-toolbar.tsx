@@ -15,6 +15,7 @@ import {
   projectOption,
   type PickerOption,
 } from "#src/features/pickers/entity-picker";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import {
   NO_OWNER,
@@ -343,6 +344,9 @@ function LayoutSwitch({
   layout: TaskLayout;
   onLayoutChange: (layout: TaskLayout) => void;
 }) {
+  // A phone's toolbar has no room for the words: Filter, the two views and New task side by side
+  // need the icons alone, named for a screen reader.
+  const words = useBreakpoint("sm");
   return (
     <ButtonGroup
       size="sm"
@@ -354,11 +358,11 @@ function LayoutSwitch({
         if (key === "board" || key === "list") onLayoutChange(key);
       }}
     >
-      <ButtonGroupItem id="board" iconLeading={Columns03}>
-        {m.tasks_layout_board()}
+      <ButtonGroupItem id="board" iconLeading={Columns03} aria-label={m.tasks_layout_board()}>
+        {words && m.tasks_layout_board()}
       </ButtonGroupItem>
-      <ButtonGroupItem id="list" iconLeading={List}>
-        {m.tasks_layout_list()}
+      <ButtonGroupItem id="list" iconLeading={List} aria-label={m.tasks_layout_list()}>
+        {words && m.tasks_layout_list()}
       </ButtonGroupItem>
     </ButtonGroup>
   );
