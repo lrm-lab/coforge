@@ -1,8 +1,7 @@
 import { APP_GRANT_AGENT_CARD_KIND, type ResolvedActionCardPayload } from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { APP_BOT_LOGO_SELECT, appBotAvatarUrl } from "#src/server/apps/app-logo.server";
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rules.server";
 import { roleCan } from "#src/features/workspaces/workspace-roles";
@@ -149,9 +148,7 @@ export async function actionCardViews(
   const userAvatar = new Map(
     users.map((u) => [u.id, workspaceUserAvatarUrl(workspaceId, u.id, u.avatarObjectKey)]),
   );
-  const agentAvatar = new Map(
-    agents.map((a) => [a.id, appBotAvatarUrl(a.appBot) ?? agentAvatarUrl(a.id, a.avatarMascot)]),
-  );
+  const agentAvatar = new Map(agents.map((a) => [a.id, agentFaceUrl(a)]));
   const viewerInChannel = new Set(
     viewerChannelMemberships.flatMap((m) => (m.leftAt === null ? [m.conversationId] : [])),
   );

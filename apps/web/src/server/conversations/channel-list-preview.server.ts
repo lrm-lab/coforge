@@ -5,8 +5,7 @@ import {
   latestTopLevelMessageRows,
 } from "#src/server/db/repositories/channel-list-preview.repositories.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { APP_BOT_LOGO_SELECT, appBotAvatarUrl } from "#src/server/apps/app-logo.server";
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import type { PreviewCard } from "#src/features/conversations/action-card-preview";
 import { previewNoticeOf, type PreviewNotice } from "#src/features/conversations/preview-line";
 import { previewCardFieldOf } from "#src/server/conversations/action-card-preview.server";
@@ -267,7 +266,7 @@ function channelListMember(
       kind: "agent",
       id: agent.id,
       name: browserSenderName({ agent }),
-      avatarUrl: appBotAvatarUrl(agent.appBot) ?? agentAvatarUrl(agent.id, agent.avatarMascot),
+      avatarUrl: agentFaceUrl(agent),
     };
   }
   return null;

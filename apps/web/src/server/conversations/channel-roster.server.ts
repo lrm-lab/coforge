@@ -2,12 +2,7 @@ import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import {
-  APP_BOT_LOGO_SELECT,
-  agentFaceUrl,
-  appBotAvatarUrl,
-} from "#src/server/apps/app-logo.server";
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { recordChannelMembersAdded } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
@@ -356,7 +351,7 @@ export async function channelMembers(
           name: agent.name,
           displayName: agent.displayName?.trim() || agent.name,
           description: agent.description,
-          avatarUrl: appBotAvatarUrl(agent.appBot) ?? agentAvatarUrl(agent.id, agent.avatarMascot),
+          avatarUrl: agentFaceUrl(agent),
         })),
     },
   };

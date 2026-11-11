@@ -1,11 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import {
-  APP_BOT_LOGO_SELECT,
-  agentFaceUrl,
-  appBotAvatarUrl,
-} from "#src/server/apps/app-logo.server";
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -74,7 +69,7 @@ export function mentionables(
             handle: row.agent!.name,
             label: row.agent!.displayName?.trim() || row.agent!.name,
             description: row.agent!.description.trim(),
-            avatarUrl: appBotAvatarUrl(row.agent!.appBot) ?? agentFaceUrl(row.agent!),
+            avatarUrl: agentFaceUrl(row.agent!),
             mentionScore: mentionScores.get(`agent:${row.agent!.id}`) ?? 0,
           },
     )
@@ -219,7 +214,7 @@ export async function mentionOutsiders(
       handle: agent.name,
       label: agent.displayName?.trim() || agent.name,
       description: agent.description.trim(),
-      avatarUrl: appBotAvatarUrl(agent.appBot) ?? agentAvatarUrl(agent.id, agent.avatarMascot),
+      avatarUrl: agentFaceUrl(agent),
       mentionScore: 0,
       outsider: true as const,
     })),

@@ -1,3 +1,4 @@
+import type { Prisma } from "#src/generated/prisma/client";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import {
   PROFILE_IMAGE_STYLES,
@@ -44,28 +45,23 @@ export function appLogoObjectKey(ownerWorkspaceId: string, appKey: string): stri
  * mascot the bot's id chooses. Null without a logo — the surface's monogram stands
  * in, as every app surface does; the mascot never does.
  */
-export function appBotAvatarUrl(
+function appBotAvatarUrl(
   bot:
     | {
-        installation?: {
+        installation: {
           app: { key: string; ownerWorkspaceId: string; logoObjectKey: string | null };
         };
-        appBot?: {
-          installation: {
-            app: { key: string; ownerWorkspaceId: string; logoObjectKey: string | null };
-          };
-        } | null;
       }
     | null
     | undefined,
 ): string | null {
-  const app = bot?.installation?.app ?? bot?.appBot?.installation.app;
+  const app = bot?.installation.app;
   return app ? appLogoUrl(app.ownerWorkspaceId, app.key, app.logoObjectKey) : null;
 }
 
 /** The `appBot` select every read that draws an app bot's face shares: through the bot's
  * installation to the app that owns the logo. Spread it into the agent select, and read the
- * face with `appBotAvatarUrl(bot) ?? mascot`. */
+ * face with `agentFaceUrl`. */
 export const APP_BOT_LOGO_SELECT = {
   select: {
     installation: {
@@ -74,12 +70,11 @@ export const APP_BOT_LOGO_SELECT = {
   },
 } as const;
 
-/** The app behind a bot row selected with `APP_BOT_LOGO_SELECT`. */
-export type AppBotLogoRow = {
-  appBot: {
-    installation: { app: { key: string; ownerWorkspaceId: string; logoObjectKey: string | null } };
-  } | null;
-};
+/** An agent row selected with `APP_BOT_LOGO_SELECT`: the bot, its installation and the app that
+ * owns the logo. */
+export type AppBotLogoRow = Prisma.AgentGetPayload<{
+  select: { appBot: typeof APP_BOT_LOGO_SELECT };
+}>;
 
 /**
  * The face an Agent shows on the server: an app's bot wears its app's logo, any other Agent the
@@ -90,11 +85,7 @@ export type AppBotLogoRow = {
 export function agentFaceUrl(agent: {
   id: string;
   avatarMascot?: string | null;
-  appBot?: {
-    installation: { app: { key: string; ownerWorkspaceId: string; logoObjectKey: string | null } };
-  } | null;
+  appBot?: AppBotLogoRow["appBot"];
 }): string {
-  const app = agent.appBot?.installation.app;
-  const logo = app ? appLogoUrl(app.ownerWorkspaceId, app.key, app.logoObjectKey) : null;
-  return logo ?? agentAvatarUrl(agent.id, agent.avatarMascot);
+  return appBotAvatarUrl(agent.appBot) ?? agentAvatarUrl(agent.id, agent.avatarMascot);
 }

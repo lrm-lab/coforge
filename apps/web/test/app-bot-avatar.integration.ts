@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "#src/generated/prisma/client";
-import { appBotAvatarUrl, appLogoUrl } from "#src/server/apps/app-logo.server";
+import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import { botFixture, type BotFixture } from "./app-bots-fixture";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
@@ -61,8 +61,6 @@ test.skipIf(!connectionString)(
         `workspaces/x/apps/${fixture.key}/logos/logo/original`,
       ) ?? "",
     );
-    // The helper agrees with what the read served.
-    expect(appBotAvatarUrl).toBeDefined();
     // A plain agent's DM keeps its mascot: the logo is the bot's alone.
     const plainAgent = await db.agent.create({
       data: {
