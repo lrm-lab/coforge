@@ -1,26 +1,26 @@
-import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { ArrowLeft } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { backTargetOf } from "#src/components/layout/tab-home";
+import { backTargetOf, sectionOf } from "#src/components/layout/tab-home";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { splitWorkspacePath } from "#src/features/workspaces/workspace-url";
+import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { m } from "#src/paraglide/messages";
 
 /**
  * An inner page's way out on a phone, where the tab bar is hidden: back to the tab home the page
  * belongs to (`backTargetOf`), else one step back in the app's own history, else the Chat list.
- * A desktop has the sidebar, so it never shows there.
+ * A desktop has the sidebar, so it never shows there. The page is read when pressed, so the
+ * button does not re-render on every navigation.
  */
 export function PageBackButton() {
   const router = useRouter();
   const navigate = useNavigate();
   const workspaceSlug = useWorkspaceSlug();
-  const target = useRouterState({
-    select: (state) =>
-      backTargetOf(splitWorkspacePath(state.location.pathname)?.rest.split("/")[1] ?? ""),
-  });
   const goBack = () => {
+    const target = backTargetOf(
+      sectionOf(router.state.location.pathname, workspacePath(workspaceSlug)),
+    );
     if (target === "workspace")
       void navigate({ to: "/w/$workspaceSlug/workspace", params: { workspaceSlug } });
     else if (target === "me")

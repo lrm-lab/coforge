@@ -11,7 +11,7 @@ type WorkspaceHubItem = {
 /**
  * What the phone's tab pages take from `AppShell`, which owns the nav items, the Workspace
  * switcher and the signed-in user: the Workspace tab's rows, the Me page's identity and sign-out,
- * the switcher the header's mark opens, and whether Chat's list is showing.
+ * and the switcher the header's mark opens.
  */
 export type PhoneShell = {
   /** The Workspace switcher with the CoForge mark as its trigger. */
@@ -20,10 +20,13 @@ export type PhoneShell = {
   workspaceItems: readonly WorkspaceHubItem[];
   user: { name: string; email: string | null; avatarUrl?: string | null };
   onSignOut: () => Promise<void> | void;
-  setChatListOpen: (open: boolean) => void;
 };
 
 export const PhoneShellContext = createContext<PhoneShell | null>(null);
+
+/** How a conversation page tells the shell whether Chat's list is on screen. A context of its own:
+ * the setter never changes, so reporting re-renders none of the tab pages. */
+export const ChatListOpenContext = createContext<((open: boolean) => void) | null>(null);
 
 /** The shell's phone context; the tab pages render only inside `AppShell`. */
 export function usePhoneShell(): PhoneShell {
@@ -35,7 +38,7 @@ export function usePhoneShell(): PhoneShell {
 /** Tells the shell that Chat's list is on screen, which a conversation's address does not say:
  * its back arrow brings the list back over it. */
 export function useReportChatListOpen(open: boolean) {
-  const setChatListOpen = useContext(PhoneShellContext)?.setChatListOpen;
+  const setChatListOpen = useContext(ChatListOpenContext);
   useEffect(() => {
     setChatListOpen?.(open);
     return () => setChatListOpen?.(false);

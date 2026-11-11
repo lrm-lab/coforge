@@ -27,15 +27,15 @@ export function WorkspaceSwitcher({
   current,
   onSelect,
   onCreate,
-  trigger = "name",
+  markOnly = false,
 }: {
   workspaces: WorkspaceOption[];
   current: WorkspaceOption | null;
   onSelect?: (slug: string) => Promise<void> | void;
   onCreate?: (input: CreateWorkspaceInput) => Promise<void>;
-  /** What opens the menu: the Workspace's name (the desktop top bar), or the CoForge mark alone
-   * (a phone's tab home header, which has no room for the name). */
-  trigger?: "name" | "mark";
+  /** The button is the CoForge mark and the Workspace's name (the desktop top bar), or the mark
+   * alone (a phone's tab home header, which has no room for the name). */
+  markOnly?: boolean;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const toast = useAppToast();
@@ -52,27 +52,29 @@ export function WorkspaceSwitcher({
   return (
     <>
       <Dropdown.Root>
-        {trigger === "mark" ? (
-          <AriaButton
-            aria-label={m.workspace_switcher()}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg outline-focus-ring transition-colors duration-100 ease-linear hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            <CoForgeMark className="size-5" />
-          </AriaButton>
-        ) : (
-          <AriaButton
-            aria-label={m.workspace_switcher()}
-            className="flex h-8 max-w-full min-w-0 items-center gap-1 rounded-lg bg-transparent px-1.5 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-brand"
-          >
-            <span
-              data-workspace-name
-              className="min-w-0 truncate text-sm font-semibold text-primary"
-            >
-              {label}
-            </span>
-            <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-          </AriaButton>
-        )}
+        <AriaButton
+          aria-label={m.workspace_switcher()}
+          className={cx(
+            "flex h-8 min-w-0 shrink-0 items-center rounded-lg outline-focus-ring transition-colors duration-100 ease-linear hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2",
+            markOnly ? "w-8 justify-center" : "max-w-full shrink gap-2 px-1.5 text-left",
+          )}
+        >
+          <CoForgeMark className="size-5 shrink-0" />
+          {!markOnly && (
+            <>
+              <span
+                data-workspace-name
+                className="min-w-0 truncate text-sm font-semibold text-primary"
+              >
+                {label}
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                className="-ml-1 size-4 shrink-0 text-fg-quaternary"
+              />
+            </>
+          )}
+        </AriaButton>
         <Dropdown.Popover
           placement="bottom start"
           offset={6}

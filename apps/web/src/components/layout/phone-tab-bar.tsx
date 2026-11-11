@@ -33,7 +33,7 @@ export function PhoneTabBar({
   base,
   user,
 }: {
-  current: TabHome | null;
+  current: TabHome;
   chatHref: string;
   activityHref: string;
   /** The Activity nav item's unread state: its count when the server counts, else whether the
@@ -95,7 +95,7 @@ export function PhoneTabBar({
   return (
     <nav
       aria-label={m.navigation_label()}
-      className="shrink-0 border-t border-secondary bg-sidebar pb-safe-bottom lg:hidden"
+      className="shrink-0 border-t border-secondary bg-sidebar pb-safe-bottom"
     >
       <ul className="grid grid-cols-4">
         {tabs.map(({ key, label, href, icon, badge, unreadText }) => {

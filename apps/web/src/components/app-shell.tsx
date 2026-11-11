@@ -18,10 +18,14 @@ import type { NavItemType } from "#src/components/application/app-navigation/con
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
 import { SidebarExpanded } from "#src/components/layout/sidebar/sidebar-expanded";
-import { PhoneShellContext, type PhoneShell } from "#src/components/layout/phone-shell";
+import {
+  ChatListOpenContext,
+  PhoneShellContext,
+  type PhoneShell,
+} from "#src/components/layout/phone-shell";
 import { PhoneTabBar } from "#src/components/layout/phone-tab-bar";
 import { ShellLinks } from "#src/components/layout/shell-links";
-import { tabHomeOf } from "#src/components/layout/tab-home";
+import { sectionOf, tabHomeOf } from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
 import {
@@ -40,7 +44,9 @@ import type { CreateWorkspaceInput } from "#src/features/workspaces/create-works
 import { useReportActivityUnread, useWorkspaceTabTitle } from "#src/lib/browser-tab";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
-import { TopBarBusyAgents } from "#src/features/agents/shell-busy-agents";
+import { ShellBusyAgents } from "#src/features/agents/shell-busy-agents";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { SearchField } from "#src/features/search/search-field";
 import { AppTopBar } from "#src/components/layout/app-top-bar";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
@@ -101,72 +107,76 @@ function useNavItems(
   /** The phone's tab bar carries this item itself; the Workspace tab lists the rest. */
   tab?: "chat" | "activity";
 })[] {
-  const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
   // The number when the server counts some, else the dot while anything is unread (an item the
   // count leaves out, such as a Task, or a server that counts nothing).
   const unreadCount =
     activity.unreadCount && activity.unreadCount > 0 ? activity.unreadCount : undefined;
-  const activityBadge =
-    unreadCount !== undefined ? (
-      <>
-        <UnreadBadge count={unreadCount} />
-        {/* The badge is hidden from assistive tech, so the row names its count here. */}
-        <span className="sr-only">{m.conversation_thread_unread({ count: unreadCount })}</span>
-      </>
-    ) : activity.hasUnread ? (
-      <UnreadDot className="ml-auto" />
-    ) : undefined;
+  const { hasUnread } = activity;
+  // The Records link goes back to the page last open there, which changes as the person moves.
   const recordsHref = recordsNavHref(workspaceId);
-  const item = (section: string) => ({
-    bareHref: `${base}/${section}`,
-    href: localizeHref(`${base}/${section}`),
-  });
-  return [
-    {
-      label: m.navigation_chat(),
-      bareHref: base,
-      href: localizeHref(base),
-      sections: CHAT_SECTIONS,
-      icon: MessageChatSquare,
-      tab: "chat" as const,
-    },
-    {
-      label: m.navigation_activity(),
-      ...item("activity"),
-      icon: Activity,
-      badge: activityBadge,
-      unreadCount,
-      tab: "activity" as const,
-    },
-    ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
-    // What the Workspace shares sits under its own heading, apart from the viewer's own
-    // conversations and activity.
-    {
-      label: m.projects_title(),
-      ...item("projects"),
-      icon: Folder,
-      groupLabel: m.navigation_workspace_group(),
-    },
-    {
-      label: m.navigation_agents(),
-      ...item("members"),
-      sections: ["members", "agent"],
-      icon: Users,
-    },
-    {
-      label: m.navigation_records(),
-      bareHref: `${base}/records`,
-      href: localizeHref(`${base}${recordsHref}`),
-      icon: FileText,
-      badge: recordsDot,
-    },
-    {
-      label: m.navigation_computers(),
-      ...item("computers"),
-      sections: ["computers", "computer"],
-      icon: Monitor,
-    },
-  ];
+  return useMemo(() => {
+    const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
+    const activityBadge =
+      unreadCount !== undefined ? (
+        <>
+          <UnreadBadge count={unreadCount} />
+          {/* The badge is hidden from assistive tech, so the row names its count here. */}
+          <span className="sr-only">{m.conversation_thread_unread({ count: unreadCount })}</span>
+        </>
+      ) : hasUnread ? (
+        <UnreadDot className="ml-auto" />
+      ) : undefined;
+    const item = (section: string) => ({
+      bareHref: `${base}/${section}`,
+      href: localizeHref(`${base}/${section}`),
+    });
+    return [
+      {
+        label: m.navigation_chat(),
+        bareHref: base,
+        href: localizeHref(base),
+        sections: CHAT_SECTIONS,
+        icon: MessageChatSquare,
+        tab: "chat" as const,
+      },
+      {
+        label: m.navigation_activity(),
+        ...item("activity"),
+        icon: Activity,
+        badge: activityBadge,
+        unreadCount,
+        tab: "activity" as const,
+      },
+      ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
+      // What the Workspace shares sits under its own heading, apart from the viewer's own
+      // conversations and activity.
+      {
+        label: m.projects_title(),
+        ...item("projects"),
+        icon: Folder,
+        groupLabel: m.navigation_workspace_group(),
+      },
+      {
+        label: m.navigation_agents(),
+        ...item("members"),
+        sections: ["members", "agent"],
+        icon: Users,
+      },
+      {
+        label: m.navigation_records(),
+        bareHref: `${base}/records`,
+        href: localizeHref(`${base}${recordsHref}`),
+        icon: FileText,
+        badge: recordsDot,
+      },
+      {
+        label: m.navigation_computers(),
+        ...item("computers"),
+        sections: ["computers", "computer"],
+        icon: Monitor,
+      },
+    ];
+  }, [base, recordsPreview, aiWorkbench, unreadCount, hasUnread, recordsHref]);
 }
 
 export function AppShell({
@@ -217,11 +227,13 @@ export function AppShell({
   useReportActivityUnread(activityAttention.hasUnread, activityAttention.unreadCount);
   useWorkspaceTabTitle(currentWorkspace.name);
   const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
-  const section = pathname.slice(base.length).split("/")[1] ?? "";
+  const section = sectionOf(pathname, base);
   // The phone's tab bar shows on a tab home only; Chat's list is on screen without its own address
   // when a conversation's back arrow brings it back, which the page reports.
   const [chatListOpen, setChatListOpen] = useState(false);
   const tabHome = tabHomeOf({ section, search, chatListOpen });
+  // The tab bar is mounted on a phone's tab home only, never hidden by CSS on a desktop.
+  const phone = !useBreakpoint("lg");
   const activeUrl = navItems.find((item) =>
     item.sections
       ? item.sections.includes(section)
@@ -237,82 +249,107 @@ export function AppShell({
   );
   const chatItem = navItems.find((item) => item.tab === "chat");
   const activityItem = navItems.find((item) => item.tab === "activity");
-  const phoneShell: PhoneShell = {
-    workspaceSwitcher: (
-      <WorkspaceSwitcher
-        workspaces={workspaces}
-        current={currentWorkspace}
-        onSelect={onSelectWorkspace}
-        onCreate={onCreateWorkspace}
-        trigger="mark"
-      />
-    ),
-    workspaceItems: navItems.filter(
-      (item): item is typeof item & { href: string } => !item.tab && item.href !== undefined,
-    ),
-    user,
-    onSignOut,
-    setChatListOpen,
-  };
+  const tabBar = phone && tabHome && chatItem?.href && activityItem?.href ? tabHome : null;
+  // The Workspace layout hands its handlers and user over inline, so the tab pages' context keeps
+  // them stable itself: it changes only with what the pages show.
+  const selectWorkspace = useLatestCallback(onSelectWorkspace);
+  const createWorkspace = useLatestCallback(onCreateWorkspace);
+  const signOut = useLatestCallback(onSignOut);
+  const { name, email, avatarUrl } = user;
+  const phoneShell = useMemo<PhoneShell>(
+    () => ({
+      workspaceSwitcher: (
+        <WorkspaceSwitcher
+          workspaces={workspaces}
+          current={currentWorkspace}
+          onSelect={selectWorkspace}
+          onCreate={createWorkspace}
+          markOnly
+        />
+      ),
+      workspaceItems: navItems.filter(
+        (item): item is typeof item & { href: string } => !item.tab && item.href !== undefined,
+      ),
+      user: { name, email, avatarUrl },
+      onSignOut: signOut,
+    }),
+    [
+      workspaces,
+      currentWorkspace,
+      selectWorkspace,
+      createWorkspace,
+      navItems,
+      name,
+      email,
+      avatarUrl,
+      signOut,
+    ],
+  );
 
   return (
     <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>
       <PhoneShellContext value={phoneShell}>
-        {/* Clears the notch on a phone, and its home indicator unless the tab bar, which has its own
+        <ChatListOpenContext value={setChatListOpen}>
+          {/* Clears the notch on a phone, and its home indicator unless the tab bar, which has its own
         padding for it, is showing. */}
-        <div
-          className={cx(
-            "flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:bg-sidebar",
-            tabHome && "max-lg:pb-0!",
-          )}
-        >
-          <ShellLinks>
-            <AppTopBar
-              workspace={workspaceSwitcher}
-              agents={<TopBarBusyAgents />}
-              search={<SearchField />}
-              end={
-                <>
-                  <NotificationBell workspaceSlug={currentWorkspace.slug} />
-                  <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
-                </>
-              }
-            />
-          </ShellLinks>
-          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-            {/* `contents` keeps the sidebars direct flex items of this row. On desktop
-            `sidebar-collapsed` on <html> picks the expanded one or the rail; a phone has neither, its
-            tab bar below the content takes their place. */}
+          <div
+            className={cx(
+              "flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased lg:bg-sidebar",
+              !tabBar && "pb-safe-bottom",
+            )}
+          >
             <ShellLinks>
-              <SidebarExpanded activeUrl={activeUrl} items={navItems} footer={<WhatsNewRow />} />
-              <SidebarRail activeUrl={activeUrl} items={navItems} footer={<WhatsNewRailButton />} />
-            </ShellLinks>
-
-            {/* On desktop the content is one white card under the top bar, inset 8px from the sidebar's
-            background; a page made of several panels (Chat) divides the card with hairlines, never
-            separate cards, so what belongs together reads as one block. */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pt-0 lg:pl-0">
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl">
-                {children}
-              </div>
-            </div>
-          </div>
-          {tabHome && chatItem?.href && activityItem?.href && (
-            <ShellLinks>
-              <PhoneTabBar
-                current={tabHome}
-                chatHref={chatItem.href}
-                activityHref={activityItem.href}
-                activityUnread={{
-                  count: activityItem.unreadCount,
-                  lit: Boolean(activityItem.badge),
-                }}
-                base={base}
-                user={user}
+              <AppTopBar
+                workspace={workspaceSwitcher}
+                agents={<ShellBusyAgents placement="top-bar" />}
+                search={<SearchField />}
+                end={
+                  <>
+                    <NotificationBell workspaceSlug={currentWorkspace.slug} />
+                    <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
+                  </>
+                }
               />
             </ShellLinks>
-          )}
-        </div>
+            <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+              {/* `contents` keeps the sidebars direct flex items of this row. On desktop
+            `sidebar-collapsed` on <html> picks the expanded one or the rail; a phone has neither, its
+            tab bar below the content takes their place. */}
+              <ShellLinks>
+                <SidebarExpanded activeUrl={activeUrl} items={navItems} footer={<WhatsNewRow />} />
+                <SidebarRail
+                  activeUrl={activeUrl}
+                  items={navItems}
+                  footer={<WhatsNewRailButton />}
+                />
+              </ShellLinks>
+
+              {/* On desktop the content is one white card under the top bar, inset 8px from the sidebar's
+            background; a page made of several panels (Chat) divides the card with hairlines, never
+            separate cards, so what belongs together reads as one block. */}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pt-0 lg:pl-0">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl">
+                  {children}
+                </div>
+              </div>
+            </div>
+            {tabBar && chatItem?.href && activityItem?.href && (
+              <ShellLinks>
+                <PhoneTabBar
+                  current={tabBar}
+                  chatHref={chatItem.href}
+                  activityHref={activityItem.href}
+                  activityUnread={{
+                    count: activityItem.unreadCount,
+                    lit: Boolean(activityItem.badge),
+                  }}
+                  base={base}
+                  user={user}
+                />
+              </ShellLinks>
+            )}
+          </div>
+        </ChatListOpenContext>
       </PhoneShellContext>
     </SystemNotificationsProvider>
   );
