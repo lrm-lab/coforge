@@ -258,6 +258,11 @@ export function observeRuntimeEvent(
   // there, not in the provider. Remembered on the launch so a process exit that follows without
   // an intervening `completed` can report `runtime_crashed` instead of a plain `idle` exit.
   if (event.type === "error") {
+    // A runtime that is being stopped on purpose — a configuration push taking effect on an idle
+    // Agent, an immediate restart, a person's Stop — reports its own teardown as an error. That is
+    // the stop, not a failure: it must not classify, hold deliveries for a retry, or put an error
+    // in the Activity, and it must not become the `crashDetail` a later exit would report (#35).
+    if (launch.stopping) return;
     launch.crashDetail = event;
     ports.phaseBookkeeping.compactionError(agentId, launch, event.message);
     // Classified once here: the Activity's fallback class/reason and this failure's retry
