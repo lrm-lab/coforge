@@ -16,8 +16,11 @@ import { logStalledRecovery } from "./agent-failure-logs";
 import { idleBlocker, type ColdIdleAgent } from "./cold-idle-sweep";
 import type { DaemonIdleFacts } from "./agent-idle-facts";
 import type { BusyActivity } from "./agent-activity-publisher";
-import { waitsOnProvider, type DeliveryHoldReason } from "./agent-delivery-gate";
+import type { DeliveryHoldReason } from "./agent-delivery-gate";
 import type { LaunchRequest } from "./runtime-launch-types";
+import { stalledRuntime, type StalledRuntime } from "./runtime-release-stalled";
+
+export type { StalledRuntime } from "./runtime-release-stalled";
 import {
   coldIdleRuntimePlan,
   configApplyRuntimePlan,
@@ -28,10 +31,8 @@ import {
 } from "./runtime-release-plans";
 import {
   STALLED_RECOVERY_EXIT_TIMEOUT_MS,
-  stalledRecoveryBasis,
   unattendedResumePrompt,
   type ProviderProgress,
-  type StalledRecoveryBasis,
 } from "./stalled-recovery";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -46,15 +47,6 @@ export type ReleasableLaunch = {
   toolCalls?: ToolCallLedger;
   backgroundTasks?: OutstandingBackgroundTasks;
 };
-
-/** A launch found stalled, and what its restart needs. */
-export type StalledRuntime<L extends ReleasableLaunch> = Readonly<{
-  launch: L;
-  session: AgentSession;
-  restart: AgentRestartConfig;
-  /** Why it was judged stalled, and on which facts (`stalled-recovery.ts`). */
-  basis: StalledRecoveryBasis;
-}>;
 
 /** What a wake relaunches from: the remembered restart config, and the first turn to give it. */
 export type WakeRestart = AgentRestartConfig & Readonly<{ resumePrompt?: string }>;
@@ -140,38 +132,10 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     return this.#recovering.has(agentId);
   }
 
-  /** What a stalled-provider restart works on, when a message arriving now should restart this
-   * Agent's provider (`stalled-recovery.ts`): its busy turn has been silent too long with nothing
-   * still running. */
+  /** What a stalled-provider restart works on, or undefined when this Agent's runtime is not
+   * stalled (`stalled-recovery.ts`). */
   stalled(agentId: string): StalledRuntime<L> | undefined {
-    const launch = this.#ports.launch(agentId);
-    const session = this.#ports.runtime(agentId)?.session;
-    const restart = this.#ports.restartConfig(agentId);
-    const progress = launch?.progress;
-    if (!launch || !progress || !session || !restart) return undefined;
-    const basis = stalledRecoveryBasis(
-      {
-        turnBusy: this.#ports.lastBusy(agentId)?.launch === launch && session.hasLiveTurn !== false,
-        // A waiting delivery whose submitted turn never began reports no live turn: that is the
-        // "queued but no new round started" case, not a turn to wait on.
-        liveTurn: session.hasLiveTurn === true,
-        silentForMs: progress.silentForMs(),
-        queuedForMs: this.#ports.queuedForMs(agentId),
-        hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
-        resumable: this.#ports.resumable(agentId),
-        noticeAcceptedForMs: ageOf(this.#ports.noticeAcceptedAt?.(agentId)),
-        recoveryHold: waitsOnProvider(this.#ports.explicitHold?.(agentId)),
-        // The running session declares whether a notice can steer its live turn; an adapter
-        // that does not declare is read as queue-only (the longer fuse).
-        steersBusyTurn: session.steersBusyTurn === true,
-        lastAgentActionForMs: Math.min(
-          progress.silentForMs(),
-          ageOf(this.#ports.lastAgentActionAt?.(agentId)) ?? Number.POSITIVE_INFINITY,
-        ),
-      },
-      { lastEventAtMs: progress.lastEventAtMs },
-    );
-    return basis ? { launch, session, restart, basis } : undefined;
+    return stalledRuntime(this.#ports, agentId);
   }
 
   /**
@@ -427,6 +391,3 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
 }
 
 /** Milliseconds since `atMs`, or undefined for a clock that never fired. */
-function ageOf(atMs: number | undefined): number | undefined {
-  return atMs === undefined ? undefined : Date.now() - atMs;
-}
