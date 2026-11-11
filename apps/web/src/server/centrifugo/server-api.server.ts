@@ -63,6 +63,21 @@ export type CentrifugoConnections = {
 const CENTRIFUGO_REQUEST_TIMEOUT_MS = 5_000;
 
 /**
+ * Whether the Centrifugo server API's environment is present. `createCentrifugoServerApi` throws
+ * without it, so an optional consumer checks this before installing anything that would build one
+ * (the features broadcast does: a deployment without Centrifugo still has to boot). The predicate
+ * narrows the two variables to `string` for the caller that goes on to use them.
+ */
+export function centrifugoServerApiConfigured(
+  env: NodeJS.ProcessEnv = process.env,
+): env is NodeJS.ProcessEnv & {
+  COFORGE_CENTRIFUGO_API_URL: string;
+  COFORGE_CENTRIFUGO_API_KEY: string;
+} {
+  return Boolean(env.COFORGE_CENTRIFUGO_API_URL && env.COFORGE_CENTRIFUGO_API_KEY);
+}
+
+/**
  * Server-only adapter for Centrifugo's HTTP server API. Business code never builds its HTTP body.
  * Every call carries a deadline, so an unreachable Centrifugo rejects (`TimeoutError`) instead of
  * holding the request that published.
@@ -71,9 +86,10 @@ export function createCentrifugoServerApi(
   env = process.env,
   { timeoutMs = CENTRIFUGO_REQUEST_TIMEOUT_MS }: { timeoutMs?: number } = {},
 ): CentrifugoServerApi & CentrifugoConnections & CentrifugoStreams {
+  if (!centrifugoServerApiConfigured(env))
+    throw new Error("Centrifugo server API is not configured");
   const endpoint = env.COFORGE_CENTRIFUGO_API_URL;
   const apiKey = env.COFORGE_CENTRIFUGO_API_KEY;
-  if (!endpoint || !apiKey) throw new Error("Centrifugo server API is not configured");
   const serverApiUrl = endpoint;
   const serverApiKey = apiKey;
   async function call(method: string, params: Record<string, unknown>) {

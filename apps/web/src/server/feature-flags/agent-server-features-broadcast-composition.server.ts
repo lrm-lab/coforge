@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
+  centrifugoServerApiConfigured,
   createCentrifugoServerApi,
   daemonControlChannel,
   type CentrifugoServerApi,
@@ -26,10 +27,21 @@ export function createAgentServerFeaturesBroadcaster(
 let installed = false;
 let broadcastQueue = Promise.resolve();
 
-/** Installs the process-wide reload hook. A failed broadcast never invalidates the flag reload. */
-export function installAgentServerFeaturesBroadcast(): () => void {
+/** Installs the process-wide reload hook. A failed broadcast never invalidates the flag reload.
+ * Without a configured Centrifugo server API there is no daemon channel to publish on, so the
+ * broadcast stays uninstalled rather than failing the boot that called this. */
+export function installAgentServerFeaturesBroadcast(env = process.env): () => void {
   if (installed) return () => {};
   installed = true;
+  if (!centrifugoServerApiConfigured(env)) {
+    console.info(
+      JSON.stringify({
+        event: "feature_flags:agent_server_features_broadcast_disabled",
+        reason: "centrifugo_server_api_not_configured",
+      }),
+    );
+    return () => {};
+  }
   const publish = () => {
     const db = getDatabaseClient();
     if (!db) return;
