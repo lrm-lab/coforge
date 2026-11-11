@@ -115,7 +115,7 @@ export async function readOwnQueueTasks(
   return rows.map((row) => ({
     id: row.id,
     number: row.number,
-    status: storedTaskStatus(row.status),
+    status: storedTaskStatus(row.status, { number: row.number }),
     priority: storedTaskPriority(row.priority),
     blocked: relationsOf(relations, row.id).blocked,
     createdAt: row.createdAt,

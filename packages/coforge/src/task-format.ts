@@ -149,15 +149,27 @@ export function formatMyTaskList(result: TaskResult, status: TaskListStatus): st
       // The section's trailing blank separates it from status rows; with none, drop it.
       ...(queueSection.length ? ["", ...queueSection.slice(0, -1)] : []),
     ].join("\n");
-  const sections = TASK_STATUSES.flatMap((section) => {
-    const rows = tasks.filter((task) => task.status === section);
-    return rows.length
+  // A status this build does not know — a newer server's — gets its own section, so a Task is
+  // never dropped from the list for its vocabulary being newer than the CLI's (task #61).
+  const known = new Set<string>(TASK_STATUSES);
+  const others = tasks.filter((task) => !known.has(task.status));
+  const sections = [
+    ...TASK_STATUSES.flatMap((section) => {
+      const rows = tasks.filter((task) => task.status === section);
+      return rows.length
+        ? [
+            `### ${section} (${rows.length})`,
+            ...rows.map((task) => ownRow(task, queuePosition.get(task.id))),
+          ]
+        : [];
+    }),
+    ...(others.length
       ? [
-          `### ${section} (${rows.length})`,
-          ...rows.map((task) => ownRow(task, queuePosition.get(task.id))),
+          `### other (${others.length})`,
+          ...others.map((task) => ownRow(task, queuePosition.get(task.id))),
         ]
-      : [];
-  });
+      : []),
+  ];
   return [...header, ...queueSection, ...sections].join("\n");
 }
 

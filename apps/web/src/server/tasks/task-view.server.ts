@@ -159,7 +159,7 @@ export function storedTaskPriority(value: string): TaskPriority {
   return value as TaskPriority;
 }
 
-export function storedTaskStatus(value: string): TaskStatus {
+export function storedTaskStatus(value: string, context?: { number?: number }): TaskStatus {
   switch (value) {
     case "todo":
     case "in_progress":
@@ -168,7 +168,18 @@ export function storedTaskStatus(value: string): TaskStatus {
     case "closed":
       return value;
     default:
-      throw new AppError("INTERNAL_ERROR");
+      // A status this build does not know — a newer server's, met while an older instance is
+      // still serving a rolling deploy — passes through as its own value, so reads do not fail.
+      // The newer vocabulary renders as its raw key until this build updates; the warn keeps the
+      // window visible rather than silently passed over.
+      console.warn(
+        JSON.stringify({
+          event: "tasks:unknown_status_passthrough",
+          status: value,
+          ...(context?.number !== undefined ? { taskNumber: context.number } : {}),
+        }),
+      );
+      return value as TaskStatus;
   }
 }
 
@@ -323,7 +334,7 @@ export function taskView(
     title: readTaskText(task.title, reader, taskMentions(task)),
     // A card read leaves `description` out of its row; the key is absent, not undefined.
     ...(task.description !== undefined && { description: task.description }),
-    status: storedTaskStatus(task.status),
+    status: storedTaskStatus(task.status, { number: task.number }),
     priority: storedTaskPriority(task.priority),
     revision: task.revision,
     ...relations,

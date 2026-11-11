@@ -15,7 +15,7 @@ import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
 import { actionCardPreviewText } from "#src/features/conversations/action-card-preview";
 import { systemNoticeText } from "#src/features/conversations/system-notice-text";
-import { TASK_STATUS_COLOR } from "#src/features/tasks/task-workflow";
+import { taskStatusColor } from "#src/features/tasks/task-workflow";
 import { cn } from "#src/lib/utils";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -347,7 +347,7 @@ function ActivityItemBadges({
         </Badge>
       )}
       {task && (
-        <Badge type="color" size="sm" color={TASK_STATUS_COLOR[task.status].badge}>
+        <Badge type="color" size="sm" color={taskStatusColor(task.status).badge}>
           #{task.number}
           {task.ownerName ? (
             // The owner's face stands in for the "@" the name used to start with (task #521).

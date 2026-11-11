@@ -81,7 +81,7 @@ function claimConflict(task: SelectedTask): TaskClaimConflict {
       name: owner.handle,
       ...(owner.deleted && { deleted: true }),
     },
-    taskStatus: storedTaskStatus(task.status),
+    taskStatus: storedTaskStatus(task.status, { number: task.number }),
     claimedAt: task.claimedAt?.toISOString() ?? null,
     observedAt: new Date().toISOString(),
   };

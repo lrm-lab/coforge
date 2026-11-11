@@ -185,7 +185,7 @@ export async function readIdleTaskFacts(
     const review = own.find(
       (event) => event.eventType === "status_changed" && field(event.payload, "to") === "in_review",
     );
-    const status = storedTaskStatus(task.status);
+    const status = storedTaskStatus(task.status, { number: task.number });
     const blockers = dependencies.filter((row) => row.taskId === task.id);
     const blocked = blockers.some((row) => !finished(row.blocker.status));
     const done = blocked

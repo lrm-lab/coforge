@@ -167,3 +167,22 @@ test("An empty own list still states its coverage, and a missing field reads unk
     "Output: showing 0 of 0 visible matches · mode=unknown · truncated=unknown",
   ]);
 });
+
+test("A status the CLI does not know gets its own section instead of dropping the row (task #61)", () => {
+  const parked = task(11, {
+    status: "backlog" as TaskView["status"],
+    channelRef: "#general",
+    title: "Someday",
+  });
+  const text = formatMyTaskList(
+    {
+      tasks: [parked, task(2, { channelRef: "@ada" })],
+      coverage,
+      pagination: { mode: "complete", truncated: false },
+    },
+    undefined,
+  );
+  expect(text).toContain("### todo (1)");
+  expect(text).toContain("### other (1)");
+  expect(text).toContain("task #11 [backlog] prio=none by=@ada msg=11abcdef0-111 created=");
+});

@@ -35,7 +35,7 @@ import { TaskDescription } from "./task-description";
 import { TaskSection, type RelationPicker } from "./task-section";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
 import { isTaskStep } from "./task-popup-steps";
-import { statusLabel, TASK_STATUS_COLOR, type TaskControls } from "./task-workflow";
+import { statusLabel, taskStatusColor, type TaskControls } from "./task-workflow";
 import { useTaskRelationAccess, type DetailCommand } from "./use-task-relations";
 
 /** A Task card's "More actions" button, as the menu shows it and as the card's stand-in for the
@@ -106,7 +106,7 @@ export function TaskDetailMenu({
                     <span className="flex items-center gap-2">
                       <span
                         aria-hidden="true"
-                        className={`size-2 shrink-0 rounded-full ${TASK_STATUS_COLOR[status].dot}`}
+                        className={`size-2 shrink-0 rounded-full ${taskStatusColor(status).dot}`}
                       />
                       {statusLabel(status)}
                     </span>

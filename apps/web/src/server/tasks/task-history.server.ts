@@ -72,7 +72,10 @@ export function creationChanges(task: SelectedTask): TaskHistoryChange[] {
   const changes: TaskHistoryChange[] = [
     {
       eventType: "created",
-      payload: { taskNumber: task.number, status: storedTaskStatus(task.status) },
+      payload: {
+        taskNumber: task.number,
+        status: storedTaskStatus(task.status, { number: task.number }),
+      },
     },
   ];
   if (task.owner) changes.push(assigneeChange(task));
@@ -91,7 +94,10 @@ export function taskChanges(before: SelectedTask, after: SelectedTask): TaskHist
   if (before.status !== after.status)
     changes.push({
       eventType: "status_changed",
-      payload: { from: storedTaskStatus(before.status), to: storedTaskStatus(after.status) },
+      payload: {
+        from: storedTaskStatus(before.status, { number: before.number }),
+        to: storedTaskStatus(after.status, { number: after.number }),
+      },
     });
   if (before.priority !== after.priority)
     changes.push({
