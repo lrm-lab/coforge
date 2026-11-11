@@ -28,7 +28,7 @@ export const FEATURE_FLAGS = {
   "computer-release-channels":
     "Computers phase 1: honor the release channel reported by upgraded Computers; keep off until the upgraded cohort is verified",
   agentContextView:
-    "Agents: show the retained provider context view when the Computer advertises agent-context-view:v0",
+    "Agents: `coforge context search`/`read` on the Computer's agent-context-view:v0 capability",
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS;

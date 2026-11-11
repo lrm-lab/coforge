@@ -91,13 +91,17 @@ the cohort is healthy without reinstalling or changing the Computer data.
 
 ### Agent context view rollout
 
-`agentContextView` gates the Agent profile context view for the Computer owner and Workspace
-owners/admins. Keep it off until the Web
-receiver, the `agent-context-view:v0` capability lease, and the Computer's availability reports
-are deployed together. A disabled flag must not publish a request or expose the result route.
-The Web side is a start and a read Server Function (`agent-context-view.functions.ts`), polled
-through `awaitAgentContextView`, because the Computer's restore outlasts production's idle
-timeout.
+`agentContextView` is the switch for `coforge context search` and `coforge context read` — an
+Agent's own retained provider context, read through its Computer and the
+`agent-context-view:v0` capability, which the Daemon gates per Agent at launch and on a delivery
+that changes it — plus the Web-side request/result path
+(`agent-context-view.functions.ts`, the internal result route) that nothing renders today. It
+gates no page: the profile entry that used to show it was removed on purpose
+(`b48c6cc71`), and the server functions stay unused until something asks for them. The Web side
+is a start and a read Server Function, polled through `awaitAgentContextView`, because the
+Computer's restore outlasts production's idle timeout. Keep it off until the Web receiver, the
+capability lease and the Computer's availability reports are deployed together; a disabled flag
+must not publish a request or expose the result route.
 
 Every flag is boolean, with the variants `on` and `off` and `off` as the default variant.
 
