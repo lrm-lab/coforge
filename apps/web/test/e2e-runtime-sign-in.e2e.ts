@@ -5,6 +5,7 @@ import { RedisClient } from "bun";
 import { PrismaPg } from "@prisma/adapter-pg";
 import {
   RUNTIME_AUTH_CAPABILITY,
+  KIRO_FREE_AUTH_CAPABILITY,
   KIRO_IDENTITY_CENTER_AUTH_CAPABILITY,
   type RuntimeAuthLoginReport,
   type RuntimeAuthLogoutResult,
@@ -14,6 +15,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import {
   getRuntimeAuthCapabilityLease,
+  getKiroFreeCapabilityLease,
   getKiroIdentityCenterCapabilityLease,
 } from "#src/server/computers/runtime-auth-capability.server";
 import { userRuntimeAuth } from "#src/server/computers/runtime-auth-composition.server";
@@ -130,6 +132,8 @@ async function answerLogout(result: RuntimeAuthLogoutResult, seen: Set<string>) 
 beforeAll(async () => {
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    // The dev user's own seeded Workspace, not whichever a leftover test left first (task #82).
+    orderBy: { createdAt: "asc" },
     include: { workspace: true },
   });
   workspaceId = membership.workspaceId;
@@ -322,6 +326,55 @@ test("Kiro enterprise form starts the shared device-code flow and explains an ex
   const signInVisible = await page.evaluate(() => Array.from(document.querySelectorAll('[role="dialog"] button')).some(button => button.textContent?.trim() === "登录"));
   if (signInVisible) throw new Error("Windows must not show the enterprise login entry");
   ${shot("kiro-windows-no-enterprise")}
+ `);
+  browserPassed = true;
+}, 90_000);
+
+test("a Computer that can sign Kiro in free asks which account first; free starts with no form (task #87)", async () => {
+  browserPassed = false;
+  await db.computer.update({ where: { id: computerId }, data: { platform: "linux" } });
+  await getComputerStatusCache().put(scope(), true);
+  await getKiroIdentityCenterCapabilityLease().record(workspaceId, computerId, [
+    KIRO_IDENTITY_CENTER_AUTH_CAPABILITY,
+  ]);
+  await getKiroFreeCapabilityLease().record(workspaceId, computerId, [KIRO_FREE_AUTH_CAPABILITY]);
+  const startUrlShown = `document.querySelector('[role="dialog"]').innerText.includes("Start URL")`;
+  /** The radio's own input is hidden under its label, which takes the click. */
+  const choose = (value: string) =>
+    `await page.evaluate(() => document.querySelector('input[type=radio][value=${value}]').closest("label").click());`;
+  await step(`
+  await page.cdp("Emulation.clearDeviceMetricsOverride", {});
+  await page.goto(${JSON.stringify(pageUrl)});
+  await page.waitForSelector('li button[aria-label^="Kiro"]',{timeout:30000});
+  await page.click('li button[aria-label^="Kiro"]');
+  await page.click("loc=role:button[name='Sign In']");
+  await page.waitForSelector("input[type=radio][value=free]",{timeout:15000});
+  if (!(await page.evaluate(() => document.querySelector("input[type=radio][value=free]").checked)))
+    throw new Error("Free must be chosen first");
+  if (await page.evaluate(() => ${startUrlShown})) throw new Error("Free asks for no Start URL");
+  ${shot("kiro-choice-free-en")}
+  ${choose("pro")}
+  ${waitText("Start URL")}
+  ${shot("kiro-choice-enterprise-en")}
+  ${choose("free")}
+  await page.waitForFunction(() => !(${startUrlShown}), undefined, { timeout: 5000 });
+  await page.click("loc=css:[role=dialog] button[type=submit]");
+  // No daemon listens here, so the start answers "offline"; a Kiro start with neither an identity
+  // center nor the free license would have been refused as a bad request before that.
+  ${waitText("This Computer is offline.")}
+  await page.click('loc=css:button[aria-label="Close"]');
+  await page.cdp("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await page.goto(${JSON.stringify(pageUrl.replace("/en/", "/zh-CN/"))});
+  await page.waitForSelector('li button[aria-label^="Kiro"]',{timeout:30000});
+  await page.click('li button[aria-label^="Kiro"]');
+  await page.click("loc=role:button[name='登录']");
+  await page.evaluate(()=>document.documentElement.classList.add("dark-mode"));
+  await page.waitForSelector("input[type=radio][value=pro]",{timeout:15000});
+  ${choose("pro")}
+  ${waitText("AWS 区域")}
+  ${shot("kiro-choice-zh-dark-mobile")}
+  await page.click('loc=css:button[aria-label="关闭"]');
+  await page.cdp("Emulation.clearDeviceMetricsOverride", {});
  `);
   browserPassed = true;
 }, 90_000);
