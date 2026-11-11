@@ -80,7 +80,9 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     expect(pinnedRow).toContain("1 new");
     const [threadRow] = await evaluate<string[]>(rowsIn(todayRows));
     expect(threadRow).toContain("E2E pinned root");
-    expect(threadRow).toContain("#e2e-activity-pinned · ");
+    // Its channel by group avatar and name, no `#` (task #55).
+    expect(threadRow).toContain("e2e-activity-pinned · ");
+    expect(threadRow).not.toContain("#e2e-activity-pinned");
     expect(threadRow).not.toContain("E2E pinned hello");
     // Pinned, its rows, then the day's heading and its rows: since the Activity redesign (task
     // #30) the rest of the list groups by day, and every seeded message falls on "Today".

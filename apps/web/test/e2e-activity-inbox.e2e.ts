@@ -141,7 +141,9 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(rows[1]).toContain("E2E activity root");
     expect(rows[1]).toContain("@you");
     expect(rows[1]).toContain("1 new");
-    expect(rows[1]).toContain("#e2e-activity-inbox · Activity Peer: ");
+    // The thread's channel goes by its group avatar and name, no `#` (task #55).
+    expect(rows[1]).toContain("e2e-activity-inbox · Activity Peer: ");
+    expect(rows[1]).not.toContain("#e2e-activity-inbox");
     // Nothing is open, so there is no conversation area: the list spans the page.
     expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
     const fullWidth = await evaluate<number>(listColumnWidth);

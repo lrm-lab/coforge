@@ -7,6 +7,10 @@ import { paginated } from "#src/server/db/pagination.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import { managedAgentWhere } from "./agent-visibility.server";
 import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
+import {
+  channelListMembers,
+  type ChannelListMember,
+} from "#src/server/conversations/channel-list-preview.server";
 
 export const AGENT_REMINDER_PAGE_SIZE = 50;
 
@@ -28,6 +32,8 @@ export type AgentReminderListItem = {
         channelId: string;
         channelName: string;
         visibility: ChannelVisibility;
+        /** The channel's group avatar (task #55). */
+        members: ChannelListMember[];
         messageId: string;
         threadRootId: string | null;
       }
@@ -143,6 +149,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
                 channelId: conversation.id,
                 channelName: conversation.channelName,
                 visibility: channelVisibilityOf(conversation),
+                members: [] as ChannelListMember[],
                 messageId: row.messageId,
                 threadRootId: message.threadRootId,
               }
@@ -168,6 +175,14 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
           anchor,
         };
       });
+      // The anchoring channels' group avatars, in one read for the page.
+      const faces = await channelListMembers(db, viewer.workspaceId, [
+        ...new Set(
+          reminders.flatMap(({ anchor }) => (anchor?.kind === "channel" ? [anchor.channelId] : [])),
+        ),
+      ]);
+      for (const { anchor } of reminders)
+        if (anchor?.kind === "channel") anchor.members = faces.get(anchor.channelId) ?? [];
       return { reminders, hasMore: page.hasNextPage };
     },
   };

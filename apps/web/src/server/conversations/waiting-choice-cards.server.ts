@@ -2,6 +2,15 @@ import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { readableConversationWhere } from "./channel-read-access.server";
+import { channelListMembers, type ChannelListMember } from "./channel-list-preview.server";
+
+/** A channel a card is in or on: its group avatar's members with its name (task #55). */
+type WaitingCardChannel = {
+  id: string;
+  name: string;
+  visibility: ChannelVisibility;
+  members: ChannelListMember[];
+};
 
 /** One pending choice card the viewer may answer, as the Activity "waiting" list shows it. */
 export type WaitingChoiceCard = {
@@ -9,14 +18,14 @@ export type WaitingChoiceCard = {
   conversationId: string;
   kind: "choice" | "questions";
   /** The channel the card is in; null in a direct conversation or a Task's. */
-  channel: { name: string; visibility: ChannelVisibility } | null;
+  channel: WaitingCardChannel | null;
   /** The thread the card was posted in, when it is a reply. */
   threadRootId: string | null;
   /** The Task whose conversation the card is in: its number, and the channel it is on. */
   task: {
     conversationId: string;
     number: number;
-    channel: { name: string; visibility: ChannelVisibility } | null;
+    channel: WaitingCardChannel | null;
   } | null;
   prompt: string;
   options: { id: string; label: string }[];
@@ -31,7 +40,7 @@ export type WaitingChoiceCard = {
  * `payload.to`, the card's own commit rule), in a conversation they can read.
  */
 export async function waitingChoiceCards(
-  db: Pick<PrismaClient, "actionCard">,
+  db: PrismaClient,
   workspaceId: string,
   userId: string,
 ): Promise<WaitingChoiceCard[]> {
@@ -81,6 +90,26 @@ export async function waitingChoiceCards(
       preparedByAgent: { select: { id: true, displayName: true, avatarMascot: true } },
     },
   });
+  // Every channel's group avatar in one read with the cards, not one per card.
+  const channelIds = cards.flatMap(({ conversationId, conversation }) => [
+    ...(conversation.channelName ? [conversationId] : []),
+    ...(conversation.taskDiscussionOf?.conversation.channelName
+      ? [conversation.taskDiscussionOf.conversationId]
+      : []),
+  ]);
+  const members = await channelListMembers(db, workspaceId, [...new Set(channelIds)]);
+  const channelOf = (
+    id: string,
+    conversation: { channelName: string | null; visibility: string },
+  ): WaitingCardChannel | null =>
+    conversation.channelName
+      ? {
+          id,
+          name: conversation.channelName,
+          visibility: conversation.visibility as ChannelVisibility,
+          members: members.get(id) ?? [],
+        }
+      : null;
   return cards.map((card) => {
     const payload = card.payload as {
       prompt?: string;
@@ -93,12 +122,12 @@ export async function waitingChoiceCards(
       messageId: card.messageId,
       conversationId: card.conversationId,
       kind: card.kind as "choice" | "questions",
-      channel: channelOf({ channelName, visibility }),
+      channel: channelOf(card.conversationId, { channelName, visibility }),
       threadRootId: card.message.threadRootId,
       task: taskDiscussionOf && {
         conversationId: taskDiscussionOf.conversationId,
         number: taskDiscussionOf.number,
-        channel: channelOf(taskDiscussionOf.conversation),
+        channel: channelOf(taskDiscussionOf.conversationId, taskDiscussionOf.conversation),
       },
       prompt: payload.prompt ?? payload.questions?.[0]?.prompt ?? "",
       options: payload.options ?? [],
@@ -111,11 +140,4 @@ export async function waitingChoiceCards(
       createdAt: card.createdAt.toISOString(),
     };
   });
-}
-
-/** A channel's name and visibility; null for a direct conversation or a Task's. */
-function channelOf(conversation: { channelName: string | null; visibility: string }) {
-  return conversation.channelName
-    ? { name: conversation.channelName, visibility: conversation.visibility as ChannelVisibility }
-    : null;
 }

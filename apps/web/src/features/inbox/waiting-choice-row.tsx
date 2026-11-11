@@ -9,7 +9,7 @@ import { cancelActionCard } from "#src/features/conversations/action-cards.funct
 import { focusIgnore } from "#src/features/conversations/action-card-ignored";
 import { useUndoableIgnore } from "#src/features/conversations/use-undoable-ignore";
 import { choiceNumber } from "#src/features/conversations/choice-number";
-import { ChannelTitle } from "#src/features/conversations/channel-name";
+import { ChannelPlace } from "#src/features/conversations/channel-name";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
@@ -66,14 +66,15 @@ export function WaitingChoiceRow({
   }, [ignored]);
   const workspaceSlug = useWorkspaceSlug();
   const target = waitingChoiceTarget(card);
-  // Where it was asked: its channel, or a Task's, as "#channel · Task #N"; a DM goes unnamed.
+  // Where it was asked: its channel, or a Task's, as its group avatar and name, then "· Task #N"
+  // (task #55); a DM goes unnamed.
   const channel = card.task?.channel ?? card.channel;
   // A private channel with its lock, as everywhere a channel is named (task #375).
   const taskLabel = card.task && m.activity_inbox_waiting_task({ number: card.task.number });
   const place =
     channel || taskLabel ? (
       <>
-        {channel && <ChannelTitle {...channel} lockClassName="size-3.5" />}
+        {channel && <ChannelPlace {...channel} />}
         {channel && taskLabel && " · "}
         {taskLabel}
       </>
