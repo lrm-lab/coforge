@@ -10,11 +10,12 @@ import {
   type RefObject,
 } from "react";
 import { Heading } from "react-aria-components";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { LinkExternal01, XClose } from "@untitledui/icons";
 import {
   RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN,
-  type KiroIdentityCenterOptions,
+  type KiroLoginTarget,
   type RuntimeAuthProvider,
 } from "@lrm/coforge-sdk/internal";
 
@@ -31,6 +32,7 @@ import { Spinner } from "#src/components/ui/spinner";
 import { m } from "#src/paraglide/messages";
 import {
   cancelRuntimeAuthLogin,
+  readRuntimeAuthKiroFree,
   readRuntimeAuthLogin,
   startRuntimeAuthLogin,
 } from "./runtime-auth.functions";
@@ -73,7 +75,7 @@ const SIGN_IN_CATCHUP_INTERVAL_MS = 30_000;
  */
 export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: () => void }) {
   const [attempt, setAttempt] = useState(0);
-  const [kiroIdentityCenter, setKiroIdentityCenter] = useState<KiroIdentityCenterOptions>();
+  const [kiro, setKiro] = useState<KiroLoginTarget>();
   const [antigravityMethodId, setAntigravityMethodId] = useState<
     "oauth-personal" | "oauth-business"
   >();
@@ -90,20 +92,20 @@ export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: 
     >
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
         <Dialog className="text-left">
-          {target.provider === RUNTIME_PROVIDER.KIRO && !kiroIdentityCenter ? (
-            <KiroEnterpriseSignIn onStart={setKiroIdentityCenter} onClose={onClose} />
+          {target.provider === RUNTIME_PROVIDER.KIRO && !kiro ? (
+            <KiroChoice computerId={target.computerId} onStart={setKiro} onClose={onClose} />
           ) : target.provider === RUNTIME_PROVIDER.ANTIGRAVITY && !antigravityMethodId ? (
             <AntigravitySignIn onStart={setAntigravityMethodId} onClose={onClose} />
           ) : (
             <SignInAttempt
               key={attempt}
               {...target}
-              kiroIdentityCenter={kiroIdentityCenter}
+              kiro={kiro}
               antigravityMethodId={antigravityMethodId}
               closeAction={closeAction}
               onRetry={() => {
                 setAttempt((n) => n + 1);
-                setKiroIdentityCenter(undefined);
+                setKiro(undefined);
               }}
               onClose={onClose}
             />
@@ -114,18 +116,48 @@ export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: 
   );
 }
 
+/**
+ * Kiro's first step: the choice of a free or an enterprise account where the Computer can sign in
+ * free (task #87), else the enterprise form as it always was. A failed read counts as "cannot".
+ */
+function KiroChoice({
+  computerId,
+  onStart,
+  onClose,
+}: {
+  computerId: string;
+  onStart: (target: KiroLoginTarget) => void;
+  onClose: () => void;
+}) {
+  const read = useServerFn(readRuntimeAuthKiroFree);
+  const offerFree = useQuery({
+    queryKey: ["runtime-auth-kiro-free", computerId],
+    queryFn: () => read({ data: { computerId } }),
+    retry: false,
+  });
+  if (offerFree.isPending)
+    return (
+      <div className="flex min-h-40 items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  return (
+    <KiroEnterpriseSignIn offerFree={offerFree.data === true} onStart={onStart} onClose={onClose} />
+  );
+}
+
 function SignInAttempt({
   computerId,
   computerName,
   provider,
   runtimeName,
-  kiroIdentityCenter,
+  kiro,
   antigravityMethodId,
   closeAction,
   onRetry,
   onClose,
 }: Target & {
-  kiroIdentityCenter?: KiroIdentityCenterOptions;
+  kiro?: KiroLoginTarget;
   antigravityMethodId?: "oauth-personal" | "oauth-business";
   closeAction: RefObject<(() => void) | undefined>;
   onRetry: () => void;
@@ -188,7 +220,8 @@ function SignInAttempt({
       data: {
         computerId,
         provider,
-        ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}),
+        ...(kiro?.license === "pro" ? { kiroIdentityCenter: kiro.identityCenter } : {}),
+        ...(kiro ? { kiroLicense: kiro.license } : {}),
         ...(antigravityMethodId ? { antigravityMethodId } : {}),
       },
     })
