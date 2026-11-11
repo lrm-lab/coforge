@@ -5,12 +5,19 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * A phone's task list row (task #14): the title takes the row's width and wraps to two lines, the
  * number and channel sit under it, and there is no drag handle (the menu moves a task). From `sm`
- * up the row stays one line with its handle. Screenshots go under `.amp/e2e/phone-task-row/`.
+ * up the row stays one line with its handle. On a desktop the row's channel pill and the board
+ * card's first line name the channel by its group avatar and bare name, never `#name` (task #84).
+ * Screenshots go under `.amp/e2e/phone-task-row/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/phone-task-row");
@@ -21,10 +28,7 @@ test("a phone's task row gives the title the width, two lines, and no drag handl
   });
   const { browser, evaluate } = browserSession(browserPath, `phone-task-row-${process.pid}`);
   const tail = `${process.pid}-${Date.now()}`;
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   // Long enough that, uncut, it would push the row's second line past the owner and menu at 320.
   const channelName = `e2e-row-onboarding-and-first-week-${tail}`;
   const channel = await db.conversation.create({
@@ -76,9 +80,9 @@ test("a phone's task row gives the title the width, two lines, and no drag handl
           };
         })()`);
 
-    const open = async (width: string, height: string) => {
+    const open = async (width: string, height: string, layout = "list") => {
       await browser("set", "viewport", width, height);
-      await browser("open", `${origin}/en/w/${workspace.slug}/tasks?layout=list`);
+      await browser("open", `${origin}/en/w/${workspace.slug}/tasks?layout=${layout}`);
       await browser(
         "wait",
         "--fn",
@@ -114,7 +118,23 @@ test("a phone's task row gives the title the width, two lines, and no drag handl
     expect(desktop.lines).toBe(1);
     expect(desktop.handle).toBe(true);
     expect(desktop.second).toBeNull();
+    // The task's article, by its title; on the board it names the channel on its first line.
+    const article = `[...document.querySelectorAll("article h3")].find((el) => el.textContent.includes(${JSON.stringify(tail)}))?.closest("article")`;
+    const channelFace = async () => {
+      await browser("wait", "--fn", `${article}?.querySelector(".avatar-group-xs") != null`);
+      return evaluate<string>(`${article}.textContent`);
+    };
+    const listText = await channelFace();
+    expect(listText).toContain(channelName);
+    expect(listText).not.toContain(`#${channelName}`);
     await browser("screenshot", join(artifacts, "desktop.png"));
+
+    await open("1440", "900", "board");
+    const cardText = await channelFace();
+    expect(cardText).toContain(channelName);
+    expect(cardText).not.toContain(`#${channelName}`);
+    await evaluate(`${article}.scrollIntoView({ block: "center" }) ?? true`);
+    await browser("screenshot", join(artifacts, "board.png"));
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);

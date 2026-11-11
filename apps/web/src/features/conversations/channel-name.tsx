@@ -80,7 +80,8 @@ export function ChannelPlace({
   visibility,
   members,
 }: {
-  id: string;
+  /** Looked up in the channel names by id, or by `name` where the caller has none. */
+  id?: string;
   name: string;
   /** When the caller's data lacks it, the channel names' say. */
   visibility?: ChannelVisibility;
@@ -88,7 +89,7 @@ export function ChannelPlace({
    * channel names are not read; else the channel names'. */
   members?: readonly GroupAvatarMember[];
 }) {
-  const listed = useChannelName({ id });
+  const listed = useChannelName(id ? { id } : { name });
   const faces = members ?? listed?.members;
   return (
     <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 align-bottom">

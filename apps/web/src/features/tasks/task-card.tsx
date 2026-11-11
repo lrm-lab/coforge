@@ -2,6 +2,7 @@ import type { TaskView } from "@lrm/coforge-sdk/internal";
 import type { PointerEvent, ReactNode } from "react";
 
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
+import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
 import { formatMonthDay } from "#src/lib/dates";
@@ -116,8 +117,8 @@ export function TaskCard({
   renderTitle: (title: ReactNode) => ReactNode;
   /** The conversation the task belongs to, on surfaces that mix conversations. */
   source?: string;
-  /** The channel the task lives in, when `source` is one: a phone's list row names it as the
-   * group avatar and its name, not `#name`. */
+  /** The channel the task lives in, when `source` is one: named by its group avatar and its name,
+   * not `#name`. */
   channel?: string | null;
   /** The Project the task's conversation belongs to, on surfaces that mix Projects; null when it
    * has none. */
@@ -198,7 +199,7 @@ export function TaskCard({
         )}
         {source && (
           <Pill className="hidden sm:inline-flex">
-            <span className="truncate">{source}</span>
+            {channel ? <ChannelPlace name={channel} /> : <span className="truncate">{source}</span>}
           </Pill>
         )}
         {task.labels?.length ? (
@@ -222,8 +223,12 @@ export function TaskCard({
       className="group relative flex flex-col gap-2.5 rounded-xl border border-secondary bg-primary p-3 transition-colors hover:border-primary"
     >
       {/* The channel leads: a number counts within its channel, so two cards can share one. */}
-      <div className="flex h-4 items-center gap-1.5 text-xs tabular-nums">
-        {source && <span className="min-w-0 truncate font-medium text-secondary">{source}</span>}
+      <div className="flex h-5 items-center gap-1.5 text-xs tabular-nums">
+        {source && (
+          <span className="flex min-w-0 font-medium text-secondary">
+            {channel ? <ChannelPlace name={channel} /> : <span className="truncate">{source}</span>}
+          </span>
+        )}
         <span className="shrink-0 text-quaternary">#{task.number}</span>
         {priorityMark("ml-auto size-3.5 text-fg-quaternary")}
       </div>
