@@ -1,3 +1,4 @@
+import { APP_BOT_LOGO_SELECT } from "#src/server/apps/app-logo.server";
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { canReadChannel } from "./channel-read-access.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -30,8 +31,7 @@ import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.ser
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { findLinkedMessage } from "#src/server/db/message-anchor.server";
 
-/** Exported so projections that must render exactly like the message stream (the Saved list,
- * #120/#124) reuse this same row shape instead of growing a near-copy. */
+/** The row shape the Saved list (#120/#124) shares, so it renders exactly like the stream. */
 export const browserMessageFields = {
   id: true,
   sequence: true,
@@ -51,7 +51,15 @@ export const browserMessageFields = {
       user: {
         select: { username: true, displayName: true, avatarObjectKey: true },
       },
-      agent: { select: { name: true, displayName: true, deletedAt: true, avatarMascot: true } },
+      agent: {
+        select: {
+          name: true,
+          displayName: true,
+          deletedAt: true,
+          avatarMascot: true,
+          appBot: APP_BOT_LOGO_SELECT,
+        },
+      },
     },
   },
   mentions: BROWSER_MESSAGE_MENTIONS_SELECT,

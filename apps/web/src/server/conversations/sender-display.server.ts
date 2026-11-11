@@ -2,7 +2,7 @@ import { isValidMessageSender, type MessageSenderKind } from "@lrm/coforge-sdk/i
 import type { Prisma } from "#src/generated/prisma/client";
 import { SYSTEM_SENDER_LABEL } from "#src/features/profiles/person-name";
 import { humanLabel, type HumanNames } from "#src/lib/human-label";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
 /**
@@ -38,7 +38,15 @@ type BrowserAvatarSender =
       userId?: string | null;
       agentId?: string | null;
       user?: { avatarObjectKey?: string | null } | null;
-      agent?: { avatarMascot?: string | null } | null;
+      agent?: {
+        avatarMascot?: string | null;
+        /** An app's bot's installation app: the face is its logo (task #67). */
+        appBot?: {
+          installation: {
+            app: { key: string; ownerWorkspaceId: string; logoObjectKey: string | null };
+          };
+        } | null;
+      } | null;
     }
   | null
   | undefined;
@@ -51,7 +59,12 @@ export function browserSenderAvatarUrl(
 ): string | null {
   if (sender?.userId)
     return workspaceUserAvatarUrl(workspaceId, sender.userId, sender.user?.avatarObjectKey ?? null);
-  if (sender?.agentId) return agentAvatarUrl(sender.agentId, sender.agent?.avatarMascot ?? null);
+  if (sender?.agentId)
+    return agentFaceUrl({
+      id: sender.agentId,
+      avatarMascot: sender.agent?.avatarMascot,
+      appBot: sender.agent?.appBot,
+    });
   return null;
 }
 

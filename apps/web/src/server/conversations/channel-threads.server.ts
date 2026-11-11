@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
   agentVisibilityViewerForUser,
@@ -204,7 +204,13 @@ export async function threadFollowingAgents(
         member: {
           select: {
             agent: {
-              select: { id: true, name: true, displayName: true, avatarMascot: true },
+              select: {
+                id: true,
+                name: true,
+                displayName: true,
+                avatarMascot: true,
+                appBot: APP_BOT_LOGO_SELECT,
+              },
             },
           },
         },
@@ -220,7 +226,7 @@ export async function threadFollowingAgents(
           id: agent.id,
           name: agent.name,
           displayName: agent.displayName.trim() || agent.name,
-          avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+          avatarUrl: agentFaceUrl(agent),
         },
       ];
     })

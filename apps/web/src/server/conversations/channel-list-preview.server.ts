@@ -6,7 +6,7 @@ import {
 } from "#src/server/db/repositories/channel-list-preview.repositories.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { appBotAvatarUrl } from "#src/server/apps/app-logo.server";
+import { APP_BOT_LOGO_SELECT, appBotAvatarUrl } from "#src/server/apps/app-logo.server";
 import type { PreviewCard } from "#src/features/conversations/action-card-preview";
 import { previewNoticeOf, type PreviewNotice } from "#src/features/conversations/preview-line";
 import { previewCardFieldOf } from "#src/server/conversations/action-card-preview.server";
@@ -142,15 +142,7 @@ export async function channelListPreviews(
             name: true,
             displayName: true,
             avatarMascot: true,
-            appBot: {
-              select: {
-                installation: {
-                  select: {
-                    app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
-                  },
-                },
-              },
-            },
+            appBot: APP_BOT_LOGO_SELECT,
           },
         })
       : [],
@@ -217,15 +209,7 @@ export async function channelListMembers(
             name: true,
             displayName: true,
             avatarMascot: true,
-            appBot: {
-              select: {
-                installation: {
-                  select: {
-                    app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
-                  },
-                },
-              },
-            },
+            appBot: APP_BOT_LOGO_SELECT,
           },
         })
       : [],

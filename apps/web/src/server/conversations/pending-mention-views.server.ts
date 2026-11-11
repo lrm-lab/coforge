@@ -3,7 +3,7 @@ import {
   type ChannelVisibility,
 } from "#src/features/conversations/channel-visibility";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { humanLabel } from "#src/lib/human-label";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -112,7 +112,13 @@ const PENDING_MENTION_ACTION_SELECT = {
     },
   },
   targetAgent: {
-    select: { displayName: true, avatarMascot: true, visibility: true, deletedAt: true },
+    select: {
+      displayName: true,
+      avatarMascot: true,
+      visibility: true,
+      deletedAt: true,
+      appBot: APP_BOT_LOGO_SELECT,
+    },
   },
 } satisfies Prisma.PendingMentionActionSelect;
 
@@ -146,7 +152,7 @@ function pendingMentionActionView(
       ? agent.displayName?.trim() || row.targetHandle
       : humanLabel({ displayName: row.targetUser?.displayName }),
     targetAvatarUrl: agent
-      ? agentAvatarUrl(targetId, agent.avatarMascot)
+      ? agentFaceUrl({ id: targetId, avatarMascot: agent.avatarMascot, appBot: agent.appBot })
       : workspaceUserAvatarUrl(workspaceId, targetId, row.targetUser?.avatarObjectKey ?? null),
     channelName: channel.channelName ?? "",
     visibility: channelVisibilityOf(channel),

@@ -9,8 +9,7 @@ import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { appBotAvatarUrl } from "#src/server/apps/app-logo.server";
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { workspaceUserAvatarUrl } from "./user-profile.repositories.server";
 import {
   browserMessageFields,
@@ -99,18 +98,8 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
               // to compute `dmWritable`.
               ownerId: true,
               visibility: true,
-              // An app's bot shows its app's logo wherever it shows a face (task #67).
-              appBot: {
-                select: {
-                  installation: {
-                    select: {
-                      app: {
-                        select: { key: true, ownerWorkspaceId: true, logoObjectKey: true },
-                      },
-                    },
-                  },
-                },
-              },
+              // An app's bot shows its app's logo wherever it shows a face.
+              appBot: APP_BOT_LOGO_SELECT,
             },
           },
         },
@@ -176,7 +165,7 @@ export function conversationMentionables(
               handle: member.agent.name,
               label: member.agent.displayName?.trim() || member.agent.name,
               description: member.agent.description?.trim() ?? "",
-              avatarUrl: agentAvatarUrl(member.agent.id, member.agent.avatarMascot),
+              avatarUrl: agentFaceUrl(member.agent),
               mentionScore: 0,
             }
           : undefined,
@@ -261,9 +250,8 @@ export async function openConversationForUser(
             name: agent.name,
             displayName: agent.displayName,
             deletedAt: agent.deletedAt,
-            // An app's bot wears its app's logo, never the mascot its id would choose (task #67).
-            avatarUrl:
-              appBotAvatarUrl(agent.appBot) ?? agentAvatarUrl(agent.id, agent.avatarMascot),
+            // An app's bot wears its app's logo, never the mascot its id would choose.
+            avatarUrl: agentFaceUrl(agent),
           },
           // Whether this viewer may still send here: a private Agent's DM stays scoped to
           // its own creator, so an existing DM held by anyone else reads read-only once it goes

@@ -1,3 +1,4 @@
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import {
   ACTION_CARD_PREVIEW_SELECT,
   previewCardFieldOf,
@@ -10,7 +11,6 @@ import type {
   ActivityInboxFilter,
   ActivityItemDone,
 } from "#src/features/inbox/activity-inbox.schemas";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { channelListMembers } from "#src/server/conversations/channel-list-preview.server";
 import {
   browserMessageFields,
@@ -254,7 +254,13 @@ export class ActivityInbox {
       }),
       this.db.agent.findMany({
         where: { id: { in: [...agentIds] }, workspaceId },
-        select: { id: true, name: true, displayName: true, avatarMascot: true },
+        select: {
+          id: true,
+          name: true,
+          displayName: true,
+          avatarMascot: true,
+          appBot: APP_BOT_LOGO_SELECT,
+        },
       }),
       // By the key, not a membership: the member stays named after leaving the Workspace.
       this.db.user.findMany({
@@ -275,7 +281,13 @@ export class ActivityInbox {
               agentId: true,
               user: { select: { username: true, displayName: true, avatarObjectKey: true } },
               agent: {
-                select: { name: true, displayName: true, deletedAt: true, avatarMascot: true },
+                select: {
+                  name: true,
+                  displayName: true,
+                  deletedAt: true,
+                  avatarMascot: true,
+                  appBot: APP_BOT_LOGO_SELECT,
+                },
               },
             },
           },
@@ -299,7 +311,7 @@ export class ActivityInbox {
           kind: "agent" as const,
           agentId: agent.id,
           displayName: agent.displayName.trim() || agent.name,
-          avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+          avatarUrl: agentFaceUrl(agent),
         },
       ]),
     );

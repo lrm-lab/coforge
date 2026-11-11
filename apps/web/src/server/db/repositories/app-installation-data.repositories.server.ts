@@ -1,3 +1,4 @@
+import { APP_BOT_LOGO_SELECT } from "#src/server/apps/app-logo.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -16,6 +17,7 @@ const AGENT_SELECT = {
   displayName: true,
   description: true,
   avatarMascot: true,
+  appBot: APP_BOT_LOGO_SELECT,
   createdAt: true,
 } satisfies Prisma.AgentSelect;
 const CHANNEL_SELECT = {

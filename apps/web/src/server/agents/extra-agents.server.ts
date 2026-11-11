@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
+import { agentMascot } from "#src/features/agents/agent-mascot";
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import { HELD_AGENT_IDS_LIMIT, type ExtraAgent } from "#src/features/agents/extra-agent";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "./active-agent.server";
@@ -57,6 +58,7 @@ export async function listExtraAgents(
       avatarMascot: true,
       visibility: true,
       computerId: true,
+      appBot: APP_BOT_LOGO_SELECT,
     },
     orderBy: { id: "asc" },
   });
@@ -96,7 +98,7 @@ export async function listExtraAgents(
       id: row.id,
       name: row.name,
       displayName: row.displayName,
-      avatarUrl: agentAvatarUrl(row.id, mascot),
+      avatarUrl: agentFaceUrl({ id: row.id, avatarMascot: row.avatarMascot, appBot: row.appBot }),
       mascot,
       visibility: normalizeAgentVisibility(row.visibility),
       ...(display ? { display } : {}),

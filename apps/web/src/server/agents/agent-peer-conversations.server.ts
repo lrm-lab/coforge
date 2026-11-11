@@ -1,5 +1,5 @@
+import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { AGENT_PEER_DIRECT_KEY_WHERE } from "#src/features/conversations/direct-key";
 import { agentDmIsLimited } from "#src/server/conversations/agent-dm-limits.server";
 import {
@@ -132,7 +132,7 @@ export async function listAgentPeerCards(
         agentId: peer.id,
         name: peer.name,
         displayName: peer.displayName,
-        avatar: agentAvatarUrl(peer.id, peer.avatarMascot),
+        avatar: agentFaceUrl(peer),
       },
       message: spoken ? cutMessage(spoken.body!, mentionsByMessage.get(spoken.messageId!)) : null,
       at: spoken?.createdAt ?? createdAt,

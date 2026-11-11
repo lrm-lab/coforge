@@ -7,6 +7,7 @@ import {
 } from "#src/features/conversations/thread-summary-model";
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
 import { browserSenderAvatarUrl, browserSenderName } from "./sender-display.server";
+import { APP_BOT_LOGO_SELECT } from "#src/server/apps/app-logo.server";
 
 /** What a window of roots says about their threads, for the viewer reading it. */
 export type WindowThreads = {
@@ -111,7 +112,13 @@ export async function readWindowThreads(
                 },
               },
               agent: {
-                select: { name: true, displayName: true, deletedAt: true, avatarMascot: true },
+                select: {
+                  name: true,
+                  displayName: true,
+                  deletedAt: true,
+                  avatarMascot: true,
+                  appBot: APP_BOT_LOGO_SELECT,
+                },
               },
             },
           },

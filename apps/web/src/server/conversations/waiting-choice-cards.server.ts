@@ -1,4 +1,4 @@
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { readableConversationWhere } from "./channel-read-access.server";
@@ -135,7 +135,7 @@ export async function waitingChoiceCards(
       preparedBy: {
         agentId: agent.id,
         name: agent.displayName,
-        avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+        avatarUrl: agentFaceUrl(agent),
       },
       createdAt: card.createdAt.toISOString(),
     };

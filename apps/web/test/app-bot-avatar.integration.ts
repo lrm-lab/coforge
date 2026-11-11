@@ -6,6 +6,7 @@ import { appBotAvatarUrl, appLogoUrl } from "#src/server/apps/app-logo.server";
 import { botFixture, type BotFixture } from "./app-bots-fixture";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
+import { mapBrowserMessage } from "#src/server/conversations/conversation-history.server";
 
 /**
  * An app's bot wears its app's logo wherever it shows a face: the DM's open (its header and list
@@ -82,6 +83,48 @@ test.skipIf(!connectionString)(
     );
     if (!("agent" in plainOpened) || !plainOpened.agent)
       throw new Error("the plain DM's agent row is missing");
+    console.log("PLAIN_AVATAR", plainOpened.agent.avatarUrl);
     expect(plainOpened.agent.avatarUrl).not.toBeNull();
+    // The message author reads the same face: a bot's message's sender avatar is the app logo.
+    const author = mapBrowserMessage(
+      {
+        id: "message-bot",
+        sequence: 1,
+        threadRootId: null,
+        senderMemberId: "bot-member",
+        body: "hello",
+        createdAt: new Date(),
+        sender: {
+          userId: null,
+          agentId: botAgentId,
+          user: null,
+          agent: {
+            name: fixture.key,
+            displayName: "Acme Reviews",
+            deletedAt: null,
+            avatarMascot: null,
+            appBot: {
+              installation: {
+                app: {
+                  key: fixture.key,
+                  ownerWorkspaceId: app.ownerWorkspaceId,
+                  logoObjectKey: "w/logo",
+                },
+              },
+            },
+          },
+        },
+        attachments: [],
+        mentions: [],
+        reactionVersion: 0,
+        reactions: [],
+        forwards: [],
+        systemMessage: null,
+      } as never,
+      fixture.workspaceId,
+    );
+    expect(author.senderAvatarUrl).toBe(
+      appLogoUrl(app.ownerWorkspaceId, fixture.key, "w/logo") ?? "",
+    );
   },
 );

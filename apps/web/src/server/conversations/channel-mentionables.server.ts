@@ -1,7 +1,11 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { appBotAvatarUrl } from "#src/server/apps/app-logo.server";
+import {
+  APP_BOT_LOGO_SELECT,
+  agentFaceUrl,
+  appBotAvatarUrl,
+} from "#src/server/apps/app-logo.server";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -32,14 +36,8 @@ export const MENTIONABLE_MEMBER_SELECT = {
       displayName: true,
       description: true,
       avatarMascot: true,
-      // An app's bot wears its app's logo, never the mascot its id chooses (task #67).
-      appBot: {
-        select: {
-          installation: {
-            select: { app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } } },
-          },
-        },
-      },
+      // An app's bot wears its app's logo, never the mascot its id chooses.
+      appBot: APP_BOT_LOGO_SELECT,
     },
   },
 } satisfies Prisma.ConversationMemberSelect;
@@ -76,9 +74,7 @@ export function mentionables(
             handle: row.agent!.name,
             label: row.agent!.displayName?.trim() || row.agent!.name,
             description: row.agent!.description.trim(),
-            avatarUrl:
-              appBotAvatarUrl(row.agent!.appBot) ??
-              agentAvatarUrl(row.agent!.id, row.agent!.avatarMascot),
+            avatarUrl: appBotAvatarUrl(row.agent!.appBot) ?? agentFaceUrl(row.agent!),
             mentionScore: mentionScores.get(`agent:${row.agent!.id}`) ?? 0,
           },
     )
@@ -198,15 +194,7 @@ export async function mentionOutsiders(
         displayName: true,
         description: true,
         avatarMascot: true,
-        appBot: {
-          select: {
-            installation: {
-              select: {
-                app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
-              },
-            },
-          },
-        },
+        appBot: APP_BOT_LOGO_SELECT,
       },
       orderBy: { name: "asc" },
     }),

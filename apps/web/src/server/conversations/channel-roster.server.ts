@@ -3,7 +3,11 @@ import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { appBotAvatarUrl } from "#src/server/apps/app-logo.server";
+import {
+  APP_BOT_LOGO_SELECT,
+  agentFaceUrl,
+  appBotAvatarUrl,
+} from "#src/server/apps/app-logo.server";
 import { recordChannelMembersAdded } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
@@ -225,15 +229,7 @@ export async function channelMembers(
             role: true,
             computerId: true,
             avatarMascot: true,
-            appBot: {
-              select: {
-                installation: {
-                  select: {
-                    app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
-                  },
-                },
-              },
-            },
+            appBot: APP_BOT_LOGO_SELECT,
           },
         },
       },
@@ -338,7 +334,7 @@ export async function channelMembers(
         name: row.agent!.name,
         displayName: row.agent!.displayName?.trim() || row.agent!.name,
         description: row.agent!.description,
-        avatarUrl: agentAvatarUrl(row.agent!.id, row.agent!.avatarMascot),
+        avatarUrl: agentFaceUrl(row.agent!),
         serverRole: row.agent!.role,
         channelRole: row.channelRole,
         channelAdminBasis: deriveChannelAdminBasis(row.agent!.role, row.channelRole),

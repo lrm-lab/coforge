@@ -1,7 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { agentDirectKey, peopleDirectKey } from "#src/features/conversations/direct-key";
 import type { ForwardTarget } from "#src/features/conversations/message-forward";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { humanLabel } from "#src/lib/human-label";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { directMessageAgentWhere } from "#src/server/agents/agent-visibility.server";
@@ -248,7 +248,7 @@ export async function searchForwardTargets(
       name: agent.displayName.trim() || agent.name,
       handle: agent.name,
       description: agent.description,
-      avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+      avatarUrl: agentFaceUrl(agent),
       ...(conversationId ? { conversationId } : {}),
       joined: true,
       canSend: true,

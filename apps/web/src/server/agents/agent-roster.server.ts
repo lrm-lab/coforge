@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
+import { agentMascot } from "#src/features/agents/agent-mascot";
+import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { getAgentStatusCache } from "#src/server/agents/agent-status.server";
 import { manageAgents } from "#src/server/agents/manage-agents-production.server";
@@ -15,6 +16,19 @@ import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 export async function readAgentRoster(db: PrismaClient, userId: string, workspaceId: string) {
   const agents = await manageAgents(db).list({ userId, workspaceId });
   const statuses = getAgentStatusCache();
+  // The bots' installation apps, one indexed read for the roster: an app bot's face is its app's
+  // logo, which the avatar rows alone cannot resolve.
+  const botRows = await db.appInstallationBot
+    .findMany({
+      where: { agentId: { in: agents.map((agent) => agent.id) } },
+      select: {
+        agentId: true,
+        installation: {
+          select: { app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } } },
+        },
+      },
+    })
+    .catch(() => []);
   // One round trip for every Agent's status lease, not one per Agent: the list is the page's
   // whole point and every row asks for the same kind of thing. Agents without a Computer have no
   // lease to read, so they are not asked for and stay `undefined` exactly as before.
@@ -37,6 +51,7 @@ export async function readAgentRoster(db: PrismaClient, userId: string, workspac
   const statusByAgentId = new Map(
     scoped.map((agent, index) => [agent.id, statusSnapshots[index]] as const),
   );
+  const botByAgentId = new Map(botRows.map((bot) => [bot.agentId, bot]));
   const displayByAgentId = new Map(
     scoped.map((agent, index) => [agent.id, displaySnapshots[index]] as const),
   );
@@ -47,7 +62,11 @@ export async function readAgentRoster(db: PrismaClient, userId: string, workspac
     return {
       ...agent,
       mascot,
-      avatarUrl: agentAvatarUrl(agent.id, mascot),
+      avatarUrl: agentFaceUrl({
+        id: agent.id,
+        avatarMascot: agent.avatarMascot,
+        appBot: botByAgentId.get(agent.id),
+      }),
       stopped: Boolean(agent.stoppedAt),
       ...(displaySnapshot ? { display: displaySnapshot } : {}),
       status: {

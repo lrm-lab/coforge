@@ -1,5 +1,5 @@
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import {
   WORKSPACE_ONBOARDING_MODES,
@@ -40,17 +40,17 @@ export async function loadWorkspaceOnboarding(
     db.agent.findMany({
       where: onboardingAgentWhere(input.workspaceId),
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: { id: true, name: true, avatarMascot: true },
+      select: { id: true, name: true, avatarMascot: true, appBot: APP_BOT_LOGO_SELECT },
     }),
   ]);
   return {
     mode: onboardingMode(workspace.onboardingMode),
     agentId: workspace.onboardingAgentId,
     newAgentGreeting: workspace.newAgentGreeting,
-    agents: agents.map(({ id, name, avatarMascot }) => ({
+    agents: agents.map(({ id, name, avatarMascot, appBot }) => ({
       id,
       name,
-      avatarUrl: agentAvatarUrl(id, avatarMascot),
+      avatarUrl: agentFaceUrl({ id, avatarMascot, appBot }),
     })),
   };
 }

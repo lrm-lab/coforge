@@ -27,7 +27,7 @@ export function AgentDisplayAvatar({
    * Agent never flashes initials while its data loads. */
   src?: string | null;
   /** The id's default picture is not this Agent's face: an app's bot wears its app's logo,
-   * which only its own read knows (task #67), and an Agent absent from every list the viewer
+   * which only its own read knows, and an Agent absent from every list the viewer
    * sees was given its mascot by someone else. Until their read arrives they render the
    * neutral monogram, not a wrong face. */
   noIdDefault?: boolean;

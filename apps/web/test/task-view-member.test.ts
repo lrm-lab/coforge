@@ -35,7 +35,7 @@ describe("taskMember", () => {
     agentId: "agent-1",
     leftAt: null,
     user: null,
-    agent: { name: "atlas", displayName: "Atlas Bot", deletedAt: null, ...fields },
+    agent: { name: "atlas", displayName: "Atlas Bot", deletedAt: null, appBot: null, ...fields },
   });
 
   test("an Agent is still its display name, with its @handle as the handle", () => {

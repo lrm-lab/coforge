@@ -273,11 +273,11 @@ export function AgentProfilePanel({
           displayName: knownName,
           avatarUrl: profile?.avatarUrl ?? liveAgent?.avatarUrl,
           // A face this panel has no list data for — an app's bot, or an Agent outside the
-          // roster — waits with the neutral monogram instead of the id's mascot (task #67).
+          // roster — waits with the neutral monogram instead of the id's mascot.
           noIdDefault: !liveAgent,
         }}
         mascot={profile?.mascot ?? liveAgent?.mascot}
-        appBot={profile ? Boolean(profile.appBot) : undefined}
+        appBot={Boolean(profile?.appBot)}
         display={display}
         controls={controls}
         onClose={onClose}

@@ -28,8 +28,9 @@ import { useOpenDirectConversation } from "#src/features/conversations/open-dire
 export function AgentProfileHeader({
   agent,
   mascot,
-  /** The app the bot speaks for: the header's face is its logo. Undefined while the profile
-   * is still loading — the face is then unknown, and the neutral monogram stands in. */
+  /** True when this profile is an app's bot, which has no mascot: its picture stays still,
+   * as on its card. Undefined while the profile is still loading — the face is then unknown,
+   * and the neutral monogram stands in. */
   appBot,
   display,
   controls,
@@ -43,14 +44,15 @@ export function AgentProfileHeader({
     displayName: string;
     avatarUrl?: string | null;
     /** The face is unknown until a read provides it: an app's bot, or an Agent outside the
-     * roster, waits with the neutral monogram instead of the id's mascot (task #67). */
+     * roster, waits with the neutral monogram instead of the id's mascot. */
     noIdDefault?: boolean;
   };
   /** The Agent's mascot key, once the profile has loaded: the avatar then moves. Until then, a
    * still picture. */
   mascot?: AgentMascot;
-  /** The profile is an app's bot, which has no mascot: its picture stays still, as on its card. */
-  appBot?: { logoUrl: string | null } | boolean | undefined;
+  /** True when this profile is an app's bot, which has no mascot: its picture stays still,
+   * as on its card. Undefined while the profile is still loading. */
+  appBot?: boolean | undefined;
   display?: AgentDisplaySnapshot;
   controls: AgentRuntimeControls;
   /** The viewer may message this Agent: any member a public one, only its creator a private one. */
@@ -93,8 +95,8 @@ export function AgentProfileHeader({
         <AgentDisplayAvatar
           agentId={agent.id}
           name={agent.displayName}
-          src={typeof appBot === "object" ? appBot.logoUrl : agent.avatarUrl}
-          noIdDefault={!appBot}
+          src={agent.avatarUrl}
+          noIdDefault={agent.noIdDefault}
           display={display}
           deleted={deleted}
         />

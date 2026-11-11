@@ -102,7 +102,7 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
       ),
     },
     mascot: agentMascot(result.id, result.avatarMascot),
-    // An app's bot wears its app's logo, never the mascot its id would choose (task #67): the
+    // An app's bot wears its app's logo, never the mascot its id would choose: the
     // profile header reads this, so the face it waits with is already the app's.
     avatarUrl: result.appBot?.logoUrl ?? agentAvatarUrl(result.id, result.avatarMascot ?? null),
     runtimeConfig: publicAgentRuntimeConfig(runtimeConfig),

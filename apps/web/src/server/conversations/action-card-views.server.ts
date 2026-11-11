@@ -2,7 +2,7 @@ import { APP_GRANT_AGENT_CARD_KIND, type ResolvedActionCardPayload } from "@lrm/
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { appBotAvatarUrl } from "#src/server/apps/app-logo.server";
+import { APP_BOT_LOGO_SELECT, appBotAvatarUrl } from "#src/server/apps/app-logo.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rules.server";
 import { roleCan } from "#src/features/workspaces/workspace-roles";
@@ -118,15 +118,7 @@ export async function actionCardViews(
               name: true,
               displayName: true,
               avatarMascot: true,
-              appBot: {
-                select: {
-                  installation: {
-                    select: {
-                      app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
-                    },
-                  },
-                },
-              },
+              appBot: APP_BOT_LOGO_SELECT,
             },
           })
         : Promise.resolve([]),

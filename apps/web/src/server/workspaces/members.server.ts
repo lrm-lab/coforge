@@ -1,9 +1,9 @@
+import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import {
   canDirectMessageAgent,
   visibleAgentWhere,
@@ -69,7 +69,7 @@ function createdAgentView(agent: {
   return {
     id: agent.id,
     displayName: shownAgentName(agent),
-    avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+    avatarUrl: agentFaceUrl(agent),
   };
 }
 
@@ -178,7 +178,7 @@ export class WorkspaceMembers {
         name: agent.name,
         displayName: shownAgentName(agent),
         description: agent.description,
-        avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+        avatarUrl: agentFaceUrl(agent),
         computerId: agent.computer?.workspaces.length ? agent.computer.id : null,
         computerName: agent.computer?.workspaces.length
           ? agent.computer.displayName.trim() || agent.computer.name.trim()
@@ -279,7 +279,7 @@ export class WorkspaceMembers {
         handle: agent.name,
         name: shownAgentName(agent),
         description: agent.description,
-        avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+        avatarUrl: agentFaceUrl(agent),
         /** Whether the viewer may open a direct conversation with it (`DirectConversations.open`). */
         canMessage: canDirectMessageAgent(userId, agent),
         /** Visibility and the weekly-report flag, so a channel picker offers only the Agents a

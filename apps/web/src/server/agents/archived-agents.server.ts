@@ -1,7 +1,7 @@
+import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { assertCanDeleteAgents } from "#src/server/workspaces/member-role.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 
 /**
  * Every archived Agent of the Workspace, newest archive first, for Settings → Workspace profile.
@@ -30,7 +30,7 @@ export async function listArchivedAgents(
   return agents.map((agent) => ({
     id: agent.id,
     displayName: agent.displayName.trim() || agent.name,
-    avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+    avatarUrl: agentFaceUrl(agent),
     archivedAt: agent.deletedAt!,
     computerName: agent.computer
       ? agent.computer.displayName.trim() || agent.computer.name.trim()
