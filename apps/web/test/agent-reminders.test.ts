@@ -82,6 +82,8 @@ test("exposes targets and derives readable message anchors from the canonical co
     target: id === "public-channel" ? "#general" : "@owner",
   });
   const db = withFakePagination({
+    // The anchoring channel's group avatar (task #55): no active members here.
+    $queryRaw: async () => [],
     reminder: {
       findMany: async () => [
         reminder("owned-dm", "message-owned-dm"),
@@ -147,6 +149,7 @@ test("exposes targets and derives readable message anchors from the canonical co
       channelId: "channel-1",
       channelName: "general",
       visibility: "public",
+      members: [],
       messageId: "message-channel-reply",
       threadRootId: "channel-root",
     },

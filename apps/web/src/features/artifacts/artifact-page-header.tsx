@@ -17,6 +17,7 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { channelNamesQuery } from "#src/features/conversations/conversation-queries";
+import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
@@ -176,7 +177,16 @@ function BackToHome({ home }: { home: ArtifactHome | undefined }) {
   const workspaceSlug = useWorkspaceSlug();
   const toWorkspace = home !== undefined && (!home.conversationId || home.kind === "workspace");
   const homeName = useHomeName(home);
-  const label = toWorkspace ? m.doc_back_to_workspace() : (homeName ?? m.doc_back());
+  // A channel reads its group avatar and name, no `#` (task #55); the share dialog's sentence
+  // keeps `#name`.
+  const channel = home?.kind === "channel" && home.conversationId ? home.conversationId : null;
+  const label = toWorkspace ? (
+    m.doc_back_to_workspace()
+  ) : channel && homeName ? (
+    <ChannelPlace id={channel} name={homeName.replace(/^#/, "")} />
+  ) : (
+    (homeName ?? m.doc_back())
+  );
   const className =
     "flex min-w-0 shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-tertiary outline-focus-ring hover:bg-primary_hover hover:text-secondary focus-visible:outline-2";
   const inner = (

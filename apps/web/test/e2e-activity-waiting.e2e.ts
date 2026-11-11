@@ -114,6 +114,15 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     expect(await evaluate<string>(`${section}.previousElementSibling.textContent`)).toContain(
       "· 4",
     );
+    // Where it was asked: the channel's group avatar and name, no `#` (task #55).
+    expect(
+      await evaluate<boolean>(
+        `[...${section}.querySelectorAll("[data-channel-name]")].some((el) => el.textContent === "${channel.channelName}" && el.parentElement.querySelector(".avatar-group"))`,
+      ),
+    ).toBe(true);
+    expect(
+      await evaluate<boolean>(`${section}.textContent.includes("#${channel.channelName}")`),
+    ).toBe(false);
     await browser("screenshot", join(artifacts, "waiting.png"));
 
     // The keyboard walks the waiting cards with the rest (Frank, 11-10, task #51): Down from the

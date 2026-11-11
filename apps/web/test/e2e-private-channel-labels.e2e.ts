@@ -51,7 +51,9 @@ test("a private channel goes without `#` wherever another page names it", async 
   /** The page names the private channel bare and never as `#vault`. */
   const namesVaultBare = `${text}.includes("${vaultName}") && !${text}.includes("#${vaultName}")`;
   /** The public channel reads its group avatar before its name, no `#` (Frank, 11-10, task #55). */
-  const plazaFaced = `[...document.querySelectorAll("[data-channel-name]")].some((el) => el.textContent === "${plazaName}" && el.parentElement.querySelector(".avatar-group"))`;
+  const faced = (name: string) =>
+    `[...document.querySelectorAll("[data-channel-name]")].some((el) => el.textContent === "${name}" && el.parentElement.querySelector(".avatar-group"))`;
+  const plazaFaced = faced(plazaName);
   /** Outside the sidebar, the private name follows its lock. */
   const vaultLocked = `[...document.querySelectorAll('[role="img"][aria-label="Private"]')].some((lock) => !lock.closest("[data-sidebar]") && lock.nextElementSibling?.textContent === "${vaultName}")`;
   const both = async (shot: string) => {
@@ -201,13 +203,17 @@ test("a private channel goes without `#` wherever another page names it", async 
       "2-saved.png",
     );
     expect(await evaluate(plazaFaced)).toBe(true);
-    await shoot(`/activity`, `${text}.includes("#${plazaName}")`, "3-activity.png");
+    await shoot(`/activity`, `${text}.includes("${plazaName}")`, "3-activity.png");
+    // A row's mark is its channel's group avatar; its place line names it with no `#` (task #55).
+    expect(await evaluate<boolean>(`${text}.includes("#${plazaName}")`)).toBe(false);
     await shoot(`/tasks`, `${text}.includes("#${plazaName}")`, "4-tasks.png", false);
     await shoot(
       `/agent/${agent.id}?agentTab=reminders`,
       `${text}.includes("Check the vault")`,
       "5-reminders.png",
     );
+    // The reminder's source is the private channel's group avatar, its lock and its name.
+    expect(await evaluate(faced(vaultName))).toBe(true);
     // The Agent's Chat tab lists the channels it is in, each with its group avatar (task #55).
     await db.conversationMember.create({
       data: { conversationId: plaza.id, workspaceId: workspace.id, agentId: agent.id },
