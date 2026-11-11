@@ -24,6 +24,7 @@ export function useMessageRowActions({
   conversationId,
   channelNames,
   readState,
+  seenBy,
   onOpenThread,
   onToggleReaction,
   onToggleSave,
@@ -35,6 +36,8 @@ export function useMessageRowActions({
   conversationId?: string;
   channelNames?: ReadonlyMap<string, string>;
   readState?: ReadState;
+  /** Offers who has seen the message without ticks to go by (an own thread reply). */
+  seenBy?: boolean;
   onOpenThread?: (rootId: string) => void;
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => void;
   onToggleSave?: (messageId: string, saved: boolean) => Promise<void>;
@@ -114,7 +117,7 @@ export function useMessageRowActions({
       makeTask && conversationId && canForwardMessage(message) && !message.threadRootId
         ? () => makeTask({ conversationId, messageId: message.id })
         : undefined,
-    seenBy: readState && conversationId ? { conversationId } : undefined,
+    seenBy: (readState || seenBy) && conversationId ? { conversationId } : undefined,
     onCopy: () =>
       void copyText(messagePlainText(message, channelNames)).then((copied) => {
         if (copied) toast.success(m.conversation_message_copied());

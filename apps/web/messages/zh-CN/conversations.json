@@ -330,5 +330,8 @@
   "conversation_seen_count": "{count} 人已看",
   "conversation_seen_none": "无人查看",
   "conversation_seen_loading": "加载中…",
-  "conversation_seen_by": "已看的人"
+  "conversation_seen_by": "已看的人",
+  "conversation_seen_undelivered": "{count} 个 Agent 没收到",
+  "conversation_seen_undelivered_muted": "静音了频道，没收到这条",
+  "conversation_seen_undelivered_unfollowed": "取消关注了讨论，没收到这条"
 }

@@ -355,6 +355,7 @@ export function ConversationPane({
                 canCompose={canCompose}
                 quoteSelection={quoteSelection}
                 readTicks={readTicks}
+                threadSeenBy={Boolean(root && conversation.readTicks)}
                 shownOutbox={shownOutbox}
                 outbox={outbox}
                 outboxContinues={outboxContinues}

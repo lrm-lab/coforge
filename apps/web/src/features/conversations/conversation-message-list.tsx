@@ -46,6 +46,7 @@ export function ConversationMessageList({
   canCompose,
   quoteSelection,
   readTicks,
+  threadSeenBy,
   shownOutbox,
   outbox,
   outboxContinues,
@@ -76,6 +77,8 @@ export function ConversationMessageList({
   canCompose: boolean;
   quoteSelection: NonNullable<RowProps["onQuoteSelection"]>;
   readTicks: PaneConversation["readTicks"];
+  /** A thread pane's own replies offer who has seen them, where the conversation keeps reads. */
+  threadSeenBy: boolean;
   shownOutbox: PaneOutbox["shownOutbox"];
   outbox: PaneOutbox["outbox"];
   outboxContinues: boolean;
@@ -164,6 +167,7 @@ export function ConversationMessageList({
             channelNames={channelNames}
             onQuoteSelection={canCompose ? quoteSelection : undefined}
             readState={ownMessageReadState(own, message.sequence, readTicks)}
+            seenBy={own && threadSeenBy}
           />
         );
       })}

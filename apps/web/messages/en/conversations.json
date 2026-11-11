@@ -343,5 +343,17 @@
   "conversation_seen_count": "{count} seen",
   "conversation_seen_none": "Nobody viewed",
   "conversation_seen_loading": "Loading…",
-  "conversation_seen_by": "Seen by"
+  "conversation_seen_by": "Seen by",
+  "conversation_seen_undelivered": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} Agent didn't get this",
+        "countPlural=other": "{count} Agents didn't get this"
+      }
+    }
+  ],
+  "conversation_seen_undelivered_muted": "Muted the channel, missed this",
+  "conversation_seen_undelivered_unfollowed": "Unfollowed the thread, missed this"
 }

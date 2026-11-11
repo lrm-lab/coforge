@@ -103,6 +103,7 @@ export const MessageRow = memo(function MessageRow({
   channelNames,
   onQuoteSelection,
   readState,
+  seenBy,
 }: {
   message: MessageView;
   conversationId?: string;
@@ -159,6 +160,8 @@ export const MessageRow = memo(function MessageRow({
    * read at all. */
   onQuoteSelection?: (quote: string) => void;
   readState?: ReadState;
+  /** The "N seen" entry on an own message without ticks (a thread reply). */
+  seenBy?: boolean;
 }) {
   const timeFormat = useTimeFormat();
   const timeZone = useTimeZone();
@@ -219,6 +222,7 @@ export const MessageRow = memo(function MessageRow({
       conversationId,
       channelNames,
       readState,
+      seenBy,
       onOpenThread,
       onToggleReaction,
       onToggleSave,
