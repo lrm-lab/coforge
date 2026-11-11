@@ -1,8 +1,10 @@
 import { useState } from "react";
 
+import { useAppToast } from "#src/components/ui/toast";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { offlineStart } from "./agent-offline-start";
 import { stopReasonCopy, stopReasonSentence } from "./agent-stop-reason";
 import {
   agentControlInFlight,
@@ -57,8 +59,18 @@ export function useAgentRuntimeControls({
   // running — including the member who pressed it — so all controls disable and pending
   // labels show for its whole lifetime, not only while `execute()` is in flight.
   const controlState = useAgentControlState(agentId);
-  const controlInFlight = agentControlInFlight(controlState);
-  const controlPendingLabel = agentControlPendingLabel(controlState);
+  const [startRequested, setStartRequested] = useState(false);
+  const offline = offlineStart({
+    computerOnline,
+    agentOnline: isOnline,
+    control: controlState,
+    requested: startRequested,
+    computerLabel,
+  });
+  // A press is remembered only while the Computer stays away: once it is back, the Start ran.
+  if (startRequested && !offline.computerOffline) setStartRequested(false);
+  const controlInFlight = agentControlInFlight(controlState) && !offline.waiting;
+  const controlPendingLabel = offline.waiting ? undefined : agentControlPendingLabel(controlState);
   const controlFailureDetail = controlState?.phase === "failed" ? controlState.detail : undefined;
   const [restartSubmitError, setRestartSubmitError] = useState<string | null>(null);
   const [restartOpen, setRestartOpen] = useState(false);
@@ -120,20 +132,27 @@ export function useAgentRuntimeControls({
   const [startPending, guardStart] = useSubmitGuard();
   const [stopPending, guardStop] = useSubmitGuard();
   const [startStopError, setStartStopError] = useState<string | null>(null);
-  const [startDeferred, setStartDeferred] = useState(false);
-  const startStopBusy = startPending || stopPending || controlInFlight;
+  const toast = useAppToast();
+  const startStopBusy =
+    (startPending && !offline.computerOffline) ||
+    stopPending ||
+    controlInFlight ||
+    offline.deferred;
 
-  function submitStart() {
+  /** Starts the Agent. `announce` is for a trigger with no room for `startNote` beside it (an icon,
+   * a menu item): a deferred start then says so in a notice. */
+  function submitStart(options?: { announce?: boolean }) {
     setStartStopError(null);
     setRestartSubmitError(null);
-    setStartDeferred(false);
+    if (offline.computerOffline) {
+      setStartRequested(true);
+      if (options?.announce === true) toast.notice(offline.deferredNote);
+    }
     void guardStart(async () => {
       try {
         await onExecute({ agentId, action: "start", requestId: crypto.randomUUID() });
-        // A Computer known to be offline never got the Start; the persisted intent
-        // still resumes it at the next Daemon `ready`, so this is a note, not a failure.
-        if (computerOnline === false) setStartDeferred(true);
       } catch (cause) {
+        setStartRequested(false);
         setStartStopError(agentControlFailureMessage(cause));
       }
     });
@@ -144,7 +163,7 @@ export function useAgentRuntimeControls({
   async function stop() {
     setStartStopError(null);
     setRestartSubmitError(null);
-    setStartDeferred(false);
+    setStartRequested(false);
     await guardStop(() => onExecute({ agentId, action: "stop", requestId: crypto.randomUUID() }));
   }
 
@@ -160,7 +179,11 @@ export function useAgentRuntimeControls({
     stopPending,
     startStopBusy,
     startStopError,
-    startDeferred,
+    /** On an offline Computer, a Start that will run when the Computer reconnects. */
+    startDeferred: offline.deferred,
+    /** What every Start trigger says beside itself while the Computer is offline: that it is,
+     * then, once pressed, when the Agent will start. */
+    startNote: offline.note,
     /** A control operation accepted by the Daemon is still running; callers disable every
      * Start/Stop/Restart/Reset trigger on it. */
     controlInFlight,

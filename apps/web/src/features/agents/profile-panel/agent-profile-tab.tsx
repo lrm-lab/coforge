@@ -398,13 +398,13 @@ function AgentProfileTabBody({
               className="w-full justify-center"
               iconLeading={controls.isOnline ? Stop : Play}
               isDisabled={controls.startStopBusy}
-              onPress={controls.isOnline ? controls.submitStop : controls.submitStart}
+              onPress={controls.isOnline ? controls.submitStop : () => controls.submitStart()}
             >
               {controls.isOnline ? m.agent_profile_action_stop() : m.agent_profile_action_start()}
             </Button>
-            {controls.controlPendingLabel && (
+            {(controls.controlPendingLabel ?? controls.startNote) && (
               <p className="text-sm text-tertiary" role="status">
-                {controls.controlPendingLabel}
+                {controls.controlPendingLabel ?? controls.startNote}
               </p>
             )}
             <Button
