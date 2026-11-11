@@ -92,8 +92,9 @@ export function QuestionRows({
           {option.description && (
             <span className="text-xs wrap-anywhere text-tertiary">{option.description}</span>
           )}
+          {option.recommended && <Recommended at="under" />}
         </span>
-        {option.recommended && <Recommended />}
+        {option.recommended && <Recommended at="end" />}
       </>
     );
     return many ? (
@@ -171,8 +172,18 @@ export function QuestionRows({
   );
 }
 
-function Recommended() {
+/** "Recommended": at the row's end; a row that can be picked moves it under the option on a phone,
+ * where the title keeps the row's width (Frank, 11-11, task #81: beside it, it squeezed the title into a narrow column). */
+function Recommended({ at }: { at?: "end" | "under" }) {
   return (
-    <span className="shrink-0 text-xs text-tertiary">{m.action_card_questions_recommended()}</span>
+    <span
+      className={cn(
+        "shrink-0 text-xs text-tertiary",
+        at === "under" && "sm:hidden",
+        at === "end" && "max-sm:hidden",
+      )}
+    >
+      {m.action_card_questions_recommended()}
+    </span>
   );
 }

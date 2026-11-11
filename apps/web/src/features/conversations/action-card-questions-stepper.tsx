@@ -230,9 +230,9 @@ export function QuestionsStepper({
     >
       {/* Every question in one cell, only the current one shown: the card is as tall as its
           tallest question on every page, so turning them moves nothing below (Frank, 11-05,
-          task #535). A shorter question sits at the top. On a touch screen the next question shows
-          its edge at the right, the way a carousel shows there is more to swipe to (task #560);
-          the strip it shows in stays on the last question too, so no page is wider than another. */}
+          task #535). A shorter question sits at the top. On a touch screen a finger drags the next
+          question in; at rest none of it shows (task #81: its cut-off edge read as spilled text,
+          Frank 11-11), and the dots and arrows say there is more. */}
       <div
         ref={pages}
         onTouchStart={onTouchStart}
@@ -243,7 +243,7 @@ export function QuestionsStepper({
           "group/pages grid touch-pan-y",
           // Clipped on a touch screen only: on a desktop the rows' focus rings reach past the edge.
           questions.length > 1 &&
-            "pointer-coarse:grid-cols-[minmax(0,1fr)_--spacing(6)] pointer-coarse:overflow-x-clip pointer-coarse:mask-r-from-[calc(100%-var(--spacing)*6)]",
+            "pointer-coarse:grid-cols-[minmax(0,1fr)] pointer-coarse:overflow-x-clip",
         )}
       >
         {questions.map((entry, index) => {
@@ -276,11 +276,14 @@ export function QuestionsStepper({
               className={cn(
                 follows,
                 "invisible flex flex-col gap-1.5 [grid-area:1/1]",
-                // Beside the current page, a gap away: the one after shows in the strip.
+                // Beside the current page, a gap away, shown only while a finger drags it in; let go
+                // short of turning, it slides back out before it hides.
+                Math.abs(index - step) === 1 &&
+                  "transition-[transform,visibility] group-data-dragging/pages:transition-none",
                 index === step + 1 &&
-                  "pointer-coarse:visible pointer-coarse:translate-x-[calc(100%+--spacing(1))]",
+                  "pointer-coarse:translate-x-[calc(100%+--spacing(1))] pointer-coarse:group-data-dragging/pages:visible",
                 index === step - 1 &&
-                  "pointer-coarse:visible pointer-coarse:-translate-x-[calc(100%+--spacing(1))]",
+                  "pointer-coarse:-translate-x-[calc(100%+--spacing(1))] pointer-coarse:group-data-dragging/pages:visible",
               )}
             >
               {page(entry, () => undefined)}
