@@ -3,6 +3,7 @@ import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { appBotAvatarUrl } from "#src/server/apps/app-logo.server";
 import { recordChannelMembersAdded } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
@@ -224,6 +225,15 @@ export async function channelMembers(
             role: true,
             computerId: true,
             avatarMascot: true,
+            appBot: {
+              select: {
+                installation: {
+                  select: {
+                    app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -253,6 +263,15 @@ export async function channelMembers(
         displayName: true,
         description: true,
         avatarMascot: true,
+        appBot: {
+          select: {
+            installation: {
+              select: {
+                app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
+              },
+            },
+          },
+        },
       },
       orderBy: [{ name: "asc" }, { id: "asc" }],
     }),
@@ -341,7 +360,7 @@ export async function channelMembers(
           name: agent.name,
           displayName: agent.displayName?.trim() || agent.name,
           description: agent.description,
-          avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+          avatarUrl: appBotAvatarUrl(agent.appBot) ?? agentAvatarUrl(agent.id, agent.avatarMascot),
         })),
     },
   };

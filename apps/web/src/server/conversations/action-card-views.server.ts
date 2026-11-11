@@ -2,6 +2,7 @@ import { APP_GRANT_AGENT_CARD_KIND, type ResolvedActionCardPayload } from "@lrm/
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { appBotAvatarUrl } from "#src/server/apps/app-logo.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rules.server";
 import { roleCan } from "#src/features/workspaces/workspace-roles";
@@ -112,7 +113,21 @@ export async function actionCardViews(
       agentIds.size
         ? db.agent.findMany({
             where: { id: { in: [...agentIds] } },
-            select: { id: true, name: true, displayName: true, avatarMascot: true },
+            select: {
+              id: true,
+              name: true,
+              displayName: true,
+              avatarMascot: true,
+              appBot: {
+                select: {
+                  installation: {
+                    select: {
+                      app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
+                    },
+                  },
+                },
+              },
+            },
           })
         : Promise.resolve([]),
       channelIds.size
@@ -142,7 +157,9 @@ export async function actionCardViews(
   const userAvatar = new Map(
     users.map((u) => [u.id, workspaceUserAvatarUrl(workspaceId, u.id, u.avatarObjectKey)]),
   );
-  const agentAvatar = new Map(agents.map((a) => [a.id, agentAvatarUrl(a.id, a.avatarMascot)]));
+  const agentAvatar = new Map(
+    agents.map((a) => [a.id, appBotAvatarUrl(a.appBot) ?? agentAvatarUrl(a.id, a.avatarMascot)]),
+  );
   const viewerInChannel = new Set(
     viewerChannelMemberships.flatMap((m) => (m.leftAt === null ? [m.conversationId] : [])),
   );

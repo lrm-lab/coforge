@@ -4,7 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { appBotAvatarUrl, appLogoUrl } from "#src/server/apps/app-logo.server";
 import { botFixture, type BotFixture } from "./app-bots-fixture";
-import { openConversationForUser } from "#src/server/db/repositories/user-direct-reads.repositories.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 
 /**
@@ -42,8 +42,8 @@ test.skipIf(!connectionString)(
       viewer.id,
       { agentId: botAgentId },
     );
-    const opened = await openConversationForUser(
-      { db },
+    const repo = new PrismaDirectConversationRepository(db);
+    const opened = await repo.openConversationForUser(
       fixture.workspaceId,
       viewer.id,
       conversationId,
@@ -58,7 +58,7 @@ test.skipIf(!connectionString)(
         app.ownerWorkspaceId,
         fixture.key,
         `workspaces/x/apps/${fixture.key}/logos/logo/original`,
-      ),
+      ) ?? "",
     );
     // The helper agrees with what the read served.
     expect(appBotAvatarUrl).toBeDefined();
@@ -75,8 +75,7 @@ test.skipIf(!connectionString)(
     const plainDm = await new DirectConversations(db).open(fixture.workspaceId, viewer.id, {
       agentId: plainAgent.id,
     });
-    const plainOpened = await openConversationForUser(
-      { db },
+    const plainOpened = await repo.openConversationForUser(
       fixture.workspaceId,
       viewer.id,
       plainDm.conversationId,

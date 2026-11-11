@@ -12,6 +12,7 @@ export function AgentDisplayAvatar({
   agentId,
   name,
   src,
+  noIdDefault,
   display,
   stopped,
   deleted,
@@ -25,6 +26,11 @@ export function AgentDisplayAvatar({
   /** The Agent's avatar URL. Its default picture stands in until it is known, so an
    * Agent never flashes initials while its data loads. */
   src?: string | null;
+  /** The id's default picture is not this Agent's face: an app's bot wears its app's logo,
+   * which only its own read knows (task #67), and an Agent absent from every list the viewer
+   * sees was given its mascot by someone else. Until their read arrives they render the
+   * neutral monogram, not a wrong face. */
+  noIdDefault?: boolean;
   display?: AgentDisplaySnapshot;
   /** The user stopped this Agent; see `agentDisplay`. */
   stopped?: boolean;
@@ -39,7 +45,7 @@ export function AgentDisplayAvatar({
   className?: string;
 }) {
   const view = agentDisplay(display, { stopped });
-  const picture = src ?? agentAvatarUrl(agentId);
+  const picture = src ?? (noIdDefault ? null : agentAvatarUrl(agentId));
   const badge =
     cornerDot && !deleted ? (
       <StatusDot tone={view.tone} pulse={view.pulse} className="avatar-status-dot absolute" />

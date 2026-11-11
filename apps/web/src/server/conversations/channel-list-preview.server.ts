@@ -6,6 +6,7 @@ import {
 } from "#src/server/db/repositories/channel-list-preview.repositories.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { appBotAvatarUrl } from "#src/server/apps/app-logo.server";
 import type { PreviewCard } from "#src/features/conversations/action-card-preview";
 import { previewNoticeOf, type PreviewNotice } from "#src/features/conversations/preview-line";
 import { previewCardFieldOf } from "#src/server/conversations/action-card-preview.server";
@@ -136,7 +137,21 @@ export async function channelListPreviews(
     agentIds.size
       ? db.agent.findMany({
           where: { id: { in: [...agentIds] } },
-          select: { id: true, name: true, displayName: true, avatarMascot: true },
+          select: {
+            id: true,
+            name: true,
+            displayName: true,
+            avatarMascot: true,
+            appBot: {
+              select: {
+                installation: {
+                  select: {
+                    app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
+                  },
+                },
+              },
+            },
+          },
         })
       : [],
   ]);
@@ -197,7 +212,21 @@ export async function channelListMembers(
     agentIds.size
       ? db.agent.findMany({
           where: { id: { in: [...agentIds] } },
-          select: { id: true, name: true, displayName: true, avatarMascot: true },
+          select: {
+            id: true,
+            name: true,
+            displayName: true,
+            avatarMascot: true,
+            appBot: {
+              select: {
+                installation: {
+                  select: {
+                    app: { select: { key: true, ownerWorkspaceId: true, logoObjectKey: true } },
+                  },
+                },
+              },
+            },
+          },
         })
       : [],
   ]);
@@ -222,6 +251,11 @@ type ChannelListMemberAgent = {
   name: string;
   displayName: string;
   avatarMascot: string | null;
+  appBot: {
+    installation: {
+      app: { key: string; ownerWorkspaceId: string; logoObjectKey: string | null };
+    };
+  } | null;
 };
 
 /** One active member row as a channel's collage shows it, or null when its person or Agent is
@@ -249,7 +283,7 @@ function channelListMember(
       kind: "agent",
       id: agent.id,
       name: browserSenderName({ agent }),
-      avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+      avatarUrl: appBotAvatarUrl(agent.appBot) ?? agentAvatarUrl(agent.id, agent.avatarMascot),
     };
   }
   return null;
