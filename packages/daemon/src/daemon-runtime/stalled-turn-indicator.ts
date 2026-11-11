@@ -1,6 +1,7 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
+import { isBusyActivityDetailKind } from "./agent-activity-publisher";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -109,13 +110,38 @@ const TURN_ENDING_DETAIL_KINDS: ReadonlySet<string> = new Set([
   AGENT_ACTIVITY_DETAIL_KIND.FRESHNESS_HOLD,
 ]);
 
-/** Whether this provider event, or a session that no longer holds a live turn, ends the turn. */
+/**
+ * Events that are themselves evidence the turn is running: model output, a call starting, the model
+ * streaming a call's arguments. A session's own `hasLiveTurn` can lag these by a moment — Codex
+ * emits a command's `item/started` before it accepts the turn — and that lag is not the turn's end.
+ */
+export function showsTurnWork(event: AgentRuntimeEvent): boolean {
+  switch (event.type) {
+    case "text-delta":
+    case "thinking-delta":
+    case "tool-start":
+    case "tool-output":
+    case "reply-intent":
+    case "progress":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Whether this provider event, or a session that no longer holds a live turn, ends the turn. Work
+ * under way is never read as an end, however stale the session's own answer is: only an explicit
+ * ending ends a turn (task #41). */
 export function endsStalledTurn(event: AgentRuntimeEvent, hasLiveTurn: boolean | undefined) {
-  return (
-    event.type === "completed" ||
-    hasLiveTurn === false ||
-    (event.type === "activity" && TURN_ENDING_DETAIL_KINDS.has(event.activity.detailKind))
-  );
+  if (event.type === "completed") return true;
+  if (event.type === "activity") {
+    const { detailKind } = event.activity;
+    if (TURN_ENDING_DETAIL_KINDS.has(detailKind)) return true;
+    // A frame that shows the Agent working is the turn's own evidence: a turn's model output and
+    // tool activity reach the observation as these coalesced frames.
+    if (isBusyActivityDetailKind(detailKind)) return false;
+  } else if (showsTurnWork(event)) return false;
+  return hasLiveTurn === false;
 }
 
 /** The silence clock starts at the newer of provider progress and the oldest open tool start. */
@@ -228,7 +254,23 @@ export function stalledTurnNotice(
   }>,
 ): (agentId: string, indicator: StalledTurnIndicator) => void {
   return (agentId, indicator) => {
-    if (!host.isCurrent(agentId) || launch.stopping) return;
+    const current = host.isCurrent(agentId);
+    if (!current || launch.stopping) {
+      // A watchdog that fired and was dropped here leaves no other trace: without this line a
+      // reader cannot tell it apart from one that never fired (task #41). Info, not debug: this is
+      // exactly the line a real machine's log has to show.
+      logger.info("Agent runtime stall notice dropped", {
+        event: "agent_runtime:turn_stalled_dropped",
+        agent_id: agentId,
+        launch_id: launch.launchId,
+        is_current: current,
+        stopping: launch.stopping === true,
+        stalled_window: indicator.window,
+        silent_for_ms: indicator.silentForMs,
+        outcome: "dropped",
+      });
+      return;
+    }
     const minutes = Math.max(1, Math.round(indicator.silentForMs / 60_000));
     const openTool = launch.toolCalls?.oldestOpenTool();
     host.publish(agentId, `Agent runtime has produced no progress for ${minutes} minutes.`);

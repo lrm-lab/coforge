@@ -8,7 +8,7 @@ import { isMemoryAgentRuntime } from "@coforge/agent";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
 import { credentialInvalidReason } from "#src/agent-runtime/credential-invalid";
-import { endsStalledTurn, stalledTurnObservation } from "./stalled-turn-indicator";
+import { endsStalledTurn, showsTurnWork, stalledTurnObservation } from "./stalled-turn-indicator";
 import {
   buildRuntimeErrorFenceActivity,
   buildRuntimeReconnectingActivity,
@@ -66,7 +66,10 @@ export function observeRuntimeEvent(
   )
     ports.deliveryGate.busy(agentId);
   if (endsStalledTurn(event, runtime.session.hasLiveTurn)) launch.stalled?.finish(agentId);
-  else if (ports.isWorking(agentId) || runtime.session.hasLiveTurn === true)
+  // Work under way is enough on its own: a session that has not accepted the turn yet reports no
+  // live turn and no busy Activity, and waiting for either is what left a running command
+  // unwatched for fifteen minutes (task #41).
+  else if (showsTurnWork(event) || ports.isWorking(agentId) || runtime.session.hasLiveTurn === true)
     launch.stalled?.observe(agentId, stalledTurnObservation(launch));
   if (event.type === "session") {
     if (controlled && !event.conversation)

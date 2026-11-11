@@ -3,6 +3,8 @@ import {
   STALLED_TURN_MODEL_SILENCE_MS,
   STALLED_TURN_SILENCE_MS,
   StalledTurnTracker,
+  endsStalledTurn,
+  showsTurnWork,
   stalledTurnModelSilenceMs,
   stalledTurnSilenceMs,
   stalledTurnSilenceStartAtMs,
@@ -155,4 +157,51 @@ test("a model window of zero leaves only the tool window", () => {
   } finally {
     jest.useRealTimers();
   }
+});
+
+test("work under way is never read as the turn's end, however stale the session is", () => {
+  const toolStart = {
+    type: "tool-start",
+    id: "exec-1",
+    name: "bash",
+    input: { command: "sleep 1500" },
+  } as const;
+  // Codex emits the command's item before it accepts the turn, so `hasLiveTurn` is still false at
+  // that moment: that lag is not the turn's end (task #41).
+  expect(showsTurnWork(toolStart)).toBe(true);
+  expect(endsStalledTurn(toolStart, false)).toBe(false);
+  expect(endsStalledTurn({ type: "thinking-delta", text: "" }, false)).toBe(false);
+  expect(endsStalledTurn({ type: "text-delta", text: "hi" }, false)).toBe(false);
+  expect(endsStalledTurn({ type: "tool-output", id: "exec-1", text: "…" }, false)).toBe(false);
+  expect(endsStalledTurn({ type: "progress" }, false)).toBe(false);
+  // Model output and tool activity reach the observation as these coalesced frames, and a frame
+  // that shows the Agent working is the turn's own evidence too.
+  expect(
+    endsStalledTurn(
+      {
+        type: "activity",
+        activity: {
+          detailKind: "running_command",
+          level: "info",
+          detail: "",
+          entries: [],
+        } as never,
+      },
+      false,
+    ),
+  ).toBe(false);
+  // Only an explicit ending does: a finished turn, or a session that reports it idle while the
+  // event itself carries no work.
+  expect(endsStalledTurn({ type: "completed", status: "completed" }, true)).toBe(true);
+  expect(endsStalledTurn({ type: "tool-end", id: "exec-1", isError: false }, false)).toBe(true);
+  expect(endsStalledTurn({ type: "usage", snapshot: {} as never }, false)).toBe(true);
+  expect(
+    endsStalledTurn(
+      {
+        type: "activity",
+        activity: { detailKind: "idle", level: "info", detail: "Idle" } as never,
+      },
+      true,
+    ),
+  ).toBe(true);
 });
