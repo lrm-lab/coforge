@@ -309,6 +309,13 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       (await db.conversationMember.findUniqueOrThrow({ where: { id: viewer.id } }))
         .readThroughSequence,
     ).toBe(0);
+    // Clicked once the panel stops moving: a click aimed mid-animation lands where the button was
+    // (task #80).
+    await browser(
+      "wait",
+      "--fn",
+      `document.getAnimations().every((a) => a.playState !== "running")`,
+    );
     await browser(
       "click",
       'section[aria-label="Selected conversation"] aside [aria-label="Close"]',
