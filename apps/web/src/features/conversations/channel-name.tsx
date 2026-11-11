@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { Hash01, Lock01 } from "@untitledui/icons";
 import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import { useChannelMembers, useChannelName } from "./channel-members";
-import { GroupAvatar } from "./group-avatar";
+import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
@@ -78,18 +78,21 @@ export function ChannelPlace({
   id,
   name,
   visibility,
+  members,
 }: {
   id: string;
   name: string;
   /** When the caller's data lacks it, the channel names' say. */
   visibility?: ChannelVisibility;
+  /** Its members from the caller's own server read, for a page rendered on the server, where the
+   * channel names are not read; else the channel names'. */
+  members?: readonly GroupAvatarMember[];
 }) {
   const listed = useChannelName({ id });
+  const faces = members ?? listed?.members;
   return (
     <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 align-bottom">
-      {listed?.members?.length ? (
-        <GroupAvatar members={listed.members} className="avatar-group-xs" />
-      ) : null}
+      {faces?.length ? <GroupAvatar members={faces} className="avatar-group-xs" /> : null}
       <span data-channel-name="" className="min-w-0 truncate">
         <ChannelTitle
           name={name}

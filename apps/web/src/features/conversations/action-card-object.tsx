@@ -10,6 +10,7 @@ import type {
   ActionCardRef,
 } from "#src/server/conversations/action-cards.server";
 import { ActionCardAppBody } from "./action-card-app-body";
+import { ChannelPlace } from "./channel-name";
 import type { ToolActionCardView } from "./action-card-labels";
 import { ActionCardDesktopTakeoverBody, ActionCardPageFillBody } from "./action-card-handoff";
 
@@ -120,8 +121,15 @@ export function ActionCardObject({
         <Faces
           people={[...view.humans, ...view.agents]}
           label={
-            <span className="text-sm font-semibold text-primary">
-              {namesOf([...view.humans, ...view.agents])} → #{view.channel.displayName}
+            // The channel by its group avatar and name, no `#` (task #55); one the viewer cannot
+            // read goes by its name alone.
+            <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm font-semibold text-primary">
+              {namesOf([...view.humans, ...view.agents])} →
+              {view.channel.id ? (
+                <ChannelPlace id={view.channel.id} name={view.channel.displayName} />
+              ) : (
+                view.channel.displayName
+              )}
             </span>
           }
         />

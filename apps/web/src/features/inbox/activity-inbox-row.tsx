@@ -104,7 +104,13 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
     rowPlace?.kind === "attachment" ? (
       m.activity_inbox_attachment_comment({ fileName: rowPlace.fileName })
     ) : rowPlace && place.kind === "channel" ? (
-      <ChannelTitle name={title} visibility={place.visibility} lockClassName="size-3.5" />
+      // Its name, no `#` (task #55): the row's mark is already the channel's group avatar.
+      <ChannelTitle
+        name={title}
+        visibility={place.visibility}
+        hash={false}
+        lockClassName="size-3.5"
+      />
     ) : (
       rowPlace && `@${title}`
     );

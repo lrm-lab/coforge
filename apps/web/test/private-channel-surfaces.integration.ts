@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { actionCardViews } from "#src/server/conversations/action-card-views.server";
+import { waitingChoiceCards } from "#src/server/conversations/waiting-choice-cards.server";
 import { MessageForwards } from "#src/server/conversations/message-forwards.server";
 import {
   cachedActivityAudience,
@@ -270,6 +271,55 @@ test.skipIf(!connectionString)(
     // The Workspace owner manages the insider's Agent but is not in the private channel.
     expect(await anchored(people.owner)).toEqual([open.id, null].sort());
     expect(await anchored(people.insider)).toEqual([open.id, closed.id].sort());
+    // A channel's group avatar comes only with an anchor the reader may see (task #55): the
+    // private channel's members reach its members, and an outsider's reminder names nothing.
+    const facesOf = async (userId: string) => {
+      const listed = await query.list({ userId, workspaceId: ws }, { agentId: extra.scout.id });
+      if (listed.status !== "ready") throw new Error(listed.status);
+      return new Map(
+        listed.reminders.flatMap((reminder) =>
+          reminder.anchor?.kind === "channel"
+            ? [[reminder.anchor.channelId, reminder.anchor.members.map((member) => member.id)]]
+            : [],
+        ),
+      );
+    };
+    expect((await facesOf(people.insider)).get(closed.id)).toContain(people.insider);
+    expect((await facesOf(people.owner)).has(closed.id)).toBe(false);
+  },
+);
+
+test.skipIf(!connectionString)(
+  "a waiting card's channel brings its group avatar only to a reader who can see it",
+  async () => {
+    const { db, ws, people, closed } = fixture;
+    // A choice card for each in the private channel's Task discussion, where the outsider kept a
+    // seat, and one for the insider in the private channel itself.
+    const card = async (conversationId: string, to: string, sequence: number) => {
+      const seat = await db.conversationMember.findFirstOrThrow({
+        where: { conversationId, userId: people.insider },
+      });
+      const message = await db.message.create({
+        data: { workspaceId: ws, conversationId, senderMemberId: seat.id, sequence, body: "Pick" },
+      });
+      await db.actionCard.create({
+        data: {
+          messageId: message.id,
+          conversationId,
+          workspaceId: ws,
+          kind: "choice",
+          payload: { type: "choice", to, prompt: "Pick", options: [{ id: "a", label: "A" }] },
+          preparedByAgentId: extra.scout.id,
+        },
+      });
+    };
+    await card(extra.discussionMessage.conversationId, people.outsider, 50);
+    await card(closed.id, people.insider, 50);
+    // The outsider cannot read the discussion, so no card names the private channel to them.
+    expect(await waitingChoiceCards(db, ws, people.outsider)).toEqual([]);
+    const [mine] = await waitingChoiceCards(db, ws, people.insider);
+    expect(mine?.channel?.id).toBe(closed.id);
+    expect(mine?.channel?.members.map((member) => member.id)).toContain(people.insider);
   },
 );
 
