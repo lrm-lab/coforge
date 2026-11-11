@@ -101,3 +101,15 @@ test("provider progress counts every provider event", () => {
   progress.observe();
   expect(progress.silentForMs()).toBe(0);
 });
+
+test("work stops counting at the turn's own bookkeeping, which is not progress", () => {
+  setSystemTime(START);
+  const progress = new ProviderProgress();
+  setSystemTime(minutes(10));
+  progress.observe({ type: "context-usage" });
+  // The turn's clock keeps counting from its last work; the launch's own liveness does not.
+  expect(progress.lastEventAtMs).toBe(minutes(10).getTime());
+  expect(progress.lastWorkAtMs).toBe(START.getTime());
+  progress.observe({ type: "thinking-delta" });
+  expect(progress.lastWorkAtMs).toBe(minutes(10).getTime());
+});

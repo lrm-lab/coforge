@@ -89,10 +89,9 @@ session 如果每次恢复后几秒内就让 runtime 静默崩溃，说明它在
   （`silent_turn` / `queued_turn_never_started` / `noticed_but_frozen`）、`threshold_ms`（本次用的
   阈值：15 或 60 分钟）、`silent_for_ms`、`last_event_at`（最近一个 provider 事件的时刻）、
   `steers_busy_turn`。
-- 10 分钟的可见 notice（`agent_runtime:turn_stalled`）走的是另一条规则——它只在有工具正在运行时
-  才计时，所以没有 `reason`，`threshold_ms` 是它自己的窗口（默认 10 分钟，可用
-  `COFORGE_STALLED_TURN_SILENCE_MS` 改）；它带 `open_tool` 与 `open_tool_for_ms`，这正是“沉默
-  半小时里在跑构建”和“挂住了”的分界。
+- 可见 notice（`agent_runtime:turn_stalled`）是另一条规则：窗口有 tool（10 分钟）与 model（20 分钟）
+  两条，计时只看工作量事件，判定与诊断行见
+  [stalled-turn-windows](./stalled-turn-windows.md)。
 - 工具调用只写一行，且只写 ledger 自己计时满 `TOOL_CALL_LOG_MIN_MS`（5 秒）的调用：
   `agent_runtime:tool_finished`（调用正常结束）或 `agent_runtime:tool_unfinished`（turn 结束时仍
   未报告结束，或进程随 launch 一起结束）。字段为 `agent_id`、`launch_id`、`call_id`、`tool`、

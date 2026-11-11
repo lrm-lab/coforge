@@ -54,7 +54,7 @@ function windowMs(
 export type StalledTurnObservation = Readonly<{
   /** The provider still reports a live turn. */
   turnBusy: boolean;
-  /** The last raw provider event observed by the daemon. */
+  /** The last event that showed work — provider bookkeeping does not count. */
   lastEventAtMs: number;
   /** The oldest open tool's start time, when a tool is still running. */
   oldestToolStartedAtMs?: number;
@@ -80,7 +80,7 @@ type StalledTurnState = {
 };
 
 /** The launch's provider clock, as both the silence clock and the notice's line read it. */
-type LaunchProgress = Readonly<{ lastEventAtMs: number }>;
+type LaunchProgress = Readonly<{ lastEventAtMs: number; lastWorkAtMs?: number }>;
 
 /** The slice of a launch the silence clock reads. */
 export type StalledTurnLaunch = Readonly<{
@@ -91,11 +91,11 @@ export type StalledTurnLaunch = Readonly<{
   };
 }>;
 
-/** What the launch shows now: a busy turn, its last raw provider event and its open tools. */
+/** What the launch shows now: a busy turn, its last work and its open tools. */
 export function stalledTurnObservation(launch: StalledTurnLaunch): StalledTurnObservation {
   return {
     turnBusy: true,
-    lastEventAtMs: launch.progress?.lastEventAtMs ?? Date.now(),
+    lastEventAtMs: launch.progress?.lastWorkAtMs ?? launch.progress?.lastEventAtMs ?? Date.now(),
     oldestToolStartedAtMs: launch.toolCalls?.oldestOpenToolStartedAtMs(),
     hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
   };
@@ -129,6 +129,25 @@ export function showsTurnWork(event: AgentRuntimeEvent): boolean {
   }
 }
 
+/**
+ * Provider events that say nothing about whether the turn is running: the session's own identity,
+ * plan usage, a context-window reading, the service tier. Codex emits them mid-turn (a
+ * `context-usage` lands between a command's start and its output, and a `session` frame arrives
+ * with `hasLiveTurn` still false), so reading one as the turn's end or as fresh progress moved or
+ * cancelled a running command's watchdog (task #41, s144).
+ */
+export function isTurnNeutralEvent(event: Readonly<{ type: string }>): boolean {
+  switch (event.type) {
+    case "session":
+    case "usage":
+    case "context-usage":
+    case "service-tier":
+      return true;
+    default:
+      return false;
+  }
+}
+
 /** Whether this provider event, or a session that no longer holds a live turn, ends the turn. Work
  * under way is never read as an end, however stale the session's own answer is: only an explicit
  * ending ends a turn (task #41). */
@@ -140,7 +159,7 @@ export function endsStalledTurn(event: AgentRuntimeEvent, hasLiveTurn: boolean |
     // A frame that shows the Agent working is the turn's own evidence: a turn's model output and
     // tool activity reach the observation as these coalesced frames.
     if (isBusyActivityDetailKind(detailKind)) return false;
-  } else if (showsTurnWork(event)) return false;
+  } else if (showsTurnWork(event) || isTurnNeutralEvent(event)) return false;
   return hasLiveTurn === false;
 }
 
@@ -163,15 +182,15 @@ export class StalledTurnTracker {
   /** Starts or resets the current turn's silence clock after a raw provider event. */
   observe(agentId: string, observation: StalledTurnObservation): void {
     if (!observation.turnBusy) {
-      this.finish(agentId);
+      this.finish(agentId, "turn_not_busy");
       return;
     }
     // A tool still open is judged on the tool window; a turn with none is the model's own silence,
     // judged on the longer one — the state a person otherwise cannot tell from a healthy turn.
     const window = observation.hasOpenToolCall ? "tool" : "model";
-    const thresholdMs = window === "tool" ? this.silenceMs : this.modelSilenceMs;
+    const thresholdMs = this.#thresholdMs(window);
     if (thresholdMs <= 0) {
-      this.finish(agentId);
+      this.finish(agentId, "window_disabled");
       return;
     }
     const startAtMs = stalledTurnSilenceStartAtMs(observation);
@@ -182,23 +201,53 @@ export class StalledTurnTracker {
 
   /** Starts a fresh turn, including one whose first provider event has not arrived yet. */
   start(agentId: string, observation: StalledTurnObservation): void {
-    this.finish(agentId);
-    this.observe(agentId, observation);
+    this.finish(agentId, "new_turn");
+    // A window switched off in configuration leaves nothing to arm and nothing to fire, which on a
+    // real machine reads exactly like a turn that was never watched (task #41). Say so, once per
+    // turn, instead of returning quietly.
+    const window = observation.hasOpenToolCall ? "tool" : "model";
+    const thresholdMs = this.#thresholdMs(window);
+    if (thresholdMs > 0) this.observe(agentId, observation);
+    else if (this.silenceMs <= 0 && this.modelSilenceMs <= 0)
+      logger.info("Agent runtime turn silence clock disabled", {
+        event: "agent_runtime:turn_stalled_disabled",
+        agent_id: agentId,
+        stalled_window: window,
+        threshold_ms: thresholdMs,
+        outcome: "disabled",
+      });
   }
 
-  /** Ends the current turn and cancels its watchdog. */
-  finish(agentId: string): void {
+  /** Ends the current turn and cancels its watchdog, saying why: a clock that never fired and one
+   * that was cancelled read the same without this line (task #41). Info like the arming line: the
+   * next real-machine run has to show it without a debug setting. */
+  finish(agentId: string, reason = "unspecified"): void {
     const state = this.#states.get(agentId);
-    if (state?.watchdog !== undefined) clearTimeout(state.watchdog);
+    if (!state) return;
+    if (state.watchdog !== undefined) clearTimeout(state.watchdog);
     this.#states.delete(agentId);
+    logger.info("Agent runtime turn silence clock finished", {
+      event: "agent_runtime:turn_stalled_finished",
+      agent_id: agentId,
+      stalled_window: state.window,
+      threshold_ms: state.thresholdMs,
+      silence_started_at: state.startAtMs,
+      fired: state.warned,
+      reason,
+      outcome: "finished",
+    });
+  }
+
+  #thresholdMs(window: "tool" | "model"): number {
+    return window === "tool" ? this.silenceMs : this.modelSilenceMs;
   }
 
   dispose(agentId: string): void {
-    this.finish(agentId);
+    this.finish(agentId, "disposed");
   }
 
   disposeAll(): void {
-    for (const agentId of this.#states.keys()) this.finish(agentId);
+    for (const agentId of this.#states.keys()) this.finish(agentId, "disposed");
   }
 
   #arm(agentId: string, startAtMs: number, thresholdMs: number, window: "tool" | "model"): void {
@@ -214,6 +263,30 @@ export class StalledTurnTracker {
     };
     state.watchdog = setTimeout(() => this.#markStalled(agentId, startAtMs), delayMs);
     this.#states.set(agentId, state);
+    // A watchdog that never fires leaves no trace of itself, so a turn that was never watched and
+    // a turn that was watched and never passed its window read the same in a real machine's log
+    // (task #41). One line when a clock begins, and the rest at debug so a debug log shows the
+    // whole trail: which events moved the silence's start and when it would fire.
+    const clock = {
+      agent_id: agentId,
+      stalled_window: window,
+      threshold_ms: thresholdMs,
+      silence_started_at: startAtMs,
+      fires_in_ms: delayMs,
+    };
+    if (current === undefined || current.warned)
+      logger.info("Agent runtime turn silence clock armed", {
+        event: "agent_runtime:turn_stalled_armed",
+        ...clock,
+        outcome: "armed",
+      });
+    else
+      logger.debug("Agent runtime turn silence clock moved", {
+        event: "agent_runtime:turn_stalled_rearmed",
+        ...clock,
+        previous_started_at: current.startAtMs,
+        outcome: "rearmed",
+      });
   }
 
   #markStalled(agentId: string, startAtMs: number): void {
@@ -273,7 +346,8 @@ export function stalledTurnNotice(
     }
     const minutes = Math.max(1, Math.round(indicator.silentForMs / 60_000));
     const openTool = launch.toolCalls?.oldestOpenTool();
-    host.publish(agentId, `Agent runtime has produced no progress for ${minutes} minutes.`);
+    // The line goes first: publishing is what a reader sees on the Agent's page, and a page that
+    // failed to update must not be the reason the log is silent about a stalled turn (task #41).
     logger.warning("Agent runtime turn has stalled", {
       event: "agent_runtime:turn_stalled",
       agent_id: agentId,
@@ -285,5 +359,17 @@ export function stalledTurnNotice(
       ...(openTool ? { open_tool: openTool.name, open_tool_for_ms: openTool.silentForMs } : {}),
       outcome: "indicator",
     });
+    try {
+      host.publish(agentId, `Agent runtime has produced no progress for ${minutes} minutes.`);
+    } catch (error) {
+      logger.error("Agent runtime stall notice failed to publish", {
+        event: "agent_runtime:turn_stalled_publish_failed",
+        agent_id: agentId,
+        launch_id: launch.launchId,
+        stalled_window: indicator.window,
+        error: error instanceof Error ? error.message : String(error),
+        outcome: "failed",
+      });
+    }
   };
 }

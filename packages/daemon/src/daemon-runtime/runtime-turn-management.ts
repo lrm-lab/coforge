@@ -126,7 +126,7 @@ export function reconcileIdleTurn(
   // Preserve output accepted while the turn was live before publishing its final Idle.
   // Otherwise the pending trajectory timer could publish it after Idle and rearm Busy.
   launch.trajectory?.flush();
-  launch.stalled?.finish(agentId);
+  launch.stalled?.finish(agentId, "turn_idle_reconciled");
   ports.phaseBookkeeping.dispose(agentId);
   if (ports.isWorking(agentId)) {
     showQuietTurn(ports, agentId, launch, (id, source, activity) =>

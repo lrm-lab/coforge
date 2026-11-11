@@ -46,6 +46,7 @@ Daemon、服务端存储和前端展示使用同一契约，每条 activity 固�
 
 - [Provider 信号的 detailKind](detail-kinds.md): 工具结束、thinking、压缩、review、subagent 等只在 provider 有真实信号时上报的 `detailKind`。
 - [Runtime 生命周期 detailKind 与冷空闲回收](runtime-lifecycle.md): 消息接收、崩溃、打断、卡住重启、session 不可恢复，以及冷空闲回收的 Activity、日志事件和环境变量。
+- [卡住 turn 的可见 notice](stalled-turn-windows.md): tool（10 分钟）与 model（20 分钟）两条窗口、只认工作量事件、以及 `turn_stalled_*` 诊断行。
 - [凭据失效 hold](credential-invalid-hold.md): provider 凭据已知不可用时保留进程、扣住投递和 tracked @mention 的触发、期间行为与结束方式。
 - [Stop 一定完成](stop.md): Stop 的期限、升级到 SIGKILL 的 sweep、`agent_runtime:stop_unconfirmed` 日志，以及下一次 Start 的处理。
 - [Provider 拒绝 replay 后的冷启动](provider-replay-recovery.md): Codex 已存 session 的加密 reasoning 被 API 拒绝时，Daemon 如何失效该 session、冷启动并带上未读消息。

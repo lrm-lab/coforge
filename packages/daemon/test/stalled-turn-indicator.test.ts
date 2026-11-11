@@ -1,4 +1,5 @@
 import { expect, jest, test } from "bun:test";
+import type { LogRecord } from "@logtape/logtape";
 import {
   STALLED_TURN_MODEL_SILENCE_MS,
   STALLED_TURN_SILENCE_MS,
@@ -6,9 +7,18 @@ import {
   endsStalledTurn,
   showsTurnWork,
   stalledTurnModelSilenceMs,
+  stalledTurnNotice,
   stalledTurnSilenceMs,
   stalledTurnSilenceStartAtMs,
 } from "#src/daemon-runtime/stalled-turn-indicator";
+import { captureDaemonLogs } from "./log-capture";
+
+/** The tracker's own lines, by their event name. */
+function clockLines(records: readonly LogRecord[], event: string) {
+  return records
+    .filter((record) => record.properties.event === event)
+    .map((record) => record.properties);
+}
 
 test("the silence window defaults, accepts launch zero, and rejects malformed values", () => {
   expect(stalledTurnSilenceMs(undefined, {})).toBe(STALLED_TURN_SILENCE_MS);
@@ -194,7 +204,16 @@ test("work under way is never read as the turn's end, however stale the session 
   // event itself carries no work.
   expect(endsStalledTurn({ type: "completed", status: "completed" }, true)).toBe(true);
   expect(endsStalledTurn({ type: "tool-end", id: "exec-1", isError: false }, false)).toBe(true);
-  expect(endsStalledTurn({ type: "usage", snapshot: {} as never }, false)).toBe(true);
+  // The turn's own bookkeeping is not an ending either: Codex sends these mid-turn with
+  // `hasLiveTurn` still false (task #41, s144).
+  expect(endsStalledTurn({ type: "usage", snapshot: {} as never }, false)).toBe(false);
+  expect(endsStalledTurn({ type: "context-usage", usedTokens: 1, windowTokens: 2 }, false)).toBe(
+    false,
+  );
+  expect(
+    endsStalledTurn({ type: "session", identity: { sessionId: "t", state: "unknown" } }, false),
+  ).toBe(false);
+  expect(endsStalledTurn({ type: "service-tier", state: "on" } as never, false)).toBe(false);
   expect(
     endsStalledTurn(
       {
@@ -204,4 +223,80 @@ test("work under way is never read as the turn's end, however stale the session 
       true,
     ),
   ).toBe(true);
+});
+
+test("a turn's first clock says when counting began, against which window", async () => {
+  const { records } = await captureDaemonLogs(async () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(1_000);
+      const tracker = new StalledTurnTracker(() => undefined, 600_000, Date.now, 1_200_000);
+      tracker.start("agent-a", { turnBusy: true, lastEventAtMs: 1_000, hasOpenToolCall: false });
+      // A second event moves the clock: the line stays one per clock, the move is debug.
+      jest.setSystemTime(61_000);
+      tracker.observe("agent-a", { turnBusy: true, lastEventAtMs: 61_000, hasOpenToolCall: true });
+      tracker.finish("agent-a", "test_over");
+    } finally {
+      jest.useRealTimers();
+    }
+  }, "debug");
+  expect(clockLines(records, "agent_runtime:turn_stalled_armed")).toEqual([
+    expect.objectContaining({
+      agent_id: "agent-a",
+      stalled_window: "model",
+      threshold_ms: 1_200_000,
+      silence_started_at: 1_000,
+      fires_in_ms: 1_200_000,
+    }),
+  ]);
+  expect(clockLines(records, "agent_runtime:turn_stalled_rearmed")).toEqual([
+    expect.objectContaining({
+      stalled_window: "tool",
+      threshold_ms: 600_000,
+      silence_started_at: 61_000,
+      previous_started_at: 1_000,
+    }),
+  ]);
+  expect(clockLines(records, "agent_runtime:turn_stalled_finished")).toEqual([
+    expect.objectContaining({ agent_id: "agent-a", fired: false, reason: "test_over" }),
+  ]);
+});
+
+test("a tracker with both windows switched off says so instead of arming", async () => {
+  const { records } = await captureDaemonLogs(async () => {
+    const tracker = new StalledTurnTracker(() => undefined, 0, Date.now, 0);
+    tracker.start("agent-a", { turnBusy: true, lastEventAtMs: 0, hasOpenToolCall: true });
+  });
+  expect(clockLines(records, "agent_runtime:turn_stalled_armed")).toEqual([]);
+  expect(clockLines(records, "agent_runtime:turn_stalled_disabled")).toEqual([
+    expect.objectContaining({ agent_id: "agent-a", stalled_window: "tool", threshold_ms: 0 }),
+  ]);
+});
+
+test("a stall whose Activity fails to publish still says so in the log", async () => {
+  const launch = {
+    launchId: "launch-a",
+    progress: { lastEventAtMs: 1_000 },
+  };
+  const { result, records } = await captureDaemonLogs(async () => {
+    const notice = stalledTurnNotice(launch, {
+      isCurrent: () => true,
+      publish: () => {
+        throw new Error("transport gone");
+      },
+    });
+    notice("agent-a", { silentForMs: 600_000, thresholdMs: 600_000, window: "tool" });
+  });
+  expect(result).toBeUndefined();
+  expect(clockLines(records, "agent_runtime:turn_stalled")).toEqual([
+    expect.objectContaining({
+      agent_id: "agent-a",
+      launch_id: "launch-a",
+      stalled_window: "tool",
+      threshold_ms: 600_000,
+    }),
+  ]);
+  expect(clockLines(records, "agent_runtime:turn_stalled_publish_failed")).toEqual([
+    expect.objectContaining({ agent_id: "agent-a", error: "transport gone" }),
+  ]);
 });

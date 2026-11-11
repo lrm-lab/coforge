@@ -1,6 +1,7 @@
 import { foldUntrustedLine, truncateCodePoints } from "@lrm/coforge-sdk/internal";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import { processClockMs } from "#src/platform/process-tree";
+import { isTurnNeutralEvent } from "./stalled-turn-indicator";
 
 const LAST_STEP_MAX_CHARS = 200;
 
@@ -33,6 +34,7 @@ export const STALLED_RECOVERY_EXIT_TIMEOUT_MS = 2 * PROCESS_TREE_EXIT_GRACE_MS +
  */
 export class ProviderProgress {
   #lastEventAtMs = Date.now();
+  #lastWorkAtMs = this.#lastEventAtMs;
   #turnStartedAtMs = this.#lastEventAtMs;
   #turnStartedProcessClockMs: number;
 
@@ -44,6 +46,9 @@ export class ProviderProgress {
 
   observe(event?: Readonly<{ type: string }>): void {
     this.#lastEventAtMs = Date.now();
+    // A turn's own silence is judged on what the turn did, not on the bookkeeping a provider emits
+    // around it: a context-window reading says nothing about a running command (task #41).
+    if (!event || !isTurnNeutralEvent(event)) this.#lastWorkAtMs = this.#lastEventAtMs;
     if (event?.type === "completed") this.#lastCompletedAtMs = this.#lastEventAtMs;
   }
 
@@ -56,6 +61,7 @@ export class ProviderProgress {
    * client: a turn is never judged by the quiet spell before it began. */
   noteTurnStarted(): void {
     this.#lastEventAtMs = Date.now();
+    this.#lastWorkAtMs = this.#lastEventAtMs;
     this.#turnStartedAtMs = this.#lastEventAtMs;
     this.#turnStartedProcessClockMs = this.processClock();
   }
@@ -72,6 +78,12 @@ export class ProviderProgress {
   /** When the provider last reported anything. */
   get lastEventAtMs(): number {
     return this.#lastEventAtMs;
+  }
+
+  /** When the provider last showed work: any event but the turn's own bookkeeping. A turn's
+   * silence clock reads this one. */
+  get lastWorkAtMs(): number {
+    return this.#lastWorkAtMs;
   }
 
   silentForMs(): number {

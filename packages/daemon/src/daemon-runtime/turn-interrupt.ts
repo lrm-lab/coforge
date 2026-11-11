@@ -91,7 +91,7 @@ export async function interruptAgentTurn<Launch extends TurnInterruptLaunch>(
     return;
   }
   launch.replyIntents?.clear();
-  launch.stalled?.finish(intent.agentId);
+  launch.stalled?.finish(intent.agentId, "turn_interrupted");
   const status = await host.interrupt(intent.agentId, {
     interruptTimeoutMs: AGENT_TURN_INTERRUPT_TIMEOUT_MS,
     releaseTimeoutMs: AGENT_TURN_INTERRUPT_RELEASE_TIMEOUT_MS,
