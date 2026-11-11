@@ -43,7 +43,14 @@ export type ContextViewRestoreFailure =
 export type ContextViewTooLargeCause = "session_file" | "request" | "restore_limit";
 export type ContextViewRestoreResult =
   | { ok: true; view: RestoredContextView }
-  | { ok: false; failure: ContextViewRestoreFailure; tooLargeCause?: ContextViewTooLargeCause };
+  | {
+      ok: false;
+      failure: ContextViewRestoreFailure;
+      tooLargeCause?: ContextViewTooLargeCause;
+      /** What the child process said on stderr, its first line: the one clue a failed read has
+       * about why the restore never happened (task #739). */
+      detail?: string;
+    };
 
 export type RecordValue = Record<string, unknown>;
 export const CONTEXT_VIEW_RECORD_END = Symbol("context-view-record-end");

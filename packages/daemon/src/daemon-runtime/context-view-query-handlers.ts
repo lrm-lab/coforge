@@ -347,7 +347,7 @@ export function subscribeContextViewQueries(
                 verification: restored.view.verification,
               };
         })()
-      : failure(request, restored.failure, restored.failure, {
+      : failure(request, restored.failure, restored.detail ?? restored.failure, {
           sourceBytes: source.sourceBytes,
           ...(restored.failure === "too_large" && restored.tooLargeCause
             ? { tooLargeCause: restored.tooLargeCause }

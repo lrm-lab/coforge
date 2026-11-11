@@ -133,7 +133,14 @@ export async function queryAgentContext(
   if (ports.currentSessionId(agentId) !== request.sessionId)
     refuse("context session changed while it was being restored", "CONTEXT_SESSION_MISMATCH");
   if (!restored.ok)
-    refuse("context could not be restored", `CONTEXT_${restored.failure.toUpperCase()}`);
+    // The child's own first stderr line, when it left one: the difference between "the restore
+    // said no" and "the restore never ran" (task #739).
+    refuse(
+      restored.detail === undefined
+        ? "context could not be restored"
+        : `context could not be restored: ${restored.detail}`,
+      `CONTEXT_${restored.failure.toUpperCase()}`,
+    );
 
   try {
     return request.mode === "search"

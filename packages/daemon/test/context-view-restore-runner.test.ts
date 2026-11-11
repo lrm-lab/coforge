@@ -3,8 +3,60 @@ import { join } from "node:path";
 import {
   encodeContextViewRestoreChildResult,
   decodeContextViewRestoreChildResult,
+  firstStderrLine,
   runContextViewRestoreInChild,
+  selfSubcommand,
 } from "#src/agent-context-view/context-view-restore-runner";
+
+test("a compiled Computer runs the subcommand as its first argument", () => {
+  // Measured in a compiled binary: execPath is the binary and argv[1] is `/$bunfs/root/...`, while
+  // the Computer itself was started with a subcommand — so argv[1] is never this subcommand
+  // (task #739).
+  expect(
+    selfSubcommand("__restore-context-view", {
+      execPath: "/Applications/CoForge/coforge-computer",
+      script: "/$bunfs/root/probe",
+    }),
+  ).toEqual(["/Applications/CoForge/coforge-computer", "__restore-context-view"]);
+});
+
+test("under bun the script comes before the subcommand", () => {
+  expect(
+    selfSubcommand("__restore-context-view", {
+      execPath: "/usr/local/bin/bun",
+      script: "/repo/packages/computer/src/main.ts",
+    }),
+  ).toEqual([
+    "/usr/local/bin/bun",
+    "/repo/packages/computer/src/main.ts",
+    "__restore-context-view",
+  ]);
+});
+
+test("a child that never starts leaves its first stderr line on the refusal", async () => {
+  const result = await runContextViewRestoreInChild(
+    {
+      runtime: "codex",
+      sessionId: "s1",
+      messageId: "m1",
+      buffer: Buffer.from("", "utf8"),
+      offset: 0,
+    },
+    { command: ["sh", "-c", "echo 'error: unknown command' >&2; exit 2"] },
+  );
+  expect(result).toEqual({
+    ok: false,
+    failure: "read_failed",
+    detail: "error: unknown command",
+  });
+});
+
+test("a child silent on stderr keeps the refusal as it was", () => {
+  expect(firstStderrLine("")).toBeUndefined();
+  expect(firstStderrLine("\n\n")).toBeUndefined();
+  expect(firstStderrLine("first\nsecond")).toBe("first");
+  expect(firstStderrLine(`${"x".repeat(400)}\nrest`)).toHaveLength(301);
+});
 
 test("round trips bounded child result framing", () => {
   const result = {

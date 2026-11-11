@@ -4,6 +4,7 @@ import {
   type ContextViewRestoreResult,
 } from "./context-view-restore";
 import { writeFileSync } from "node:fs";
+import { basename } from "node:path";
 
 export const CONTEXT_VIEW_RESTORE_TIMEOUT_MS = 25_000;
 export const CONTEXT_VIEW_RESTORE_HEAP_MB = 1_024;
@@ -26,6 +27,28 @@ function childRequest(request: RestoreRequest): ChildRequest {
 
 function restorePayload(request: ChildRequest): ContextViewRestoreResult {
   return restoreContextView({ ...request, buffer: Buffer.from(request.bufferBase64, "base64") });
+}
+
+/**
+ * How this program asks itself to run a subcommand. A compiled Computer is its own entrypoint, so
+ * the subcommand is its first argument; under `bun` the script has to come first, or the runtime
+ * looks for a file named after the subcommand.
+ *
+ * The runtime is what tells the two apart: in a compiled binary `process.execPath` is the binary,
+ * while `process.argv[1]` is an embedded `/$bunfs/root/...` path (measured), so passing it along
+ * would make the child dispatch on the wrong argument — the restore then fell into the CLI branch
+ * and every context read failed with `CONTEXT_READ_FAILED` (task #739).
+ */
+export function selfSubcommand(
+  subcommand: string,
+  self: Readonly<{ execPath: string; script?: string }> = {
+    execPath: process.execPath,
+    script: process.argv[1],
+  },
+): string[] {
+  const underBun = basename(self.execPath).startsWith("bun");
+  const script = underBun && self.script !== undefined ? [self.script] : [];
+  return [self.execPath, ...script, subcommand];
 }
 
 export function encodeContextViewRestoreChildResult(result: ContextViewRestoreResult): string {
@@ -115,16 +138,14 @@ export async function runContextViewRestoreInChild(
   request: RestoreRequest,
   options: { timeoutMs?: number; command?: string[] } = {},
 ): Promise<ContextViewRestoreResult> {
-  const command = options.command ?? [
-    process.execPath,
-    ...(process.argv[1] ? [process.argv[1]] : []),
-    "__restore-context-view",
-  ];
+  const command = options.command ?? selfSubcommand("__restore-context-view");
   const child = Bun.spawn({
     cmd: command,
     stdin: "pipe",
     stdout: "pipe",
-    stderr: "ignore",
+    // Kept, not dropped: a child that cannot start says why on stderr, and that first line is the
+    // only clue a failed read leaves behind (task #739).
+    stderr: "pipe",
     maxBuffer: CONTEXT_VIEW_RESTORE_RESULT_MAX_BYTES + CONTEXT_VIEW_RESTORE_HEADER_MAX_BYTES,
     ...(process.execPath.endsWith("bun")
       ? {
@@ -137,6 +158,7 @@ export async function runContextViewRestoreInChild(
   });
   const timeoutMs = options.timeoutMs ?? CONTEXT_VIEW_RESTORE_TIMEOUT_MS;
   const timer = setTimeout(() => child.kill(), timeoutMs);
+  const stderr = new Response(child.stderr as ReadableStream<Uint8Array>).text();
   try {
     let body: string;
     try {
@@ -155,11 +177,26 @@ export async function runContextViewRestoreInChild(
     const result = decodeContextViewRestoreChildResult(raw);
     if (result.ok && process.memoryUsage().rss > CONTEXT_VIEW_RESTORE_RSS_MAX_BYTES)
       return { ok: false, failure: "too_large", tooLargeCause: "restore_limit" };
+    if (!result.ok) {
+      const detail = firstStderrLine(await stderr);
+      return detail === undefined ? result : { ...result, detail };
+    }
     return result;
   } catch {
-    return { ok: false, failure: "read_failed" };
+    const detail = firstStderrLine(await stderr);
+    return detail === undefined
+      ? { ok: false, failure: "read_failed" }
+      : { ok: false, failure: "read_failed", detail };
   } finally {
     clearTimeout(timer);
     child.kill();
   }
+}
+
+/** The child's own words about why it failed, bounded: one line, no paths beyond what it said. */
+export function firstStderrLine(stderr: string, maxChars = 300): string | undefined {
+  const line = stderr.split("\n").find((each) => each.trim() !== "");
+  if (line === undefined) return undefined;
+  const trimmed = line.trim();
+  return trimmed.length > maxChars ? `${trimmed.slice(0, maxChars)}…` : trimmed;
 }
