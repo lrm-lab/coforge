@@ -261,9 +261,13 @@ test.skipIf(!connectionString)(
   async () => {
     const { suffix, login, teardown } = await userIdentityFixture();
     try {
-      const named = await login(`sub-named-${suffix}`, { preferredUsername: `ada2024-${suffix}` });
+      // The `a` keeps "2024" and an all-digit suffix from merging into an 11-digit run that
+      // the phone-number rule refuses; without it a ~4% of random suffixes flakes this test.
+      const named = await login(`sub-named-${suffix}`, {
+        preferredUsername: `ada2024-a${suffix}`,
+      });
 
-      expect(named.username).toBe(`ada2024-${suffix}`);
+      expect(named.username).toBe(`ada2024-a${suffix}`);
     } finally {
       await teardown();
     }
