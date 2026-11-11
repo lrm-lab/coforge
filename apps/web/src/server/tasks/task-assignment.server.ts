@@ -147,7 +147,8 @@ export async function assignTask(
       owner,
       [task],
       [receiptId],
-      command.reason,
+      // Stored as one line, the way the CLI would have sent it (task #36).
+      command.reason?.trim(),
     );
     return { task, changed: true, assigneeHandle: assigneeMention(owner), receipt: posted };
   });

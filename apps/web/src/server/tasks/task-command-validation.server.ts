@@ -2,10 +2,12 @@ import {
   isTaskRef,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  taskAssignReasonProblem,
   type TaskCommand,
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { LABEL_NAME_MAX, LABELS_PER_TASK_MAX } from "./labels.server";
+import { refuseAssignReason } from "./task-assign-reason.server";
 import { TASK_PRIORITY_INVALID } from "./task-priority.server";
 
 /**
@@ -67,6 +69,15 @@ export function validateTaskCommand(command: TaskCommand) {
     throw new AppError("INVALID_INPUT");
   if (command.messageIds?.some((messageId) => !messageId.trim()))
     throw new AppError("INVALID_INPUT");
+  // An assignment's handover sentence obeys the same rules as `assign --reason` (task #36): the
+  // notice shows it next to the assignment, so a blank, wrapped or over-long one is refused here
+  // rather than stored as whatever an API caller sent.
+  if (command.reason !== undefined) {
+    if (command.operation !== "assign" || typeof command.reason !== "string")
+      throw new AppError("INVALID_INPUT");
+    const problem = taskAssignReasonProblem(command.reason);
+    if (problem) refuseAssignReason(problem);
+  }
   if (
     command.operation !== "update" &&
     command.operation !== "unclaim" &&

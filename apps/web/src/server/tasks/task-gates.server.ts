@@ -17,6 +17,7 @@ import {
 import { TASK_RELATION_INVALID } from "./task-relation-graph.server";
 import { isTaskManager } from "./task-assignees.server";
 import { TASK_PRIORITY_DENIED, TASK_PRIORITY_INVALID } from "./task-priority.server";
+import { TASK_ASSIGN_REASON_INVALID } from "./task-assign-reason.server";
 import { TASK_RELATIONS_OFF, taskRelationsEnabled } from "./task-conversations-gate.server";
 import type { NoticeSubject, NoticeWriter } from "./task-notice-posting.server";
 import {
@@ -54,6 +55,9 @@ export const AGENT_FACING_ERROR_IDS: ReadonlySet<string> = new Set([
   TASK_RELATIONS_OFF,
   TASK_PRIORITY_INVALID,
   TASK_PRIORITY_DENIED,
+  // A handover sentence the board will not store: the CLI caller learns which rule it broke
+  // (task #36).
+  TASK_ASSIGN_REASON_INVALID,
   // Label refusals: an Agent needs the Workspace's own names, the archived fact and the group
   // rule, not a shapeless INVALID_INPUT (task #455).
   "task-label-unknown",

@@ -100,6 +100,9 @@ export const taskRequestSchema = z
     titles: z.array(z.string().min(1).max(10_000)).min(1).optional(),
     description: z.string().max(50_000).nullable().optional(),
     assignee: z.string().nullable().optional(),
+    // `assign`: the handover sentence. Its rules are the board's, not the shape's, so the refusal
+    // names what is wrong with it (task #36).
+    reason: z.string().optional(),
     blockedBy: z.array(taskRefSchema).max(100).optional(),
     parent: taskRefSchema.nullable().optional(),
     ready: z.boolean().optional(),

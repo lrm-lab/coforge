@@ -458,6 +458,7 @@ export * from "./reminder";
 export * from "./reminder-grammar";
 export * from "./app-config";
 export * from "./tasks";
+export * from "./task-assign-reason";
 export * from "./task-codec";
 export * from "./channel-command";
 export * from "./agent-display";
