@@ -18,9 +18,21 @@ const TONES = [
   "bg-avatar-6",
 ] as const;
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/**
+ * The glyph a pictureless avatar shows: the name's first letter or digit, as a whole grapheme
+ * (`charAt(0)` split an emoji into half a surrogate pair, drawn as a box: task #86). Sender names
+ * arrive as "@handle", and a name may lead with an emoji ("🦊 Fox" shows "F"); a name with no letter
+ * at all shows its first grapheme ("🦊" shows "🦊").
+ */
 export function avatarInitial(name: string): string {
-  // Sender names arrive as "@handle"; the glyph is the first letter, not the "@".
-  return name.trim().replace(/^@+/, "").charAt(0).toUpperCase() || "?";
+  let first: string | undefined;
+  for (const { segment } of graphemes.segment(name.trim().replace(/^@+/, ""))) {
+    if (/[\p{L}\p{N}]/u.test(segment)) return segment.toUpperCase();
+    first ??= segment;
+  }
+  return first ?? "?";
 }
 
 export function avatarToneClassName(name: string): string {
