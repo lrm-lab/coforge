@@ -248,6 +248,12 @@ test("another conversation's Task reads as its live label, or as a Task the read
     const popupOf = (title: string) =>
       `[...document.querySelectorAll('[role="dialog"]')].find((el) => el.textContent.includes(${JSON.stringify(title)}))`;
     const noPopup = `document.querySelector('[role="dialog"]') === null`;
+    // The popup scales in, and a click aimed while it moves lands where its close button was, beside
+    // where it is (task #80), so the button is clicked once the popup is still.
+    const closePopup = async () => {
+      await settled();
+      await browser("click", `[role="dialog"] button[aria-label="Close"]`);
+    };
     await browser("click", "[data-e2e-launch]");
     await browser("wait", "--fn", `${popupOf(launchTitle)} != null && ${onThisPage}`);
     await browser("wait", "--fn", `${popupOf(launchTitle)}.querySelector("textarea") != null`);
@@ -274,7 +280,7 @@ test("another conversation's Task reads as its live label, or as a Task the read
     );
 
     // Its close button leaves no popup and nothing in the address.
-    await browser("click", `[role="dialog"] button[aria-label="Close"]`);
+    await closePopup();
     await browser("wait", "--fn", noPopup);
     expect(await evaluate<string>(`location.search`)).not.toContain("otherTask");
     expect(await evaluate<boolean>(onThisPage)).toBe(true);
@@ -284,7 +290,7 @@ test("another conversation's Task reads as its live label, or as a Task the read
     await evaluate(`${chip(directTitle)}.setAttribute("data-e2e-direct", "") ?? true`);
     await browser("click", "[data-e2e-direct]");
     await browser("wait", "--fn", `${popupOf(directTitle)} != null && ${onThisPage}`);
-    await browser("click", `[role="dialog"] button[aria-label="Close"]`);
+    await closePopup();
     await browser("wait", "--fn", noPopup);
 
     // A Task whose conversation cannot be read shows no popup, and the address lets go of it.
