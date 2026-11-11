@@ -82,14 +82,16 @@ export async function failAgentStartup(
 ): Promise<void> {
   if (ports.stopping || launch.stopping || ports.currentActivityLaunches.get(agentId) !== launch)
     return;
-  const detail = `Agent runtime did not become ready within ${AGENT_STARTUP_TIMEOUT_MS / 1000} seconds. Check the provider on this Computer, then start the Agent again.`;
+  // The window that expired, not a global default: a slow provider's launch waited ten minutes.
+  const timeoutMs = launch.startup?.timeoutMs ?? AGENT_STARTUP_TIMEOUT_MS;
+  const detail = `Agent runtime did not become ready within ${timeoutMs / 1000} seconds. Check the provider on this Computer, then start the Agent again.`;
   const error = new Error(detail);
   if (!launch.startup?.fail(error)) return;
   logger.warning("Agent runtime startup failed", {
     event: "agent_runtime:startup_timed_out",
     agent_id: agentId,
     launch_id: launch.launchId,
-    timeout_ms: AGENT_STARTUP_TIMEOUT_MS,
+    timeout_ms: timeoutMs,
     outcome: "failed",
   });
   ports.activityPublisher.publish(agentId, launch, ports.drafts.runtimeError(agentId, detail));

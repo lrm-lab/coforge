@@ -1,5 +1,6 @@
 import { taskHint } from "#src/daemon-runtime/inbox-notice-text";
 import { AgentSessionRecoveryError, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 /** The first turn when no real Message or explicit resume prompt is available. Standing
  * instructions already live in the provider's native system/developer prompt. `memoryInContext`:
@@ -34,6 +35,27 @@ Read each listed conversation with ${command} ${reading}, then end this turn. Do
 }
 export const AGENT_STARTUP_TIMEOUT_MS = 120_000;
 
+/** Providers whose first turn legitimately takes minutes: a cold CLI, a package it downloads, or a
+ * login it only finishes once it starts. Raft 1.0.69 item 11 (task #26) moved theirs to ten
+ * minutes; every other runtime keeps two. */
+export const SLOW_STARTUP_PROVIDERS: ReadonlySet<string> = new Set([
+  RUNTIME_PROVIDER.OPENCODE,
+  RUNTIME_PROVIDER.GROK,
+  RUNTIME_PROVIDER.ANTIGRAVITY,
+]);
+export const SLOW_STARTUP_TIMEOUT_MS = 600_000;
+
+/** How long one provider's launch may stay silent before the Agent is reported as failed to
+ * start. Both the timer and the wording a person sees read this one number. */
+export function startupTimeoutMs(provider: string): number {
+  return SLOW_STARTUP_PROVIDERS.has(provider) ? SLOW_STARTUP_TIMEOUT_MS : AGENT_STARTUP_TIMEOUT_MS;
+}
+
+/** One provider's startup window, already armed; the launch keeps the tracker it returns. */
+export function agentStartup(provider: string, onTimeout: () => void): AgentStartup {
+  return new AgentStartup(onTimeout, { timeoutMs: startupTimeoutMs(provider), now: Date.now });
+}
+
 /** How far past its window a startup timer may fire before the delay is read as the Computer
  * having slept rather than the process having been silent. */
 export const STARTUP_SUSPEND_SLACK_MS = 30_000;
@@ -59,6 +81,11 @@ export class AgentStartup {
   ) {
     void this.#ready.promise.catch(() => {});
     this.#arm(onTimeout);
+  }
+
+  /** The window this launch got, so the failure wording names the one that expired. */
+  get timeoutMs(): number {
+    return this.timing.timeoutMs;
   }
 
   /** Arms the window. A timer that fires long after its time ran while the Computer slept, before

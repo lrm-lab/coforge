@@ -1,6 +1,6 @@
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import { AgentAuthorizationError } from "#src/agent-runtime/launch-failure";
-import { AgentStartup } from "#src/agent-runtime/agent-startup";
+import { agentStartup } from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
@@ -232,7 +232,9 @@ export async function launchAgentProcess(
       ...ports.drafts.starting(agentId),
       requestId,
     });
-    launch.startup = new AgentStartup(() => ports.scheduleStartupFailure(agentId, launch));
+    launch.startup = agentStartup(config.provider, () =>
+      ports.scheduleStartupFailure(agentId, launch),
+    );
     const { trajectory, progress, toolCalls, replyIntents } = trackAgentLaunch(
       ports,
       agentId,
