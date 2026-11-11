@@ -11,7 +11,13 @@ import { ROW_CLASS } from "./message-row";
 import type { MessageView } from "./message-view";
 import { useMemberDirectory } from "./member-directory";
 import type { Mentionable } from "./mention-text";
-import { systemNoticeParts, systemNoticeText, type NoticePerson } from "./system-notice-text";
+import {
+  assignmentReason,
+  systemNoticeParts,
+  systemNoticeText,
+  withoutAssignmentReason,
+  type NoticePerson,
+} from "./system-notice-text";
 
 /** The day label (`dayLabel`) of the day a folded group is drawn under, its first notice's, so a
  * notice from a later day in it writes its date before its time. Outside a group a notice is under
@@ -44,14 +50,55 @@ export function SystemMessageRow({
   const groupDay = useContext(SystemGroupDayContext);
   // In the viewer's language from the notice's kind; an unstructured one reads as its body. The
   // line draws each person it names by face (task #521); the tooltip keeps the words alone.
-  const text = systemNoticeText(message);
-  const parts = systemNoticeParts(message);
+  // An assignment with a reason is drawn as a card of two lines: the notice, then the reason in
+  // the stream's own ink, where it can wrap (task #83). Any other notice keeps its one line.
+  const reason = assignmentReason(message);
+  const notice = reason ? withoutAssignmentReason(message) : message;
+  const text = systemNoticeText(notice);
+  const parts = systemNoticeParts(notice);
   const members = useMemberDirectory();
   // A notice from a later day than its group's writes its date, before the same clock.
   const time =
     dateLocale && groupDay && groupDay !== dayLabel(message.createdAt, dateLocale, timeZone)
       ? formatMonthDayTime(message.createdAt, timeZone, dateLocale, timeFormat, { hour: "2-digit" })
       : clockLabel(message.createdAt, dateLocale, timeFormat, timeZone);
+  const noticeLine = (
+    <span className="flex min-w-0 items-baseline gap-2">
+      <time dateTime={new Date(message.createdAt).toISOString()} className="shrink-0 tabular-nums">
+        {time}
+      </time>
+      {/* The trigger is itself the flex item, so `min-w-0` governs it and `truncate` clips;
+          a wrapper between this line and the text let the stream scroll sideways on a
+          phone. A plain span gives React Aria nothing to hover, so the full text never
+          showed. Out of the tab order, as in `agent-model-label.tsx`: a stop per notice
+          would crowd the stream, and the text is read whole whatever the width cuts. */}
+      <Tooltip title={text}>
+        <TooltipTrigger
+          excludeFromTabOrder
+          // In a card the notice may wrap, so who the Task went to is never cut on a phone.
+          className={cn(
+            "min-w-0 cursor-default rounded-sm text-left outline-focus-ring focus-visible:outline-2",
+            reason ? "break-words" : "truncate",
+          )}
+        >
+          {parts.map((part, index) =>
+            typeof part === "string" ? (
+              part
+            ) : (
+              <ActorName
+                key={index}
+                actor={noticeActor(part, members)}
+                inline
+                // The people are what the notice is about: their names a step darker
+                // and heavier than its words; no pill or @ (the pill read heavy, #591).
+                className="font-medium text-secondary"
+              />
+            ),
+          )}
+        </TooltipTrigger>
+      </Tooltip>
+    </span>
+  );
   return (
     <li data-message-id={message.id} className={ROW_CLASS}>
       {unreadStartsHere && <UnreadDivider />}
@@ -67,42 +114,33 @@ export function SystemMessageRow({
         )}
       >
         <CentredOnRule>
-          {/* One line, never wrapped: overflow becomes an ellipsis in the notice, which lands in
-              a task's title since its number comes first; the time stays whole. */}
-          <span className="flex min-w-0 items-baseline gap-2">
-            <time
-              dateTime={new Date(message.createdAt).toISOString()}
-              className="shrink-0 tabular-nums"
+          {reason ? (
+            <div
+              data-assignment-reason-card
+              className="flex max-w-xl min-w-0 flex-col gap-1 rounded-lg border border-secondary bg-primary px-3 py-2"
             >
-              {time}
-            </time>
-            {/* The trigger is itself the flex item, so `min-w-0` governs it and `truncate` clips;
-                a wrapper between this line and the text let the stream scroll sideways on a
-                phone. A plain span gives React Aria nothing to hover, so the full text never
-                showed. Out of the tab order, as in `agent-model-label.tsx`: a stop per notice
-                would crowd the stream, and the text is read whole whatever the width cuts. */}
-            <Tooltip title={text}>
-              <TooltipTrigger
-                excludeFromTabOrder
-                className="min-w-0 cursor-default truncate rounded-sm text-left outline-focus-ring focus-visible:outline-2"
-              >
-                {parts.map((part, index) =>
-                  typeof part === "string" ? (
-                    part
-                  ) : (
-                    <ActorName
-                      key={index}
-                      actor={noticeActor(part, members)}
-                      inline
-                      // The people are what the notice is about: their names a step darker
-                      // and heavier than its words; no pill or @ (the pill read heavy, #591).
-                      className="font-medium text-secondary"
-                    />
-                  ),
-                )}
-              </TooltipTrigger>
-            </Tooltip>
-          </span>
+              {noticeLine}
+              {/* The reason is what the person handing over wants read: body ink, wrapping, three
+                  lines at most; the tooltip and a screen reader have it whole. */}
+              <Tooltip title={reason}>
+                <TooltipTrigger
+                  excludeFromTabOrder
+                  className="w-full min-w-0 cursor-default rounded-sm text-left text-sm text-secondary outline-focus-ring focus-visible:outline-2"
+                >
+                  {/* Clamped inside: a button takes no line clamp, and the trigger sizes to its
+                      content unless told to fill the card. */}
+                  <span
+                    data-assignment-reason
+                    className="line-clamp-3 break-words whitespace-pre-line"
+                  >
+                    {reason}
+                  </span>
+                </TooltipTrigger>
+              </Tooltip>
+            </div>
+          ) : (
+            noticeLine
+          )}
         </CentredOnRule>
       </div>
     </li>

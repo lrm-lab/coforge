@@ -311,6 +311,22 @@ export function systemNoticeText(message: SystemNoticeSource, locale?: Locale): 
   return emoji ? `${emoji} ${text}` : text;
 }
 
+/** The reason an assignment notice gives (`task assign --reason`), which the stream draws on a
+ * line of its own under the notice (task #83); undefined for any other notice or none given. */
+export function assignmentReason(message: SystemNoticeSource): string | undefined {
+  const notice = systemNoticeOf(message);
+  if (notice?.kind !== "task.assigned") return undefined;
+  return notice.params.reason?.trim() || undefined;
+}
+
+/** The same notice without its assignment reason: the first line of the two the stream draws. */
+export function withoutAssignmentReason(message: SystemNoticeSource): SystemNoticeSource {
+  const notice = systemNoticeOf(message);
+  if (notice?.kind !== "task.assigned") return message;
+  const { reason: _reason, ...params } = notice.params;
+  return { ...message, system: { ...notice, params } };
+}
+
 /** A person a notice names, with the text a plain notice writes for them. */
 export type NoticePerson = { person: SystemPerson & { kind?: string }; text: string };
 
