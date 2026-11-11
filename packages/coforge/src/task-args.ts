@@ -1,14 +1,11 @@
 import {
-  CHANNEL_NAME_PATTERN,
   TASK_PRIORITIES,
   TASK_STATUSES,
   type TaskCommand,
-  type TaskRef,
   type TaskResourceReceipt,
   type TaskPriority,
   type TaskStatus,
 } from "@lrm/coforge-sdk/internal";
-import { CliError } from "#src/cli-error";
 import { unknownCommandError } from "./command-help";
 import { parseTaskListStatus } from "./task-list-status-args";
 import {
@@ -17,11 +14,9 @@ import {
   handleOption,
   invalidTaskArg,
   parentOption,
-  positiveInt,
   TASK_SWITCHES,
   TASK_TARGET,
   taskNumber,
-  taskRefOption,
 } from "./task-arg-options";
 import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
 import { parseAssignReason } from "#src/task-assign-reason-arg";
