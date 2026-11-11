@@ -211,6 +211,37 @@ export function AgentMigrationForm({
   );
 }
 
+/**
+ * Where a direct placement (#coforge:#732) left the Agent unstarted: the target's name when the
+ * move placed it but its start did not go out (`startPublished: false`), so the Profile says to
+ * start it rather than reading the move as done; else null.
+ */
+export function notStartedAfterMove(
+  moved: { direct?: boolean; startPublished?: boolean } | null | undefined,
+  targetName: string,
+): string | null {
+  return moved?.direct === true && moved.startPublished === false ? targetName : null;
+}
+
+/** A direct placement that did not start: what happened and what to press. */
+export function AgentMigrationNotStarted({
+  agentName,
+  computerName,
+}: {
+  agentName: string;
+  computerName: string;
+}) {
+  return (
+    <Alert
+      color="warning"
+      description={m.agent_migration_direct_not_started({
+        name: agentName,
+        computer: computerName,
+      })}
+    />
+  );
+}
+
 /** Why the move was refused, with a link to the page where it can be fixed. */
 export function AgentMigrationRefusalNotice({
   message,
@@ -319,10 +350,12 @@ export function AgentMigrationSection({
         const moved = await requestMove({ data: { agentId, targetComputerId } });
         setOpen(false);
         // Placed but not started: say so, rather than let the move read as done.
-        if ("direct" in moved && moved.direct && !moved.startPublished)
-          setNotStartedOn(
+        setNotStartedOn(
+          notStartedAfterMove(
+            moved,
             targets.find(({ id }) => id === targetComputerId)?.name || m.agent_computer_unnamed(),
-          );
+          ),
+        );
         await refresh();
       } catch (cause) {
         // The dialog stays open: it says why, links to where to fix it, and offers to try again.
@@ -383,13 +416,7 @@ export function AgentMigrationSection({
         />
       )}
       {notStartedOn && (
-        <Alert
-          color="warning"
-          description={m.agent_migration_direct_not_started({
-            name: agentName,
-            computer: notStartedOn,
-          })}
-        />
+        <AgentMigrationNotStarted agentName={agentName} computerName={notStartedOn} />
       )}
       {migration && (
         <AgentMigrationStatus
