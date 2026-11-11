@@ -145,6 +145,18 @@ test("an action card commits in one press and closes to one line", async () => {
       `[...${card(createCard.messageId)}.querySelectorAll("button")].every((el) => !el.disabled)`,
     );
     await shot("pending");
+    // The channel to be made reads the group avatar it will have, from the people it starts with,
+    // then its name, no `#` (Frank, 11-11, task #55).
+    expect(
+      await evaluate<boolean>(
+        `[...${card(createCard.messageId)}.querySelectorAll("p")].some((p) => p.querySelector(".avatar-group") && p.querySelector("span.wrap-anywhere")?.textContent === ${JSON.stringify(launch)})`,
+      ),
+    ).toBe(true);
+    expect(
+      await evaluate<boolean>(
+        `${card(createCard.messageId)}.textContent.includes(${JSON.stringify(`#${launch}`)})`,
+      ),
+    ).toBe(false);
 
     // The name taken since: said so, and the primary button renames it in the dialog, since
     // sending it again would fail the same way.

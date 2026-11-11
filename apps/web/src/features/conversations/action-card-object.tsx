@@ -11,6 +11,7 @@ import type {
 } from "#src/server/conversations/action-cards.server";
 import { ActionCardAppBody } from "./action-card-app-body";
 import { ChannelPlace } from "./channel-name";
+import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
 import type { ToolActionCardView } from "./action-card-labels";
 import { ActionCardDesktopTakeoverBody, ActionCardPageFillBody } from "./action-card-handoff";
 
@@ -51,6 +52,11 @@ export function NamesWithFaces({
 }
 
 /** A few faces and, as text, everyone they are. More than the faces shown still read in the names. */
+/** A person's or an Agent's sticker in a group avatar. */
+function faceOf(person: ActionCardPersonRef) {
+  return { id: person.id, name: person.displayName, avatarUrl: person.avatarUrl };
+}
+
 function Faces({ people, label }: { people: ActionCardPersonRef[]; label?: ReactNode }) {
   if (!people.length) return null;
   return (
@@ -88,10 +94,19 @@ export function ActionCardObject({
   const note = view.draftHint ? <p className="text-tertiary">{view.draftHint}</p> : null;
   let body: ReactNode = null;
   if (view.kind === "channel:create") {
+    const newChannelFaces: GroupAvatarMember[] = [
+      ...view.initialHumans.map((person) => ({ kind: "user" as const, ...faceOf(person) })),
+      ...view.initialAgents.map((agent) => ({ kind: "agent" as const, ...faceOf(agent) })),
+    ];
     body = (
       <>
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-semibold text-primary">
-          <span className="min-w-0 wrap-anywhere">#{view.name}</span>
+          {/* The group avatar the channel will have, from the people it starts with, before its
+              name, no `#` (Frank, 11-11, task #55). */}
+          {newChannelFaces.length > 0 && (
+            <GroupAvatar members={newChannelFaces} className="avatar-group-xs" />
+          )}
+          <span className="min-w-0 wrap-anywhere">{view.name}</span>
           <span className="shrink-0 rounded-full border border-primary px-1.5 text-xs font-semibold text-tertiary">
             {view.visibility === "public" ? m.action_card_visibility_public() : m.channel_private()}
           </span>
