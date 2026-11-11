@@ -42,6 +42,14 @@ const CASES: [SystemNotice, string, string][] = [
     "📌 Frank An 把任务 #4「Fix login」指派给了 @coder",
   ],
   [
+    {
+      kind: "task.assigned",
+      params: { actor: frank, task, assignee: coder, reason: "finish the daemon side" },
+    },
+    '📌 Frank An assigned #4 "Fix login" to @coder: finish the daemon side',
+    "📌 Frank An 把任务 #4「Fix login」指派给了 @coder：finish the daemon side",
+  ],
+  [
     { kind: "task.claimed", params: { claimer: frank, task } },
     '📌 Frank An claimed #4 "Fix login"',
     "📌 Frank An 认领了任务 #4「Fix login」",

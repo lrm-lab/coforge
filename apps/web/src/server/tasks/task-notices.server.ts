@@ -143,8 +143,14 @@ export const noticeText = {
     `📋 ${actor} converted a message to task ${reference(task)}`,
   fromMessage: (actor: DisplayName, task: QuotedTask) =>
     `📋 ${actor} made task ${reference(task)} from this message`,
-  assigned: (actor: DisplayName, task: QuotedTask, assignee: AssigneeMention, queueNote?: string) =>
-    `📌 ${actor} assigned ${reference(task)} to ${assignee}${queueNote ? ` — ${queueNote}` : ""}`,
+  assigned: (
+    actor: DisplayName,
+    task: QuotedTask,
+    assignee: AssigneeMention,
+    queueNote?: string,
+    reason?: string,
+  ) =>
+    `📌 ${actor} assigned ${reference(task)} to ${assignee}${queueNote ? ` — ${queueNote}` : ""}${reason ? ` — "${reason}"` : ""}`,
   claimed: (claimer: Handle, task: QuotedTask) => `📌 ${claimer} claimed ${reference(task)}`,
   moved: (actor: DisplayName, task: QuotedTask, status: TaskStatus) =>
     `${STATUS_WORDING[status].emoji} ${actor} moved ${reference(task)} to ${STATUS_WORDING[status].label}`,

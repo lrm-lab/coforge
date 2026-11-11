@@ -30,7 +30,7 @@ export type SystemNotice =
   | { kind: "task.from_message"; params: { actor: SystemPerson; task: SystemTask } }
   | {
       kind: "task.assigned";
-      params: { actor: SystemPerson; task: SystemTask; assignee: SystemPerson };
+      params: { actor: SystemPerson; task: SystemTask; assignee: SystemPerson; reason?: string };
     }
   | { kind: "task.claimed"; params: { claimer: SystemPerson; task: SystemTask } }
   | { kind: "task.moved"; params: { actor: SystemPerson; task: SystemTask; status: TaskStatus } }
@@ -128,7 +128,12 @@ export function isSystemNotice(value: { kind: string; params: unknown }): value 
     case "task.assigned_you":
       return person(params.actor) && task(params.task);
     case "task.assigned":
-      return person(params.actor) && task(params.task) && person(params.assignee);
+      return (
+        person(params.actor) &&
+        task(params.task) &&
+        person(params.assignee) &&
+        (params.reason === undefined || typeof params.reason === "string")
+      );
     case "task.blocked":
       return (
         ownerAddressed(params) && Array.isArray(params.blockers) && params.blockers.every(task)

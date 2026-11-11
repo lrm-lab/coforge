@@ -100,7 +100,10 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task assign": {
     syntax:
-      "coforge task assign --target <channel> [--peer-kind human|agent] --number <n> --assignee @handle [--expected-revision <n>] [--json]",
+      "coforge task assign --target <channel> [--peer-kind human|agent] --number <n> --assignee @handle [--reason <text>] [--expected-revision <n>] [--json]",
+    flags: [
+      "--reason  one line saying what the assignee should do; it is shown with the assignment (max 200 characters, single line)",
+    ],
   },
   "task unassign": {
     syntax:

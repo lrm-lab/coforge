@@ -133,6 +133,9 @@ export function isBlockerSatisfied(status: string): boolean {
 export const MAX_TASK_BLOCKERS = 20;
 /** The deepest a subtask tree may nest: a top-level Task is level 1. */
 export const MAX_TASK_TREE_DEPTH = 5;
+/** The longest handover sentence an assignment may carry: it is shown next to the assignment, so
+ * it stays one readable line rather than a description. */
+export const TASK_ASSIGN_REASON_MAX_LENGTH = 200;
 
 /** One node of a Task's subtask tree as `task show` reads it. A hidden node has no children read. */
 export type TaskTreeNode =
@@ -337,6 +340,9 @@ export type TaskCommand = {
   /** `list`: only Tasks ready to start: todo, unowned and not blocked. */
   ready?: boolean;
   assignee?: string | null;
+  /** `assign`: one line of why the Task is handed over, shown with the assignment (Raft 1.0.69
+   * item 5, task #28). Optional, single line, at most `TASK_ASSIGN_REASON_MAX_LENGTH` characters. */
+  reason?: string;
   mine?: boolean;
   createsResource?: boolean;
   receipt?: TaskResourceReceipt;

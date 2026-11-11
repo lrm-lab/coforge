@@ -17,6 +17,7 @@
   "system_notice_task_converted": "{actor} 把一条消息转成了{task}",
   "system_notice_task_from_message": "{actor} 用这条消息建了{task}",
   "system_notice_task_assigned": "{actor} 把{task}指派给了 {assignee}",
+  "system_notice_task_assigned_reason": "{actor} 把{task}指派给了 {assignee}：{reason}",
   "system_notice_task_claimed": "{actor} 认领了{task}",
   "system_notice_task_moved": "{actor} 把{task}移到了{status}",
   "system_notice_task_unassigned": "{actor} 取消了{task}的指派",

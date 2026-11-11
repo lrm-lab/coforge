@@ -18,6 +18,7 @@
   "system_notice_task_converted": "{actor} converted a message to task {task}",
   "system_notice_task_from_message": "{actor} made task {task} from this message",
   "system_notice_task_assigned": "{actor} assigned {task} to {assignee}",
+  "system_notice_task_assigned_reason": "{actor} assigned {task} to {assignee}: {reason}",
   "system_notice_task_claimed": "{actor} claimed {task}",
   "system_notice_task_moved": "{actor} moved {task} to {status}",
   "system_notice_task_unassigned": "{actor} unassigned {task}",

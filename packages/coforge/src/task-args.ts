@@ -12,6 +12,7 @@ import { CliError } from "#src/cli-error";
 import { unknownCommandError } from "./command-help";
 import { parseTaskListStatus } from "./task-list-status-args";
 import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
+import { parseAssignReason } from "#src/task-assign-reason-arg";
 import {
   parseTaskConversationArgs,
   type TaskConversationInvocation,
@@ -79,6 +80,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--peer-kind",
     "--number",
     "--assignee",
+    "--reason",
     "--expected-revision",
     "--anyway",
     "--json",
@@ -419,6 +421,9 @@ export function parseTaskArgs(
       assignee.startsWith("@") ? assignee : `@${assignee}`,
       "--assignee must be an @handle",
     );
+    // One line saying what the assignee should do; see `parseAssignReason`.
+    const reason = parseAssignReason(one("--reason"));
+    if (reason !== undefined) task.reason = reason;
     if (values.has("--anyway")) task.continueAnyway = true;
   }
   if (operation === "amend") {

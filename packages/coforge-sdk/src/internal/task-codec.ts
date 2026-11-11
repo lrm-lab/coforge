@@ -236,5 +236,9 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.numbers === undefined &&
       !messages &&
       value.receipt !== undefined);
+  // The handover sentence belongs to an assignment; a reason anywhere else would be dropped
+  // silently by the server, so the request is refused instead.
+  if (value.reason !== undefined && value.operation !== "assign")
+    throw new Error("reason is only valid for assign");
   if (!valid) throw new Error("missing Task operation argument");
 }

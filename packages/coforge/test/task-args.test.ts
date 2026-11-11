@@ -90,6 +90,24 @@ test("task list --status takes one status, all, or several comma-separated", () 
     expect(() => parseTaskArgs(["list", ...target, "--status", raw])).toThrow();
 });
 
+test("assign takes one handover line and refuses anything that is not one", () => {
+  const target = ["--target", "#general"];
+  const assign = (...extra: string[]) =>
+    parseTaskArgs(["assign", ...target, "--number", "7", "--assignee", "@ada", ...extra]);
+  expect(assign("--reason", "  finish the daemon side  ")).toMatchObject({
+    task: { reason: "finish the daemon side" },
+  });
+  // No reason at all is still a plain assignment.
+  expect(assign()).not.toHaveProperty("task.reason");
+  expect(() => assign("--reason", "   ")).toThrow(/must say something/);
+  expect(() => assign("--reason", "first line\nsecond line")).toThrow(/single line/);
+  expect(() => assign("--reason", "x".repeat(201))).toThrow(/longer than 200/);
+  // The sentence belongs to an assignment, not to other task writes.
+  expect(() =>
+    parseTaskArgs(["update", ...target, "--number", "7", "--status", "done", "--reason", "why"]),
+  ).toThrow();
+});
+
 test("create, claim and assign take --anyway to confirm a held review", () => {
   const target = ["--target", "#general"];
   expect(parseTaskArgs(["create", ...target, "--title", "A", "--anyway"])).toMatchObject({

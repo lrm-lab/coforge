@@ -36,6 +36,9 @@ export async function assignmentReceipts(
   assignee: Member,
   tasks: readonly SelectedTask[],
   receiptIds: readonly string[],
+  /** One handover line the assignment carries into its notice (`assign --reason`); absent for
+   * every assignment nobody explained, which keeps its notice exactly as it was. */
+  reason?: string,
 ): Promise<PostedNotice[]> {
   const queueNotes = assignee.agentId
     ? await assignmentQueueNotes(
@@ -60,6 +63,7 @@ export async function assignmentReceipts(
             quoted,
             assigneeMention(assignee),
             queueNotes?.get(task.id),
+            reason,
           ),
           system: {
             kind: "task.assigned",
@@ -71,6 +75,7 @@ export async function assignmentReceipts(
                 handle: assigneeMention(assignee).slice(1),
                 displayName: assigneeMention(assignee).slice(1),
               },
+              ...(reason ? { reason } : {}),
             },
           },
         }),
@@ -142,6 +147,7 @@ export async function assignTask(
       owner,
       [task],
       [receiptId],
+      command.reason,
     );
     return { task, changed: true, assigneeHandle: assigneeMention(owner), receipt: posted };
   });

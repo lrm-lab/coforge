@@ -125,15 +125,27 @@ function noticeText(notice: SystemNotice, locale?: Locale, names: Names = TEXT_N
         },
         { locale },
       );
-    case "task.assigned":
-      return m.system_notice_task_assigned(
-        {
-          actor: shown(notice.params.actor),
-          task: reference(notice.params.task, locale),
-          assignee: mention(notice.params.assignee),
-        },
-        { locale },
-      );
+    case "task.assigned": {
+      const { actor, task: assignedTask, assignee, reason } = notice.params;
+      return reason
+        ? m.system_notice_task_assigned_reason(
+            {
+              actor: shown(actor),
+              task: reference(assignedTask, locale),
+              assignee: mention(assignee),
+              reason,
+            },
+            { locale },
+          )
+        : m.system_notice_task_assigned(
+            {
+              actor: shown(actor),
+              task: reference(assignedTask, locale),
+              assignee: mention(assignee),
+            },
+            { locale },
+          );
+    }
     case "task.claimed":
       return m.system_notice_task_claimed(
         {
