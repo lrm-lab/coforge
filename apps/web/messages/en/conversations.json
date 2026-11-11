@@ -209,6 +209,7 @@
   "tasks_deleted_toast": "Deleted task #{number}",
   "tasks_restore_failed": "Couldn't undo. Try again.",
   "tasks_restore_expired": "Too late to undo: the Task is gone.",
+  "tasks_status_backlog": "Backlog",
   "tasks_status_todo": "To do",
   "tasks_status_in_progress": "In progress",
   "tasks_status_in_review": "In review",

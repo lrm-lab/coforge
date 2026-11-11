@@ -9,6 +9,12 @@ import { m } from "#src/paraglide/messages";
  * colour, the solid dot, the icon's colour, and the lighter line the popup's history timeline
  * draws between nodes. */
 export const TASK_STATUS_COLOR = {
+  backlog: {
+    badge: "slate",
+    dot: "bg-utility-slate-400",
+    text: "text-utility-slate-500",
+    line: "bg-utility-slate-300",
+  },
   todo: {
     badge: "orange",
     dot: "bg-utility-orange-500",
@@ -48,6 +54,7 @@ export const TASK_STATUS_COLOR = {
  * the history timeline agree.
  */
 const RING: Record<TaskStatus, { fill: number; mark?: string }> = {
+  backlog: { fill: 0 },
   todo: { fill: 0 },
   in_progress: { fill: 0.5 },
   in_review: { fill: 0.75 },
@@ -118,6 +125,7 @@ const ringIcon =
     <TaskStatusIcon status={status} className={cn(className, taskStatusColor(status).text)} />
   );
 const STATUS_BADGE_ICON: Record<TaskStatus, IconComponentType> = {
+  backlog: ringIcon("backlog"),
   todo: ringIcon("todo"),
   in_progress: ringIcon("in_progress"),
   in_review: ringIcon("in_review"),
@@ -135,6 +143,7 @@ export function statusLabel(status: TaskStatus) {
 
 /** The localized status names, by status; a status this build does not know reads as its key. */
 const LABELS: Record<TaskStatus, () => string> = {
+  backlog: m.tasks_status_backlog,
   todo: m.tasks_status_todo,
   in_progress: m.tasks_status_in_progress,
   in_review: m.tasks_status_in_review,

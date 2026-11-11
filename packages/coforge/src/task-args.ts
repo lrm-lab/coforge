@@ -74,6 +74,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--project",
     "--anyway",
     "--priority",
+    "--status",
     "--json",
   ],
   convert: ["--target", "--peer-kind", "--message-id", "--json"],
@@ -222,6 +223,14 @@ export function parseTaskArgs(
     const titles = values.get("--title") ?? [];
     if (!titles.length) throw invalidTaskArg("--title is required (at least one)");
     if (titles.some((title) => !title.trim())) throw invalidTaskArg("--title must be nonblank");
+    const initialStatus = one("--status");
+    if (initialStatus !== undefined) {
+      if (!(TASK_STATUSES as readonly string[]).includes(initialStatus))
+        throw invalidTaskArg(
+          `--status must be one of: ${TASK_STATUSES.join(", ")}; got ${initialStatus}`,
+        );
+      task.status = initialStatus as TaskStatus;
+    }
     if (titles.length === 1) task.title = titles[0];
     else task.titles = titles;
     if (values.has("--anyway")) task.continueAnyway = true;

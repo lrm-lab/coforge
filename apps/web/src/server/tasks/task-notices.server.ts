@@ -117,6 +117,7 @@ export function quotedTask(
 }
 
 const STATUS_WORDING: Record<TaskStatus, { emoji: string; label: string }> = {
+  backlog: { emoji: "🗂", label: "Backlog" },
   todo: { emoji: "📝", label: "Todo" },
   in_progress: { emoji: "🔄", label: "In Progress" },
   in_review: { emoji: "👀", label: "In Review" },

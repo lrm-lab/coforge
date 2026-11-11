@@ -17,6 +17,7 @@ export const taskColumnHiddenClass = (status: TaskStatus) => `task-column-hidden
 
 /** A hidden board column before hydration: the boot script's class on <html> hides it. */
 export const HIDDEN_COLUMN_CLASS: Record<TaskStatus, string> = {
+  backlog: "[.task-column-hidden-backlog_&]:hidden",
   todo: "[.task-column-hidden-todo_&]:hidden",
   in_progress: "[.task-column-hidden-in_progress_&]:hidden",
   in_review: "[.task-column-hidden-in_review_&]:hidden",

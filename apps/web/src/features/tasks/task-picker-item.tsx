@@ -12,6 +12,7 @@ const statusIcon = (status: TaskStatus) => () => (
   <TaskStatusIcon status={status} className="mr-2.5" />
 );
 const STATUS_ICON: Record<TaskStatus, () => ReactElement> = {
+  backlog: statusIcon("backlog"),
   todo: statusIcon("todo"),
   in_progress: statusIcon("in_progress"),
   in_review: statusIcon("in_review"),

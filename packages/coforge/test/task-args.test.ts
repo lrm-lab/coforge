@@ -157,6 +157,17 @@ test("labels: create attaches, amend adds and takes off, list filters", () => {
   expect(() => parseTaskArgs(["amend", ...target, "--number", "7", "--label", "-"])).toThrow();
 });
 
+// Task #61: a create may open the Task in a chosen column.
+test("--status opens a new task in the column named", () => {
+  const target = ["--target", "#general"];
+  expect(parseTaskArgs(["create", ...target, "--title", "A", "--status", "backlog"])).toMatchObject(
+    { task: { operation: "create", status: "backlog" } },
+  );
+  expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--status", "open"])).toThrow(
+    "--status must be one of: backlog, todo, in_progress, in_review, done, closed; got open",
+  );
+});
+
 // Task #470: a priority on create, and an update of the priority, the status, or both.
 test("--priority sets a new task's priority and an update's, with or without --status", () => {
   const target = ["--target", "#general"];

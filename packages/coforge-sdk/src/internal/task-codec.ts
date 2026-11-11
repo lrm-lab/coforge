@@ -159,7 +159,7 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.status !== undefined ||
       !Array.isArray(value.statuses) ||
       value.statuses.length === 0 ||
-      value.statuses.length > 5 ||
+      value.statuses.length > TASK_STATUSES.length ||
       !value.statuses.every((status) => statuses.has(status)))
   )
     throw new Error("invalid Task statuses");

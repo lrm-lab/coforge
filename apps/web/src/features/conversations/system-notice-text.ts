@@ -33,6 +33,7 @@ const KIND_EMOJI: Partial<Record<SystemNotice["kind"], string>> = {
 };
 
 const STATUS_EMOJI: Record<TaskStatus, string> = {
+  backlog: "🗂",
   todo: "📝",
   in_progress: "🔄",
   in_review: "👀",
@@ -42,6 +43,7 @@ const STATUS_EMOJI: Record<TaskStatus, string> = {
 
 /** The task board's own names for the statuses. */
 const STATUS_LABEL: Record<TaskStatus, (locale?: Locale) => string> = {
+  backlog: (locale) => m.tasks_status_backlog({}, { locale }),
   todo: (locale) => m.tasks_status_todo({}, { locale }),
   in_progress: (locale) => m.tasks_status_in_progress({}, { locale }),
   in_review: (locale) => m.tasks_status_in_review({}, { locale }),

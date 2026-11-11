@@ -2,7 +2,16 @@
 import type { AgentMessageRecord } from "./local-daemon";
 import { CHANNEL_NAME_PATTERN } from "./channel-references";
 
-export const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "closed"] as const;
+/** Backlog leads: the parking column work waits in before it is scheduled (task #61, Linear's
+ * order). */
+export const TASK_STATUSES = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+  "closed",
+] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 /** A Task's priority, highest first (Linear's five levels); a new Task is `none`. */
@@ -16,15 +25,18 @@ export type TaskPeerKind = "human" | "agent";
 
 /**
  * The statuses a Task may move to in ordinary hands, as the reference product's board works: work
- * moves forward Todo → In Progress → In Review → Done, In Progress may be withdrawn to Todo,
- * In Review may be sent back to In Progress for more work, Closed may be set from anywhere, and a finished Task may be reopened. A Workspace
- * owner or admin may set any status at all; this table is what everyone else may do. The server's
- * TaskBoard and the browser's board both read it, so the two cannot drift apart.
+ * waits in Backlog until it is scheduled, then moves forward Todo → In Progress → In Review →
+ * Done; work may be deferred back to Backlog from Todo or In Progress, In Review may be sent back
+ * to In Progress for more work, Closed may be set from anywhere, and a finished Task may be
+ * reopened. A Workspace owner or admin may set any status at all; this table is what everyone
+ * else may do. The server's TaskBoard and the browser's board both read it, so the two cannot
+ * drift apart.
  */
 export const ORDINARY_TASK_STATUS_MOVES: Record<TaskStatus, readonly TaskStatus[]> = {
-  todo: ["in_progress", "closed"],
-  // Back to Todo withdraws a Task that was started by mistake.
-  in_progress: ["todo", "in_review", "closed"],
+  backlog: ["todo", "in_progress", "closed"],
+  todo: ["backlog", "in_progress", "closed"],
+  // Back to Todo withdraws a Task that was started by mistake; back to Backlog defers it.
+  in_progress: ["backlog", "todo", "in_review", "closed"],
   in_review: ["in_progress", "done", "closed"],
   // A Done Task goes back to Todo, In Progress or In Review.
   done: ["todo", "in_progress", "in_review", "closed"],
@@ -48,10 +60,11 @@ export function taskStatusMoveAllowed(
   return viewer.manager || ordinaryTaskStatusMove(from, to);
 }
 
-/** Whether a Task must have an owner to be in this status: only To do and Closed may be nobody's
- * (the server answers CONFLICT otherwise). A Task nobody owns reaches In progress by a claim. */
+/** Whether a Task must have an owner to be in this status: To do, Backlog and Closed may be
+ * nobody's (the server answers CONFLICT otherwise). A Task nobody owns reaches In progress by a
+ * claim. */
 export function taskStatusNeedsOwner(status: TaskStatus): boolean {
-  return status !== "todo" && status !== "closed";
+  return status !== "todo" && status !== "backlog" && status !== "closed";
 }
 
 /** Whether a Task cannot yet be in this status for want of its resource receipt: one made to
