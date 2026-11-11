@@ -57,6 +57,8 @@ export class LaunchFailureBackoff {
       streak: number;
       /** A failure no retry can fix was recorded. */
       terminal: boolean;
+      /** When this streak's first failure was recorded: the clock a total deadline runs on. */
+      startedAtMs: number;
     }
   >();
 
@@ -92,6 +94,11 @@ export class LaunchFailureBackoff {
       recoveryWait,
       streak: (previous?.streak ?? 0) + (recoveryWait ? 0 : 1),
       terminal: terminal || previous?.terminal === true,
+      // A total deadline measures the attempts themselves, so a wait on something outside the
+      // runtime does not run it down: a failure that names a recovery time starts the clock when
+      // that wait ends. A streak of ordinary failures keeps the first one's start, so repeated
+      // attempts cannot push the deadline out (task #32).
+      startedAtMs: recoveryWait ? untilMs : (previous?.startedAtMs ?? now),
     });
     for (const listener of this.#listeners) listener(agentId);
     return { attempts, cooldownMs: cooldown, untilMs };
@@ -123,11 +130,19 @@ export class LaunchFailureBackoff {
     return attempts;
   }
 
-  /** Whether the Agent's failures leave nothing to retry: one no retry can fix, or `cap`
-   * consecutive ones that were not waits on a named recovery time. */
-  exhausted(agentId: string, cap: number): boolean {
+  /** Whether the Agent's failures leave nothing to retry: one no retry can fix, `cap`
+   * consecutive ones that were not waits on a named recovery time, or a streak that has been
+   * running longer than `deadlineMs` allows. */
+  exhausted(agentId: string, cap: number, now: number = Date.now(), deadlineMs?: number): boolean {
     const failure = this.#failures.get(agentId);
-    return failure !== undefined && (failure.terminal || failure.streak >= cap);
+    if (!failure) return false;
+    if (failure.terminal || failure.streak >= cap) return true;
+    return deadlineMs !== undefined && now - failure.startedAtMs >= deadlineMs;
+  }
+
+  /** When this streak began, for the log line that narrates giving up. */
+  streakStart(agentId: string): number | undefined {
+    return this.#failures.get(agentId)?.startedAtMs;
   }
 
   attempts(agentId: string): number {

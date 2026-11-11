@@ -16,6 +16,7 @@ import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentOfflineResidency } from "./agent-offline-residency";
 import { agentDeliveryRejection } from "./message-composition";
+import { startupTimeoutMs } from "#src/agent-runtime/agent-startup";
 import { WAKE_FAILURE_STREAK_CAP } from "./wake-launch";
 import { isTrackedMention, type MentionDeliveryTracker } from "./mention-delivery-tracker";
 
@@ -40,6 +41,17 @@ export type ExitedDeliveryCollaborators = {
   handleAgentMessage(message: AgentMessageDelivery): Promise<void>;
 };
 
+/** How long every attempt to wake this Agent may take together: twice its provider's own startup
+ * window plus a minute of slack, so a slow runtime gets two honest tries before the person is told
+ * it is not going to start (task #32). */
+function startupDeadlineMs(
+  ports: ExitedDeliveryCollaborators,
+  agentId: string,
+): number | undefined {
+  const provider = ports.agentProcessManager().restartConfig(agentId)?.config.provider;
+  return provider === undefined ? undefined : startupTimeoutMs(provider) * 2 + 60_000;
+}
+
 /** Settles a delivery for an Agent with no hold, session or launch in flight (`AgentExitedDelivery`). */
 export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): AgentExitedDelivery {
   const exited = new AgentExitedDelivery({
@@ -59,13 +71,27 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
         ? ports.wakeLaunchFailures.blockedUntil(agentId)
         : undefined,
     giveUpWake: (agentId) => {
-      if (!ports.wakeLaunchFailures.exhausted(agentId, WAKE_FAILURE_STREAK_CAP)) return;
+      const deadlineMs = startupDeadlineMs(ports, agentId);
+      if (
+        !ports.wakeLaunchFailures.exhausted(
+          agentId,
+          WAKE_FAILURE_STREAK_CAP,
+          Date.now(),
+          deadlineMs,
+        )
+      )
+        return;
       // No launch is coming: with the wake config gone a later delivery is rejected `no_process`
       // and the server decides whether to start the Agent.
+      const startedAtMs = ports.wakeLaunchFailures.streakStart(agentId);
       logger.warning("Agent wake given up after repeated launch failures", {
         event: "agent.wake.given_up",
         agent_id: agentId,
         attempts: ports.wakeLaunchFailures.attempts(agentId),
+        // The window and how long this streak actually ran, so "gave up because it outlived its
+        // window" is distinguishable in the log from "gave up after N failures" (task #32).
+        ...(deadlineMs !== undefined ? { deadline_ms: deadlineMs } : {}),
+        ...(startedAtMs !== undefined ? { elapsed_ms: Date.now() - startedAtMs } : {}),
       });
       ports.wakeLaunchFailures.reset(agentId);
       ports.agentProcessManager().forgetRestart(agentId);
