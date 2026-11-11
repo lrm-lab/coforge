@@ -1,9 +1,10 @@
 import type { RuntimeAuthLoginEvent } from "#src/contract";
 import type { KiroIdentityCenterOptions } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
 import { getLogger } from "@logtape/logtape";
 import { kiroDeviceLinkAllowed, type KiroLinkFlow } from "./auth-link-hosts";
 
-const logger = getLogger(["coforge", "daemon", "runtime", "kiro", "auth"]);
+const logger = getLogger(["coforge", "daemon", "runtime", RUNTIME_PROVIDER.KIRO, "auth"]);
 
 export class KiroAuthFailure extends Error {
   constructor(
