@@ -4,6 +4,7 @@ import { channelActorOf } from "#src/server/conversations/channel-actor.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { assertCanAssignOther } from "./task-assignment-authority.server";
 import type { TaskCommand, TaskHistoryChange, TaskPrincipal } from "@lrm/coforge-sdk/internal";
+import { taskStatusNeedsOwner } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AppError } from "#src/lib/app-error";
 import {
@@ -234,6 +235,20 @@ export async function createTasks(
     if (assignee && assignee.id !== member.id)
       await assertCanAssignOther(tx, scope.workspaceId, member);
     const started = assignee?.id === member.id;
+    // An initial status the command named (task #61): the column a board form was opened from, or
+    // an Agent's explicit pick. The defaults stay: a self-assign starts in progress, anything
+    // else waits in todo — an explicit status only says where the new Task waits instead.
+    const initial = command.status === "all" ? undefined : command.status;
+    if (initial && taskStatusNeedsOwner(initial) && !assignee)
+      throw new AppError("CONFLICT", {
+        hint: `a Task in ${initial} needs an owner; assign it or create it in todo`,
+      });
+    if (initial && command.createsResource && initial !== "todo") throw new AppError("CONFLICT");
+    // "Claimed" is today's started: the creator took the Task themselves and it begins in
+    // progress. An explicit status defers to itself — a self-assign parked in another column is
+    // held, not started.
+    const claimed = started && (initial === undefined || initial === "in_progress");
+    const initialStatus = initial ?? (started ? "in_progress" : "todo");
     const tasks: SelectedTask[] = [];
     const sequences: number[] = [];
     for (const [index, title] of titles.entries()) {
@@ -302,8 +317,8 @@ export async function createTasks(
               createsResource: command.createsResource ?? false,
               priority: command.priority,
               ownerMemberId: assignee?.id,
-              status: started ? "in_progress" : "todo",
-              claimedAt: started ? new Date() : null,
+              status: initialStatus,
+              claimedAt: claimed ? new Date() : null,
               creatorMemberId: memberId(member),
               requestId: requestIds[index],
             },
@@ -320,7 +335,7 @@ export async function createTasks(
         });
       await writeMessageReferences(tx, message, scope, stored.references);
 
-      if (assignee?.agentId && started) {
+      if (assignee?.agentId && claimed) {
         await ensureTaskExecutionSession(tx, message.task!, assignee.agentId);
         tasks.push(
           await tx.task.findUniqueOrThrow({

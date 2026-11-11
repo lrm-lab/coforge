@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
+import type { TaskCommand, TaskPrincipal, TaskStatus } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 
@@ -122,6 +122,15 @@ const refused: [string, TaskCommand][] = [
     command({ operation, ...(operation === "update" && { status: "done" }) }),
   ]),
   ["an update without a status", command({ operation: "update", number: 1 })],
+  ["a create with status all", command({ operation: "create", title: "x", status: "all" })],
+  [
+    "a create with an unknown status",
+    command({ operation: "create", title: "x", status: "archived" as TaskStatus }),
+  ],
+  [
+    "a resource-receipt create with a status",
+    command({ operation: "create", title: "x", status: "done", createsResource: true }),
+  ],
   ["a convert that names nothing", command({ operation: "convert" })],
   ["a claim that names nothing", command({ operation: "claim", numbers: [], messageIds: [] })],
   ["numbers on convert", command({ operation: "convert", number: 1, numbers: [2] })],
@@ -143,6 +152,16 @@ const accepted: [string, TaskPrincipal, TaskCommand][] = [
   ],
   ["a create with one title", person, command({ operation: "create", title: "x".repeat(8_000) })],
   ["a create with titles", person, command({ operation: "create", titles: ["a", "b"] })],
+  [
+    "a create with an initial status",
+    person,
+    command({ operation: "create", title: "x", status: "in_progress", assignee: "@ada" }),
+  ],
+  [
+    "a create in a column with no one to hold it",
+    person,
+    command({ operation: "create", title: "x", status: "todo" }),
+  ],
   ["a convert by message id", person, command({ operation: "convert", messageId: "m-1" })],
   ["a claim by numbers", person, command({ operation: "claim", numbers: [1, 2] })],
   ["a claim by message ids", person, command({ operation: "claim", messageIds: ["m-1"] })],

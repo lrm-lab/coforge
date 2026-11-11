@@ -3,7 +3,9 @@ import type {
   TaskHistoryChange,
   TaskPrincipal,
   TaskPriority,
+  TaskStatus,
 } from "@lrm/coforge-sdk/internal";
+import { taskStatusNeedsOwner } from "@lrm/coforge-sdk/internal";
 
 import { AppError } from "#src/lib/app-error";
 import {
@@ -128,6 +130,13 @@ export async function createConversationTasks(
     if (command.assignee && !assignee) throw new AppError("NOT_FOUND");
     if (assignee && assignee.id !== member.id)
       await assertCanAssignOther(tx, scope.workspaceId, member);
+    // An initial status that needs a hand to hold it (task #61): to do and closed may be
+    // nobody's, the rest may not.
+    const initial = command.status === "all" ? undefined : command.status;
+    if (initial && taskStatusNeedsOwner(initial) && !assignee)
+      throw new AppError("CONFLICT", {
+        hint: `a Task in ${initial} needs an owner; assign it or create it in todo`,
+      });
     const labels = await resolveTaskLabels(
       tx,
       scope.workspaceId,
@@ -169,6 +178,7 @@ export async function createConversationTasks(
         description: command.description,
         createsResource: command.createsResource ?? false,
         priority: command.priority,
+        status: initial,
         assignee,
         requestId: requestIds[index]!,
         source,
@@ -278,6 +288,9 @@ export async function insertConversationTask(
     description?: string | null;
     createsResource?: boolean;
     priority?: TaskPriority;
+    /** The status the new Task opens in; absent, the defaults (a self-assign starts in
+     * progress, anything else waits in todo). */
+    status?: TaskStatus;
     assignee: Awaited<ReturnType<typeof assigneeMember>>;
     requestId: string;
     source: SourceMessage | null;
@@ -292,6 +305,9 @@ export async function insertConversationTask(
 ) {
   const { assignee, source } = input;
   const started = assignee?.id === member.id;
+  // "Claimed" is the create's self-assign start; an explicit initial status defers to itself
+  // (task #61) — a self-assign parked elsewhere is held, not started.
+  const claimed = started && (input.status === undefined || input.status === "in_progress");
   const task = await tx.task.create({
     data: {
       id: Bun.randomUUIDv7(),
@@ -303,8 +319,8 @@ export async function insertConversationTask(
       createsResource: input.createsResource ?? false,
       priority: input.priority,
       ownerMemberId: assignee?.id,
-      status: started ? "in_progress" : "todo",
-      claimedAt: started ? new Date() : null,
+      status: input.status ?? (started ? "in_progress" : "todo"),
+      claimedAt: claimed ? new Date() : null,
       creatorMemberId: memberId(member),
       requestId: input.requestId,
       sourceMessageId: source?.id,
@@ -336,7 +352,7 @@ export async function insertConversationTask(
   await followTask(tx, scope, task.id, memberId(member), "created");
   if (assignee && assignee.id !== member.id)
     await followTask(tx, scope, task.id, assignee.id, "assigned");
-  if (assignee?.agentId && started) await ensureTaskExecutionSession(tx, task, assignee.agentId);
+  if (assignee?.agentId && claimed) await ensureTaskExecutionSession(tx, task, assignee.agentId);
   // The assignee's notice makes the task's conversation, so the task is read again to carry it.
   const assigned = assignee && assignee.id !== member.id;
   if (assigned && !input.deferAssignedNotice)

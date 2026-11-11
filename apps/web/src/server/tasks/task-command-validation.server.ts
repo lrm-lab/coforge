@@ -46,10 +46,30 @@ export function validateTaskCommand(command: TaskCommand) {
     throw new AppError("INVALID_INPUT");
   if (
     command.status !== undefined &&
-    !["all", "todo", "in_progress", "in_review", "done", "closed"].includes(command.status)
+    command.status !== "all" &&
+    !(TASK_STATUSES as readonly unknown[]).includes(command.status)
   )
     throw new AppError("INVALID_INPUT");
   if (command.status === "all" && command.operation !== "list") throw new AppError("INVALID_INPUT");
+  // A create may open the Task in a chosen column (task #61); every other non-update read may
+  // name a status only to pick what it reads.
+  if (
+    command.status !== undefined &&
+    command.operation !== "update" &&
+    command.operation !== "list" &&
+    command.operation !== "create"
+  )
+    throw new AppError("INVALID_INPUT");
+  // A Task made to create a resource starts in To do: its receipt is what moves it to Done.
+  if (
+    command.operation === "create" &&
+    command.status !== undefined &&
+    command.createsResource &&
+    command.status !== "todo"
+  )
+    throw new AppError("INVALID_INPUT", {
+      hint: "a Task made to create a resource starts in todo; its receipt moves it to done",
+    });
   // Several statuses are a list's pick only (task #506), of known statuses, never with `status`.
   if (
     command.statuses !== undefined &&
@@ -88,12 +108,6 @@ export function validateTaskCommand(command: TaskCommand) {
   )
     throw new AppError("INVALID_INPUT");
   if (command.operation === "unassign" && command.assignee !== undefined)
-    throw new AppError("INVALID_INPUT");
-  if (
-    command.operation !== "update" &&
-    command.operation !== "list" &&
-    command.status !== undefined
-  )
     throw new AppError("INVALID_INPUT");
   if (command.operation === "create") {
     const titles = command.titles ?? (command.title === undefined ? [] : [command.title]);
