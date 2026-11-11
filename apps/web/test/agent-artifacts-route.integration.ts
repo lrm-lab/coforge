@@ -298,11 +298,12 @@ test("a request outside the web page's rules is refused", async () => {
   ).toMatchObject({ status: 400, body: { error: expect.stringContaining("artifact-target") } });
 });
 
-test("a Workspace without documents says so, whatever was asked", async () => {
+test("a Workspace without the Artifacts experiment says so, whatever was asked", async () => {
   enabled = false;
   try {
     for (const body of [
       { operation: "create", title: "Plan", target: "#nowhere" },
+      { operation: "create", kind: "html", title: "Page", description: "A page", text: "<p>x</p>" },
       { operation: "read", artifact: key() },
     ])
       expect(await post(body)).toMatchObject({
