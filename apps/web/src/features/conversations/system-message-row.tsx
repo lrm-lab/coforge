@@ -6,6 +6,7 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { ActorName, type NamedActor } from "#src/features/avatars/actor-name";
 import { cn } from "#src/lib/utils";
+import { AssignmentReasonCard } from "./assignment-reason-card";
 import { CentredOnRule, DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
 import { ROW_CLASS } from "./message-row";
 import type { MessageView } from "./message-view";
@@ -62,11 +63,28 @@ export function SystemMessageRow({
     dateLocale && groupDay && groupDay !== dayLabel(message.createdAt, dateLocale, timeZone)
       ? formatMonthDayTime(message.createdAt, timeZone, dateLocale, timeFormat, { hour: "2-digit" })
       : clockLabel(message.createdAt, dateLocale, timeFormat, timeZone);
+  const named = parts.map((part, index) =>
+    typeof part === "string" ? (
+      part
+    ) : (
+      <ActorName
+        key={index}
+        actor={noticeActor(part, members)}
+        inline
+        // The people are what the notice is about: their names a step darker and heavier than
+        // its words; no pill or @ (the pill read heavy, #591).
+        className="font-medium text-secondary"
+      />
+    ),
+  );
+  const timeElement = (
+    <time dateTime={new Date(message.createdAt).toISOString()} className="shrink-0 tabular-nums">
+      {time}
+    </time>
+  );
   const noticeLine = (
     <span className="flex min-w-0 items-baseline gap-2">
-      <time dateTime={new Date(message.createdAt).toISOString()} className="shrink-0 tabular-nums">
-        {time}
-      </time>
+      {timeElement}
       {/* The trigger is itself the flex item, so `min-w-0` governs it and `truncate` clips;
           a wrapper between this line and the text let the stream scroll sideways on a
           phone. A plain span gives React Aria nothing to hover, so the full text never
@@ -75,26 +93,9 @@ export function SystemMessageRow({
       <Tooltip title={text}>
         <TooltipTrigger
           excludeFromTabOrder
-          // In a card the notice may wrap, so who the Task went to is never cut on a phone.
-          className={cn(
-            "min-w-0 cursor-default rounded-sm text-left outline-focus-ring focus-visible:outline-2",
-            reason ? "break-words" : "truncate",
-          )}
+          className="min-w-0 cursor-default truncate rounded-sm text-left outline-focus-ring focus-visible:outline-2"
         >
-          {parts.map((part, index) =>
-            typeof part === "string" ? (
-              part
-            ) : (
-              <ActorName
-                key={index}
-                actor={noticeActor(part, members)}
-                inline
-                // The people are what the notice is about: their names a step darker
-                // and heavier than its words; no pill or @ (the pill read heavy, #591).
-                className="font-medium text-secondary"
-              />
-            ),
-          )}
+          {named}
         </TooltipTrigger>
       </Tooltip>
     </span>
@@ -115,29 +116,7 @@ export function SystemMessageRow({
       >
         <CentredOnRule>
           {reason ? (
-            <div
-              data-assignment-reason-card
-              className="flex max-w-xl min-w-0 flex-col gap-1 rounded-lg border border-secondary bg-primary px-3 py-2"
-            >
-              {noticeLine}
-              {/* The reason is what the person handing over wants read: body ink, wrapping, three
-                  lines at most; the tooltip and a screen reader have it whole. */}
-              <Tooltip title={reason}>
-                <TooltipTrigger
-                  excludeFromTabOrder
-                  className="w-full min-w-0 cursor-default rounded-sm text-left text-sm text-secondary outline-focus-ring focus-visible:outline-2"
-                >
-                  {/* Clamped inside: a button takes no line clamp, and the trigger sizes to its
-                      content unless told to fill the card. */}
-                  <span
-                    data-assignment-reason
-                    className="line-clamp-3 break-words whitespace-pre-line"
-                  >
-                    {reason}
-                  </span>
-                </TooltipTrigger>
-              </Tooltip>
-            </div>
+            <AssignmentReasonCard time={timeElement} notice={named} reason={reason} />
           ) : (
             noticeLine
           )}

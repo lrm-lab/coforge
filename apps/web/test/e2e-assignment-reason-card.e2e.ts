@@ -37,7 +37,11 @@ async function notice(conversationId: string, body: string, system: SystemNotice
 }
 
 const SHORT = "后端已经好了，请接着做页面部分";
-const LONG = `${"这次交接的背景比较长：服务端的指派理由已经存进通知参数，页面需要把它单独成行显示，并且在窄屏上也不能把时间和人名挤掉。".repeat(3)}\n参考 https://staging.coforge.cn/zh-CN/w/default/channel/416fa211-c707-4ec6-be1b-48f108bea322?view=chat&task=310&msg=01a1c82f0a63725897b6c97ffe543edc`;
+/** The longest reason the CLI takes: one line of 200 characters (`TASK_ASSIGN_REASON_MAX_LENGTH`). */
+const LONG =
+  "这次交接需要你接着做页面部分：服务端已经把指派理由存进通知参数，前端要把它单独成行显示，桌面和手机都要看得清楚；超长的理由不能把时间、人名和任务编号挤掉，深色模式下的对比度也要检查，完成后在任务里贴同尺寸的对比图并说明改动范围与测试结果，谢谢。"
+    .repeat(2)
+    .slice(0, 200);
 
 test("an assignment with a reason is a two-line card; one without keeps its line", async () => {
   const channelId = await fx.createChannel(`e2e-assign-reason-${suffix}`);
@@ -59,6 +63,12 @@ test("an assignment with a reason is a two-line card; one without keeps its line
     kind: "task.assigned",
     params: { actor: frank, task: page, assignee: coder, reason: LONG },
   });
+  // A blank reason (only the CLI refuses one) reads as no reason: no card, no dangling colon.
+  await fx.send(channelId, DEV_BROWSER_USER.id, `Fourth ${suffix}`);
+  await notice(channelId, '📌 frank-an assigned #4 "修复登录" to @coder:    ', {
+    kind: "task.assigned",
+    params: { actor: frank, task: login, assignee: coder, reason: "   " },
+  });
   await fx.send(channelId, DEV_BROWSER_USER.id, `Last ${suffix}`);
 
   const cards = `[...document.querySelectorAll("[data-assignment-reason-card]")]`;
@@ -70,7 +80,7 @@ test("an assignment with a reason is a two-line card; one without keeps its line
   ] as const) {
     await fx.browser("set", "viewport", width, height);
     await fx.browser("open", `${fx.proxy.origin}${zh}/channel/${channelId}`);
-    await until(`${cards}.length === 2 && ${notices}.length === 3`, 60_000);
+    await until(`${cards}.length === 2 && ${notices}.length === 4`, 60_000);
 
     await evaluate(`${cards}[0].scrollIntoView({ block: "center" }) ?? true`);
     await fx.browser("wait", "300");
@@ -93,18 +103,33 @@ test("an assignment with a reason is a two-line card; one without keeps its line
         `${cards}.map((card) => card.querySelector("[data-assignment-reason]").textContent)`,
       ),
     ).toEqual([SHORT, LONG]);
-    // The one without a reason keeps its single line and no card.
-    const plain = await evaluate<{ card: boolean; text: string }>(
-      `(() => { const row = ${notices}[1]; return { card: row.querySelector("[data-assignment-reason-card]") !== null, text: row.textContent.replace(/\\s+/g, " ") }; })()`,
-    );
-    expect(plain.card).toBe(false);
-    expect(plain.text).toContain("指派给了");
-    expect(plain.text).not.toContain("：");
+    // The ones without a reason, or with a blank one, keep their single line and no card.
+    for (const index of [1, 3]) {
+      const plain = await evaluate<{ card: boolean; text: string }>(
+        `(() => { const row = ${notices}[${index}]; return { card: row.querySelector("[data-assignment-reason-card]") !== null, text: row.textContent.replace(/\\s+/g, " ").trim() }; })()`,
+      );
+      expect(plain.card).toBe(false);
+      expect(plain.text).toEndWith("coder");
+      expect(plain.text).not.toContain("：");
+    }
     // The long reason stops at three lines, and no card runs past the page.
     const fit = await evaluate<{ lines: number; overflow: boolean }>(
       `(() => { const reason = ${cards}[1].querySelector("[data-assignment-reason]"); const lineHeight = parseFloat(getComputedStyle(reason).lineHeight); return { lines: Math.round(reason.getBoundingClientRect().height / lineHeight), overflow: ${cards}.some((card) => card.getBoundingClientRect().right > innerWidth) || document.documentElement.scrollWidth > innerWidth }; })()`,
     );
     expect(fit.lines).toBe(3);
     expect(fit.overflow).toBe(false);
+    // A short reason is plain text; a clamped one is a control that shows it whole in place,
+    // since a phone has no hover for a tooltip.
+    const reasonButton = (index: number) =>
+      `${cards}[${index}].querySelector('button[aria-expanded]')`;
+    expect(await evaluate<boolean>(`${reasonButton(0)} === null`)).toBe(true);
+    // Once open it is plain text again, which can be selected and copied.
+    await evaluate(`${reasonButton(1)}.click() ?? true`);
+    await until(`${reasonButton(1)} === null`);
+    expect(
+      await evaluate<number>(
+        `(() => { const reason = ${cards}[1].querySelector("[data-assignment-reason]"); return Math.round(reason.getBoundingClientRect().height / parseFloat(getComputedStyle(reason).lineHeight)); })()`,
+      ),
+    ).toBeGreaterThan(3);
   }
 }, 240_000);
