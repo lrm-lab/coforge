@@ -56,5 +56,9 @@
   "agent_migration_target_offline": "目标电脑离线。请连接它，或选择其他电脑。",
   "agent_migration_open_computer": "打开电脑设置",
   "agent_migration_open_computers": "打开电脑列表",
-  "agent_migration_try_again": "重试"
+  "agent_migration_try_again": "重试",
+  "agent_migration_revoked_title": "无法再访问 {computer}",
+  "agent_migration_revoked_body": "这台电脑的访问权限已被撤销。把 {name} 迁移到其他电脑后，它才能继续工作。",
+  "agent_migration_direct_left_behind": "{computer} 上的文件和本地记忆不会带到新电脑，{name} 会在新电脑上从头开始。",
+  "agent_migration_direct_not_started": "{name} 已迁移到 {computer}，但没能启动。请点「启动」手动启动它。"
 }

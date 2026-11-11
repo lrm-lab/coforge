@@ -44,6 +44,24 @@ type ComputerOption = { id: string; name: string };
 /** How often a move in progress is read again; each stage takes seconds to minutes. */
 const PROGRESS_POLL_MS = 3_000;
 
+/**
+ * The Agent's latest move and where it can be moved from, read again every few seconds while a
+ * move is going. The Profile reads it too, to lead with the move when the Agent's Computer was
+ * revoked; both share the one query.
+ */
+export function useAgentMigrationStatus(agentId: string, enabled = true) {
+  const readMigration = useServerFn(getAgentMigration);
+  return useQuery({
+    queryKey: ["agent-migration", agentId] as const,
+    queryFn: () => readMigration({ data: { agentId } }),
+    enabled,
+    refetchInterval: (query) =>
+      query.state.data?.migration && isAgentMigrationInProgress(query.state.data.migration.state)
+        ? PROGRESS_POLL_MS
+        : false,
+  });
+}
+
 /** One line on where the Agent's latest move stands, with a cancel while it is going. */
 export function AgentMigrationStatus({
   migration,
@@ -135,12 +153,16 @@ export function AgentMigrationForm({
   selected,
   onSelect,
   disabled,
+  direct,
 }: {
   /** The Workspace's other Computers; whether one can take the Agent is checked on Move. */
   computers: readonly ComputerOption[];
   selected: string | null;
   onSelect: (computerId: string) => void;
   disabled?: boolean;
+  /** The Agent is placed on the target with nothing copied from where it was (#coforge:#732): its
+   * Computer's access was revoked. What it leaves behind is all the dialog says. */
+  direct?: { sourceName: string; agentName: string };
 }) {
   const controlSize = useDialogControlSize();
   return (
@@ -170,11 +192,20 @@ export function AgentMigrationForm({
       )}
       <div className="flex items-start gap-3">
         <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
-        <ul className="min-w-0 list-disc space-y-1 pl-5 text-sm text-secondary">
-          <li>{m.agent_migration_dialog_session()}</li>
-          <li>{m.agent_migration_dialog_stops()}</li>
-          <li>{m.agent_migration_dialog_left_behind()}</li>
-        </ul>
+        {direct ? (
+          <p className="min-w-0 pt-1 text-sm text-secondary">
+            {m.agent_migration_direct_left_behind({
+              computer: direct.sourceName,
+              name: direct.agentName,
+            })}
+          </p>
+        ) : (
+          <ul className="min-w-0 list-disc space-y-1 pl-5 text-sm text-secondary">
+            <li>{m.agent_migration_dialog_session()}</li>
+            <li>{m.agent_migration_dialog_stops()}</li>
+            <li>{m.agent_migration_dialog_left_behind()}</li>
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -234,7 +265,6 @@ export function AgentMigrationSection({
   const queryClient = useQueryClient();
   const workspaceSlug = useWorkspaceSlug();
   const invalidateProfile = useInvalidateAgentProfile(agentId);
-  const readMigration = useServerFn(getAgentMigration);
   const requestMove = useServerFn(requestAgentMigration);
   const cancelMove = useServerFn(cancelAgentMigration);
   const loadTargets = useServerFn(listAgentMigrationTargets);
@@ -247,18 +277,13 @@ export function AgentMigrationSection({
     targetComputerId: string;
   } | null>(null);
   const [cancelError, setCancelError] = useState("");
+  /** The Computer a direct placement put the Agent on, when its start did not go out. */
+  const [notStartedOn, setNotStartedOn] = useState<string | null>(null);
   const [submitting, guardSubmit] = useSubmitGuard();
   const [canceling, guardCancel] = useSubmitGuard();
 
   const statusKey = ["agent-migration", agentId] as const;
-  const status = useQuery({
-    queryKey: statusKey,
-    queryFn: () => readMigration({ data: { agentId } }),
-    refetchInterval: (query) =>
-      query.state.data?.migration && isAgentMigrationInProgress(query.state.data.migration.state)
-        ? PROGRESS_POLL_MS
-        : false,
-  });
+  const status = useAgentMigrationStatus(agentId);
   const computers = useQuery({
     queryKey: ["agent-migration-targets", agentId, currentComputerId],
     queryFn: () => loadTargets({ data: { agentId } }),
@@ -278,6 +303,8 @@ export function AgentMigrationSection({
   }, [inProgress, invalidateProfile]);
 
   if (!status.data || (!status.data.available && !migration)) return null;
+  const revoked = status.data.computerAccessRevoked === true;
+  const sourceName = status.data.sourceComputerName || m.agent_computer_unnamed();
 
   const refresh = () =>
     Promise.all([queryClient.invalidateQueries({ queryKey: statusKey }), invalidateProfile()]);
@@ -286,10 +313,16 @@ export function AgentMigrationSection({
     if (!selected || submitting) return;
     const targetComputerId = selected;
     setRefusal(null);
+    setNotStartedOn(null);
     void guardSubmit(async () => {
       try {
-        await requestMove({ data: { agentId, targetComputerId } });
+        const moved = await requestMove({ data: { agentId, targetComputerId } });
         setOpen(false);
+        // Placed but not started: say so, rather than let the move read as done.
+        if ("direct" in moved && moved.direct && !moved.startPublished)
+          setNotStartedOn(
+            targets.find(({ id }) => id === targetComputerId)?.name || m.agent_computer_unnamed(),
+          );
         await refresh();
       } catch (cause) {
         // The dialog stays open: it says why, links to where to fix it, and offers to try again.
@@ -342,6 +375,22 @@ export function AgentMigrationSection({
 
   return (
     <>
+      {revoked && !inProgress && (
+        <Alert
+          color="warning"
+          title={m.agent_migration_revoked_title({ computer: sourceName })}
+          description={m.agent_migration_revoked_body({ name: agentName })}
+        />
+      )}
+      {notStartedOn && (
+        <Alert
+          color="warning"
+          description={m.agent_migration_direct_not_started({
+            name: agentName,
+            computer: notStartedOn,
+          })}
+        />
+      )}
       {migration && (
         <AgentMigrationStatus
           migration={migration}
@@ -360,7 +409,8 @@ export function AgentMigrationSection({
       )}
       {canMove && status.data.available && !inProgress && (
         <Button
-          color="secondary"
+          // Revoked, the move is the one thing left to do: it leads.
+          color={revoked ? "primary" : "secondary"}
           className="w-full justify-center"
           iconLeading={SwitchHorizontal01}
           onPress={() => {
@@ -434,6 +484,7 @@ export function AgentMigrationSection({
                   selected={selected}
                   onSelect={setSelected}
                   disabled={submitting}
+                  direct={revoked ? { sourceName, agentName } : undefined}
                 />
                 {refusal && (
                   <AgentMigrationRefusalNotice

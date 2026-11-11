@@ -93,6 +93,7 @@ function AgentProfileTabBody({
   onLoadSkills,
   onStartDelete,
   migration,
+  migrationLeads = false,
   archive,
   contextUsage,
   fastMode,
@@ -110,6 +111,8 @@ function AgentProfileTabBody({
   fastMode?: AgentFastModeReading | null;
   /** The Agent's moves between Computers (`AgentMigrationSection`), shown under ACTIONS. */
   migration?: ReactNode;
+  /** The Agent's Computer was revoked: the move is first on the tab, not under ACTIONS. */
+  migrationLeads?: boolean;
   /** An archived Agent's ARCHIVE section (`AgentArchiveSection`), for those who managed it. */
   archive?: ReactNode;
   /** `canManageAgentRole || ownedByCurrentUser` — gates every pencil, the ACTIONS section. */
@@ -177,6 +180,11 @@ function AgentProfileTabBody({
     // `relative` keeps absolutely positioned `sr-only` labels inside this scroll box; without
     // it they escape it and stretch the page.
     <div className="relative min-h-0 flex-1 overflow-y-auto">
+      {canManage && migrationLeads && migration && (
+        <section className="flex flex-col gap-2 border-b border-secondary px-6 py-5">
+          {migration}
+        </section>
+      )}
       <section className="border-b border-secondary px-6 py-5">
         <div className="mb-5 flex flex-wrap items-center gap-4">
           {onMascotChange ? (
@@ -392,7 +400,7 @@ function AgentProfileTabBody({
           <div className="mt-3 flex flex-col gap-2">
             {/* Moving comes first, as in the reference Computer: it is the action that changes
                 where the Agent lives, and its progress belongs at the top while it runs. */}
-            {migration}
+            {!migrationLeads && migration}
             <Button
               color="secondary"
               className="w-full justify-center"

@@ -31,7 +31,7 @@ import {
   saveAgentEnvironment,
 } from "#src/features/agents/agents.functions";
 import { AgentArchiveSection } from "./agent-archive-section";
-import { AgentMigrationSection } from "./agent-migration-section";
+import { AgentMigrationSection, useAgentMigrationStatus } from "./agent-migration-section";
 import { AgentRuntimeCredentialSection } from "./agent-runtime-credential-section";
 import {
   combineRuntimeSaveOutcomes,
@@ -127,6 +127,10 @@ export function AgentProfilePanel({
   const deleted = Boolean(profile?.deletedAt);
   const canManage = profile && !deleted ? canManageAgent(profile) : false;
   usePrefetchAgentActivityFeed(agentId, canManage);
+  // A revoked Computer leaves the Agent unable to work: the move leads the Profile then.
+  const migrationLeads =
+    useAgentMigrationStatus(agentId, Boolean(profile?.computer && canManage)).data
+      ?.computerAccessRevoked === true;
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
   // `undefined` for an unreadable stored config: the migration section's refusal names need a
   // runtime and model, so it stays hidden with the rest of the runtime block (task #517).
@@ -388,6 +392,7 @@ export function AgentProfilePanel({
                 />
               ) : undefined
             }
+            migrationLeads={migrationLeads}
             migration={
               profile.computer && !deleted && migrationRuntime ? (
                 <AgentMigrationSection

@@ -56,5 +56,9 @@
   "agent_migration_target_offline": "That Computer is offline. Connect it, or choose another Computer.",
   "agent_migration_open_computer": "Open Computer settings",
   "agent_migration_open_computers": "Open Computers",
-  "agent_migration_try_again": "Try again"
+  "agent_migration_try_again": "Try again",
+  "agent_migration_revoked_title": "{computer} can no longer be reached",
+  "agent_migration_revoked_body": "Access to this Computer was revoked. Move {name} to another Computer so it can keep working.",
+  "agent_migration_direct_left_behind": "Files and local memory on {computer} don't come along. {name} starts fresh on the new Computer.",
+  "agent_migration_direct_not_started": "{name} moved to {computer} but didn't start. Press Start to start it."
 }
