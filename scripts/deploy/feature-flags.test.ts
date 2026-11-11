@@ -18,8 +18,14 @@ describe("feature flags in the deployed Compose files", () => {
     // artifacts now show for every Workspace, switched on per Workspace in Settings > Experiments.
     // task-ref-tokens writes `#channel:#N` /
     // `dm:@peer:#N` message references as task-ref tokens for QA's write-path check (task #437).
-    // Production stays without it.
+    // agentContextView is on for staging so QA can open the Agent context view on 0.1.29
+    // Computers. Production stays without both.
     expect(definitions.flags).toEqual({
+      agentContextView: {
+        state: "ENABLED",
+        variants: { on: true, off: false },
+        defaultVariant: "on",
+      },
       "task-ref-tokens": {
         state: "ENABLED",
         variants: { on: true, off: false },
