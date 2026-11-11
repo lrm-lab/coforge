@@ -4,7 +4,6 @@ import {
   type ContextViewRestoreResult,
 } from "./context-view-restore";
 import { writeFileSync } from "node:fs";
-import { basename } from "node:path";
 
 export const CONTEXT_VIEW_RESTORE_TIMEOUT_MS = 25_000;
 export const CONTEXT_VIEW_RESTORE_HEAP_MB = 1_024;
@@ -29,15 +28,19 @@ function restorePayload(request: ChildRequest): ContextViewRestoreResult {
   return restoreContextView({ ...request, buffer: Buffer.from(request.bufferBase64, "base64") });
 }
 
+/** The prefix of an entrypoint Bun holds inside its own binary (measured on a compiled Computer:
+ * `process.argv[1]` and `Bun.main` are both `/$bunfs/root/<name>`). */
+const EMBEDDED_SCRIPT_PREFIX = "/$bunfs/";
+
 /**
  * How this program asks itself to run a subcommand. A compiled Computer is its own entrypoint, so
  * the subcommand is its first argument; under `bun` the script has to come first, or the runtime
  * looks for a file named after the subcommand.
  *
- * The runtime is what tells the two apart: in a compiled binary `process.execPath` is the binary,
- * while `process.argv[1]` is an embedded `/$bunfs/root/...` path (measured), so passing it along
- * would make the child dispatch on the wrong argument — the restore then fell into the CLI branch
- * and every context read failed with `CONTEXT_READ_FAILED` (task #739).
+ * The script path is what tells the two apart, and it says so directly: a path inside the runtime's
+ * own binary is no file the child could be asked to run, so it is not passed at all. Reading the
+ * executable's name instead would guess — a compiled binary may be named `bun-something`, and bun
+ * itself can be renamed or reached through a shim (task #739).
  */
 export function selfSubcommand(
   subcommand: string,
@@ -46,8 +49,8 @@ export function selfSubcommand(
     script: process.argv[1],
   },
 ): string[] {
-  const underBun = basename(self.execPath).startsWith("bun");
-  const script = underBun && self.script !== undefined ? [self.script] : [];
+  const embedded = self.script?.startsWith(EMBEDDED_SCRIPT_PREFIX) === true;
+  const script = self.script !== undefined && !embedded ? [self.script] : [];
   return [self.execPath, ...script, subcommand];
 }
 

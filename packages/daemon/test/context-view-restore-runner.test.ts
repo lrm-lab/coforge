@@ -33,6 +33,32 @@ test("under bun the script comes before the subcommand", () => {
   ]);
 });
 
+test("the script path decides the shape, not the executable's name", () => {
+  // The two shapes are told apart by where the entrypoint is, so a name says nothing: a compiled
+  // binary may be named like bun, and bun itself may be renamed or reached through a shim.
+  expect(
+    selfSubcommand("__restore-context-view", {
+      execPath: "/Applications/CoForge/bun-computer-copy",
+      script: "/$bunfs/root/probe",
+    }),
+  ).toEqual(["/Applications/CoForge/bun-computer-copy", "__restore-context-view"]);
+  expect(
+    selfSubcommand("__restore-context-view", {
+      execPath: "/Users/dev/.local/share/mise/shims/coforge-computer-runner",
+      script: "/repo/packages/computer/src/main.ts",
+    }),
+  ).toEqual([
+    "/Users/dev/.local/share/mise/shims/coforge-computer-runner",
+    "/repo/packages/computer/src/main.ts",
+    "__restore-context-view",
+  ]);
+  // No script at all: the executable is the only thing there is to run.
+  expect(selfSubcommand("__restore-context-view", { execPath: "/usr/local/bin/bun" })).toEqual([
+    "/usr/local/bin/bun",
+    "__restore-context-view",
+  ]);
+});
+
 test("a child that never starts leaves its first stderr line on the refusal", async () => {
   const result = await runContextViewRestoreInChild(
     {
