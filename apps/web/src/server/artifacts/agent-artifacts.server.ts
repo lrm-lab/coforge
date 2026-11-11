@@ -25,8 +25,6 @@ export type AgentArtifactServices = {
   shares?: Pick<ArtifactShares, "share">;
   send?: Parameters<ArtifactShares["share"]>[0]["send"];
   enabled: (workspaceId: string) => Promise<boolean>;
-  /** Whether the Workspace may have web pages made (the `artifact-web-pages` flag, task #490). */
-  webPages: (workspaceId: string) => Promise<boolean>;
 };
 
 const { id, version, baseVersion, text, title, description, note, label, historyLimit } =
@@ -94,12 +92,6 @@ export async function runAgentArtifactOperation(
   switch (request.operation) {
     case "create": {
       const input = parsed.data as z.infer<typeof RULES.create>;
-      // Off until the pane shows a web page as one: until then nobody could read it properly.
-      if (input.kind === "html" && !(await services.webPages(workspaceId)))
-        throw new AppError("ACCESS_DENIED", {
-          errorId: "artifact-web-pages-off",
-          hint: "web pages are not available yet: make a document (no --kind)",
-        });
       const conversationId =
         input.target === undefined
           ? undefined

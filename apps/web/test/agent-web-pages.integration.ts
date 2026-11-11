@@ -30,7 +30,6 @@ let workspaceId: string;
 let alice: string;
 let agentId: string;
 let channelId: string;
-let webPages = true;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-web-pages-"));
@@ -86,7 +85,7 @@ async function post(body: unknown) {
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db, artifacts, documents, enabled: async () => true, webPages: async () => webPages },
+    { db, artifacts, documents, enabled: async () => true },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
@@ -228,30 +227,6 @@ test("a person reads a web page and goes back to a version, but cannot make or s
   });
   expect(reverted).toMatchObject({ status: "created", number: 3 });
   expect((await documents.load(me, { artifactId: artifact })).text).toBe(PAGE_1);
-});
-
-test("with the artifact-web-pages flag off, no web page is made; documents are as before", async () => {
-  webPages = false;
-  try {
-    const off = await post({
-      operation: "create",
-      kind: "html",
-      title: "Early",
-      description: "Too soon",
-      target: `#growth-${handle}`,
-      text: PAGE_1,
-    });
-    expect(off).toMatchObject({ status: 403, body: { code: "ACCESS_DENIED" } });
-    expect(off.body.error).toContain("artifact-web-pages-off");
-    const doc = await post({
-      operation: "create",
-      title: "Still fine",
-      target: `#growth-${handle}`,
-    });
-    expect(doc).toMatchObject({ status: 200, body: { kind: "markdown" } });
-  } finally {
-    webPages = true;
-  }
 });
 
 test("a web page needs a description, and a kind is markdown or html", async () => {

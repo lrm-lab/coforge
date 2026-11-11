@@ -16,9 +16,6 @@ switched on (Settings > Experiments); until then every command fails with `ARTIF
 When in doubt, make an artifact: anything people will want to edit, or that is mostly prose, is an
 artifact.
 
-Web pages are not open in every Workspace yet. Where they are not, `create --kind html` fails
-with `artifact-web-pages-off`: make an artifact instead.
-
 ## Writing a web page
 
 - One self-contained `index.html`, at most 2 MiB. Put styles in `<style>`, scripts in inline

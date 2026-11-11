@@ -15,7 +15,6 @@ import {
   productionArtifactShares,
   productionArtifacts,
 } from "#src/server/artifacts/artifact-composition.server";
-import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import { parsePeerTarget } from "#src/server/db/repositories/agent-peer-target.server";
@@ -90,7 +89,6 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
               body,
             }),
           enabled: (workspaceId) => artifactsEnabled(db, workspaceId),
-          webPages: (workspaceId) => isFeatureEnabled("artifact-web-pages", { workspaceId }),
         });
       },
     },
