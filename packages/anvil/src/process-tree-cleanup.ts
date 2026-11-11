@@ -30,12 +30,22 @@ export async function cleanupOwnedTree(
 ): Promise<void> {
   const turnScoped = options?.cutoffAtMs !== undefined && tree.terminateForTurn;
   // A restart that names no turn fence (none was known) keeps the whole-tree ladder: processes
-  // started before the turn are killed too.
-  if (options && !turnScoped)
-    logger.warning("Turn-scoped cleanup unavailable; killing the whole process tree", {
-      event: "process_tree_cleanup:whole_tree",
-      reason: options.cutoffAtMs === undefined ? "no_turn_fence" : "no_turn_scoped_owner",
-    });
+  // started before the turn are killed too. An idle Agent has no turn to scope to, so a restart of
+  // one takes this path every time and says so at info; a lost fence the runtime should have had
+  // is the warning (task #35).
+  if (options && !turnScoped) {
+    const properties = { event: "process_tree_cleanup:whole_tree" } as const;
+    if (options.cutoffAtMs === undefined)
+      logger.info("Turn-scoped cleanup unavailable; killing the whole process tree", {
+        ...properties,
+        reason: "no_turn_fence",
+      });
+    else
+      logger.warning("Turn-scoped cleanup unavailable; killing the whole process tree", {
+        ...properties,
+        reason: "no_turn_scoped_owner",
+      });
+  }
   try {
     if (turnScoped) await tree.terminateForTurn!(false, options!.cutoffAtMs!);
     else await tree.terminate(false);
