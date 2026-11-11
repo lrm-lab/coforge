@@ -10,7 +10,13 @@ import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useTaskHiddenColumns } from "#src/features/settings/task-hidden-columns";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { BoardNewTaskDialog, canCreateIn, newTaskChoices } from "./board-new-task-dialog";
+import { useAssignTargets } from "./board-assign-to";
+import {
+  BoardNewTaskDialog,
+  canCreateIn,
+  canFileNewTask,
+  newTaskChoices,
+} from "./board-new-task-dialog";
 import { CreateTaskDialog, type TaskDraft } from "./create-task-dialog";
 import { isFinishedStatus, type FinishedStatus } from "./finished-tasks";
 import { TASK_TITLE_CLASS, TaskCard } from "./task-card";
@@ -135,6 +141,13 @@ export function TaskBoard<T extends BoardTask>({
     () => (newTask ? newTaskChoices(tasks, newTask.projectSlug) : undefined),
     [tasks, newTask],
   );
+  // Where a new Task can go: the channels the board's Tasks were filed in, or — on a board that
+  // holds none yet, a new Workspace's or a new Project's — the viewer's own channels (task #60).
+  // Every board would ask the server for them, so only the boards that offer "New task" do.
+  const newTaskPlaces = useAssignTargets({ enabled: newTask !== undefined });
+  const canFile = newTaskChoice
+    ? canFileNewTask(newTaskChoice.places, newTaskPlaces.targets)
+    : false;
   const onCreateTask = onCommand ? conversation?.onCreateTask : undefined;
   // A Workspace owner or admin sets any status; the board must offer exactly what the server takes.
   const canSetAnyStatus = useCanSetAnyTaskStatus();
@@ -176,7 +189,7 @@ export function TaskBoard<T extends BoardTask>({
                 type="button"
                 size="sm"
                 iconLeading={Plus}
-                isDisabled={newTaskChoice.places.length === 0}
+                isDisabled={!canFile}
                 onPress={() => setCreating("todo")}
               >
                 {m.task_board_create_new_task()}
@@ -221,7 +234,7 @@ export function TaskBoard<T extends BoardTask>({
             // A conversation's board says above it when any command, a move included, is refused.
             showMoveError={!conversation}
             adding={
-              newTaskChoice && onCommand && newTaskChoice.places.length > 0
+              newTaskChoice && onCommand && canFile
                 ? { statuses: TASK_STATUSES.filter(canCreateIn), onAdd: setCreating }
                 : undefined
             }
