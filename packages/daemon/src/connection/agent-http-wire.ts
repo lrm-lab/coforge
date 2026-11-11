@@ -110,20 +110,70 @@ export function agentHeaders(keys: { agentApiKey: string; daemonApiKey: string }
   };
 }
 
+/** How long a repeated request waits before its second attempt: long enough for a reset socket or
+ * a proxy's failed upstream to clear, short enough to stay inside the caller's deadline. */
+const REPEAT_AFTER_RESET_DELAY_MS = 150;
+
+/** Whether repeating this request cannot double its effect. Only reads: every write that may be
+ * repeated already owns its own one-shot repeat — a send settles by its idempotency key
+ * (`settleAgentSend`), a reply repeats in the CLI under the key it mints — so repeating here too
+ * would spend attempts several times over for one outage. */
+function repeatableRequest(init: RequestInit): boolean {
+  const method = (init.method ?? "GET").toUpperCase();
+  return method === "GET" || method === "HEAD";
+}
+
+/** One more attempt after a connection that failed before an answer, or a 5xx, and only when the
+ * request is repeatable. The repeat is the same `init` — the same idempotency key — never a new
+ * one. The second attempt's outcome stands, whatever it is. */
+async function repeatOnce(
+  attempt: () => Promise<Response>,
+  what: string,
+  reason: "reset" | "5xx",
+  status?: number,
+): Promise<Response> {
+  logger.info("Agent HTTP request repeated after a failed answer", {
+    event: "agent.http.repeat_after_failed_answer",
+    what,
+    reason,
+    ...(status !== undefined ? { status } : {}),
+    attempt: 2,
+  });
+  await new Promise((resolve) => setTimeout(resolve, REPEAT_AFTER_RESET_DELAY_MS));
+  return attempt();
+}
+
 /** Invokes the HTTP fetcher, turning any thrown error into a typed pre-response transport failure.
  * Every caller here speaks for an Agent, so the shared key heal applies even when the caller
- * injected a bare `fetch`. */
+ * injected a bare `fetch`. A read gets exactly one more attempt when the connection failed before
+ * an answer arrived or the server answered 5xx (task #24, Raft 1.0.69 item 3); writes keep their
+ * single attempt here because their caller already owns one repeat. */
 export async function fetchAgentResponse(
   fetcher: HttpFetch,
   url: string | URL,
   init: RequestInit,
   what: string,
 ): Promise<Response> {
+  const send = async () => {
+    try {
+      return await withAgentApiKeyHeal(fetcher)(url, init);
+    } catch (cause) {
+      throw AgentTransportError.preResponseTransport(what, cause);
+    }
+  };
+  const repeatable = repeatableRequest(init) && replayableAgentBody(init.body);
+  let first: Response;
   try {
-    return await withAgentApiKeyHeal(fetcher)(url, init);
-  } catch (cause) {
-    throw AgentTransportError.preResponseTransport(what, cause);
+    first = await send();
+  } catch (error) {
+    if (!repeatable) throw error;
+    // The reset happened before any answer: this is the case the repeat exists for.
+    return repeatOnce(send, what, "reset");
   }
+  if (!repeatable || first.status < 500) return first;
+  // A 5xx may still have produced a body: release its connection before the pool is reused.
+  void first.body?.cancel().catch(() => undefined);
+  return repeatOnce(send, what, "5xx", first.status);
 }
 
 /** Reads a response body as text, turning a stream failure into a typed mid-response failure. */
