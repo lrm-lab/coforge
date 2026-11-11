@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Radio } from "react-aria-components";
 
+import { avatarInitial } from "#src/lib/avatar-tone";
 import { cx } from "#src/utils/cx";
 
 import { AvatarSticker, StickerInitial, StickerPicture } from "./avatar-sticker";
@@ -48,7 +49,7 @@ export function AvatarChoice({
                 ) : (
                   <StickerPicture
                     src={src}
-                    fallback={<StickerInitial initial={label.charAt(0)} />}
+                    fallback={<StickerInitial initial={avatarInitial(label)} />}
                   />
                 )}
               </AvatarSticker>

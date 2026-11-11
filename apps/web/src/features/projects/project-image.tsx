@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { avatarInitial } from "#src/lib/avatar-tone";
 import { cx } from "#src/utils/cx";
 
 /** A Project's uploaded icon, or `fallback` (its first letter by default) when it has none. */
@@ -25,7 +26,7 @@ export function ProjectImage({
       {url ? (
         <img src={url} alt="" className="size-full object-cover" />
       ) : (
-        (fallback ?? name.trim().slice(0, 1).toUpperCase())
+        (fallback ?? avatarInitial(name))
       )}
     </span>
   );
