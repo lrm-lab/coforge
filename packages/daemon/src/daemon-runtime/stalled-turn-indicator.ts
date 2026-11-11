@@ -8,16 +8,46 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 export const STALLED_TURN_SILENCE_MS = 10 * 60_000;
 export const STALLED_TURN_SILENCE_ENV = "COFORGE_STALLED_TURN_SILENCE_MS";
 
+/** The same window for a busy turn with no tool open: the model itself produced nothing. Longer
+ * than the tool window, because a model may legitimately take minutes over a large context while
+ * a long tool is at least visible as a tool; zero leaves only the tool window. A turn in this
+ * state is indistinguishable from a healthy one on the Agent's page, so a person had no way to
+ * stop it (task #41). */
+export const STALLED_TURN_MODEL_SILENCE_MS = 20 * 60_000;
+export const STALLED_TURN_MODEL_SILENCE_ENV = "COFORGE_STALLED_TURN_MODEL_SILENCE_MS";
+
 /** Resolves the per-launch silence window; an explicit zero disables the indicator. */
 export function stalledTurnSilenceMs(
   launchEnv: Readonly<Record<string, string>> | undefined,
   daemonEnv: Readonly<Record<string, string | undefined>> = Bun.env,
 ): number {
-  const raw = launchEnv?.[STALLED_TURN_SILENCE_ENV] ?? daemonEnv[STALLED_TURN_SILENCE_ENV];
-  if (raw === undefined || raw.trim() === "") return STALLED_TURN_SILENCE_MS;
-  if (!/^\d+$/.test(raw.trim())) return STALLED_TURN_SILENCE_MS;
+  return windowMs(STALLED_TURN_SILENCE_ENV, STALLED_TURN_SILENCE_MS, launchEnv, daemonEnv);
+}
+
+/** Resolves the window for a turn with no tool open; an explicit zero turns that case off. */
+export function stalledTurnModelSilenceMs(
+  launchEnv: Readonly<Record<string, string>> | undefined,
+  daemonEnv: Readonly<Record<string, string | undefined>> = Bun.env,
+): number {
+  return windowMs(
+    STALLED_TURN_MODEL_SILENCE_ENV,
+    STALLED_TURN_MODEL_SILENCE_MS,
+    launchEnv,
+    daemonEnv,
+  );
+}
+
+function windowMs(
+  name: string,
+  fallbackMs: number,
+  launchEnv: Readonly<Record<string, string>> | undefined,
+  daemonEnv: Readonly<Record<string, string | undefined>>,
+): number {
+  const raw = launchEnv?.[name] ?? daemonEnv[name];
+  if (raw === undefined || raw.trim() === "") return fallbackMs;
+  if (!/^\d+$/.test(raw.trim())) return fallbackMs;
   const parsed = Number(raw);
-  return Number.isSafeInteger(parsed) ? parsed : STALLED_TURN_SILENCE_MS;
+  return Number.isSafeInteger(parsed) ? parsed : fallbackMs;
 }
 
 export type StalledTurnObservation = Readonly<{
@@ -27,7 +57,8 @@ export type StalledTurnObservation = Readonly<{
   lastEventAtMs: number;
   /** The oldest open tool's start time, when a tool is still running. */
   oldestToolStartedAtMs?: number;
-  /** At least one tool call remains open; model-only silence is not a stalled tool. */
+  /** At least one tool call remains open. A turn with none is judged on the longer model window,
+   * which is what tells a long build from a model that produced nothing at all. */
   hasOpenToolCall: boolean;
 }>;
 
@@ -35,10 +66,14 @@ export type StalledTurnIndicator = Readonly<{
   silentForMs: number;
   /** The tracker's own window, so the notice states the window it fired against. */
   thresholdMs: number;
+  /** Which window judged this turn: one with a tool open, or a model that produced nothing. */
+  window: "tool" | "model";
 }>;
 
 type StalledTurnState = {
   startAtMs: number;
+  thresholdMs: number;
+  window: "tool" | "model";
   watchdog: ReturnType<typeof setTimeout> | undefined;
   warned: boolean;
 };
@@ -96,18 +131,27 @@ export class StalledTurnTracker {
     private readonly onStalled: (agentId: string, indicator: StalledTurnIndicator) => void,
     private readonly silenceMs = STALLED_TURN_SILENCE_MS,
     private readonly now: () => number = Date.now,
+    private readonly modelSilenceMs = STALLED_TURN_MODEL_SILENCE_MS,
   ) {}
 
   /** Starts or resets the current turn's silence clock after a raw provider event. */
   observe(agentId: string, observation: StalledTurnObservation): void {
-    if (this.silenceMs <= 0 || !observation.turnBusy || !observation.hasOpenToolCall) {
+    if (!observation.turnBusy) {
+      this.finish(agentId);
+      return;
+    }
+    // A tool still open is judged on the tool window; a turn with none is the model's own silence,
+    // judged on the longer one — the state a person otherwise cannot tell from a healthy turn.
+    const window = observation.hasOpenToolCall ? "tool" : "model";
+    const thresholdMs = window === "tool" ? this.silenceMs : this.modelSilenceMs;
+    if (thresholdMs <= 0) {
       this.finish(agentId);
       return;
     }
     const startAtMs = stalledTurnSilenceStartAtMs(observation);
     const current = this.#states.get(agentId);
     if (current?.warned && current.startAtMs === startAtMs) return;
-    this.#arm(agentId, startAtMs);
+    this.#arm(agentId, startAtMs, thresholdMs, window);
   }
 
   /** Starts a fresh turn, including one whose first provider event has not arrived yet. */
@@ -131,12 +175,14 @@ export class StalledTurnTracker {
     for (const agentId of this.#states.keys()) this.finish(agentId);
   }
 
-  #arm(agentId: string, startAtMs: number): void {
+  #arm(agentId: string, startAtMs: number, thresholdMs: number, window: "tool" | "model"): void {
     const current = this.#states.get(agentId);
     if (current?.watchdog !== undefined) clearTimeout(current.watchdog);
-    const delayMs = Math.max(0, startAtMs + this.silenceMs - this.now());
+    const delayMs = Math.max(0, startAtMs + thresholdMs - this.now());
     const state: StalledTurnState = {
       startAtMs,
+      thresholdMs,
+      window,
       warned: false,
       watchdog: undefined,
     };
@@ -151,7 +197,8 @@ export class StalledTurnTracker {
     state.warned = true;
     this.onStalled(agentId, {
       silentForMs: Math.max(0, this.now() - startAtMs),
-      thresholdMs: this.silenceMs,
+      thresholdMs: state.thresholdMs,
+      window: state.window,
     });
   }
 }
@@ -189,6 +236,7 @@ export function stalledTurnNotice(
       event: "agent_runtime:turn_stalled",
       agent_id: agentId,
       launch_id: launch.launchId,
+      stalled_window: indicator.window,
       silent_for_ms: indicator.silentForMs,
       threshold_ms: indicator.thresholdMs,
       ...(launch.progress ? { last_event_at: launch.progress.lastEventAtMs } : {}),

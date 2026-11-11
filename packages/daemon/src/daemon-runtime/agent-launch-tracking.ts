@@ -14,6 +14,7 @@ import type { LaunchRequest } from "./runtime-launch-types";
 import { ProviderProgress } from "./stalled-recovery";
 import {
   StalledTurnTracker,
+  stalledTurnModelSilenceMs,
   stalledTurnNotice,
   stalledTurnSilenceMs,
 } from "./stalled-turn-indicator";
@@ -84,6 +85,8 @@ export function trackAgentLaunch(
         ),
     }),
     stalledTurnSilenceMs(config.envVars),
+    Date.now,
+    stalledTurnModelSilenceMs(config.envVars),
   );
   const replyIntents = ports.replyIntents.tracker(agentId, launch);
   launch.replyIntents = replyIntents;
