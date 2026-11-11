@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { TaskView } from "@lrm/coforge-sdk/internal";
 import { formatMyTaskList } from "#src/task-format";
 import { coverage, person, task } from "./task-format-fixtures";
 
