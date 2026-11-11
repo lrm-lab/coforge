@@ -13,6 +13,7 @@ import { Folder, MessageChatCircle, Paperclip } from "@untitledui/icons";
 
 import type { FilterableTask } from "./task-filters";
 import { openBlockers, type TaskRelations } from "./task-relation-edits";
+import { TaskLocator } from "./task-chip";
 import { TaskParentMark, TaskSubtaskMark, TaskBlockedMark } from "./task-relations";
 import { TaskCardLabels } from "./task-labels";
 import { TaskLabelChip } from "./task-label-chip";
@@ -102,6 +103,7 @@ export function TaskCard({
   task,
   renderTitle,
   source,
+  channel,
   project,
   controls,
   menu,
@@ -114,6 +116,9 @@ export function TaskCard({
   renderTitle: (title: ReactNode) => ReactNode;
   /** The conversation the task belongs to, on surfaces that mix conversations. */
   source?: string;
+  /** The channel the task lives in, when `source` is one: a phone's list row names it as the
+   * group avatar and its name, not `#name`. */
+  channel?: string | null;
   /** The Project the task's conversation belongs to, on surfaces that mix Projects; null when it
    * has none. */
   project?: TaskCardProject | null;
@@ -174,10 +179,14 @@ export function TaskCard({
           </h3>
           <p className="flex items-center gap-1 text-xs text-tertiary tabular-nums sm:hidden">
             {priorityMark("size-3 shrink-0")}
-            <span className="truncate">
-              #{task.number}
-              {source && ` · ${source}`}
-            </span>
+            {channel ? (
+              <TaskLocator task={{ number: task.number, channel }} shrink />
+            ) : (
+              <span className="truncate">
+                #{task.number}
+                {source && ` · ${source}`}
+              </span>
+            )}
           </p>
         </div>
         {blocked}
