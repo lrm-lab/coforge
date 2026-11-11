@@ -5,6 +5,7 @@ import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.s
 import {
   createCentrifugoServerApi,
   daemonControlChannel,
+  daemonOnline,
 } from "#src/server/centrifugo/server-api.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { getAgentContextViewAvailabilityStore } from "#src/server/centrifugo/agent-context-view-availability-receiver.server";
@@ -52,7 +53,7 @@ export function computerAgentContextViews(
         }),
       );
     },
-    online: (scope) => getComputerStatusCache().get(scope),
+    online: daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     supported: async ({ userId, workspaceId, computerId, agentId }) => {
       const viewer = await agentVisibilityViewerForUser(db, workspaceId, userId);
       const agent = await db.agent.findFirst({

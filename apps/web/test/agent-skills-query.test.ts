@@ -4,12 +4,9 @@ import {
   type AgentSkillsListRequest,
   type AgentSkillsListResult,
 } from "@lrm/coforge-sdk/internal";
-import {
-  AgentSkillsQuery,
-  skillsDaemonOnline,
-  type SkillsAssignment,
-} from "#src/server/agents/agent-skills.server";
+import { AgentSkillsQuery, type SkillsAssignment } from "#src/server/agents/agent-skills.server";
 import { createAgentSkillsListResultMethod } from "#src/server/centrifugo/agent-skills-cache.server";
+import { daemonOnline } from "#src/server/centrifugo/server-api.server";
 
 test("Skills query binds the owner's assignment and rechecks it before returning metadata", async () => {
   let assignment: { computerId: string; provider: "codex"; revision: string } | undefined = {
@@ -231,7 +228,7 @@ test("Skills query keeps its deadline when notifications never arrive", async ()
   expect(waits).toEqual([1_000, 1_000, 500]);
 });
 
-test("Skills daemon online needs the status cache and a live channel subscriber", async () => {
+test("daemon online needs the status cache and a live channel subscriber", async () => {
   const scope = { workspaceId: "workspace", computerId: "computer" };
   const clients = [{ client: "c", user: "u" }];
   let presenceCalls = 0;
@@ -244,12 +241,12 @@ test("Skills daemon online needs the status cache and a live channel subscriber"
   const status = (online: boolean) => ({ get: async () => online });
 
   // Cache says offline: presence is never asked, the answer is offline at once.
-  expect(await skillsDaemonOnline(api, status(false))(scope)).toBe(false);
+  expect(await daemonOnline(() => api, status(false))(scope)).toBe(false);
   expect(presenceCalls).toBe(0);
 
   // Cache says online but nobody is subscribed: the publish would be dropped.
   const emptyApi = { presence: async () => [] };
-  expect(await skillsDaemonOnline(emptyApi, status(true))(scope)).toBe(false);
+  expect(await daemonOnline(() => emptyApi, status(true))(scope)).toBe(false);
 
   // A presence read that fails keeps the old path: publish and let the timeout bound it.
   const brokenApi = {
@@ -257,7 +254,7 @@ test("Skills daemon online needs the status cache and a live channel subscriber"
       throw new Error("centrifugo unreachable");
     },
   };
-  expect(await skillsDaemonOnline(brokenApi, status(true))(scope)).toBe(true);
+  expect(await daemonOnline(() => brokenApi, status(true))(scope)).toBe(true);
 
-  expect(await skillsDaemonOnline(api, status(true))(scope)).toBe(true);
+  expect(await daemonOnline(() => api, status(true))(scope)).toBe(true);
 });

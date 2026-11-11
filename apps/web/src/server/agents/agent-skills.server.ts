@@ -6,11 +6,6 @@ import type {
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { parseAgentRuntimeConfig } from "./agent-runtime-config.server";
-import type { ComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
-import {
-  daemonChannelReachable,
-  type CentrifugoConnections,
-} from "#src/server/centrifugo/server-api.server";
 
 export type SkillsViewer = { userId: string; workspaceId: string };
 export type SkillsAssignment = { computerId: string; provider: RuntimeProvider; revision: string };
@@ -25,17 +20,6 @@ export interface AgentSkillsResults {
 type SkillsResponse =
   | { status: "ready"; result: AgentSkillsListResult }
   | { status: "offline" | "timeout" | "unavailable" };
-
-/** "Online" for a Skills query means a live subscriber on the daemon's control channel: the
- * status cache can outlive an ungraceful disconnect by its TTL, and a publish into a channel
- * nobody reads is dropped unheard (task #738). */
-export function skillsDaemonOnline(
-  api: Pick<CentrifugoConnections, "presence">,
-  status: Pick<ComputerStatusCache, "get">,
-): (scope: { workspaceId: string; computerId: string }) => Promise<boolean> {
-  return async (scope) =>
-    (await status.get(scope)) && daemonChannelReachable(api, scope.workspaceId, scope.computerId);
-}
 
 /** Authorizes a fresh directory observation, not Computer inventory or session state. */
 export class AgentSkillsQuery {

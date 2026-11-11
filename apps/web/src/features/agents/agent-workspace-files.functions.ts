@@ -23,6 +23,7 @@ import {
 import {
   createCentrifugoServerApi,
   daemonControlChannel,
+  daemonOnline,
 } from "#src/server/centrifugo/server-api.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import {
@@ -34,7 +35,7 @@ import {
 function buildQuery(db: Parameters<typeof findWorkspaceFilesAssignment>[0]) {
   return new AgentWorkspaceFilesQuery({
     findOwned: (viewer, id) => findWorkspaceFilesAssignment(db, viewer, id),
-    online: (scope) => getComputerStatusCache().get(scope),
+    online: daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     publishList: (request) =>
       createCentrifugoServerApi().publish(
         daemonControlChannel(request.workspaceId, request.computerId),

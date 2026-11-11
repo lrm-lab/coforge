@@ -5,6 +5,7 @@ import {
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import type { StreamPosition } from "#src/features/realtime/subscription-gap";
+import type { ComputerStatusCache } from "./computer-status.server";
 import { getUsageCache, type UsageCache } from "./usage-cache.server";
 
 export type CentrifugoServerApi = {
@@ -252,6 +253,23 @@ export async function daemonChannelReachable(
     );
     return true;
   }
+}
+
+/**
+ * "Online" for a request that publishes into a Computer's control channel and waits on the
+ * answer: the status cache says online AND a live daemon is subscribed right now. The cache can
+ * outlive an ungraceful disconnect by its TTL, and a publish into a channel nobody reads is
+ * dropped unheard, so the query would wait out its whole timeout for nothing (task #738, #749).
+ * `api` is a factory so a caller whose reads need no Centrifugo environment never builds one for
+ * a Computer the cache already calls offline. A presence read that fails keeps the caller on its
+ * old path (fail open, inside {@link daemonChannelReachable}).
+ */
+export function daemonOnline(
+  api: () => Pick<CentrifugoConnections, "presence">,
+  status: Pick<ComputerStatusCache, "get">,
+): (scope: { workspaceId: string; computerId: string }) => Promise<boolean> {
+  return async (scope) =>
+    (await status.get(scope)) && daemonChannelReachable(api(), scope.workspaceId, scope.computerId);
 }
 
 /**

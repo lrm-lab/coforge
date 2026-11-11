@@ -11,6 +11,7 @@ import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.s
 import {
   createCentrifugoServerApi,
   daemonControlChannel,
+  daemonOnline,
 } from "#src/server/centrifugo/server-api.server";
 import { ComputerLocalSessions } from "./computer-local-sessions.server";
 import { getLocalSessionHandoffCapabilityLease } from "./local-session-capability.server";
@@ -32,7 +33,7 @@ export function computerLocalSessions(db: Pick<PrismaClient, "computer">) {
           select: { id: true },
         }),
       ),
-    online: (scope) => getComputerStatusCache().get(scope),
+    online: daemonOnline(() => centrifugo, getComputerStatusCache()),
     supported: ({ workspaceId, computerId }) =>
       getLocalSessionHandoffCapabilityLease().supports(workspaceId, computerId),
     publishSearch: (request) =>

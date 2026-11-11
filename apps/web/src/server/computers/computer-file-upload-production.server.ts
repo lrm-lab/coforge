@@ -5,6 +5,7 @@ import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.s
 import {
   createCentrifugoServerApi,
   daemonControlChannel,
+  daemonOnline,
 } from "#src/server/centrifugo/server-api.server";
 import { getFileStorage } from "#src/server/files/file-storage.server";
 import { ComputerFileUploads } from "./computer-file-upload.server";
@@ -27,7 +28,7 @@ export async function computerFileUploads(db: Pick<PrismaClient, "computer">) {
           select: { id: true },
         }),
       ),
-    online: (scope) => getComputerStatusCache().get(scope),
+    online: daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     supported: ({ workspaceId, computerId }) =>
       getComputerFileUploadCapabilityLease().supports(workspaceId, computerId),
     storage,

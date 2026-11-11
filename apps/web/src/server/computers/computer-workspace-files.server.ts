@@ -19,6 +19,7 @@ import { isAdminLike, isWorkspaceMemberRole } from "#src/server/workspaces/membe
 import {
   createCentrifugoServerApi,
   daemonControlChannel,
+  daemonOnline,
 } from "#src/server/centrifugo/server-api.server";
 import { encodeAgentWorkspaceScanRequest } from "@lrm/coforge-sdk/internal";
 
@@ -140,7 +141,7 @@ export function computerWorkspaceFilesQuery(
 export function computerWorkspaceScanQuery(db: Pick<Db, "agent">, computerId: string) {
   return new AgentWorkspaceScanQuery({
     findOwned: (viewer, agentId) => ownedComputerAgentAssignment(db, computerId, viewer, agentId),
-    online: (scope) => getComputerStatusCache().get(scope),
+    online: daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     publishScan: (request) =>
       createCentrifugoServerApi().publish(
         daemonControlChannel(request.workspaceId, request.computerId),
@@ -167,7 +168,7 @@ export function archivedAgentWorkspaceScanQuery(db: Pick<Db, "agent">, role: str
   return new AgentWorkspaceScanQuery({
     findOwned: (viewer, agentId) =>
       archivedAgentWorkspaceAssignment(db, { ...viewer, role }, agentId),
-    online: (scope) => getComputerStatusCache().get(scope),
+    online: daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     publishScan: (request) =>
       createCentrifugoServerApi().publish(
         daemonControlChannel(request.workspaceId, request.computerId),
@@ -186,7 +187,7 @@ function workspaceFilesQuery(
 ) {
   return new AgentWorkspaceFilesQuery({
     findOwned,
-    online: (scope) => getComputerStatusCache().get(scope),
+    online: daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     publishList: options.list
       ? (request) =>
           createCentrifugoServerApi().publish(
