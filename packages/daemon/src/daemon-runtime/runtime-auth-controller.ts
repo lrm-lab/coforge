@@ -38,6 +38,7 @@ type Login = {
   id: string;
   provider: RuntimeAuthProvider;
   kiroIdentityCenter?: KiroIdentityCenterOptions;
+  kiroLicense?: "pro" | "free";
   antigravityMethodId?: "oauth-personal" | "oauth-business";
   abort: AbortController;
   prompt?: { resolve(code: string): void; reject(error: Error): void };
@@ -168,6 +169,7 @@ export class RuntimeAuthController {
       id: intent.loginId,
       provider: intent.provider,
       ...(intent.kiroIdentityCenter ? { kiroIdentityCenter: intent.kiroIdentityCenter } : {}),
+      ...(intent.kiroLicense ? { kiroLicense: intent.kiroLicense } : {}),
       ...(intent.antigravityMethodId ? { antigravityMethodId: intent.antigravityMethodId } : {}),
       abort: new AbortController(),
       prompts: 0,
@@ -298,6 +300,7 @@ export class RuntimeAuthController {
           {
             workingDirectory: this.ports.workingDirectory,
             ...(login.kiroIdentityCenter ? { kiroIdentityCenter: login.kiroIdentityCenter } : {}),
+            ...(login.kiroLicense ? { kiroLicense: login.kiroLicense } : {}),
             ...(login.antigravityMethodId
               ? { antigravityMethodId: login.antigravityMethodId }
               : {}),

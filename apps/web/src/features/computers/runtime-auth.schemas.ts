@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  runtimeAuthKiroOptions,
+  runtimeAuthKiroLogin,
   RUNTIME_AUTH_LOGIN_ID_PATTERN,
   RUNTIME_AUTH_PROVIDERS,
 } from "@lrm/coforge-sdk/internal";
@@ -13,11 +13,12 @@ export const startRuntimeAuthLoginInputSchema = z
     computerId,
     provider: z.enum(RUNTIME_AUTH_PROVIDERS),
     kiroIdentityCenter: z.object({ startUrl: z.string(), region: z.string() }).optional(),
+    kiroLicense: z.enum(["pro", "free"]).optional(),
     antigravityMethodId: z.enum(["oauth-personal", "oauth-business"]).optional(),
   })
   .superRefine((value, context) => {
     try {
-      runtimeAuthKiroOptions(value.provider, value.kiroIdentityCenter);
+      runtimeAuthKiroLogin(value.provider, value.kiroIdentityCenter, value.kiroLicense);
     } catch {
       context.addIssue({
         code: "custom",

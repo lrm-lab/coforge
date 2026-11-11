@@ -25,13 +25,38 @@ export function parseKiroIdentityCenterOptions(value: unknown): KiroIdentityCent
   return { startUrl, region };
 }
 
-export function runtimeAuthKiroOptions(
+/** Which Kiro sign-in a person asked for: the identity-center one (`pro`), or Builder ID and the
+ * social providers, which `kiro-cli` calls the free license. */
+export type KiroLicense = "pro" | "free";
+
+/** A Kiro sign-in as the adapter needs it: the license, and for `pro` the identity center it must
+ * land on. `free` carries no identity center, and one sent with it is refused rather than ignored. */
+export type KiroLoginTarget = Readonly<
+  { license: "free" } | { license: "pro"; identityCenter: KiroIdentityCenterOptions }
+>;
+
+/**
+ * Validates Kiro's two sign-in shapes together, since either one alone is ambiguous: no license
+ * with an identity center is a `pro` sign-in from a server that predates the choice, and a `free`
+ * sign-in must not name an identity center at all.
+ */
+export function runtimeAuthKiroLogin(
   provider: string,
-  value: unknown,
-): KiroIdentityCenterOptions | undefined {
-  if (provider === RUNTIME_PROVIDER.KIRO) return parseKiroIdentityCenterOptions(value);
-  if (value !== undefined) throw new Error("Kiro enterprise target belongs to Kiro only");
-  return undefined;
+  identityCenter: unknown,
+  license: unknown,
+): KiroLoginTarget | undefined {
+  if (provider !== RUNTIME_PROVIDER.KIRO) {
+    if (identityCenter !== undefined || license !== undefined)
+      throw new Error("Kiro sign-in options belong to Kiro only");
+    return undefined;
+  }
+  if (license === "free") {
+    if (identityCenter !== undefined)
+      throw new Error("A free Kiro sign-in names no identity center");
+    return { license: "free" };
+  }
+  if (license !== undefined && license !== "pro") throw new Error("Invalid Kiro license");
+  return { license: "pro", identityCenter: parseKiroIdentityCenterOptions(identityCenter) };
 }
 
 const ANTIGRAVITY_METHODS = new Set(["oauth-personal", "oauth-business"]);

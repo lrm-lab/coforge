@@ -23,6 +23,9 @@ message RuntimeAuthLoginStart {
   optional KiroIdentityCenterOptions kiro_identity_center = 3;
   // Antigravity's authenticate method: "oauth-personal" or "oauth-business".
   optional string antigravity_method_id = 4;
+  // Kiro's license: "pro" for an IAM Identity Center start (the default when absent, so an older
+  // server's intents still mean what they meant), "free" for Builder ID or social sign-in.
+  optional string kiro_license = 5;
 }
 
 message RuntimeAuthLoginCode {

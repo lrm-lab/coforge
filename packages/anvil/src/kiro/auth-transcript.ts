@@ -1,5 +1,9 @@
 import type { RuntimeAuthLoginEvent } from "#src/contract";
 import type { KiroIdentityCenterOptions } from "@lrm/coforge-sdk/internal";
+import { getLogger } from "@logtape/logtape";
+import { kiroDeviceLinkAllowed, type KiroLinkFlow } from "./auth-link-hosts";
+
+const logger = getLogger(["coforge", "daemon", "runtime", "kiro", "auth"]);
 
 export class KiroAuthFailure extends Error {
   constructor(
@@ -16,12 +20,17 @@ export class KiroEnterpriseLoginTranscript {
   #startAnswered = false;
   #regionAnswered = false;
   #emitted = false;
+  readonly #flow: KiroLinkFlow;
   constructor(
-    private readonly target: KiroIdentityCenterOptions,
+    /** The identity center a `pro` sign-in must land on; absent for a free sign-in, where
+     * `kiro-cli` chooses the provider and no identity-center prompt appears. */
+    private readonly target: KiroIdentityCenterOptions | undefined,
     private readonly write: (text: string) => void,
     private readonly emit: (event: RuntimeAuthLoginEvent) => void,
     private readonly secret?: (value: string) => void,
-  ) {}
+  ) {
+    this.#flow = target === undefined ? "free" : "identity_center";
+  }
   accept(chunk: string): void {
     // Kiro redraws its waiting spinner for the entire authorization window. Keep framing
     // context, not the full terminal history, so a healthy long login stays bounded.
@@ -61,29 +70,47 @@ export class KiroEnterpriseLoginTranscript {
     const urls = [...text.matchAll(/https:\/\/[^\s\x1b<>]+/gu)].map((m) =>
       m[0].replace(/[),.;]+$/u, ""),
     );
-    const url = urls.find((raw) => {
+    // The link is clicked in the web dialog, so only a known host is offered: a terminal's own
+    // output cannot widen where a person is sent (task #615).
+    const hostsOf = (raw: string) => {
       try {
-        const u = new URL(raw);
-        return (
-          raw !== this.target.startUrl &&
-          !u.username &&
-          !u.password &&
-          (/(^|\.)awsapps\.com$/u.test(u.hostname) ||
-            /^device\.sso\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?$/u.test(u.hostname))
-        );
+        return new URL(raw).hostname;
       } catch {
-        return false;
+        return "unparsable";
       }
-    });
+    };
+    const url = urls.find((raw) => raw !== this.target?.startUrl && this.#allowedLink(raw));
     const code =
       /(?:verification\s+code|one[- ]time\s+code|user\s+code|\bcode)\s*(?:is\s*)?[:：]?\s*([A-Z0-9]{4}-[A-Z0-9]{4})\b/iu.exec(
         text,
       )?.[1] ?? /\b([A-Z0-9]{4}-[A-Z0-9]{4})\b/u.exec(text)?.[1];
     if (url && code) {
       this.#emitted = true;
+      // The domain a real sign-in prints is the one thing this log needs: it is how the allowlist
+      // learns what kiro-cli actually uses, without ever forwarding the link itself.
+      logger.info("Kiro sign-in link offered", {
+        event: "runtime_auth:kiro_link_host",
+        flow: this.#flow,
+        host: hostsOf(url),
+      });
       this.secret?.(code);
       this.secret?.(url);
       this.emit({ kind: "device_code", verificationUrl: url, userCode: code });
+      return;
+    }
+    // A free sign-in showed a code with a link nobody here trusts: refuse it by name instead of
+    // leaving the dialog waiting on a link that will never come.
+    if (!url && code && this.#flow === "free" && urls.length > 0)
+      throw new KiroAuthFailure(
+        "rejected",
+        `kiro_link_host_not_allowed:${[...new Set(urls.map(hostsOf))].join(",")}`,
+      );
+  }
+  #allowedLink(raw: string): boolean {
+    try {
+      return kiroDeviceLinkAllowed(this.#flow, new URL(raw));
+    } catch {
+      return false;
     }
   }
 }

@@ -191,6 +191,9 @@ export interface RuntimeAuthAdapter {
       timeoutMs?: number;
       onSecret?: RuntimeAuthSecretSink;
       kiroIdentityCenter?: KiroIdentityCenterOptions;
+      /** Kiro's license: the identity-center sign-in (`pro`, the default) or Builder ID and the
+       * social providers (`free`), which carries no identity center. */
+      kiroLicense?: "pro" | "free";
       /** Antigravity's two OAuth methods — the personal or business account the flow opens. */
       antigravityMethodId?: "oauth-personal" | "oauth-business";
     },

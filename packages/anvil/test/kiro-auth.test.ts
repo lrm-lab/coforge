@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { KiroRuntimeAuthAdapter, type KiroAuthHost, type KiroAuthProcess } from "#src/kiro/auth";
+import { kiroDeviceLinkAllowed } from "#src/kiro/auth-link-hosts";
 import { parseKiroWhoami } from "#src/kiro/whoami";
 import type { RuntimeAuthLoginEvent } from "#src/contract";
 const target = { startUrl: "https://example.awsapps.com/start", region: "us-east-1" };
@@ -324,3 +325,122 @@ for (const missingExecutable of [true, false]) {
     );
   });
 }
+
+test("Kiro's free sign-in runs the licence without an identity center, and takes whatever account it lands on", async () => {
+  const login = child();
+  const spawned = Promise.withResolvers<void>();
+  const commands: readonly string[][] = [];
+  const builderId =
+    JSON.stringify({ accountType: "BuilderId", email: "alice@example.com" }) + "\nProfile:\nfree";
+  const adapter = new KiroRuntimeAuthAdapter({
+    enterpriseLoginSupported: true,
+    maskAccountLabel: () => "a***@example.com",
+    spawn(args, _cwd, terminal) {
+      (commands as string[][]).push([...args]);
+      if (terminal) {
+        spawned.resolve();
+        return login.process;
+      }
+      const probe = child();
+      probe.send(builderId);
+      probe.end();
+      return probe.process;
+    },
+  });
+  const events: RuntimeAuthLoginEvent[] = [];
+  const pending = adapter.startLogin(
+    { workingDirectory: "/test", kiroLicense: "free", timeoutMs: 1000 },
+    { onEvent: (e) => events.push(e), prompt: async () => "" },
+  );
+  await spawned.promise;
+  login.send("Open https://device.sso.us-east-1.amazonaws.com/\nCode: ABCD-EFGH\n");
+  login.end();
+  expect(commands[0]).toEqual(["login", "--license", "free", "--use-device-flow"]);
+  expect(await pending).toMatchObject({
+    status: "logged_in",
+    authStatus: { provider: "kiro", account: { methodLabel: "BuilderId" } },
+  });
+  expect(events).toContainEqual({
+    kind: "device_code",
+    verificationUrl: "https://device.sso.us-east-1.amazonaws.com/",
+    userCode: "ABCD-EFGH",
+  });
+});
+
+/** A free sign-in that shows the link kiro-cli printed, whatever host it names. */
+function freeSignIn() {
+  const login = child();
+  const spawned = Promise.withResolvers<void>();
+  const adapter = new KiroRuntimeAuthAdapter({
+    enterpriseLoginSupported: true,
+    maskAccountLabel: () => "a***@example.com",
+    spawn(_args, _cwd, terminal) {
+      if (terminal) {
+        spawned.resolve();
+        return login.process;
+      }
+      const probe = child();
+      probe.send(JSON.stringify({ accountType: "BuilderId" }) + "\nProfile:\nfree");
+      probe.end();
+      return probe.process;
+    },
+  });
+  const events: RuntimeAuthLoginEvent[] = [];
+  const pending = adapter.startLogin(
+    { workingDirectory: "/test", kiroLicense: "free", timeoutMs: 1000 },
+    { onEvent: (e) => events.push(e), prompt: async () => "" },
+  );
+  return { spawned, events, pending, login };
+}
+
+test("a free sign-in offers a link on a provider host it knows", async () => {
+  const x = freeSignIn();
+  await x.spawned.promise;
+  x.login.send("Open https://accounts.google.com/o/oauth2/device\nCode: ABCD-EFGH\n");
+  x.login.end();
+  expect(await x.pending).toMatchObject({ status: "logged_in" });
+  expect(x.events).toContainEqual({
+    kind: "device_code",
+    verificationUrl: "https://accounts.google.com/o/oauth2/device",
+    userCode: "ABCD-EFGH",
+  });
+});
+
+test("a free sign-in refuses a link on a host nobody here trusts, and names the host", async () => {
+  const x = freeSignIn();
+  await x.spawned.promise;
+  x.login.send("Open https://kiro-signin.example.net/device\nCode: ABCD-EFGH\n");
+  x.login.end();
+  // The person would click this link: the dialog gets a plain failure, never the URL.
+  expect(await x.pending).toEqual({
+    status: "failed",
+    reason: "rejected",
+    detail: "kiro_link_host_not_allowed:kiro-signin.example.net",
+  });
+  expect(x.events).toEqual([]);
+});
+
+test("a free sign-in refuses a link that carries a credential, even on a known host", async () => {
+  const x = freeSignIn();
+  await x.spawned.promise;
+  x.login.send("Open https://alice:pw@accounts.google.com/o/oauth2/device\nCode: ABCD-EFGH\n");
+  x.login.end();
+  expect(await x.pending).toMatchObject({ status: "failed", reason: "rejected" });
+  expect(x.events).toEqual([]);
+});
+
+test("only the identity center's AWS hosts are offered to an identity-center sign-in", () => {
+  const allowed = (flow: "identity_center" | "free", url: string) =>
+    kiroDeviceLinkAllowed(flow, new URL(url));
+  expect(allowed("identity_center", "https://device.sso.us-east-1.amazonaws.com/")).toBe(true);
+  expect(allowed("identity_center", "https://example.awsapps.com/start")).toBe(true);
+  expect(allowed("identity_center", "https://accounts.google.com/o/oauth2/device")).toBe(false);
+  expect(allowed("identity_center", "http://device.sso.us-east-1.amazonaws.com/")).toBe(false);
+  expect(allowed("free", "https://device.sso.us-east-1.amazonaws.com/")).toBe(true);
+  expect(allowed("free", "https://kiro.dev/signin")).toBe(true);
+  expect(allowed("free", "https://github.com/login/device")).toBe(true);
+  expect(allowed("free", "https://accounts.google.com/o/oauth2/device")).toBe(true);
+  expect(allowed("free", "https://device.sso.us-east-1.amazonaws.com.evil.net/")).toBe(false);
+  expect(allowed("free", "http://github.com/login/device")).toBe(false);
+  expect(allowed("free", "https://alice:pw@github.com/login/device")).toBe(false);
+});

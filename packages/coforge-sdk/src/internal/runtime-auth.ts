@@ -31,3 +31,6 @@ export const RUNTIME_AUTH_STATUS_READ_CAPABILITY = "runtime-auth:status-read:v1"
 
 export * from "./runtime-auth-kiro";
 export const KIRO_IDENTITY_CENTER_AUTH_CAPABILITY = "runtime-auth:kiro-idc:v1" as const;
+/** The daemon can start Kiro's free sign-in (Builder ID, Google, GitHub) as well as the
+ * identity-center one, so a page only offers that choice where it is understood. */
+export const KIRO_FREE_AUTH_CAPABILITY = "runtime-auth:kiro-free:v1" as const;

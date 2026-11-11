@@ -1,3 +1,4 @@
+import { getLogger } from "@logtape/logtape";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
 import { parseKiroIdentityCenterOptions } from "@lrm/coforge-sdk/internal";
 import {
@@ -11,6 +12,8 @@ import { runtimeAuthAccount } from "#src/runtime-auth-status";
 import { withDeadline } from "#src/deadline";
 import { KiroAuthFailure, KiroEnterpriseLoginTranscript } from "./auth-transcript";
 import { parseKiroWhoami } from "./whoami";
+
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.KIRO, "auth"]);
 
 export const KIRO_LOGIN_TIMEOUT_MS = 16 * 60 * 1000;
 export const KIRO_AUTH_PROBE_TIMEOUT_MS = 20_000;
@@ -120,17 +123,20 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
     let deadline = false;
     let stop: () => void = () => {};
     try {
-      const target = parseKiroIdentityCenterOptions(options.kiroIdentityCenter);
+      // A free sign-in (Builder ID, Google, GitHub) is the same command without the identity
+      // center: `kiro-cli` asks for the provider itself, so nothing here names one.
+      const license = options.kiroLicense ?? "pro";
+      const target =
+        license === "pro" ? parseKiroIdentityCenterOptions(options.kiroIdentityCenter) : undefined;
       if (signal.aborted) return { status: "cancelled" };
       child = this.host.spawn(
         [
           "login",
           "--license",
-          "pro",
-          "--identity-provider",
-          target.startUrl,
-          "--region",
-          target.region,
+          license,
+          ...(target === undefined
+            ? []
+            : ["--identity-provider", target.startUrl, "--region", target.region]),
           "--use-device-flow",
         ],
         options.workingDirectory,
@@ -159,12 +165,23 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
           KIRO_AUTH_PROBE_TIMEOUT_MS,
           signal,
         );
+        // A `pro` sign-in must have landed on the identity center it was given. A free one has no
+        // target to compare: the account type it reports is recorded as-is (Builder ID, Google,
+        // GitHub), and the first real free login's exact value is what later tightens this.
+        const landed = result.data;
         if (
-          result.data?.accountType !== "IamIdentityCenter" ||
-          result.data.startUrl !== target.startUrl ||
-          result.data.region !== target.region
+          target !== undefined &&
+          (landed?.accountType !== "IamIdentityCenter" ||
+            landed.startUrl !== target.startUrl ||
+            landed.region !== target.region)
         )
           return { status: "failed", reason: "not_logged_in" } as const;
+        if (target === undefined)
+          logger.info("Kiro free sign-in finished", {
+            event: "runtime_auth:kiro_free_login",
+            outcome: "finished",
+            account_type: landed?.accountType ?? "unknown",
+          });
         return { status: "logged_in", authStatus: result.status } as const;
       })();
       return await withDeadline(

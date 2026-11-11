@@ -1,5 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
 import {
+  KIRO_FREE_AUTH_CAPABILITY,
   KIRO_IDENTITY_CENTER_AUTH_CAPABILITY,
   RUNTIME_AUTH_CAPABILITY,
   RUNTIME_AUTH_STATUS_READ_CAPABILITY,
@@ -37,6 +38,16 @@ export function getRuntimeAuthStatusReadCapabilityLease() {
     "runtime-auth-status-read-capability",
   ));
 }
+/** Kiro's free sign-in: a Computer without this lease only ever gets the identity-center form. */
+let kiroFree: RedisComputerCapabilityLease | undefined;
+export function getKiroFreeCapabilityLease() {
+  return (kiroFree ??= new RedisComputerCapabilityLease(
+    openRedisClient(redisUrlFor("Kiro free auth capability leases")),
+    KIRO_FREE_AUTH_CAPABILITY,
+    "kiro-free-auth-capability",
+  ));
+}
+
 export const runtimeAuthCapabilitySupport = {
   supports(workspaceId: string, computerId: string, provider?: RuntimeAuthProvider) {
     return (
@@ -44,6 +55,10 @@ export const runtimeAuthCapabilitySupport = {
         ? getKiroIdentityCenterCapabilityLease()
         : getRuntimeAuthCapabilityLease()
     ).supports(workspaceId, computerId);
+  },
+  /** Whether this Computer can start Kiro's free sign-in (Builder ID, Google, GitHub). */
+  supportsKiroFree(workspaceId: string, computerId: string) {
+    return getKiroFreeCapabilityLease().supports(workspaceId, computerId);
   },
   supportsStatusRead(workspaceId: string, computerId: string) {
     return getRuntimeAuthStatusReadCapabilityLease().supports(workspaceId, computerId);

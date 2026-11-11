@@ -13,8 +13,9 @@ import {
 
 import {
   runtimeAuthAntigravityMethod,
-  runtimeAuthKiroOptions,
+  runtimeAuthKiroLogin,
   type KiroIdentityCenterOptions,
+  type KiroLicense,
 } from "./runtime-auth-kiro";
 
 const INTENT_TYPE = "coforge.rpc.v1.RuntimeAuthIntent";
@@ -26,6 +27,8 @@ export type RuntimeAuthIntent = RuntimeAuthScope &
         loginId: string;
         provider: RuntimeAuthProvider;
         kiroIdentityCenter?: KiroIdentityCenterOptions;
+        /** Kiro's license; absent means the identity-center sign-in, as before this choice. */
+        kiroLicense?: KiroLicense;
         antigravityMethodId?: "oauth-personal" | "oauth-business";
       }
     | { kind: "login_code"; loginId: string; code: string }
@@ -39,7 +42,11 @@ function checkIntent(value: RuntimeAuthIntent): RuntimeAuthIntent {
   const base = scope(value);
   switch (value.kind) {
     case "login_start": {
-      const kiroIdentityCenter = runtimeAuthKiroOptions(value.provider, value.kiroIdentityCenter);
+      const kiro = runtimeAuthKiroLogin(
+        value.provider,
+        value.kiroIdentityCenter,
+        value.kiroLicense,
+      );
       const antigravityMethodId = runtimeAuthAntigravityMethod(
         value.provider,
         value.antigravityMethodId,
@@ -49,7 +56,10 @@ function checkIntent(value: RuntimeAuthIntent): RuntimeAuthIntent {
         kind: "login_start",
         loginId: loginId(value.loginId),
         provider: providerOf(value.provider),
-        ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}),
+        ...(kiro?.license === "pro" ? { kiroIdentityCenter: kiro.identityCenter } : {}),
+        // Only a sign-in that named its license says so on the wire: an intent from a server that
+        // predates this choice keeps its exact shape, and absent still means the identity-center one.
+        ...(kiro && value.kiroLicense !== undefined ? { kiroLicense: kiro.license } : {}),
         ...(antigravityMethodId ? { antigravityMethodId } : {}),
       };
     }
@@ -88,6 +98,7 @@ export function encodeRuntimeAuthIntent(value: RuntimeAuthIntent): Uint8Array {
             loginId: checked.loginId,
             provider: checked.provider,
             kiroIdentityCenter: checked.kiroIdentityCenter,
+            kiroLicense: checked.kiroLicense,
             antigravityMethodId: checked.antigravityMethodId,
           },
         };

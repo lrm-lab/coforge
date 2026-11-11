@@ -1,7 +1,7 @@
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   encodeRuntimeAuthIntent,
-  runtimeAuthKiroOptions,
+  runtimeAuthKiroLogin,
   type KiroIdentityCenterOptions,
   isRuntimeAuthCode,
   type RuntimeAuthLoginEvent,
@@ -111,11 +111,13 @@ export class RuntimeAuth {
       computerId: string;
       provider: RuntimeAuthProvider;
       kiroIdentityCenter?: KiroIdentityCenterOptions;
+      /** Kiro's free sign-in (Builder ID, Google, GitHub) instead of an identity center. */
+      kiroLicense?: "pro" | "free";
       antigravityMethodId?: "oauth-personal" | "oauth-business";
     },
   ): Promise<{ status: "started"; loginId: string } | { status: "busy" | RuntimeAuthUnavailable }> {
     const scope = await this.authorize(principal, input.computerId, input.provider);
-    const kiroIdentityCenter = runtimeAuthKiroOptions(input.provider, input.kiroIdentityCenter);
+    const kiro = runtimeAuthKiroLogin(input.provider, input.kiroIdentityCenter, input.kiroLicense);
     const unavailable = await this.unavailable(scope, input.provider);
     if (unavailable) return { status: unavailable };
     const loginId = this.newLoginId();
@@ -130,7 +132,8 @@ export class RuntimeAuth {
         kind: "login_start",
         loginId,
         provider: input.provider,
-        ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}),
+        ...(kiro?.license === "pro" ? { kiroIdentityCenter: kiro.identityCenter } : {}),
+        ...(kiro ? { kiroLicense: kiro.license } : {}),
         ...(input.antigravityMethodId ? { antigravityMethodId: input.antigravityMethodId } : {}),
       });
     } catch {
