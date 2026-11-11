@@ -35,6 +35,9 @@ export type DaemonRuntimeReadyPorts = {
     ): Promise<unknown>;
   };
   reminderRecovery?: { snapshotAssigned(workspaceId: string, computerId: string): Promise<void> };
+  /** Resends this Computer's current feature snapshot once its capabilities are recorded, so a
+   * daemon that missed a broadcast while away learns the flags on its ready. */
+  featuresRepublish?: { republish(workspaceId: string, computerId: string): Promise<void> };
   /** Moves on the Computer's Agent migrations after it was away. */
   migrationRecovery?: { recover(workspaceId: string, computerId: string): Promise<void> };
   observe?: (
@@ -64,6 +67,7 @@ export const createDaemonRuntimeReadyMethod =
     restarts,
     capabilities,
     reminderRecovery,
+    featuresRepublish,
     migrationRecovery,
     observe,
     upgrades,
@@ -123,6 +127,8 @@ export const createDaemonRuntimeReadyMethod =
         request.capabilities ?? [],
         { workerInstanceId: request.workerInstanceId, startedAt: request.startedAt },
       );
+      stage = "features_republish";
+      await featuresRepublish?.republish(request.workspaceId, request.computerId);
       stage = "computer_observation";
       await observe?.(
         { workspaceId: request.workspaceId, computerId: request.computerId },

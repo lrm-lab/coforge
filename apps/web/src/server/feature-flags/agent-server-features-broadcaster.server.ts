@@ -27,6 +27,13 @@ export class AgentServerFeaturesBroadcaster {
     return run;
   }
 
+  /** The snapshot one Computer's daemon missed while it was away, resent on its ready. */
+  async publishComputer(workspaceId: string, computerId: string): Promise<void> {
+    const run = this.#publishing.then(() => this.#publishComputer(workspaceId, computerId));
+    this.#publishing = run.catch(() => {});
+    return run;
+  }
+
   async #publishSnapshot(): Promise<void> {
     const rows = await this.dependencies.db.agent.findMany({
       where: { deletedAt: null, computerId: { not: null } },
@@ -41,25 +48,42 @@ export class AgentServerFeaturesBroadcaster {
       grouped.set(key, current);
     }
     for (const placements of grouped.values()) {
-      if (
-        !(await this.dependencies.supports(placements[0]!.workspaceId, placements[0]!.computerId))
-      )
-        continue;
-      const enabled = await this.dependencies.enabled(placements[0]!.workspaceId);
-      const sync: AgentServerFeatures = {
-        protocolMajor: 1,
-        requestId: `flag_${crypto.randomUUID().replaceAll("-", "")}`,
-        workspaceId: placements[0]!.workspaceId,
-        computerId: placements[0]!.computerId,
-        revision: ++revision,
-        agentIds: placements.map((placement) => placement.agentId),
-        agentContextView: enabled,
-      };
-      await this.dependencies.publish(
-        sync.workspaceId,
-        sync.computerId,
-        encodeAgentServerFeatures(sync),
-      );
+      await this.#publishPlacements(placements);
     }
+  }
+
+  async #publishComputer(workspaceId: string, computerId: string): Promise<void> {
+    const rows = await this.dependencies.db.agent.findMany({
+      where: { workspaceId, computerId, deletedAt: null },
+      select: { id: true, workspaceId: true, computerId: true },
+    });
+    await this.#publishPlacements(
+      rows.flatMap((row) =>
+        row.computerId
+          ? [{ workspaceId: row.workspaceId, computerId: row.computerId, agentId: row.id }]
+          : [],
+      ),
+    );
+  }
+
+  async #publishPlacements(placements: Placement[]): Promise<void> {
+    if (placements.length === 0) return;
+    const head = placements[0]!;
+    if (!(await this.dependencies.supports(head.workspaceId, head.computerId))) return;
+    const enabled = await this.dependencies.enabled(head.workspaceId);
+    const sync: AgentServerFeatures = {
+      protocolMajor: 1,
+      requestId: `flag_${crypto.randomUUID().replaceAll("-", "")}`,
+      workspaceId: head.workspaceId,
+      computerId: head.computerId,
+      revision: ++revision,
+      agentIds: placements.map((placement) => placement.agentId),
+      agentContextView: enabled,
+    };
+    await this.dependencies.publish(
+      sync.workspaceId,
+      sync.computerId,
+      encodeAgentServerFeatures(sync),
+    );
   }
 }

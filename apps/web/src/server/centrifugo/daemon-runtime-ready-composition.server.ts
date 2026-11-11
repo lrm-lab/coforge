@@ -22,6 +22,7 @@ import type { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.
 import type { daemonCapabilityLeases } from "./capability-composition.server";
 import type { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
 import { getComputerReleaseState } from "#src/server/computers/computer-release-state-composition.server";
+import { createAgentServerFeaturesBroadcaster } from "#src/server/feature-flags/agent-server-features-broadcast-composition.server";
 
 /** The ready method's ports, assembled beside the composition so the file's `createDaemon*
  * table stays a list of names rather than one method's dependency graph. */
@@ -58,6 +59,13 @@ export function daemonRuntimeReadyPorts(input: {
     ),
     restarts: getComputerRestartStore(),
     capabilities: input.capabilityLeases,
+    featuresRepublish: {
+      republish: (workspaceId, computerId) =>
+        createAgentServerFeaturesBroadcaster(db, centrifugo).publishComputer(
+          workspaceId,
+          computerId,
+        ),
+    },
     reminderRecovery: {
       snapshotAssigned: async (workspaceId, computerId) => {
         const agents = await db.agent.findMany({

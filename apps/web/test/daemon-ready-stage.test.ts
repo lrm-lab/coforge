@@ -248,6 +248,38 @@ test("overlapping ready calls cannot let the older worker write capabilities las
   });
 });
 
+test("a ready republishes the Computer's feature snapshot only after its capabilities are recorded", async () => {
+  const order: string[] = [];
+  const method = createDaemonRuntimeReadyMethod({
+    capabilities: {
+      record: async () => {
+        order.push("capabilities");
+      },
+    },
+    featuresRepublish: {
+      republish: async (workspaceId, computerId) => {
+        order.push(`features:${workspaceId}:${computerId}`);
+      },
+    },
+  });
+  expect(await method(readyPayload(), { principal: principal() })).toBeInstanceOf(Uint8Array);
+  expect(order).toEqual(["capabilities", "features:workspace-1:computer-1"]);
+});
+
+test("a failed feature republish fails the ready at its own stage, so the daemon retries it", async () => {
+  const method = createDaemonRuntimeReadyMethod({
+    featuresRepublish: {
+      republish: async () => {
+        throw new Error("centrifugo is down");
+      },
+    },
+  });
+  expect(await method(readyPayload(), { principal: principal() })).toEqual({
+    code: 503,
+    message: "daemon ready failed at features_republish",
+  });
+});
+
 /** The ready reply carries the feed's latest Computer version: a daemon on an older Computer
  * learns it may be stale without a call of its own, and an older server's empty reply decodes
  * to no version. */
