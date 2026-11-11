@@ -131,6 +131,14 @@ test("a person who may not manage the Computer, or a Computer that is away or ol
   expect(published).toEqual([]);
 });
 
+test("Kiro's free sign-in is offered as the Computer says, and only to who may sign it in (task #87)", async () => {
+  expect(await service().kiroFreeSupported(alice, { computerId })).toBe(true);
+  kiroCapable = false;
+  expect(await service().kiroFreeSupported(alice, { computerId })).toBe(false);
+  allowed.delete("alice");
+  await expect(service().kiroFreeSupported(alice, { computerId })).rejects.toThrow("not available");
+});
+
 test("a failed publish ends the login and frees the provider", async () => {
   const auth = service();
   failIntents = true;

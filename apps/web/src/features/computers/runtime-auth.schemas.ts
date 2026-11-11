@@ -8,6 +8,8 @@ import {
 const computerId = z.string().min(1);
 const loginId = z.string().regex(RUNTIME_AUTH_LOGIN_ID_PATTERN);
 
+export const runtimeAuthKiroFreeInputSchema = z.object({ computerId });
+
 export const startRuntimeAuthLoginInputSchema = z
   .object({
     computerId,
