@@ -4,6 +4,7 @@ import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { userRuntimeAuth } from "#src/server/computers/runtime-auth-composition.server";
 import {
   readRuntimeAuthLogoutInputSchema,
+  runtimeAuthKiroFreeInputSchema,
   runtimeAuthLoginInputSchema,
   runtimeAuthLogoutInputSchema,
   runtimeAuthStatusReadInputSchema,
@@ -18,6 +19,16 @@ export const startRuntimeAuthLogin = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
     return userRuntimeAuth(db).startLogin({ userId: user.id, workspaceId }, data);
+  });
+
+/** Whether the Computer's Kiro may sign in free (Builder ID, Google, GitHub), not only through an
+ * identity center: the sign-in dialog offers the choice only then. */
+export const readRuntimeAuthKiroFree = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(runtimeAuthKiroFreeInputSchema)
+  .handler(async ({ context, data }) => {
+    const { user, db, workspaceId } = context;
+    return userRuntimeAuth(db).kiroFreeSupported({ userId: user.id, workspaceId }, data);
   });
 
 export const submitRuntimeAuthCode = createServerFn({ method: "POST" })

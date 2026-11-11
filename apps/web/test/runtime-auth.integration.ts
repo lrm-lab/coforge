@@ -29,6 +29,7 @@ let online = true;
 let capable = true;
 let kiroCapable = true;
 let statusReadCapable = true;
+let kiroFreeCapable = true;
 let allowed = new Set<string>();
 let failIntents = false;
 
@@ -47,6 +48,7 @@ function service() {
       supports: async (_workspaceId, _computerId, provider) =>
         provider === "kiro" ? kiroCapable : capable,
       supportsStatusRead: async () => statusReadCapable,
+      supportsKiroFree: async () => kiroFreeCapable,
     },
     () => `rtl_${String(++ids).padStart(20, "0")}`,
     () => clock,
@@ -62,6 +64,7 @@ beforeEach(() => {
   capable = true;
   kiroCapable = true;
   statusReadCapable = true;
+  kiroFreeCapable = true;
   allowed = new Set(["alice", "bob"]);
   failIntents = false;
 });
@@ -128,6 +131,14 @@ test("a person who may not manage the Computer, or a Computer that is away or ol
     status: "needs_upgrade",
   });
   expect(published).toEqual([]);
+});
+
+test("Kiro's free sign-in is offered as the Computer says, and only to who may sign it in (task #87)", async () => {
+  expect(await service().kiroFreeSupported(alice, { computerId })).toBe(true);
+  kiroFreeCapable = false;
+  expect(await service().kiroFreeSupported(alice, { computerId })).toBe(false);
+  allowed.delete("alice");
+  await expect(service().kiroFreeSupported(alice, { computerId })).rejects.toThrow("not available");
 });
 
 test("a failed publish ends the login and frees the provider", async () => {

@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   encodeRuntimeAuthIntent,
@@ -100,6 +101,8 @@ export class RuntimeAuth {
       ): Promise<boolean>;
       /** Whether the Computer takes `status_read`; one that does not is never asked. */
       supportsStatusRead(workspaceId: string, computerId: string): Promise<boolean>;
+      /** Whether the Computer can start Kiro's free sign-in (Builder ID, Google, GitHub). */
+      supportsKiroFree(workspaceId: string, computerId: string): Promise<boolean>;
     },
     private readonly newLoginId: () => string,
     private readonly now: () => number = Date.now,
@@ -144,6 +147,16 @@ export class RuntimeAuth {
       return { status: "offline" };
     }
     return { status: "started", loginId };
+  }
+
+  /**
+   * Whether Kiro's sign-in on this Computer may be the free one (Builder ID, Google, GitHub) as
+   * well as an identity center: the sign-in dialog asks which only when it may. Only someone who
+   * may sign the Computer's Kiro in learns it.
+   */
+  async kiroFreeSupported(principal: Principal, input: { computerId: string }): Promise<boolean> {
+    const scope = await this.authorize(principal, input.computerId, RUNTIME_PROVIDER.KIRO);
+    return this.capability.supportsKiroFree(scope.workspaceId, scope.computerId);
   }
 
   /**
