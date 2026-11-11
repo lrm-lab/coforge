@@ -32,6 +32,13 @@ export class UpgradeComputer {
     /** Throws AppError("RELEASE_FEED_UNAVAILABLE") when the latest version cannot be resolved. */
     private readonly latestVersion: () => Promise<string>,
     private readonly publisher: Pick<CentrifugoServerApi, "publish">,
+    /** Whether a live daemon is on the Computer's control channel right now; a publish into an
+     * empty channel is dropped unheard. Cloud placements enqueue on the host instead and never
+     * consult it. */
+    private readonly online: (scope: {
+      workspaceId: string;
+      computerId: string;
+    }) => Promise<boolean>,
     private readonly cloud?: CloudImageUpgrade,
   ) {}
 
@@ -96,6 +103,9 @@ export class UpgradeComputer {
         throw error;
       }
     }
+    // The local intent is a publish into the daemon channel: with nobody subscribed it is
+    // dropped unheard, so refuse before a record exists rather than registering a void wait.
+    if (!(await this.online(scope))) throw new AppError("COMPUTER_OFFLINE");
     const expectedVersion = await this.latestVersion();
     const registered = await this.upgrades.begin(scope, input.requestId, expectedVersion);
     if (!registered.created) return registered.status;

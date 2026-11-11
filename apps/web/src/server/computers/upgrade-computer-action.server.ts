@@ -1,6 +1,6 @@
 import { isValidReleaseVersion } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
-import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { createCentrifugoServerApi, daemonOnline } from "#src/server/centrifugo/server-api.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getCloudImageInventory } from "#src/server/hosts/cloud-image-inventory.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
@@ -56,6 +56,7 @@ export async function runUpgradeComputerAction(
     getComputerStatusCache(),
     () => fetchExpectedUpgradeVersion(releaseChannel),
     createCentrifugoServerApi(),
+    daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     {
       available: (computerId) => getCloudImageInventory().available(computerId),
       enqueue: async (input) => {

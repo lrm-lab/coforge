@@ -84,6 +84,7 @@ test("publishes a restart only for a User's exact Workspace–Computer connectio
       canRestart: async ({ userId, workspaceId, computerId }) =>
         userId === "user-1" && workspaceId === "workspace-1" && computerId === "computer-1",
     },
+    async () => true,
     { publish: async (channel, data) => void publications.push({ channel, data }) },
     store,
   );
@@ -244,6 +245,7 @@ test("a restart of a Computer no process has reported from is refused as offline
   const publications: Uint8Array[] = [];
   const restart = new RestartComputer(
     { canRestart: async () => true },
+    async () => true,
     { publish: async (_channel, data) => void publications.push(data) },
     new RedisComputerRestartStore(memoryRedis()),
   );
@@ -256,4 +258,56 @@ test("a restart of a Computer no process has reported from is refused as offline
     .catch((error: unknown) => error);
   expect(isAppErrorCode(refused, "COMPUTER_OFFLINE")).toBe(true);
   expect(publications).toEqual([]);
+});
+
+test("a restart for a Computer nobody is listening on is refused before a record exists", async () => {
+  const scope = { workspaceId: "workspace-1", computerId: "computer-1" };
+  const store = new RedisComputerRestartStore(memoryRedis());
+  await store.ready(scope, { workerInstanceId: "old", daemonVersion: "1.0.0", startedAt: 1 }, []);
+  const publications: Uint8Array[] = [];
+  const restart = new RestartComputer(
+    { canRestart: async () => true },
+    async () => false,
+    { publish: async (_channel, data) => void publications.push(data) },
+    store,
+  );
+
+  const refused = await restart
+    .execute(
+      { userId: "user-1", workspaceId: "workspace-1" },
+      { computerId: "computer-1", requestId: "restart-1" },
+    )
+    .catch((error: unknown) => error);
+  expect(isAppErrorCode(refused, "COMPUTER_OFFLINE")).toBe(true);
+  expect(publications).toEqual([]);
+  await expect(store.status(scope, "restart-1")).resolves.toBeUndefined();
+});
+
+test("a retried requestId still reads its stored status while the Computer is away", async () => {
+  const scope = { workspaceId: "workspace-1", computerId: "computer-1" };
+  const store = new RedisComputerRestartStore(memoryRedis());
+  await store.ready(scope, { workerInstanceId: "old", daemonVersion: "1.0.0", startedAt: 1 }, []);
+  const publications: Uint8Array[] = [];
+  let online = true;
+  const restart = new RestartComputer(
+    { canRestart: async () => true },
+    async () => online,
+    { publish: async (_channel, data) => void publications.push(data) },
+    store,
+  );
+  const accepted = await restart.execute(
+    { userId: "user-1", workspaceId: "workspace-1" },
+    { computerId: "computer-1", requestId: "restart-1" },
+  );
+  expect(accepted).toMatchObject({ status: "accepted" });
+
+  // The restart itself takes the daemon down: a retry must read back the stored
+  // status, not be refused as offline.
+  online = false;
+  const retry = await restart.execute(
+    { userId: "user-1", workspaceId: "workspace-1" },
+    { computerId: "computer-1", requestId: "restart-1" },
+  );
+  expect(retry).toEqual(accepted);
+  expect(publications).toHaveLength(1);
 });

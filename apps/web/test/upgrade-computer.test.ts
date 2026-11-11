@@ -18,6 +18,7 @@ const identity = (workerInstanceId: string, version: string, startedAt: number) 
 function upgradeComputer(overrides: {
   upgrades: RedisComputerUpgradeStore;
   online?: boolean;
+  subscribed?: boolean;
   latestVersion?: () => Promise<string>;
   publish?: (channel: string, data: Uint8Array) => Promise<void>;
   cloud?: CloudImageUpgrade;
@@ -33,6 +34,7 @@ function upgradeComputer(overrides: {
         await overrides.publish?.(channel, data);
       },
     },
+    async () => (overrides.online ?? true) && (overrides.subscribed ?? true),
     overrides.cloud,
   );
   return { upgrade, publications };
@@ -270,6 +272,63 @@ test("a cloud computer without a newer node image is refused without publishing"
     ),
   ).rejects.toMatchObject({ name: "AppError", code: "CONFLICT" });
   expect(publications).toEqual([]);
+});
+
+test("a local upgrade for a Computer nobody is listening on is refused before a record exists", async () => {
+  const store = new RedisComputerUpgradeStore(memoryRedis());
+  const scope = { workspaceId: "workspace-1", computerId: "computer-1" };
+  await store.ready(scope, identity("old", "1.0.0", 1), []);
+  const { upgrade, publications } = upgradeComputer({
+    upgrades: store,
+    online: true,
+    subscribed: false,
+  });
+
+  await expect(
+    upgrade.execute(
+      { workspaceId: "workspace-1" },
+      { computerId: "computer-1", requestId: "upgrade-1" },
+    ),
+  ).rejects.toMatchObject({ name: "AppError", code: "COMPUTER_OFFLINE" });
+  expect(publications).toEqual([]);
+  await expect(store.status(scope, "upgrade-1")).resolves.toBeUndefined();
+});
+
+test("a cloud upgrade is still queued while nobody is subscribed to the daemon channel", async () => {
+  const queued: string[] = [];
+  const cloud: CloudImageUpgrade = {
+    available: async () => ({ imageId: "sha256:new", version: "0.1.3-dev.2" }),
+    enqueue: async () => {
+      queued.push("image");
+    },
+    enqueueRuntime: async () => {
+      queued.push("runtime");
+    },
+  };
+  // One active upgrade per Computer, so each placement gets its own scope and store.
+  for (const [computerId, requestId, target] of [
+    ["computer-image", "upgrade-image", undefined],
+    ["computer-runtime", "upgrade-runtime", "runtime"],
+  ] as const) {
+    const store = new RedisComputerUpgradeStore(memoryRedis());
+    const scope = { workspaceId: "workspace-1", computerId };
+    await store.ready(scope, identity("old", "0.1.2-dev.attach", 1), []);
+    const { upgrade, publications } = upgradeComputer({
+      upgrades: store,
+      online: true,
+      subscribed: false,
+      cloud,
+    });
+
+    // The cloud host's queue is durable: an empty daemon channel must not refuse it.
+    const status = await upgrade.execute(
+      { workspaceId: "workspace-1", userId: "user-a" },
+      { computerId, requestId, placement: "cloud", ...(target ? { target } : {}) },
+    );
+    expect(status).toMatchObject({ status: "accepted" });
+    expect(publications).toEqual([]);
+  }
+  expect(queued).toEqual(["image", "runtime"]);
 });
 
 test("a publication failure marks the request failed and still propagates the error", async () => {

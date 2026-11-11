@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
-import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { createCentrifugoServerApi, daemonOnline } from "#src/server/centrifugo/server-api.server";
+import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import {
   canRestartWorkspaceComputer,
   isWorkspaceMemberComputer,
@@ -20,6 +21,7 @@ export const restartComputer = createServerFn({ method: "POST" })
       {
         canRestart: (scope) => canRestartWorkspaceComputer(db, scope),
       },
+      daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
       createCentrifugoServerApi(),
       getComputerRestartStore(),
     ).execute({ userId: user.id, workspaceId }, data);
