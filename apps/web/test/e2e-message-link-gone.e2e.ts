@@ -22,6 +22,7 @@ test("a link to a message that is gone opens the conversation and says so, with 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const general = await db.conversation.findFirstOrThrow({

@@ -3,8 +3,12 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 import { waitFor } from "./helpers/activity-inbox-e2e";
 import { seedChannel } from "./helpers/open-unread-e2e";
 
@@ -43,10 +47,7 @@ for (const away of [
     // The page is in that state from its first script on, before the app reads anything.
     const fromStart = join(artifacts, `${away.file}-from-start.js`);
     try {
-      const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-        where: { userId: DEV_BROWSER_USER.id },
-        include: { workspace: { select: { slug: true } } },
-      });
+      const { workspaceId, workspace } = await devBrowserWorkspace(db);
       // Read through the first message; the second arrived since.
       const channel = await seedChannel(db, workspaceId, `e2e-unseen-read-${away.file}`, 1, [
         { from: "peer", body: "E2E unseen read" },

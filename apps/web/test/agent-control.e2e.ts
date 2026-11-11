@@ -47,6 +47,7 @@ test("Profile controls and Skills cross Web, WSS, native child and Session persi
   const ownerId = DEV_BROWSER_USER.id;
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: ownerId },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const workspaceId = membership.workspaceId;

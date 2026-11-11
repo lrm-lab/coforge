@@ -49,6 +49,7 @@ beforeAll(async () => {
   issuer = discovery.issuer!;
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
   });
   key = `e2e-token-${suffix}`;
   ({ clientSecret: secret } = await createAppRegistry(db).registerApp(

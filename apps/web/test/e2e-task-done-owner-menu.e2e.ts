@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * A finished Task's owner menu does not offer "Unassigned": the server refuses to leave a Done
@@ -21,10 +26,7 @@ test("a Done Task's owner menu has no Unassigned", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `done-owner-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({

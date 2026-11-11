@@ -5,7 +5,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { CHOICE_OTHER_TEXT_MAX_LENGTH, choiceActionSchema } from "@lrm/coforge-sdk/agent";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * A choice card with text as long as the server allows (task #449): a long question, long options,
@@ -72,10 +77,7 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `choice-long-${process.pid}`);
   const suffix = `${process.pid}-${Date.now()}`;
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const peer = await db.user.create({
     data: { username: `e2e-long-peer-${suffix}`, displayName: PEER_NAME },
   });

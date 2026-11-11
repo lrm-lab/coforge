@@ -8,6 +8,7 @@ import { PrismaExperimentsRepository } from "#src/server/experiments/experiments
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
+  devBrowserWorkspace,
   hydratedElement,
   localBrowserE2e,
   pageHydrated,
@@ -34,10 +35,7 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
   const { browser, evaluate } = browserSession(browserPath, `project-tasks-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
   const board = new TaskBoard(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const home = await db.project.create({
     data: {

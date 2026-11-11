@@ -22,6 +22,7 @@ test("settings: the experiments address opens the page, its entry in the Workspa
   try {
     const { workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     await browser("open", `${origin}/en/w/${workspace.slug}/settings?section=experiments`);

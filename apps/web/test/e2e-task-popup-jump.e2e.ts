@@ -11,7 +11,12 @@ import { PrismaExperimentsRepository } from "#src/server/experiments/experiments
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * Back to bottom over a Task discussion that fits (Frank, 11-06, task #coforge-ui:#10): a pane
@@ -28,10 +33,7 @@ test("a discussion that fits again drops Back to bottom", async () => {
   const experiments = new PrismaExperimentsRepository(db);
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const { origin } = proxy;
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({

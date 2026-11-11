@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * The Task popup's ··· menu sets a parent, adds a Task to wait on and adds a sub-task, each from a
@@ -27,10 +32,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
   const { browser, evaluate } = browserSession(browserPath, `task-pickers-${process.pid}`);
   const board = new TaskBoard(db);
   const experiments = new PrismaExperimentsRepository(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const channel = await db.conversation.create({

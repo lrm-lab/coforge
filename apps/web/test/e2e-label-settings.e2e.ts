@@ -43,6 +43,7 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
   const experiments = new PrismaExperimentsRepository(db);
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const { workspaceId, workspace } = membership;

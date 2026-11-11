@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * "Add sub-task" with an existing Task (task #505): from the Task popup's ··· menu, a search over the
@@ -26,10 +31,7 @@ test("an existing Task is put under the open one, and one under another parent i
   const { browser, evaluate } = browserSession(browserPath, `task-existing-${process.pid}`);
   const board = new TaskBoard(db);
   const experiments = new PrismaExperimentsRepository(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const channel = await db.conversation.create({

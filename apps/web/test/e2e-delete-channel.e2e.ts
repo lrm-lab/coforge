@@ -68,6 +68,7 @@ test("an owner deletes a channel from its settings panel", async () => {
   const sidebarHasChannel = `[...document.querySelectorAll("a")].some((link) => link.getAttribute("aria-label") === ${JSON.stringify(`#${channelName}`)})`;
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const workspacePath = `/en/w/${membership.workspace.slug}`;

@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, cpuThrottle, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  cpuThrottle,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * Activity's "Waiting on you" section (task #413): a choice card that asks the viewer heads the
@@ -22,10 +28,7 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `activity-waiting-${process.pid}`);
   const suffix = `${process.pid}-${Date.now()}`;
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const peer = await db.user.create({
     data: { username: `e2e-waiting-peer-${suffix}`, displayName: "Waiting Peer" },
   });

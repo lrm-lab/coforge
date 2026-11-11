@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * A very long Project name (task #588) is cut short with an ellipsis wherever it shows: the Task
@@ -26,10 +31,7 @@ test("a long Project name truncates in a Task's popup and on its card", async ()
   const { browser, evaluate } = browserSession(browserPath, `project-long-name-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
   const board = new TaskBoard(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   // As long as the one Frank reported, with no space for a line to break at in its second half.
   const name = `River 2.0 工具型 Agent 的端云协同与离线推理能力建设和全链路评测体系 ${tail}`;

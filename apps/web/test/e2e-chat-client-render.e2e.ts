@@ -104,6 +104,7 @@ test("a chat page's server HTML holds no conversation, and the browser shows the
 
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const workspaceId = membership.workspaceId;

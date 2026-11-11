@@ -26,6 +26,7 @@ test("a long Agent name leaves the header's avatar whole", async () => {
   const suffix = `${process.pid}-${Date.now().toString(36)}`;
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const agent = await db.agent.create({

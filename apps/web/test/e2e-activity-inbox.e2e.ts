@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+  seededUuid,
+} from "./helpers/browser-e2e";
 import {
   activeCount,
   currentRow,
@@ -45,10 +51,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     .map((row) => row.textContent + " " + [...row.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" "))
     .filter((text) => text.includes("e2e-activity-inbox"))`;
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const workspacePath = `/en/w/${workspace.slug}`;
     const { channelId, viewer, rootId, replyId, newestId } = await seedChannel(db, {
       workspaceId,

@@ -70,6 +70,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
   const created = [`First new ${suffix}`];
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const workspacePath = `/en/w/${membership.workspace.slug}`;

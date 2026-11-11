@@ -11,7 +11,12 @@ import { PrismaExperimentsRepository } from "#src/server/experiments/experiments
 import { Labels } from "#src/server/tasks/labels.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * The one Task board (task #596) on a Project's Tasks tab and on All tasks, with one realistic
@@ -29,10 +34,7 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `project-board-${process.pid}`);
   const board = new TaskBoard(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}`.slice(-5);
   const project = await db.project.create({
     data: {

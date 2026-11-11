@@ -101,6 +101,7 @@ test("members open a direct message with each other, and with themselves", async
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     workspaceId = membership.workspaceId;

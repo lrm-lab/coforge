@@ -9,7 +9,12 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -42,10 +47,7 @@ test("a Project's Tasks tab lists its Tasks as a tree", async () => {
     realtime: new CentrifugoConversationRealtime(centrifugo),
     publisher: centrifugo,
   });
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const home = await db.project.create({
     data: { workspaceId, name: `Launch ${tail}`, slug: `launch-${tail}` },

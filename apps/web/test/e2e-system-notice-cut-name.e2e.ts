@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
+import { devBrowserWorkspace } from "./helpers/browser-e2e";
 
 /**
  * Task #561 (Frank, 11-05, on his phone): "@qa-test-agent added @piresearch-3d-frontend to this
@@ -24,10 +25,7 @@ test("a notice cut on a phone cuts inside a name, never drops it", async () => {
     throw new Error("DATABASE_URL must target local PostgreSQL");
   if (!chrome) throw new Error("Chrome is required (COFORGE_E2E_CHROME)");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const runtimeConfig = {
     runtime: "pi",

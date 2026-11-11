@@ -98,6 +98,7 @@ test("the conversation list resizes and remembers its width", async () => {
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${membership.workspace.slug}`;

@@ -54,6 +54,7 @@ test("a pasted reply link lands on the reply; a shared short id says so", async 
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${membership.workspace.slug}`;

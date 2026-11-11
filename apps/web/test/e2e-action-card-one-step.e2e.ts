@@ -29,6 +29,7 @@ test("an action card commits in one press and closes to one line", async () => {
   const tail = suffix.slice(-5);
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const runtimeConfig = {

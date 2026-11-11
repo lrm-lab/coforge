@@ -117,6 +117,7 @@ async function readThrough(sequence: number) {
 beforeAll(async () => {
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   workspacePath = `/en/w/${membership.workspace.slug}`;

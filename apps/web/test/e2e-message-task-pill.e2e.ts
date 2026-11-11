@@ -7,7 +7,12 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { Labels } from "#src/server/tasks/labels.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * The pill under a message made into a Task (task #449, plan A v2): its status, number and owner
@@ -23,10 +28,7 @@ test("a message's Task shows as the chip its words name Tasks with, its details 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `message-task-pill-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const channel = await db.conversation.create({

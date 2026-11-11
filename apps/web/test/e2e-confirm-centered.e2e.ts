@@ -61,6 +61,7 @@ test("a confirmation is centered on a phone", async () => {
   const channelName = `e2e-confirm-mid-${process.pid}`;
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const workspacePath = `/en/w/${membership.workspace.slug}`;

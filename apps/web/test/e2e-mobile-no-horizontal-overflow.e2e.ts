@@ -37,6 +37,7 @@ test("a phone viewport never scrolls the message stream sideways, even with long
   try {
     const membership = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
+      orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true } } },
     });
     const workspacePath = `/en/w/${membership.workspace.slug}`;

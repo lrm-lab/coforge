@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * Who can see an artifact, from its page's Share (task #514, #529): for an artifact of a
@@ -29,10 +34,7 @@ test("an artifact's Share: who can see it", async () => {
   const { browser, evaluate } = browserSession(browserPath, `artifact-share-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
   const { documents } = productionArtifacts(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({

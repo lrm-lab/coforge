@@ -11,7 +11,12 @@ import { getMessageRequestIdempotency } from "#src/server/conversations/redis-me
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * An image opened from a Task popup's discussion on a phone opens its review without the page
@@ -30,10 +35,7 @@ test("an image in a Task popup's discussion opens without a load error", async (
   const files = new LocalFileStorage(storageRoot);
   const { browser, evaluate } = browserSession(browserPath, `task-image-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({

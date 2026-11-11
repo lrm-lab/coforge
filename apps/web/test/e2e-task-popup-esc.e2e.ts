@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * Esc steps back one popup at a time inside one channel (task #478): from a parent's popup, a
@@ -26,10 +31,7 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
   const { browser, evaluate } = browserSession(browserPath, `task-esc-${process.pid}`);
   const board = new TaskBoard(db);
   const experiments = new PrismaExperimentsRepository(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   // A second member, for the composer's `@` completion to offer.

@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+  seededUuid,
+} from "./helpers/browser-e2e";
 import {
   activeCount,
   inPane,
@@ -40,10 +46,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
   const rowsIn = (selector: string) =>
     `[...document.querySelectorAll(${selector})].map((row) => row.textContent + " " + [...row.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" ")).filter((text) => text.includes("E2E pinned"))`;
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const workspacePath = `/en/w/${workspace.slug}`;
     // Every run starts unpinned.
     await db.conversationPin.deleteMany({ where: { conversationId: channelId } });

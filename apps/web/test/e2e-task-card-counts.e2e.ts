@@ -22,6 +22,7 @@ test("a card shows its comments and files, and a quiet card shows neither", asyn
   const tail = `${process.pid}-${Date.now().toString(36)}`;
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const channel = await db.conversation.create({

@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * An Agent's several questions on one card (task #515): it shows as its own card, not another
@@ -20,10 +25,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/questions-card");
 test("a questions card takes an answer for every question, then sends them at once", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `questions-card-${process.pid}`);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({
     data: {
@@ -109,6 +111,7 @@ test("a questions card takes an answer for every question, then sends them at on
   // The same questions asked of someone else: the viewer only sees them, and whom they wait on.
   const other = await db.workspaceMembership.findFirst({
     where: { workspaceId, userId: { not: DEV_BROWSER_USER.id } },
+    orderBy: { createdAt: "asc" },
     select: { userId: true },
   });
   const otherMessage =

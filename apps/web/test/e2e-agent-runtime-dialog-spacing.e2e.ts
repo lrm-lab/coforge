@@ -22,6 +22,7 @@ test("the runtime configuration dialog keeps its closed More close to the button
   const suffix = `${process.pid}-${Date.now().toString(36)}`;
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const computer = await db.computer.create({

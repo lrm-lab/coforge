@@ -22,6 +22,7 @@ test("mentions, channels and links keep their colour in message text", async () 
   const suffix = `${process.pid}-${Date.now().toString(36)}`;
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const member = await db.conversationMember.findFirstOrThrow({

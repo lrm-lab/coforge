@@ -7,7 +7,12 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { LABEL_PALETTE, newLabelColor } from "#src/features/tasks/label-colors";
 import { Labels } from "#src/server/tasks/labels.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * Task labels, the simple version (task #455): the Task popup's picker ticks the Workspace's labels
@@ -27,10 +32,7 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
   const { browser, evaluate } = browserSession(browserPath, `task-labels-${process.pid}`);
   const board = new TaskBoard(db);
   const labels = new Labels(db);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const name = (label: string) => `${label}${tail}`;
   const channel = await db.conversation.create({

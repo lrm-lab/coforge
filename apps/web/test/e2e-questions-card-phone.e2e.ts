@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
+import { devBrowserWorkspace } from "./helpers/browser-e2e";
 
 /**
  * Task #560 (Frank, 11-05, on his phone): a questions card waiting on someone else. Its "Waiting
@@ -24,10 +25,7 @@ test("a questions card on a phone: an @mention to wait on, keys to press, the ne
     throw new Error("DATABASE_URL must target local PostgreSQL");
   if (!chrome) throw new Error("Chrome is required (COFORGE_E2E_CHROME)");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const asked = await db.user.create({
     data: { username: `e2e-card-phone-${tail}`, displayName: "Raft QA" },

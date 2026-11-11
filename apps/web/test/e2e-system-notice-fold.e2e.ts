@@ -5,7 +5,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import type { SystemNotice } from "#src/features/conversations/system-notice";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * Consecutive system notices fold as Raft's do (task #412): a run that spans days is one group,
@@ -26,10 +31,7 @@ test("a run of notices folds across days and each notice sits centred on a rule"
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `system-fold-${process.pid}`);
   const suffix = `${process.pid}-${Date.now()}`;
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const name = `e2e-fold-${suffix}`;
   const channel = await db.conversation.create({
     data: {

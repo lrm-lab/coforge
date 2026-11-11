@@ -68,6 +68,7 @@ test("the Agent panel's tabs reorder by mouse and keyboard, and the order is kep
     );
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { id: true, slug: true } } },
   });
   const workspaceId = membership.workspace.id;

@@ -5,7 +5,13 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { personAvatarUrl } from "#src/lib/person-picture";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+  seededUuid,
+} from "./helpers/browser-e2e";
 import {
   currentRow,
   inPane,
@@ -33,10 +39,7 @@ test("a direct message with a member, and the one with themself, list with the m
   const row = (text: string) =>
     `(() => { const row = [...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)})); return row ? { text: row.textContent + " " + [...row.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" "), avatar: row.querySelector("[data-avatar] img")?.getAttribute("src") ?? null } : null; })()`;
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const workspacePath = `/en/w/${workspace.slug}`;
     const peer = await db.user.upsert({
       where: { id: seededUuid("e2e-activity-inbox:dm-peer") },

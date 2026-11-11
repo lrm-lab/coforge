@@ -32,6 +32,7 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
   const second = browserSession(browserPath, `whats-new-b-${process.pid}`);
   const { workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
+    orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
   const user = await db.user.findUniqueOrThrow({
