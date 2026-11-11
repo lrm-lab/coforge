@@ -40,7 +40,7 @@ import type { CreateWorkspaceInput } from "#src/features/workspaces/create-works
 import { useReportActivityUnread, useWorkspaceTabTitle } from "#src/lib/browser-tab";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
-import { TopBarBusyAgents } from "#src/features/agents/top-bar-busy-agents";
+import { TopBarBusyAgents } from "#src/features/agents/shell-busy-agents";
 import { SearchField } from "#src/features/search/search-field";
 import { AppTopBar } from "#src/components/layout/app-top-bar";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
