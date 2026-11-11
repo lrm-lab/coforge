@@ -49,6 +49,12 @@ const CASES: [SystemNotice, string, string][] = [
     '📌 Frank An assigned #4 "Fix login" to @coder: finish the daemon side',
     "📌 Frank An 把任务 #4「Fix login」指派给了 @coder：finish the daemon side",
   ],
+  // A blank reason, which only the CLI refuses, reads as none rather than a dangling colon.
+  [
+    { kind: "task.assigned", params: { actor: frank, task, assignee: coder, reason: "   " } },
+    '📌 Frank An assigned #4 "Fix login" to @coder',
+    "📌 Frank An 把任务 #4「Fix login」指派给了 @coder",
+  ],
   [
     { kind: "task.claimed", params: { claimer: frank, task } },
     '📌 Frank An claimed #4 "Fix login"',

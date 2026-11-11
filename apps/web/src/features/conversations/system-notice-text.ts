@@ -126,7 +126,9 @@ function noticeText(notice: SystemNotice, locale?: Locale, names: Names = TEXT_N
         { locale },
       );
     case "task.assigned": {
-      const { actor, task: assignedTask, assignee, reason } = notice.params;
+      const { actor, task: assignedTask, assignee } = notice.params;
+      // A blank reason (only the CLI refuses one) reads as none, never as a dangling colon.
+      const reason = notice.params.reason?.trim();
       return reason
         ? m.system_notice_task_assigned_reason(
             {
