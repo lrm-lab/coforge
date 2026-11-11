@@ -8,6 +8,7 @@ import { HoverPopover } from "#src/components/ui/hover-popover";
 import { useChannelMembers } from "#src/features/conversations/channel-members";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { priorityLabel } from "./task-history-more";
 import { TaskPriorityIcon } from "./task-priority-icon";
 import { TaskLabelChip } from "./task-label-chip";
@@ -25,11 +26,22 @@ export function taskMetaLabel(task: { number: number; channel?: string | null })
 
 /** The same locator drawn: `#7`, or `#7 ·` then another channel's group avatar and name, no `#`
  * (Frank, 11-10, task #74). A channel no one is in reads `#design`. */
-export function TaskLocator({ task }: { task: { number: number; channel?: string | null } }) {
+export function TaskLocator({
+  task,
+  shrink = false,
+}: {
+  task: { number: number; channel?: string | null };
+  /** Alone on its line: the channel's name gives way rather than the line overflowing. Beside a
+   * title the title gives way instead. */
+  shrink?: boolean;
+}) {
   return (
     <span
       data-task-locator
-      className="flex shrink-0 items-center gap-1 text-xs text-tertiary tabular-nums"
+      className={cx(
+        "flex items-center gap-1 text-xs text-tertiary tabular-nums",
+        shrink ? "min-w-0" : "shrink-0",
+      )}
     >
       #{task.number}
       {task.channel && (

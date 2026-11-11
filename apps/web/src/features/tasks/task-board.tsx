@@ -365,6 +365,7 @@ function BoardTaskCard<T extends BoardTask>({
         )
       }
       source={conversation ? undefined : task.source?.label}
+      channel={conversation ? undefined : task.source?.channelName}
       // Null for a Task outside any Project: no pill.
       project={project ? undefined : task.project}
       controls={controls}
