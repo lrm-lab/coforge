@@ -32,6 +32,7 @@ const refreshed = (provider: RuntimeProvider): ProviderModelRefreshResult => ({
 function useCase(
   options: {
     allowed?: boolean | (() => boolean);
+    online?: boolean | "throws";
     visible?: RuntimeProvider[];
     publishFails?: boolean;
     beginFails?: boolean;
@@ -48,6 +49,11 @@ function useCase(
     authorize: async () => {
       marks.push("authorize");
       return allowed();
+    },
+    online: async (scope) => {
+      marks.push(`online:${scope.computerId}`);
+      if (options.online === "throws") throw new Error("status cache is down");
+      return options.online ?? true;
     },
     visibleProviders: async () => {
       marks.push("visible");
@@ -112,7 +118,13 @@ test("starting detects, records and publishes one probe, and returns its request
   });
   // The Computer is detecting from the start, and stays so until its result ends it: starting
   // never reads, never waits and never ends the mark.
-  expect(marks).toEqual(["authorize", `detect:${published[0]!.requestId}`, "begin", "publish"]);
+  expect(marks).toEqual([
+    "authorize",
+    "online:computer-1",
+    `detect:${published[0]!.requestId}`,
+    "begin",
+    "publish",
+  ]);
 });
 
 test("a rescan of the whole Computer names no provider", async () => {
@@ -142,6 +154,25 @@ test("a request that could not go out fails and does not leave the Computer dete
       marks.find((mark) => mark.startsWith("detect:"))!.replace("detect:", "end:"),
     );
   }
+});
+
+test("a Computer whose daemon has no live subscriber fails at once, before anything is marked, recorded or sent", async () => {
+  const { refresh, marks, published } = useCase({ online: false });
+  expect(await refresh.start(viewer, { computerId: "computer-1" })).toEqual({
+    status: "failed",
+  });
+  expect(published).toHaveLength(0);
+  expect(marks).toEqual(["authorize", "online:computer-1"]);
+});
+
+test("an online check that cannot answer fails the start rather than publishing into the void", async () => {
+  const { refresh, marks, published } = useCase({ online: "throws" });
+  expect(await refresh.start(viewer, { computerId: "computer-1" })).toEqual({
+    status: "failed",
+  });
+  expect(published).toHaveLength(0);
+  // The throw is caught like a publish failure: its own detecting mark is still ended.
+  expect(marks.at(-1)).toMatch(/^end:/);
 });
 
 test("a read is pending, and does no authorization, until the Computer has answered", async () => {

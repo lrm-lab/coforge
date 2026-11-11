@@ -9,7 +9,9 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   createCentrifugoServerApi,
   daemonControlChannel,
+  daemonOnline,
 } from "#src/server/centrifugo/server-api.server";
+import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getCommandCodeEffortResults } from "#src/server/centrifugo/command-code-effort-cache.server";
 import { CommandCodeEffortRead } from "#src/server/computers/command-code-effort-read.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
@@ -25,6 +27,7 @@ function commandCodeEffortRead(db: PrismaClient) {
   return new CommandCodeEffortRead({
     authorize: ({ userId, workspaceId }, computerId) =>
       visibility.canSelect({ workspaceId, userId }, computerId, RUNTIME_PROVIDER.COMMAND_CODE),
+    online: daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     results: getCommandCodeEffortResults(),
     // Made on use: reading an answer needs neither the API nor its environment.
     publish: async (request) => {

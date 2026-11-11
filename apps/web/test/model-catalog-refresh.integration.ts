@@ -36,6 +36,7 @@ function refreshOver(
     detection,
     publish,
     authorize: async () => true,
+    online: async () => true,
     visibleProviders: async () => new Set(["antigravity"]),
   });
 }

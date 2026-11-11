@@ -6,7 +6,9 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   createCentrifugoServerApi,
   daemonControlChannel,
+  daemonOnline,
 } from "#src/server/centrifugo/server-api.server";
+import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getModelCatalogRefreshResults } from "#src/server/centrifugo/model-catalog-refresh-cache.server";
 import { ComputerModelCatalogRefresh } from "#src/server/computers/computer-model-catalog-refresh.server";
 import { getComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
@@ -24,6 +26,7 @@ function runtimeCatalogRefresh(db: PrismaClient) {
   return new ComputerModelCatalogRefresh({
     results: getModelCatalogRefreshResults(),
     detection: getComputerRuntimeDetection(),
+    online: daemonOnline(() => createCentrifugoServerApi(), getComputerStatusCache()),
     authorize: async ({ workspaceId }, computerId) =>
       (await db.workspaceComputer.findUnique({
         where: { workspaceId_computerId: { workspaceId, computerId } },

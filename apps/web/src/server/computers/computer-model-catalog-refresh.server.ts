@@ -62,6 +62,10 @@ export class ComputerModelCatalogRefresh {
       };
       /** Whether the viewer reaches this Computer in their Workspace. */
       authorize(viewer: Viewer, computerId: string): Promise<boolean>;
+      /** Whether the Computer's daemon is reachable right now; a publish into an unsubscribed
+       * control channel is dropped unheard, so an offline Computer fails the start at once
+       * instead of leaving the page to poll out its deadline (task #749). */
+      online(scope: Scope): Promise<boolean>;
       /** The runtimes of the Computer the viewer may see; only those are returned. */
       visibleProviders(viewer: Viewer, computerId: string): Promise<ReadonlySet<RuntimeProvider>>;
     },
@@ -71,7 +75,7 @@ export class ComputerModelCatalogRefresh {
     viewer: Viewer,
     input: { computerId: string; provider?: RuntimeProvider },
   ): Promise<ModelCatalogRefreshStart> {
-    const { authorize, results, publish, detection } = this.dependencies;
+    const { authorize, results, publish, detection, online } = this.dependencies;
     if (!(await authorize(viewer, input.computerId))) return { status: "refused" };
     const request: DaemonRuntimeProviderModelRefreshRequest = {
       protocolMajor: 1,
@@ -82,6 +86,7 @@ export class ComputerModelCatalogRefresh {
     };
     const scope = { workspaceId: viewer.workspaceId, computerId: input.computerId };
     try {
+      if (!(await online(scope))) return { status: "failed" };
       await detection.begin(scope, request.requestId);
       await results.begin({ request, userId: viewer.userId, revision: "" });
       await publish(request);

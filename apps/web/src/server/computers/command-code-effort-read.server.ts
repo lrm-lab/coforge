@@ -35,9 +35,13 @@ export type CommandCodeEffortAnswer =
 export class CommandCodeEffortRead {
   constructor(
     private readonly dependencies: {
+      authorize?: (viewer: Viewer, computerId: string) => Promise<boolean>;
+      /** Whether the Computer's daemon is reachable right now; a publish into an unsubscribed
+       * control channel is dropped unheard, so an offline Computer fails the start at once
+       * instead of leaving the page to poll out its deadline (task #749). */
+      online(scope: { workspaceId: string; computerId: string }): Promise<boolean>;
       publish(request: DaemonRuntimeCommandCodeEffortReadRequest): Promise<void>;
       results: EffortResults;
-      authorize?: (viewer: Viewer, computerId: string) => Promise<boolean>;
     },
   ) {}
 
@@ -45,7 +49,7 @@ export class CommandCodeEffortRead {
     viewer: Viewer,
     input: { computerId: string; modelId: string },
   ): Promise<CommandCodeEffortStart> {
-    const { results, publish, authorize } = this.dependencies;
+    const { results, publish, authorize, online } = this.dependencies;
     if (!((await authorize?.(viewer, input.computerId)) ?? true)) return { status: "failed" };
     const request: DaemonRuntimeCommandCodeEffortReadRequest = {
       protocolMajor: 1,
@@ -55,6 +59,8 @@ export class CommandCodeEffortRead {
       modelId: input.modelId,
     };
     try {
+      if (!(await online({ workspaceId: viewer.workspaceId, computerId: input.computerId })))
+        return { status: "failed" };
       await results.begin({ request, userId: viewer.userId, revision: "" });
       await publish(request);
     } catch {

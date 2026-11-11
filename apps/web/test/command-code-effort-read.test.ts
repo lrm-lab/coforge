@@ -14,7 +14,12 @@ type Answer = Partial<DaemonRuntimeCommandCodeEffortReadResponse>;
 
 /** A use case over a results store the test fills the way the Computer's result RPC would. */
 function useCase(
-  options: { allowed?: boolean; publishFails?: boolean; beginFails?: boolean } = {},
+  options: {
+    allowed?: boolean;
+    online?: boolean | "throws";
+    publishFails?: boolean;
+    beginFails?: boolean;
+  } = {},
 ) {
   const marks: string[] = [];
   const published: DaemonRuntimeCommandCodeEffortReadRequest[] = [];
@@ -24,6 +29,11 @@ function useCase(
     authorize: async () => {
       marks.push("authorize");
       return options.allowed ?? true;
+    },
+    online: async (scope) => {
+      marks.push(`online:${scope.computerId}`);
+      if (options.online === "throws") throw new Error("status cache is down");
+      return options.online ?? true;
     },
     results: {
       begin: async (pending) => {
@@ -77,7 +87,7 @@ test("starting publishes one read for the model and returns its request id witho
     modelId: "native-model",
   });
   // The request stays pending for the Computer's answer: starting never reads, clears or waits.
-  expect(marks).toEqual(["authorize", "begin", "publish"]);
+  expect(marks).toEqual(["authorize", "online:computer-1", "begin", "publish"]);
 });
 
 test("a read before the Computer answers is pending and authorizes nobody", async () => {
@@ -114,10 +124,10 @@ test("an invisible Command Code runtime does not publish an effort read", async 
 test("a store that cannot record the request, or a publish that fails, is a failed start", async () => {
   const noStore = useCase({ beginFails: true });
   expect(await noStore.reader.start(viewer, input)).toEqual({ status: "failed" });
-  expect(noStore.marks).toEqual(["authorize", "begin"]);
+  expect(noStore.marks).toEqual(["authorize", "online:computer-1", "begin"]);
   const noPublish = useCase({ publishFails: true });
   expect(await noPublish.reader.start(viewer, input)).toEqual({ status: "failed" });
-  expect(noPublish.marks).toEqual(["authorize", "begin", "publish"]);
+  expect(noPublish.marks).toEqual(["authorize", "online:computer-1", "begin", "publish"]);
 });
 
 test("a request id reaches nothing outside the caller's Workspace and Computer", async () => {
@@ -144,6 +154,19 @@ test("an answer is returned only to who may still select the runtime", async () 
   options.allowed = false;
   expect(await reader.read(viewer, scope)).toEqual({ status: "failed" });
   expect(marks).toEqual(["read", "authorize"]);
+});
+
+test("a Computer whose daemon has no live subscriber fails at once, before anything is sent", async () => {
+  const { reader, marks, published } = useCase({ online: false });
+  expect(await reader.start(viewer, input)).toEqual({ status: "failed" });
+  expect(published).toHaveLength(0);
+  expect(marks).toEqual(["authorize", "online:computer-1"]);
+});
+
+test("an online check that cannot answer fails the start rather than publishing into the void", async () => {
+  const { reader, published } = useCase({ online: "throws" });
+  expect(await reader.start(viewer, input)).toEqual({ status: "failed" });
+  expect(published).toHaveLength(0);
 });
 
 test("the effort result RPC stores this Computer's reply and refuses another Computer", async () => {
