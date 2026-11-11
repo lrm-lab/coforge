@@ -25,7 +25,7 @@ import {
 } from "#src/components/layout/phone-shell";
 import { PhoneTabBar } from "#src/components/layout/phone-tab-bar";
 import { ShellLinks } from "#src/components/layout/shell-links";
-import { sectionOf, tabHomeOf } from "#src/components/layout/tab-home";
+import { CHAT_SECTIONS, sectionOf, tabHomeOf } from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
 import {
@@ -85,9 +85,6 @@ function useActivityAttention(user: AppUser, workspaceId: string) {
   const query = useQuery(activityNavAttentionQuery(workspaceId));
   return { hasUnread: query.data?.hasUnread ?? false, unreadCount: query.data?.unreadCount };
 }
-
-/** Chat is the Workspace's home page ("") and its conversations. */
-const CHAT_SECTIONS = ["", "channel", "messages", "saved", "drafts"];
 
 function useNavItems(
   base: string,
@@ -215,7 +212,10 @@ export function AppShell({
     select: (state) => state.location.searchStr,
   });
   const itemOpen = useRouterState({
-    select: (state) => (state.location.search as { open?: unknown }).open !== undefined,
+    // The page's validated search, not the raw address: Activity drops an `open` it can't read,
+    // and then shows its list, which the tab bar belongs under.
+    select: (state) =>
+      (state.matches.at(-1)?.search as { open?: unknown } | undefined)?.open !== undefined,
   });
   const workspaceId = currentWorkspace.id;
   const base = workspacePath(currentWorkspace.slug);

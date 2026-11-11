@@ -3,8 +3,9 @@ import { splitWorkspacePath } from "#src/features/workspaces/workspace-url";
 /** The four pages the phone's bottom tab bar leads to. */
 export type TabHome = "chat" | "activity" | "workspace" | "me";
 
-/** The Chat pages whose list can be on screen while their own address is a conversation's. */
-const CHAT_PAGES: readonly string[] = ["channel", "dm", "saved", "drafts"];
+/** Chat's sections: its home (`""`, the list) and the pages whose list can be on screen while
+ * their own address is a conversation's. The sidebar's Chat item is current on all of them. */
+export const CHAT_SECTIONS: readonly string[] = ["", "channel", "dm", "saved", "drafts"];
 
 /** The first path segment under the Workspace (`""` for its home or outside one). */
 export function sectionOf(pathname: string): string {
@@ -30,7 +31,7 @@ export function tabHomeOf({
   chatListOpen: boolean;
 }): TabHome | null {
   if (section === "") return "chat";
-  if (CHAT_PAGES.includes(section)) return chatListOpen ? "chat" : null;
+  if (CHAT_SECTIONS.includes(section)) return chatListOpen ? "chat" : null;
   if (section === "activity") return itemOpen ? null : "activity";
   if (section === "workspace" || section === "me") return section;
   return null;
@@ -48,6 +49,7 @@ const WORKSPACE_PAGES: readonly string[] = [
   "records",
   "computers",
   "computer",
+  "agent",
   "pi-chat",
 ];
 
