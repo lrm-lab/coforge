@@ -12,7 +12,7 @@ These rules apply to `src/features/realtime/`.
 - The connection's state changes, the client's errors and slow token fetches go to the
   console through `connection-journal.ts`, wired once in `BrowserRealtimeProvider`. Centrifugo
   logs only rejected commands, so this is the only record of a connection that never hears back
-. Keep it free of tokens and message content.
+  . Keep it free of tokens and message content.
 - Subscription hooks must run below `BrowserRealtimeProvider`. Do not call one
   in the component that renders the provider; `useBrowserRealtime` throws there
   so the mistake fails at first render instead of silently never subscribing.

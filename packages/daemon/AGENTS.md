@@ -51,6 +51,8 @@ Directories with their own `AGENTS.md` add rules for that directory only.
   reaches only a running Agent, as a `transient` App Inbox item that is removed when the Agent first
   reads it (`consumeOnRead`) or after 15 minutes. Never write it to disk, a log or Activity, and keep
   `cfa_secret_…` in the redaction rules of Activity text and failure details.
+- Read the provider's official protocol documentation before changing an adapter;
+  undocumented provider internals are not a stable contract.
 
 ## Status and Activity contracts
 

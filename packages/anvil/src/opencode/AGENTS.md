@@ -25,8 +25,10 @@ These rules extend [`../../AGENTS.md`](../../AGENTS.md).
   admitted when the live turn ends.
 - Model and effort apply through `session/set_config_option` after the session opens —
   `session/new` (and `session/load`) return the `model` select with `provider/model` values,
-  and a `thought_level` `effort` select after a model applies.  `session/set_mode` is
+  and a `thought_level` `effort` select after a model applies. `session/set_mode` is
   never called — opencode defaults to `build` and no launch field carries a mode.
+  `runtime.model` fails with `RuntimeModelNotFoundError` when the select lacks it; a missing
+  effort option leaves the model's own default, and a present option that lacks the value fails.
 - The model catalog is `session/new`'s `model` config option (`acp-catalog.ts`), not
   `opencode models`. Discovery is a full probe session: version gate, `initialize`,
   `session/new`, dispose.

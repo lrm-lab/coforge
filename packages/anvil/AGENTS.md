@@ -13,15 +13,15 @@
 
 ## Module map
 
-| Path                                                        | Boundary                                                                                                              |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `src/contract.ts`, `src/runtime-auth-status.ts`             | Provider-neutral sessions, provider and auth contracts                                                                |
-| `src/execution.ts`, `src/jsonl-*.ts`, `src/catalog-*.ts`    | The explicit public entry for JSONL/ACP catalog execution and its shared process, error and discovery policy           |
-| `src/process-tree.ts`, `src/version-gate.ts`                | Host ports for process ownership, terminal transport, cleanup deadlines and version reads, plus shared version policy  |
-| `src/acp/`                                                  | Shared ACP connection, session state machine, profile and turn projection contracts                                   |
+| Path                                                                                              | Boundary                                                                                                                         |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `src/contract.ts`, `src/runtime-auth-status.ts`                                                   | Provider-neutral sessions, provider and auth contracts                                                                           |
+| `src/execution.ts`, `src/jsonl-*.ts`, `src/catalog-*.ts`                                          | The explicit public entry for JSONL/ACP catalog execution and its shared process, error and discovery policy                     |
+| `src/process-tree.ts`, `src/version-gate.ts`                                                      | Host ports for process ownership, terminal transport, cleanup deadlines and version reads, plus shared version policy            |
+| `src/acp/`                                                                                        | Shared ACP connection, session state machine, profile and turn projection contracts                                              |
 | `src/stderr-*.ts`, `src/transcript-tail.ts`, `src/local-session.ts`, `src/launch-log-identity.ts` | Bounded, credential-redacted stderr excerpts, transcript tails, local Session handoff projections, and the launch's log identity |
-| `src/<runtime>/` (one per runtime in the list below)        | One native runtime: its session, events, catalog, auth and usage behind host capabilities                             |
-| Other `src/` modules                                        | Shared runtime Activity, error, JSON, stream, deadline and text-projection utilities                                  |
+| `src/<runtime>/` (one per runtime in the list below)                                              | One native runtime: its session, events, catalog, auth and usage behind host capabilities                                        |
+| Other `src/` modules                                                                              | Shared runtime Activity, error, JSON, stream, deadline and text-projection utilities                                             |
 
 Runtime directories: `pi`, `antigravity`, `dsh`, `grok`, `command-code`, `kiro`, `opencode`, `cursor`, `codex`, `devin`, `droid`, `claude-code`.
 
