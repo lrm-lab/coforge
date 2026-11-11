@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 import { seedChannel } from "./helpers/activity-inbox-e2e";
 
 /**
@@ -25,10 +30,7 @@ test("a phone's tab bar leads between the four tab homes and hides on inner page
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `phone-tab-bar-${process.pid}`);
   const tail = `${process.pid}-${Date.now()}`;
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true } } },
-  });
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const base = `${origin}/en/w/${workspace.slug}`;
   const agent = await db.agent.create({
     data: {

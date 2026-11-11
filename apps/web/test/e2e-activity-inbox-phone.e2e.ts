@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 import {
   inPane,
   listHidden,
@@ -38,10 +43,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
   /** The text of this test's rows (its channel's and its thread's), in page order. */
   const seededRows = `[...document.querySelectorAll(${rowItems})].map((row) => row.textContent).filter((text) => text.includes("e2e-activity-phone"))`;
   try {
-    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      include: { workspace: { select: { slug: true } } },
-    });
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const workspacePath = `/en/w/${workspace.slug}`;
     const { channelId, rootId, replyId, newestId } = await seedChannel(db, {
       workspaceId,
