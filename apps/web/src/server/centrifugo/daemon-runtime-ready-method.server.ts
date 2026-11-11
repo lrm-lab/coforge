@@ -36,7 +36,9 @@ export type DaemonRuntimeReadyPorts = {
   };
   reminderRecovery?: { snapshotAssigned(workspaceId: string, computerId: string): Promise<void> };
   /** Resends this Computer's current feature snapshot once its capabilities are recorded, so a
-   * daemon that missed a broadcast while away learns the flags on its ready. */
+   * daemon that missed a broadcast while away learns the flags on its ready. Best-effort: the
+   * resend only keeps feature bits fresh, so a failure warns and the ready still answers — the
+   * next flag change or ready republishes. */
   featuresRepublish?: { republish(workspaceId: string, computerId: string): Promise<void> };
   /** Moves on the Computer's Agent migrations after it was away. */
   migrationRecovery?: { recover(workspaceId: string, computerId: string): Promise<void> };
@@ -127,8 +129,20 @@ export const createDaemonRuntimeReadyMethod =
         request.capabilities ?? [],
         { workerInstanceId: request.workerInstanceId, startedAt: request.startedAt },
       );
-      stage = "features_republish";
-      await featuresRepublish?.republish(request.workspaceId, request.computerId);
+      try {
+        await featuresRepublish?.republish(request.workspaceId, request.computerId);
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            event: "daemon_ready.features_republish_failed",
+            outcome: "failed",
+            request_id: request.requestId,
+            workspace_id: request.workspaceId,
+            computer_id: request.computerId,
+            error_type: errorType(error),
+          }),
+        );
+      }
       stage = "computer_observation";
       await observe?.(
         { workspaceId: request.workspaceId, computerId: request.computerId },

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { decodeAgentServerFeatures } from "@lrm/coforge-sdk/internal";
 import { AgentServerFeaturesBroadcaster } from "./agent-server-features-broadcaster.server";
 
@@ -87,6 +87,41 @@ test("a Computer ready republishes nothing when unsupported or no Agent is place
   });
   await empty.publishComputer("w", "c");
   expect(published).toHaveLength(0);
+});
+
+test("a failed ready-resend warns with the snapshot's revision and resolves", async () => {
+  const warnings: string[] = [];
+  const warning = spyOn(console, "warn").mockImplementation((message: string) => {
+    warnings.push(message);
+  });
+  try {
+    let attemptedRevision: number | undefined;
+    const broadcaster = new AgentServerFeaturesBroadcaster({
+      db: {
+        agent: {
+          findMany: async () => [{ id: "a1", workspaceId: "w", computerId: "c" }],
+        },
+      } as never,
+      supports: async () => true,
+      enabled: async () => true,
+      publish: async (_workspaceId, _computerId, payload) => {
+        attemptedRevision = decodeAgentServerFeatures(payload).revision;
+        throw new Error("centrifugo is down");
+      },
+    });
+    await broadcaster.publishComputer("w", "c");
+    expect(warnings.map((line) => JSON.parse(line))).toEqual([
+      {
+        event: "agent_server_features:republish_failed",
+        workspace_id: "w",
+        computer_id: "c",
+        revision: attemptedRevision,
+        error_type: "Error",
+      },
+    ]);
+  } finally {
+    warning.mockRestore();
+  }
 });
 
 test("serializes overlapping snapshots so revisions follow reload order", async () => {

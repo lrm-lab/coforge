@@ -266,18 +266,33 @@ test("a ready republishes the Computer's feature snapshot only after its capabil
   expect(order).toEqual(["capabilities", "features:workspace-1:computer-1"]);
 });
 
-test("a failed feature republish fails the ready at its own stage, so the daemon retries it", async () => {
-  const method = createDaemonRuntimeReadyMethod({
-    featuresRepublish: {
-      republish: async () => {
-        throw new Error("centrifugo is down");
+test("a failed feature republish warns and the ready still succeeds", async () => {
+  const warnings: string[] = [];
+  const warning = spyOn(console, "warn").mockImplementation((message: string) => {
+    warnings.push(message);
+  });
+  try {
+    const method = createDaemonRuntimeReadyMethod({
+      featuresRepublish: {
+        republish: async () => {
+          throw new Error("centrifugo is down");
+        },
       },
-    },
-  });
-  expect(await method(readyPayload(), { principal: principal() })).toEqual({
-    code: 503,
-    message: "daemon ready failed at features_republish",
-  });
+    });
+    expect(await method(readyPayload(), { principal: principal() })).toBeInstanceOf(Uint8Array);
+    expect(warnings.map((line) => JSON.parse(line))).toEqual([
+      {
+        event: "daemon_ready.features_republish_failed",
+        outcome: "failed",
+        request_id: "ready-1",
+        workspace_id: "workspace-1",
+        computer_id: "computer-1",
+        error_type: "Error",
+      },
+    ]);
+  } finally {
+    warning.mockRestore();
+  }
 });
 
 /** The ready reply carries the feed's latest Computer version: a daemon on an older Computer
