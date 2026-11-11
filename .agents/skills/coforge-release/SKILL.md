@@ -1,6 +1,7 @@
 ---
 name: coforge-release
-description: Operate and verify CoForge cloud images and local Computer installation release sets across test and production. Use when an Agent needs to inspect or publish a test candidate assembled from the Computer and Daemon app packages, prepare or request a production promotion, promote an exact immutable artifact after human approval, verify release evidence, install a local Computer distribution, or roll back a failed release.
+description: "Inspect, publish, promote, verify, install or roll back CoForge cloud images and local Computer release sets across test and production. Use for any CoForge release step. Production promotion only after human approval."
+when_to_use: "test candidate from Computer and Daemon packages, production promotion, promote immutable artifact, release evidence, install local Computer distribution, rollback"
 ---
 
 # CoForge release

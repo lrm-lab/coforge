@@ -59,3 +59,17 @@
 - **App Inbox**：session 因此被替换时，该 Agent 已告知过的 App Inbox 条目一并忘记
   （`AgentInboxCoordinator.forgetAnnouncedAppItems`），新 launch 的 `drainAppInboxNotices` 重新告知。
   普通重启和其他 session 变化不清这份记录。
+
+## From the daemon-runtime instructions
+
+- `provider-replay-recovery.ts` owns the rejected-replay watch (a resumed Session's `error` event with
+  `sessionRecovery`, acted on after the failed turn ends, spent only once the Session was replaced) and
+  what the fresh Session carries: the rejected launch's own start input plus the unread summary
+  (the Agent's unread and deliveries parked while the runtime ends, less the tracked @mentions
+  `RuntimeRelease.endAndReplace` carries to the fresh launch, which tells them in one notice). `AgentLaunchCoordinator`
+  ends the runtime through `endAndReplace` and cold-starts through the same path as the early crash.
+  What it carries is owed (`OwedRecovery`, kept in the Agent's `LaunchInbox`) until a launch for the Agent
+  has told it: `startAgent` merges it into the next launch that spawns a process and pays it after
+  that launch's input is delivered. Only a Stop `AgentControl` accepted (`stopAccepted`; an unmanaged
+  one in `handleAgentStop`), the Agent's delete and a whole-runtime stop drop it, never the stop
+  that cleans up after a failed launch.

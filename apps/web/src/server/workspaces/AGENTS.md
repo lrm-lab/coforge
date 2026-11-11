@@ -59,14 +59,7 @@ These rules apply to `src/server/workspaces/`.
   prevents reopening from undoing a deliberate Agent deletion. The open also
   repairs a missing platform-assistant session, but a GET loader never starts
   the assistant — a missed Start waits for the Daemon's ready recovery.
-- `server-connection.server.ts` builds the cloud computer service page: the
-  install command and the system unit, neither of which carries a secret. The
-  light is on only while that host's heartbeat is under 90 seconds old.
-- `cloud-service-access.server.ts` checks the deployment operating password
-  (`COFORGE_CLOUD_SERVICE_PASSWORD`) and seals a short-lived unlock cookie.
-  The settings page withholds the install script until that cookie is valid.
-- `host-bootstrap.server.ts` builds the manager install script. The cluster
-  token is inside the file and is not shown on the page.
+- Read [`hosts/AGENTS.md`](../hosts/AGENTS.md) when changing the cloud computer service page, its operating-password unlock, or the manager install script (`server-connection`, `cloud-service-access`, `host-bootstrap`).
 
 ## Role capabilities
 

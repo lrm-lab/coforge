@@ -52,48 +52,13 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 
 ## DeepSeek Harness
 
-- DSH remains unadvertised until native and UI acceptance. Its descriptor may resolve the
-  executable without enrolling it in `externalCodeAgents`.
-- DSH catalog probes use a private temporary cwd and the selected native home/profile. Native
-  close does not delete persisted sessions; never delete their files ourselves. Reuse successful
-  metadata within the process by install/config stat and effective-environment fingerprint.
-  Neither credentials nor their fingerprint may be written to disk. Restart invalidates the
-  cache; no periodic TTL refresh. Failed explicit refreshes retain old cache but report failure.
-- ACP has no login flow. Existing native API-key/account configuration remains native; catalog
-  availability is not proof of authentication, quota or successful generation.
+- Read [Anvil DSH instructions](../../../anvil/src/dsh/AGENTS.md) when changing DSH discovery, catalog probes or launch files (unadvertised until acceptance; the daemon host lives in `dsh/`).
 
 ## Command Code
 
-- Command Code uses `cmd acp`. It has no ACP system-prompt field, so the host-supplied
-  instructions are injected with a private `--mod` whose `appendSystemPrompt` hook returns
-  the text read once at process start. A resumed session starts a new process and reads the
-  briefing for that launch. The launch never includes `--safe-mode`, because that skips
-  `--mod`. The temporary directory is removed when the session ends or the launch fails.
-  Do not write those instructions into the Agent workspace. Discovery and launch both refuse a
-  CLI below 1.87.2, the release that first loads `--mod` on `cmd acp`. A cached inventory entry
-  is checked again the same way. An unparseable version is not refused.
-- Skill metadata lists the Agent workspace and home only. Command Code CLI 1.87.3 help
-  (`extendingBody`) discovers `.commandcode/skills` and `.agents/skills` in each place. A native
-  project scan also requires a trusted workspace and walks up to the git root; this scan does
-  neither. Assigned packs go to the native project root `.commandcode/skills`
-  (`getProjectSkillsDir` on that CLI).
-- The model catalog is `session/new`'s `model` config option, read by Anvil and cached with the
-  other CLI catalogs. Effort is not on that list. After one model is selected, the daemon reads
-  that model's `thought_level` options, drops `default` (stored as an empty string), and caches
-  the rest by provider version and model id for the catalog TTL through the shared
-  `code-agent/effort-cache.ts` (Devin caches the same way). A version change drops the
-  cache. Failures are not cached. A missing effort option leaves the model's own default. There
-  is no usage scan. Permission requests are allow-once only for the active session, and all other
-  requests are cancelled.
+- Read [Anvil Command Code instructions](../../../anvil/src/command-code/AGENTS.md) (section "From the daemon") when changing Command Code launch, skills metadata, catalog or effort handling.
 - Native Command Code rules live in [Anvil Command Code instructions](../../../anvil/src/command-code/AGENTS.md).
-- Devin (`devin acp`): full-access `bypass` mode, standing instructions in a private always-on
-  `.devin/rules/coforge-runtime-*.md`, `session/load` resume with replacement, and
-  `devin auth status|login|logout` for the login chip; login pastes the code through a
-  pseudo-terminal (`auth-process.ts`, shared with Kiro). The catalog publishes the model list at
-  discovery speed with cache-known efforts; inventory-sync then sweeps each model's
-  `thought_level` in one `devin acp` session and reports the catalog again — an unread model is
-  never reported as effort-less. No usage scan. Rules in
-  [Anvil Devin instructions](../../../anvil/src/devin/AGENTS.md).
+- Read [Anvil Devin instructions](../../../anvil/src/devin/AGENTS.md) (section "From the daemon") when changing Devin (`devin acp`) launch, login, catalog or effort handling.
 
 ## Standing instructions
 
@@ -102,12 +67,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   and passes them through the required `AgentSessionOptions.instructions`.
 - Keep transport guidance minimal: identity, `Current Runtime Context`,
   communication, on-demand context recovery, safety, and help. The fixed
-  prompt budget is 4480 bytes excluding dynamic identity data: raised from 4352 for the
-  say-sent-only-after-success rule (task #711), and before that from 4096 for the memory
-  writing rules (facts are edited at the event, the Active Context is overwritten as work moves,
-  and MEMORY.md is consulted before asking a human), and before that from 3840 for the
-  before-stopping task-board check, and before that from 3712 for the system-notice assignment
-  exception, and before that from 3584 because a coordinator's scope and "Agent reports are not human authorization" live only here once the coordinator-change notice became one line; the shared communication style fits without removing delivery or authority rules. Ordinary questions and untracked DM work need no Task or per-turn memory bookkeeping. `MEMORY.md` is
+  prompt budget excludes dynamic identity data and is enforced by `test/agent-instructions.test.ts`; the shared communication style fits without removing delivery or authority rules. Ordinary questions and untracked DM work need no Task or per-turn memory bookkeeping. `MEMORY.md` is
   what the next session resumes from, kept within its size limit, and `notes/active-context.md` is
   overwritten as the current state; what a line says is the Agent's own judgement (task #10).
   An inbox notice lists targets — `check --target` those and reply; do not

@@ -74,3 +74,18 @@ unclear, stop and settle the design options before writing implementation code.
 For behavior changes, establish the public module seam and regression test first. Test
 application/domain behavior independently from CLI rendering, transport framing, and provider-specific
 adapters.
+
+## Rules
+
+Moved from the root `AGENTS.md` verbatim.
+
+- Identify the owning module and its public seam before adding a feature; do not put business logic in the nearest command, entrypoint or transport.
+- Keep CLI commands thin: parse, invoke a use case, format the result.
+- Keep the abstraction gradient explicit; no cross-layer methods.
+- Dependencies point downward; domain code imports no Commander, terminal UI, filesystem paths, sockets, database clients or provider parsers.
+- Name modules after stable domain concepts and one responsibility; avoid `Helper`, `Utils`, `Service`, `Resolver`, `Manager` unless it is an established domain role.
+- Import through `#src/` inside a package and `./` for a sibling; another package by its package name; repository-root `scripts/` by relative path.
+- Keep terminology consistent across code, protocol, logs and documentation.
+- Use the logging framework directly; no wrapper, adapter, facade or parallel logger.
+- Keep a module map in the owning app's `AGENTS.md`; update it before reorganizing or adding a module.
+- For behavior changes, establish the public module seam and regression test first.

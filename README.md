@@ -69,6 +69,7 @@ The architecture invariants every change must respect are in
 | [docs/operations/cdn-certificates/](docs/operations/cdn-certificates/README.md) | CDN certificate renewal runbook |
 | [docs/agents/testing.md](docs/agents/testing.md) | Testing guidance for agents |
 | [docs/agents/module-design.md](docs/agents/module-design.md) | Module ownership, layers, naming, imports and the module map |
+| [docs/agents/proposals.md](docs/agents/proposals.md) | Framework choice, official-source and proposal-content rules for technical proposals |
 | [docs/agents/delivery.md](docs/agents/delivery.md) | GitHub Flow, direct pushes, CR contents, TDD, review, worktree cleanup and the incidents behind them |
 | [docs/agents/web-runtime.md](docs/agents/web-runtime.md) | Web runtime entry point, file naming, import protection and the trailing-blank-line check |
 | [docs/agents/message-references.md](docs/agents/message-references.md) | The send-time recognizer of a message body's references |
@@ -81,6 +82,12 @@ The architecture invariants every change must respect are in
 | [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the latest Raft Computer reference binary, source tree, and installer |
 | [docs/agents/dsh-acp.md](docs/agents/dsh-acp.md) | DSH preview ACP sessions, literal instruction plugin, delivery and host cleanup |
 | [docs/agents/grok-acp.md](docs/agents/grok-acp.md) | Persistent Grok ACP behavior, compatibility and native verification |
+| [docs/agents/cursor-acp.md](docs/agents/cursor-acp.md) | Cursor ACP session, resume, steering and model catalog behavior |
+| [docs/agents/droid-acp.md](docs/agents/droid-acp.md) | Droid ACP session, resume, model and effort, context usage and skills behavior |
+| [docs/agents/antigravity-acp.md](docs/agents/antigravity-acp.md) | Antigravity `agy acp` session, resume, steering, catalog and usage behavior |
+| [docs/agents/command-code-acp.md](docs/agents/command-code-acp.md) | Command Code ACP model catalog, per-model efforts and tool titles |
+| [docs/agents/codex-app-server.md](docs/agents/codex-app-server.md) | Codex app-server reset credit, catalog fallback, retry, resume recovery, turn signals, idle recycle and context usage |
+| [docs/computer/container-host.md](docs/computer/container-host.md) | The Computer `host/` runtime: Swarm service per cloud Computer, volumes, update jobs and heartbeats |
 | [docs/research/](docs/research/README.md) | Evidence-backed research reports |
 | [apps/web/README.md](apps/web/README.md) | Web app setup and scripts |
 | [apps/web/assets/mascots/README.md](apps/web/assets/mascots/README.md) | Agent mascot Rive file: generator, runtime contract, static avatars, Rive CLI pin |

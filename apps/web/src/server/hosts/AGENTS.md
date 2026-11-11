@@ -16,3 +16,12 @@ These rules apply to `src/server/hosts/`.
 - Operator steps for a new deployment are in `docs/operations/cloud-swarm/README.md`.
 
 - `COFORGE_RETAINED_CLOUD_IMAGE_IDS` holds exact private image IDs that must keep their local customizations. Derive protection from deployment configuration on every snapshot read, never trust a heartbeat's protection flag. Keep the real image ID. Refuse shared replacement both at enqueue and claim, including queued work; an unknown live image also cannot be replaced. Retained upgrades remain an operator operation that preserves each image's layer. `COFORGE_CLOUD_IMAGE_UPDATES_PAUSED=true` temporarily refuses enqueue and defers claim of every image update independently of inventory availability, while other operations continue.
+
+- `server-connection.server.ts` builds the cloud computer service page: the
+  install command and the system unit, neither of which carries a secret. The
+  light is on only while that host's heartbeat is under 90 seconds old.
+- `cloud-service-access.server.ts` checks the deployment operating password
+  (`COFORGE_CLOUD_SERVICE_PASSWORD`) and seals a short-lived unlock cookie.
+  The settings page withholds the install script until that cookie is valid.
+- `host-bootstrap.server.ts` builds the manager install script. The cluster
+  token is inside the file and is not shown on the page.

@@ -2,7 +2,7 @@
 
 `@lrm/coforge-anvil` owns provider-neutral Agent contracts, runtime adapters and their shared execution machinery. Keep it independent of daemon orchestration and platform implementations.
 
-- The root entry exposes provider-neutral contracts, errors, projections and tools only. Import each native runtime from its named subpath (`/cursor`, `/opencode`, `/kiro`, `/grok`, `/command-code`, `/antigravity`, `/pi`, `/dsh`, `/codex`, `/claude-code`) and shared process/session implementations from `/execution`. Never re-export these implementations from the root or import them into neutral modules.
+- The root entry exposes provider-neutral contracts, errors, projections and tools only. Import each native runtime from its named subpath (the `exports` map in `package.json`) and shared process/session implementations from `/execution`. Never re-export these implementations from the root or import them into neutral modules.
 - Public contracts and exports belong here; daemon imports them by package name. Never import daemon modules, including through relative paths or aliases. `scripts/ci/anvil-boundary.test.ts` checks this direction.
 - OS process trees and executable discovery are ports. The daemon supplies implementations explicitly; Anvil must not construct a platform default, read Workspace configuration, discover executables or read PATH.
 - The host supplies environment composition through each provider runtime host's `buildEnvironment`. Preserve when it runs and each provider's sanitization and overrides; Anvil never assembles the daemon's launch environment.
@@ -41,6 +41,7 @@
 | `src/cursor/`                | Cursor ACP session, composite model-id resolution, version policy and private rules injection                                 |
 | `src/codex/`                 | Codex sessions, native events, auth, usage, reset credit, catalog, idle-recycle reads via required host capabilities          |
 | `src/devin/`                 | Devin ACP sessions, always-on rule injection, model/effort selects, auth status and login through host capabilities           |
+| `src/droid/`                 | Droid ACP sessions, private system-prompt file, model/effort selects, PTY auth and `/limits` usage through host capabilities  |
 | `src/claude-code/`           | Claude sessions, native events, auth, usage, history and catalog through required host capabilities                           |
 | `src/inline-text.ts`         | Pure whitespace normalization for inline text projections                                                                     |
 | `src/subagent-type.ts`       | SDK-bounded display-safe subagent type projection                                                                             |
@@ -56,5 +57,12 @@
 - [Antigravity adapter](src/antigravity/AGENTS.md)
 - [Pi adapter](src/pi/AGENTS.md)
 - [Codex adapter](src/codex/AGENTS.md)
-
+- [Devin adapter](src/devin/AGENTS.md)
+- [Droid adapter](src/droid/AGENTS.md)
 - [Claude Code adapter](src/claude-code/AGENTS.md)
+
+## ACP adapters
+
+Rules shared by every ACP adapter; each runtime file keeps only its own codes and paths.
+
+- A `tool_call_update` ends a call only through `acpToolUpdateEnded`; a status the set misses leaves the call open forever and suppresses stalled recovery.

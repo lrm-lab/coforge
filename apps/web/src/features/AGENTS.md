@@ -1,7 +1,5 @@
 # Features modules
 
-- `features/pi-chat/` — independent cloud Pi conversations, session navigation, transcript presentation, complete tool detail and the working-directory file sidebar.
-
 The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGENTS.md#module-map). Each line names a directory under `src/` and its single responsibility. Update it before adding or reorganizing a module.
 
 - `features/agents/` — Members page, Agent creation, profile panel (its Apps tab included), control buttons, and Agent status and Activity display.
@@ -24,6 +22,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/notifications/` — browser push lifecycle and in-page notifications.
 - `features/onboarding/` — the first-sign-in setup wizard (`onboarding-wizard.tsx` and its four `onboarding-*-step.tsx`, the pure `onboarding-wizard-plan.ts`, `person-role.ts` for the closed role set; rules in `docs/design/onboarding-wizard.md`).
 - `features/panel-tabs/` — each member's saved panel tab order.
+- `features/pi-chat/` — independent cloud Pi conversations, session navigation, transcript presentation, complete tool detail and the working-directory file sidebar.
 - `features/profiles/` — the phone's Me tab page (`me-page.tsx`), current-user profile read and update, the one rule for a person's name (`person-name.ts`), the avatar presets a person can choose (`avatar-presets.ts`, the ten cartoon people of `src/lib/person-picture.ts`, also offered on the first sign-in name step), and the send that asks Authing for the account email's verification link (`sendEmailVerification`).
 - `features/projects/` — Projects directory, project detail, file browser, and project settings page.
 - `features/realtime/` — the one browser Centrifuge connection, and its status as the page shows it (`connection-status.ts`).
@@ -32,7 +31,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
   about the browser for the server render (phone or desktop).
 - `features/search/` — Workspace search, a dialog over the current page (`SearchDialogHost` in the Workspace layout; Cmd/Ctrl+K, the top bar's search field, the phone Chat list's search field, "Search this channel"): filters, matching channels, Agents and Computers, message results, and the browser-local search history and frequently used places. `/w/<slug>/search` is only an old address that opens the dialog.
 - `features/tasks/` — Task board, list, overview, and message task actions.
-- `features/usage-limits/` — provider usage-limit events (task #611): the `usage.limit.changed.v1` wire type and decoder, and the owner/admin-only server functions (list, seen, dismiss) the reminder UI will call.
+- `features/usage-limits/` — provider usage-limit events (task #611): the `usage.limit.changed.v1` wire type and decoder, and the owner/admin-only server functions (list, seen, dismiss) its provider calls.
 - `features/workspaces/` — Workspace switcher and creation (the switcher dialog and the page a signed-in person in no Workspace lands on, `/workspaces/new`), the Workspace a page URL names (`/w/<slug>`) and the one each QueryClient last showed, member directory reads, member presence (`presence:workspace:<workspace_id>`), join links and the invite-link page (`/join/<token>`), human roles, the Settings → Workspace profile Danger zone (leave, or delete for its owner), leaving a page whose Workspace was deleted (`workspace.deleted.v1`), and the last page `/` returns to, and the member's per-Workspace settings read (`member-settings.functions.ts`: tab orders and whether the setup wizard is pending, from one row). The switcher's CoForge-mark trigger is the phone tab homes' header button; `workspace-hub.tsx` is the phone's Workspace tab page (the sidebar's items under Chat and Activity).
 
 ## Design rules

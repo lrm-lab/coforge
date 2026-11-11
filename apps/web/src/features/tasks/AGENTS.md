@@ -115,12 +115,7 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
 - Filters are search params, comma-separated: `owners` holds User or Agent
   ids and `projects` holds Project ids, with `none` meaning no owner or no
   Project (`task-filters.ts`).
-- Rows and cards follow Linear: a status is `TaskStatusIcon` (a ring that
-  fills as work advances, colours from `TASK_STATUS_COLOR`); list rows are one
-  line (number, status, title, source and Project pills, owner avatar); cards
-  put number and source over the title with the owner avatar beside them.
-  A task reference in a message body is `TaskNumberBadge`: `#N` on the
-  status's Untitled UI colour badge with the same ring leading.
+- Read [Tasks board rows, cards and hidden columns](../../../../../docs/design/tasks-board.md) when changing a task row, card, status icon or `TaskNumberBadge`.
 - A message row's part reads its one Task through `useNumberedTask` /
   `useMessageTask`, selectors over the collection's TanStack Store (`byId`,
   `byNumber`, `byMessage`, `bySource`, where an unchanged Task keeps its object), never from a list
@@ -129,12 +124,7 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   A body's task reference whose number the collection does not hold yet opens
   the Task on a press, as Raft's does; it is the plain words only once a read
   by number has answered without it or its Task was deleted (`missing`).
-- Board columns can be hidden from their "···" menu, as Linear allows; hidden
-  ones are listed last (`HiddenColumn`), stay drop targets, and show again when
-  pressed. Every column shows by default; the choice is per device
-  (`features/settings/task-hidden-columns.ts`, on the shared
-  `device-preference.ts` store) and a boot-script class, so a hidden column
-  never flashes while hydrating and never reads its pages.
+- Read [Tasks board rows, cards and hidden columns](../../../../../docs/design/tasks-board.md) when changing hidden board columns (`HiddenColumn`, `task-hidden-columns.ts`).
 - The Workspace board shows the channels' Tasks the viewer may read and their
   own direct conversations' (task #596); another person's DM never shows. The
   server scopes every Workspace-page read; realtime applies the Workspace

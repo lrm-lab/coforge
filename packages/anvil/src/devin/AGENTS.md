@@ -46,3 +46,14 @@
   A second prompt sent while a turn runs is therefore queued for the next turn. If a later CLI
   advertises `_meta.steering`, add an `AcpSteerProfile` here rather than another mechanism — the
   measured effect today is a 6–13 s p50 wait before a notice reaches the session (`#319`).
+
+## From the daemon
+
+- Devin (`devin acp`): full-access `bypass` mode, standing instructions in a private always-on
+  `.devin/rules/coforge-runtime-*.md`, `session/load` resume with replacement, and
+  `devin auth status|login|logout` for the login chip; login pastes the code through a
+  pseudo-terminal (`auth-process.ts`, shared with Kiro). The catalog publishes the model list at
+  discovery speed with cache-known efforts; inventory-sync then sweeps each model's
+  `thought_level` in one `devin acp` session and reports the catalog again — an unread model is
+  never reported as effort-less. No usage scan. Rules in
+  [Anvil Devin instructions](../../../anvil/src/devin/AGENTS.md).

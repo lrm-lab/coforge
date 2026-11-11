@@ -98,3 +98,10 @@ Before accepting a task change, answer:
 4. Does its name fit the repository verbs and colon-group convention?
 5. Does `mise tasks` describe the public task clearly without exposing internal
    helper steps?
+
+## Command surface
+
+Moved from the root `AGENTS.md` verbatim.
+
+- Keep mise as the small, stable repository command surface: add a task only for a documented developer entry point, reusable repository gate, cross-workspace or cross-tool orchestration, or behavior that needs mise task features. Keep package-owned commands in that workspace's `package.json`; never mirror every package script or add a CI-only forwarding task.
+- Give each operation one implementation owner. Keep short task declarations in `mise.toml`, substantial procedural logic in checked executable scripts, and CI-provider concerns in workflow YAML.

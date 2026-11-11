@@ -184,15 +184,7 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   decides whether a healthy installation is `REPAIR_NOT_NEEDED` (definition in place, unreported,
   or a running Windows task left alone) or repaired (written). A definition failure is one
   message suffix on whichever receipt applies.
-- `src/start.rs`: `coforge-installer start`, no arguments. Stops nothing, so it has no
-  inside-the-unit refusal: inside a running unit it registers without restarting (launchd writes
-  the file only, systemd reloads, Windows leaves a running task). Takes the machine lock (busy: exit 2), reads `active.json` (nothing installed:
-  exit 1), reads the active version's definition from its stored executable (a Computer that lists
-  no `service-definition`: exit 1, run `coforge-computer upgrade`), registers it (a running
-  service whose manager would replace it is left as it is), starts the service and waits for the
-  manager to report it running (exit 0), printing `Registered::stage_line` when registration did
-  something; a failure is `coforge-installer: <message>` on stderr, no receipt. It does not
-  probe `__lifecycle status`: the Computer does its own handshake. Tests in `src/start/tests.rs`.
+- `src/start.rs`: Read [the installer command line](../../../docs/release/installer-commands.md#startrs-behavior-and-exit-codes) when changing `coforge-installer start` (machine lock, exit codes, registration, no receipt).
 - `src/test_support.rs`: test-only helpers shared by the modules' tests: a
   scratch directory, a loopback HTTP server (`src/test_support/loopback.rs`,
   which can script a path's first answers), a tiny release tree, and runners

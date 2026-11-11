@@ -1,6 +1,7 @@
 ---
 name: perf-scan
-description: Find, verify and rank the most promising performance-optimization and refactor direction in this repository, then hand a recommendation to the owner; never implement. Also the checklist a pre-push independent review runs over its own diff. Use when asked to find a performance or refactor direction, scan for hotspots, work out where something is slow, choose what to optimize next, or review a change for performance regressions. Accepts areas (web-server, daemon, web-client, or a repository path), or a diff; defaults to the three named areas.
+description: "Find, verify and rank the best performance or refactor direction in this repo and hand a recommendation to the owner; never implements. Also the checklist for a pre-push review of a diff for performance regressions. Accepts areas (web-server, daemon, web-client, a path) or a diff; defaults to the three areas."
+when_to_use: "find a performance direction, scan for hotspots, where is it slow, what to optimize next, refactor direction, review for performance regressions"
 ---
 
 # Perf scan

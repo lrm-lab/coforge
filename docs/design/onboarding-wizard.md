@@ -44,3 +44,13 @@
 - 服务端：`test/onboarding-wizard.integration.ts`、`test/workspace-assistant-configure.integration.ts`、`test/workspace-assistant-onboarding.integration.ts`、`test/agent-introduction.test.ts`、`test/workspace-member-preferences.integration.ts`。
 - 浏览器：`test/onboarding-wizard.e2e.ts`（首次登录、走完或跳过、落到助手私信）。
 - 手工清单见 [UI 手工验证场景](../agents/ui-manual-checks.md)。
+
+## Route gating and the name step
+
+- A signed-in User with no display name is asked for one (and their personal Workspace's URL) once, at `welcome?returnTo=<page>`: sign-in
+  sends them there before anything is made for them, and `/w/$workspaceSlug` (its loader),
+  `workspaces/new` and `join/$token` send them there with `nameStepRedirect`. Answering makes their
+  personal Workspace, except when `returnTo` is a join page the server confirms is a working invite:
+  then only the name is asked and saved, no Workspace is made, and joining is the way in. Sign-in
+  never makes a Workspace for someone who has already answered; one in no Workspace goes to
+  `workspaces/new`. Answering lands in the new Workspace, where the setup wizard (`features/onboarding/`, mounted by the layout, no route of its own) shows while the member's `onboardingPendingSince` is set. `oauth/verify` and `oidc/auth` are not gated: approving a Computer or an app needs no name.

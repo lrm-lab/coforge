@@ -1,6 +1,7 @@
 ---
 name: prisma-database-setup
-description: Guides for configuring Prisma with different database providers (PostgreSQL, MySQL, SQLite, MongoDB, etc.). Use when setting up a new project, changing databases, or troubleshooting connection issues. Triggers on "configure postgres", "connect to mysql", "setup mongodb", "sqlite setup".
+description: "Configure Prisma for a database provider (PostgreSQL, MySQL, SQLite, MongoDB, etc.). Use when setting up, switching databases or fixing connection issues."
+when_to_use: "configure postgres, connect to mysql, setup mongodb, sqlite setup, connection troubleshooting"
 license: MIT
 metadata:
   author: prisma

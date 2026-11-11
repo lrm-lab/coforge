@@ -1,6 +1,7 @@
 ---
 name: prisma-upgrade-v7
-description: Complete migration guide from Prisma ORM v6 to v7 covering all breaking changes. Use when upgrading Prisma versions, encountering v7 errors, or migrating existing projects. Triggers on "upgrade to prisma 7", "prisma 7 migration", "prisma-client generator", "driver adapter required".
+description: "Prisma ORM v6 → v7 migration guide with all breaking changes. Use when upgrading Prisma or hitting v7 errors."
+when_to_use: "upgrade to prisma 7, prisma 7 migration, prisma-client generator, driver adapter required"
 license: MIT
 metadata:
   author: prisma

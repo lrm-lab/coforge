@@ -37,8 +37,6 @@ These rules extend [`../../AGENTS.md`](../../AGENTS.md).
 - The model catalog is `session/new`'s `model` config option (`acp-catalog.ts`), not
   `opencode models`. Discovery is a full probe session: version gate, `initialize`,
   `session/new`, dispose.
-- A `tool_call_update` ends a call only through `acpToolUpdateEnded`; a status the set misses
-  leaves the call open forever and suppresses stalled recovery.
 - The launch passes `--print-logs` so the runtime's diagnostics ride this process's stderr —
   its data-dir `opencode.log` is shared by every opencode on the machine and would quote other
   Agents' lines. Stdout stays the clean ACP channel, and the shared stderr excerpt carries the

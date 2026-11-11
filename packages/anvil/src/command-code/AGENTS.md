@@ -1,16 +1,15 @@
 # Command Code runtime
 
+Read [Command Code ACP behavior](../../../../docs/agents/command-code-acp.md) when changing its model catalog, per-model efforts or tool titles.
+
 - Launch the user-installed `cmd acp` process through `JsonlProcess`; the host owns cwd, environment and process trees.
 - Command Code ACP has no system-prompt field. Standing instructions go through a private session mod: `--mod <path>` and an `appendSystemPrompt` hook. The mod file and the instructions file live in a 0700 temporary directory, mode 0600, and are deleted when the session ends, when startup fails, or when a later error closes the process. Nothing is written into the user workspace or the user's Command Code config.
 - The mod factory reads the instructions file once and caches that string. `appendSystemPrompt` returns the cache on every turn. One `cmd acp` process does not see a new briefing; a resumed session starts a new process, a new directory and a new read, so it gets the briefing generated for that launch. Reading again on every turn would change the system-prompt bytes and break the prompt cache. The cache stays in the factory closure, not in `modState`: `modState` is stored with the native session and would replay an older briefing after resume.
 - Never pass `--safe-mode`. It loads built-in mods only and skips `--mod`, so the standing instructions would silently disappear. A user setting `mods.disableAll` skips `--mod` the same way. CLI 1.87.1 and earlier ignore `--mod` on `cmd acp`; 1.87.2 is the first release that loads it (Command Code changelog). Discovery omits a confidently lower version, and a launch checks again before spawn. An unparseable version is not gated. The mod factory writes a `loaded` marker after it reads the instructions; if that marker is missing once `initialize` returns, the session fails instead of continuing without the briefing. The error names both an older CLI and `mods.disableAll`.
 - Preserve ACP session identity, resume, prompt, cancellation and request-permission semantics. Only the active session may receive `allow_once`; otherwise answer `cancelled`.
-- The model list is the `session/new` `configOptions` select whose id and category are `model`. Each option is `value`, `name` and `description` ([Models and effort](https://commandcode.ai/docs/acp)). Catalog discovery launches `cmd acp` without `--mod`, then closes the session. It does not read `models.availableModels` and it does not parse `cmd --list-models`. `reasoningEfforts` stays empty: the sibling `effort` select (category `thought_level`) changes after `session/set_config_option` and is not on the model entries. Catalog discovery does not switch models.
-- One selected model's efforts are a separate read: `session/new`, then one `session/set_config_option` for that model, then the `effort` values except `default`. `default` is the provider default and is stored as an empty string. No `thought_level` select is a ready empty list, not a failure. A missing model, a timeout, a closed process, or an RPC error is a failure. A session applies `runtime.model` through `session/set_config_option`. It applies `runtime.reasoning` only when the `effort` option returned after that switch contains the value. If the option is absent, the model's own default stays. If the option is present and the value is not in it, the session fails. Empty reasoning skips that select, which is how a stored empty string keeps the provider default.
 - Do not invent usage readers, yolo/trust flags or provider-specific wire extensions.
 - `cmd status --json` is the auth probe. Human `cmd status` writes "Not authenticated" on stderr, which the probe does not read. Exit 0 is logged in; `authenticated: false` is logged out. `cmd auth status` starts interactive login; the auth adapter never invokes it. Login and logout remain terminal-only. A logged-in status also shows the account's email, masked: `cmd whoami` (a colored report, parsed through the `Email:` line or JSON `email`) reaches the account service, so it runs once per signed-in account, keyed by the status `user`, never per poll. `NO_COLOR=1` is set on the call and ANSI is stripped anyway. A failed `whoami` falls back to the `user` name masked the same way; an unmaskable name carries no label rather than leaking.
 - `session/new` and `session/resume` pass `mcpServers: []`. This version does not start host MCP servers, the same as Grok and DSH. Do not send SSE.
-- ACP tool titles are display labels (`Read: <path>`, `Fetch: <url>`), from CLI 1.87.3 `toolTitleFor`. The activity name comes from `toolKindFor` (`read` → `read_file`, `edit` → `edit_file`, `search` → `grep`, `fetch` → `web_fetch`). An execute tool with a string `command` is `shell_command`. A title is kept only when it is a bare tool name (`powershell`). A `Label: argument` title never becomes the activity name.
 
 ## Real-account acceptance
 
@@ -19,3 +18,27 @@ These need a signed-in `cmd` and are not covered by the fixture:
 1. Put one checkable sentence in the standing instructions and confirm the reply follows it. This is the first acceptance check; the fixture only proves the mod file and the launch arguments.
 2. Logged-in `cmd status --json` (exit 0, `authenticated: true`). The adapter shows the account's masked email from `cmd whoami`, re-reading it only when the `user` field changes.
 3. One real tool permission request is `allow_once` for the active session only. A non-default model chosen in the web is the model that session uses. The model list itself comes from the catalog reader above.
+
+## From the daemon
+
+- Command Code uses `cmd acp`. It has no ACP system-prompt field, so the host-supplied
+  instructions are injected with a private `--mod` whose `appendSystemPrompt` hook returns
+  the text read once at process start. A resumed session starts a new process and reads the
+  briefing for that launch. The launch never includes `--safe-mode`, because that skips
+  `--mod`. The temporary directory is removed when the session ends or the launch fails.
+  Do not write those instructions into the Agent workspace. Discovery and launch both refuse a
+  CLI below 1.87.2, the release that first loads `--mod` on `cmd acp`. A cached inventory entry
+  is checked again the same way. An unparseable version is not refused.
+- Skill metadata lists the Agent workspace and home only. Command Code CLI 1.87.3 help
+  (`extendingBody`) discovers `.commandcode/skills` and `.agents/skills` in each place. A native
+  project scan also requires a trusted workspace and walks up to the git root; this scan does
+  neither. Assigned packs go to the native project root `.commandcode/skills`
+  (`getProjectSkillsDir` on that CLI).
+- The model catalog is `session/new`'s `model` config option, read by Anvil and cached with the
+  other CLI catalogs. Effort is not on that list. After one model is selected, the daemon reads
+  that model's `thought_level` options, drops `default` (stored as an empty string), and caches
+  the rest by provider version and model id for the catalog TTL through the shared
+  `code-agent/effort-cache.ts` (Devin caches the same way). A version change drops the
+  cache. Failures are not cached. A missing effort option leaves the model's own default. There
+  is no usage scan. Permission requests are allow-once only for the active session, and all other
+  requests are cancelled.

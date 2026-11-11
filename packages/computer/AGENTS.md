@@ -51,9 +51,13 @@ relative to `src/`.
 | `release/channel-state.ts`                 | Durable local release-channel selector and fail-closed parser                                       |
 | `cli/release-channel-command.ts`           | Channel CLI registration and persisted selector command                                             |
 | `cli/update-command-registration.ts`       | Install and upgrade CLI option registration and channel propagation                                 |
+| `detach/`                                  | `detach`: the machine leaves a Workspace, server-confirmed, keeping the registration otherwise      |
+| `network-error.ts`                         | Transient network-error classification and the proxy hint shared by polling callers                 |
 | `daemon-client/`                           | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                       |
 | `daemon-service/`                          | The daemon host's inputs for this machine, shared by `cli.ts` and `__lifecycle service-definition`  |
 | `host/`                                    | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them                     |
+| `host/run-host.ts`, `host/host-cloud.ts`   | Host loop and its HTTPS client: heartbeat, claim and report container jobs                          |
+| `host/docker-containers.ts`, `host/container-binding*.ts` | Swarm service and volume naming; the Daemon binding written on a container's volume |
 | `status/`                                  | Read-only `status` report through per-platform ports                                                |
 | `doctor/`                                  | Read-only diagnostic checks built from the status report                                            |
 | `runners/`                                 | Operator-only Agent runner listing and scoped stop through local Daemon RPC                         |
@@ -61,6 +65,7 @@ relative to `src/`.
 | `updater.ts`                               | Reads the installed version; zod contract schemas and launcher text shared with the installer       |
 | `release/upgrade-runner.ts`                | Runs the installer for one upgrade, or `repair` on the terminal                                     |
 | `release/coordinator-service-registrar.ts` | Runs `coforge-installer start` to register and start the service                                    |
+| `release/detached-upgrade.ts`              | Runs an upgrade as a job outside this process and watches its receipt                               |
 | `release/remote-upgrade.ts`                | Runs one server-triggered upgrade, records redacted launch output, then removes its finished OS job |
 | `release/upgrade-receipt.ts`               | Writes the fallback failed receipt; `UpgradeFailedError` (the receipt read is the Daemon's)         |
 | `release/upgrade-operation.ts`             | One upgrade operation record, built from CLI or `__remote-upgrade` arguments                        |
@@ -96,7 +101,7 @@ belong to `coforge-installer` (`crates/installer/AGENTS.md`), which also fetches
 `photon_rs_bg.wasm` (`docs/release/local-distribution.md`). The Computer never writes a version
 directory.
 `src/release/installation-source.ts` runs the embedded release installer scripts for version
-resolution (`--resolve-only`) and the installer bootstrap. Nothing in the Computer downloads a binary.
+resolution (`--resolve-only`) and the installer bootstrap. Nothing in the Computer downloads the product binary.
 `src/release/installer-launch.ts` fetches `coforge-installer` through the same
 scripts, pointed at `<feed>/installer` (pointer and manifest phases) plus their
 `installer` phase, which downloads only that target's `coforge-installer(.exe).gz`;
@@ -123,18 +128,7 @@ that environment; login, setup, and lifecycle adapters share that public seam.
   encode RPC.
 - `setup/` owns the Computer setup business flow. It coordinates domain ports
   without knowing Commander or terminal output formatting.
-- `host/` polls the server over HTTPS and places one Swarm service per cloud
-  Computer. It does not open a Daemon WebSocket or interpret Workspace messages.
-  A container's `foreground` start, and `__attach-workspace`, write the Daemon
-  API key and append one enabled workspace binding on the service volume.
-  `__attach-workspace` then asks the running supervisor to start only that
-  workspace. Agent workspaces are `/root/.coforge/agent-workspaces` on that volume.
-  A second named volume at `/opt` keeps software installed there across an image replace. Home, the desktop, and `/root/.pi` stay on the writable layer and use the retained-image procedure. Removing the service removes both volumes. A disk format is this
-  removal, then a create of the same computer id. An `update` job runs
-  `docker service update --image --force` on that service and does not remove
-  either volume. Heartbeats report node and `coforge-<id>` task image ids so Web
-  can offer a replace when layers differ; the runtime version is display-only.
-  `docker/Dockerfile` is the local image; its entrypoint is `coforge-computer foreground`. The proxied desktop page keeps `window.opener`; clearing it makes that window name unreachable.
+- Read [the container host rules](../../docs/computer/container-host.md) when changing `host/`, `__attach-workspace`, the `foreground` container start, or the cloud Computer image.
 - `workspace/` owns the direct Workspace lookup used by setup intent. Computer
   never lists or interactively selects Workspaces; do not add a picker or a
   list-selection flow.

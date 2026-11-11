@@ -147,6 +147,10 @@ add. The size rule also keeps the two skips it was approved with (task #25): fil
 
 What the rules and the hooks do not catch is in [Limits](limits.md).
 
+**Commit message rules from the root `AGENTS.md`.** Moved verbatim; the root keeps the `Revert-effect:` trailer rule.
+
+One commit does one thing: a pure rename or code move never rides with a behavior change — split them, or mark a deliberate exception `Granularity-exempt: <reason>` ([hard rules](hard-rules.md#commit-granularity)). A commit touching a high-risk path ([the list](../../../scripts/ci/high-risk-paths.txt)) should also carry `Reviewed-in: #<channel>:#<task>`; missing it warns, never fails, for now.
+
 ## Sources
 
 - [githooks](https://git-scm.com/docs/githooks#_pre_push) (`pre-push`).

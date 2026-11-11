@@ -127,6 +127,10 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/local-rpc.ts`                       | Computer↔Daemon local socket server, framing, validation, and dispatch                                                                                     |
 | `src/agent-proxy.ts`                     | Local Agent capability boundary and approved HTTPS forwarding                                                                                              |
 | `src/agent-proxy-domain-failures.ts`     | The domain errors the Agent proxy answers                                                                                                                  |
+| `src/agent-proxy-*.ts`                   | The Agent proxy's route groups, runtimes, request parsers, delivery and failure mapping, split out of `src/agent-proxy.ts`                                 |
+| `src/agent-context-view/`                | Agent context view: provider session locators, restore and redaction, and the index store behind the context view                                          |
+| `src/computer-files/`                    | Computer file pull for Agent workspaces                                                                                                                    |
+| `src/openviking-read-proxy.ts`           | Daemon-local OpenViking read proxy: admits Agent `ov_*` reads and forwards the frozen command envelope to the injected web URL                             |
 
 Do not create a new directory or rename a module solely for aesthetics. First
 state the responsibility that needs the boundary, then update this map in the
@@ -164,3 +168,9 @@ submit-pack|submit-empty|submit-failure`. Daemon injects the Agent API key and
   (`POST /api/agent/v1/weekly-report-memory`) and `coforge weekly-report-memory
 submit`. Daemon forwards the JSON file; Web/backend applies the memory rules.
   The skill text does not store habits.
+
+## Agent process environment
+
+Moved from the root `AGENTS.md` verbatim.
+
+Inherit the Daemon's ordinary local environment, then apply explicit Agent overrides, adapter extraEnv, and trusted CoForge launch fields. Clear stale CoForge Agent capabilities, control sockets, and the Workspace Daemon's own scope variables (its state directory, launchd job scope, supervisor channel, and cloud endpoint) before installing the current launch fields.

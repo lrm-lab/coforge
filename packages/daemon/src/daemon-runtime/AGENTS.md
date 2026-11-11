@@ -77,14 +77,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   `noteResumedEarlyCrashClose`): a resume that exits silently inside 15 seconds counts, and the
   second consecutive close makes `runtime.ts` invalidate the Session (`repeated_early_crash`)
   and cold-start a fresh one through the ordinary launch gate.
-- `provider-replay-recovery.ts` owns the rejected-replay watch (a resumed Session's `error` event with
-  `sessionRecovery`, acted on after the failed turn ends, spent only once the Session was replaced) and
-  what the fresh Session carries: the rejected launch's own start input plus the unread summary
-  (the Agent's unread and deliveries parked while the runtime ends, less the tracked @mentions
-  `RuntimeRelease.endAndReplace` carries to the fresh launch, which tells them in one notice). `AgentLaunchCoordinator`
-  ends the runtime through `endAndReplace` and cold-starts through the same path as the early crash.
-  What it carries is owed (`OwedRecovery`, kept in the Agent's `LaunchInbox`) until a launch for the Agent
-  has told it: `startAgent` merges it into the next launch that spawns a process and pays it after
+- Read [provider replay recovery](../../../../docs/observability/agent-status-and-activity/provider-replay-recovery.md) when changing `provider-replay-recovery.ts` (rejected-replay watch, what the fresh Session carries, `OwedRecovery`).
   that launch's input is delivered. Only a Stop `AgentControl` accepted (`stopAccepted`; an unmanaged
   one in `handleAgentStop`), the Agent's delete and a whole-runtime stop drop it, never the stop
   that cleans up after a failed launch.

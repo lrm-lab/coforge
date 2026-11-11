@@ -53,3 +53,17 @@ The commands, output and exit status of `coforge-installer`; what the crate does
   The release feed is compiled in (`src/compiled_feed.rs`): production defaults to
   `https://releases.coforge.cn`; plain HTTP is allowed only for loopback end-to-end tests. No command
   takes a feed.
+
+## `start.rs` behavior and exit codes
+
+Moved verbatim from `crates/installer/src/AGENTS.md`.
+
+- `src/start.rs`: `coforge-installer start`, no arguments. Stops nothing, so it has no
+  inside-the-unit refusal: inside a running unit it registers without restarting (launchd writes
+  the file only, systemd reloads, Windows leaves a running task). Takes the machine lock (busy: exit 2), reads `active.json` (nothing installed:
+  exit 1), reads the active version's definition from its stored executable (a Computer that lists
+  no `service-definition`: exit 1, run `coforge-computer upgrade`), registers it (a running
+  service whose manager would replace it is left as it is), starts the service and waits for the
+  manager to report it running (exit 0), printing `Registered::stage_line` when registration did
+  something; a failure is `coforge-installer: <message>` on stderr, no receipt. It does not
+  probe `__lifecycle status`: the Computer does its own handshake. Tests in `src/start/tests.rs`.

@@ -7,13 +7,7 @@ These rules apply to `apps/web`, the TanStack Start Web/backend modular monolith
 - Before designing or changing product UI, read and follow [the product design guidance](../../docs/design/README.md). It is the single design document for `apps/web`; colors and fonts live in [design tokens](../../docs/design-tokens.md). Do not create another design or UI-guideline document; change `docs/design/` instead.
 - For list/detail pages and empty states apply sections 2.1–2.2 and 5.1, and run the checklist and acceptance checks in section 6. State why a different user task requires an exception before implementing one; do not treat existing pages as automatic exceptions.
 - Check every UI delivery against [the UI principles](../../docs/design/ui-principles.md), Frank's rules on type, copy, flatness, languages, device sizes and confirmations.
-- Hard rules for every UI change (details in `docs/design/`):
-  - Mockups: a provided mockup wins over the defaults in `docs/design/`; implement it with the components and units below and update the conflicting rule in the same change. Ask before inventing data or concepts the mockup shows but the product lacks (§1).
-  - Components (product UI; `features/landing` keeps its Spell / Magic UI motion components): only official Untitled UI components, unmodified, and the primitives listed in `components/ui/README.md`, per §7 including its exceptions. Icons only from `@untitledui/icons`; a file's type glyph from `@untitledui/file-icons`, reached only through `features/files/file-type-icon.tsx`; vendor logos from `@lobehub/icons-static-svg`, or the vendor's own vector mark kept beside its user with its source noted in the file.
-  - Sizes: anything affecting layout or reading uses rem — the Tailwind scale or a rem arbitrary value such as `w-[18rem]`; never `w-[280px]`, `text-[10px]`, or numeric inline `style` sizes. px only for hairlines, stroke widths, shadows/blur, and positions and sizes measured from the DOM (§12).
-  - Colors: semantic tokens only, no hex or `dark:` color overrides (§11).
-  - People: show a person by `humanLabel` (`src/lib/human-label.ts`), never as `@username`, and do not search by username; an Agent keeps its `@handle`.
-  - Feedback: a toast only confirms an action; anything the user must see, handle, or come back to stays inline (§13). Toasts go through `AppToastProvider`; do not add a second notification system.
+- Read [the UI hard rules](../../docs/design/ui-hard-rules.md) when changing any UI: mockups, components and icons, rem sizes, semantic colors, how people are named, toasts versus inline feedback.
 - Do not apply marketing-page defaults from `design-taste-frontend` to the product workspace.
 - Keep supplemental explanations behind accessible, on-demand help when appropriate; keep essential constraints, errors, and risks visible. Help must work for keyboard and touch users.
 - Loading placeholders and local load errors belong to the feature whose content they represent (for example `features/agents/agents-pending.tsx`); routes select them, and `components/ui/skeleton.tsx` supplies decorative styling only.
@@ -24,7 +18,7 @@ These rules apply to `apps/web`, the TanStack Start Web/backend modular monolith
 Runtime, file-naming and import-protection mechanics are in [web runtime](../../docs/agents/web-runtime.md).
 
 - This app uses TanStack Start, not Next.js. Do not add `app/`, `pages/`, `getServerSideProps`, `getStaticProps`, or `"use server"` directives.
-- Follow the TanStack guidance listed in the repository-level `AGENTS.md` before changing routing, data loading, Server Functions, middleware, authentication, SSR, or code splitting.
+- Run `bunx @tanstack/intent@latest list` from the workspace root and load the matching skill (`bunx @tanstack/intent@latest load <package>#<skill>`, as the repository-level `AGENTS.md` says) before changing routing, data loading, Server Functions, middleware, authentication, SSR, or code splitting.
 - Keep `src/server.ts` limited to request middleware and the Start server handler; boot-time work belongs to a Nitro plugin, and long-lived handles register their stop with `onServerShutdown`.
 - Use a Server Function (`createServerFn`) for data and mutations called by the Web UI. Put the public function at the owning feature seam, for example `src/features/agents/agents.functions.ts`.
 - Follow TanStack Start's file naming: `.functions.ts` for `createServerFn` wrappers, `.server.ts` for server-only code, and no suffix for client-safe code. Everything under `src/server/` is server-only and denied in the client build; code the browser also needs lives in `features/` or `src/lib/`.

@@ -10,3 +10,15 @@
 - On interrupt, reject queued input before `session/cancel`, wait boundedly for the active prompt to settle, and clean launch files. Dispose terminates the process immediately, without waiting for a natural turn end, and cleans files even on failure.
 - Tool titles are native names in this preview. Preserve subagent/workflow/goal. Disable plugin-manager tools and plan-mode's interactive exit tool. Map only official ACP display events and never turn raw provider stderr into Activity.
 - Shell command recognition remains a host policy, injected through the reply-intent scanner port.
+
+## From the daemon
+
+- DSH remains unadvertised until native and UI acceptance. Its descriptor may resolve the
+  executable without enrolling it in `externalCodeAgents`.
+- DSH catalog probes use a private temporary cwd and the selected native home/profile. Native
+  close does not delete persisted sessions; never delete their files ourselves. Reuse successful
+  metadata within the process by install/config stat and effective-environment fingerprint.
+  Neither credentials nor their fingerprint may be written to disk. Restart invalidates the
+  cache; no periodic TTL refresh. Failed explicit refreshes retain old cache but report failure.
+- ACP has no login flow. Existing native API-key/account configuration remains native; catalog
+  availability is not proof of authentication, quota or successful generation.

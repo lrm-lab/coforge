@@ -11,8 +11,6 @@ Before editing files for a substantial task:
 
 # CoForge repository instructions
 
-These instructions apply to the entire repository.
-
 ## Decisions
 
 - Do not turn an unresolved question into code or a repository convention. Present the options and trade-offs in `#coforge`, then record the decision in the CR description before implementation; use Frank's approval only when the decision meets a gate below.
@@ -28,25 +26,13 @@ These instructions apply to the entire repository.
 
 ## Module design and implementation discipline
 
-Examples, the import mechanics and the naming detail are in [module design](docs/agents/module-design.md).
-
-- Identify the owning module and its public seam before adding a feature; do not put business logic in the nearest command, entrypoint or transport.
-- Keep CLI commands thin: parse, invoke a use case, format the result.
-- Keep the abstraction gradient explicit; no cross-layer methods.
-- Dependencies point downward; domain code imports no Commander, terminal UI, filesystem paths, sockets, database clients or provider parsers.
-- Name modules after stable domain concepts and one responsibility; avoid `Helper`, `Utils`, `Service`, `Resolver`, `Manager` unless it is an established domain role.
-- Import through `#src/` inside a package and `./` for a sibling; another package by its package name; repository-root `scripts/` by relative path.
-- Keep terminology consistent across code, protocol, logs and documentation.
-- Use the logging framework directly; no wrapper, adapter, facade or parallel logger.
-- Keep a module map in the owning app's `AGENTS.md`; update it before reorganizing or adding a module.
-- For behavior changes, establish the public module seam and regression test first.
+Read [module design](docs/agents/module-design.md) when adding a feature or module, writing imports, naming, logging, or keeping the module map.
+- Keep domain and protocol packages independent of UI frameworks, database clients, transport servers, and concrete Agent providers.
 
 ## Decision gates
 
 - Obtain Frank's explicit approval before changing architecture, database schema, wire protocol, licensing, security boundaries, or another decision with broad or difficult-to-reverse impact. Ordinary reversible implementation choices use the MVP fast lane below.
-- Prefer a mature maintained framework when it satisfies the requirements. Propose custom infrastructure only after documenting the gap, maintenance burden, and alternatives.
-- Base technical proposals and implementations on current official documentation, official repositories, and official migration guides. Do not rely on remembered or built-in knowledge for versions, APIs, configuration, or support status.
-- For each broad or difficult-to-reverse technical proposal, cite its official sources and state the problem, candidates, maturity, license, runtime compatibility, operational cost, migration/rollback impact, recommendation, and unresolved risks. Mark experimental or undocumented behavior explicitly.
+- Read [proposals](docs/agents/proposals.md) when proposing a framework, custom infrastructure, or a broad or difficult-to-reverse technical change.
 - Do not add or change a repository license without Frank's explicit approval.
 - Establish formatting and lint checks before feature implementation, and make them required CR checks once adopted.
 - Do not add or broaden lint, formatting, type-check, or test exemptions without the user's explicit prior approval, including exemptions for official upstream components. This covers configuration overrides, ignore patterns, inline disable comments, and skipped checks. Fix the underlying code instead; an existing exemption is not permission to add another. When requesting approval, name the exact files, rules, reason, and verification being bypassed.
@@ -56,13 +42,13 @@ Examples, the import mechanics and the naming detail are in [module design](docs
 Details and the incidents behind these rules are in [delivery](docs/agents/delivery.md).
 
 - Follow branch-based GitHub Flow; a maintainer or an Agent may push directly to `main` after the local checks, `simplify` and an independent review; everyone else reaches `main` through a CR.
-- Use the MVP fast lane for ordinary changes; the decision gates still need Frank.
+- Use the MVP fast lane ([defined in delivery](docs/agents/delivery.md)) for ordinary changes; the decision gates still need Frank.
 - Rebase before review; never force-push another contributor's branch; keep `main` linear.
 - Read code from `origin/main` or a fresh worktree, never a long-lived checkout.
 - Remove the worktree you created for a change once that change is on `main` (`git worktree remove <path>`); do not keep it for a next time.
 - Use concise English Conventional Commit messages, as the person running the Agent; never an Agent or bot identity.
 - Keep one concern per branch; claim a task and read the board row back before changing files.
-- A CR or direct-push commit message records scope, decisions, sources, checks, risks, follow-ups and the Agent session, and ends with a `Revert-effect:` trailer naming what reverting it would break (`none` for docs and tests). One commit does one thing: a pure rename or code move never rides with a behavior change — split them, or mark a deliberate exception `Granularity-exempt: <reason>` ([hard rules](docs/agents/git-hooks/hard-rules.md#commit-granularity)). A commit touching a high-risk path ([the list](scripts/ci/high-risk-paths.txt)) should also carry `Reviewed-in: #<channel>:#<task>`; missing it warns, never fails, for now.
+- A CR or direct-push commit message records scope, decisions, sources, checks, risks, follow-ups and the Agent session, and ends with a `Revert-effect:` trailer naming what reverting it would break (`none` for docs and tests). Read [the commit message rules](docs/agents/git-hooks/hard-rules.md) when splitting commits or touching a high-risk path ([the list](scripts/ci/high-risk-paths.txt)).
 - Keep required CI short; a task is complete only after the checks pass and the change is on `main`.
 - Develop with TDD: a failing test first, the minimum implementation, no weakened tests.
 - Remove an export or mechanism completely: implementation, tests and every assertion that pins it.
@@ -83,10 +69,9 @@ Details and the incidents behind these rules are in [delivery](docs/agents/deliv
 - Run `mise run test`, `mise run check`, and `mise run build` before submitting a change; CI runs them in that order.
 - Reach the formatter through `mise run check` or the workspace's own script; never invoke a formatter binary directly. A default-config run does not read this repository's settings and rewrites files nobody touched — one `oxfmt` run over a directory reformatted 49 unrelated files, including a generated route tree.
 - Before adding, changing, or removing a mise task, read and follow [the mise task policy](docs/agents/mise-tasks.md).
-- Keep mise as the small, stable repository command surface: add a task only for a documented developer entry point, reusable repository gate, cross-workspace or cross-tool orchestration, or behavior that needs mise task features. Keep package-owned commands in that workspace's `package.json`; never mirror every package script or add a CI-only forwarding task.
-- Give each operation one implementation owner. Keep short task declarations in `mise.toml`, substantial procedural logic in checked executable scripts, and CI-provider concerns in workflow YAML.
+- Read [the mise task policy](docs/agents/mise-tasks.md#command-surface) when deciding whether a command belongs in mise or a package.
 - Do not silently change a runtime or tool version. Update `mise.toml`, affected lockfiles, and CI together.
-- Protobuf schemas under `packages/coforge-sdk/proto` must pass `buf lint` and `buf format --diff --exit-code`; do not use TypeScript lint rules as a substitute for `.proto` validation.
+- Read [the SDK rules](packages/coforge-sdk/AGENTS.md) when changing `.proto` files.
 - Never edit any `package.json` manually with an editor or patch. Use Bun's package-management commands instead: `bun add`, `bun remove`, `bun pm pkg set`, or `bun pm pkg delete`. Run the command from the owning workspace, then review the resulting manifest and `bun.lock` diff. A dependency change is incomplete unless the lockfile is updated and the relevant check passes.
 - Do not hand-edit `bun.lock`; regenerate it through Bun after changing a package manifest.
 - Do not introduce Next.js. The accepted Web/backend direction is TanStack Start with Bun 1.4 as the business-control runtime.
@@ -102,7 +87,6 @@ These bind every change. Read [the architecture invariants](docs/agents/architec
 
 ## Dependency and security rules
 
-- Keep domain and protocol packages independent of UI frameworks, database clients, transport servers, and concrete Agent providers.
 - Validate external input at process and network boundaries. Version shared protocols explicitly.
 - Keep credentials out of source, logs, command arguments, fixtures, and generated artifacts.
-- Launch Agent processes in their declared Agent workspace directories. Inherit the Daemon's ordinary local environment, then apply explicit Agent overrides, adapter extraEnv, and trusted CoForge launch fields. Never upload inherited environment variables; cloud persistence is only for user-entered overrides. Clear stale CoForge Agent capabilities, control sockets, and the Workspace Daemon's own scope variables (its state directory, launchd job scope, supervisor channel, and cloud endpoint) before installing the current launch fields.
+- Launch Agent processes in their declared Agent workspace directories. Never upload inherited environment variables; cloud persistence is only for user-entered overrides. Read [the daemon rules](packages/daemon/AGENTS.md#agent-process-environment) when changing how Agent processes are launched.
