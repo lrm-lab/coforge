@@ -93,8 +93,9 @@ export type AgentLaunchCoordinatorPorts = {
   agentControl: AgentControl;
   agentSessions: AgentSessions;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
-  /** Told when a launch fails with a provider credential known unusable. */
-  credentialHolds: Pick<CredentialInvalidHolds, "record">;
+  /** Told when a launch fails with a provider credential known unusable, and when a person's Start
+   * ends that record before the launch it is making. */
+  credentialHolds: Pick<CredentialInvalidHolds, "record" | "started">;
   lifecycle: Pick<AgentLifecycle, "processClosed">;
   replyIntents: ReplyIntentPublisher<ActivityLaunch>;
   offlineResidency: AgentOfflineResidency;
@@ -357,6 +358,12 @@ export class AgentLaunchCoordinator {
   /** Drops what the Agent was owed: a Stop a person made, or the Agent's delete. */
   dropOwedRecovery(agentId: string): void {
     this.#owed.drop(agentId);
+  }
+
+  /** A person's Start is the probe for a credential the Agent showed unusable: the record ends
+   * before the launch, and a live Agent is told what the hold kept (task #39). */
+  credentialStarted(agentId: string): void {
+    this.ports.credentialHolds.started(agentId);
   }
 
   /** Drops every debt, as a whole-runtime stop does: the cloud's next Start is the source then. */

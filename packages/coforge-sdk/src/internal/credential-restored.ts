@@ -26,11 +26,23 @@ export const CREDENTIAL_FAILURE_ERROR_REASONS: Readonly<Record<CredentialRestore
 /** What made the credential usable again, as the daemon knows it. */
 export const CREDENTIAL_RELEASE_CAUSES = [
   "credentials_changed",
+  "explicit_start",
   "explicit_stop",
   "model_changed",
   "model_output",
 ] as const;
 export type CredentialReleaseCause = (typeof CREDENTIAL_RELEASE_CAUSES)[number];
+
+/** The cause a receiver reads in a report whose daemon knew one this build does not: the report
+ * still stands, because the cause is diagnostic (it says why the failure ended, not what ended),
+ * so a daemon may add one without a release ordering of its own. */
+export const UNKNOWN_RELEASE_CAUSE = "unknown";
+export type ReportedReleaseCause = CredentialReleaseCause | typeof UNKNOWN_RELEASE_CAUSE;
+
+export const knownReleaseCause = (value: string): CredentialReleaseCause | undefined =>
+  (CREDENTIAL_RELEASE_CAUSES as readonly string[]).includes(value)
+    ? (value as CredentialReleaseCause)
+    : undefined;
 
 export type AgentCredentialRestored = {
   protocolMajor: number;
@@ -38,7 +50,8 @@ export type AgentCredentialRestored = {
   workspaceId: string;
   agentId: string;
   reason: CredentialRestoredReason;
-  releaseCause: CredentialReleaseCause;
+  /** What ended the record: a cause of this build, or `unknown` for one it does not know. */
+  releaseCause: ReportedReleaseCause;
   /** The Agent's running launch, when it had one. */
   launchId?: string;
   /** When the daemon found the credential usable again, on the clock of the Agent's Activities. */
@@ -62,8 +75,10 @@ function checked(
     !isId(value.requestId) ||
     !isId(value.workspaceId) ||
     !isId(value.agentId) ||
+    // The reason selects which failure Activity the recovery ends, so guessing one is worse than
+    // refusing; the cause only labels why it ended, and an unknown one is kept as `unknown`.
     !(CREDENTIAL_RESTORED_REASONS as readonly string[]).includes(value.reason) ||
-    !(CREDENTIAL_RELEASE_CAUSES as readonly string[]).includes(value.releaseCause) ||
+    !isId(value.releaseCause) ||
     (value.launchId !== undefined && !isId(value.launchId)) ||
     !Number.isSafeInteger(value.restoredAtMs) ||
     value.restoredAtMs < 1
@@ -102,7 +117,7 @@ export function decodeAgentCredentialRestored(bytes: Uint8Array): AgentCredentia
     ...value,
     restoredAtMs: Number(restoredAtMs),
     reason: value.reason as CredentialRestoredReason,
-    releaseCause: value.releaseCause as CredentialReleaseCause,
+    releaseCause: knownReleaseCause(value.releaseCause) ?? UNKNOWN_RELEASE_CAUSE,
     ...(launchId ? { launchId } : {}),
   };
 }

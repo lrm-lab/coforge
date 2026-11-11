@@ -58,6 +58,29 @@ test("an Agent the Computer does not run, or a malformed report, is refused with
   expect(malformed).toMatchObject({ code: 403 });
 });
 
+test("a release cause newer than this server still ends the failure, and says so", async () => {
+  const warns: string[] = [];
+  const original = console.warn;
+  console.warn = (line: string) => void warns.push(String(line));
+  try {
+    const { method, received } = subject();
+    const newer = { ...report, releaseCause: "explicit_start_of_next_build" as never };
+    expect(await method(encodeAgentCredentialRestored(newer), metadata(daemon))).toEqual(
+      new Uint8Array(),
+    );
+    expect(received).toEqual([
+      [{ workspaceId: "workspace-1", computerId: "computer-1" }, "agent-1"],
+    ]);
+    expect(JSON.parse(warns[0]!)).toMatchObject({
+      event: "credential_restored:unknown_release_cause",
+      agent_id: "agent-1",
+      reason: "user_reauth",
+    });
+  } finally {
+    console.warn = original;
+  }
+});
+
 test("without a database the method answers 503", async () => {
   const [method] = Object.values(agentCredentialRestoredMethods(null));
   expect(await method!(encodeAgentCredentialRestored(report), metadata(daemon))).toMatchObject({

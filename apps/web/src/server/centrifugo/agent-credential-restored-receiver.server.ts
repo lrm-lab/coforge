@@ -1,5 +1,6 @@
 import {
   AGENT_CREDENTIAL_RESTORED_METHOD,
+  UNKNOWN_RELEASE_CAUSE,
   decodeAgentCredentialRestored,
 } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -30,6 +31,18 @@ export function createAgentCredentialRestoredMethod(
       const report = decodeAgentCredentialRestored(payload);
       if (principal.workspaceId !== report.workspaceId)
         return { code: 403, message: "credential restored scope is not authorized" };
+      // A daemon newer than this server ended the failure for a cause it does not know. The
+      // report still ends it (the cause is diagnostic), and the line is how the gap gets noticed.
+      if (report.releaseCause === UNKNOWN_RELEASE_CAUSE)
+        console.warn(
+          JSON.stringify({
+            event: "credential_restored:unknown_release_cause",
+            workspace_id: report.workspaceId,
+            computer_id: principal.computerId,
+            agent_id: report.agentId,
+            reason: report.reason,
+          }),
+        );
       if (
         !(await restored.receive(
           { workspaceId: report.workspaceId, computerId: principal.computerId },

@@ -30,10 +30,19 @@ test.each([
   ["a protocol major other than 1", { protocolMajor: 2 }],
   ["no agent", { agentId: " " }],
   ["a reason it does not know", { reason: "other" }],
-  ["a release cause it does not know", { releaseCause: "other" }],
   ["no time it was restored at", { restoredAtMs: 0 }],
 ])("%s is refused", (_name, change) => {
   expect(() => encodeAgentCredentialRestored({ ...restored, ...change } as never)).toThrow(
     "invalid credential restored",
   );
+});
+
+test("a release cause this build does not know is kept as unknown, not refused", () => {
+  // A daemon that adds a cause must not need this server released first: the cause is diagnostic,
+  // so the report (and the Activity that ends the failure) stands either way.
+  const newer = { ...restored, releaseCause: "explicit_start_of_next_build" as never };
+  expect(decodeAgentCredentialRestored(encodeAgentCredentialRestored(newer))).toEqual({
+    ...restored,
+    releaseCause: "unknown",
+  });
 });

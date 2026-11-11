@@ -145,6 +145,24 @@ export class CredentialInvalidHolds {
     for (const key of keys) this.ledger.release(key, "explicit_stop");
   }
 
+  /**
+   * A person started the Agent: their act is the probe, so the records that held it end here
+   * rather than waiting for a launch to run into the same failure. What the hold kept is handed
+   * to a live Agent in the same step (`#lift`'s present); the launch this Start is making tells
+   * it when no process is running. Ending the hold is what makes that possible at all: the hold
+   * keeps the delivery a turn would have needed to produce the model output it waits for.
+   */
+  started(agentId: string): void {
+    const config = this.ports.configOf(agentId);
+    this.#cancelClosed(agentId);
+    const keys = new Set<CredentialKey>([ownCredentialKey(agentId)]);
+    if (config) keys.add(credentialKeyOf(agentId, config));
+    for (const key of keys) this.ledger.release(key, "explicit_start");
+    // A record that no longer answers to this Agent's keys (a sibling's on a shared sign-in, a
+    // model it has since left) still holds it: the person's Start ends that one with it.
+    if (this.isHeld(agentId)) this.#lift(agentId, "explicit_start");
+  }
+
   /** The Agent is gone (offline, deleted, relaunched fresh): it no longer waits on its own
    * credentials, which nothing reports restored. */
   forget(agentId: string): void {
@@ -251,7 +269,8 @@ export class CredentialInvalidHolds {
       live,
     });
     if (live) this.ports.present(agentId);
-    else this.ports.wake(agentId);
+    // A person's Start is the launch: waking here would start a second one beside it.
+    else if (cause !== "explicit_start") this.ports.wake(agentId);
   }
 
   #cancelClosed(agentId: string): void {

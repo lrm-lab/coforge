@@ -147,6 +147,8 @@ export type AgentControlIntentPorts = {
   stops: Pick<AgentStopRegistry, "pendingStop">;
   /** Drops what a cold start owed the Agent's next launch. */
   dropOwedRecovery(agentId: string): void;
+  /** A person's Start ends a credential-invalid record the Agent was holding (task #39). */
+  credentialStarted(agentId: string): void;
   startAgent(
     agentId: string,
     config: AgentRuntimeConfig,
@@ -168,7 +170,7 @@ export type AgentControlIntentDeps = {
   agentSessions: Pick<AgentSessions, "replay">;
   processes: Pick<AgentProcessManager, "runtime" | "pendingRelease">;
   stops: Pick<AgentStopRegistry, "pendingStop">;
-  launchCoordinator: Pick<AgentLaunchCoordinator, "dropOwedRecovery">;
+  launchCoordinator: Pick<AgentLaunchCoordinator, "dropOwedRecovery" | "credentialStarted">;
   startAgent: AgentControlIntentPorts["startAgent"];
   stopAgent(agentId: string): Promise<void>;
 };
@@ -191,6 +193,7 @@ export function controlIntentPorts(deps: AgentControlIntentDeps): AgentControlIn
         deps.stops.pendingStop(agentId) ?? deps.processes.pendingRelease(agentId),
     },
     dropOwedRecovery: (agentId) => deps.launchCoordinator.dropOwedRecovery(agentId),
+    credentialStarted: (agentId) => deps.launchCoordinator.credentialStarted(agentId),
     startAgent: (agentId, config, recovery, request) =>
       deps.startAgent(agentId, config, recovery, request),
     stopAgent: (agentId) => deps.stopAgent(agentId),
@@ -210,6 +213,9 @@ export async function handleAgentStart(
   // A Start follows a stop already under way for the Agent, never adopts or races its process.
   const stopping = ports.stops.pendingStop(intent.agentId);
   if (stopping) await stopping.catch(() => undefined);
+  // A person pressed Start: their act is the probe for a credential the Agent showed unusable,
+  // so the record and its hold end before this launch, not after it fails the same way again.
+  ports.credentialStarted(intent.agentId);
   if (intent.controlEpoch) {
     await ports.controlStart(intent);
     await ports.replaySession(intent.agentId);

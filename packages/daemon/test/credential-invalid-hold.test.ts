@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, expect, jest, test } from "bun:test";
 import { rm } from "node:fs/promises";
-import type { AgentConfigSync } from "@lrm/coforge-sdk/internal";
+import type { AgentConfigSync, AgentStartIntent } from "@lrm/coforge-sdk/internal";
 import type { AgentConsumedSeqState } from "#src/persistence/agent-consumed-seq-store";
 import { seedCursor } from "./fixtures/consumed-cursor";
 import {
@@ -53,6 +53,17 @@ const push = (changes: Partial<AgentConfigSync>): AgentConfigSync => ({
   reasoning: "balanced",
   revision: 2,
   ...changes,
+});
+
+/** A server Start: the one intent a person's press of Start/Retry produces. */
+const startIntent = (overrides: Partial<AgentStartIntent> = {}): AgentStartIntent => ({
+  protocolMajor: 1,
+  requestId: "start-request",
+  workspaceId: connection.workspaceId,
+  computerId: connection.computerId,
+  agentId: "agent-a",
+  ...config,
+  ...overrides,
 });
 
 const terminals = (frames: readonly Frame[]) => frames.filter((frame) => frame.kind === "terminal");
@@ -223,6 +234,54 @@ test("a pushed model the plan covers releases the hold: the live Agent is told w
       { agentId: "agent-a", reason: "user_model_access", releaseCause: "model_changed" },
     ]);
   } finally {
+    await h.runtime.stop();
+  }
+});
+
+test("a person's Start lifts the hold: the live Agent is told what it kept", async () => {
+  const h = await harness();
+  try {
+    // A managed launch, so a person's second Start rebinds the live process instead of spawning.
+    await h.runtime.stopAgent("agent-a");
+    await h.runtime.handleAgentStart(startIntent({ controlEpoch: 1, launchId: "launch-1" }));
+    h.emit({ type: "error", message: AUTH });
+    h.emit({ type: "completed", status: "failed" });
+    await h.deliver(1, h.envelope(1));
+
+    // Their act is the probe: the record ends and the mention it kept is handed over now,
+    // instead of waiting for a turn that the hold itself prevents.
+    await h.runtime.handleAgentStart(startIntent({ controlEpoch: 2, launchId: "launch-2" }));
+    await told(h, "delivery-1");
+
+    expect(h.restored).toMatchObject([
+      { agentId: "agent-a", reason: "user_reauth", releaseCause: "explicit_start" },
+    ]);
+    expect(terminals(h.frames)).toEqual([]);
+  } finally {
+    await h.runtime.stop();
+  }
+});
+
+test("a person's Start with no process running launches once and that launch tells what was kept", async () => {
+  const h = await failed();
+  try {
+    await h.deliver(1, h.envelope(1));
+    jest.useFakeTimers();
+    h.exit();
+    jest.useRealTimers();
+    const launches = h.launches();
+
+    // The Start itself is the launch: ending the hold here must not wake a second one.
+    await h.runtime.handleAgentStart(startIntent({ launchId: "launch-start" }));
+    await told(h, "delivery-1");
+
+    expect(h.launches()).toBe(launches + 1);
+    expect(h.restored).toMatchObject([
+      { agentId: "agent-a", reason: "user_reauth", releaseCause: "explicit_start" },
+    ]);
+    expect(terminals(h.frames)).toEqual([]);
+  } finally {
+    jest.useRealTimers();
     await h.runtime.stop();
   }
 });

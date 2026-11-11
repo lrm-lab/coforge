@@ -78,7 +78,7 @@ test("a Start follows a release already under way instead of racing the process 
     agentSessions: { replay: async () => {} },
     processes: manager,
     stops: { pendingStop: () => undefined },
-    launchCoordinator: { dropOwedRecovery: () => {} },
+    launchCoordinator: { dropOwedRecovery: () => {}, credentialStarted: () => {} },
     startAgent: async () => {
       throw new Error("unexpected");
     },
