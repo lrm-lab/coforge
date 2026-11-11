@@ -8,8 +8,8 @@ import { devBrowserWorkspace } from "./helpers/browser-e2e";
 /**
  * Task #560 (Frank, 11-05, on his phone): a questions card waiting on someone else. Its "Waiting
  * for" line names them as an @mention chip (task #563); the ← → that turn its questions are
- * pressable 44px squares under a finger; the next question shows its edge at the right, a swipe
- * turns to it, and the card is as tall on every question (task #535).
+ * pressable 44px squares under a finger; a swipe turns to the next question (none of it shows at
+ * rest, task #81), and the card is as tall on every question (task #535).
  *
  * Opt-in like the other browser E2Es: the real local Web and a headless Chrome as a touch phone.
  * The people, Agent, channel and card are seeded per run and removed after it.
@@ -18,7 +18,7 @@ const origin = Bun.env.COFORGE_E2E_WEB_URL;
 const databaseUrl = Bun.env.DATABASE_URL;
 const chrome = chromePath();
 
-test("a questions card on a phone: an @mention to wait on, keys to press, the next question at the edge", async () => {
+test("a questions card on a phone: an @mention to wait on, keys to press, the card fits its width", async () => {
   if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
     throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
   if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
@@ -83,10 +83,19 @@ test("a questions card on a phone: an @mention to wait on, keys to press, the ne
             id: "region",
             prompt: "Which deploy region should we target?",
             select: "one",
-            options: labels(
-              ["US East", "US West", "EU Central", "Asia Pacific", "Middle East"],
-              "r",
-            ),
+            options: [
+              // Frank's card (11-11): a long recommended option with a description.
+              {
+                id: "r0",
+                label: "Add a search icon to the header of all three pages",
+                description: "Next to the bell; it opens the same search",
+                recommended: true,
+              },
+              { id: "r1", label: "US West" },
+              { id: "r2", label: "EU Central" },
+              { id: "r3", label: "Asia Pacific" },
+              { id: "r4", label: "Middle East" },
+            ],
           },
           {
             id: "checks",
@@ -102,11 +111,38 @@ test("a questions card on a phone: an @mention to wait on, keys to press, the ne
   });
 
   const browser = await launchHeadlessChrome(chrome);
+  let page!: Awaited<ReturnType<typeof browser.open>>;
+  const card = `document.querySelector('[data-message-id="${asking.id}"] [data-questions-card]')`;
+  /** At rest, nothing of the next question shows (Frank, 11-11: its cut-off edge read as text
+   * spilling out); the recommended option's title keeps the row's width, "Recommended" under it;
+   * the header names the channel without a `#`. */
+  const expectCardFits = async (width: string) => {
+    const fit = await page.evaluate<{
+      peek: string;
+      title: number;
+      row: number;
+      below: boolean;
+      header: string;
+    }>(`(() => {
+      const next = ${card}.querySelector('[data-question-peek]');
+      const row = ${card}.querySelector('[data-question="region"] [data-question-option="r0"]');
+      const title = [...row.querySelectorAll("span")].find((el) => el.textContent === "Add a search icon to the header of all three pages");
+      const mark = [...row.querySelectorAll("span")].find((el) => el.textContent === "Recommended" && el.getClientRects().length > 0);
+      return { peek: getComputedStyle(next).visibility,
+        title: title.getBoundingClientRect().width, row: row.getBoundingClientRect().width,
+        below: mark.getBoundingClientRect().top >= title.getBoundingClientRect().bottom - 1,
+        header: document.querySelector("[data-channel-name]").textContent };
+    })()`);
+    expect(fit.peek, width).toBe("hidden");
+    // Only the key (24px), its gap and the row's padding stand beside the title.
+    expect(fit.title, width).toBeGreaterThan(fit.row - 60);
+    expect(fit.below, width).toBe(true);
+    expect(fit.header.startsWith("#"), width).toBe(false);
+  };
   try {
-    const page = await browser.open(`${origin}/en/w/${workspace.slug}/channel/${channel.id}`, {
+    page = await browser.open(`${origin}/en/w/${workspace.slug}/channel/${channel.id}`, {
       phone: { width: 390, height: 844 },
     });
-    const card = `document.querySelector('[data-message-id="${asking.id}"] [data-questions-card]')`;
     const shown = (id: string) =>
       `${card}?.querySelector('[data-question="${id}"]:not([inert])') != null`;
     await until(() => page.evaluate<boolean>(`${shown("region")}`), 60_000);
@@ -132,15 +168,7 @@ test("a questions card on a phone: an @mention to wait on, keys to press, the ne
     expect(arrows.map((arrow) => arrow.label)).toEqual(["Back", "Next"]);
     for (const arrow of arrows) expect(arrow.corners).toEqual([true, true, true, true]);
 
-    // The next question shows at the right edge, inside the card.
-    const peek = await page.evaluate<{ visible: boolean; shows: number }>(`(() => {
-      const next = ${card}.querySelector('[data-question-peek]');
-      const grid = next.parentElement.getBoundingClientRect();
-      return { visible: getComputedStyle(next).visibility === "visible",
-        shows: grid.right - next.getBoundingClientRect().left };
-    })()`);
-    expect(peek.visible).toBe(true);
-    expect(peek.shows).toBeGreaterThan(8);
+    await expectCardFits("390");
 
     // A swipe to the left turns to it, and the card keeps its height.
     const height = () => page.evaluate<number>(`${card}.getBoundingClientRect().height`);
@@ -156,6 +184,12 @@ test("a questions card on a phone: an @mention to wait on, keys to press, the ne
       });
     await touch("touchStart", at.x);
     for (const step of [10, 30, 60, 90, 120]) await touch("touchMove", at.x - step);
+    // Under the finger, the next question comes in.
+    expect(
+      await page.evaluate<string>(
+        `getComputedStyle(${card}.querySelector('[data-question-peek]')).visibility`,
+      ),
+    ).toBe("visible");
     await touch("touchEnd", at.x - 120);
     await until(() => page.evaluate<boolean>(shown("checks")));
     expect(await height()).toBe(before);
@@ -169,6 +203,15 @@ test("a questions card on a phone: an @mention to wait on, keys to press, the ne
         `new URLSearchParams(location.search).get("profile") === "user:${asked.id}"`,
       ),
     );
+
+    // The narrowest phone: the same, at 320.
+    await page.close();
+    page = await browser.open(`${origin}/en/w/${workspace.slug}/channel/${channel.id}`, {
+      phone: { width: 320, height: 640 },
+    });
+    await until(() => page.evaluate<boolean>(`${shown("region")}`), 60_000);
+    await page.evaluate(`${card}.scrollIntoView({ block: "center" })`);
+    await expectCardFits("320");
   } finally {
     await browser.close();
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
