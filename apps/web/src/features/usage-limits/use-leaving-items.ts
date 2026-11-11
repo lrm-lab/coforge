@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-/** How long a card takes to fade and fold away; `usage-limit-notice-list` animates to match. */
+/** How long a card that left stays mounted: no shorter than its `Fold` takes to shut (`--motion-out`). */
 export const NOTICE_LEAVE_MS = 200;
 
 /**

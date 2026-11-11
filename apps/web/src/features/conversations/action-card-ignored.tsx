@@ -15,5 +15,8 @@ export function IgnoredLine({ onUndo }: { onUndo: () => void }) {
 
 /** Moves focus to the card's Undo (just collapsed) or its Ignore button (back, by undo or failure). */
 export function focusIgnore(card: HTMLElement | null, to: "undo" | "ignore") {
-  card?.querySelector<HTMLElement>(to === "undo" ? "[data-ignore-undo]" : "[data-ignore]")?.focus();
+  // Without scrolling: the button sits in a fold still opening, whose clipped box would scroll.
+  card
+    ?.querySelector<HTMLElement>(to === "undo" ? "[data-ignore-undo]" : "[data-ignore]")
+    ?.focus({ preventScroll: true });
 }

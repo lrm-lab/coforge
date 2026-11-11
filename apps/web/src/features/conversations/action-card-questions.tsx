@@ -4,6 +4,7 @@ import type { OpenPersonProfile } from "#src/features/agents/profile-panel/open-
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
 import { Button } from "#src/components/base/buttons/button";
+import { Fold } from "#src/components/ui/fold";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -155,101 +156,111 @@ export function QuestionsActionCard({
         "mt-1 flex max-w-md flex-col gap-2 rounded-xl border border-secondary bg-primary px-1.5 pt-3 pb-1.5",
       )}
     >
-      {ignored && (
-        <>
-          <p className="px-2.5 text-sm font-semibold wrap-anywhere text-primary">
-            {view.prompt || view.questions[0]?.prompt}
-          </p>
-          <IgnoredLine onUndo={undo} />
-        </>
-      )}
-      {/* Kept mounted while collapsed, so an Undo restores the card as it was. */}
-      <div
-        hidden={ignored}
-        className={cn("flex flex-col", canAnswer || pagesOnly ? "gap-2" : "gap-4")}
-      >
-        {view.prompt && (
-          // While it is being answered the question leads; the card's own title stays small.
-          <p
-            className={cn(
-              "wrap-anywhere",
-              canAnswer || pagesOnly
-                ? "px-2 text-xs text-tertiary"
-                : "px-2.5 text-sm font-semibold text-primary",
-            )}
-          >
-            {view.prompt}
-          </p>
-        )}
-        {pagesOnly && (
-          <QuestionsStepper
-            questions={view.questions}
-            drafts={pagesOnly}
-            disabled={false}
-            canSubmit={false}
-            submitting={false}
-            onChange={() => undefined}
-            onSubmit={() => undefined}
-            readOnly
-          />
-        )}
-        {!canAnswer &&
-          !pagesOnly &&
-          view.questions.map((question, index) => (
-            <section key={question.id} data-question={question.id} className="flex flex-col">
-              <div className="flex items-baseline gap-2 px-2.5 pb-2 text-sm">
-                {pending && view.questions.length > 1 && (
-                  <span className="shrink-0 text-tertiary tabular-nums">{index + 1}.</span>
-                )}
-                {/* Handled, the question in gray over its answer, as a handled choice card reads. */}
-                <p
-                  className={cn(
-                    "min-w-0 flex-1 font-semibold wrap-anywhere",
-                    pending ? "text-primary" : "text-secondary",
-                  )}
-                >
-                  {question.prompt}
-                </p>
-                {canAnswer && question.select === "many" && (
-                  <span className="shrink-0 text-xs text-tertiary">
-                    {m.action_card_questions_many()}
-                  </span>
-                )}
-              </div>
-              {pending ? (
-                <QuestionRows
-                  question={question}
-                  draft={drafts[question.id]}
-                  canAnswer={canAnswer}
-                  disabled={submitting}
-                  onChange={(draft) => setDrafts((all) => ({ ...all, [question.id]: draft }))}
-                />
-              ) : null}
-            </section>
-          ))}
-        {canAnswer ? (
-          <QuestionsStepper
-            questions={view.questions}
-            drafts={drafts}
-            disabled={submitting}
-            canSubmit={canSubmit}
-            submitting={submitting}
-            onChange={(questionId, draft) => setDrafts((all) => ({ ...all, [questionId]: draft }))}
-            onSubmit={() => void submit()}
-            notice={errorLine}
-          />
-        ) : (
-          footer
-        )}
-        {canIgnore && (
-          <div className="flex px-2.5 pb-1">
-            <Button data-ignore="" size="sm" color="link-gray" onPress={ignore} className="ml-auto">
-              {m.action_card_ignore()}
-            </Button>
+      {/* Ignoring folds the card down to its question and an Undo; each fold, shut, gives back
+          the gap beside it. */}
+      {(canIgnore || ignored) && (
+        <Fold open={ignored} className={cn(!ignored && "-mb-2")}>
+          <div className="flex flex-col gap-2">
+            <p className="px-2.5 text-sm font-semibold wrap-anywhere text-primary">
+              {view.prompt || view.questions[0]?.prompt}
+            </p>
+            <IgnoredLine onUndo={undo} />
           </div>
-        )}
-        {!pending && <ClosedReason view={view} />}
-      </div>
+        </Fold>
+      )}
+      <Fold open={!ignored} className={cn(ignored && "-mt-2")}>
+        <div className={cn("flex flex-col", canAnswer || pagesOnly ? "gap-2" : "gap-4")}>
+          {view.prompt && (
+            // While it is being answered the question leads; the card's own title stays small.
+            <p
+              className={cn(
+                "wrap-anywhere",
+                canAnswer || pagesOnly
+                  ? "px-2 text-xs text-tertiary"
+                  : "px-2.5 text-sm font-semibold text-primary",
+              )}
+            >
+              {view.prompt}
+            </p>
+          )}
+          {pagesOnly && (
+            <QuestionsStepper
+              questions={view.questions}
+              drafts={pagesOnly}
+              disabled={false}
+              canSubmit={false}
+              submitting={false}
+              onChange={() => undefined}
+              onSubmit={() => undefined}
+              readOnly
+            />
+          )}
+          {!canAnswer &&
+            !pagesOnly &&
+            view.questions.map((question, index) => (
+              <section key={question.id} data-question={question.id} className="flex flex-col">
+                <div className="flex items-baseline gap-2 px-2.5 pb-2 text-sm">
+                  {pending && view.questions.length > 1 && (
+                    <span className="shrink-0 text-tertiary tabular-nums">{index + 1}.</span>
+                  )}
+                  {/* Handled, the question in gray over its answer, as a handled choice card reads. */}
+                  <p
+                    className={cn(
+                      "min-w-0 flex-1 font-semibold wrap-anywhere",
+                      pending ? "text-primary" : "text-secondary",
+                    )}
+                  >
+                    {question.prompt}
+                  </p>
+                  {canAnswer && question.select === "many" && (
+                    <span className="shrink-0 text-xs text-tertiary">
+                      {m.action_card_questions_many()}
+                    </span>
+                  )}
+                </div>
+                {pending ? (
+                  <QuestionRows
+                    question={question}
+                    draft={drafts[question.id]}
+                    canAnswer={canAnswer}
+                    disabled={submitting}
+                    onChange={(draft) => setDrafts((all) => ({ ...all, [question.id]: draft }))}
+                  />
+                ) : null}
+              </section>
+            ))}
+          {canAnswer ? (
+            <QuestionsStepper
+              questions={view.questions}
+              drafts={drafts}
+              disabled={submitting}
+              canSubmit={canSubmit}
+              submitting={submitting}
+              onChange={(questionId, draft) =>
+                setDrafts((all) => ({ ...all, [questionId]: draft }))
+              }
+              onSubmit={() => void submit()}
+              notice={errorLine}
+            />
+          ) : (
+            footer
+          )}
+          {canIgnore && (
+            <div className="flex px-2.5 pb-1">
+              <Button
+                data-ignore=""
+                size="sm"
+                color="link-gray"
+                onPress={ignore}
+                className="ml-auto"
+              >
+                {m.action_card_ignore()}
+              </Button>
+            </div>
+          )}
+          {!pending && <ClosedReason view={view} />}
+        </div>
+      </Fold>
       <p role="status" className="sr-only">
         {announcement}
       </p>
