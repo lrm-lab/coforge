@@ -135,7 +135,10 @@ test("a timed-out interrupt writes one line naming the turn, its provider and th
       release: "exited",
       outcome: "restarted",
     });
-    expect(line!.properties.waited_ms).toBeGreaterThanOrEqual(1);
+    // The deadline can fire inside a single clock tick, so the recorded wait may be 0: the line
+    // must prove it measured one, not that any time passed.
+    expect(Number.isSafeInteger(line!.properties.waited_ms)).toBe(true);
+    expect(line!.properties.waited_ms).toBeGreaterThanOrEqual(0);
     // One line per timed-out interrupt: the accepted log belongs to the intent, not to this path.
     expect(
       records.filter(
