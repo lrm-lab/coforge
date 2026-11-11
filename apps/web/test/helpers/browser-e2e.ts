@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { PrismaClient } from "#src/generated/prisma/client";
+import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
 export function seededUuid(key: string): string {
@@ -257,4 +259,18 @@ export async function cpuThrottle(
     set: (rate: number) => devtools.send("Emulation.setCPUThrottlingRate", { rate }),
     close: devtools.close,
   };
+}
+
+/**
+ * The dev user's own Workspace: the oldest of theirs, the one the seed made. Other E2Es create
+ * Workspaces for the dev user and some leave them behind, so an unordered `findFirst` over their
+ * memberships can return any of them (task #77); this never does.
+ */
+export async function devBrowserWorkspace(db: PrismaClient) {
+  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
+    where: { userId: DEV_BROWSER_USER.id },
+    orderBy: { createdAt: "asc" },
+    include: { workspace: { select: { slug: true } } },
+  });
+  return { workspaceId, workspace };
 }
