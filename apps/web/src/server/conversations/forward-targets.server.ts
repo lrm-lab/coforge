@@ -23,33 +23,45 @@ function interleave<T>(lists: readonly (readonly T[])[], limit: number): T[] {
   return merged;
 }
 
-/** How many of the viewer's latest forwards the "most forwarded" order reads. */
+/** How many of the viewer's latest forwards the "most forwarded" order reads. A forward is one
+ * snapshot (a message carrying several originals is several rows), counted once per message. */
 const FORWARD_HISTORY_WINDOW = 500;
 
 type ForwardHistory = Map<string, { count: number; last: number }>;
 
 /**
- * How often the viewer forwarded into each conversation, from their latest forwards (each forward
- * is one message per destination, carrying `MessageForward` rows), newest first. Only their own
- * forwards, in this Workspace. Bounded by `FORWARD_HISTORY_WINDOW`; read by the sender's index
- * (`senderMemberId`) per its definition, not measured with EXPLAIN.
+ * How often the viewer forwarded into each conversation, from their latest forwards, newest
+ * first. Only their own forwards, in this Workspace. Bounded by `FORWARD_HISTORY_WINDOW`.
+ *
+ * The count reads the forward rows themselves (task #78): each row was stamped with the
+ * Workspace and the person who made it when it was written, and
+ * `message_forwards (workspaceId, senderUserId, createdAt DESC)` walks their forwards newest
+ * first and stops after the window. Reading the messages instead — where the forwards used to be
+ * found by an `EXISTS` per message — scanned the Workspace's messages newest first and matched
+ * each row's sender, so a member who never forwarded read every message in the Workspace
+ * (92 ms at 360k messages and growing with it) before returning nothing.
  */
-async function forwardHistory(
+export async function forwardHistory(
   db: PrismaClient,
   workspaceId: string,
   userId: string,
 ): Promise<ForwardHistory> {
-  const sent = await db.message.findMany({
-    where: { workspaceId, sender: { userId }, forwards: { some: {} } },
+  const forwards = await db.messageForward.findMany({
+    where: { workspaceId, senderUserId: userId },
     orderBy: { createdAt: "desc" },
     take: FORWARD_HISTORY_WINDOW,
-    select: { conversationId: true, createdAt: true },
+    select: { messageId: true, message: { select: { conversationId: true, createdAt: true } } },
   });
   const history: ForwardHistory = new Map();
-  for (const { conversationId, createdAt } of sent) {
-    const seen = history.get(conversationId);
+  const counted = new Set<string>();
+  for (const { messageId, message } of forwards) {
+    // Several originals ride one message; the conversation is counted once per message, as one
+    // forwarding act.
+    if (counted.has(messageId)) continue;
+    counted.add(messageId);
+    const seen = history.get(message.conversationId);
     if (seen) seen.count += 1;
-    else history.set(conversationId, { count: 1, last: createdAt.getTime() });
+    else history.set(message.conversationId, { count: 1, last: message.createdAt.getTime() });
   }
   return history;
 }

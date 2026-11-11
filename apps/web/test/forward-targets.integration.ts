@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "#src/generated/prisma/client";
 import { searchForwardTargets } from "#src/server/conversations/forward-targets.server";
+import { forwardHistory } from "#src/server/conversations/forward-targets.server";
 import { openPeopleDirectConversation } from "#src/server/conversations/user-direct-conversations.server";
 
 /** The picker behind a forward: what it finds, and what it says about each place. */
@@ -142,6 +143,39 @@ test("finds a person by the name they are shown by, never by username, and keeps
   ).toHaveLength(2);
 });
 
+test("counts a message that carried several originals once, at its latest forward's time", async () => {
+  const busy = await channel("multi", [carol]);
+  const member = await db.conversationMember.findFirstOrThrow({
+    where: { conversationId: busy.id, userId: carol.id },
+  });
+  const at = new Date("2026-03-01T00:00:00Z");
+  await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: busy.id,
+      senderMemberId: member.id,
+      sequence: (sequence += 1),
+      body: "",
+      createdAt: at,
+      forwards: {
+        create: [0, 1].map((position) => ({
+          position,
+          sourceConversationId: busy.id,
+          sourceSenderName: "Source",
+          sourceSenderHandle: "source",
+          sourceCreatedAt: at,
+          sourceBody: "forwarded",
+          workspaceId,
+          senderUserId: carol.id,
+        })),
+      },
+    },
+  });
+  // One forwarding act, whatever it carried: the conversation counts once.
+  const history = await forwardHistory(db, workspaceId, carol.id);
+  expect(history.get(busy.id)).toMatchObject({ count: 1, last: at.getTime() });
+});
+
 let sequence = 1_000;
 /** `times` forwards by `user` into a conversation, at `at` (later ones a second apart). */
 async function forwardInto(user: { id: string }, conversationId: string, times: number, at: Date) {
@@ -165,6 +199,8 @@ async function forwardInto(user: { id: string }, conversationId: string, times: 
             sourceSenderHandle: "source",
             sourceCreatedAt: at,
             sourceBody: "forwarded",
+            workspaceId,
+            senderUserId: user.id,
           },
         },
       },

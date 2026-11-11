@@ -30,11 +30,26 @@ model MessageForward {
   /// The original's mentions as the browser reads them (kind, actorId, handle, label), frozen.
   sourceMentions         Json?
   createdAt              DateTime @default(now())
+  /// The Workspace the carrying message belongs to, stamped beside it (denormalized from the
+  /// message, which the forward row cascades from): the forward picker's "most forwarded" read
+  /// counts a member's forwards from here, without joining messages to find them (task #78).
+  /// Nullable for now — a Web instance of the previous release, still live in a rolling deploy,
+  /// writes rows without it; release two backfills those and sets NOT NULL (task #93). The read
+  /// is by equality, so an unfilled row only misses the order until then.
+  workspaceId            String?  @db.Uuid
+  /// The person who made the forward — the carrying message's sender's User id, denormalized
+  /// from their member row (a member row names a conversation, but the history is the person's).
+  /// Null only where the sender was not a person; the picker reads it by equality, so those rows
+  /// never surface.
+  senderUserId           String?  @db.Uuid
   message                Message  @relation("MessageForwardOf", fields: [messageId], references: [id], onDelete: Cascade)
   sourceMessage          Message? @relation("MessageForwardSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
 
   @@id([messageId, position])
   /// Serves the `SET NULL` when an original is deleted.
   @@index([sourceMessageId])
+  /// Serves the forward picker's "most forwarded" order: a person's forwards in one Workspace,
+  /// newest first, walked from the index and stopped after the window (task #78).
+  @@index([workspaceId, senderUserId, createdAt(sort: Desc)])
   @@map("message_forwards")
 }

@@ -131,10 +131,23 @@ export async function attachForwardedAccess<T extends { forwarded?: ForwardedMes
 /**
  * Stores the forward's snapshots with the message that carries them, in the send's transaction:
  * each original at its place. Its attachment copies name their original themselves
- * (`Attachment.forwardPosition`, set as they are copied).
+ * (`Attachment.forwardPosition`, set as they are copied). Each row also carries the Workspace
+ * and the sender's User id (resolved from their member row once, here): the forward picker's
+ * "most forwarded" read counts a person's forwards from one index instead of joining every
+ * message (task #78).
  */
 export function recordForward(sources: readonly ForwardSource[]): SentMessageHook {
   return async (tx, message) => {
+    const sender = await tx.conversationMember.findUnique({
+      where: {
+        id_conversationId_workspaceId: {
+          id: message.senderMemberId,
+          conversationId: message.conversationId,
+          workspaceId: message.workspaceId,
+        },
+      },
+      select: { userId: true },
+    });
     await tx.messageForward.createMany({
       data: sources.map((source, position) => ({
         messageId: message.id,
@@ -149,6 +162,8 @@ export function recordForward(sources: readonly ForwardSource[]): SentMessageHoo
         sourceBody: source.sourceBody,
         sourceRawBody: source.sourceRawBody,
         sourceMentions: source.sourceMentions,
+        workspaceId: message.workspaceId,
+        senderUserId: sender?.userId ?? null,
       })),
     });
   };
