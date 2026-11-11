@@ -73,7 +73,7 @@ const languages = {
     name: "安栋",
     lateName: "迟到",
     h1: "输入你的昵称",
-    signIn: "立即登录",
+    signIn: "登录",
     codeTab: "手机号登录",
     passwordTab: "账号密码登录",
     continue: "继续",

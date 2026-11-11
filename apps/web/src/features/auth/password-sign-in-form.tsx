@@ -130,11 +130,17 @@ export function PasswordSignInForm({
         <Link
           to="/login/reset-password"
           search={{ returnTo, prompt }}
-          className="text-md font-semibold text-(--login-brand) hover:text-(--login-brand-hover)"
+          className="login-link text-md font-semibold"
         >
           {m.login_forgot_password()}
         </Link>
-        <Button color="link-gray" size="lg" noTextPadding onPress={onEmailCode}>
+        <Button
+          color="link-gray"
+          size="lg"
+          noTextPadding
+          className="login-link"
+          onPress={onEmailCode}
+        >
           {m.login_email_code_link()}
         </Button>
       </div>

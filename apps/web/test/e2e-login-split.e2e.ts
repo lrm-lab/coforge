@@ -144,6 +144,18 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     expect(await exists(destinationFieldSelector)).toBe(false);
     expect(await evaluate<boolean>(`!!${button("Forgot password?")}`)).toBe(true);
     expect(await evaluate<boolean>(`!!${button("Sign in with an email code")}`)).toBe(true);
+    // One form (task #39): both links in the muted grey the idle tab wears, brand purple left to
+    // the selected tab and the button; the tabs as far from the fields as the title from the tabs.
+    for (const link of ["Forgot password?", "Sign in with an email code"]) {
+      expect(await evaluate<string>(`getComputedStyle(${button(link)}).color`)).toBe(
+        "rgb(119, 125, 141)",
+      );
+    }
+    expect(
+      await evaluate<number[]>(
+        `(() => { const top = (el) => el.getBoundingClientRect(); const h1 = top(document.querySelector("h1")); const tabs = top(document.querySelector('[role="tablist"]')); const field = top(${fieldGroup(accountFieldSelector)}); return [Math.round(tabs.top - h1.bottom), Math.round(field.top - tabs.bottom)]; })()`,
+      ),
+    ).toEqual([32, 32]);
 
     // "Sign in with an email code" opens the code tab worded for an email, with a way back.
     await browser("eval", `${button("Sign in with an email code")}.click()`);

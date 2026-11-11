@@ -152,6 +152,25 @@
   border-bottom-color: var(--login-brand);
 }
 
+/* Every text link on the form reads one way, the muted grey, and turns brand on hover: the brand
+ * colour is left to the selected tab and the button, the form's two "you are here" marks. */
+.login-form .login-link {
+  color: var(--login-muted);
+  transition: color 100ms ease;
+}
+
+/* The link button's own hover underline: the plain link has none, so neither does it. */
+.login-form .login-link [data-text] {
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .login-form .login-link:hover,
+  .login-form .login-link[data-hovered] {
+    color: var(--login-brand);
+  }
+}
+
 .login-form [class~="group/input"] {
   min-height: 3rem;
   border: 1px solid var(--login-border);

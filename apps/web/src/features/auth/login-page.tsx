@@ -61,8 +61,9 @@ export function LoginPage({
               {m.login_tab_password()}
             </Tab>
           </TabList>
-          {/* Both panels share a minimum height, so the tabs and title above them never move. */}
-          <TabPanel id="code" className="min-h-72 pt-10">
+          {/* Both panels share a minimum height, so the tabs and title above them never move. The
+              tabs sit as far from the fields as the title from the tabs: one 32px step. */}
+          <TabPanel id="code" className="min-h-72 pt-8">
             <CodeSignInForm
               key={byEmail ? "email" : "phone"}
               returnTo={returnTo}
@@ -72,7 +73,13 @@ export function LoginPage({
             {byEmail ? (
               <div className="mt-4">
                 {/* lg is the link size whose text matches the row's text-md. */}
-                <Button color="link-gray" size="lg" noTextPadding onPress={() => setByEmail(false)}>
+                <Button
+                  color="link-gray"
+                  size="lg"
+                  noTextPadding
+                  className="login-link"
+                  onPress={() => setByEmail(false)}
+                >
                   {m.login_tab_phone()}
                 </Button>
               </div>
@@ -83,7 +90,7 @@ export function LoginPage({
               </div>
             ) : null}
           </TabPanel>
-          <TabPanel id="password" className="min-h-72 pt-10">
+          <TabPanel id="password" className="min-h-72 pt-8">
             <PasswordSignInForm
               returnTo={returnTo}
               prompt={prompt}
