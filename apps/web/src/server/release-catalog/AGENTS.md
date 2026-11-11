@@ -19,7 +19,7 @@ These rules apply to `src/server/release-catalog/`.
   never appears in Web config, code or logs. An unset or malformed hash disables publishing (503),
   a missing or wrong bearer is 401, and the check runs before the body is read.
 - Limits: `app` matches `^[a-z0-9][a-z0-9-]{0,62}$`, `version` passes the SDK's
-  `isValidReleaseVersion`, and each of `en` and `zh-CN` is required, trimmed, 1 to 16000
-  characters (the SDK's `RELEASE_NOTES_MAX_LENGTH`, shared with
+  `isValidReleaseVersion`, and each of `en` and `zh-CN` is required, trimmed, non-empty and at most
+  the SDK's `RELEASE_NOTES_MAX_LENGTH` characters (shared with
   `scripts/release/release-notes.ts`). A PUT overwrites earlier notes, so a reader revalidates
   (`cache-control: no-cache`).

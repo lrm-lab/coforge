@@ -68,9 +68,9 @@ These rules apply to `src/server/computers/`.
 - `computer-model-catalog-refresh.server.ts` is an explicit model probe — scoped to one provider when
   the request names it; ordinary catalog reads use the stored inventory. The same probe is the
   Computer page's "Rescan runtimes": the daemon re-runs runtime discovery before it re-reports.
-  Production closes a request idle for about ten seconds and a whole-Computer rescan runs its
-  runtimes one after another, so, as the reference Computer acknowledges a rescan and reports it
-  separately, it is two calls like the reset credit: `start` publishes and returns a request id (or
+  A whole-Computer rescan runs its runtimes one after another, so, as the reference Computer
+  acknowledges a rescan and reports it separately, it is start/read (see "Slow calls" in
+  `server/AGENTS.md`): `start` publishes and returns a request id (or
   `refused` for a Computer the viewer does not reach, or `failed` with nothing sent), and `read`
   returns pending or the settled per-provider outcome. `read` answers only a request that names the
   caller's Workspace and Computer, says pending without authorizing until an answer exists, and
@@ -103,8 +103,7 @@ These rules apply to `src/server/computers/`.
   Computer's owner, or a Workspace owner or admin who sees the runtime on the Computer page; never
   another member's default cloud Computer), the same rule that lets them read and scan the usage
   that shows the button (`runtime-usage-access.server.ts`).
-  - `start` never waits: production closes a request idle for about ten seconds and the Computer
-    can take up to about 90, so the page polls `read`. Refusals are values, in this order:
+  - `start` never waits (the Computer can take up to about 90 seconds), so the page polls `read`. Refusals are values, in this order:
     `forbidden`, `offline`, `needs_upgrade` (the `runtime-usage:reset-credit:v1` lease).
   - `read` answers only a request that names the caller's Workspace, Computer and runtime and
     passes `canManage`; until then it says pending without a database read.
@@ -171,8 +170,7 @@ These rules apply to `src/server/computers/`.
   leaves the result to expire (35 seconds) so a lost reply can be asked for again. Never hold a
   request for the result.
 - `computer-file-upload.server.ts` places an owner's browser upload in the Computer's `uploads/`.
-  Production closes a request idle for about ten seconds and storing the object plus the Computer's
-  pull can take minutes, so it is two calls. `start` (behind `POST /api/computers/<id>/file-uploads`)
+  Storing the object plus the Computer's pull can take minutes, so it is start/read. `start` (behind `POST /api/computers/<id>/file-uploads`)
   answers once the body is validated and the status record is written, with an upload id or a
   refusal (`too_large`, `invalid_name`, `unavailable`, `storage_unavailable`, `offline`,
   `unsupported`); nothing is stored for a refusal, and a record that cannot be written throws. The

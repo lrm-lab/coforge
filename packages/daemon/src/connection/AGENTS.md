@@ -5,18 +5,6 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
 
 ## Boundary
 
-- `daemon-connection-client.ts` holds the transport contract; `daemon-connection.ts` implements it.
-- `agent-message-operations.ts` owns the Agent message HTTP operations (`check`, mute, thread
-  unfollow, resolve, reactions, read, search, send, send reconciliation) and the reminder operation, which
-  rides the same HTTP client; the connection supplies its liveness check, server URL, credentials
-  and HTTP client as ports.
-- `daemon-status-refresh.ts` owns the two periodic status refreshes a live connection runs
-  (active-Agent status replay and the Computer connection-status poll); the connection only
-  supplies its collaborators.
-  cloud HTTP route; `daemon-connection.ts` supplies the connection's endpoint, keys and client.
-- This directory owns the daemon's long-lived WSS connection, ordered replay,
-  reconnect, and protocol transport mechanics. Domain decisions stay in
-  `daemon-runtime/` and below.
 - `built-server.ts` supplies the build-inlined server and WSS endpoint. Do not
   read them from anywhere else.
 - A Centrifugo disconnect whose code and reason name a
@@ -48,10 +36,6 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
   60 s up (`STABLE_CONNECTION_MS`), checked at the next failure or reconnect.
   A connection dropped sooner continues the outage (backoff, attempt count,
   escalation); a reconnect never restarts the ready retry count either.
-- `connectFailure()` is what status and the handshake report while the
-  Workspace is not recovered: whichever failed last, the ready
-  (`ready failed: <stage>`) or a connect attempt since the connection last
-  came up.
 - Publications that arrive while a ready waits are held in
   `ReadyPublicationHold` (`ready-publication-hold.ts`): only the latest start,
   stop and config sync per Agent (so a restart survives), and `HELD_NOTICE_CAP`

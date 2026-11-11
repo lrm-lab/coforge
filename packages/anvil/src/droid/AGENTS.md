@@ -5,7 +5,7 @@ These rules extend [`../../AGENTS.md`](../../AGENTS.md).
 Read [Droid ACP behavior](../../../../docs/agents/droid-acp.md) when changing Droid's session open, resume, model and effort, context usage or skills. Shared ACP rules: [Anvil instructions](../../AGENTS.md#acp-adapters).
 
 - Standing instructions ride the CLI's own `--append-system-prompt-file`: the provider writes
-  a private file (0700 directory, 0600 file) under the system temporary directory — never into
+  a private file under the system temporary directory — never into
   the Agent workspace — and the session removes it when it ends. The alternative,
   `--append-system-prompt <text>`, would put the briefing in argv where any process table
   shows it.

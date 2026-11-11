@@ -35,31 +35,14 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
   on this page re-reads it itself and keeps the positions. A read moves only the live badge,
   never a row, so a re-seed takes server counts only from a list read again (`unreadIdsToKeep`).
   Server and list share one order (`compareChannelNames`).
-- A channel created, changed or gone in the Workspace (`channel.created.v1`, `channel.updated.v1`,
-  Slack's `channel_created`/`channel_rename`) carries its info or `gone`, which
+- A channel created, changed or gone in the Workspace (`channel.created.v1`, `channel.updated.v1`) carries its info or `gone`, which
   `applyChannelSignalToLists` (`sidebar-signals.ts`) writes into the names and the list without a read; it re-reads only
   what an event cannot place, and a list being read or while a sidebar change is saving (a failed
   save's rollback undoes a direct write made meanwhile).
-- Read the lists with `useSidebarLists` and change them only through `useSidebarActions`
-  (optimistic; a saved change is written into the synced list, a failed save rolls it back; a
-  section update, reorder or move whose save failed on the way is retried first,
-  `SAVE_RETRY_DELAYS_MS`, never a create or remove); never
-  `router.invalidate` for a sidebar change. A message that brings a closed or unlisted chat in
-  re-reads only its own list (`closedConversationLists`), plus the Agent roster for a new Agent
-  (`unknownAgentOf`). A top-level message in a DM the sidebar already lists re-reads only the
-  DM list (`directRowRefreshLists`), so its row's last message and preview stay current, whether
-  the viewer or the other side wrote it. A top-level message in a channel the sidebar already lists
-  re-reads only the channel list (`channelRowRefreshLists`), for the same reason. A change made outside the sidebar on this page (a
-  channel's creation, rename or archive, or leaving, muting or pinning it from the settings panel)
-  re-reads the channel list through `useRefreshSidebarChannels`. The viewer's own changes elsewhere arrive as a `ViewerEvent`
-  on their `chat:user:` channel (Slack's `channel_marked`, `channel_joined`, `im_marked`,
-  `im_created`, `pref_change`, `star_added`, `star_removed`): a read sets the badge from the
-  event's count; any other re-reads only the lists `sidebarListsChangedBy` names. A message signal
-  names the person who wrote it (`senderUserId`, Slack's `message.user`); the viewer's own message
-  never bumps their badge or brings a closed chat back.
+- Read the lists with `useSidebarLists`, write them only through `useSidebarActions` (optimistic: a saved change is written into the synced list, a failed save rolls back; a section update, reorder or move whose save failed on the way is retried first, `SAVE_RETRY_DELAYS_MS`, never a create or remove), and never call `router.invalidate` for a sidebar change. After a signal, re-read only the list that can have changed: a message that brings a closed or unlisted chat in re-reads its own list (`closedConversationLists`) plus the Agent roster for a new Agent (`unknownAgentOf`); a top-level message in a listed DM or channel re-reads that list so the row's last message and preview stay current, whoever wrote it (`directRowRefreshLists`, `channelRowRefreshLists`); a change made outside the sidebar on this page (a channel's creation, rename or archive, or leaving, muting or pinning from the settings panel) goes through `useRefreshSidebarChannels`. The viewer's own changes elsewhere arrive as a `ViewerEvent` on their `chat:user:` channel (`channel_marked`, `channel_joined`, `im_marked`, `im_created`, `pref_change`, `star_added`, `star_removed`): a read sets the badge from the event's count; any other re-reads only the lists `sidebarListsChangedBy` names. A message signal names the person who wrote it (`senderUserId`); the viewer's own message never bumps their badge or brings a closed chat back.
 - A message row's Task, thread and Agent status data is read by the part that
-  shows it, by id, as Mattermost and Telegram Web do. A sender's avatar
-  (`ActorAvatar`) carries its status dot, a person's as an Agent's (task #510); the mascot there is a still sticker. The Task a message became
+  shows it, by id. A sender's avatar
+  (`ActorAvatar`) carries its status dot, a person's as an Agent's; the mascot there is a still sticker. The Task a message became
   (`MessageTask`) and a body's task reference (`TaskReference`) each read one
   Task under `ConversationIdProvider` (see `features/tasks/AGENTS.md`). A
   root's thread preview and thread entries (`thread-summary.tsx`) read that
@@ -77,7 +60,7 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
   sharing then keeps each unchanged message's object across a re-read (focus,
   remount, invalidation, reconcile). A `Date` or class instance makes every
   message new on every re-read, and every row renders and parses again.
-- Chat is rendered in the browser only, as Slack's page is: the `_chat` route is `ssr: false`
+- Chat is rendered in the browser only: the `_chat` route is `ssr: false`
   (every route under it inherits that), so the server sends the app's chrome and `MessagesPending`
   (a loading screen: the list column, the conversation and its composer as skeletons), and the
   sidebar's lists, the open conversation and Saved are read by loaders that run in the browser.
@@ -169,7 +152,7 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
 - The header gear opens `channel-settings-panel.tsx`, the one place for a
   channel's info (name, description), the viewer's preferences (pin, mute,
   collapse long messages: `ConversationMember.collapseLongMessages`, off by
-  default as on Raft, read by every pane of the conversation, thread panes included)
+  default, read by every pane of the conversation, thread panes included)
   and its actions (archive, leave, stopping every Agent in it and resuming
   them with new guidance for any member of a live channel; hiding `#general`
   or deleting the channel for a Workspace owner or admin); each action

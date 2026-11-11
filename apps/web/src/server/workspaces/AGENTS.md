@@ -11,9 +11,7 @@ These rules apply to `src/server/workspaces/`.
   OpenViking account may already be gone.
 - Messages go in batches before the final transaction; they are what makes a
   large Workspace slow (one FK trigger per row per referencing table).
-- Lock conversations first, then the Workspace row, then the conversations again:
-  the order every writer takes (conversation lock, then a key naming the
-  Workspace). Retry only on a PostgreSQL write conflict, through
+- Lock in the Workspace-deletion order of `server/AGENTS.md` ("Lock order"). Retry only on a PostgreSQL write conflict, through
   `server/db/write-conflict.server.ts`.
 - Memory Offer citations and messages are deleted before the Workspace: they name
   rows the same cascade removes with `Restrict`. A new `Restrict` or `NO ACTION`
@@ -46,7 +44,7 @@ These rules apply to `src/server/workspaces/`.
   daemons, best effort, so each parks its binding now. A new path that ends a
   membership goes through that store write. `removalComputers`/`leaveComputers`
   preview the same Computer set for the confirmation dialogs, under the same
-  authority checks; account deletion (task #466) must run
+  authority checks; account deletion must run
   `unlinkDepartingMemberComputers` for every Workspace before the User row
   cascades, or the Computers never learn their binding is gone.
 - `create-workspace.server.ts` starts the account's default cloud computer for a

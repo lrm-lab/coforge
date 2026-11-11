@@ -3,7 +3,7 @@
 Read [Command Code ACP behavior](../../../../docs/agents/command-code-acp.md) when changing its model catalog, per-model efforts or tool titles.
 
 - Launch the user-installed `cmd acp` process through `JsonlProcess`; the host owns cwd, environment and process trees.
-- Command Code ACP has no system-prompt field. Standing instructions go through a private session mod: `--mod <path>` and an `appendSystemPrompt` hook. The mod file and the instructions file live in a 0700 temporary directory, mode 0600, and are deleted when the session ends, when startup fails, or when a later error closes the process. Nothing is written into the user workspace or the user's Command Code config.
+- Command Code ACP has no system-prompt field. Standing instructions go through a private session mod: `--mod <path>` and an `appendSystemPrompt` hook. The mod file and the instructions file live in a private temporary directory and are deleted when the session ends, when startup fails, or when a later error closes the process. Nothing is written into the user workspace or the user's Command Code config.
 - The mod factory reads the instructions file once and caches that string. `appendSystemPrompt` returns the cache on every turn. One `cmd acp` process does not see a new briefing; a resumed session starts a new process, a new directory and a new read, so it gets the briefing generated for that launch. Reading again on every turn would change the system-prompt bytes and break the prompt cache. The cache stays in the factory closure, not in `modState`: `modState` is stored with the native session and would replay an older briefing after resume.
 - Never pass `--safe-mode`. It loads built-in mods only and skips `--mod`, so the standing instructions would silently disappear. A user setting `mods.disableAll` skips `--mod` the same way. CLI 1.87.1 and earlier ignore `--mod` on `cmd acp`; 1.87.2 is the first release that loads it (Command Code changelog). Discovery omits a confidently lower version, and a launch checks again before spawn. An unparseable version is not gated. The mod factory writes a `loaded` marker after it reads the instructions; if that marker is missing once `initialize` returns, the session fails instead of continuing without the briefing. The error names both an older CLI and `mods.disableAll`.
 - Preserve ACP session identity, resume, prompt, cancellation and request-permission semantics. Only the active session may receive `allow_once`; otherwise answer `cancelled`.
@@ -13,11 +13,7 @@ Read [Command Code ACP behavior](../../../../docs/agents/command-code-acp.md) wh
 
 ## Real-account acceptance
 
-These need a signed-in `cmd` and are not covered by the fixture:
-
-1. Put one checkable sentence in the standing instructions and confirm the reply follows it. This is the first acceptance check; the fixture only proves the mod file and the launch arguments.
-2. Logged-in `cmd status --json` (exit 0, `authenticated: true`). The adapter shows the account's masked email from `cmd whoami`, re-reading it only when the `user` field changes.
-3. One real tool permission request is `allow_once` for the active session only. A non-default model chosen in the web is the model that session uses. The model list itself comes from the catalog reader above.
+With a signed-in `cmd`, check on a real account what the fixture cannot prove (it covers only the mod file and launch arguments): a checkable sentence in the standing instructions shows up in the reply; logged-in `cmd status --json` shows the account's masked email, re-read from `cmd whoami` only when `user` changes; one real tool permission is `allow_once` for the active session only; a non-default model chosen in the web is the model that session uses.
 
 ## From the daemon
 

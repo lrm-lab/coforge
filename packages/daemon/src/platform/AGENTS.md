@@ -3,8 +3,6 @@
 Rules for OS primitives in `src/platform/`. They extend
 `packages/daemon/AGENTS.md`.
 
-- This directory holds OS-specific details only. Expose them through
-  interfaces such as the process-tree seam; do not leak platform APIs upward.
 - `operating-system.ts` is the single OS release observation, shared by
   Computer registration and Daemon ready reporting. On macOS, report the
   product version, not the kernel version.
@@ -19,12 +17,8 @@ Rules for OS primitives in `src/platform/`. They extend
 - `process-transport.ts` supplies pipe or opt-in terminal I/O to the shared process-tree owner and its launchd runner. Provider output is never parsed here.
 - `posix-process-tree.ts` is the shared POSIX owner for direct launches and terminal children inside launchd. Terminal cleanup snapshots descendants before TERM and checks PID/start time before escalation, including children in another session. Whole-tree `terminate()` snapshots descendants before signaling too, so a member that escaped the child's process group (setsid/setpgid) is still signaled while its parent chain is intact. Keep turn-scoped pipe cleanup unchanged.
 - `process-table.ts` owns host process observations and their clock, and the shared turn-scoped descendant kill both process owners run; process-table failure must not be treated as successful cleanup.
-- Terminal descendants reparented before the first terminate/waitForExit observation cannot be identified by that snapshot, including a setsid child whose main process already exited. Pipe `terminate()` has the same limit: a descendant already adopted by init before its snapshot is unreachable, matching Raft's own process-group kill.
+- Terminal descendants reparented before the first terminate/waitForExit observation cannot be identified by that snapshot, including a setsid child whose main process already exited. Pipe `terminate()` has the same limit: a descendant already adopted by init before its snapshot is unreachable.
 
-- `launchd-job.ts` owns launchd user-job registration and native observations.
-- `launchd-process.ts` owns the owner side of external Agent stdio and
-  cleanup behind the process-tree interface: the launchd job, its relay
-  socket and directory sweep, and the bounded exit/force-stop checks.
 - `launchd-agent-runner.ts` is the internal runner embedded inside each Agent
   job in Computer, never another installed product; it spawns the Agent child,
   relays its stdio and runs terminal cleanup on the owner's signals.

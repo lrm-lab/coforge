@@ -108,7 +108,7 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   saved. Announced Task changes (`task.changed.v1`, `task-realtime.ts`) are
   applied to the rows with `apply` in one write per burst; only an unfinished Task the
   page does not list yet reads the list again.
-- The board's toolbar (`task-toolbar.tsx`) follows Linear: one "Filter"
+- The board's toolbar (`task-toolbar.tsx`) has one "Filter"
   menu (owner, Project, status submenus) with a removable chip per filter in
   use, and a board or list switch in the bar (Frank, 11-06: nothing else to
   set; a card's fields are fixed).
@@ -122,11 +122,11 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   passed down. Under task conversations a message's Task is the one made from it
   (`sourceMessageId`), which a message window reads by that message's sequence. They never read anything themselves, so a row adds no request.
   A body's task reference whose number the collection does not hold yet opens
-  the Task on a press, as Raft's does; it is the plain words only once a read
+  the Task on a press; it is the plain words only once a read
   by number has answered without it or its Task was deleted (`missing`).
 - Read [Tasks board rows, cards and hidden columns](../../../../../docs/design/tasks-board.md) when changing hidden board columns (`HiddenColumn`, `task-hidden-columns.ts`).
 - The Workspace board shows the channels' Tasks the viewer may read and their
-  own direct conversations' (task #596); another person's DM never shows. The
+  own direct conversations'; another person's DM never shows. The
   server scopes every Workspace-page read; realtime applies the Workspace
   channel's announcements and every one on the viewer's own channel.
   The page creates no Tasks: new ones start from a conversation's Tasks tab

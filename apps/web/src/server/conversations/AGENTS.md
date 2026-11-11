@@ -8,9 +8,9 @@ These rules apply to `src/server/conversations/`.
 - Message forwarding (`message-forwards.server.ts`, `forward-targets.server.ts`): the snapshot, copied files, per-destination sends and per-viewer access to the original are in [message-forwards.md](./message-forwards.md).
 - `channel-coordination.server.ts` owns current coordinator context and role changes, including the check that the acting person may update the channel: atomically store a system Message and old/new coordinator deliveries, even when muted or stopped. Repeated settings are a no-op. Channel reads show current roles, including threads and restart recovery; never rewrite stored messages or Agent memory.
 - `chat-sections.server.ts` owns personal Chat groups, their saved collapse state, and assigning a member's conversations, scoped to that user and Workspace.
-  Deleting a group keeps its conversations; moving into one unpins that row. Group and row ordering takes the member pin lock before conversation locks.
-- `PublicChannels` (`public-channels.server.ts`) owns Workspace authorization, default-channel enrollment, channel membership, canonical read/write and ordering, human read positions, persistent follow state, and mute/mention delivery eligibility. Every operation lives in one channel module, to which it hands its `PublicChannelPorts`: `channel-access` (who may reach a channel, the shared channel and member lookups; `ChannelActor` and `channelActorMemberWhere` are in `channel-actor`), `channel-preferences` (one member's mute, folding, pin, unread mark and close), `channel-threads` (thread follows and a person's thread read position), `channel-directory` (the channel lists), `channel-lifecycle` (create, info, roles, archive, hiding `#general`, delete), `channel-roster` (join, leave, add, remove, the roster, mention follow-up actions), `channel-mentionables` (@-completion), `channel-page` (channel page and updates) and `channel-send` (a channel send's transaction).
-  `channelAgentRecipients` (`channel-agent-recipients.server.ts`) is the one rule for which Agents a sent channel message wakes, whether a person or an Agent sent it; the Agent send path in the direct-conversation repository calls it too, and `enrollThreadReplyFollowers` (`channel-threads.server.ts`), the one rule for who a thread reply makes a follower. A Task and an action card keep their own rules. `#general` enrollment (`generalChannelForCreator`, `enrollGeneralChannel`, `joinGeneralChannel`) lives in `general-channel.server.ts`, a new channel (a person's or an Agent's) is written by `channel-creation.server.ts`, an Agent's own join by `agent-channel-join.server.ts`, the writes that change a channel or its roster (`softLeaveMember`, channel info, archive, adding members) by `channel-changes.server.ts`, and restoring a direct conversation's member rows by `direct-conversation-members.server.ts`. Each records its app notification event in the same transaction, and is the single write it always was while `appNotificationsPossible()` is false.
+  Deleting a group keeps its conversations; moving into one unpins that row. Group and row ordering follows the pin lock order in `server/AGENTS.md` ("Lock order").
+- `PublicChannels` (`public-channels.server.ts`) is the channel boundary: Workspace authorization, default-channel enrollment, membership, canonical read/write and ordering, human read positions, follow state, and mute/mention delivery eligibility. Every operation lives in one `channel-*` module beside it, to which it hands its `PublicChannelPorts` (`ChannelActor` and `channelActorMemberWhere` are in `channel-actor`).
+  `channelAgentRecipients` (`channel-agent-recipients.server.ts`) is the one rule for which Agents a sent channel message wakes, whether a person or an Agent sent it; the Agent send path in the direct-conversation repository calls it too, and `enrollThreadReplyFollowers` (`channel-threads.server.ts`), the one rule for who a thread reply makes a follower. A Task and an action card keep their own rules. `#general` enrollment (`generalChannelForCreator`, `enrollGeneralChannel`, `joinGeneralChannel`) lives in `general-channel.server.ts`; channel creation, an Agent's own join, the writes that change a channel or its roster (`softLeaveMember`, channel info, archive, adding members) and restoring a direct conversation's member rows live in `channel-creation`, `agent-channel-join`, `channel-changes` and `direct-conversation-members`. Each records its app notification event in the same transaction, and is the single write it always was while `appNotificationsPossible()` is false.
 - The active registered Workspace Memory Agent also receives channel Message observations, including messages addressed to another Agent. These ordinary observations are coalesced by the daemon (five updates or 30 seconds); personal mentions remain immediate. Only `message_read` consumes the full channel increment. Memory's own sends are excluded, and stopped Agents, departed members and a disabled memory profile are not observers.
 - `DirectConversations` (`direct-conversations.server.ts`) owns the viewer's direct conversations by id: opening one by who it is with (a live Agent they
   may message per `canDirectMessageAgent`, or a member), `authorize` (who may use a conversation id and who it is with: a DM with an Agent is its key's
@@ -38,8 +38,7 @@ These rules apply to `src/server/conversations/`.
   functions enforce the authenticated Agent identity before calling it. Which
   messages an Agent still owes attention to is stated once, in
   `server/db/repositories/agent-attention.repositories.server.ts`; its reads
-  use that module and do not restate the rule. It stays the facade; its operations live in sibling modules taking the facade's `DirectConversationPorts`: `agent-targets` (target resolution, reactions, mute and follow), `user-direct-reads` (a person's DM window, updates, read cursors), `agent-message-reads` (message pages, read-through, mention reports), `agent-recovery` (pending deliveries, recovery context), `agent-event-drain` (`message check`), `agent-target-freshness` (a send's freshness reads) and
-  `direct-message-sends` (the DM send transactions), each `*.repositories.server.ts`.
+  use that module and do not restate the rule. It stays the facade; its operations live in sibling `*.repositories.server.ts` modules taking the facade's `DirectConversationPorts`.
 - `agent-dm-limits.server.ts` owns the Agent-to-Agent anti-loop limits (chain of 20 messages with a 10-minute quiet reset, 60 sends per Agent per hour, the once-per-chain system notice); the numbers live in `AGENT_DM_LIMITS` only.
 - `server/db/repositories/agent-peer-direct.repositories.server.ts` owns Agent-to-Agent direct conversations:
   what `@name`, `@name~agent` and `@name~human` name (`AMBIGUOUS_TARGET` when a Workspace member and a
@@ -96,9 +95,7 @@ These rules apply to `src/server/conversations/`.
   user's pins with `member: { userId }`, never by `memberId` (a
   per-conversation membership). The order rules live in `src/lib/pin-order.ts`,
   which the Chat sidebar applies before the server answers.
-- A transaction that writes pins takes `lockMemberPins` before any
-  conversation lock, and several conversation locks in id order. The other
-  order deadlocks a menu pin against a drag.
+- A transaction that writes pins follows the pin lock order in `server/AGENTS.md` ("Lock order").
 
 ## `#general`
 
@@ -134,8 +131,8 @@ These rules apply to `src/server/conversations/`.
 - Human (Web UI) and Agent (CLI) channel operations take a
   `ChannelActor = { userId } | { agentId }` and share one authorization and
   write path. Do not add a parallel Agent-only path.
-- Leaving and removal are soft: they set `ConversationMember.leftAt`, filtered
-  by `ACTIVE_MEMBER_WHERE`, and never hard-delete a membership row on its own
+- Leaving and removal are soft: they set `ConversationMember.leftAt` (reads
+  filter it, below), and never hard-delete a membership row on its own
   (only deleting the whole channel does); `Message.sender`, `Task.owner` and
   `Task.creator` are `onDelete: Restrict`. Web UI channel leave and removal
   go through `softLeaveMember`; the Agent CLI's channel commands, an Agent

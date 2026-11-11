@@ -4,29 +4,8 @@ These rules apply to `src/features/computers/`.
 
 ## Module map
 
-- `computer-layout.tsx` — list/detail selection and empty state
-- `computer-connection.functions.ts` — minimal connection state for installation completion
-- `computer-release.functions.ts` — the latest released version and one release's catalog notes
-- `local-session-handoff.functions.ts` — owner-only local Session list/search/excerpt Server Functions for the handoff wizard
-- `local-session-handoff-dialog.tsx` — the Chat + menu's 接手本机会话 dialog (loaded lazily by the menu): own Computer select, then picker or form; owns the session search so "换一个会话" returns to the same list
-- `handoff-session-picker.tsx` — step 1: tool tabs with counts, search box, session list (state comes from the dialog)
-- `handoff-form.tsx` — step 2: selected session, Agent name, briefing preview, create and resend
-- `handoff-states.tsx` — the wizard's shared progress line and refusal alert (with Retry)
-- `use-handoff-create.ts` — creates the Agent, opens its DM, sends the briefing under one idempotency key; resend never recreates
-- `use-local-session-handoff.ts` — the search and excerpt queries behind the dialog (the one place to swap in fixture data)
-- `local-session-state.ts` — pure mapping of a daemon response to the picker/form state (an unfinished empty list is busy, never empty; sessions come out newest first)
-- `local-session-list.ts` — pure session list helpers: sort, per-tool split, default tab, recently-active check, path shortening, row summary
-- `handoff-briefing.ts` — pure: briefing text bounded to a direct message, default Agent name and its free-name stepping
-- `computer-detail.tsx` — one Computer's panel composition and owner actions
-- `computer-detail-view.ts` — detail panel view type and restart poll constants
-- `use-computer-detail-lifecycle.ts` — upgrade slots and restart polling
-- `computer-detail-title.tsx` — header band identity: name, hostname · OS, status, in-place rename
-- `computer-detail-stats.tsx` — Disk / Memory / Version / Image / added-by strip, upgrade slots
-- `computer-detail-agent-roster.tsx` — Agents on this Computer, a name / runtime / status table (select + control)
-- `computer-detail-workspace-inventory.tsx` — Agent workspace scan/delete
-- `computer-detail-date.tsx` — connected-at calendar day in the viewer's zone
-- `computer-detail-header.tsx` — detail header band: identity, desktop, restart
-- `computer-detail-rows.tsx` — shared DetailGroup
+- The handoff wizard (`local-session-handoff-dialog.tsx`, `handoff-session-picker.tsx`, `handoff-form.tsx`, `handoff-states.tsx`, `use-handoff-create.ts`, `use-local-session-handoff.ts`, `local-session-state.ts`, `local-session-list.ts`, `handoff-briefing.ts`): the dialog owns the session search, so "换一个会话" returns to the same list; creating the Agent, opening its DM and sending the briefing share one idempotency key and a resend never recreates; an unfinished empty list is busy, never empty, and sessions come out newest first; `use-local-session-handoff.ts` is the one place to swap in fixture data.
+- One Computer's detail panel is `computer-detail*.tsx` with `use-computer-detail-lifecycle.ts` (upgrade slots, restart polling); `computer-layout.tsx` holds list/detail selection.
 - `runtime-reset-credit-action.tsx` — the runtime popover's "Use reset · N" button and its confirm dialog (outside the popover, like the sign-out dialog); takes the count and an `onConsume(idempotencyKey)` as props
 - `reset-credit-attempt.ts` — the reset attempt's idempotency key per Computer + provider + account label (`sessionStorage`, memory fallback); expires 10 minutes after it was made, cleared only on a settled outcome, kept after `unknown`, a refusal or a thrown failure. The dialog treats `already_redeemed` like `reset` (toast, close); any other settled answer shows its message and turns Confirm off (`ConfirmDialog`'s `confirmDisabled`)
 - `poll-for-answer.ts` — the shared wait for a started request: asks until the answer is not pending, asks again after a read that failed, and ends as the caller's give-up value at the deadline or when the caller's signal aborts (unmount). The reset credit (`reset-credit-poll.ts`), the Agent form's Command Code efforts (`features/agents/use-command-code-efforts.ts`, with `command-code-effort.functions.ts`: from 250 ms, doubling to 1.5 s, 45 s deadline, ends with no efforts), the Agent panel's Stop current turn (`features/agents/agent-turn-interrupt-poll.ts`), the runtime catalog refresh (below), the Agent context view (`features/agents/agent-context-view-poll.ts`, with `agent-context-view.functions.ts`: from 250 ms, doubling to 1 s, 30 s deadline, ends as `timeout`; no UI calls it yet), every Pi chat command (`features/pi-chat/pi-chat-poll.ts`, run by `use-execute-pi-chat.ts`: from 50 ms, doubling to 500 ms, 25 s deadline inside the reply's 30 s lifetime, ends as the unavailable error) and the file upload panel (`computer-file-upload-poll.ts`: from 250 ms, doubling to 1.5 s, a 930 s deadline past the server's store and pull limits, ends as a `timeout` failure) all poll through it; a Server Function that waits on a Computer longer than about eight seconds must be split into start and read the same way
@@ -49,8 +28,7 @@ These rules apply to `src/features/computers/`.
   server announces each stored report on every viewer's `runtimeAuthChannel`, and the Computer
   page re-reads its routes (`useRuntimeAuthStatusRefresh`); a runtime that becomes signed in
   scans its usage once. The dialogs do not invalidate: their result arrives before that report.
-- A runtime's popover opens on a press, with a close button and Escape, as on
-  Raft, on the Computer page and the Agent profile alike (`runtime-usage.tsx`).
+- A runtime's popover opens on a press, with a close button and Escape, on the Computer page and the Agent profile alike (`runtime-usage.tsx`).
   A quota reads as the share left.
 - The reset credit button (Codex only) sits immediately left of Sign Out in the `accountAction`
   cluster of `computer-runtimes.tsx`. `RuntimeUsage` hands `accountAction` the usage snapshot it
@@ -102,7 +80,7 @@ These rules apply to `src/features/computers/`.
   the release on offer or being installed, in the UI's language with the other as fallback. No
   notes, or a failed read, means no link and never an error; it never holds up Upgrade.
 - A runtime chip is its mark, its name and one round status dot (`runtime-chip.tsx`). The dot
-  and the popover badge read one table (`runtime-usage-status.ts`, task #209): green for signed
+  and the popover badge read one table (`runtime-usage-status.ts`): green for signed
   in or usage OK (an old read too: the popover shows its age); orange for "Not signed in",
   "Update Computer to sign in or out here" and "Limit reached". Red is kept for a state retrying
   cannot fix; none is. A failed usage read says nothing (Frank): no dot, no badge, no usage block,
@@ -111,8 +89,8 @@ These rules apply to `src/features/computers/`.
   to the Computer's owner and Workspace owners and admins (`runtimeAuthView`), which the popover
   says; everyone else receives the state alone. With no plan and no account the account row has
   no heading.
-- Every login state has an outcome in the popover, never a blank (task #208), and the popover
-  never says a state could not be read (Frank, task #209): a failed login check (`unknown`) reads
+- Every login state has an outcome in the popover, never a blank, and the popover
+  never says a state could not be read (Frank): a failed login check (`unknown`) reads
   as signed in while usage still reads (reading usage needs a signed-in account), else as signed
   out (`shownAccount`). Signed out and unreported (a Computer too old to send one, said only to
   those who may sign in) take the orange band, the only states the user must act on. Sign In and
@@ -120,9 +98,9 @@ These rules apply to `src/features/computers/`.
   Refresh rereads both login and usage.
 - Sign in and Sign out sit in a Claude Code, Codex or Kiro runtime's popover for the
   Computer's owner and Workspace owners and admins, the server's own rule
-  (`computer-runtimes.tsx`). The account is the popover's last band, as on Raft:
+  (`computer-runtimes.tsx`). The account is the popover's last band:
   the login state beside one button of the same weight signed in or out (Frank,
-  2026-10-27, task #196). It and the Public switch stay in view while the bands
+  2026-10-27). It and the Public switch stay in view while the bands
   above them scroll, so a phone never cuts an action off
   (`test/e2e-runtime-account-band.e2e.ts`). The dialogs subscribe to the viewer's
   `runtimeauth:user:<id>` channel and then read the login or logout once, and

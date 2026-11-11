@@ -19,16 +19,7 @@ These rules apply to `src/features/agents/`.
   changes, so a list row reads its own Agent rather than the whole list. The sidebar reads
   `useVisibleAgentDirectory` (who, never status); a DM row's face reads `useVisibleAgentDisplay`.
   `useRefreshAgentDirectory` re-reads that store after a committed write; a failed read preserves the snapshot and rejects to the caller without replacing the Workspace route.
-- The Agents beyond the viewer's roster (`loadExtraAgents`, scoped like the Members directory,
-  without the viewer's own) are one query in the provider; each is a named `isExtra` entry of
-  `useAgentStatuses`' list, so the status publications on the shared channel and on a private
-  Agent's own channel update it in place, and a private one gets its per-Agent subscriptions. Only
-  busy extras and held ones get a display: those shown busy or lapsed (`heldDisplayAgentIds`, so a
-  stale busy display clears) and those a mounted view reads (`useWatchAgentDisplay`; an idle extra
-  has none otherwise). The provider's `refresh` reads the roster and these together, the extras
-  failing soft, so the display-expiry timer, a resubscribe gap and directory and visibility events
-  cover them. `useLiveAgents` leaves them out; the chat list header reads the busy ones through
-  `useWorkspaceBusyAgents`. Never subscribe to a private Agent's channel twice (not ref-counted).
+- The Agents beyond the viewer's roster (`loadExtraAgents`, scoped like the Members directory, without the viewer's own) are one query in the provider, each a named `isExtra` entry of `useAgentStatuses`' list that status publications update in place (a private one also gets its per-Agent subscriptions). Only busy or held extras, and those a mounted view reads (`useWatchAgentDisplay`), get a display, so a stale busy display clears (`heldDisplayAgentIds`). The provider's `refresh` reads the roster and the extras together, the extras failing soft. `useLiveAgents` leaves them out; the chat list header reads the busy ones through `useWorkspaceBusyAgents`. Never subscribe to a private Agent's channel twice (not ref-counted).
 - The model and description line beside an Agent's name in chat (`agent-models.ts`; the model
   behind Settings → Show agent model) are one query per Workspace over every Agent the viewer may
   see (`listVisibleAgentModels`, scoped by `visibleAgentWhere`), wider than `listAgents`. A row
@@ -36,7 +27,7 @@ These rules apply to `src/features/agents/`.
   and reconnect, when an unknown Agent newer than the list appears, after a runtime or profile
   save, and on a visibility or directory change.
 - `agent-status-realtime.ts` consumes backend display snapshots and status events, accepting newer revisions with no reducer; at display expiry it refreshes and retries, keeping the last snapshot — an unavailable initial one is unknown, not offline.
-  `agent-control-realtime.ts` decodes `agent.control.v1` into the per-Agent control-phase store `agent-runtime-controls.ts` reads for pending labels and disabled controls while an operation runs (task #584); a phase-only event never erases a same-request error, and pending entries lapse after `AGENT_CONTROL_PENDING_TTL_MS`.
+  `agent-control-realtime.ts` decodes `agent.control.v1` into the per-Agent control-phase store `agent-runtime-controls.ts` reads for pending labels and disabled controls while an operation runs; a phase-only event never erases a same-request error, and pending entries lapse after `AGENT_CONTROL_PENDING_TTL_MS`.
 - Activity lives in the TanStack Query cache (`agent-activity-queries.ts`).
   Publications patch it with `setQueryData`; every (re)subscribe invalidates
   it; it refetches when the tab becomes visible or the network returns.
@@ -127,7 +118,7 @@ These rules apply to `src/features/agents/`.
   in Settings → Account.
 - Computer prerequisites appear only after the user requests Agent creation.
   Runtime management stays in the profile panel. `new-agent-dialog.tsx` (the + menu and Members) opens on `cloud-agent-form.tsx`, which asks for a username and an optional display name as the local form does, waits for cloud readiness and opens the created private Agent's DM; a link swaps in the local form, which also ends in the DM; it re-reads the Agent roster, picker directory, and DM list after their writes instead of relying on realtime signals. Creation permissions remain server-owned.
-- Who sees what on an Agent, as Raft does: Message (profile header, Members
+- Who sees what on an Agent: Message (profile header, Members
   card, DM picker, search) follows the server's `canMessage` (any member a
   public Agent, only its creator a private one); the Activity, Chat, Reminders and Workspace tabs
   follow `canManageAgent` (its creator or a Workspace owner/admin; an app's bot shows Profile and
@@ -170,7 +161,7 @@ These rules apply to `src/features/agents/`.
   header on every tab (`agent-error-banner.tsx`), with the Activity tab's
   diagnostics copy and a way to that tab
   for whoever gets that tab. Nothing else in the panel repeats it.
-- `profile-panel/agent-profile-status.tsx` owns ordinary errors and the localized `runtime_stalled` warning, the panel's only Stop Current Turn entry (text only), with its pending state and response feedback. It starts with `startAgentTurnInterrupt` and polls `readAgentTurnInterrupt` (`agent-turn-interrupt-poll.ts`: from 250 ms, up to every 1 s, 30 s deadline, no outcome by then ends as `failed`, which offers Retry). The poll is never cancelled: the Daemon clears the stalled display before it reports, which unmounts the panel, so the success toast is shown whether or not it is still mounted and only the panel's own failure state is guarded.
+- `profile-panel/agent-profile-status.tsx` owns ordinary errors and the localized `runtime_stalled` warning, the panel's only Stop Current Turn entry (text only), with its pending state and response feedback. It starts with `startAgentTurnInterrupt` and polls `readAgentTurnInterrupt` (`agent-turn-interrupt-poll.ts`; no outcome by its deadline ends as `failed`, which offers Retry). The poll is never cancelled: the Daemon clears the stalled display before it reports, which unmounts the panel, so the success toast is shown whether or not it is still mounted and only the panel's own failure state is guarded.
 - `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
   badge) for every message-history surface. Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's mascot picker, opened by clicking
@@ -182,7 +173,7 @@ These rules apply to `src/features/agents/`.
   `.server.ts` file so browser validators can import it, and `normalizeAgentVisibility`: read a
   stored value through it, since anything but exactly `public` is private.
 - The environment editor edits only user-declared Agent environment overrides; a name the SDK's shared rule reserves is refused here, and a stored one is skipped and reported by the daemon.
-- The Apps tab (`agent-apps-tab.tsx`, after Raft's web UI) shows every viewer of a live
+- The Apps tab (`agent-apps-tab.tsx`) shows every viewer of a live
   Agent its pending requests and active grants; Approve, Deny, Grant access and Revoke only when
   the read's `canManage` says so (Workspace owner/admin or the Agent's creator). Revoke acts at
   once, with no confirmation, and every failure stays inline at the top of the tab.

@@ -50,7 +50,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - `AgentControl` runs Start, Stop, Restart, Reset Session, and Full
   Reset as fixed command chains with receipt-driven state transitions and
   request/epoch fences. Operation progress is not a new Agent status and not a
-  durable command mailbox. `agent-control.server.ts` is the `AgentControl` facade and keeps its public methods; the jobs behind it live beside it: `agent-control-access` (who may control an Agent), `-operations` (`begin`, the compare-and-swap write of the current operation), `-publisher` (the Start, Stop and reset commands sent to the Daemon), `-driver` (`advance` and `drive`), `-receiver` (`authorizeLaunch`, `result` and the Daemon's `accepted` acknowledgement, task #584 — its request-scoped signal key is what `execute()`'s bounded wait races, and the signal's TTL'd remembered marker covers an acknowledgement that lands before any waiter registers), `-batch` (`stopMany` and `startMany`), `-accepted-capability` (the Redis lease of the Daemon ready capability `agent-control-accepted:v1` that decides whether `execute()` waits at all), `-events` (`agent.control.v1` publication on the Agent status channels), over the shared state and fences in `agent-control-types`. Add logic to the module that owns the job; the facade is under the 20,000-byte size ratchet.
+  durable command mailbox. `agent-control.server.ts` is the `AgentControl` facade and keeps its public methods; the jobs behind it live in `agent-control-*` modules over the shared state and fences in `agent-control-types`. Two of them carry rules: `-receiver` (`authorizeLaunch`, `result` and the Daemon's `accepted` acknowledgement) has a request-scoped signal key that `execute()`'s bounded wait races, and the signal's TTL'd remembered marker covers an acknowledgement that lands before any waiter registers; `-accepted-capability` is the Redis lease of the Daemon ready capability `agent-control-accepted:v1` that decides whether `execute()` waits at all. Add logic to the module that owns the job; the facade is under the 20,000-byte size ratchet.
 - Each operation mints one `launchId` when it enters `starting` and supplies it
   in the Start intent. `authorizeLaunch` is read-only: it verifies that id and
   never writes.
@@ -73,7 +73,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   throwing; `executeAgentControl` throws only on `failed`. `publishStop()`
   throws on supersede because its callers need a confirmed stop.
 - Control clears the Session binding at the local chain step.
-- `agent-turn-interrupt.server.ts` (Stop current turn) never holds a request for the Daemon (up to ~15 s; production cuts idle requests at ~10 s): `start` returns a request id or a refusal, `read` returns `pending` or the outcome, both re-checking access, the result keyed by Workspace and Agent.
+- `agent-turn-interrupt.server.ts` (Stop current turn) never holds a request for the Daemon (up to ~15 s): `start` returns a request id or a refusal, `read` returns `pending` or the outcome, both re-checking access, the result keyed by Workspace and Agent.
 
 ## Send freshness
 
@@ -129,7 +129,7 @@ See [sessions.md](./sessions.md).
 - Publish Activity and `agent:display` through `agentActivityChannelFor` and
   `agentStatusChannelFor`; never choose the shared or per-Agent channel inline.
   Activity in a private channel goes only to its people's own channels
-  (`cachedActivityAudience`), and its `agent:display` keeps no words (task #302).
+  (`cachedActivityAudience`), and its `agent:display` keeps no words.
 - Computer lifecycle rows are the only Activity the server writes itself
   (`computer-lifecycle-activity.server.ts`). A daemon's return row follows
   the server's upgrade and restart records, then the previous version, never

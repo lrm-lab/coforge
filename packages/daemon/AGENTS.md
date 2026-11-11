@@ -52,16 +52,8 @@ Directories with their own `AGENTS.md` add rules for that directory only.
   reads it (`consumeOnRead`) or after 15 minutes. Never write it to disk, a log or Activity, and keep
   `cfa_secret_…` in the redaction rules of Activity text and failure details.
 
-## Naming and abstraction
+## Status and Activity contracts
 
-- Use domain names consistently: `DaemonRuntime`, `AgentProcessManager`,
-  `RuntimeConfig`, `AgentStateMachine`, and `AgentActivity`. Avoid arbitrary
-  synonyms and generic `Helper`, `Utils`, `Service`, or `Resolver` names.
-- Upper layers use intent-level methods such as `configure`, `startAgent`, and
-  `recordActivity`. Lower layers use concrete operations such as `spawn`,
-  `writeFrame`, `readFrame`, `flush`, and `reconnect`.
-- Do not combine responsibilities in names or methods such as
-  `startWorkerAndParseClaudeOutput` or `reserveCapacityAndWriteSocketFrame`.
 - Keep status and Activity message contracts small, versioned, and normalized
   before they cross the cloud protocol boundary. Activity is best effort and
   may be lost or reordered; preserve provider error/warning text except for
@@ -69,8 +61,6 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 
 ## Tests and workflow
 
-- Establish the module's public seam before implementation and test it without
-  the CLI or a real provider process where possible.
 - Add regression coverage for state transitions, best-effort Activity
   isolation, status reconnect/replay, IPC request validation, and provider
   adapter close/failure paths.
@@ -78,59 +68,35 @@ Directories with their own `AGENTS.md` add rules for that directory only.
   LogTape's scoped configuration, so a test that times out cannot tear down or pollute the
   next test's capture. Never call `configure`, `reset`, or `dispose` in a test: they throw
   while any capture is still running.
-- Use Bun and the repository's `mise` tasks. Do not introduce Node runtime APIs
-  or a second process framework.
-- Run `mise run test:daemon`, `mise run check:daemon`, and
-  `mise run build:daemon` before review.
-- Read official provider protocol documentation before changing an adapter;
-  undocumented provider internals are not a stable contract.
 
 ## Module map
 
-| Path                                     | Single responsibility                                                                                                                                      |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/daemon-startup-options.ts`          | Private daemon invocation options and default state directory                                                                                              |
-| `index.ts`                               | Process entrypoint and package exports; dependency assembly only                                                                                           |
-| `src/daemon-host/`                       | Login-session startup through launchd, systemd user, and Windows tasks                                                                                     |
-| `src/supervisor/`                        | Machine Coordinator: Workspace binding registry and per-Workspace process lifecycle                                                                        |
-| `src/daemon-runtime/`                    | One Workspace child's runtime: cloud use cases, attention, delivery, mention tracking, thread-read indexing, and bounded Agent context queries             |
-| `src/connection/`                        | The Workspace's WSS connection, ordered replay, reconnect, and Agent HTTPS transport                                                                       |
-| `src/pi-chat/`                           | Independent native Pi worker processes and bounded command/event relay on the Workspace connection                                                         |
-| `src/agent-runtime/`                     | Agent lifecycle state machine, control, native Session state, and Activity                                                                                 |
-| `src/code-agent/`                        | Built-in CoForge provider, runtime inventory, instructions and vendor host composition; vendor adapters, contracts and execution live in `packages/anvil/` |
-| `src/code-agent/kiro/host.ts`            | Environment, client identity, process and usage capabilities injected into Kiro                                                                            |
-| `src/code-agent/kiro/auth-host.ts`       | Shared process-tree auth, environment and account masking capabilities injected into Kiro                                                                  |
-| `src/code-agent/kiro/usage-host.ts`      | Read-only native Kiro authentication and usage requests; only usage JSON crosses into the adapter                                                          |
-| `src/code-agent/pi/`                     | Built-in CoForge provider/catalog/metadata and Pi host composition; native SDK Session is shared through Anvil                                             |
-| `src/code-agent/antigravity/acp-host.ts` | Client identity, environment (incl. SSH-marker stripping), process, version and usage capabilities for Antigravity's `agy acp` session                     |
-| `src/code-agent/dsh/`                    | DSH environment, private launch files and process-scoped catalog discovery; native ACP and plugin content live in Anvil                                    |
-| `src/code-agent/command-code/`           | Command Code host capabilities for its native ACP session                                                                                                  |
-| `src/code-agent/devin/`                  | Devin host environment, process, version, auth-login and `thought_level` effort-sweep capabilities for its native ACP session                              |
-| `src/code-agent/droid/`                  | Droid host environment, process, version, the PTY/doctor auth capabilities, and the wide-PTY `/limits` usage spawn for its native ACP session              |
-| `src/code-agent/grok/host.ts`            | Host environment, client identity, reply intent and account-label policies for Grok                                                                        |
-| `src/code-agent/opencode/`               | OpenCode ACP host environment and per-model effort reads                                                                                                   |
-| `src/code-agent/process-host.ts`         | Platform process-tree spawning for Anvil execution                                                                                                         |
-| `src/code-agent/catalog-host.ts`         | Environment and process capabilities for Anvil JSONL catalog execution                                                                                     |
-| `src/code-agent/codex/host.ts`           | Codex environment, client identity, masking, file I/O and native CLI process capabilities                                                                  |
-| `src/code-agent/claude-code/`            | Claude environment, prompt/process I/O, executable discovery and read-only secured file capabilities                                                       |
-| `src/code-agent/version-probe.ts`        | Bounded version subprocess reads with the host environment for Anvil gates                                                                                 |
-| `src/local-session/`                     | Bounded, read-only discovery and briefing extraction for local Claude Code and Codex sessions                                                              |
-| `src/agent-migration/`                   | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit                                                            |
-| `src/agent-app-inbox/`                   | Typed Agent App items (incl. the transient client-secret notice) and the Agent's sealed source identities, apart from chat Message attention               |
-| `src/agent-reminder/`                    | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                                                                                   |
-| `src/system-cleaner/`                    | Per-Agent MEMORY.md and disk measurements, and the hints they present at Working→Idle                                                                      |
-| `src/agent-app-config/`                  | Agent App config sync: snapshot requests per connection, routing each config to its App runtime                                                            |
-| `src/credentials/`                       | Daemon credential store and Agent API keys                                                                                                                 |
-| `src/persistence/`                       | Durable local daemon state and configuration validation                                                                                                    |
-| `src/platform/`                          | OS primitives: process trees, launchd jobs, Job Objects, locks, log files, OS release                                                                      |
-| `src/platform/oom-score.ts`              | Best-effort Linux OOM score adjustment for Agent runtime children                                                                                          |
-| `src/local-rpc.ts`                       | Computer↔Daemon local socket server, framing, validation, and dispatch                                                                                     |
-| `src/agent-proxy.ts`                     | Local Agent capability boundary and approved HTTPS forwarding                                                                                              |
-| `src/agent-proxy-domain-failures.ts`     | The domain errors the Agent proxy answers                                                                                                                  |
-| `src/agent-proxy-*.ts`                   | The Agent proxy's route groups, runtimes, request parsers, delivery and failure mapping, split out of `src/agent-proxy.ts`                                 |
-| `src/agent-context-view/`                | Agent context view: provider session locators, restore and redaction, and the index store behind the context view                                          |
-| `src/computer-files/`                    | Computer file pull for Agent workspaces                                                                                                                    |
-| `src/openviking-read-proxy.ts`           | Daemon-local OpenViking read proxy: admits Agent `ov_*` reads and forwards the frozen command envelope to the injected web URL                             |
+| Path                                        | Single responsibility                                                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/daemon-startup-options.ts`, `index.ts` | Private daemon invocation options, default state directory; process entrypoint and package exports (dependency assembly only)                                                  |
+| `src/daemon-host/`                          | Login-session startup through launchd, systemd user, and Windows tasks                                                                                                         |
+| `src/supervisor/`                           | Machine Coordinator: Workspace binding registry and per-Workspace process lifecycle                                                                                            |
+| `src/daemon-runtime/`                       | One Workspace child's runtime: cloud use cases, attention, delivery, mention tracking, thread-read indexing, bounded Agent context queries                                     |
+| `src/connection/`                           | The Workspace's WSS connection, ordered replay, reconnect, and Agent HTTPS transport                                                                                           |
+| `src/pi-chat/`                              | Independent native Pi worker processes and bounded command/event relay on the Workspace connection                                                                             |
+| `src/agent-runtime/`                        | Agent lifecycle state machine, control, native Session state, and Activity                                                                                                     |
+| `src/code-agent/`                           | Built-in CoForge provider, runtime inventory, instructions and per-vendor host composition (`<provider>/`); vendor adapters, contracts and execution live in `packages/anvil/` |
+| `src/local-session/`                        | Bounded, read-only discovery and briefing extraction for local Claude Code and Codex sessions                                                                                  |
+| `src/agent-migration/`                      | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit                                                                                |
+| `src/agent-app-inbox/`                      | Typed Agent App items (incl. the transient client-secret notice) and the Agent's sealed source identities, apart from chat Message attention                                   |
+| `src/agent-app-config/`                     | Agent App config sync: snapshot requests per connection, routing each config to its App runtime                                                                                |
+| `src/agent-reminder/`                       | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                                                                                                       |
+| `src/system-cleaner/`                       | Per-Agent MEMORY.md and disk measurements, and the hints they present at Working→Idle                                                                                          |
+| `src/agent-context-view/`                   | Agent context view: provider session locators, restore, redaction, and the index store                                                                                         |
+| `src/computer-files/`                       | Computer file pull for Agent workspaces                                                                                                                                        |
+| `src/credentials/`                          | Daemon credential store and Agent API keys                                                                                                                                     |
+| `src/persistence/`                          | Durable local daemon state and configuration validation                                                                                                                        |
+| `src/platform/`                             | OS primitives: process trees, launchd jobs, Job Objects, locks, log files, OS release, best-effort Linux OOM score adjustment                                                  |
+| `src/local-rpc.ts`                          | Computer↔Daemon local socket server, framing, validation, and dispatch                                                                                                         |
+| `src/agent-proxy*.ts`                       | Local Agent capability boundary: approved HTTPS forwarding, route groups, runtimes, and the domain errors it answers                                                           |
+| `src/openviking-read-proxy.ts`              | Daemon-local OpenViking read proxy: admits Agent `ov_*` reads and forwards the frozen command envelope to the injected web URL                                                 |
+
+Host notes for `src/code-agent/<provider>/`: each injects environment, client identity, process, version, auth and usage capabilities into Anvil's native sessions. Kiro's `usage-host.ts` is read-only: only usage JSON crosses into the adapter. Antigravity's `acp-host.ts` strips SSH markers. Droid spawns a wide PTY for `/limits`. Devin runs the `thought_level` effort sweep. `pi/` holds the built-in provider, catalog and metadata and shares the native SDK Session through Anvil.
 
 Do not create a new directory or rename a module solely for aesthetics. First
 state the responsibility that needs the boundary, then update this map in the

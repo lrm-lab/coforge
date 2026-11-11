@@ -29,51 +29,24 @@ Keep `src` organized by responsibility. New code belongs in the owning module;
 do not grow `cli.ts` or `setup/` into an application god module. Paths are
 relative to `src/`.
 
-| Path                                       | Single responsibility                                                                               |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `main.ts`                                  | Binary entrypoint: dispatches the internal modes or the Computer CLI                                |
-| `cli.ts`                                   | Commander command tree and thin command actions                                                     |
-| `cli/`                                     | Command wiring and output: login, setup, update, daemon, restart; upgrade wording                   |
-| `errors.ts`                                | Stable user-facing CLI error stages                                                                 |
-| `terminal-output.ts`                       | Terminal-safe text                                                                                  |
-| `logind-session-risk.ts`                   | Read-only Linux logind session-risk detection and startup guidance                                  |
-| `setup/`                                   | Computer setup business flow                                                                        |
-| `workspace/`                               | Direct Workspace lookup and slug validation for setup intent                                        |
-| `registration/`                            | Computer registration idempotency                                                                   |
-| `cloud-rpc-transport.ts`                   | User-authenticated HTTPS RPC for `workspace:get` and `computer:register`                            |
-| `login.ts`, `oauth-device-client.ts`       | Device-code authorization                                                                           |
-| `logout.ts`                                | Local credential logout while retaining Workspace registrations                                     |
-| `credential-store.ts`                      | File-backed User credentials                                                                        |
-| `machine-id.ts`, `platform.ts`             | Machine identity and platform metadata                                                              |
-| `paths.ts`                                 | Platform-native state and credential paths                                                          |
-| `local-config.ts`                          | Reading and validating the persisted profile                                                        |
-| `release-channel.ts`                       | Compiled official feed/server mapping                                                               |
-| `release/channel-state.ts`                 | Durable local release-channel selector and fail-closed parser                                       |
-| `cli/release-channel-command.ts`           | Channel CLI registration and persisted selector command                                             |
-| `cli/update-command-registration.ts`       | Install and upgrade CLI option registration and channel propagation                                 |
-| `detach/`                                  | `detach`: the machine leaves a Workspace, server-confirmed, keeping the registration otherwise      |
-| `network-error.ts`                         | Transient network-error classification and the proxy hint shared by polling callers                 |
-| `daemon-client/`                           | Daemon lifecycle requests (`start`, `stop`, `restart`) through the supervisor                       |
-| `daemon-service/`                          | The daemon host's inputs for this machine, shared by `cli.ts` and `__lifecycle service-definition`  |
-| `host/`                                    | Cluster runtime: register, heartbeat, claim Swarm service jobs, and report them                     |
-| `host/run-host.ts`, `host/host-cloud.ts`   | Host loop and its HTTPS client: heartbeat, claim and report container jobs                          |
-| `host/docker-containers.ts`, `host/container-binding*.ts` | Swarm service and volume naming; the Daemon binding written on a container's volume |
-| `status/`                                  | Read-only `status` report through per-platform ports                                                |
-| `doctor/`                                  | Read-only diagnostic checks built from the status report                                            |
-| `runners/`                                 | Operator-only Agent runner listing and scoped stop through local Daemon RPC                         |
-| `logging/`                                 | Computer LogTape configuration and the `logs` follower                                              |
-| `updater.ts`                               | Reads the installed version; zod contract schemas and launcher text shared with the installer       |
-| `release/upgrade-runner.ts`                | Runs the installer for one upgrade, or `repair` on the terminal                                     |
-| `release/coordinator-service-registrar.ts` | Runs `coforge-installer start` to register and start the service                                    |
-| `release/detached-upgrade.ts`              | Runs an upgrade as a job outside this process and watches its receipt                               |
-| `release/remote-upgrade.ts`                | Runs one server-triggered upgrade, records redacted launch output, then removes its finished OS job |
-| `release/upgrade-receipt.ts`               | Writes the fallback failed receipt; `UpgradeFailedError` (the receipt read is the Daemon's)         |
-| `release/upgrade-operation.ts`             | One upgrade operation record, built from CLI or `__remote-upgrade` arguments                        |
-| `release/installer-contract.ts`            | Shapes shared only with `coforge-installer` (release manifest, lifecycle)                           |
-| `release/supervisor-status.ts`             | What the supervisor runs: live snapshot, or persisted bindings when stopped                         |
-| `release/lifecycle-command.ts`             | Hidden `__lifecycle` command: the installer's read-only JSON surface                                |
-| `release/installer-launch.ts`              | Fetches, verifies, and caches the `coforge-installer` binary for this machine                       |
-| `version.ts`                               | Build version                                                                                       |
+| Path                                                               | Boundary                                                                                           |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `main.ts`, `cli.ts`, `cli/`                                        | Binary entrypoint, the Commander command tree and its command wiring and output                     |
+| `errors.ts`, `terminal-output.ts`, `logind-session-risk.ts`        | Stable CLI error stages, terminal-safe text, read-only Linux logind session-risk guidance           |
+| `setup/`, `workspace/`, `registration/`, `cloud-rpc-transport.ts`  | Setup flow, direct Workspace lookup, registration idempotency, User-authenticated HTTPS RPC (`workspace:get`, `computer:register`) |
+| `login.ts`, `oauth-device-client.ts`, `logout.ts`, `credential-store.ts` | Device-code authorization, local logout that keeps Workspace registrations, file-backed User credentials |
+| `machine-id.ts`, `platform.ts`, `paths.ts`, `local-config.ts`      | Machine identity, platform metadata, platform-native paths, the validated persisted profile          |
+| `release-channel.ts`, `release/channel-state.ts`, `cli/release-channel-command.ts`, `cli/update-command-registration.ts` | Compiled feed/server mapping, the durable fail-closed channel selector, and their CLI registration |
+| `daemon-client/`, `daemon-service/`                                | Daemon lifecycle requests through the supervisor; the daemon host's inputs for this machine (shared with `__lifecycle service-definition`) |
+| `host/`                                                            | Cluster runtime: register, heartbeat, claim Swarm service jobs, report them (files below)           |
+| `status/`, `doctor/`, `runners/`, `logging/`                       | Read-only `status` report, diagnostics built from it, operator-only runner listing and stop, LogTape setup and `logs` |
+| `detach/`, `network-error.ts`                                      | `detach` (server-confirmed, otherwise keeps the registration); transient network-error classification and the proxy hint |
+| `updater.ts`, `version.ts`                                         | Reads the installed version; zod contract schemas and launcher text shared with the installer; build version |
+| `release/upgrade-runner.ts`, `release/remote-upgrade.ts`, `release/detached-upgrade.ts`, `release/upgrade-operation.ts` | Run the installer for one upgrade or `repair`: from the CLI, server-triggered (redacted launch output, then the finished OS job removed), or as a detached job whose receipt is watched |
+| `release/upgrade-receipt.ts`, `release/installer-contract.ts`, `release/supervisor-status.ts`, `release/lifecycle-command.ts` | Fallback failed receipt and `UpgradeFailedError`; shapes shared only with `coforge-installer`; what the supervisor runs; the hidden `__lifecycle` command |
+| `release/coordinator-service-registrar.ts`, `release/installer-launch.ts`, `release/installation-source.ts` | `coforge-installer start`; fetching, verifying and caching the installer binary; the embedded release installer scripts |
+
+`host/run-host.ts`, `host/host-cloud.ts`, `host/docker-containers.ts` and `host/container-binding*.ts` hold the host loop and its HTTPS client, Swarm service and volume naming, and the Daemon binding written on a container's volume.
 
 `coforge-computer __lifecycle protocol|status|service-definition` is how the installer reads a
 Computer (`service-definition`: the service file it registers, rendered by the daemon host). It prints exactly one JSON object on stdout (the `Lifecycle*` shapes), exits
@@ -95,8 +68,7 @@ The map describes ownership, not permission to create empty layers. Keep an
 existing file in place when it still has one clear responsibility; move code
 only when a real boundary is needed, and update this map in the same change.
 
-`src/updater.ts` reads the installed version (`active.json`) and owns the zod schemas and
-launcher text that `crates/installer` writes. Installing, verifying, and activating a version
+Installing, verifying, and activating a version
 belong to `coforge-installer` (`crates/installer/AGENTS.md`), which also fetches Pi's
 `photon_rs_bg.wasm` (`docs/release/local-distribution.md`). The Computer never writes a version
 directory.
@@ -114,9 +86,6 @@ installer, read receipts, or touch the product's own upgrade transaction.
 The install and upgrade transaction is serialized by the machine
 mutation lock; do not narrow it to activation or reuse the Supervisor lifetime
 mutex as the upgrade lock.
-
-`src/local-config.ts` owns reading and validating the persisted profile against
-that environment; login, setup, and lifecycle adapters share that public seam.
 
 ### Layer rules
 
@@ -140,8 +109,6 @@ that environment; login, setup, and lifecycle adapters share that public seam.
   discovers external providers from its effective PATH and reports a complete
   snapshot after startup and reconnect, so installing a provider never requires
   Computer re-registration.
-- `daemon-client/` contains the Computer-side Daemon lifecycle requests; it
-  does not implement Daemon supervision or cloud WSS behavior.
 - `status/` only reads through its injected ports; it never starts, stops, or
   configures anything. A running Workspace's `cloud=` comes from its own
   handshake, asked with a bounded wait; its error is remote text and is
@@ -170,9 +137,6 @@ client, or command-specific copy of an existing domain operation.
   Computer dialog renders with the current Workspace already filled in, so the
   user copies it rather than recalling it. `COFORGE_SETUP_INTENT` remains as the
   bypass for e2e and automation. A missing or malformed value fails stably.
-- Computer has no long-lived cloud WebSocket. It communicates with Daemon over
-  local RPC; each Daemon-supervised daemon owns its own cloud WSS
-  connection and uses the versioned CoForge RPC/Protobuf protocol.
 - User authorization may authorize the one-time Computer registration. Long-lived
   User credentials and refresh tokens must not be persisted by Daemon or exposed
   to Agent runtimes. The approved GitHub integration may supply the Agent owner's

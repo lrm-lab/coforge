@@ -8,11 +8,11 @@ These rules apply to `src/features/realtime/`.
 - React consumers subscribe through `useRealtimeSubscription`; imperative conversation readers use `subscribeToSharedRealtime` from `browser-realtime.tsx`. Both use its one ref-counted pool. It
   owns the client type. A page subscribes every channel without a token: Centrifugo asks the
   subscribe proxy (`server/centrifugo/subscribe-proxy.server.ts`) whether its user may hold it,
-  and asks again at each refresh, so a lost grant ends the subscription (task #348).
+  and asks again at each refresh, so a lost grant ends the subscription.
 - The connection's state changes, the client's errors and slow token fetches go to the
   console through `connection-journal.ts`, wired once in `BrowserRealtimeProvider`. Centrifugo
   logs only rejected commands, so this is the only record of a connection that never hears back
-  (task #322). Keep it free of tokens and message content.
+. Keep it free of tokens and message content.
 - Subscription hooks must run below `BrowserRealtimeProvider`. Do not call one
   in the component that renders the provider; `useBrowserRealtime` throws there
   so the mistake fails at first render instead of silently never subscribing.
@@ -21,7 +21,7 @@ These rules apply to `src/features/realtime/`.
   `chat:user:<user_id>`). Never call `newSubscription` directly; Centrifuge
   rejects a second subscription to the same channel.
 - No handler may throw into the Centrifuge client: it handles every frame on one promise chain,
-  and a throw leaves that chain unsettled until the page reloads (task #326). The shared pool runs
+  and a throw leaves that chain unsettled until the page reloads. The shared pool runs
   each handler through `dispatch`; a decoder for a shared channel such as `chat:user:` returns
   undefined for what is not its own, binary publications included.
 - Presence and join/leave for "who is online" exist only in the `presence`

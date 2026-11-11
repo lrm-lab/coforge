@@ -2,8 +2,7 @@
 
 These rules apply to `src/server/db/`.
 
-- `conversation-signal.repositories.server.ts` reads real DM participants for signal destinations; `reminder-anchor.repositories.server.ts` resolves reminder anchors through actual channel/DM authority.
-- The web pool is `StatementPool` (`statement-pool.server.ts`, task #348): a statement run
+- The web pool is `StatementPool` (`statement-pool.server.ts`): a statement run
   outside a transaction waits at most 10 s, and only a plain `SELECT` is run again on a fresh
   connection. A read with side effects (a lock, `nextval`) belongs in a transaction; a statement
   that legitimately runs longer does too, under the transaction's own `timeout`.
@@ -45,40 +44,20 @@ These rules apply to `src/server/db/`.
   Its `appId` names a built-in Agent App (the SDK's `BUILT_IN_APPS`, no table); the App's config
   defaults and validation are the SDK's `APP_CONFIG_DEFINITIONS`, applied in
   `server/agent-app-configs/`.
-- `app.repositories.server.ts` persists the app registry: only the apps Workspaces register.
-  A read for display never selects `clientSecretHash`, and every write is scoped to an app its
-  Workspace owns, so it cannot reach another Workspace's; who may write stays in `server/apps/`.
-- `app-owner-agents.repositories.server.ts` reads the apps an Agent owns, its register cards and its Agent row, assigns the owner Agent only while the Agent is live and the app has none, and writes a rotated secret's hash only while that Agent is still the owner. Who may do what stays in `server/apps/`.
-- `app-permissions.repositories.server.ts` persists app data permissions: a declaration is one
-  compare-and-set on the app's `permissionRevision` that also narrows every installation's approval
-  to the groups still declared (one raw `UPDATE`, so an approval committed meanwhile is narrowed
-  too), and an approval is one update conditional on that revision. Its `db` may be an open transaction
-  (`transaction.server.ts`: `inTransaction` joins it instead of nesting). Who may write stays in
-  `server/app-permissions/`.
-- `app-installation-setup.repositories.server.ts` persists installation setup rows. Its raw
-  `UPDATE`s are needed because Prisma cannot express them as one statement: a declaration bumps
-  `setupRevision` only when `setupUrl` differs from the stored value (`IS DISTINCT FROM`, null
-  included), and a report is a compare-and-set on the app's current `setupRevision` that keeps an
-  earlier completion time. Both must read the stored row inside the write, so concurrent declares
-  and reports cannot lose a bump or record a stale revision. Who may write stays in
-  `server/app-installation-setup/`.
-- `app-agent-inbound.repositories.server.ts` persists an app's Agent inbound grants and requests: a request and its grant are written in one transaction, an approval is a conditional update on the pending request, one pending request exists per app and Agent (partial unique index), and `revokeAppAgentInbound` is the installation removal's call. `app-agent-event.repositories.server.ts` writes an accepted event with its Message, delivery and the dedicated conversation in one transaction (`directKey` `app:<app id>|agent:<Agent id>`). When an app may send and who may decide stay in `server/app-agent-events/`.
-- `app-installation-data.repositories.server.ts` reads what an installed app may see, filtering
-  private data out in the query itself and selecting only the projected columns. The projections
-  and the bearer check stay in `server/app-installation-data/`.
-- `app-publishing.repositories.server.ts` persists review requests and the publish status they move: a request and its app's status change in one transaction (a conditional `updateMany` on the status it expects, so a lost race writes nothing). Who may ask and decide stays in `server/app-marketplace/`.
-- `app-installation.repositories.server.ts` lists the published apps other Workspaces may install, writes an install, and owns `removeAppInstallations`: the one removal of an (app, Workspace) installation, shared by an uninstall and an approved offline request. It lists every table keyed by (appId, workspaceId) and calls the owner of each: `revokeAppAuthorizations` (consents, authorization codes; `oauth-authorization`) `revokeAppAgentAccess` (Agent grants, pending requests; `app-agent-access`) and `archiveAppBots` (the bot Agent; `app-bot`). A new such table adds its revocation to its owner and a call there. Who may install stays in `server/app-marketplace/`.
-- `app-share-link.repositories.server.ts` persists an app's share links: replacing the unrevoked link revokes the old and inserts the new under a lock on the app's row (one unrevoked link per app is a partial unique index), and only a token's hash is stored. Who may create or revoke stays in `server/app-marketplace/`; installing from a link is read by `app-installation.repositories.server.ts` (`findShared`, `findSharedListing`).
-- `app-notification-subscribers.repositories.server.ts` reads the Workspace and the installations an app notification is for; the flag and fan-out stay in `server/app-notifications/`.
-- `app-bot.repositories.server.ts` persists an app's bots: each change locks the installation row (`FOR UPDATE`), a grant makes the bot Agent (`systemKind = app-bot`, no Computer) or reactivates it with the next generation, a revoke ends the keys and archives the Agent in the same transaction, a key mints atomically with `rotate`, and the status line is one conditional update. Who may grant and what the app is told stay in `server/app-bots/`.
-- `app-webhook.repositories.server.ts` persists an app's webhook row and its installations' delivery statuses: a change locks the webhook row, bumps `revision` and deletes the statuses in one transaction, and an attempt's outcome is one conditional upsert that writes only while the webhook is still at the revision the attempt started with. Who may change it, the endpoint rules and the delivery policy stay in `server/app-notifications/`.
-- `app-notification-queue-schema.repositories.server.ts` asks whether pg-boss's `pgboss` schema exists (the only raw SQL on it); starting the queue stays in `server/app-notifications/`.
-- `oauth-authorization.repositories.server.ts` persists the authorization endpoint's rows: apps
-  read as OIDC clients, the Workspaces a person may authorize an app in, consents and authorization
-  codes (only a code's hash). What a request may do stays in `server/authorization-server/`.
-- `oauth-grant.repositories.server.ts` persists the token and UserInfo endpoints' rows: apps read
-  with their secret hash to authenticate, a code redeemed by one conditional update, and the
-  person, app, membership, installation and consent a code names, as they are now.
+- The app repositories (`app*.repositories.server.ts`, `oauth-*.repositories.server.ts`) only persist; who may write stays in the owning `server/app-*/`, `server/apps/` and `server/authorization-server/` modules. Their rules:
+  - `app`: a read for display never selects `clientSecretHash`, and every write is scoped to an app its Workspace owns, so it cannot reach another Workspace's.
+  - `app-owner-agents`: assigns the owner Agent only while the Agent is live and the app has none, and writes a rotated secret's hash only while that Agent is still the owner.
+  - `app-permissions`: a declaration is one compare-and-set on the app's `permissionRevision` that also narrows every installation's approval to the groups still declared (one raw `UPDATE`, so an approval committed meanwhile is narrowed too); an approval is one update conditional on that revision. Its `db` may be an open transaction (`transaction.server.ts`: `inTransaction` joins it instead of nesting).
+  - `app-installation-setup`: its raw `UPDATE`s are needed because Prisma cannot express them as one statement: a declaration bumps `setupRevision` only when `setupUrl` differs from the stored value (`IS DISTINCT FROM`, null included), and a report is a compare-and-set on the app's current `setupRevision` that keeps an earlier completion time. Both must read the stored row inside the write, so concurrent declares and reports cannot lose a bump or record a stale revision.
+  - `app-agent-inbound`: a request and its grant are written in one transaction, an approval is a conditional update on the pending request, one pending request exists per app and Agent (partial unique index), and `revokeAppAgentInbound` is the installation removal's call. `app-agent-event` writes an accepted event with its Message, delivery and the dedicated conversation in one transaction (`directKey` `app:<app id>|agent:<Agent id>`).
+  - `app-installation-data`: filters private data out in the query itself and selects only the projected columns.
+  - `app-publishing`: a request and its app's status change in one transaction (a conditional `updateMany` on the status it expects, so a lost race writes nothing).
+  - `app-installation`: owns `removeAppInstallations`, the one removal of an (app, Workspace) installation, shared by an uninstall and an approved offline request. It lists every table keyed by (appId, workspaceId) and calls the owner of each: `revokeAppAuthorizations` (consents, authorization codes; `oauth-authorization`) `revokeAppAgentAccess` (Agent grants, pending requests; `app-agent-access`) and `archiveAppBots` (the bot Agent; `app-bot`). A new such table adds its revocation to its owner and a call there.
+  - `app-share-link`: replacing the unrevoked link revokes the old and inserts the new under a lock on the app's row (one unrevoked link per app is a partial unique index), and only a token's hash is stored. Installing from a link is read by `app-installation.repositories.server.ts` (`findShared`, `findSharedListing`).
+  - `app-bot`: each change locks the installation row (`FOR UPDATE`), a grant makes the bot Agent (`systemKind = app-bot`, no Computer) or reactivates it with the next generation, a revoke ends the keys and archives the Agent in the same transaction, a key mints atomically with `rotate`, and the status line is one conditional update.
+  - `app-webhook`: a change locks the webhook row, bumps `revision` and deletes the statuses in one transaction, and an attempt's outcome is one conditional upsert that writes only while the webhook is still at the revision the attempt started with.
+  - `app-notification-queue-schema` asks whether pg-boss's `pgboss` schema exists (the only raw SQL on it); starting the queue stays in `server/app-notifications/`.
+  - `oauth-authorization` and `oauth-grant`: only a code's hash is stored, a code is redeemed by one conditional update, and a person, app, membership, installation and consent a code names are read as they are now.
 - `reminder.repositories.server.ts` owns PostgreSQL locking and persistence
   only; authorization, recurrence, and fire idempotence stay in
   `server/reminders/`.
@@ -104,11 +83,7 @@ These rules apply to `src/server/db/`.
   `DirectConversations` has authorized and never creates one;
   `PrismaDirectConversationRepository` keeps the DM's messages and read
   cursors.
-- `agent-targets.repositories.server.ts` resolves an Agent's target (channel, DM, thread root) and owns the `DirectConversationPorts` context the facade's operations share, plus an Agent's reaction, channel mute and thread follow.
-- `user-direct-reads.repositories.server.ts` reads a person's DM (window, peer, updates) and advances their read cursors.
 - `agent-message-reads.repositories.server.ts` reads an Agent's message pages and advances its read-through; `agent-recovery.repositories.server.ts` reads pending deliveries and the recovery context. `agent-attention-deliveries.repositories.server.ts` holds the delivery-side half of the Agent attention rule (`pendingDeliveryWhere`, `unreadAgentMessagesFragment`, the shared live-delivery and notified-Agent predicates) that `agent-attention.repositories.server.ts` re-exports.
-- `agent-event-drain.repositories.server.ts` drains an Agent's owed attention; `agent-target-freshness.repositories.server.ts` reads a send's pending and recent context.
-- `direct-message-sends.repositories.server.ts` owns the send transactions: `direct-message-send.repositories.server.ts` a person's DM send, `direct-message-sends.repositories.server.ts` an Agent's channel or DM send (its channel join on the way): sequence allocation, attachment claiming, mention resolution and deliveries.
 - `mention-delivery.repositories.server.ts` keeps tracked @mention outcomes on
   `agent_message_deliveries`. Every write is conditional on the outcome still
   being open (pending or unknown) and, for a daemon report, on the row still
@@ -122,7 +97,3 @@ These rules apply to `src/server/db/`.
   the adapter's `TransactionWriteConflict`). Retry only those, a bounded number
   of times, and only a transaction that takes its locks in the writers' order.
 - `memory-disposition.repositories.server.ts` freezes Hint provenance at delivery, serializes receipts per Hint with a PostgreSQL row lock, and appends disposition/citation events atomically. Authorization within that callback uses the transaction connection, never a second global pool checkout.
-- `host-directory.repositories.server.ts` persists host-node rows. Enrollment,
-  the online window, and token checks stay in `server/hosts/`.
-- `host-job.repositories.server.ts` persists a cloud Computer and its create job.
-  Membership, the online check, and when the daemon key is cleared stay in `server/hosts/`.

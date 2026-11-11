@@ -34,7 +34,6 @@ Read [module design](docs/agents/module-design.md) when adding a feature or modu
 - Obtain Frank's explicit approval before changing architecture, database schema, wire protocol, licensing, security boundaries, or another decision with broad or difficult-to-reverse impact. Ordinary reversible implementation choices use the MVP fast lane below.
 - Read [proposals](docs/agents/proposals.md) when proposing a framework, custom infrastructure, or a broad or difficult-to-reverse technical change.
 - Do not add or change a repository license without Frank's explicit approval.
-- Establish formatting and lint checks before feature implementation, and make them required CR checks once adopted.
 - Do not add or broaden lint, formatting, type-check, or test exemptions without the user's explicit prior approval, including exemptions for official upstream components. This covers configuration overrides, ignore patterns, inline disable comments, and skipped checks. Fix the underlying code instead; an existing exemption is not permission to add another. When requesting approval, name the exact files, rules, reason, and verification being bypassed.
 
 ## Collaboration and delivery
@@ -50,15 +49,12 @@ Details and the incidents behind these rules are in [delivery](docs/agents/deliv
 - Keep one concern per branch; claim a task and read the board row back before changing files.
 - A CR or direct-push commit message records scope, decisions, sources, checks, risks, follow-ups and the Agent session, and ends with a `Revert-effect:` trailer naming what reverting it would break (`none` for docs and tests). Read [the commit message rules](docs/agents/git-hooks/hard-rules.md) when splitting commits or touching a high-risk path ([the list](scripts/ci/high-risk-paths.txt)).
 - Keep required CI short; a task is complete only after the checks pass and the change is on `main`.
-- Develop with TDD: a failing test first, the minimum implementation, no weakened tests.
 - Remove an export or mechanism completely: implementation, tests and every assertion that pins it.
 - Run `simplify` and an independent review (including the performance pass) before pushing.
 
 ## Testing
 
-- NEVER write unit tests after you write code.
-- Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
-- Do not write UI unit tests; verify UI changes by hand as [the UI verification policy](docs/agents/testing.md#ui-verification-policy) describes.
+- A behavior change starts with a failing test, then the minimum implementation; never weaken a test. Prefer E2E tests where they can verify the behavior, and end an E2E test with a verifiable, repeatable artifact. NO: tests written after the code to raise coverage, or UI unit tests. OK: a failing test first, E2E where possible, and UI changes verified by hand as [the UI verification policy](docs/agents/testing.md#ui-verification-policy) describes.
 - When writing or modifying tests, investigating test failures, or reviewing test changes, read and follow [the testing guidance](docs/agents/testing.md). Unrelated tasks do not require loading this document.
 - Inside a CoForge Agent, start every test run through the isolation wrapper `scripts/test/isolated-test-run.ts`, which runs it without the Agent's and the Workspace's CoForge credentials and identity. The mise `test` tasks (`mise run test`, `test:*`, `mise run test:file -- <path> [flags]` from the package directory) and the root `test:*` scripts already do; run any other test command or script (`scripts/e2e/*.sh`, say) as `bun scripts/test/isolated-test-run.ts <command>`.
 

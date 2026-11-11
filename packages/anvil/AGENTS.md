@@ -13,39 +13,17 @@
 
 ## Module map
 
-| Path                         | Responsibility                                                                                                                |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `src/contract.ts`            | Provider-neutral sessions, provider and auth contracts                                                                        |
-| `src/runtime-auth-status.ts` | Shared runtime auth status values                                                                                             |
-| `src/execution.ts`           | Explicit public entry for JSONL/ACP catalog execution and process cleanup                                                    |
-| `src/jsonl-error.ts`         | Pure JSONL protocol/request errors, shared by neutral projections and execution                                               |
-| `src/jsonl-process.ts`       | Shared JSONL child protocol, record stream and process lifecycle with required host process ownership                         |
-| `src/launch-log-identity.ts` | The Agent and launch a provider process's log records name, read from the launch environment the Daemon spawns it with        |
-| `src/process-tree.ts`        | Host process ownership ports, optional terminal transport and shared cleanup deadline policy                                  |
-| `src/catalog-discovery.ts`   | Catalog wait deadlines and trusted discovery error projection                                                                 |
-| `src/catalog-process.ts`     | JSONL catalog execution and diagnostics with required host environment and process ports                                      |
-| `src/catalog-command.ts`     | Host catalog command execution port                                                                                           |
-| `src/stderr-hint.ts`         | The bounded, credential-redacted single-line stderr excerpt a catalog logs                                                    |
-| `src/stderr-excerpt.ts`      | The newest scrubbed stderr lines within a character budget: the process log's one summary, and a failed open's visible error |
-| `src/transcript-tail.ts`     | The tail-reader capability and the lines of a transcript/rollout tail                                                         |
-| `src/local-session.ts`       | Shared limits and content-only projections for local Session handoff discovery                                                |
-| `src/acp/`                   | Shared ACP connection, session state machine, profile and turn projection contracts                                           |
-| `src/version-gate.ts`        | Shared version policy and required host version-reader port                                                                   |
-| `src/pi/`                    | Embedded Pi provider, native event/catalog projection and shared SDK Session factory with host capabilities                   |
-| `src/antigravity/`           | Antigravity `agy acp` session profile, turn events, version/catalog policy and usage parsing                                  |
-| `src/dsh/`                   | DSH ACP, pinned preview version, native catalogs and literal instruction content behind host ports                            |
-| `src/grok/`                  | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities                                 |
-| `src/command-code/`          | Command Code ACP sessions, native model catalog and a private `--mod` instruction bridge                                      |
-| `src/kiro/`                  | Kiro ACP provider, native profile, events, version/catalog policy, enterprise auth and usage parsing with explicit host ports |
-| `src/opencode/`              | OpenCode ACP sessions, version policy, model catalog, and private instruction overlay                                        |
-| `src/cursor/`                | Cursor ACP session, composite model-id resolution, version policy and private rules injection                                 |
-| `src/codex/`                 | Codex sessions, native events, auth, usage, reset credit, catalog, idle-recycle reads via required host capabilities          |
-| `src/devin/`                 | Devin ACP sessions, always-on rule injection, model/effort selects, auth status and login through host capabilities           |
-| `src/droid/`                 | Droid ACP sessions, private system-prompt file, model/effort selects, PTY auth and `/limits` usage through host capabilities  |
-| `src/claude-code/`           | Claude sessions, native events, auth, usage, history and catalog through required host capabilities                           |
-| `src/inline-text.ts`         | Pure whitespace normalization for inline text projections                                                                     |
-| `src/subagent-type.ts`       | SDK-bounded display-safe subagent type projection                                                                             |
-| Other `src/` modules         | Shared runtime Activity, error, JSON, stream and deadline utilities                                                           |
+| Path                                                        | Boundary                                                                                                              |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `src/contract.ts`, `src/runtime-auth-status.ts`             | Provider-neutral sessions, provider and auth contracts                                                                |
+| `src/execution.ts`, `src/jsonl-*.ts`, `src/catalog-*.ts`    | The explicit public entry for JSONL/ACP catalog execution and its shared process, error and discovery policy           |
+| `src/process-tree.ts`, `src/version-gate.ts`                | Host ports for process ownership, terminal transport, cleanup deadlines and version reads, plus shared version policy  |
+| `src/acp/`                                                  | Shared ACP connection, session state machine, profile and turn projection contracts                                   |
+| `src/stderr-*.ts`, `src/transcript-tail.ts`, `src/local-session.ts`, `src/launch-log-identity.ts` | Bounded, credential-redacted stderr excerpts, transcript tails, local Session handoff projections, and the launch's log identity |
+| `src/<runtime>/` (one per runtime in the list below)        | One native runtime: its session, events, catalog, auth and usage behind host capabilities                             |
+| Other `src/` modules                                        | Shared runtime Activity, error, JSON, stream, deadline and text-projection utilities                                  |
+
+Runtime directories: `pi`, `antigravity`, `dsh`, `grok`, `command-code`, `kiro`, `opencode`, `cursor`, `codex`, `devin`, `droid`, `claude-code`.
 
 ## Runtime instructions
 
@@ -66,3 +44,8 @@
 Rules shared by every ACP adapter; each runtime file keeps only its own codes and paths.
 
 - A `tool_call_update` ends a call only through `acpToolUpdateEnded`; a status the set misses leaves the call open forever and suppresses stalled recovery.
+- Resume is `session/load`. Only the runtime's own stored-session-gone answer (its code is in the provider file) is replaced with a fresh session reported as `replaced` (`onSessionId(newId, oldId)`); any other load failure surfaces. DSH has `session/resume` instead and never replaces a failed resume.
+- A runtime without `session/cancel` (Cursor and Droid answer `-32601`, Antigravity leaves it unimplemented, OpenCode is not relied on) interrupts by process disposal, and the daemon relaunches on the same session id.
+- A terminal RPC failure after prompt submission is an accepted failed turn, never an admission refusal.
+- Model and effort apply through `session/set_config_option` after the session opens. `runtime.model` fails with `RuntimeModelNotFoundError` when the select lacks it; a missing effort option leaves the model's own default, and a present option that lacks the value fails.
+- Instruction files an adapter writes for a CLI are private (0700 directory, 0600 file) and removed when the session ends or the launch fails.

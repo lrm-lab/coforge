@@ -25,7 +25,6 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/main.rs`: command line. Calls `installation`, prints the
   result, maps outcomes to exit codes. No installation logic. Process tests in `tests/cli.rs`
   run the real binary against a scratch home, with no network.
-- `src/lib.rs`: crate root; declares the library modules.
 - `src/fetch.rs`: verified download. One HTTPS object, hashed as it arrives,
   optionally gunzipped under a byte cap, committed only after every check
   passes; plus the bounded in-memory read of a small metadata object. Follows
@@ -95,13 +94,7 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   product, split by concept into `src/contract/` and re-exported from `contract`, so callers name
   `contract::X`. `ArtifactIdentity` and `to_file_json` live here; the golden test helpers and the
   golden coverage list are in `src/contract/tests.rs`, each submodule's tests in its `tests.rs`.
-- `src/contract/manifests.rs`: the product and installer release manifests, the feed list, and
-  the release version cases.
-- `src/contract/installation.rs`: `active.json`, `installation.json`, and the launchers.
-- `src/contract/receipts.rs`: upgrade receipts and their outcomes, exit and error codes, and
-  dead-process evidence.
-- `src/contract/lifecycle.rs`: the JSON `coforge-computer __lifecycle` prints.
-- `src/contract/machine.rs`: the machine mutation lock, service names, and paths.
+- `src/contract/`: one module per concept — manifests and feed, `active.json`/`installation.json`/launchers, receipts with exit and error codes, the `__lifecycle` JSON, and the machine lock, service names and paths.
 - `src/clock.rs`: the clock and sleep port the bounded waits run through (virtual in tests).
 - `src/service.rs`: OS service control of the Computer supervisor: state (not installed, stopped,
   running with the manager's pid), stop (waits until the manager has dropped it), install (registers
@@ -115,9 +108,7 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/service/definition.rs`: what the backends share to register a definition: the manager
   check, the byte comparison with the file already in place, the atomic owner-only write, and the
   UTF-16 temporary file `schtasks` reads.
-- `src/service/port.rs`: the `CommandRunner` port and `SystemRunner`, which runs a manager tool
-  with a bound and kills it at the deadline.
-- `src/service/error.rs`: `ServiceError`, each failure worded with what to run next.
+- `src/service/`: besides the backends, the `CommandRunner` port (`SystemRunner` bounds a manager tool and kills it at the deadline), `ServiceError` (each failure worded with what to run next) and a scripted fake runner.
 - `src/service/launchd.rs`: the macOS backend, `launchctl` in the `gui/<uid>` domain; install writes
   the plist. Install tests in `src/service/launchd/install_tests.rs`.
 - `src/service/systemd.rs`: the Linux backend, `systemctl --user`; install writes the unit under
@@ -127,18 +118,10 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/service/windows_task.rs`: the Windows backend, the scheduled task through `schtasks` and
   `Get-ScheduledTask`; install is `schtasks /Create /XML /F`. Install tests in
   `src/service/windows_task/install_tests.rs`.
-- `src/service/fakes.rs`: a scripted `CommandRunner` for the backend tests.
 - `src/processes.rs`: the processes of the installed product executable: identity (pid, start
   time, executable), enumeration, and the SIGTERM, SIGKILL, verify-dead escalation after the
   manager's stop. One `ProcessTable` adapter per OS in `src/processes/`; the caller is excluded.
-- `src/processes/linux.rs`: the Linux `ProcessTable`, read from `/proc`.
-- `src/processes/proc_stat.rs`: parsing `/proc/<pid>/stat` and the `exe` link; compiled on every
-  platform under test.
-- `src/processes/macos.rs`: the macOS `ProcessTable`, through libproc.
-- `src/processes/windows.rs`: the Windows `ProcessTable`, through Toolhelp and process handles.
-- `src/processes/signals.rs`: SIGTERM and SIGKILL to one pid (Unix).
-- `src/processes/fakes.rs`: a process table that plays out exits, kills, zombies, and pid reuse
-  on the virtual clock.
+- `src/processes/`: the per-OS `ProcessTable` adapters (Linux `/proc`, macOS libproc, Windows Toolhelp), Unix signals, and a fake table that plays out exits, kills, zombies and pid reuse on the virtual clock. `proc_stat.rs` is compiled on every platform under test.
 - `src/lifecycle.rs`: the `ComputerLifecycle` port (protocol, status, and service-definition
   answers of a Computer executable), `reported_service_definition` (asks for the definition only
   when `protocol`'s `commands` lists it; `service_definition_if_listed` does so for a protocol

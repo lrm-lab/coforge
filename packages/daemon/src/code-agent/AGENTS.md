@@ -69,7 +69,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   communication, on-demand context recovery, safety, and help. The fixed
   prompt budget excludes dynamic identity data and is enforced by `test/agent-instructions.test.ts`; the shared communication style fits without removing delivery or authority rules. Ordinary questions and untracked DM work need no Task or per-turn memory bookkeeping. `MEMORY.md` is
   what the next session resumes from, kept within its size limit, and `notes/active-context.md` is
-  overwritten as the current state; what a line says is the Agent's own judgement (task #10).
+  overwritten as the current state; what a line says is the Agent's own judgement.
   An inbox notice lists targets — `check --target` those and reply; do not
   read MEMORY.md first. Replies default to where the conversation is (top
   level, its thread, or a claimed Task's thread); a new topic or a thread's

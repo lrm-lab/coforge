@@ -113,7 +113,7 @@ as known non-triggers. `Granularity-exempt: <reason>` in the message bypasses th
 rules only — `Revert-effect:` is still required — and each use is printed as a warning and
 listed in the CI step summary. Merge commits skip all three rules.
 
-**Reviewed-in warnings.** `scripts/ci/reviewed-in.ts` is the warn-only companion (task #593),
+**Reviewed-in warnings.** `scripts/ci/reviewed-in.ts` is the warn-only companion,
 run by `scripts/ci/range-checks.ts` — the `--range` entrypoint pre-push and ci.yml share —
 after the blocking rules:
 a commit whose diff touches a path in `scripts/ci/high-risk-paths.txt` — protocol and
@@ -121,8 +121,7 @@ contract sources, credentials and secrets, auth, workflows, deploy and infra con
 should carry a `Reviewed-in: #<channel>:#<task>` trailer naming where it was reviewed (the
 review message id may follow it). Each offending commit gets a `::warning::` and a step-summary
 table in CI and a printed warning on pre-push; nothing fails. Commits carrying the trailer are
-silent, and merge commits are skipped. Warn-only for its first two weeks while the false-positive
-rate is measured; whether it becomes a hard rule is a later decision.
+silent, and merge commits are skipped. Warn-only today (`reviewed-in.ts` never fails a run); whether it becomes a hard rule is a later decision.
 
 **Whitespace check.** `scripts/ci/diff-check.ts` is the blocking companion (task #628), run by
 `range-checks.ts` after the hard rules: it applies the same `git diff --check` CI's "Select
@@ -149,7 +148,7 @@ What the rules and the hooks do not catch is in [Limits](limits.md).
 
 **Commit message rules from the root `AGENTS.md`.** Moved verbatim; the root keeps the `Revert-effect:` trailer rule.
 
-One commit does one thing: a pure rename or code move never rides with a behavior change — split them, or mark a deliberate exception `Granularity-exempt: <reason>` ([hard rules](hard-rules.md#commit-granularity)). A commit touching a high-risk path ([the list](../../../scripts/ci/high-risk-paths.txt)) should also carry `Reviewed-in: #<channel>:#<task>`; missing it warns, never fails, for now.
+One commit does one thing: a pure rename or code move never rides with a behavior change — split them, or mark a deliberate exception `Granularity-exempt: <reason>` ([hard rules](hard-rules.md#commit-granularity)). A commit touching a high-risk path ([the list](../../../scripts/ci/high-risk-paths.txt)) should also carry `Reviewed-in: #<channel>:#<task>`; missing it warns and never fails (`scripts/ci/reviewed-in.ts` is warn-only).
 
 ## Sources
 

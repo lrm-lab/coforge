@@ -11,7 +11,7 @@ of this workspace alone, with no root `node_modules`.
 
 `scripts/installer-contract.ts` (outside `src/`, never bundled) generates
 `crates/installer/contract/`, the cross-language contract with the Rust installer:
-JSON Schema via `z.toJSONSchema()` plus golden files. This package is its source
+a JSON Schema (draft 2020-12, via `z.toJSONSchema()`) per JSON shape plus a golden instance of every file. Never edit it by hand; change the TypeScript owner and regenerate. The generator lists which module owns each file. This package is its source
 of truth; each shape's zod schema lives in the module that owns the concept
 (`updater.ts`, `release/installer-contract.ts`, and the upgrade receipt in
 `@lrm/coforge-sdk/internal/upgrade-receipt`, which the Daemon's single receipt reader also uses).

@@ -4,7 +4,7 @@ These rules apply to `src/server/artifacts/`. They extend
 [`../AGENTS.md`](../AGENTS.md).
 
 The artifacts module is written to be lifted into its own App later; today it
-is a module inside the Web server (task #542). Three rules keep "moving it
+is a module inside the Web server. Three rules keep "moving it
 out" a move, not a split:
 
 - Code outside this directory imports only the public entries below, never

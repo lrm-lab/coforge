@@ -13,16 +13,12 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   exhausted balance, mid-turn or at launch, keeps the process and holds the Agent's deliveries (`credential-invalid.ts`,
   [hold](../../../../docs/observability/agent-status-and-activity/credential-invalid-hold.md)); a sticky
   model-config one ends the process and reports `inactive`; other terminal failures keep it wakeable.
-- `subagent-progress-activity.ts` owns task row wording and `OutstandingBackgroundTasks`: a
-  launch's tasks without a terminal notification, by task id, and the wait a quiet turn shows.
 - `activity-trajectory.ts` owns launch-local display-delta coalescing (350 ms),
   boundary flushing, and bounded retention. Assembled-text redaction is provided by
   `packages/anvil/src/agent-activity.ts`. Adapters
   supply only official display events and explicit lineage, never raw
   reasoning.
-- `tool-call-ledger.ts` is a launch's one record of open tool calls (stalled
-  recovery reads it too) and builds each `tool_end`'s `toolOutcome`; the field
-  rules are in `docs/observability/agent-status-and-activity/detail-kinds.md` (`tool_end`).
+- Field rules for `tool_end`'s `toolOutcome` are in `docs/observability/agent-status-and-activity/detail-kinds.md` (`tool_end`); `tool-call-ledger.ts` is a launch's one record of open tool calls (stalled recovery reads it too).
 
 ## Start and stop
 
@@ -53,11 +49,7 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 
 ## Control fencing (`agent-control*.ts`)
 
-- `agent-control.ts` owns request/epoch-fenced stop, reset-workspace, and start plus their
-  control completion, over the runtime port in `agent-control-runtime.ts`; never Session input.
-  Launch attempts, retries and the pending-Start count live in `agent-control-launch.ts`
-  (`ManagedLaunches`), the record fence and checks in `agent-control-fence.ts`, the rebind in
-  `agent-control-rebind.ts`.
+- `agent-control.ts` stop, reset-workspace and start are request/epoch-fenced and never carry Session input.
 - A managed Start launches under the server-supplied `launchId`, never a locally minted one.
 - `startPending(agentId)` is true from the synchronous `start` call until the Start launches,
   runs out of attempts, or is ended by a Stop or newer operation, launch-retry cooldowns
@@ -78,9 +70,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   a `LAUNCH_FAILURE_REASON` as `errorReason`, and whose `detail` says what
   happened and the next step (a runnable `coforge-computer` command or the
   Agent setting to change). Exception: a thrown launch whose text names a
-  future quota recovery time (`recoveryWaitMs`) does not report `inactive`.
-  A managed Start retries the same attempt at that time, or at once when that provider's limit
-  is lifted (`launch-retry-timers.ts`). A message-triggered wake does not arm that timer; its
+  A managed Start retries the same attempt at that time (or at once when that provider's limit
+  is lifted; `launch-retry-timers.ts`) without using up the seven attempts. A message-triggered wake does not arm that timer; its
   cooldown lasts until the same time or until the limit is lifted, so another delivery does not
   launch during the wait. The Activity is the quota failure (including when it resets), not
   `LauncherError`. No recovery time keeps the short backoff.
@@ -93,17 +84,11 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - Log every failed launch as `agent_runtime:launch_failed` with
   `launchFailureLogFields` (reason, redacted message, SDK trace); the
   Activity sends people to that log line.
-- The reason changes no retry, with two exceptions. A reason listed in
+- The reason changes no retry, with one exception: a reason listed in
   `NON_RETRYABLE_LAUNCH_FAILURE_REASONS` skips the retries, because no attempt
-  can succeed until a person changes something on the Computer. A quota failure
-  that names a future recovery time waits until then on the same attempt,
-  instead of the short backoff, and does not use up the seven attempts. A wake
-  records that wait as its cooldown. Every other reason keeps the same launch
+  can succeed until a person changes something on the Computer. (A quota failure that names a
+  future recovery time waits as described above.) Every other reason keeps the same launch
   attempts and backoff.
-- `launch-attempt-failure.ts` owns what a failed attempt owes — the retry
-  after its cooldown, or the terminal `launch_failed` record — including the
-  non-retryable decision above; `ManagedLaunches` (`agent-control-launch.ts`) only asks
-  it and stops when it scheduled a retry.
 
 ## Launch identity
 
@@ -121,8 +106,6 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - After such a launch, `AgentControl.wake()` sets the persisted record back to
   `phase: "running"` so a later server Start rebinds instead of meeting a stale
   `"stopped"` record.
-- `memory-conversation-sessions.ts` owns Memory Agent conversation-scoped native sessions,
-  their shared workspace, admission serialization, and activity attribution.
 
 ## Session state and records
 
@@ -143,15 +126,14 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   ignore file `.coforgemigrateignore` (which leaves `code/` behind by default) right after the
   workspace directory is created. It only creates files (`flag: "wx"`, `EEXIST` ignored) and never
   overwrites one the Agent already wrote. A seed failure is logged and never fails the launch.
-- The seed no longer writes `notes/work-log.md`: a chronological log is not what the Agent is told
-  to keep. A workspace from before that change keeps its file; nothing deletes it.
+- The seed does not write `notes/work-log.md`; a workspace that already has one keeps it, and nothing deletes it.
 - `MEMORY.md` holds the index _and_ the facts, with a `## Pointers` line for each
   `notes/<topic>.md` that holds long material. A role is the description the standing prompt
   carries, never a section here. The Active Context lives in `notes/active-context.md`; older
   workspaces get the missing notes files, and an existing `MEMORY.md` is never migrated or rewritten.
 - The instructions say what the file is for — the next session resumes from it, so it holds what a
   later reader needs to continue without asking again — and its limits; what goes in it, and how a
-  line is worded, is the Agent's own judgement (task #10, following Anthropic's "tell the Agent what
+  line is worded, is the Agent's own judgement (following Anthropic's "tell the Agent what
   memory is for, do not teach it how to use it"). The Active Context is overwritten as the current
   state, and `MEMORY.md` is checked before asking a human. Never per-turn maintenance.
 - No tidy-up reminder is scheduled and none is created: writing is event-driven, a file over its
@@ -195,5 +177,5 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   when nothing else is queued, and is its own short reference turn ahead of a real delivery. Every
   fresh launch — first start, a session the provider lost, an explicit create — and every fresh
   Memory Agent conversation gets it; a resume never does.
-- A finished compaction queues nothing (task #548): the read ledger starts a new context, and the
-  files arrive with the next fresh session — as Raft 1.0.60 does.
+- A finished compaction queues nothing: the read ledger starts a new context, and the
+  files arrive with the next fresh session.
