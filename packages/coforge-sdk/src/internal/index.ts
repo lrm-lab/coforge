@@ -31,6 +31,7 @@ export {
   decodeAgentContextViewResult,
   encodeAgentContextViewRequest,
   encodeAgentContextViewResult,
+  isAgentContextViewRequest,
   AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
   decodeAgentContextViewAvailability,
   encodeAgentContextViewAvailability,

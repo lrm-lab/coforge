@@ -22,6 +22,7 @@ import {
   LOCAL_SESSION_EXCERPT_RESULT_METHOD,
   decodeAgentContextViewRequest,
   encodeAgentContextViewResult,
+  isAgentContextViewRequest,
   AGENT_CONTEXT_VIEW_RESULT_METHOD,
   decodeComputerFilePullRequest,
   encodeComputerFilePullResult,
@@ -47,7 +48,7 @@ class DaemonQuery<Request extends Scope, Result> {
     private readonly encode: (value: Result) => Uint8Array,
     private readonly method: string,
     private readonly rpc: Rpc,
-    private readonly onInvalid?: () => void,
+    private readonly onInvalid?: (bytes: Uint8Array) => void,
   ) {}
   readonly onRequest = (listener: (request: Request) => Promise<void>) => {
     this.#listener = listener;
@@ -63,7 +64,7 @@ class DaemonQuery<Request extends Scope, Result> {
     try {
       request = this.decode(bytes);
     } catch {
-      this.onInvalid?.();
+      this.onInvalid?.(bytes);
       return false;
     }
     if (request.workspaceId === scope.workspaceId && request.computerId === scope.computerId)
@@ -145,10 +146,14 @@ export class DaemonQueries {
       encodeAgentContextViewResult,
       AGENT_CONTEXT_VIEW_RESULT_METHOD,
       rpc,
-      () =>
+      // Every publication on this channel passes these decoders in turn, so a decode failure is
+      // ordinary traffic unless the message says it is a context view request (task #34).
+      (bytes) => {
+        if (!isAgentContextViewRequest(bytes)) return;
         logger.error("Agent context view request invalid", {
           event: "daemon.agent_context_view.request_invalid",
-        }),
+        });
+      },
     );
     this.computerFilePull = new DaemonQuery(
       decodeComputerFilePullRequest,

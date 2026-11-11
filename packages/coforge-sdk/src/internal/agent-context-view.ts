@@ -163,6 +163,19 @@ export function encodeAgentContextViewRequest(value: AgentContextViewRequest): U
     }),
   );
 }
+/**
+ * Whether these bytes announce themselves as a context view request. The channel carries many
+ * publications and no envelope, so a request that fails to decode may simply be another kind of
+ * message (task #34); the type field it sets is the only claim it makes. Bytes too broken to read
+ * at all claim nothing.
+ */
+export function isAgentContextViewRequest(bytes: Uint8Array): boolean {
+  try {
+    return fromBinary(AgentContextViewRequestSchema, bytes).messageType === REQUEST_TYPE;
+  } catch {
+    return false;
+  }
+}
 export function decodeAgentContextViewRequest(bytes: Uint8Array): AgentContextViewRequest {
   const value = fromBinary(AgentContextViewRequestSchema, bytes);
   if (value.messageType !== REQUEST_TYPE) throw new Error("Invalid context view request");
