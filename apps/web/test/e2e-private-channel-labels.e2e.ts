@@ -62,15 +62,14 @@ test("a private channel goes without `#` wherever another page names it", async 
     await browser("screenshot", join(artifacts, shot.replace(".png", "-dark.png")));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   };
-  /** \`locked\`: the page names the channel with its lock; the Tasks board names it in a card's
-   * text line, bare. */
-  const shoot = async (path: string, ready: string, shot: string, locked = true) => {
+  /** Each page names the private channel bare, with its lock. */
+  const shoot = async (path: string, ready: string, shot: string) => {
     await browser("open", `${origin}${workspacePath}${path}`);
     await waitFor(`${pageHydrated} && ${ready}`);
     await browser("wait", "300");
     await both(shot);
     expect(await evaluate(namesVaultBare)).toBe(true);
-    if (locked) expect(await evaluate(vaultLocked)).toBe(true);
+    expect(await evaluate(vaultLocked)).toBe(true);
   };
   try {
     for (const peer of [ada!, grace!])
@@ -206,7 +205,9 @@ test("a private channel goes without `#` wherever another page names it", async 
     await shoot(`/activity`, `${text}.includes("${plazaName}")`, "3-activity.png");
     // A row's mark is its channel's group avatar; its place line names it with no `#` (task #55).
     expect(await evaluate<boolean>(`${text}.includes("#${plazaName}")`)).toBe(false);
-    await shoot(`/tasks`, `${text}.includes("#${plazaName}")`, "4-tasks.png", false);
+    // A board card names its channel as its group avatar and name, no `#`, a private one with its
+    // lock (task #84).
+    await shoot(`/tasks`, `${plazaFaced} && !${text}.includes("#${plazaName}")`, "4-tasks.png");
     await shoot(
       `/agent/${agent.id}?agentTab=reminders`,
       `${text}.includes("Check the vault")`,
