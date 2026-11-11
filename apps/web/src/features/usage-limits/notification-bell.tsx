@@ -12,6 +12,7 @@ import {
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Fold } from "#src/components/ui/fold";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { formatMonthDayTime } from "#src/lib/dates";
@@ -100,14 +101,8 @@ function NoticeList({
       ) : (
         <ul className="-mb-px min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
           {rows.map(({ item, leaving }) => (
-            <li
-              key={item.id}
-              className={cn(
-                "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
-                leaving ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr]",
-              )}
-            >
-              <div className="min-h-0 overflow-hidden">
+            <li key={item.id}>
+              <Fold open={!leaving}>
                 <UsageLimitCard
                   notice={item}
                   unseen={shownUnseen.has(item.id)}
@@ -120,7 +115,7 @@ function NoticeList({
                   }}
                   onDismiss={() => notifications?.dismiss(item.id)}
                 />
-              </div>
+              </Fold>
             </li>
           ))}
         </ul>
