@@ -13,6 +13,7 @@ import {
   ProviderProgress,
   STALLED_RECOVERY_SILENCE_QUEUE_ONLY_MS,
   UNATTENDED_RECOVERY_LIMIT,
+  stalledRecoveryDisplayText,
 } from "#src/daemon-runtime/stalled-recovery";
 
 // A busy turn that went silent is restarted even when no message waits for it (task #404): the
@@ -112,7 +113,13 @@ test("a stalled turn with no message waiting is resumed with where it stopped", 
   expect(woken[0]!.resumePrompt).toContain("no output for 16 minutes");
   expect(woken[0]!.resumePrompt).toContain("Running bash: npm test");
   expect(woken[0]!.resumePrompt).toContain("No new message is waiting");
+  // The page is told why first (task #41), then that the restart is under way.
   expect(published[0]).toMatchObject({
+    level: "error",
+    detailKind: "runtime_stalled",
+    text: "No reply from the Pi runtime for 16 minutes; restarting it.",
+  });
+  expect(published[1]).toMatchObject({
     level: "info",
     detailKind: "stalled_recovery",
     text: "Restarting stalled Pi runtime; no message was waiting",
@@ -123,7 +130,38 @@ test("a restart for a waiting message carries no resume prompt: the message is t
   const { runtimeRelease, stalled, woken, published } = release();
   await runtimeRelease.recoverStalled("agent-a", stalled);
   expect(woken[0]!.resumePrompt).toBeUndefined();
-  expect(published[0]!.text).toBe("Restarting stalled Pi runtime for queued message");
+  const announce = published.find((each) => each.detailKind === "stalled_recovery");
+  expect(announce!.text).toBe("Restarting stalled Pi runtime for queued message");
+});
+
+test("a restart says on the page why it happens, before the process goes", async () => {
+  const { runtimeRelease, stalled, published } = release();
+  await runtimeRelease.recoverStalled("agent-a", stalled);
+  // The reason is the Activity a person can act on, and it comes before the restart's own line.
+  expect(published.map((each) => [each.level, each.detailKind])).toEqual([
+    ["error", "runtime_stalled"],
+    ["info", "stalled_recovery"],
+  ]);
+  expect(published[0]!.text).toContain("16 minutes");
+  expect(published[0]!.text).not.toContain("stuck");
+});
+
+test("each reason says what the daemon observed, not that the Agent is broken", () => {
+  const basis = {
+    silentForMs: 20 * 60_000,
+    thresholdMs: 15 * 60_000,
+    lastEventAtMs: 0,
+    steersBusyTurn: true,
+  } as const;
+  expect(stalledRecoveryDisplayText("Codex", { ...basis, reason: "silent_turn" })).toBe(
+    "No reply from the Codex runtime for 20 minutes; restarting it.",
+  );
+  expect(
+    stalledRecoveryDisplayText("Codex", { ...basis, reason: "queued_turn_never_started" }),
+  ).toBe("A message waited 20 minutes without starting a turn; restarting the Codex runtime.");
+  expect(stalledRecoveryDisplayText("Codex", { ...basis, reason: "noticed_but_frozen" })).toBe(
+    "A notice went unanswered in the Codex runtime for 20 minutes; restarting it.",
+  );
 });
 
 test("restarts with nothing waiting stop at the limit, tell the owner once, and reset after a completed turn", async () => {
@@ -239,8 +277,12 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     launch.stopping = false;
     // A message arriving now still finds a stalled turn to restart.
     expect(runtimeRelease.stalled("agent-a")).toBeDefined();
-    // The limit notice reaches the server with the reason the profile reads (task #418).
-    expect(sent.find((activity) => activity.detailKind === "runtime_stalled")).toMatchObject({
+    // The limit notice reaches the server with the reason the profile reads (task #418). The
+    // stall's own reason is published before every restart (task #41), so this picks the one
+    // that carries a `runtimeError`.
+    expect(
+      sent.find((activity) => activity.detailKind === "runtime_stalled" && activity.runtimeError),
+    ).toMatchObject({
       runtimeError: { errorClass: "TurnStallError", errorReason: "stalled_restart_limit" },
     });
   } finally {

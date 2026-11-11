@@ -248,8 +248,10 @@ test("a message for a turn silent for 15 minutes restarts the provider, resuming
     expect(h.reportedLaunchIds.at(-1)).toBe("launch-1");
     expect(h.acks).toContain("delivery-1");
     const kinds = h.activities.map((activity) => activity.detailKind);
-    expect(kinds[0]).toBe("stalled_recovery");
-    expect(h.activities[0]).toMatchObject({
+    // The page is told why the runtime goes (task #41), then that the restart is under way.
+    expect(kinds.slice(0, 2)).toEqual(["runtime_stalled", "stalled_recovery"]);
+    expect(h.activities[0]).toMatchObject({ level: "error" });
+    expect(h.activities[1]).toMatchObject({
       level: "info",
       detail: "Restarting stalled Pi runtime for queued message",
     });
@@ -425,7 +427,11 @@ test.each([
 
       const kinds = h.activities.map((activity) => activity.detailKind);
       expect(kinds.filter((kind) => kind === "stalled_recovery")).toHaveLength(1);
-      const failures = h.activities.filter((activity) => activity.level === "error");
+      // The stall's own reason is an error Activity too (task #41); the restart's failure is the
+      // one this test is about.
+      const failures = h.activities.filter(
+        (activity) => activity.level === "error" && activity.detailKind === "runtime_error",
+      );
       expect(failures).toHaveLength(1);
       expect(failures[0]).toMatchObject({ detailKind: "runtime_error", detail });
       expect(kinds.indexOf("runtime_error")).toBeGreaterThan(kinds.indexOf("stalled_recovery"));

@@ -225,6 +225,25 @@ export function stalledRecoveryLogFields(
   };
 }
 
+/** What the Agent's page says before a stalled runtime is restarted: why it is going, in a
+ * person's words, so the restart is explained rather than a process disappearing (task #41). It
+ * names what the daemon observed, never that the Agent or its provider is broken — a slow answer
+ * is not a fault. */
+export function stalledRecoveryDisplayText(
+  runtimeName: string,
+  basis: StalledRecoveryBasis,
+): string {
+  const minutes = Math.max(1, Math.round(basis.silentForMs / 60_000));
+  switch (basis.reason) {
+    case "silent_turn":
+      return `No reply from the ${runtimeName} runtime for ${minutes} minutes; restarting it.`;
+    case "queued_turn_never_started":
+      return `A message waited ${minutes} minutes without starting a turn; restarting the ${runtimeName} runtime.`;
+    case "noticed_but_frozen":
+      return `A notice went unanswered in the ${runtimeName} runtime for ${minutes} minutes; restarting it.`;
+  }
+}
+
 /** How many times in a row a stalled turn is restarted with no message waiting for it (task
  * #404). Past this the owner is told and the Agent is left alone until a message arrives or
  * someone restarts it: a turn that hangs again every time is not helped by more restarts. */

@@ -19,8 +19,6 @@ import type { BusyActivity } from "./agent-activity-publisher";
 import type { DeliveryHoldReason } from "./agent-delivery-gate";
 import type { LaunchRequest } from "./runtime-launch-types";
 import { stalledRuntime, type StalledRuntime } from "./runtime-release-stalled";
-
-export type { StalledRuntime } from "./runtime-release-stalled";
 import {
   coldIdleRuntimePlan,
   configApplyRuntimePlan,
@@ -29,11 +27,15 @@ import {
   type RuntimeEndPlan,
   type RuntimeReleasePlan,
 } from "./runtime-release-plans";
+import { runtimeDisplayName } from "./session-invalidate-activity";
 import {
   STALLED_RECOVERY_EXIT_TIMEOUT_MS,
+  stalledRecoveryDisplayText,
   unattendedResumePrompt,
   type ProviderProgress,
 } from "./stalled-recovery";
+
+export type { StalledRuntime } from "./runtime-release-stalled";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -166,6 +168,16 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
         this.#ports.lastBusy(agentId)?.activity.detail,
       );
     }
+    // Before the process goes: why it is going, so the page explains the restart instead of only
+    // showing one, and offers the scoped stop while the turn is still the current one (task #41).
+    // The restart's own line follows as info; this one is the reason a reader can act on.
+    this.#ports.publish(
+      agentId,
+      launch,
+      AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED,
+      "error",
+      stalledRecoveryDisplayText(runtimeDisplayName(restart.config.provider), basis),
+    );
     await this.#endAndWake(
       agentId,
       launch,
