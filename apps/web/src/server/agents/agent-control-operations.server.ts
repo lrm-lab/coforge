@@ -28,6 +28,9 @@ export class AgentControlOperations {
     /** `undefined` leaves the Agent's persisted stopped state unchanged (every caller
      * except `execute()` — `recover`, and `begin`'s own CAS retries, must never touch it). */
     stoppedAt?: Date | null,
+    /** `recover()`'s automatic Starts carry the failure streak forward so consecutive automatic
+     * attempts are counted; every Start a person asked for begins from zero. */
+    carryFailedStreak = false,
   ): Promise<AgentControlState> {
     // Every Start, Restart and Reset begins here; a Stop is what a migration itself needs.
     if (action !== "stop" && agent.migrating)
@@ -79,6 +82,9 @@ export class AgentControlOperations {
       controlSequence: 0,
       sessionSequence: 0,
       ...(identity ? { identity } : {}),
+      ...(action === "start" && carryFailedStreak && old?.failedStreak
+        ? { failedStreak: old.failedStreak }
+        : {}),
       ...(action === "start" ? { launchId: crypto.randomUUID() } : {}),
     };
     if (
@@ -118,6 +124,6 @@ export class AgentControlOperations {
       throw new Error("Agent configuration or control operation changed");
     if (attempt === 3)
       throw new Error("Agent control could not begin after 3 compare-and-swap attempts");
-    return this.begin(refreshed, action, requestId, attempt + 1, stoppedAt);
+    return this.begin(refreshed, action, requestId, attempt + 1, stoppedAt, carryFailedStreak);
   }
 }

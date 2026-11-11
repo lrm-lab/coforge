@@ -123,7 +123,7 @@ export class AgentControlReceiver {
     if (terminal(state)) throw new Error("Operation already finished");
     if (result.phase === "workspace-reset" && result.identity)
       throw new Error("Reset retained old Session");
-    const { identity: oldIdentity, errorCode: _oldError, ...fields } = state;
+    const { identity: oldIdentity, errorCode: _oldError, failedStreak, ...fields } = state;
     const identity =
       result.phase === "started" && state.sessionSequence > result.sequence
         ? oldIdentity
@@ -148,7 +148,12 @@ export class AgentControlReceiver {
         ? { errorCode: result.errorCode ?? state.errorCode }
         : {}),
       ...((command?.completed ?? "failed") === "failed"
-        ? { failedAtMs: state.failedAtMs ?? Date.now() }
+        ? {
+            failedAtMs: state.failedAtMs ?? Date.now(),
+            // A failed Stop says nothing about starting: only a Start's failure is one more
+            // consecutive automatic attempt (Raft 1.0.69 item 12, task #25).
+            ...(state.action === "stop" ? {} : { failedStreak: (failedStreak ?? 0) + 1 }),
+          }
         : {}),
     };
     if (!(await this.store.replace(agent, next))) throw new Error("Control result lost its fence");

@@ -89,6 +89,10 @@ export type AgentControlState = AgentControlScope & {
   sessionSequence: number;
   errorCode?: string;
   failedAtMs?: number;
+  /** Consecutive automatic starts that ended in the same failure. An Agent that cannot start
+   * must not be retried every window for a day: at `AUTOMATIC_START_STREAK_LIMIT` the automatic
+   * retries stop and only a person's Start may try again (Raft 1.0.69 item 12, task #25). */
+  failedStreak?: number;
 };
 
 export type AgentControlAgent = {
@@ -229,18 +233,25 @@ const NON_RETRYABLE_ERROR_CODES = new Set([
 export const TRANSIENT_FAILURE_RETRY_INTERVAL_MS = 10 * 60 * 1_000;
 /** Maximum window for automatic low-frequency retry before giving up permanently (24 hours). */
 export const TRANSIENT_FAILURE_MAX_WINDOW_MS = 24 * 60 * 60 * 1_000;
+/** How many consecutive failed automatic starts an Agent gets before the automatic retries stop:
+ * one restart, and a person's Start after the second failure (Raft 1.0.69 item 12, task #25). */
+export const AUTOMATIC_START_STREAK_LIMIT = 2;
 
 /**
  * Whether an automatic Start — a Daemon `ready` recovery or a delivery wake — may retry the
  * Agent's latest failed operation. Only a transient failure inside the bounded window is
  * retried: a non-retryable error code, a missing failure time, or an elapsed time outside the
  * window waits for a person's Start or `clearLaunchFailure` instead of another automatic
- * attempt. `agent-delivery-rejection.server.ts` and `AgentControl.recover` share this one rule.
+ * attempt. An Agent that used up its `AUTOMATIC_START_STREAK_LIMIT` of consecutive automatic
+ * starts is also left alone: retrying a start that keeps failing only multiplies the same
+ * failure for a day. `agent-delivery-rejection.server.ts` and `AgentControl.recover` share this
+ * one rule.
  */
 export function isEligibleForTransientRetry(agent: AgentControlAgent, now: number): boolean {
   const state = agent.state;
   if (!state || state.phase !== "failed") return false;
   if (state.errorCode && NON_RETRYABLE_ERROR_CODES.has(state.errorCode)) return false;
+  if ((state.failedStreak ?? 0) >= AUTOMATIC_START_STREAK_LIMIT) return false;
   if (!state.failedAtMs) return false;
   const elapsed = now - state.failedAtMs;
   return (

@@ -8,7 +8,8 @@ import {
 } from "#src/server/agents/agent-control.server";
 import { WorkspaceAgentRecovery } from "#src/server/agents/agent-runtime-control.server";
 import type { AgentRecord } from "#src/server/db/repositories/agent.repositories.server";
-import { decodeAgentStartIntent } from "@lrm/coforge-sdk/internal";
+import { AgentControlReceiver } from "#src/server/agents/agent-control-receiver.server";
+import { decodeAgentStartIntent, type AgentControlResult } from "@lrm/coforge-sdk/internal";
 import { pendingOpStore, pendingRuntimeConfig } from "./helpers/agent-control-store";
 
 test("recover republishes a pending start unchanged, without superseding it", async () => {
@@ -142,6 +143,53 @@ test("recover retries a transient launch failure inside the retry window", async
     controlEpoch: 4,
   });
   expect(current().state).toMatchObject({ requestId: "ready-recovery", phase: "starting" });
+});
+
+test("recover retries a transient launch failure inside the retry window and carries its streak", async () => {
+  const { store, current } = failedStartFixture({
+    errorCode: "runtime_spawn_failed",
+    failedAtMs: Date.now() - 15 * 60 * 1_000,
+    failedStreak: 1,
+  });
+  const sent: Uint8Array[] = [];
+  const control = new AgentControl(
+    store,
+    { publish: async (_channel, bytes) => void sent.push(bytes) },
+    { run: async (_id, work) => work() },
+    { timeoutMs: 0, fallbackMs: 0 },
+  );
+  await control.recover(readyRecoveryIntent, "owner");
+  expect(sent).toHaveLength(1);
+  // The next automatic attempt is the second of the streak; a further failure ends the streak.
+  expect(current().state).toMatchObject({
+    requestId: "ready-recovery",
+    phase: "starting",
+    failedStreak: 1,
+  });
+});
+
+test("recover gives up on an Agent whose automatic attempts ran out", async () => {
+  const { store, current } = failedStartFixture({
+    errorCode: "runtime_spawn_failed",
+    failedAtMs: Date.now() - 15 * 60 * 1_000,
+    failedStreak: 2,
+  });
+  const sent: Uint8Array[] = [];
+  const control = new AgentControl(
+    store,
+    { publish: async (_channel, bytes) => void sent.push(bytes) },
+    { run: async (_id, work) => work() },
+    { timeoutMs: 0, fallbackMs: 0 },
+  );
+  await control.recover(readyRecoveryIntent, "owner");
+  // Inside the retry window, but the Agent has already been restarted twice: a person's Start
+  // is what may try again.
+  expect(sent).toHaveLength(0);
+  expect(current().state).toMatchObject({
+    requestId: "failed-start",
+    phase: "failed",
+    failedStreak: 2,
+  });
 });
 
 test.each([
@@ -431,4 +479,79 @@ test("a Computer whose only Agent fails recovery still completes the Daemon's re
   await recovery.recoverWorkspace(dorothyWorkspaceId, dorothyComputerId, []);
 
   expect(sent).toHaveLength(0);
+});
+
+function startingStateFixture(overrides: Partial<AgentControlState> = {}) {
+  return pendingOpStore({
+    id: "a",
+    ownerId: "owner",
+    visibility: "public",
+    workspaceId: "w",
+    computerId: "c",
+    runtimeConfig: pendingRuntimeConfig,
+    state: {
+      version: 1,
+      protocolMajor: 1,
+      requestId: "start-2",
+      workspaceId: "w",
+      computerId: "c",
+      agentId: "a",
+      provider: "pi",
+      epoch: 4,
+      action: "start",
+      phase: "starting",
+      configRevision: agentControlRevision(pendingRuntimeConfig),
+      controlSequence: 0,
+      sessionSequence: 0,
+      launchId: "launch-2",
+      ...overrides,
+    },
+  });
+}
+
+const startScope = { workspaceId: "w", computerId: "c" };
+
+function startResult(overrides: Partial<AgentControlResult>): AgentControlResult {
+  return {
+    requestId: "start-2",
+    workspaceId: "w",
+    computerId: "c",
+    agentId: "a",
+    provider: "pi",
+    epoch: 4,
+    sequence: 1,
+    phase: "failed",
+    ...overrides,
+  } as AgentControlResult;
+}
+
+test("a failed start counts one more consecutive automatic attempt", async () => {
+  const { store, current } = startingStateFixture({ failedStreak: 1 });
+  const receiver = new AgentControlReceiver(
+    store,
+    { notify: async () => {} } as never,
+    {
+      run: async (_id: string, work: () => Promise<void>) => work(),
+    } as never,
+  );
+  await receiver.result(startScope, startResult({ errorCode: "runtime_spawn_failed" }));
+  expect(current().state).toMatchObject({
+    phase: "failed",
+    errorCode: "runtime_spawn_failed",
+    failedStreak: 2,
+  });
+});
+
+test("a start that gets through drops the streak it carried", async () => {
+  const { store, current } = startingStateFixture({ failedStreak: 1 });
+  const receiver = new AgentControlReceiver(
+    store,
+    { notify: async () => {} } as never,
+    {
+      run: async (_id: string, work: () => Promise<void>) => work(),
+    } as never,
+  );
+  await receiver.result(startScope, startResult({ phase: "started", launchId: "launch-2" }));
+  expect(current().state).toMatchObject({ phase: "completed" });
+  expect(current().state?.failedStreak).toBeUndefined();
 });

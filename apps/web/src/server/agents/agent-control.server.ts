@@ -18,6 +18,7 @@ import {
   type AgentStopReasonRecorder,
 } from "./agent-control-receiver.server";
 import { errorType } from "#src/server/errors/error-type.server";
+import { retryFailedAutomaticStart } from "./agent-control-retry.server";
 
 export * from "./agent-control-types.server";
 
@@ -32,7 +33,6 @@ import {
   carriesRecovery,
   controlOperationState,
   current,
-  isEligibleForTransientRetry,
   terminal,
   type AgentControlState,
   type AgentControlAgent,
@@ -139,7 +139,7 @@ export class AgentControl {
    * answered — every result is fenced on `current` — so republishing it would leave the Agent
    * pending forever; `begin` supersedes it like any newer command. And a failed latest
    * operation is retried only inside the bounded transient window the delivery wake shares
-   * (`isEligibleForTransientRetry`): a non-retryable failure, or one outside the window,
+   * (`retryFailedAutomaticStart`): a non-retryable failure, or one outside the window,
    * waits for a person's Start or `clearLaunchFailure`.
    *
    * `loaded` is the Agent the caller already read under this Agent's runtime lock; it is
@@ -166,12 +166,17 @@ export class AgentControl {
       await this.#driver.advance(agent.id, agent.state.requestId, intent);
       return;
     }
-    if (
-      controlOperationState(agent) === "failed" &&
-      !isEligibleForTransientRetry(agent, this.clock())
-    )
-      return;
-    const state = await this.#operations.begin(agent, "start", intent.requestId);
+    if (controlOperationState(agent) === "failed") {
+      if (!retryFailedAutomaticStart(agent, this.clock())) return;
+    }
+    const state = await this.#operations.begin(
+      agent,
+      "start",
+      intent.requestId,
+      1,
+      undefined,
+      true,
+    );
     // `begin` built `state` from `agent` (a retry only after checking the Computer and
     // configuration it publishes did not change), so it is published without reading it back.
     await this.#publisher.publish(agent, state, intent);
@@ -181,7 +186,12 @@ export class AgentControl {
     const agent = await this.store.get(agentId);
     if (!agent || !agent.state || agent.state.phase !== "failed") return false;
     if (expectedErrorCode && agent.state.errorCode !== expectedErrorCode) return false;
-    const { errorCode: _err, failedAtMs: _failedAt, ...fields } = agent.state;
+    const {
+      errorCode: _err,
+      failedAtMs: _failedAt,
+      failedStreak: _streak,
+      ...fields
+    } = agent.state;
     const next: AgentControlState = {
       ...fields,
       controlSequence: agent.state.controlSequence + 1,
