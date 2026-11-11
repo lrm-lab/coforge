@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { usePhoneShell } from "#src/components/layout/phone-shell";
-import { PhoneBusyAgents } from "#src/features/agents/top-bar-busy-agents";
+import { PhoneBusyAgents } from "#src/features/agents/shell-busy-agents";
 import { NotificationBell } from "#src/features/usage-limits/notification-bell";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 
