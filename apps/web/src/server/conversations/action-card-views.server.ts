@@ -245,7 +245,9 @@ export async function actionCardViews(
         app: appRegisterView(payload),
         // The registry's rule: a Workspace owner or admin registers apps.
         canCommit: pending && roleCan(viewerRole, "manageApps"),
-        result: card.result as { clientKey: string; noOwnerAgent?: boolean } | undefined,
+        result: card.result as
+          | { clientKey: string; noOwnerAgent?: boolean; secretUndelivered?: boolean }
+          | undefined,
       });
     } else if (payload.type === "page:fill") {
       views.set(card.messageId, pageFillActionCardView(base, card, payload, viewerUserId, pending));

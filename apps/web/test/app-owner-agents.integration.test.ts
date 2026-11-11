@@ -391,6 +391,30 @@ test.skipIf(!db)(
   },
 );
 
+test.skipIf(!db)(
+  "a notice that cannot be delivered marks the card so the Agent knows to rotate the secret",
+  async () => {
+    const f = await fixture(db!);
+    try {
+      const { messageId } = await f.prepare(f.scout.id);
+      const register = new AppRegisterActionCards(db!, undefined, {
+        send: async () => false,
+      });
+      await register.commit(f.actor("admin"), messageId);
+      const card = await db!.actionCard.findUniqueOrThrow({ where: { messageId } });
+      expect(card.result).toMatchObject({ clientKey: f.key, secretUndelivered: true });
+      const view = (
+        await f.actionCards.viewsFor(f.workspace.id, f.people.admin.id, [messageId])
+      ).get(messageId);
+      expect(view).toMatchObject({
+        result: { clientKey: f.key, secretUndelivered: true },
+      });
+    } finally {
+      await f.cleanup();
+    }
+  },
+);
+
 test.skipIf(!db)("Settings names the owner Agent only while it is live and public", async () => {
   const f = await fixture(db!);
   try {

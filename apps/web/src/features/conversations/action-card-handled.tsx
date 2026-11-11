@@ -172,7 +172,9 @@ export function HandledActionCard({ view }: { view: ToolActionCardView }) {
         <p className="pt-1 text-xs text-tertiary">
           {view.result.noOwnerAgent
             ? m.app_register_card_no_owner_agent()
-            : m.app_register_card_secret_sent()}
+            : view.result.secretUndelivered
+              ? m.app_register_card_secret_undelivered()
+              : m.app_register_card_secret_sent()}
         </p>
       )}
     </div>

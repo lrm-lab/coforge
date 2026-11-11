@@ -126,19 +126,22 @@ export class AppRegisterActionCards {
       await this.settle(tx, messageId, actor.userId, app.key, owned);
       return { app, clientSecret, owned };
     });
-    // Browsers refresh the card; the owner Agent alone gets the secret, privately and best effort
-    // (an Agent that misses it rotates it).
-    await Promise.all([
-      publishActionCardUpdate(this.db, this.realtime, card.conversationId, messageId),
-      created.owned
-        ? this.notices?.send({
-            agentId,
-            appKey: created.app.key,
-            appName: created.app.name,
-            clientSecret: created.clientSecret,
-          })
-        : undefined,
-    ]);
+    // Browsers refresh the card; the owner Agent alone gets the secret, privately and best effort.
+    // When it cannot be delivered the card says so, so the Agent knows to rotate the secret.
+    const delivered = created.owned
+      ? await this.notices?.send({
+          agentId,
+          appKey: created.app.key,
+          appName: created.app.name,
+          clientSecret: created.clientSecret,
+        })
+      : undefined;
+    if (created.owned && delivered !== true)
+      await this.db.actionCard.update({
+        where: { messageId },
+        data: { result: { clientKey: created.app.key, secretUndelivered: true } },
+      });
+    await publishActionCardUpdate(this.db, this.realtime, card.conversationId, messageId);
     return { clientKey: created.app.key };
   }
 

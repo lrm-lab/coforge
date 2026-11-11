@@ -52,12 +52,19 @@ test("one notice goes to the Agent's own daemon, carrying the secret", async () 
 });
 
 test("a daemon that did not advertise the capability, or an Agent with no Computer, gets nothing", async () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
   const unsupported = notices({ supported: false });
   expect(await unsupported.sender.send(notice)).toBe(false);
   expect(unsupported.published).toHaveLength(0);
   const placed = notices({ computerId: null });
   expect(await placed.sender.send(notice)).toBe(false);
   expect(placed.published).toHaveLength(0);
+  const events = warn.mock.calls.map((call) => JSON.parse(String(call[0])));
+  expect(events.map((event) => [event.event, event.reason])).toEqual([
+    ["app_registration_notice:undelivered", "unsupported"],
+    ["app_registration_notice:undelivered", "no_computer"],
+  ]);
+  expect(JSON.stringify(warn.mock.calls)).not.toContain(SECRET);
 });
 
 test("a failed publish is not retried, does not throw, and the log never holds the secret", async () => {

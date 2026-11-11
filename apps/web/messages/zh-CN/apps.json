@@ -252,6 +252,7 @@
   "app_register_card_scopes": "权限范围：{scopes}",
   "app_register_card_denied_reason": "只有工作区所有者和管理员可以注册应用。",
   "app_register_card_secret_sent": "客户端密钥已私下发送给发起请求的 Agent。如果它没有收到，可以运行 coforge app rotate-secret。",
+  "app_register_card_secret_undelivered": "客户端密钥未能送达 Agent。它可以运行 coforge app rotate-secret。",
   "apps_detail_owner_agent": "负责 Agent：{agent}",
   "app_register_card_no_owner_agent": "未设置负责 Agent（发起请求的 Agent 已不存在），因此没有发送密钥。工作区所有者或管理员可以在“设置 → 应用”中生成。",
   "app_recover_card_title": "找回应用的负责 Agent",

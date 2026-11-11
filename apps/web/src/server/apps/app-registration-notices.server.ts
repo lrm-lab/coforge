@@ -37,8 +37,9 @@ export class AppRegistrationNotices {
     try {
       const placement = await this.placement(notice.agentId);
       const computerId = placement?.computerId;
-      if (!placement || !computerId) return false;
-      if (!(await this.capability.supports(placement.workspaceId, computerId))) return false;
+      if (!placement || !computerId) return this.undelivered(notice, "no_computer");
+      if (!(await this.capability.supports(placement.workspaceId, computerId)))
+        return this.undelivered(notice, "unsupported");
       await this.publish(
         placement.workspaceId,
         computerId,
@@ -64,5 +65,21 @@ export class AppRegistrationNotices {
       );
       return false;
     }
+  }
+
+  /** A notice that can never arrive still leaves a trace: the Agent must rotate the secret. */
+  private undelivered(
+    notice: { agentId: string; appKey: string },
+    reason: "no_computer" | "unsupported",
+  ): false {
+    console.warn(
+      JSON.stringify({
+        event: "app_registration_notice:undelivered",
+        agent_id: notice.agentId,
+        app_key: notice.appKey,
+        reason,
+      }),
+    );
+    return false;
   }
 }
