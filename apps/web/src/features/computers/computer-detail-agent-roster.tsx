@@ -131,7 +131,12 @@ export function ComputerDetailAgentRoster({
             <span className="mr-auto text-sm text-tertiary">
               {m.computer_agents_selected({ count: String(selectedAgents.length) })}
             </span>
-            <Button size="sm" color="secondary" isDisabled={locked} onPress={control.submitStart}>
+            <Button
+              size="sm"
+              color="secondary"
+              isDisabled={locked}
+              onPress={() => control.submitStart()}
+            >
               {m.agent_control_start()}
             </Button>
             <Button size="sm" color="secondary" isDisabled={locked} onPress={control.submitStop}>
@@ -152,11 +157,7 @@ export function ComputerDetailAgentRoster({
             {m.computer_agents_control_failed({ names: failedNames.join(", ") })}
           </p>
         )}
-        {control.startDeferred && (
-          <p className="py-2 text-sm text-tertiary">
-            {m.agent_control_start_deferred_notice({ computer: computerName })}
-          </p>
-        )}
+        {control.startDeferred && <p className="py-2 text-sm text-tertiary">{control.startNote}</p>}
         {agents.length ? (
           // One grid for the heads and every row, which share its columns through `subgrid`: a
           // column is as wide as its widest cell, so the name and runtime take what they need.

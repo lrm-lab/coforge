@@ -125,8 +125,16 @@ export function AgentProfileHeader({
               size="sm"
               className="hidden @lg/agent-header:inline-flex"
               isDisabled={controls.startStopBusy}
-              tooltip={controls.isOnline ? m.agent_control_stop_agent() : m.agent_control_start()}
-              onClick={controls.isOnline ? controls.submitStop : controls.submitStart}
+              tooltip={
+                controls.isOnline
+                  ? m.agent_control_stop_agent()
+                  : [m.agent_control_start(), controls.startNote].filter(Boolean).join(" · ")
+              }
+              onClick={
+                controls.isOnline
+                  ? controls.submitStop
+                  : () => controls.submitStart({ announce: true })
+              }
             />
             <ButtonUtility
               icon={RotateCcw}

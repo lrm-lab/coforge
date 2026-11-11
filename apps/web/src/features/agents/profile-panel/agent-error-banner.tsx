@@ -38,6 +38,8 @@ export function AgentErrorBanner({
   const label = status.alertText || status.label;
   // A stopped Agent waits for a person; one still running retries on its own.
   const recovery = retry && !status.isOnline ? status.recovery : undefined;
+  const resetBlocked = recovery === "reset_session" && retry?.computerOffline === true;
+  const retryNote = resetBlocked ? m.agent_error_banner_computer_offline() : retry?.note;
   const showLinks = !onActivityTab && onViewLogs;
   return (
     <div
@@ -65,24 +67,22 @@ export function AgentErrorBanner({
           <div className="-my-1 flex shrink-0 items-center gap-1">
             {recovery && retry && (
               <>
-                {/* A Start would only fail while the Computer is away: say why, before the press. */}
+                {/* Retry is the panel's Start, under its one rule (task #731): on an offline
+                    Computer it still goes through and waits for the Computer, and the note
+                    beside it says so; Reset session needs the Computer there. */}
                 <Button
                   color="secondary"
                   size="sm"
-                  isDisabled={retry.busy || retry.computerOffline}
+                  isDisabled={retry.busy || resetBlocked}
                   onPress={recovery === "reset_session" ? retry.onResetSession : retry.onRetry}
                 >
                   {recovery === "reset_session"
                     ? m.agent_error_banner_reset_session()
-                    : retry.busy
+                    : retry.busy && !retry.deferred
                       ? m.agent_control_start_pending()
                       : m.agent_error_banner_retry()}
                 </Button>
-                {retry.computerOffline && (
-                  <span className="px-1.5 text-sm text-tertiary">
-                    {m.agent_error_banner_computer_offline()}
-                  </span>
-                )}
+                {retryNote && <span className="px-1.5 text-sm text-tertiary">{retryNote}</span>}
                 <span className="w-1" aria-hidden="true" />
               </>
             )}
@@ -107,11 +107,14 @@ export function AgentErrorBanner({
 }
 
 /** The banner's way back for a stop a person cleared (`agentDisplay().recovery`): the panel's
- * Start, or its Reset session (`useAgentRuntimeControls`), busy while any control runs and not
- * offered while the Agent's Computer is offline. */
+ * Start, or its Reset session (`useAgentRuntimeControls`), busy while any control runs. Start
+ * keeps the controls' offline rule (`deferred`, `note`); Reset session is not offered while the
+ * Agent's Computer is offline. */
 export type AgentRetry = {
   onRetry: () => void;
   onResetSession: () => void;
   busy: boolean;
+  deferred: boolean;
+  note?: string;
   computerOffline: boolean;
 };

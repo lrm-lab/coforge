@@ -290,9 +290,11 @@ export function AgentProfilePanel({
           display={display}
           onActivityTab={tab === "activity"}
           retry={{
-            onRetry: controls.submitStart,
+            onRetry: () => controls.submitStart(),
             onResetSession: () => controls.openRestart("reset-session"),
             busy: controls.startStopBusy,
+            deferred: controls.startDeferred,
+            note: controls.startNote,
             computerOffline: profile?.computer?.online === false,
           }}
           onViewLogs={

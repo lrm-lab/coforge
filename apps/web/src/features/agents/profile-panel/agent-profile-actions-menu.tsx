@@ -20,7 +20,7 @@ export function AgentProfileActionsMenu({
           <Dropdown.Menu
             aria-label={m.agent_profile_actions()}
             onAction={(key) => {
-              if (key === "start") controls.submitStart();
+              if (key === "start") controls.submitStart({ announce: true });
               if (key === "stop") controls.submitStop();
               if (key === "restart") controls.openRestart("restart");
             }}
@@ -36,9 +36,18 @@ export function AgentProfileActionsMenu({
               <Dropdown.Item
                 id="start"
                 icon={Play}
-                label={m.agent_control_start()}
+                textValue={m.agent_control_start()}
                 isDisabled={controls.startStopBusy}
-              />
+              >
+                <span className="flex flex-col">
+                  <span>{m.agent_control_start()}</span>
+                  {controls.startNote && (
+                    <span className="text-xs whitespace-normal text-tertiary">
+                      {controls.startNote}
+                    </span>
+                  )}
+                </span>
+              </Dropdown.Item>
             )}
             <Dropdown.Item
               id="restart"
