@@ -232,7 +232,9 @@ export const sendDirectConversationMessage = createServerFn({ method: "POST" })
       { "coforge.conversation_id": data.conversationId },
       async (sendTrace) => {
         const centrifugo = createCentrifugoServerApi();
-        const withinSend = data.asTask ? await sentAsTaskHook(db, workspaceId) : undefined;
+        const withinSend = data.asTask
+          ? await sentAsTaskHook(db, workspaceId, data.taskPriority)
+          : undefined;
         // The echo's sender profile does not depend on the send.
         const [message, profile] = await Promise.all([
           sendTrace.measure("message.persist_and_publish", () =>

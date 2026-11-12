@@ -23,8 +23,12 @@ test("Task commands require exact arguments and reject thread targets", () => {
       "Ship it",
       "--assignee",
       "@ada",
+      "--priority",
+      "medium",
     ]),
-  ).toMatchObject({ task: { operation: "create", title: "Ship it", assignee: "@ada" } });
+  ).toMatchObject({
+    task: { operation: "create", title: "Ship it", assignee: "@ada", priority: "medium" },
+  });
   expect(refusal(["task", "claim", "--target", "#general"])).toEqual(
     invalidArg("Provide at least one --number or --message-id"),
   );
@@ -50,6 +54,8 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
       "--assignee",
       " @ada ",
       "--creates-resource",
+      "--priority",
+      "high",
     ]),
   ).toMatchObject({
     task: {
@@ -57,9 +63,19 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
       titles: ["Draft", "Review"],
       assignee: "@ada",
       createsResource: true,
+      priority: "high",
     },
   });
-  const single = parseArgs(["task", "create", "--target", "#general", "--title", "One"]) as {
+  const single = parseArgs([
+    "task",
+    "create",
+    "--target",
+    "#general",
+    "--title",
+    "One",
+    "--priority",
+    "low",
+  ]) as {
     task: Record<string, unknown>;
   };
   expect(single.task).toMatchObject({ title: "One" });
@@ -78,6 +94,13 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
     refusal(["task", "create", "--target", "#general", "--title", "One", "--assignee", "@Ada"]),
   ).toEqual(invalidArg("--assignee must be an @handle"));
   expect(refusal(["task", "create", "--title", "One"])).toEqual(invalidArg("--target is required"));
+  // Task #12: a new task names its priority, one of the four levels — `none` is not a choice.
+  expect(refusal(["task", "create", "--target", "#general", "--title", "One"])).toEqual(
+    invalidArg("--priority is required (urgent, high, medium or low)"),
+  );
+  expect(
+    refusal(["task", "create", "--target", "#general", "--title", "One", "--priority", "none"]),
+  ).toEqual(invalidArg("--priority must be one of: urgent, high, medium, low; got none"));
 });
 
 test("Task claim takes repeated numbers and message ids together", () => {
@@ -133,6 +156,12 @@ test("Task update, assign, convert, amend and receipt name what is wrong with th
   expect(refusal([...update, "--number", "1"])).toEqual(
     invalidArg("task update needs --status, --priority or --label"),
   );
+  expect(refusal([...update, "--number", "1", "--priority", "none"])).toEqual(
+    invalidArg("--priority must be one of: urgent, high, medium, low; got none"),
+  );
+  expect(parseArgs([...update, "--number", "1", "--priority", "high"])).toMatchObject({
+    task: { operation: "update", number: 1, priority: "high" },
+  });
   expect(
     refusal([...update, "--number", "1", "--status", "done", "--expected-revision", "-1"]),
   ).toEqual(invalidArg("--expected-revision must be a non-negative integer; got -1"));
@@ -151,6 +180,34 @@ test("Task update, assign, convert, amend and receipt name what is wrong with th
   expect(refusal(["task", "convert", "--target", "#general"])).toEqual(
     invalidArg("--message-id is required"),
   );
+  // Task #12: convert names a priority too, from the same four levels as create.
+  expect(
+    parseArgs([
+      "task",
+      "convert",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--priority",
+      "urgent",
+    ]),
+  ).toMatchObject({ task: { operation: "convert", messageId: "abc12345", priority: "urgent" } });
+  expect(refusal(["task", "convert", "--target", "#general", "--message-id", "abc12345"])).toEqual(
+    invalidArg("--priority is required (urgent, high, medium or low)"),
+  );
+  expect(
+    refusal([
+      "task",
+      "convert",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--priority",
+      "none",
+    ]),
+  ).toEqual(invalidArg("--priority must be one of: urgent, high, medium, low; got none"));
   expect(refusal(["task", "amend", "--target", "#general", "--number", "2"])).toEqual(
     invalidArg(
       "At least one amendment is required: --title, --description, --clear-description, --blocked-by, --parent, --label, --project, or --clear-project",

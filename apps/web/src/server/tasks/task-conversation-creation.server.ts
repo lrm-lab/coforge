@@ -2,7 +2,7 @@ import type {
   TaskCommand,
   TaskHistoryChange,
   TaskPrincipal,
-  TaskPriority,
+  TaskPriorityLevel,
   TaskStatus,
 } from "@lrm/coforge-sdk/internal";
 import { taskStatusNeedsOwner } from "@lrm/coforge-sdk/internal";
@@ -290,7 +290,7 @@ export async function insertConversationTask(
     title: string;
     description?: string | null;
     createsResource?: boolean;
-    priority?: TaskPriority;
+    priority?: TaskPriorityLevel;
     /** The status the new Task opens in; absent, the defaults (a self-assign starts in
      * progress, anything else waits in todo). */
     status?: TaskStatus;

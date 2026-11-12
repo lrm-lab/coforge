@@ -1,7 +1,16 @@
 import { expect, test } from "bun:test";
 import { parseArgs, run, type MessageTransport } from "../index";
 
-const create = ["task", "create", "--target", "#general", "--title", "Fix it"];
+const create = [
+  "task",
+  "create",
+  "--target",
+  "#general",
+  "--title",
+  "Fix it",
+  "--priority",
+  "medium",
+];
 
 test("task create takes a description, a source message and --alongside", () => {
   expect(
@@ -22,6 +31,7 @@ test("task create takes a description, a source message and --alongside", () => 
       description: "Why",
       messageId: "01a16c6c-1c04",
       alongside: true,
+      priority: "medium",
     },
   });
 });
@@ -29,12 +39,28 @@ test("task create takes a description, a source message and --alongside", () => 
 test("task create without them is as before", () => {
   expect(parseArgs(create)).toEqual({
     command: "task",
-    task: { operation: "create", target: "#general", title: "Fix it" },
+    task: {
+      operation: "create",
+      target: "#general",
+      title: "Fix it",
+      priority: "medium",
+    },
   });
 });
 
 test("one source message may serve every --title, a description only a single one", () => {
-  const titles = ["task", "create", "--target", "#general", "--title", "A", "--title", "B"];
+  const titles = [
+    "task",
+    "create",
+    "--target",
+    "#general",
+    "--title",
+    "A",
+    "--title",
+    "B",
+    "--priority",
+    "low",
+  ];
   expect(parseArgs([...titles, "--message-id", "m1"])).toMatchObject({
     task: { titles: ["A", "B"], messageId: "m1" },
   });

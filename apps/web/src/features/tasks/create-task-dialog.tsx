@@ -1,4 +1,9 @@
-import type { TaskPriority, TaskProjectRef, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
+import type {
+  TaskPriorityLevel,
+  TaskProjectRef,
+  TaskStatus,
+  TaskView,
+} from "@lrm/coforge-sdk/internal";
 import { ChevronRight, XClose } from "@untitledui/icons";
 import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Heading, TextArea } from "react-aria-components";
@@ -36,8 +41,8 @@ export type TaskDraft = {
   assignee?: string;
   /** Label names. */
   labels?: string[];
-  /** Left out for none, the server's default. */
-  priority?: TaskPriority;
+  /** The new Task's priority, always one of the four levels the form offers (task #12). */
+  priority?: TaskPriorityLevel;
   /** A Project by slug, or null for none; absent where the form offers no Project (a sub-task
    * takes its parent's). */
   project?: string | null;
@@ -154,13 +159,20 @@ export function CreateTaskDialog({
       titleRef.current?.focus();
       return;
     }
+    // A new Task always names its priority (task #12); the submit button is disabled until one
+    // is picked, and a requestSubmit from the keyboard or the phone bar still lands here.
+    const priority = draft.priority;
+    if (!priority) {
+      setError(m.tasks_priority_required());
+      return;
+    }
     const description = draft.description.trim();
     const made: TaskDraft = {
       title,
       ...(description && { description }),
       ...(draft.assignee && { assignee: draft.assignee }),
       ...(draft.labels.length > 0 && { labels: draft.labels }),
-      ...(draft.priority !== "none" && { priority: draft.priority }),
+      priority,
       ...(offersProject && { project: project?.slug ?? null }),
     };
     const key = JSON.stringify(made);
@@ -395,7 +407,7 @@ export function CreateTaskDialog({
                   onChange={setMore}
                   isDisabled={saving}
                 />
-                <DialogAction type="submit" isLoading={saving}>
+                <DialogAction type="submit" isLoading={saving} isDisabled={!draft.priority}>
                   {m.tasks_new_submit()}
                   <kbd
                     aria-hidden="true"
@@ -418,7 +430,7 @@ const emptyDraft = () => ({
   description: "",
   assignee: undefined as string | undefined,
   labels: [] as string[],
-  priority: "none" as TaskPriority,
+  priority: undefined as TaskPriorityLevel | undefined,
   /** Undefined until the viewer picks: a Project's board then starts at that Project. */
   project: undefined as TaskProjectRef | null | undefined,
 });

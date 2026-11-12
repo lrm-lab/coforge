@@ -1,6 +1,6 @@
 import {
   isTaskRef,
-  TASK_PRIORITIES,
+  TASK_PRIORITY_LEVELS,
   TASK_STATUSES,
   taskAssignReasonProblem,
   type TaskCommand,
@@ -121,15 +121,20 @@ export function validateTaskCommand(command: TaskCommand) {
     // they are off.
     if (command.number !== undefined) throw new AppError("INVALID_INPUT");
   }
-  // A priority is one of five, set on create or by an update (with or without a status).
+  // A priority is set on create, convert or by an update (with or without a status), and only
+  // ever to one of the four levels — `none` is the stored level of an unprioritized Task,
+  // never a choice a command may name (task #12). An absent priority is still accepted on
+  // create and convert while older Computers send none; the Agent route logs those.
   if (
     command.priority !== undefined &&
-    (!(TASK_PRIORITIES as readonly unknown[]).includes(command.priority) ||
-      (command.operation !== "create" && command.operation !== "update"))
+    (!(TASK_PRIORITY_LEVELS as readonly unknown[]).includes(command.priority) ||
+      (command.operation !== "create" &&
+        command.operation !== "convert" &&
+        command.operation !== "update"))
   )
     throw new AppError("INVALID_INPUT", {
       errorId: TASK_PRIORITY_INVALID,
-      hint: `the priority must be one of ${TASK_PRIORITIES.join(", ")}, on create or update`,
+      hint: `the priority must be one of ${TASK_PRIORITY_LEVELS.join(", ")}, on create, convert or update`,
     });
   const relational = command.operation === "create" || command.operation === "amend";
   const labelsAllowed =

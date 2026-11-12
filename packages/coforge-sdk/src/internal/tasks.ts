@@ -5,9 +5,14 @@ import { CHANNEL_NAME_PATTERN } from "./channel-references";
 export const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "closed"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-/** A Task's priority, highest first (Linear's five levels); a new Task is `none`. */
+/** A Task's priority, highest first (Linear's five levels); `none` is the stored level of a
+ * Task nobody prioritized — a create or update may name only the four below. */
 export const TASK_PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
+/** The priorities a command may set: every level but `none` (task #12). */
+export const TASK_PRIORITY_LEVELS = ["urgent", "high", "medium", "low"] as const;
+export type TaskPriorityLevel = (typeof TASK_PRIORITY_LEVELS)[number];
 
 /** Where a priority sorts: 0 for `urgent`, and so on. A missing one (an older server) is `none`. */
 export const taskPriorityRank = (priority: TaskPriority | undefined) =>
@@ -334,9 +339,10 @@ export type TaskCommand = {
   labelDescription?: string;
   /** `create`/`amend`: the Project by slug. `amend` with null clears the Task's Project. */
   project?: string | null;
-  /** `create`: the new Tasks' priority (default `none`). `update`: the new priority, with or
-   * without a `status`. */
-  priority?: TaskPriority;
+  /** `create`/`convert`: the new Tasks' priority, one of `TASK_PRIORITY_LEVELS`; absent lands
+   * `none` while old Computers still send none. `update`: the new priority, with or without a
+   * `status`. */
+  priority?: TaskPriorityLevel;
   /** `list`: only Tasks ready to start: todo, unowned and not blocked. */
   ready?: boolean;
   assignee?: string | null;

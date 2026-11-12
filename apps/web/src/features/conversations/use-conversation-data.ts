@@ -98,10 +98,19 @@ export function useChannelConversation(channelId: string) {
         body: string,
         idempotencyKey: string,
         attachmentIds?: string[],
-        { threadRootId, mentions, asTask }: SendOptions = {},
+        { threadRootId, mentions, asTask, taskPriority }: SendOptions = {},
       ) => {
         const message = await send({
-          data: { channelId, idempotencyKey, body, attachmentIds, threadRootId, mentions, asTask },
+          data: {
+            channelId,
+            idempotencyKey,
+            body,
+            attachmentIds,
+            threadRootId,
+            mentions,
+            asTask,
+            ...(asTask && taskPriority && { taskPriority }),
+          },
         });
         page.mergeUpdates([message]);
         if (threadRootId) page.setThreadFollowed(threadRootId, true);
@@ -178,10 +187,18 @@ export function useDirectConversation(conversationId: string) {
         attachmentIds?: string[],
         // A direct conversation keeps `@handle` text as written, so the bindings of a send have
         // nothing to resolve there: only its thread and "As task" reach the server.
-        { threadRootId, asTask }: SendOptions = {},
+        { threadRootId, asTask, taskPriority }: SendOptions = {},
       ) => {
         const message = await send({
-          data: { conversationId, idempotencyKey, body, attachmentIds, threadRootId, asTask },
+          data: {
+            conversationId,
+            idempotencyKey,
+            body,
+            attachmentIds,
+            threadRootId,
+            asTask,
+            ...(asTask && taskPriority && { taskPriority }),
+          },
         });
         page.mergeUpdates([message]);
         void page.reconciliation.reconcile();

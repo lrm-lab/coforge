@@ -166,6 +166,7 @@
   "tasks_create_error": "The task could not be created. Try again.",
   "tasks_create_cancel": "Cancel",
   "tasks_create_title_required": "Add a title for the task.",
+  "tasks_priority_required": "Choose a priority for the task.",
   "tasks_loading": "Loading tasks…",
   "tasks_empty": "No tasks in this conversation",
   "tasks_group_empty": "No tasks",

@@ -4,7 +4,7 @@ import {
   CHANNEL_NAME_PATTERN,
   MAX_MESSAGE_SEQUENCE,
   SEEN_EXACT_SEQS_LIMIT,
-  TASK_PRIORITIES,
+  TASK_PRIORITY_LEVELS,
   TASK_STATUSES,
   type TaskPrincipal,
   type TaskResult,
@@ -130,7 +130,7 @@ export const taskRequestSchema = z
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),
     statuses: z.array(z.enum(TASK_STATUSES)).min(1).max(TASK_STATUSES.length).optional(),
-    priority: z.enum(TASK_PRIORITIES).optional(),
+    priority: z.enum(TASK_PRIORITY_LEVELS).optional(),
     labels: z.array(z.string().min(1).max(64)).max(5).optional(),
     removeLabels: z.array(z.string().min(1).max(64)).max(5).optional(),
     labelDescription: z.string().min(1).max(500).optional(),
@@ -147,9 +147,31 @@ export async function handleAgentTaskPost(
     execute(principal: TaskPrincipal, command: AgentTaskRequest): Promise<TaskResult>;
   },
   freshness?: Parameters<typeof executeAgentTaskWithFreshness>[0]["freshness"],
+  /** Where a create/convert that names no priority is measured from (task #12's rollout gate). */
+  client?: { computerId: string; computerVersion(): Promise<string | null> },
 ): Promise<Response> {
   try {
     const command = taskRequestSchema.parse(await readAgentJsonBody(request));
+    // Phase one of required priority: an Agent command that never names one is still accepted
+    // (it lands `none`), but it is logged with the Computer's version so the rollout gate can
+    // see which Computers still send none before the refusal ships.
+    if (
+      client &&
+      command.priority === undefined &&
+      (command.operation === "create" || command.operation === "convert")
+    ) {
+      const computerVersion = await client.computerVersion().catch(() => null);
+      console.info(
+        JSON.stringify({
+          event: "task_priority_absent",
+          operation: command.operation,
+          workspaceId: principal.workspaceId,
+          agentId: principal.agentId,
+          computerId: client.computerId,
+          computerVersion,
+        }),
+      );
+    }
     const result = await executeAgentTaskWithFreshness({ board, freshness }, principal, command);
     return Response.json({ ...result, idempotencyKey: command.idempotencyKey });
   } catch (error) {
@@ -217,6 +239,16 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
             realtime: new CentrifugoConversationRealtime(createCentrifugoServerApi()),
           }),
           (command) => agentTaskBoardFreshness(db, agentTaskPrincipal(principal), command),
+          {
+            computerId: principal.computerId,
+            computerVersion: async () =>
+              (
+                await db.computer.findUnique({
+                  where: { id: principal.computerId },
+                  select: { computerVersion: true },
+                })
+              )?.computerVersion ?? null,
+          },
         ),
     },
   },

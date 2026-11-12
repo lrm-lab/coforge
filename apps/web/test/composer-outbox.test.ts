@@ -151,6 +151,32 @@ describe("createComposerOutbox", () => {
     ]);
   });
 
+  test("a Task send's priority stays with it through failing, a reload, a retry and delivery", async () => {
+    const storage = memoryStorage();
+    const before = createComposerOutbox(storage);
+    const task = message({ asTask: true, taskPriority: "high" });
+    await before.send(task, async () => {
+      throw new TypeError("Failed to fetch");
+    });
+
+    const after = createComposerOutbox(storage);
+    expect(after.entries("chat-a")).toEqual([
+      { ...task, state: "unsent", reason: "offline", errorId: undefined },
+    ]);
+    let sent: OutgoingMessage | undefined;
+    await after.retry(task.localId, async (retried) => {
+      sent = retried;
+    });
+    expect(sent).toMatchObject({ asTask: true, taskPriority: "high" });
+
+    const pending = message({ asTask: true, taskPriority: "urgent" });
+    void after.send(pending, () => new Promise<never>(() => {}));
+    after.acknowledge(pending.idempotencyKey, "message-9");
+    expect(after.entries("chat-a")).toEqual([
+      { ...pending, state: "delivered", messageId: "message-9" },
+    ]);
+  });
+
   test("an outbox entry whose pins this page cannot read is removed from the device on load", () => {
     const storage = memoryStorage();
     const { pins: _pins, ...withoutPins } = message();

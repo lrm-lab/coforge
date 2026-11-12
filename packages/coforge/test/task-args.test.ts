@@ -32,17 +32,41 @@ test("board task commands use --target, peer kind and JSON output", () => {
   });
 });
 
-test("convert requires the source message id", () => {
-  expect(parseTaskArgs(["convert", "--target", "#general", "--message-id", "abc12345"])).toEqual({
+test("convert requires the source message id and a priority", () => {
+  expect(
+    parseTaskArgs([
+      "convert",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--priority",
+      "high",
+    ]),
+  ).toEqual({
     command: "task",
-    task: { operation: "convert", target: "#general", messageId: "abc12345" },
+    task: { operation: "convert", target: "#general", messageId: "abc12345", priority: "high" },
   });
+  expect(() =>
+    parseTaskArgs(["convert", "--target", "#general", "--message-id", "abc12345"]),
+  ).toThrow("--priority is required");
 });
 
 test("create and amend take --blocked-by and --parent; list takes --ready", () => {
   const target = ["--target", "#general"];
   expect(
-    parseTaskArgs(["create", ...target, "--title", "A", "--blocked-by", "3,5", "--parent", "7"]),
+    parseTaskArgs([
+      "create",
+      ...target,
+      "--title",
+      "A",
+      "--priority",
+      "medium",
+      "--blocked-by",
+      "3,5",
+      "--parent",
+      "7",
+    ]),
   ).toMatchObject({ task: { blockedBy: [{ number: 3 }, { number: 5 }], parent: { number: 7 } } });
   expect(
     parseTaskArgs([
@@ -50,6 +74,8 @@ test("create and amend take --blocked-by and --parent; list takes --ready", () =
       ...target,
       "--title",
       "A",
+      "--priority",
+      "low",
       "--blocked-by",
       "3,#coforge:#388",
       "--parent",
@@ -110,7 +136,9 @@ test("assign takes one handover line and refuses anything that is not one", () =
 
 test("create, claim and assign take --anyway to confirm a held review", () => {
   const target = ["--target", "#general"];
-  expect(parseTaskArgs(["create", ...target, "--title", "A", "--anyway"])).toMatchObject({
+  expect(
+    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "high", "--anyway"]),
+  ).toMatchObject({
     task: { continueAnyway: true },
   });
   expect(parseTaskArgs(["claim", ...target, "--number", "7", "--anyway"])).toMatchObject({
@@ -119,9 +147,9 @@ test("create, claim and assign take --anyway to confirm a held review", () => {
   expect(
     parseTaskArgs(["assign", ...target, "--number", "7", "--assignee", "@ada", "--anyway"]),
   ).toMatchObject({ task: { continueAnyway: true } });
-  expect(parseTaskArgs(["create", ...target, "--title", "A"])).not.toHaveProperty(
-    "task.continueAnyway",
-  );
+  expect(
+    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "medium"]),
+  ).not.toHaveProperty("task.continueAnyway");
   expect(() =>
     parseTaskArgs(["update", ...target, "--number", "7", "--status", "done", "--anyway"]),
   ).toThrow();
@@ -144,7 +172,18 @@ test("task numbers are plain digits: exponent, hex and decimal forms are refused
 test("labels: create attaches, amend adds and takes off, list filters", () => {
   const target = ["--target", "#general"];
   expect(
-    parseTaskArgs(["create", ...target, "--title", "A", "--label", "Design", "--label", "Bug"]),
+    parseTaskArgs([
+      "create",
+      ...target,
+      "--title",
+      "A",
+      "--priority",
+      "low",
+      "--label",
+      "Design",
+      "--label",
+      "Bug",
+    ]),
   ).toMatchObject({ task: { labels: ["Design", "Bug"] } });
   expect(
     parseTaskArgs(["amend", ...target, "--number", "7", "--label", "Design", "--label", "-Bug"]),
@@ -158,6 +197,7 @@ test("labels: create attaches, amend adds and takes off, list filters", () => {
 });
 
 // Task #470: a priority on create, and an update of the priority, the status, or both.
+// Task #12: create and convert must name one of the four levels; `none` stays a stored value only.
 test("--priority sets a new task's priority and an update's, with or without --status", () => {
   const target = ["--target", "#general"];
   expect(
@@ -183,12 +223,34 @@ test("--priority sets a new task's priority and an update's, with or without --s
     "--status, --priority or --label",
   );
   expect(() => parseTaskArgs(["update", ...target, "--number", "7", "--priority", "asap"])).toThrow(
-    "--priority must be one of: urgent, high, medium, low, none; got asap",
+    "--priority must be one of: urgent, high, medium, low; got asap",
   );
   expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--priority", "p1"])).toThrow(
-    "--priority must be one of",
+    "--priority must be one of: urgent, high, medium, low; got p1",
   );
   expect(() =>
     parseTaskArgs(["amend", ...target, "--number", "7", "--title", "B", "--priority", "high"]),
   ).toThrow();
+});
+
+test("create and convert require --priority, and none is never a choice", () => {
+  const target = ["--target", "#general"];
+  const levels = "--priority must be one of: urgent, high, medium, low";
+  expect(() => parseTaskArgs(["create", ...target, "--title", "A"])).toThrow(
+    "--priority is required (urgent, high, medium or low)",
+  );
+  expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--priority", "none"])).toThrow(
+    `${levels}; got none`,
+  );
+  expect(() =>
+    parseTaskArgs(["convert", ...target, "--message-id", "abc12345", "--priority", "none"]),
+  ).toThrow(`${levels}; got none`);
+  expect(() => parseTaskArgs(["update", ...target, "--number", "7", "--priority", "none"])).toThrow(
+    `${levels}; got none`,
+  );
+  // Every other operation still refuses the flag outright.
+  for (const operation of ["list", "show", "claim", "amend", "history"])
+    expect(() =>
+      parseTaskArgs([operation, ...target, "--number", "7", "--priority", "high"]),
+    ).toThrow("Usage:");
 });

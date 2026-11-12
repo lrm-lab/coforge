@@ -1,20 +1,20 @@
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useHydrated } from "@tanstack/react-router";
+import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
 
-import { useAppToast } from "#src/components/ui/toast";
 import { AlertCircle, Plus, UploadCloud02, XClose } from "@untitledui/icons";
 import { FileTrigger } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { filesFromPaste, localId, composerPlaceholder } from "./composer-behavior";
+import { localId, composerPlaceholder } from "./composer-behavior";
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
 import { useComposerAttachments } from "./use-composer-attachments";
+import { useComposerPaste } from "./use-composer-paste";
 import { useFileDrop } from "./use-file-drop";
 import { useComposerScope } from "./composer-scope";
-import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
 import { useComposerRequests, useMessageOutbox } from "./use-message-outbox";
 import {
@@ -38,6 +38,11 @@ import type { ChannelSuggestion } from "./reference-completion";
 import { useReferenceCompletion } from "./use-reference-completion";
 import { PendingMentionStrip, type PendingMention } from "./pending-mention-strip";
 import { UnpinnedMentionHint } from "./unpinned-mention-hint";
+import { ComposerTaskPriority } from "./composer-task-priority";
+import {
+  readLastTaskPriority,
+  useLastTaskPriority,
+} from "#src/features/settings/last-task-priority";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
@@ -116,15 +121,21 @@ export function MessageComposer({
   hostRef?: RefObject<HTMLTextAreaElement | null>;
 }) {
   const hydrated = useHydrated();
-  const toast = useAppToast();
   // Device-local draft, scoped to this chat (and thread): typing here never touches another
   // conversation, and the text survives switching chats, reloads, and restarts on this device.
   const scope = useComposerScope();
   const draftKey = scope?.draftKey ?? composerDraftKey(conversationId, threadRootId);
-  // A failed send keeps its idempotency key so a retry of the same text is idempotent.
-  const retryRef = useRef<{ body: string; idempotencyKey: string; asTask: boolean } | undefined>(
-    undefined,
-  );
+  // A failed send keeps its idempotency key so a retry of the same text is idempotent; the Task
+  // mode and priority it went out with are part of "the same", so changing either mints a key.
+  const retryRef = useRef<
+    | {
+        body: string;
+        idempotencyKey: string;
+        asTask: boolean;
+        taskPriority?: TaskPriorityLevel;
+      }
+    | undefined
+  >(undefined);
   const [body, setBody] = useState(() => readComposerDraft(draftKey));
   // Who each `@name` in the draft was picked to mean; sending turns those names into handles. Kept
   // with the draft and in step with its text: a name edited away takes its pin with it.
@@ -217,8 +228,12 @@ export function MessageComposer({
   });
   const { attachments, setAttachments, uploading, anyFailed, room, addFiles, tray } =
     useComposerAttachments(scope?.uploadTo ?? (() => Promise.resolve(conversationId)));
-  // Set only by editing an unsent Task back into the composer: Send then sends it as a Task again.
+  // Set by the send menu, Cmd/Ctrl+Shift+Enter, or editing an unsent Task back into the composer:
+  // the next send goes out as a Task, with the priority the chip under the field shows.
   const [asTask, setAsTask] = useState(false);
+  // The new Task's priority: the last one picked on this device until the sender changes it
+  // (task #12). It is only ever sent while `asTask` is armed.
+  const [taskPriority, setTaskPriority] = useLastTaskPriority();
   // The edited-back Task belongs to its draft; another conversation's Send is a plain send again.
   useEffect(() => setAsTask(false), [draftKey]);
   // The last quote this composer consumed. Held by id so a re-render (or an unrelated state
@@ -240,6 +255,7 @@ export function MessageComposer({
   }, [quotedDraft]);
   const composerDisabled = !hydrated;
   const drop = useFileDrop(composerDisabled || uploading, (files) => void addFiles(files));
+  const paste = useComposerPaste(room, (files) => void addFiles(files));
   const taskMode = !inThread && Boolean(canSendAsTask);
   const sendDisabled =
     composerDisabled || uploading || anyFailed || (!body.trim() && attachments.length === 0);
@@ -272,14 +288,17 @@ export function MessageComposer({
     };
   }, [hostRef, completion.textareaRef]);
 
-  /** Sends the draft, as a Task when `wantTask` (the send menu, Cmd/Ctrl+Shift+Enter) or, by
-   * default, when it is an unsent Task edited back. */
-  function submit(wantTask = asTask) {
+  /** Sends the draft: as a Task while the send menu (or an edited-back unsent Task) armed it. */
+  function submit() {
     if (sendDisabled) return;
     const text = body.trim() || attachments[0]?.file.name || "";
-    const sendAsTask = taskMode && wantTask;
+    const sendAsTask = taskMode && asTask;
+    // The remembered priority always names a level, so an armed send can never lack one.
+    const sendPriority = sendAsTask ? taskPriority : undefined;
     const idempotencyKey =
-      retryRef.current?.body === text && retryRef.current.asTask === sendAsTask
+      retryRef.current?.body === text &&
+      retryRef.current.asTask === sendAsTask &&
+      retryRef.current.taskPriority === sendPriority
         ? retryRef.current.idempotencyKey
         : localId();
     // Only files that finished uploading and were not removed.
@@ -291,6 +310,7 @@ export function MessageComposer({
       pins: pinsInText(text, pins),
       idempotencyKey,
       asTask: sendAsTask,
+      ...(sendPriority && { taskPriority: sendPriority }),
       attachments: uploaded.flatMap((item) =>
         item.id ? [{ id: item.id, fileName: item.file.name }] : [],
       ),
@@ -319,40 +339,18 @@ export function MessageComposer({
     setBody((current) => draftWithUnsentMessage(current, request.body));
     setPins((current) => request.pins.reduce(addMentionPin, current));
     setAttachments((current) => [...request.chips, ...current]);
-    if (request.asTask) setAsTask(true);
+    // An unsent Task comes back armed, with its priority; an entry stored before priorities
+    // were required keeps the device's remembered one. A plain message disarms a Task send.
+    setAsTask(request.asTask);
+    if (request.taskPriority) setTaskPriority(request.taskPriority);
     retryRef.current = {
       body: request.body,
       idempotencyKey: request.idempotencyKey,
       asTask: request.asTask,
+      taskPriority: request.asTask ? (request.taskPriority ?? readLastTaskPriority()) : undefined,
     };
     requestAnimationFrame(focusComposer);
   });
-
-  /** Paste images through the same upload path as the paperclip button. Covers three clipboard
-   * shapes: real file bytes (Finder copies, screenshot tools), image URLs without bytes (copied
-   * from a web page — fetched to a blob here), and non-inline rasters (e.g. TIFF — re-encoded to
-   * PNG). A paste with nothing image-like now says so instead of staying silent, which used to
-   * read as a broken send button. Plain-text pastes are still left to the browser. */
-  async function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const clipboard = event.clipboardData;
-    const files = filesFromPaste(clipboard);
-    const urls = files.length > 0 ? [] : imageUrlsFromPaste(clipboard);
-    if (files.length === 0 && urls.length === 0) return;
-    event.preventDefault();
-    const inlineReady = await Promise.all(files.map((file) => ensureInlineImage(file)));
-    const fetched: File[] = [];
-    for (const url of urls) {
-      if (fetched.length + inlineReady.length >= room) break;
-      const file = await imageFileFromUrl(url);
-      if (file) fetched.push(await ensureInlineImage(file));
-    }
-    const ready = [...inlineReady, ...fetched];
-    if (ready.length === 0) {
-      toast.error(m.conversation_paste_no_image());
-      return;
-    }
-    void addFiles(ready);
-  }
 
   return (
     <form
@@ -446,6 +444,7 @@ export function MessageComposer({
         label={m.conversation_message_label()}
         placeholder={placeholder}
         onSubmit={submit}
+        onTaskMode={setAsTask}
         sendDisabled={sendDisabled}
         isDisabled={composerDisabled}
         taskMode={taskMode}
@@ -472,6 +471,13 @@ export function MessageComposer({
           </FileTrigger>
         )}
       />
+      {taskMode && asTask && (
+        <ComposerTaskPriority
+          priority={taskPriority}
+          disabled={composerDisabled}
+          onSelect={setTaskPriority}
+        />
+      )}
     </form>
   );
 }
