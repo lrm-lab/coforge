@@ -22,7 +22,7 @@ import {
  * `xl` up, the form alone below it. Checks the two tabs, the fields each shows, the password tab's
  * "email code" link and its way back, that the brand panel is there at 1440 and gone at 768 and
  * 390 (where the form must still fit the width), that the form's card keeps one width at 1440 and
- * 1920, and that the agent shuts its eyes while a password is typed, then shoots the page at 1440,
+ * 1920, and that the agent squints while a password is typed, then shoots the page at 1440,
  * 768 and 390, light and dark, under `.amp/e2e/login-split/`.
  *
  * Opt-in like the other browser E2Es, and brings its own servers (`e2e-sign-in-harness.ts`):
@@ -215,13 +215,13 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
       );
     }
 
-    // While a password is typed the agent shuts its eyes; leaving the field opens them.
+    // While a password is typed the agent squints; leaving the field opens its eyes.
     await setViewport(1440);
     await browser("eval", `${passwordTab}.click()`);
     await waitFor(`!!document.querySelector(${JSON.stringify(passwordFieldSelector)})`);
     const eyesShut = () =>
       evaluate<boolean>(
-        `document.querySelector(".login-art__face--shut").hasAttribute("data-shown")`,
+        `document.querySelector(".login-art__face--squint").hasAttribute("data-shown")`,
       );
     expect(await eyesShut()).toBe(false);
     await browser("click", passwordFieldSelector);

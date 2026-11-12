@@ -30,8 +30,8 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
  * on the ground. The motion is `login-art.css`.
  *
  * The agent answers the forms beside it (jing, 11-10; `login-art-state.tsx`): while a password is
- * typed it shuts its eyes and leans away; once signed in it smiles and sways hello with a bubble
- * that says "welcome back", or "welcome aboard" to an account just made. Her two faces, eyes shut
+ * typed it squints and leans away; once signed in it smiles and sways hello with a bubble
+ * that says "welcome back", or "welcome aboard" to an account just made. Her two faces, squinting
  * and smiling, are layers crossfaded over the open-eyed one.
  */
 export function LoginArt() {
@@ -69,7 +69,10 @@ export function LoginArt() {
         lean?.cancel();
         lean = null;
         setGreeting(kind);
-        const sway = el.animate(SWAY, { duration: SWAY_MS, easing: "ease-in-out" });
+        const sway = el.animate(SWAY, {
+          duration: SWAY_MS,
+          easing: "ease-in-out",
+        });
         // The provider stops waiting after `WELCOME_LIMIT_MS` whatever happens here.
         await sway.finished.then(() => wait(HOLD_MS)).catch(() => {});
       },
@@ -77,9 +80,9 @@ export function LoginArt() {
     return () => attach(null);
   }, [attach]);
 
-  // The greeting's smile wins over eyes shut: pressing Enter in the field greets at once.
+  // The greeting's smile wins over the squint: pressing Enter in the field greets at once.
   const smiling = greeting !== null;
-  const shut = away && !smiling;
+  const squinting = away && !smiling;
   return (
     <div ref={root} className="login-art" aria-hidden="true">
       <img src="/login/frame.webp" alt="" className="login-art__frame" />
@@ -89,10 +92,10 @@ export function LoginArt() {
         <div className="login-art__float">
           <img src="/login/agent.webp" alt="" className="login-art__face" />
           <img
-            src="/login/agent-eyes-shut.webp"
+            src="/login/agent-squint.webp"
             alt=""
-            className="login-art__face login-art__face--over login-art__face--shut"
-            data-shown={shut || undefined}
+            className="login-art__face login-art__face--over login-art__face--squint"
+            data-shown={squinting || undefined}
           />
           <img
             src="/login/agent-smile.webp"

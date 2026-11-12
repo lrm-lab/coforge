@@ -13,6 +13,19 @@ import {
 import { m } from "#src/paraglide/messages";
 import { LoginArt } from "./login-art";
 
+/** The four shown by name on the panel; the line under them names the first two. */
+const LEADING = [
+  RUNTIME_PROVIDER.CLAUDE_CODE,
+  RUNTIME_PROVIDER.CODEX,
+  RUNTIME_PROVIDER.CURSOR,
+  RUNTIME_PROVIDER.OPENCODE,
+] as const;
+const REST = RUNTIME_PROVIDER_DISPLAY_ORDER.filter(
+  (provider) => !(LEADING as readonly string[]).includes(provider),
+);
+const CHIP =
+  "flex h-8 min-w-8 items-center justify-center rounded-full bg-white outline-none focus-visible:outline-2 focus-visible:outline-focus-ring";
+
 /**
  * The sign-in page's left half, from `xl` up: the logo, the illustration, the tagline and the
  * agents CoForge works with. Past 90rem its content moves in by the
@@ -26,7 +39,7 @@ export function LoginBrandPanel() {
       <Link to="/" aria-label="CoForge" className="login-brand-logo">
         <img src="/login/homepage-logo.webp" alt="" className="h-auto w-full" />
       </Link>
-      <div className="flex flex-1 items-center justify-center py-6">
+      <div className="flex flex-1 items-center justify-center py-[min(1.5rem,2dvh)]">
         <LoginArt />
       </div>
       <p className="text-display-xs font-medium">
@@ -35,19 +48,15 @@ export function LoginBrandPanel() {
         {m.landing_headline_line_2()}
       </p>
       {/* Every code agent the Daemon runs (Frank, 11-09), from the one table the runtime picker
-          reads, so a runtime added there shows here too. Twelve names read as a crowd (jing, 11-10):
-          their marks overlap in one row, each named on hover, and one line names the best known. */}
+          reads, so a runtime added there shows here too. Twelve marks read as a crowd (jing, 11-10
+          and 11-12): the best known four show, the rest wait behind their count, named on hover. */}
       <div className="mt-6 flex flex-col items-start gap-2.5">
-        <ul className="flex shrink-0">
-          {RUNTIME_PROVIDER_DISPLAY_ORDER.map((provider) => (
-            <li key={provider} className="-ml-1.5 first:ml-0">
+        <ul className="flex shrink-0 items-center gap-1.5">
+          {LEADING.map((provider) => (
+            <li key={provider}>
               <Tooltip title={runtimeProviderLabel(provider)}>
                 <Focusable>
-                  <span
-                    tabIndex={0}
-                    aria-label={runtimeProviderLabel(provider)}
-                    className="flex size-8 items-center justify-center rounded-full bg-white ring-2 ring-[#EEEBFE] outline-none focus-visible:outline-2 focus-visible:outline-focus-ring"
-                  >
+                  <span tabIndex={0} aria-label={runtimeProviderLabel(provider)} className={CHIP}>
                     {/* A single-colour mark takes the panel's own grey: the panel stays light in dark mode. */}
                     <RuntimeProviderMark
                       provider={provider}
@@ -59,6 +68,19 @@ export function LoginBrandPanel() {
               </Tooltip>
             </li>
           ))}
+          <li>
+            <Tooltip title={REST.map(runtimeProviderLabel).join(" · ")}>
+              <Focusable>
+                <span
+                  tabIndex={0}
+                  aria-label={REST.map(runtimeProviderLabel).join(", ")}
+                  className={`${CHIP} px-2 text-xs font-medium tabular-nums`}
+                >
+                  +{REST.length}
+                </span>
+              </Focusable>
+            </Tooltip>
+          </li>
         </ul>
         <p className="text-sm text-gray-500">
           {m.login_agents_supported({
