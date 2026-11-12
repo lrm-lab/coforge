@@ -32,6 +32,10 @@ export type AgentRuntimeConfig = {
   /** Whether this Agent launches with the runtime's Fast service tier. Absent (every row written
    * before Fast mode existed) means it does not. */
   fastMode?: boolean;
+  /** What a person filled in on the Agent's form, when they did: it wins over the runtime's own
+   * model entry, which fills whatever stays absent (task #30). */
+  contextWindow?: number;
+  maxOutputTokens?: number;
   environment?: EncryptedAgentEnvironment;
 };
 
@@ -49,6 +53,8 @@ export function agentRuntimeConfig(
     modelProvider: string;
     reasoning: string;
     fastMode?: boolean;
+    contextWindow?: number;
+    maxOutputTokens?: number;
   },
   provider: AgentRuntimeProviderConfig,
   environment?: EncryptedAgentEnvironment,
@@ -60,6 +66,10 @@ export function agentRuntimeConfig(
     modelProvider: selection.modelProvider,
     reasoning: selection.reasoning,
     ...(selection.fastMode ? { fastMode: true } : {}),
+    ...(selection.contextWindow === undefined ? {} : { contextWindow: selection.contextWindow }),
+    ...(selection.maxOutputTokens === undefined
+      ? {}
+      : { maxOutputTokens: selection.maxOutputTokens }),
     ...(environment ? { environment } : {}),
   };
 }
@@ -72,13 +82,17 @@ export function parseAgentRuntimeConfig(value: unknown, agentId?: string): Agent
   const modelProvider = Reflect.get(value, "modelProvider");
   const reasoning = Reflect.get(value, "reasoning");
   const fastMode = Reflect.get(value, "fastMode");
+  const contextWindow = parseModelSize(Reflect.get(value, "contextWindow"));
+  const maxOutputTokens = parseModelSize(Reflect.get(value, "maxOutputTokens"));
   const environment = parseEncryptedEnvironment(Reflect.get(value, "environment"));
   if (
     !runtime ||
     typeof model !== "string" ||
     (modelProvider !== undefined && typeof modelProvider !== "string") ||
     typeof reasoning !== "string" ||
-    (fastMode !== undefined && typeof fastMode !== "boolean")
+    (fastMode !== undefined && typeof fastMode !== "boolean") ||
+    (contextWindow === undefined && Reflect.get(value, "contextWindow") !== undefined) ||
+    (maxOutputTokens === undefined && Reflect.get(value, "maxOutputTokens") !== undefined)
   )
     throw new Error("invalid runtime config");
   return {
@@ -88,6 +102,8 @@ export function parseAgentRuntimeConfig(value: unknown, agentId?: string): Agent
     modelProvider: modelProvider ?? "",
     reasoning,
     ...(fastMode === true ? { fastMode: true } : {}),
+    ...(contextWindow === undefined ? {} : { contextWindow }),
+    ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
     ...(environment ? { environment } : {}),
   };
 }
@@ -107,6 +123,11 @@ export function publicAgentRuntimeConfig(
           }
         : config.provider,
   };
+}
+
+/** A stored size, or undefined for a zero, a fraction, or anything else no model has. */
+function parseModelSize(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
 function parseEncryptedEnvironment(value: unknown): EncryptedAgentEnvironment | undefined {
@@ -209,6 +230,9 @@ export function runtimeStartFields(config: AgentRuntimeConfig, agentConfigRevisi
     modelProvider: config.modelProvider,
     reasoning: config.reasoning,
     providerConfig: launchProviderConfig,
+    // The form's sizes, when a person filled them in; absent leaves the model entry in charge.
+    ...(config.contextWindow === undefined ? {} : { contextWindow: config.contextWindow }),
+    ...(config.maxOutputTokens === undefined ? {} : { maxOutputTokens: config.maxOutputTokens }),
     // Absent means the ordinary tier; never send a `false` the daemon would have to read as one.
     ...(config.fastMode ? { fastMode: true } : {}),
     ...(agentConfigRevision > 0 ? { agentConfigRevision } : {}),

@@ -10,6 +10,7 @@ import {
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import type { UpdateAgentInput } from "./agent.schemas";
+import { submittedModelSize } from "./agent-model-sizes";
 
 /**
  * Builds `UpdateAgentInput` from a runtime-edit form. `displayName`/`description` are only
@@ -35,9 +36,21 @@ export function updateAgentInputFromForm(
     model: String(form.get("model") ?? ""),
     reasoning: String(form.get("reasoning") ?? ""),
     fastMode: form.get("fastMode") === "true",
+    // The size fields submit a number each, or nothing when left empty (task #30).
+    ...sizesFromForm(form),
     ...(apiKey ? { apiKey } : {}),
     ...(displayName ? { displayName } : {}),
     ...(computerId ? { computerId } : {}),
+  };
+}
+
+/** The two model size fields, as the runtime form submits them: a number, or nothing at all. */
+function sizesFromForm(form: FormData) {
+  const contextWindow = submittedModelSize(String(form.get("contextWindow") ?? ""));
+  const maxOutputTokens = submittedModelSize(String(form.get("maxOutputTokens") ?? ""));
+  return {
+    ...(contextWindow === undefined ? {} : { contextWindow }),
+    ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
   };
 }
 

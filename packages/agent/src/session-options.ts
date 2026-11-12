@@ -11,6 +11,10 @@ export type CreateSessionOptions = {
   contextViewRequestLogDirectory?: string;
   modelProvider?: string;
   model?: string;
+  /** What a person filled in on the Agent's form, when they did: it wins over the runtime's own
+   * model entry, which fills whatever stays absent (task #30). */
+  contextWindow?: number;
+  maxOutputTokens?: number;
   reasoning?: string;
   apiKey?: string;
   instructions: string;

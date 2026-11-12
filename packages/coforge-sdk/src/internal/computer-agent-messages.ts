@@ -44,6 +44,10 @@ export type CodeAgentModelMetadata = {
   reasoningEfforts?: string[];
   defaultReasoning: string;
   recommended: boolean;
+  /** What the provider's model list reports for this model; absent when it reports nothing, which
+   * the Agent form leaves blank rather than guessing. A value typed in the form wins (task #30). */
+  contextWindow?: number;
+  maxOutputTokens?: number;
 };
 export type CodeAgentModelCatalog = {
   provider: RuntimeProvider;
@@ -262,6 +266,10 @@ export type AgentStartIntent = {
   fastMode?: boolean;
   /** The Agent's config revision this Start launches with; absent from an older server. */
   agentConfigRevision?: number;
+  /** What the Agent's form asks for, when a person filled it in: the runtime's own model entry
+   * decides when absent, and the launch's compaction window follows `contextWindow` (task #30). */
+  contextWindow?: number;
+  maxOutputTokens?: number;
 };
 export type AgentStopIntent = {
   protocolMajor: number;

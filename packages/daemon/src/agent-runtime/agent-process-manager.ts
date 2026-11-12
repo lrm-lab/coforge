@@ -67,7 +67,14 @@ export type AgentRestartConfig = Readonly<{
 /** The runtime fields a pushed configuration replaces on a remembered restart config. */
 export type RestartRuntimeFields = Pick<
   AgentRuntimeConfig,
-  "provider" | "model" | "modelProvider" | "reasoning" | "providerConfig" | "fastMode"
+  | "provider"
+  | "model"
+  | "modelProvider"
+  | "reasoning"
+  | "providerConfig"
+  | "fastMode"
+  | "contextWindow"
+  | "maxOutputTokens"
 >;
 
 export type AgentTurnInterruptResult = "interrupted" | "restarted" | "not_running";
@@ -396,6 +403,8 @@ export class AgentProcessManager {
       modelProvider: _modelProvider,
       providerConfig: _providerConfig,
       fastMode: _fastMode,
+      contextWindow: _contextWindow,
+      maxOutputTokens: _maxOutputTokens,
       ...kept
     } = existing.config;
     this.#restartConfigs.set(agentId, { ...existing, config: { ...kept, ...fields } });

@@ -116,5 +116,25 @@ function piModel(value: unknown): CodeAgentModelMetadata | undefined {
     reasoningEfforts,
     defaultReasoning: "",
     recommended: false,
+    // Pi's own entry knows how big the model is; the Agent form shows these and falls back on them
+    // when the person leaves the fields blank (task #30). A provider that reports neither leaves
+    // both absent, which the form shows as unknown rather than guessing a number.
+    ...modelSize(model),
   };
+}
+
+/** Pi's names for the two size numbers, `contextWindow` and `maxTokens`, when it reports them. */
+function modelSize(
+  model: Readonly<Record<string, unknown>>,
+): Pick<CodeAgentModelMetadata, "contextWindow" | "maxOutputTokens"> {
+  const contextWindow = positiveInteger(model.contextWindow);
+  const maxOutputTokens = positiveInteger(model.maxTokens);
+  return {
+    ...(contextWindow === undefined ? {} : { contextWindow }),
+    ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+  };
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }

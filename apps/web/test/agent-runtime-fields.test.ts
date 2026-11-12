@@ -194,6 +194,7 @@ test("opens not-dirty: a saved Configured model found in the Pi catalog", () => 
       modelValue: piModel.id,
       submittedReasoning: "",
       submittedFastMode: false,
+      sizes: { contextWindow: "", maxOutputTokens: "" },
       initial,
     }),
   ).toBe(false);
@@ -218,6 +219,7 @@ test("opens not-dirty: a saved built-in provider with a stored credential", () =
       modelValue: coforgeModel.id,
       submittedReasoning: "",
       submittedFastMode: false,
+      sizes: { contextWindow: "", maxOutputTokens: "" },
       initial,
     }),
   ).toBe(false);
@@ -246,6 +248,7 @@ test("opens not-dirty: a saved custom model absent from the Pi catalog preselect
       modelValue: split?.model ?? "",
       submittedReasoning: "",
       submittedFastMode: false,
+      sizes: { contextWindow: "", maxOutputTokens: "" },
       initial,
     }),
   ).toBe(false);

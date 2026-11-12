@@ -18,4 +18,8 @@ message AgentConfigSync {
   optional string provider_kind = 11;
   optional string provider_id = 12;
   string message_type = 13;
+  // What the Agent's form asks for, when a person filled it in; absent means the runtime's own
+  // model entry decides, and a launch started from this config follows these (task #30).
+  optional uint32 context_window = 14;
+  optional uint32 max_output_tokens = 15;
 }

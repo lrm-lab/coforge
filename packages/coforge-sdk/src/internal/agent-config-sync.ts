@@ -7,6 +7,8 @@ export const AGENT_CONFIG_SYNC_MESSAGE_TYPE = "coforge.rpc.v1.AgentConfigSync" a
 export const AGENT_CONFIG_SYNC_PROTOCOL_MAJOR = 1 as const;
 export const AGENT_CONFIG_CAPABILITY = "agent-config:v1" as const;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
+/** The largest model size a config carries: far above any model, small enough to stay a number. */
+const MAX_SIZE = 10_000_000;
 
 export type AgentConfigSync = {
   protocolMajor: 1;
@@ -20,7 +22,15 @@ export type AgentConfigSync = {
   reasoning: string;
   fastMode?: boolean;
   providerConfig?: AgentRuntimeProviderConfig;
+  /** What the Agent's form asks for, when a person filled it in; absent means the runtime's own
+   * model entry decides, and a launch started from this config follows these (task #30). */
+  contextWindow?: number;
+  maxOutputTokens?: number;
 };
+
+/** A launch never fails over a size: one out of range is taken as unstated. */
+const size = (value: number | undefined) =>
+  value !== undefined && value >= 1 && value <= MAX_SIZE ? value : undefined;
 
 function validate(value: AgentConfigSync): void {
   if (
@@ -34,6 +44,8 @@ function validate(value: AgentConfigSync): void {
     value.model.length > 512 ||
     (value.modelProvider !== undefined && value.modelProvider.length > 512) ||
     value.reasoning.length > 512 ||
+    size(value.contextWindow) !== value.contextWindow ||
+    size(value.maxOutputTokens) !== value.maxOutputTokens ||
     (value.providerConfig !== undefined &&
       ((value.providerConfig.kind !== "default" && value.providerConfig.kind !== "coforge") ||
         (value.providerConfig.kind === "coforge" &&
@@ -58,6 +70,8 @@ export function encodeAgentConfigSync(value: AgentConfigSync): Uint8Array {
       modelProvider: value.modelProvider,
       reasoning: value.reasoning,
       fastMode: value.fastMode,
+      contextWindow: value.contextWindow,
+      maxOutputTokens: value.maxOutputTokens,
       providerKind: value.providerConfig?.kind,
       providerId:
         value.providerConfig?.kind === "coforge" ? value.providerConfig.providerId : undefined,
@@ -86,6 +100,12 @@ export function decodeAgentConfigSync(bytes: Uint8Array): AgentConfigSync {
     reasoning: value.reasoning,
     ...(value.fastMode !== undefined ? { fastMode: value.fastMode } : {}),
     ...(providerConfig ? { providerConfig } : {}),
+    ...(size(value.contextWindow) !== undefined
+      ? { contextWindow: size(value.contextWindow) }
+      : {}),
+    ...(size(value.maxOutputTokens) !== undefined
+      ? { maxOutputTokens: size(value.maxOutputTokens) }
+      : {}),
   } satisfies AgentConfigSync;
   if (value.messageType !== AGENT_CONFIG_SYNC_MESSAGE_TYPE)
     throw new Error("Invalid Agent config sync message");

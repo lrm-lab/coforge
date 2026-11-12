@@ -77,6 +77,21 @@ test("replacing the restart runtime swaps the pushed fields and keeps the launch
     });
     expect("fastMode" in manager.restartConfig("agent-1")!.config).toBe(false);
     expect("providerConfig" in manager.restartConfig("agent-1")!.config).toBe(false);
+    // A push that names no size leaves the model's own entry in charge, not the launch's number.
+    expect("contextWindow" in manager.restartConfig("agent-1")!.config).toBe(false);
+    expect("maxOutputTokens" in manager.restartConfig("agent-1")!.config).toBe(false);
+    // A push that does name them replaces them (task #30).
+    manager.replaceRestartRuntime("agent-1", {
+      provider: "pi",
+      model: "new-model",
+      reasoning: "high",
+      contextWindow: 200_000,
+      maxOutputTokens: 64_000,
+    });
+    expect(manager.restartConfig("agent-1")!.config).toMatchObject({
+      contextWindow: 200_000,
+      maxOutputTokens: 64_000,
+    });
     expect(manager.runtime("agent-1")).toBe(runtime);
     expect(runtime?.config.model).toBe("default");
   } finally {

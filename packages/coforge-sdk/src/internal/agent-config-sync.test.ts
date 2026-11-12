@@ -54,3 +54,11 @@ test("Agent config sync carries any provider id and model provider a Start accep
     }),
   ).toThrow();
 });
+
+test("a config push carries the model sizes the form filled in", () => {
+  const sized = { ...value, contextWindow: 200_000, maxOutputTokens: 64_000 };
+  expect(decodeAgentConfigSync(encodeAgentConfigSync(sized))).toEqual(sized);
+  // Zero is not "unset": a pushed size must be usable, so it is rejected rather than dropped.
+  expect(() => encodeAgentConfigSync({ ...value, contextWindow: 0 })).toThrow(/Invalid/);
+  expect(() => encodeAgentConfigSync({ ...value, maxOutputTokens: 20_000_000 })).toThrow(/Invalid/);
+});

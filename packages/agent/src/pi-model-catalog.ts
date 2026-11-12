@@ -79,3 +79,13 @@ export async function refreshPiModelCatalog(
     // A catalog refresh must never fail the launch.
   }
 }
+
+/** The models a CoForge-runtime launch can resolve, from the SDK's own catalog. */
+export async function discoverModels(cwd: string) {
+  const services = await createAgentSessionServices({
+    cwd,
+    agentDir: getCoforgeAgentDir(cwd),
+    resourceLoaderOptions: { systemPromptOverride: () => "" },
+  });
+  return services.modelRuntime.getAvailableSnapshot();
+}

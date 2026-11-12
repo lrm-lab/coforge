@@ -15,6 +15,8 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { m } from "#src/paraglide/messages";
 import { AgentFastModeField } from "./agent-fast-mode-field";
+import { AgentModelSizeFields } from "./agent-model-size-fields";
+import { initialModelSizes } from "./agent-model-sizes";
 import { AgentReasoningField } from "./agent-reasoning-field";
 import { KEYED_MODEL_PROVIDERS, PI_BUILTIN_MODEL_PROVIDERS } from "./agent.schemas";
 import { ModelComboBox } from "./model-combobox";
@@ -91,6 +93,7 @@ export function AgentRuntimeFields({
   const [customModelText, setCustomModelText] = useState("");
   const [reasoning, setReasoning] = useState(initial?.reasoning ?? "");
   const [fastMode, setFastMode] = useState(initial?.fastMode ?? false);
+  const [sizes, setSizes] = useState(initialModelSizes(initial));
   const [apiKey, setApiKey] = useState("");
   // Only the catalog-load-failed fallback below renders plain, uncontrolled text `Input`s for
   // modelProvider/model instead of the tracked `Select`s; their own `onChange` marks this so
@@ -259,6 +262,7 @@ export function AgentRuntimeFields({
     modelValue: modelValue ?? "",
     submittedReasoning,
     submittedFastMode,
+    sizes,
     initial,
   });
 
@@ -272,6 +276,7 @@ export function AgentRuntimeFields({
     setCustomModelText("");
     setReasoning("");
     setFastMode(false);
+    setSizes(initialModelSizes());
     setApiKey("");
   }
 
@@ -476,6 +481,12 @@ export function AgentRuntimeFields({
         />
       )}
       {fastModeVisible && <AgentFastModeField isSelected={fastMode} onChange={setFastMode} />}
+      <AgentModelSizeFields
+        value={sizes}
+        model={selectedModel}
+        size={controlSize}
+        onChange={setSizes}
+      />
     </>
   );
 }
