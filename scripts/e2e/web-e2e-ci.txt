@@ -72,6 +72,7 @@ e2e-notification-banner-layout.e2e.ts 9
 e2e-notification-settings.e2e.ts 9
 e2e-send-as-task-stream.e2e.ts 9
 e2e-submenu-phone.e2e.ts 9
+e2e-card-outcome.e2e.ts 8
 artifact-sandbox-browser.e2e.ts 8
 e2e-action-card-preview-locale.e2e.ts 8
 e2e-image-reserved-size.e2e.ts 8
