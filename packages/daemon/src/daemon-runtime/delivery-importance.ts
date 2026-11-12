@@ -33,14 +33,21 @@ export type DeliveryImportanceFacts = Readonly<{
   taskExecutionSessionId?: string;
   /** Why it reached the Agent; the card events (`choice`, `expired`) answer a card it authored. */
   reason?: string;
-  /** The delivery comes from a Task's discussion: an "assigned you task #N" notice, or a reply in
-   * a task the Agent is on. The envelope cannot say so today — a task's target (`#board:#N`,
-   * `@peer:#N`) differs from a channel thread's (`#board:<id>`) only in shape, and reading that
-   * shape would mistake an all-digit thread id for a task — so the wiring supplies this from a
-   * task ref the server sends, never from the words of a notice (raft, #coforge-backend:#14
-   * seq 34: do not guess by matching text). */
+  /** The server's verdict that this delivery belongs to a Task's discussion: an "assigned you
+   * task #N" notice, or a reply in a task the Agent is on. It comes from the Task and its
+   * conversation, so a channel thread whose id happens to be digits is not one, and no notice's
+   * words are read to decide (raft, #coforge-backend:#14 seq 41). Absent from a server that
+   * predates the field, and then the delivery is judged like any other. */
   taskDiscussion?: boolean;
+  /** The message's own machine-readable notice kind (`system.kind`), absent on ordinary messages.
+   * See `RELIABLE_NOTICE_KINDS` for the ones that need the Agent. */
+  noticeKind?: string;
 }>;
+
+/** The system notice kinds that need the Agent itself, so the notice is told again until it is
+ * read. The rest are the platform narrating what it did: `task.claimed`, `channel.member_joined`
+ * and the like, which one notice covers. */
+const RELIABLE_NOTICE_KINDS: readonly string[] = ["task.assigned_you"];
 
 /** Which tier this delivery belongs to, in one place. */
 export function deliveryImportance(facts: DeliveryImportanceFacts): DeliveryImportance {
@@ -53,6 +60,8 @@ export function deliveryImportance(facts: DeliveryImportanceFacts): DeliveryImpo
     return DELIVERY_IMPORTANCE.RELIABLE;
   // Assigned work is a direct instruction, and a task's discussion is where the Agent acts on it.
   if (facts.taskDiscussion === true) return DELIVERY_IMPORTANCE.RELIABLE;
+  if (facts.noticeKind !== undefined && RELIABLE_NOTICE_KINDS.includes(facts.noticeKind))
+    return DELIVERY_IMPORTANCE.RELIABLE;
   if (facts.taskExecutionSessionId !== undefined) return DELIVERY_IMPORTANCE.RELIABLE;
   // A direct message's target is the Agent itself; a channel's always starts with `#`.
   if (facts.target?.startsWith("@") === true) return DELIVERY_IMPORTANCE.RELIABLE;

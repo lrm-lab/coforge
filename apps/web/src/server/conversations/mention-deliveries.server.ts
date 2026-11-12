@@ -25,6 +25,7 @@ import type {
   TrackedMentionState,
 } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { pendingDeliveryPublication } from "./agent-delivery.server";
+import { deliveryNoticeViews } from "./agent-delivery-notice.server";
 import { deliveryFeatures } from "./agent-delivery-features.server";
 import { currentIdentity, envelopeFor, wakeable } from "./mention-identity.server";
 import { errorType } from "#src/server/errors/error-type.server";
@@ -391,7 +392,12 @@ export class MentionDeliveryReports {
     ).filter((delivery) => !skip.has(delivery.deliveryId));
     // One features read covers the whole re-send; a per-delivery read asked the same Workspace
     // the same question N times.
-    const features = deliveries.length ? await this.features(scope.workspaceId) : undefined;
+    const [features, notices] = await Promise.all([
+      deliveries.length ? this.features(scope.workspaceId) : undefined,
+      // A re-send says what the first one said about the message's notice kind and its Task, so a
+      // delivery replayed after a reconnect still ranks where it did the first time.
+      deliveryNoticeViews(scope.workspaceId, deliveries),
+    ]);
     // One Centrifugo `batch` call for every delivery. Its parallel publications to one channel
     // keep no order between them — the per-item `publish` loop it replaces had none either.
     // A delivery its encoder refuses fails alone, as `AgentDeliveryPublisher` reports it; the
@@ -411,6 +417,7 @@ export class MentionDeliveryReports {
               tracked.has(delivery.deliveryId)
                 ? { mentionDelivery: tracked.get(delivery.deliveryId) }
                 : undefined,
+              notices.get(delivery.messageId),
             ),
           };
         } catch (reason) {
