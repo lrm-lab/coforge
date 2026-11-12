@@ -159,6 +159,42 @@ test("reports App items and a daemon failure beside the list", () => {
   expect(output).toContain("Daemon pending buffer unavailable (boom)");
 });
 
+test("due reminders are listed before other App items", () => {
+  const output = formatInboxCheck(
+    result({
+      appItems: [
+        {
+          appId: "system.cleaner",
+          itemId: "cleaner:memory_size:agent-a",
+          title: "MEMORY.md",
+          summary: "Trim it",
+        },
+        {
+          appId: "system.reminder",
+          itemId: "reminder:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb:2",
+          title: "Second",
+          summary: "Due later",
+        },
+        {
+          appId: "system.reminder",
+          itemId: "reminder:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:1",
+          title: "First",
+          summary: "Due now",
+        },
+      ],
+    }),
+    NOW,
+  );
+  expect(output).toContain("App items pending: 3.");
+  // Reminders lead, keeping the order the daemon listed them in; other items follow.
+  const secondReminder = output.indexOf("reminder:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb:2");
+  const firstReminder = output.indexOf("reminder:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:1");
+  const cleaner = output.indexOf("cleaner:memory_size:agent-a");
+  expect(secondReminder).toBeGreaterThan(-1);
+  expect(firstReminder).toBeGreaterThan(secondReminder);
+  expect(cleaner).toBeGreaterThan(firstReminder);
+});
+
 test("the Seal registry names what was sealed against what is live now", () => {
   const output = formatInboxCheck(
     result({
@@ -201,9 +237,22 @@ test("the Seal registry names what was sealed against what is live now", () => {
 test("an App item from another app says its reminder seals were not checked", () => {
   const output = formatInboxCheck(
     result({
-      appItems: [{ appId: "system.cleaner", itemId: "cleaner:memory_size:agent-a" }],
+      appItems: [
+        { appId: "system.reminder", itemId: "reminder:123e4567-e89b-42d3-a456-426614174000:1" },
+        { appId: "system.cleaner", itemId: "cleaner:memory_size:agent-a" },
+      ],
     }),
     Date.parse("2026-11-03T10:00:00.000Z"),
   );
   expect(output).toContain("Reminder seals: not checked");
+});
+
+test("a lone non-reminder App item does not claim unchecked reminder seals", () => {
+  const output = formatInboxCheck(
+    result({
+      appItems: [{ appId: "system.cleaner", itemId: "cleaner:memory_size:agent-a" }],
+    }),
+    Date.parse("2026-11-03T10:00:00.000Z"),
+  );
+  expect(output).not.toContain("Reminder seals: not checked");
 });

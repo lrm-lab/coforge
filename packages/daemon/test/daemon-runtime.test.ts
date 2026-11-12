@@ -7748,7 +7748,7 @@ describe("DaemonRuntime", () => {
       expect(notices).toEqual([]);
       await runtime.startAgent("agent-a", config);
       await Bun.sleep(10);
-      expect(notices).toEqual(["New app item available. Run coforge inbox check."]);
+      expect(notices).toEqual([expect.stringContaining("Reminder due:")]);
       listener?.({
         type: "activity",
         activity: {
@@ -7759,7 +7759,7 @@ describe("DaemonRuntime", () => {
         },
       });
       await Bun.sleep(10);
-      expect(notices).toEqual(["New app item available. Run coforge inbox check."]);
+      expect(notices).toEqual([expect.stringContaining("Reminder due:")]);
       for (const exit of exits) exit();
       await runtime.mintAppItem("agent-a", {
         ...input,

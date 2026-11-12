@@ -6,7 +6,15 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
-import type { AgentAppInbox, MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
+import type {
+  AgentAppInbox,
+  AgentAppItem,
+  MintAppItem,
+} from "#src/agent-app-inbox/agent-app-inbox";
+import {
+  mergedReminderAppInboxNoticeText,
+  reminderAppInboxNoticeText,
+} from "#src/agent-reminder/reminder-app-inbox-text";
 import type { AgentAppInboxSeals } from "#src/agent-app-inbox/app-inbox-seals";
 import type { AgentProcessManager, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
@@ -19,6 +27,37 @@ import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
 import type { RuntimeRelease } from "./runtime-release";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
+
+const GENERIC_APP_ITEM_NOTICE = "New app item available. Run coforge inbox check.";
+const REMINDER_APP_ID = "system.reminder";
+const REMINDER_DUE_CLASS = "due";
+
+type AppItemNotice = Readonly<{ itemIds: readonly string[]; text: string }>;
+
+const isDueReminder = (item: AgentAppItem) =>
+  item.appId === REMINDER_APP_ID && item.notificationClass === REMINDER_DUE_CLASS;
+
+/** The notices a set of pending App items produces: due reminders share one merged text while
+ * every other item keeps the generic pointer, so only `system.reminder` ever names its content —
+ * an App Inbox title or summary is never copied into a notice. */
+function planAppItemNotices(items: readonly AgentAppItem[]): AppItemNotice[] {
+  const reminders = items.filter(isDueReminder);
+  const notices: AppItemNotice[] = [];
+  if (reminders.length === 1)
+    notices.push({
+      itemIds: [reminders[0]!.itemId],
+      text: reminderAppInboxNoticeText(reminders[0]!),
+    });
+  else if (reminders.length > 1)
+    notices.push({
+      itemIds: reminders.map((item) => item.itemId),
+      text: mergedReminderAppInboxNoticeText(reminders),
+    });
+  for (const item of items)
+    if (!isDueReminder(item))
+      notices.push({ itemIds: [item.itemId], text: GENERIC_APP_ITEM_NOTICE });
+  return notices;
+}
 
 export type AgentInboxCoordinatorPorts = {
   workspaceId: string;
@@ -72,7 +111,7 @@ export class AgentInboxCoordinator {
 
   async mintAppItem(agentId: string, input: MintAppItem) {
     const item = await (await this.appInbox(agentId)).upsert(input);
-    await this.notifyAppItem(agentId, item.itemId);
+    await this.notifyAppItem(agentId, item);
     return item;
   }
 
@@ -165,65 +204,112 @@ export class AgentInboxCoordinator {
   }
 
   async drainAppInboxNotices(agentId: string): Promise<void> {
-    for (const item of (await this.appInbox(agentId)).list())
-      await this.notifyAppItem(agentId, item.itemId);
+    const notified = this.#notifiedAppItems.get(agentId);
+    const items = (await this.appInbox(agentId)).list();
+    // A notice already in flight keeps its own outcome: the drain waits on it exactly as the
+    // per-item awaits did, so a rejected send still fails the drain.
+    const inFlight = items.flatMap((item) => {
+      const pending = notified?.get(item.itemId);
+      return pending ? [pending] : [];
+    });
+    const fresh = items.filter((item) => !notified?.has(item.itemId));
+    await Promise.all(inFlight);
+    await this.#notifyAppItemNotices(agentId, planAppItemNotices(fresh));
   }
 
   async notifyAppItem(
     agentId: string,
-    itemId: string,
+    item: AgentAppItem | string,
+    { startStopped = true }: { startStopped?: boolean } = {},
+  ): Promise<boolean> {
+    const itemId = typeof item === "string" ? item : item.itemId;
+    const existing = this.#notifiedAppItems.get(agentId)?.get(itemId);
+    if (existing) return existing;
+    const resolved =
+      typeof item === "string"
+        ? (await this.appInbox(agentId)).list().find((entry) => entry.itemId === itemId)
+        : item;
+    const notices: AppItemNotice[] = resolved
+      ? planAppItemNotices([resolved])
+      : [{ itemIds: [itemId], text: GENERIC_APP_ITEM_NOTICE }];
+    return this.#notifyAppItemNotices(agentId, notices, { startStopped });
+  }
+
+  /** Sends each planned notice through the gates `notifyAppItem` always ran — recovery, credential
+   * hold, busy hold, session resolution — once per notice instead of once per item, in order and
+   * stopping at the first failure exactly as the per-item drain did. Every item id keeps its own
+   * notified bookkeeping, so dedup, hold/release and acknowledgement stay per item. */
+  async #notifyAppItemNotices(
+    agentId: string,
+    notices: readonly AppItemNotice[],
     { startStopped = true }: { startStopped?: boolean } = {},
   ): Promise<boolean> {
     const notified = this.#notifiedAppItems.get(agentId) ?? new Map<string, Promise<boolean>>();
     this.#notifiedAppItems.set(agentId, notified);
-    const existing = notified.get(itemId);
-    if (existing) return existing;
-    const pending = Promise.resolve().then(async () => {
-      // An ending runtime takes no notice: it waits for the launch that follows.
-      if (this.ports.runtimeRelease.isRecovering(agentId)) {
-        this.ports.deliveryGate.holdAppItem(agentId, itemId);
-        return false;
+    let accepted = true;
+    for (const notice of notices) {
+      const itemIds: string[] = [];
+      const shared: Promise<boolean>[] = [];
+      for (const itemId of notice.itemIds) {
+        const pending = notified.get(itemId);
+        if (pending) shared.push(pending);
+        else itemIds.push(itemId);
       }
-      let session = this.ports.processManager.session(agentId);
-      if (!session) {
-        if (!startStopped) return false;
-        // A credential known invalid is no reason to start the Agent: the item waits with the rest.
-        if (this.ports.deliveryGate.credentialHeld(agentId)) {
-          this.ports.deliveryGate.holdAppItem(agentId, itemId);
+      const sharedResults = shared.length > 0 ? await Promise.all(shared) : undefined;
+      if (itemIds.length === 0) {
+        if (sharedResults) accepted = sharedResults.every(Boolean);
+        continue;
+      }
+      const pending = Promise.resolve().then(async () => {
+        // An ending runtime takes no notice: it waits for the launch that follows.
+        if (this.ports.runtimeRelease.isRecovering(agentId)) {
+          for (const itemId of itemIds) this.ports.deliveryGate.holdAppItem(agentId, itemId);
           return false;
         }
-        const wakeable = this.ports.processManager.restartConfig(agentId);
-        if (!wakeable) return false;
-        session = (await this.ports.startAgent(agentId, wakeable.config, wakeable.sessionId))
-          .session;
-      }
-      if (!session.notify) return false;
-      // A queue_until_idle provider's session/notify has no safe busy path, same as an
-      // ordinary message delivery — hold this app-item notice instead of sending it now, and
-      // release it (re-attempting this same call) at the next turn end.
-      if (this.ports.deliveryGate.shouldHold(agentId)) {
-        this.ports.deliveryGate.holdAppItem(agentId, itemId);
-        return false;
-      }
-      this.ports.deliveryGate.busy(agentId);
-      const launch = this.ports.currentActivityLaunch(agentId);
+        let session = this.ports.processManager.session(agentId);
+        if (!session) {
+          if (!startStopped) return false;
+          // A credential known invalid is no reason to start the Agent: the item waits with the rest.
+          if (this.ports.deliveryGate.credentialHeld(agentId)) {
+            for (const itemId of itemIds) this.ports.deliveryGate.holdAppItem(agentId, itemId);
+            return false;
+          }
+          const wakeable = this.ports.processManager.restartConfig(agentId);
+          if (!wakeable) return false;
+          session = (await this.ports.startAgent(agentId, wakeable.config, wakeable.sessionId))
+            .session;
+        }
+        if (!session.notify) return false;
+        // A queue_until_idle provider's session/notify has no safe busy path, same as an
+        // ordinary message delivery — hold these app-item notices instead of sending them now, and
+        // release them (re-attempting this same call) at the next turn end.
+        if (this.ports.deliveryGate.shouldHold(agentId)) {
+          for (const itemId of itemIds) this.ports.deliveryGate.holdAppItem(agentId, itemId);
+          return false;
+        }
+        this.ports.deliveryGate.busy(agentId);
+        const launch = this.ports.currentActivityLaunch(agentId);
+        try {
+          await session.notify(notice.text);
+        } finally {
+          if (launch && this.ports.processManager.session(agentId) === session)
+            this.ports.reconcileIdleTurn(agentId, launch);
+        }
+        return true;
+      });
+      for (const itemId of itemIds) notified.set(itemId, pending);
       try {
-        await session.notify("New app item available. Run coforge inbox check.");
-      } finally {
-        if (launch && this.ports.processManager.session(agentId) === session)
-          this.ports.reconcileIdleTurn(agentId, launch);
+        const result = await pending;
+        if (!result)
+          for (const itemId of itemIds)
+            if (notified.get(itemId) === pending) notified.delete(itemId);
+        accepted = result;
+      } catch (error) {
+        for (const itemId of itemIds) if (notified.get(itemId) === pending) notified.delete(itemId);
+        throw error;
       }
-      return true;
-    });
-    notified.set(itemId, pending);
-    try {
-      const accepted = await pending;
-      if (!accepted && notified.get(itemId) === pending) notified.delete(itemId);
-      return accepted;
-    } catch (error) {
-      if (notified.get(itemId) === pending) notified.delete(itemId);
-      throw error;
     }
+    return accepted;
   }
 
   /** Re-attempts every app-item notice `AgentDeliveryGate` held for `agentId` — each
@@ -231,8 +317,28 @@ export class AgentInboxCoordinator {
    * coalesced delivery flush that just re-armed busy) simply re-holds itself for the next
    * release rather than being lost or sent too early. */
   releaseHeldAppItems(agentId: string): void {
-    for (const itemId of this.ports.deliveryGate.releaseAppItems(agentId))
-      void this.notifyAppItem(agentId, itemId).catch(() => {});
+    const itemIds = this.ports.deliveryGate.releaseAppItems(agentId);
+    if (itemIds.length === 0) return;
+    void this.#notifyReleasedAppItems(agentId, itemIds);
+  }
+
+  async #notifyReleasedAppItems(agentId: string, itemIds: string[]): Promise<void> {
+    try {
+      const byId = new Map(
+        (await this.appInbox(agentId)).list().map((item) => [item.itemId, item] as const),
+      );
+      const found = itemIds.flatMap((itemId) => {
+        const item = byId.get(itemId);
+        return item ? [item] : [];
+      });
+      const notices = planAppItemNotices(found);
+      for (const itemId of itemIds)
+        if (!byId.has(itemId)) notices.push({ itemIds: [itemId], text: GENERIC_APP_ITEM_NOTICE });
+      await this.#notifyAppItemNotices(agentId, notices);
+    } catch {
+      // Best-effort, same as the per-item `.catch(() => {})` this replaces: a failed release
+      // leaves its items unannounced for the next turn end.
+    }
   }
 
   /**

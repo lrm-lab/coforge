@@ -148,5 +148,5 @@ export async function acceptReminderDue(
     title: reminderAppInboxPreview(job.title),
     summary: reminderAppInboxSummary(job, late),
   });
-  return ports.inboxCoordinator.notifyAppItem(job.ownerAgentId, item.itemId);
+  return ports.inboxCoordinator.notifyAppItem(job.ownerAgentId, item);
 }

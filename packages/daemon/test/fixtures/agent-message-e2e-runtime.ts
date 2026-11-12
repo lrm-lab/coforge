@@ -88,7 +88,11 @@ async function handle(command: {
   }
   if (command.type === "prompt") {
     write({ type: "response", id: command.id, command: "prompt", success: true });
-    if (command.message === "New app item available. Run coforge inbox check.") {
+    const isAppItemNotice =
+      command.message === "New app item available. Run coforge inbox check." ||
+      command.message?.startsWith("Reminder due: ") === true ||
+      /^[0-9]+ reminders? due\. /.test(command.message ?? "");
+    if (isAppItemNotice) {
       try {
         const first = await callInbox("check", "app-inbox-check-1");
         const second = await callInbox("check", "app-inbox-check-2");

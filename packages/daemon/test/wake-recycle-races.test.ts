@@ -93,14 +93,14 @@ test("an app-item notice that arrives while the runtime is ending waits for the 
   const { result: h } = await run({ disposeGate: gate.promise }, async (h, records) => {
     await endingRuntime(h);
     await h.runtime.mintAppItem("agent-a", APP_ITEM);
-    expect(h.sessions[0]!.inputs.join("\n")).not.toContain("New app item available");
+    expect(h.sessions[0]!.inputs.join("\n")).not.toContain("Reminder due");
     gate.resolve();
     await logged(records, sweepWith(1));
-    await until(() => h.sessions[1]?.inputs.join("\n").includes("New app item") === true);
+    await until(() => h.sessions[1]?.inputs.join("\n").includes("Reminder due") === true);
     return h;
   });
   expect(h.sessions).toHaveLength(2);
-  expect(h.sessions[1]!.inputs.join("\n")).toContain("New app item available");
+  expect(h.sessions[1]!.inputs.join("\n")).toContain("Reminder due");
 });
 
 test("when the runtime will not exit, what was kept meanwhile reaches the process that stayed", async () => {
@@ -132,7 +132,7 @@ test("when the runtime will not exit, an app-item notice kept meanwhile reaches 
     gate.resolve();
     await h.activityWith(/^Stopping the idle Claude Code runtime failed/);
     await logged(records, sweepWith(1));
-    await until(() => h.sessions[0]!.inputs.join("\n").includes("New app item available"));
+    await until(() => h.sessions[0]!.inputs.join("\n").includes("Reminder due"));
     return h;
   });
   expect(h.sessions).toHaveLength(1);

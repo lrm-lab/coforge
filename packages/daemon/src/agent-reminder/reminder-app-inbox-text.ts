@@ -1,4 +1,5 @@
 import type { ReminderJob } from "@lrm/coforge-sdk/internal";
+import type { AgentAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import { APP_INBOX_PREVIEW_MAX_CHARS } from "#src/agent-app-inbox/registry";
 
 /** Projects canonical reminder text into the strict, bounded App Inbox preview. */
@@ -22,4 +23,23 @@ export function reminderAppInboxPreview(title: string): string {
 export function reminderAppInboxSummary(job: ReminderJob, late: boolean): string {
   if (!late) return "Reminder due";
   return `Overdue: was due ${new Date(job.fireAt).toISOString()}, delivered late`;
+}
+
+/** The `session.notify` text of one due reminder App item: the title, plus the overdue detail
+ * when the item carries one, and the pointer every App item notice ends with. An App item has
+ * no due-time field of its own, so an on-time reminder's notice names only its title rather
+ * than inventing a time. */
+export function reminderAppInboxNoticeText(item: AgentAppItem): string {
+  return `Reminder due: ${item.title ?? "reminder"}${reminderAppInboxOverdueSuffix(item)}. Run coforge inbox check.`;
+}
+
+/** One notice for a backlog of due reminders: the count and the earliest by mint order, which
+ * `inbox check` then lists in full. Each item stays its own App Inbox entry. */
+export function mergedReminderAppInboxNoticeText(items: readonly AgentAppItem[]): string {
+  const earliest = items.reduce((first, item) => (item.createdAt < first.createdAt ? item : first));
+  return `${items.length} reminders due. Earliest: ${earliest.title ?? "reminder"}${reminderAppInboxOverdueSuffix(earliest)}. Run coforge inbox check.`;
+}
+
+function reminderAppInboxOverdueSuffix(item: AgentAppItem): string {
+  return item.summary?.startsWith("Overdue:") === true ? ` (${item.summary})` : "";
 }

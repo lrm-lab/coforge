@@ -167,26 +167,38 @@ export function formatInboxCheck(result: InboxCheckResult, nowMs: number): strin
   else trailer.push("Next: nothing to do; new messages will reach you as they arrive.");
   sections.push(trailer.join("\n"));
   if (list.muteHint) sections.push(`Mute suggestion: ${list.muteHint}`);
-  if (result.appItems.length > 0)
+  if (result.appItems.length > 0) {
+    const appItemLines = (app: InboxAppItem): string[] => {
+      const id = [
+        app.appId ? `[${foldUntrustedLine(app.appId)}]` : "",
+        foldUntrustedLine(app.itemId ?? ""),
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const line =
+        `- ${id ? `${id} ` : ""}${foldUntrustedLine(app.title ?? "App item")}: ${frameUntrustedText(app.summary ?? "")}`.trimEnd();
+      return app.command ? [line, `  Run: ${foldUntrustedLine(app.command)}`] : [line];
+    };
+    // Due reminders lead the list: they are why the Agent was woken; maintenance notices follow.
+    const reminderItems = result.appItems.filter((app) => app.appId === "system.reminder");
+    const otherItems = result.appItems.filter((app) => app.appId !== "system.reminder");
     sections.push(
       [
         `App items pending: ${result.appItems.length}.`,
-        ...result.appItems.flatMap((app) => {
-          const id = [
-            app.appId ? `[${foldUntrustedLine(app.appId)}]` : "",
-            foldUntrustedLine(app.itemId ?? ""),
-          ]
-            .filter(Boolean)
-            .join(" ");
-          const line =
-            `- ${id ? `${id} ` : ""}${foldUntrustedLine(app.title ?? "App item")}: ${frameUntrustedText(app.summary ?? "")}`.trimEnd();
-          return app.command ? [line, `  Run: ${foldUntrustedLine(app.command)}`] : [line];
-        }),
+        ...reminderItems.flatMap(appItemLines),
+        ...(reminderItems.length > 0 && otherItems.length > 0 ? [""] : []),
+        ...otherItems.flatMap(appItemLines),
       ].join("\n"),
     );
+  }
   const seals = result.seals ?? [];
   if (seals.length > 0) sections.push(["Seal registry:", ...sealRegistry(seals)].join("\n"));
-  if (result.appItems.some((app) => app.appId && app.appId !== "system.reminder"))
+  // The registry only covers reminder seals: with seals or reminder items about, say the other
+  // apps' items went unchecked; a lone maintenance item has nothing to qualify.
+  if (
+    result.appItems.some((app) => app.appId && app.appId !== "system.reminder") &&
+    (seals.length > 0 || result.appItems.some((app) => app.appId === "system.reminder"))
+  )
     sections.push("Reminder seals: not checked");
   if (result.daemonError)
     sections.push(

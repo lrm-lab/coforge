@@ -235,6 +235,12 @@ test("the standing prompt teaches a notice's held count and no notice wording", 
   expect(instructions).not.toContain("delivered or held for you");
 });
 
+test("the standing prompt says system.reminder delivers due reminders and to check on wake", () => {
+  expect(instructions).toContain("`system.reminder` delivers due reminders");
+  expect(instructions).toContain("names the reminder's title");
+  expect(instructions).toContain("`coforge reminder list`");
+});
+
 const ACME_NOTES = {
   key: "acme-notes",
   name: "Acme Notes",

@@ -4,7 +4,8 @@ import { connection, harness } from "./fixtures/provider-replay-harness";
 
 afterAll(() => rm(connection.workspaceRoot, { recursive: true, force: true }));
 
-const APP_ITEM_NOTICE = "New app item available. Run coforge inbox check.";
+const announcements = (notices: readonly string[]) =>
+  notices.filter((notice) => notice.startsWith("Reminder due:"));
 const appItem = {
   appId: "system.reminder",
   notificationClass: "due",
@@ -12,8 +13,6 @@ const appItem = {
   title: "Due",
   summary: "Now",
 };
-const announcements = (notices: readonly string[]) =>
-  notices.filter((notice) => notice === APP_ITEM_NOTICE);
 
 test("an App Inbox item announced only to the Session the provider rejected is announced to the fresh one", async () => {
   const h = await harness({ resume: "stored-1" });

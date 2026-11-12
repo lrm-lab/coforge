@@ -148,7 +148,7 @@ test("a wake launch that fails login-required keeps later deliveries from relaun
     await Bun.sleep(10);
     for (const listener of listeners) listener({ type: "completed", status: "completed" });
     await Bun.sleep(10);
-    expect(notices).toContain("New app item available. Run coforge inbox check.");
+    expect(notices).toContain("Reminder due: Due. Run coforge inbox check.");
   } finally {
     await runtime.stop();
   }
