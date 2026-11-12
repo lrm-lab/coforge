@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import {
   ARTIFACT_SHA256_PATTERN,
+  artifactOperationTraits,
   artifactPathValid,
   decodeAgentArtifactRequest,
+  type AgentArtifactRequest,
 } from "./artifacts";
 import { agentApiRoutes } from "./routes";
 
@@ -163,4 +165,116 @@ test("an artifact file path is relative plain segments, and a sha256 is lowercas
     expect(artifactPathValid(path)).toBe(false);
   expect(ARTIFACT_SHA256_PATTERN.test("a".repeat(64))).toBe(true);
   expect(ARTIFACT_SHA256_PATTERN.test("A".repeat(64))).toBe(false);
+});
+
+test("the comment operations take exactly their own fields, nested ones included", () => {
+  expect(
+    decodeAgentArtifactRequest({
+      operation: "comments",
+      artifact: "a1",
+      path: "plan.md",
+      all: true,
+      review: "r1",
+      after: "c",
+    }),
+  ).toEqual({
+    operation: "comments",
+    artifact: "a1",
+    path: "plan.md",
+    all: true,
+    review: "r1",
+    after: "c",
+  });
+  expect(decodeAgentArtifactRequest({ operation: "comments", artifact: "a1" })).toEqual({
+    operation: "comments",
+    artifact: "a1",
+  });
+  const comment: AgentArtifactRequest = {
+    operation: "comment",
+    artifact: "a1",
+    body: "Too long.",
+    path: "plan.md",
+    anchor: { type: "lines", data: { start: 3, end: 4 } },
+    replyTo: "c1",
+    version: 2,
+    idempotencyKey: "k",
+  };
+  expect(decodeAgentArtifactRequest(comment)).toEqual(comment);
+  const review: AgentArtifactRequest = {
+    operation: "review",
+    artifact: "a1",
+    body: "Summary",
+    comments: [{ body: "One" }, { body: "Two", path: "a.md", anchor: { type: "file", data: {} } }],
+    idempotencyKey: "k",
+  };
+  expect(decodeAgentArtifactRequest(review)).toEqual(review);
+  expect(
+    decodeAgentArtifactRequest({
+      operation: "resolve",
+      artifact: "a1",
+      comment: "c1",
+      note: "Done",
+    }),
+  ).toEqual({ operation: "resolve", artifact: "a1", comment: "c1", note: "Done" });
+  expect(
+    decodeAgentArtifactRequest({ operation: "reopen", artifact: "a1", comment: "c1" }),
+  ).toEqual({
+    operation: "reopen",
+    artifact: "a1",
+    comment: "c1",
+  });
+});
+
+test("a comment request with a stray, missing or mistyped field is refused", () => {
+  const base = { operation: "comment", artifact: "a1", body: "x", idempotencyKey: "k" };
+  for (const body of [
+    { ...base, body: undefined },
+    { ...base, idempotencyKey: undefined },
+    { ...base, anchor: "lines" },
+    { ...base, anchor: { type: "lines" } },
+    { ...base, anchor: { type: "lines", data: [] } },
+    { ...base, anchor: { type: "lines", data: {}, extra: 1 } },
+    { ...base, anchor: { type: 7, data: {} } },
+    { ...base, anchor: { type: "wiggle", data: {} } },
+    { ...base, version: "2" },
+    { ...base, authorAgentId: "someone" },
+    { operation: "comments", artifact: "a1", all: "yes" },
+    { operation: "comments", artifact: "a1", exact: true },
+    { operation: "resolve", artifact: "a1" },
+    { operation: "reopen", artifact: "a1", comment: "c1", note: "no note here" },
+    { operation: "review", artifact: "a1", idempotencyKey: "k" },
+    { operation: "review", artifact: "a1", idempotencyKey: "k", comments: "x" },
+    { operation: "review", artifact: "a1", idempotencyKey: "k", comments: ["x"] },
+    { operation: "review", artifact: "a1", idempotencyKey: "k", comments: [{ path: "a.md" }] },
+    {
+      operation: "review",
+      artifact: "a1",
+      idempotencyKey: "k",
+      comments: [{ body: "x", authorUserId: "u" }],
+    },
+    {
+      operation: "review",
+      artifact: "a1",
+      idempotencyKey: "k",
+      comments: [{ body: "x", anchor: { type: "text", data: {}, extra: true } }],
+    },
+  ])
+    expect(decodeAgentArtifactRequest(body)).toBeNull();
+});
+
+test("each operation says whether it reads, is held up by unseen comments, or writes a comment", () => {
+  const traits = (operation: AgentArtifactRequest["operation"]) =>
+    artifactOperationTraits(operation);
+  for (const operation of ["list", "read", "history", "comments"] as const)
+    expect(traits(operation)).toEqual({
+      readOnly: true,
+      gatedByComments: false,
+      commentWrite: false,
+    });
+  for (const operation of ["push", "comment", "review"] as const)
+    expect(traits(operation).gatedByComments).toBe(true);
+  for (const operation of ["comment", "review", "resolve", "reopen"] as const)
+    expect(traits(operation)).toMatchObject({ readOnly: false, commentWrite: true });
+  for (const operation of ["create", "push", "revert", "share"] as const)
+    expect(traits(operation)).toMatchObject({ readOnly: false, commentWrite: false });
 });

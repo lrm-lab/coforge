@@ -56,7 +56,7 @@ const TASK_IDLE_NUDGE_ROUTE = { method: "POST", path: "/api/agent/v1/tasks/idle-
 
 const THREAD_LIST_ROUTE = { method: "GET", path: "/api/agent/v1/threads" } as const;
 
-/** `coforge artifact create|read|push|history|revert`: one document operation per request (task
+/** `coforge artifact` document and comment operations: one document operation per request (task
  * #385). Same route under `proxy`, `local` and `cloud`. */
 const ARTIFACTS_ROUTE = {
   method: "POST",

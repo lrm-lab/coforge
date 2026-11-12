@@ -1,5 +1,14 @@
+import { isRecord } from "#src/internal/json-record";
+import {
+  isAnchorShape,
+  isReviewCommentShape,
+  type AgentArtifactAnchor,
+  type AgentReviewComment,
+} from "./artifact-comments";
+
 /**
- * `coforge artifact create|list|read|push|history|revert` (task #385): an Agent's documents, one
+ * `coforge artifact create|list|read|push|history|revert|comments|comment|review|resolve|reopen`
+ * (task #385): an Agent's documents, one
  * operation per request on `POST /api/agent/v1/artifacts`. A document is sent and read as its
  * text, as the web page does; the server checks the `artifacts` experiment and the document's
  * home (a conversation, or the Workspace) for every operation.
@@ -60,57 +69,183 @@ export type AgentArtifactRequest =
       targets: string[];
       note?: string;
       requestId: string;
-    };
+    }
+  | {
+      operation: "comments";
+      artifact: string;
+      path?: string;
+      /** Everything, without moving the Agent's place; the default is what others wrote since. */
+      all?: boolean;
+      review?: string;
+      after?: string;
+    }
+  | {
+      operation: "comment";
+      artifact: string;
+      body: string;
+      path?: string;
+      anchor?: AgentArtifactAnchor;
+      replyTo?: string;
+      version?: number;
+      idempotencyKey: string;
+    }
+  | {
+      operation: "review";
+      artifact: string;
+      body?: string;
+      comments: AgentReviewComment[];
+      version?: number;
+      idempotencyKey: string;
+    }
+  | { operation: "resolve"; artifact: string; comment: string; note?: string }
+  | { operation: "reopen"; artifact: string; comment: string };
 
-const OPERATION_FIELDS = {
+/** What a field of a request is on the wire: a string, a whole non-negative number, a boolean, a
+ * list of strings, a manifest of files (`{ path, sha256 }`), an anchor (`{ type, data }`) or a
+ * review's comments. */
+type FieldKind =
+  | "string"
+  | "number"
+  | "boolean"
+  | "strings"
+  | "files"
+  | "anchor"
+  | "reviewComments";
+
+const FIELD_CHECKS: Record<FieldKind, (value: unknown) => boolean> = {
+  string: (value) => typeof value === "string",
+  number: (value) => Number.isSafeInteger(value) && (value as number) >= 0,
+  boolean: (value) => typeof value === "boolean",
+  strings: (value) => Array.isArray(value) && value.every((item) => typeof item === "string"),
+  files: (value) => Array.isArray(value) && value.every(isManifestFile),
+  anchor: isAnchorShape,
+  reviewComments: (value) => Array.isArray(value) && value.every(isReviewCommentShape),
+};
+
+/** The fields a version sent as files carries, which `text` never comes with. */
+const MANIFEST_FIELDS = { files: "files", delete: "strings", entry: "string" } as const;
+
+type OperationShape = {
+  fields: Record<string, FieldKind>;
+  required: readonly string[];
+  /** Changes nothing: a failure on the way is safe to run again. */
+  readOnly?: true;
+  /** Held up while others commented on what it touches since the Agent last read comments. */
+  gatedByComments?: true;
+  /** Writes a comment or the state of a thread. */
+  commentWrite?: true;
+};
+
+const OPERATIONS = {
   create: {
-    strings: ["title", "target", "kind", "description", "text", "idempotencyKey", "entry"],
-    numbers: [],
-    arrays: ["delete"],
-    manifest: true,
+    fields: {
+      title: "string",
+      target: "string",
+      kind: "string",
+      description: "string",
+      text: "string",
+      idempotencyKey: "string",
+      ...MANIFEST_FIELDS,
+    },
     required: ["title"],
   },
-  list: { strings: ["target", "query", "after"], numbers: ["limit"], required: [] },
-  read: { strings: ["artifact"], numbers: ["version"], required: ["artifact"] },
-  push: {
-    strings: [
-      "artifact",
-      "idempotencyKey",
-      "text",
-      "title",
-      "description",
-      "note",
-      "label",
-      "entry",
-    ],
-    numbers: ["baseVersion"],
-    arrays: ["delete"],
-    manifest: true,
-    required: ["artifact", "idempotencyKey", "baseVersion"],
+  list: {
+    fields: { target: "string", query: "string", after: "string", limit: "number" },
+    required: [],
+    readOnly: true,
   },
-  history: { strings: ["artifact"], numbers: ["before", "limit"], required: ["artifact"] },
+  read: {
+    fields: { artifact: "string", version: "number" },
+    required: ["artifact"],
+    readOnly: true,
+  },
+  push: {
+    fields: {
+      artifact: "string",
+      idempotencyKey: "string",
+      text: "string",
+      title: "string",
+      description: "string",
+      note: "string",
+      label: "string",
+      baseVersion: "number",
+      ...MANIFEST_FIELDS,
+    },
+    required: ["artifact", "idempotencyKey", "baseVersion"],
+    gatedByComments: true,
+  },
+  history: {
+    fields: { artifact: "string", before: "number", limit: "number" },
+    required: ["artifact"],
+    readOnly: true,
+  },
   revert: {
-    strings: ["artifact", "idempotencyKey"],
-    numbers: ["to", "baseVersion"],
+    fields: { artifact: "string", idempotencyKey: "string", to: "number", baseVersion: "number" },
     required: ["artifact", "idempotencyKey", "to", "baseVersion"],
   },
   share: {
-    strings: ["note", "requestId"],
-    numbers: [],
-    arrays: ["artifactIds", "targets"],
+    fields: { note: "string", requestId: "string", artifactIds: "strings", targets: "strings" },
     required: ["artifactIds", "targets", "requestId"],
   },
-} as const satisfies Record<
-  AgentArtifactRequest["operation"],
-  {
-    strings: readonly string[];
-    numbers: readonly string[];
-    arrays?: readonly string[];
-    /** Takes `files`, a manifest of `{ path, sha256 }`. */
-    manifest?: boolean;
-    required: readonly string[];
-  }
->;
+  comments: {
+    fields: {
+      artifact: "string",
+      path: "string",
+      review: "string",
+      after: "string",
+      all: "boolean",
+    },
+    required: ["artifact"],
+    readOnly: true,
+  },
+  comment: {
+    fields: {
+      artifact: "string",
+      body: "string",
+      path: "string",
+      replyTo: "string",
+      idempotencyKey: "string",
+      version: "number",
+      anchor: "anchor",
+    },
+    required: ["artifact", "body", "idempotencyKey"],
+    gatedByComments: true,
+    commentWrite: true,
+  },
+  review: {
+    fields: {
+      artifact: "string",
+      body: "string",
+      idempotencyKey: "string",
+      version: "number",
+      comments: "reviewComments",
+    },
+    required: ["artifact", "comments", "idempotencyKey"],
+    gatedByComments: true,
+    commentWrite: true,
+  },
+  resolve: {
+    fields: { artifact: "string", comment: "string", note: "string" },
+    required: ["artifact", "comment"],
+    commentWrite: true,
+  },
+  reopen: {
+    fields: { artifact: "string", comment: "string" },
+    required: ["artifact", "comment"],
+    commentWrite: true,
+  },
+} as const satisfies Record<AgentArtifactRequest["operation"], OperationShape>;
+
+/** What an operation does, for a client that reports its failures: whether it only reads, whether
+ * unseen comments hold it up, and whether it writes a comment or the state of a thread. */
+export function artifactOperationTraits(operation: AgentArtifactRequest["operation"]) {
+  const shape: OperationShape = OPERATIONS[operation];
+  return {
+    readOnly: shape.readOnly === true,
+    gatedByComments: shape.gatedByComments === true,
+    commentWrite: shape.commentWrite === true,
+  };
+}
 
 /**
  * The request a body is, or null: a known operation with exactly its own fields, strings as
@@ -118,27 +253,18 @@ const OPERATION_FIELDS = {
  * cannot reach a save's internal options.
  */
 export function decodeAgentArtifactRequest(value: unknown): AgentArtifactRequest | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const fields = value as Record<string, unknown>;
-  const operation = fields.operation;
-  if (typeof operation !== "string" || !Object.hasOwn(OPERATION_FIELDS, operation)) return null;
-  const known = OPERATION_FIELDS[operation as keyof typeof OPERATION_FIELDS];
+  if (!isRecord(value)) return null;
+  const operation = value.operation;
+  if (typeof operation !== "string" || !Object.hasOwn(OPERATIONS, operation)) return null;
+  const known: OperationShape = OPERATIONS[operation as keyof typeof OPERATIONS];
   const request: Record<string, unknown> = { operation };
-  for (const [key, field] of Object.entries(fields)) {
+  for (const [key, field] of Object.entries(value)) {
     if (key === "operation") continue;
-    if ((known.strings as readonly string[]).includes(key)) {
-      if (typeof field !== "string") return null;
-    } else if ((known.numbers as readonly string[]).includes(key)) {
-      if (!Number.isSafeInteger(field) || (field as number) < 0) return null;
-    } else if ((known as { arrays?: readonly string[] }).arrays?.includes(key)) {
-      if (!Array.isArray(field) || !field.every((item) => typeof item === "string")) return null;
-    } else if (key === "files" && (known as { manifest?: boolean }).manifest) {
-      if (!Array.isArray(field) || !field.every(isManifestFile)) return null;
-    } else return null;
+    if (!Object.hasOwn(known.fields, key) || !FIELD_CHECKS[known.fields[key]!](field)) return null;
     request[key] = field;
   }
   if (known.required.some((key) => request[key] === undefined)) return null;
-  const manifest = ["files", "delete", "entry"].some((key) => request[key] !== undefined);
+  const manifest = Object.keys(MANIFEST_FIELDS).some((key) => request[key] !== undefined);
   if (manifest && request.text !== undefined) return null;
   return request as AgentArtifactRequest;
 }
@@ -165,13 +291,11 @@ export function artifactPathValid(path: string): boolean {
 }
 
 function isManifestFile(value: unknown): value is AgentArtifactFile {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const keys = Object.keys(value);
-  const file = value as Record<string, unknown>;
+  if (!isRecord(value)) return false;
   return (
-    keys.length === 2 &&
-    typeof file.path === "string" &&
-    typeof file.sha256 === "string" &&
-    ARTIFACT_SHA256_PATTERN.test(file.sha256)
+    Object.keys(value).length === 2 &&
+    typeof value.path === "string" &&
+    typeof value.sha256 === "string" &&
+    ARTIFACT_SHA256_PATTERN.test(value.sha256)
   );
 }
