@@ -238,7 +238,7 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   "task convert": {
     syntax:
-      "coforge task convert --target <channel> [--peer-kind human|agent] --message-id <id> [--json]",
+      "coforge task convert --target <channel> [--peer-kind human|agent] --message-id <id> --priority urgent|high|medium|low [--json]",
   },
   "task amend": {
     syntax:

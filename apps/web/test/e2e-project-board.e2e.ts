@@ -16,6 +16,7 @@ import {
   devBrowserWorkspace,
   localBrowserE2e,
   pageHydrated,
+  pickTaskPriority,
 } from "./helpers/browser-e2e";
 
 /**
@@ -355,6 +356,14 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       "--fn",
       `document.querySelector('[role="dialog"] button[aria-label="Assign to: @${assignAgent.displayName}"]') !== null`,
     );
+    // The picker's popover closes after its pick; wait it out before the next field.
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="menu"][aria-label="Assign to"]') === null`,
+    );
+    // A new Task names its priority (task #12).
+    await pickTaskPriority(browser, '[role="dialog"]', "High");
     await browser(
       "eval",
       `[...document.querySelectorAll('[role="dialog"] button[type="submit"]')][0].click()`,

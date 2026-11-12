@@ -50,6 +50,7 @@ export function ComposerField({
   label,
   placeholder,
   onSubmit,
+  onTaskMode,
   sendDisabled,
   isDisabled,
   isReadOnly,
@@ -71,6 +72,10 @@ export function ComposerField({
   placeholder: string;
   /** Send the draft: as a Task when `asTask` is true, by the owner's default when it is absent. */
   onSubmit: (asTask?: boolean) => void;
+  /** Choose the send mode without sending (the send menu, Cmd/Ctrl+Shift+Enter): an owner whose
+   * Task send needs a choice first (its priority, task #12) arms the mode and lets the next
+   * submit go out. Without it the choice sends at once, as `onSubmit` does. */
+  onTaskMode?: (asTask: boolean) => void;
   sendDisabled: boolean;
   isDisabled?: boolean;
   /** Typing is held, focus kept (a send in flight that must not lose the dialog's Escape). */
@@ -127,7 +132,8 @@ export function ComposerField({
     };
     if (taskMode && shouldSendAsTaskOnEnter(key, composition)) {
       event.preventDefault();
-      onSubmit(true);
+      if (onTaskMode) onTaskMode(true);
+      else onSubmit(true);
       return;
     }
     if (shouldSendOnEnter(key, composition)) {
@@ -206,7 +212,8 @@ export function ComposerField({
           isDisabled={sendDisabled}
           label={sendLabel}
           onChoose={(wantTask) => {
-            onSubmit(wantTask);
+            if (onTaskMode) onTaskMode(wantTask);
+            else onSubmit(wantTask);
             // The closing menu hands focus back to its trigger; take it back after.
             requestAnimationFrame(() => focusDraftEnd(completion.textareaRef.current));
           }}

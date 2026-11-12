@@ -2,7 +2,7 @@ import { channelVisibilitySchema } from "./channel-visibility";
 import { createServerFn } from "@tanstack/react-start";
 import { channelInput, channelScope } from "./channel-function-scope.server";
 import { z } from "zod";
-import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
+import { CHANNEL_NAME_PATTERN, TASK_PRIORITY_LEVELS } from "@lrm/coforge-sdk/internal";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
@@ -243,11 +243,14 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
       mentions: mentionSelectorsSchema,
       /** "As task": the message is a Task from the moment it exists (top-level only). */
       asTask: z.boolean().optional(),
+      /** The new Task's priority when `asTask` (task #12); a send without it — a page from
+       * before priorities were required — lands `none`, as every send-as-task did then. */
+      taskPriority: z.enum(TASK_PRIORITY_LEVELS).optional(),
     }),
   )
   .handler(async ({ data, context }) => {
     const { db, workspaceId, userId, username } = channelScope(context);
-    const { asTask, ...input } = data;
+    const { asTask, taskPriority, ...input } = data;
     const centrifugo = createCentrifugoServerApi();
     const channels = new PublicChannels(
       db,
@@ -260,7 +263,7 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
       ...input,
       workspaceId,
       userId,
-      withinSend: asTask ? await sentAsTaskHook(db, workspaceId) : undefined,
+      withinSend: asTask ? await sentAsTaskHook(db, workspaceId, taskPriority) : undefined,
     });
     if (asTask)
       await announceSentTask(db, { conversationId: data.channelId, workspaceId }, message.id);

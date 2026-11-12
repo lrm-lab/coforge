@@ -8,9 +8,17 @@ import { agentDirectKey } from "#src/features/conversations/direct-key";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { openPeopleDirectConversation } from "#src/server/conversations/user-direct-conversations.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
+import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
+import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { sentMessageBecomesTask } from "#src/server/tasks/sent-as-task.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
+
+/** The composer's "send as task" at a chosen priority (task #12): the hook the send runs. */
+const asTask =
+  (priority: TaskPriorityLevel): SentMessageHook =>
+  (tx, message) =>
+    sentMessageBecomesTask(tx, message, priority);
 
 /**
  * "Send as task" from the composer sends the message, as Raft's composer does (`/v2/messages` with
@@ -58,7 +66,7 @@ test("a message sent as a task is one message that is a Task and keeps all its u
       idempotencyKey: crypto.randomUUID(),
       body: "Update the quota page",
       attachmentIds: [first.id, second.id],
-      withinSend: sentMessageBecomesTask,
+      withinSend: asTask("high"),
     };
     const sent = await channels.send(request);
     await board.announceSentTask(
@@ -77,12 +85,12 @@ test("a message sent as a task is one message that is a Task and keeps all its u
     const stored = await db.message.findUniqueOrThrow({
       where: { id: sent.id },
       select: {
-        task: { select: { number: true, title: true, status: true } },
+        task: { select: { number: true, title: true, status: true, priority: true } },
         attachments: { select: { id: true, position: true }, orderBy: { position: "asc" } },
       },
     });
     expect(stored).toEqual({
-      task: { number: 1, title: "Update the quota page", status: "todo" },
+      task: { number: 1, title: "Update the quota page", status: "todo", priority: "high" },
       attachments: [
         { id: first.id, position: 0 },
         { id: second.id, position: 1 },
@@ -104,6 +112,22 @@ test("a message sent as a task is one message that is a Task and keeps all its u
         threadRootId: sent.id,
       }),
     ).rejects.toThrow();
+
+    // The rollout's other half (task #12): a send from a page that predates required priorities
+    // carries none, and its Task lands `none` — the value every send-as-task wrote before.
+    const legacy = await channels.send({
+      ...request,
+      idempotencyKey: crypto.randomUUID(),
+      attachmentIds: [],
+      body: "A task from an old page",
+      withinSend: sentMessageBecomesTask,
+    });
+    expect(
+      await db.task.findUniqueOrThrow({
+        where: { messageId: legacy.id },
+        select: { priority: true },
+      }),
+    ).toEqual({ priority: "none" });
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: user.id } }).catch(() => undefined);
@@ -170,7 +194,7 @@ test("a message sent as a task in an Agent's DM is a Task with all its uploads",
         idempotencyKey: crypto.randomUUID(),
         body: "Fix the DM quota page",
         attachmentIds: uploads.map((upload) => upload.id),
-        withinSend: sentMessageBecomesTask,
+        withinSend: asTask("medium"),
       },
       {
         idempotency: new RedisMessageRequestIdempotency(redis),
@@ -181,12 +205,12 @@ test("a message sent as a task in an Agent's DM is a Task with all its uploads",
       await db.message.findUniqueOrThrow({
         where: { id: sent.id },
         select: {
-          task: { select: { number: true } },
+          task: { select: { number: true, priority: true } },
           attachments: { select: { id: true }, orderBy: { position: "asc" } },
         },
       }),
     ).toEqual({
-      task: { number: 1 },
+      task: { number: 1, priority: "medium" },
       attachments: uploads.map((upload) => ({ id: upload.id })),
     });
   } finally {
@@ -249,7 +273,7 @@ test("a message sent as a task in a DM between people is a Task with all its upl
         idempotencyKey: crypto.randomUUID(),
         body: "Review the quota copy",
         attachmentIds: uploads.map((upload) => upload.id),
-        withinSend: sentMessageBecomesTask,
+        withinSend: asTask("low"),
       },
       {
         idempotency: new RedisMessageRequestIdempotency(redis),
@@ -260,12 +284,12 @@ test("a message sent as a task in a DM between people is a Task with all its upl
       await db.message.findUniqueOrThrow({
         where: { id: sent.id },
         select: {
-          task: { select: { number: true } },
+          task: { select: { number: true, priority: true } },
           attachments: { select: { id: true }, orderBy: { position: "asc" } },
         },
       }),
     ).toEqual({
-      task: { number: 1 },
+      task: { number: 1, priority: "low" },
       attachments: uploads.map((upload) => ({ id: upload.id })),
     });
   } finally {

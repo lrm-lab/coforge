@@ -1,18 +1,23 @@
 import {
-  CHANNEL_NAME_PATTERN,
-  TASK_PRIORITIES,
+  TASK_PRIORITY_LEVELS,
   TASK_STATUSES,
   type TaskCommand,
-  type TaskRef,
   type TaskResourceReceipt,
-  type TaskPriority,
+  type TaskPriorityLevel,
   type TaskStatus,
 } from "@lrm/coforge-sdk/internal";
-import { CliError } from "#src/cli-error";
 import { unknownCommandError } from "./command-help";
 import { parseTaskListStatus } from "./task-list-status-args";
 import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
 import { parseAssignReason } from "#src/task-assign-reason-arg";
+import {
+  blockedByOption,
+  expectedRevisionOption,
+  handleOption,
+  invalidTaskArg,
+  parentOption,
+  taskNumber,
+} from "#src/task-args-values";
 import {
   parseTaskConversationArgs,
   type TaskConversationInvocation,
@@ -64,7 +69,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--priority",
     "--json",
   ],
-  convert: ["--target", "--peer-kind", "--message-id", "--json"],
+  convert: ["--target", "--peer-kind", "--message-id", "--priority", "--json"],
   claim: [
     "--target",
     "--peer-kind",
@@ -156,81 +161,6 @@ const TASK_SWITCHES = new Set([
 ]);
 
 const TASK_TARGET = /^(?:#[a-z0-9][a-z0-9_-]{0,31}|@[a-z0-9][a-z0-9_-]{0,63})$/;
-
-function invalidTaskArg(message: string): CliError {
-  return new CliError({ code: "INVALID_ARG", message, retryable: false });
-}
-
-/** A positive integer, or an invalid-argument refusal saying `message`. */
-function positiveInt(raw: string, message: string): number {
-  // Digits only: `Number()` would also take `1e1`, `0x10` and `1.0`.
-  const value = /^[0-9]+$/.test(raw.trim()) ? Number(raw) : 0;
-  if (!Number.isSafeInteger(value) || value <= 0) throw invalidTaskArg(message);
-  return value;
-}
-
-function taskNumber(raw: string | undefined): number {
-  if (raw === undefined) throw invalidTaskArg("--number is required");
-  return positiveInt(raw, `--number must be a positive integer; got ${raw}`);
-}
-
-function expectedRevisionOption(raw: string | undefined): number | undefined {
-  if (raw === undefined) return undefined;
-  const value = Number(raw);
-  if (raw.trim() === "" || !Number.isSafeInteger(value) || value < 0)
-    throw invalidTaskArg(`--expected-revision must be a non-negative integer; got ${raw}`);
-  return value;
-}
-
-/**
- * A task by number: `7` in the target's own conversation, or `#channel:#7` (Raft's form) in a
- * channel of the Workspace. The old `#channel/7` is not accepted: published Computers parse their
- * own arguments, so only the new release needs this form.
- */
-function taskRefOption(raw: string, message: string): TaskRef {
-  const part = raw.trim();
-  const match = /^#([a-z0-9][a-z0-9_-]{0,31}):#?([1-9]\d*)$/.exec(part);
-  if (match) {
-    const channel = match[1]!;
-    if (!CHANNEL_NAME_PATTERN.test(channel)) throw invalidTaskArg(message);
-    return { number: Number(match[2]!), channel };
-  }
-  if (part.startsWith("#") && part.includes(":")) throw invalidTaskArg(message);
-  return { number: positiveInt(part, message) };
-}
-
-/** `--blocked-by 3,#coforge:#388`: the tasks a task waits for. An amendment may pass `''` to clear them. */
-function blockedByOption(raw: string, clearable: boolean): TaskRef[] {
-  if (raw.trim() === "") {
-    if (clearable) return [];
-    throw invalidTaskArg("--blocked-by must list tasks, like 3,5 or 3,#channel:#7");
-  }
-  return raw
-    .split(",")
-    .map((part) =>
-      taskRefOption(part, `--blocked-by must be tasks like 3,#channel:#7; got ${raw}`),
-    );
-}
-
-/** `--parent 7` or `--parent '#coforge:#7'`. An amendment may pass `''` to make the task top level. */
-function parentOption(raw: string, clearable: boolean): TaskRef | null {
-  if (raw.trim() === "" && clearable) return null;
-  return taskRefOption(
-    raw,
-    `--parent must be a task like 7 or #channel:#7${clearable ? " (or '' for none)" : ""}; got ${raw}`,
-  );
-}
-
-/** A handle the server can resolve: `@`, then a lowercase username or Agent name. */
-const TASK_HANDLE = /^@[a-z0-9][a-z0-9_-]{0,63}$/;
-
-/** A `@handle` option: trimmed, with the handle after `@` trimmed too. */
-function handleOption(raw: string, message: string): string {
-  const value = raw.trim();
-  const handle = `@${value.slice(1).trim()}`;
-  if (!value.startsWith("@") || !TASK_HANDLE.test(handle)) throw invalidTaskArg(message);
-  return handle;
-}
 
 /** `task` and its arguments: a command on a task's own conversation, or a board operation. */
 export function parseTaskArgs(
@@ -403,12 +333,15 @@ export function parseTaskArgs(
   }
 
   const priority = one("--priority");
-  if (priority !== undefined) {
-    if (!(TASK_PRIORITIES as readonly string[]).includes(priority))
-      throw invalidTaskArg(
-        `--priority must be one of: ${TASK_PRIORITIES.join(", ")}; got ${priority}`,
-      );
-    task.priority = priority as TaskPriority;
+  if (priority === undefined) {
+    if (operation === "create" || operation === "convert")
+      throw invalidTaskArg("--priority is required (urgent, high, medium or low)");
+  } else if (!(TASK_PRIORITY_LEVELS as readonly string[]).includes(priority)) {
+    throw invalidTaskArg(
+      `--priority must be one of: ${TASK_PRIORITY_LEVELS.join(", ")}; got ${priority}`,
+    );
+  } else {
+    task.priority = priority as TaskPriorityLevel;
   }
 
   if (operation === "assign") {

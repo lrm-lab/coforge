@@ -1,6 +1,6 @@
 import { isSeenExactSeqs, MAX_MESSAGE_SEQUENCE } from "./freshness-decision";
 import {
-  TASK_PRIORITIES,
+  TASK_PRIORITY_LEVELS,
   TASK_STATUSES,
   type TaskCommand,
   type TaskResourceReceipt,
@@ -37,7 +37,7 @@ const operations = new Set<TaskCommand["operation"]>([
   "receipt",
 ]);
 const statuses = new Set<string>(TASK_STATUSES);
-const priorities = new Set<string>(TASK_PRIORITIES);
+const priorities = new Set<string>(TASK_PRIORITY_LEVELS);
 const modes = new Set(["inline", "withheld"]);
 /** The largest PostgreSQL `integer`, the column type of a task's number and revision: a larger
  * value names no task and cannot be stored or queried. */
@@ -165,7 +165,7 @@ export function validateTaskRequest(value: TaskRequest): void {
     throw new Error("invalid Task statuses");
   if (
     value.priority !== undefined &&
-    (!priorities.has(value.priority) || !["create", "update"].includes(value.operation))
+    (!priorities.has(value.priority) || !["create", "convert", "update"].includes(value.operation))
   )
     throw new Error("invalid Task priority");
   if (value.freshnessContextMode !== undefined && !modes.has(value.freshnessContextMode))

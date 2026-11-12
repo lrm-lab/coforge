@@ -123,7 +123,8 @@ test("validateTaskRequest accepts a create from a source message, alongside anot
 });
 
 // Task #470: a priority on create, and an update that changes only the priority.
-test("validateTaskRequest accepts a priority on create and update, and an update of it alone", () => {
+// Task #12: convert carries one too.
+test("validateTaskRequest accepts a priority on create, convert and update, and an update of it alone", () => {
   const update = { ...base, operation: "update" as const, number: 4 };
   expect(() => validateTaskRequest({ ...update, priority: "high" })).not.toThrow();
   expect(() =>
@@ -132,10 +133,27 @@ test("validateTaskRequest accepts a priority on create and update, and an update
   expect(() =>
     validateTaskRequest({ ...base, operation: "create", title: "x", priority: "urgent" }),
   ).not.toThrow();
+  expect(() =>
+    validateTaskRequest({
+      ...base,
+      operation: "convert",
+      messageId: "01a00000-0000-7000-8000-000000000001",
+      priority: "medium",
+    }),
+  ).not.toThrow();
   expect(() => validateTaskRequest(update)).toThrow("missing Task operation argument");
   expect(() => validateTaskRequest({ ...update, priority: "asap" as "high" })).toThrow(
     "invalid Task priority",
   );
+  // `none` is a stored level, never a choice a command may name (task #12).
+  expect(() =>
+    validateTaskRequest({
+      ...base,
+      operation: "create",
+      title: "x",
+      priority: "none" as "high",
+    }),
+  ).toThrow("invalid Task priority");
   expect(() =>
     validateTaskRequest({ ...base, operation: "amend", number: 4, title: "x", priority: "high" }),
   ).toThrow("invalid Task priority");

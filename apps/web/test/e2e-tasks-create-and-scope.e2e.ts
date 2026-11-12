@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { pickTaskPriority } from "./helpers/browser-e2e";
 
 /**
  * The Tasks page and a channel's Tasks tab in a real browser. The Tasks page lists channel Tasks
@@ -154,6 +155,10 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
       if (attempt === 5) throw new Error("the create dialog never opened");
     }
 
+    // A new Task names its priority (task #12). It is picked first so the empty-title submit
+    // below reaches the form at all: with none picked the button stays disabled.
+    await pickTaskPriority(browser, '[role="dialog"]', "Medium");
+
     // No title at all is refused in place.
     await browser(
       "eval",
@@ -202,7 +207,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await waitFor(bodyHas(created[0]!));
     const rows = await db.task.findMany({
       where: { conversationId: channel.id, title: { in: created } },
-      select: { title: true, status: true, description: true, projectId: true },
+      select: { title: true, status: true, description: true, projectId: true, priority: true },
     });
     expect(rows).toEqual([
       {
@@ -210,6 +215,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
         status: "todo",
         description: `Notes for ${suffix}`,
         projectId: project.id,
+        priority: "medium",
       },
     ]);
     await browser("screenshot", join(artifacts, "created.png"));
@@ -258,6 +264,8 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     expect(
       await browser("eval", `document.querySelector(${JSON.stringify(titleField)}).value`),
     ).toContain(`Phone ${suffix}`);
+    // A new Task names its priority (task #12); the phone's menu comes up as a sheet.
+    await pickTaskPriority(browser, '[role="dialog"]', "Low");
     await browser("find", "role", "button", "click", "--name", "Create");
     let phoneMade = null;
     for (let tries = 0; tries < 40 && !phoneMade; tries++) {
@@ -265,6 +273,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
       if (!phoneMade) await Bun.sleep(250);
     }
     expect(phoneMade).not.toBeNull();
+    expect(phoneMade!.priority).toBe("low");
   } finally {
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, direct.id] } } })

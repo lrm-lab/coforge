@@ -10,7 +10,11 @@
  * reloading the page loses a message. A retry reuses the idempotency key, which the server treats as
  * the same send, so a message the server did accept is never posted twice.
  */
-import type { MentionSelectorInput } from "@lrm/coforge-sdk/internal";
+import {
+  TASK_PRIORITY_LEVELS,
+  type MentionSelectorInput,
+  type TaskPriorityLevel,
+} from "@lrm/coforge-sdk/internal";
 import { isAppError } from "#src/lib/app-error";
 import { isMentionPin, type MentionPin } from "./mention-pins";
 
@@ -28,6 +32,9 @@ export type OutgoingMessage = {
   pins: readonly MentionPin[];
   idempotencyKey: string;
   asTask: boolean;
+  /** The Task's priority when `asTask` is set (task #12); absent on a plain message and on
+   * entries stored before priorities were required — the send path fills those in. */
+  taskPriority?: TaskPriorityLevel;
   attachments: OutgoingAttachment[];
 };
 
@@ -38,6 +45,8 @@ export type SendOptions = {
   mentions?: MentionSelectorInput[];
   /** The message is a Task from the moment it exists, carrying every upload. */
   asTask?: boolean;
+  /** The new Task's priority; sent only when `asTask` is set. */
+  taskPriority?: TaskPriorityLevel;
 };
 
 /**
@@ -174,6 +183,14 @@ function parseStored(raw: string | null): StoredEntry | undefined {
       !entry.pins.every(isMentionPin)
     )
       return undefined;
+    // A stored priority this page cannot send (a level it does not know, or `none`, which is a
+    // stored value but never a sent one) reads as absent: the send path fills in the device's
+    // remembered one rather than failing every retry.
+    if (
+      entry.taskPriority !== undefined &&
+      !(TASK_PRIORITY_LEVELS as readonly string[]).includes(entry.taskPriority)
+    )
+      entry.taskPriority = undefined;
     return stored;
   } catch {
     return undefined;
@@ -260,6 +277,7 @@ export function createComposerOutbox(storage: OutboxStorage | null): ComposerOut
       pins: entry.pins,
       idempotencyKey: entry.idempotencyKey,
       asTask: entry.asTask,
+      ...(entry.taskPriority && { taskPriority: entry.taskPriority }),
       attachments: entry.attachments,
     };
     save({ ...value, entry: { ...message, state: "sending" } });
@@ -323,7 +341,7 @@ export function createComposerOutbox(storage: OutboxStorage | null): ComposerOut
       for (const value of stored.values()) {
         if (value.entry.idempotencyKey !== idempotencyKey || value.entry.state === "delivered")
           continue;
-        const { localId, draftKey, body, pins, asTask, attachments } = value.entry;
+        const { localId, draftKey, body, pins, asTask, taskPriority, attachments } = value.entry;
         save({
           ...value,
           entry: {
@@ -333,6 +351,7 @@ export function createComposerOutbox(storage: OutboxStorage | null): ComposerOut
             pins,
             idempotencyKey,
             asTask,
+            taskPriority,
             attachments,
             state: "delivered",
             messageId,

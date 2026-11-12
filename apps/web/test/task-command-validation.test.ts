@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import type { TaskCommand, TaskPrincipal, TaskStatus } from "@lrm/coforge-sdk/internal";
+import type {
+  TaskCommand,
+  TaskPrincipal,
+  TaskPriorityLevel,
+  TaskStatus,
+} from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 
@@ -135,6 +140,26 @@ const refused: [string, TaskCommand][] = [
   ["a claim that names nothing", command({ operation: "claim", numbers: [], messageIds: [] })],
   ["numbers on convert", command({ operation: "convert", number: 1, numbers: [2] })],
   ["message ids on list", command({ operation: "list", messageIds: ["m-1"] })],
+  // Task #12: `none` is a stored level, never a choice; only the four levels may be named, and
+  // only on create, convert or update.
+  [
+    "a create with priority none",
+    command({ operation: "create", title: "x", priority: "none" as TaskPriorityLevel }),
+  ],
+  [
+    "an update with priority none",
+    command({ operation: "update", number: 1, priority: "none" as TaskPriorityLevel }),
+  ],
+  [
+    "a convert with priority none",
+    command({ operation: "convert", messageId: "m-1", priority: "none" as TaskPriorityLevel }),
+  ],
+  ["a priority on a list", command({ operation: "list", priority: "high" })],
+  ["a priority on an amend", command({ operation: "amend", number: 1, priority: "high" })],
+  [
+    "a priority that is not a level",
+    command({ operation: "create", title: "x", priority: "asap" as "high" }),
+  ],
 ];
 
 test.each(refused)("execute refuses %s as INVALID_INPUT before reading", async (_, input) => {
@@ -163,6 +188,21 @@ const accepted: [string, TaskPrincipal, TaskCommand][] = [
     command({ operation: "create", title: "x", status: "todo" }),
   ],
   ["a convert by message id", person, command({ operation: "convert", messageId: "m-1" })],
+  [
+    "a convert with a priority",
+    person,
+    command({ operation: "convert", messageId: "m-1", priority: "urgent" }),
+  ],
+  [
+    "a create with a priority",
+    person,
+    command({ operation: "create", title: "x", priority: "low" }),
+  ],
+  [
+    "an update of only the priority",
+    person,
+    command({ operation: "update", number: 1, priority: "medium" }),
+  ],
   ["a claim by numbers", person, command({ operation: "claim", numbers: [1, 2] })],
   ["a claim by message ids", person, command({ operation: "claim", messageIds: ["m-1"] })],
   ["a claim by number", person, command({ operation: "claim", number: 3 })],

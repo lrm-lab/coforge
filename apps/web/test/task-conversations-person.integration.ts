@@ -152,17 +152,21 @@ test("send as task spawns a task from the sent message without a notice", async 
     },
   });
   await db.$transaction((tx) =>
-    sentMessageSpawnsTask(tx, {
-      id: sent.id,
-      conversationId: channelId,
-      workspaceId,
-      body: sent.body,
-      senderMemberId: people.actor.memberId,
-      threadRootId: null,
-    }),
+    sentMessageSpawnsTask(
+      tx,
+      {
+        id: sent.id,
+        conversationId: channelId,
+        workspaceId,
+        body: sent.body,
+        senderMemberId: people.actor.memberId,
+        threadRootId: null,
+      },
+      "urgent",
+    ),
   );
   const task = await db.task.findFirstOrThrow({ where: { sourceMessageId: sent.id } });
-  expect(task).toMatchObject({ title: "ship it", messageId: null });
+  expect(task).toMatchObject({ title: "ship it", messageId: null, priority: "urgent" });
   expect(await db.message.count({ where: { threadRootId: sent.id } })).toBe(0);
   expect(
     await announceSpawnedTask(

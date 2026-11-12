@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { TASK_PRIORITY_LEVELS } from "@lrm/coforge-sdk/internal";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
@@ -28,6 +29,8 @@ export const makeTaskFromMessage = createServerFn({ method: "POST" })
         messageId: z.uuid(),
         idempotencyKey: z.uuid(),
         alongside: z.boolean().optional(),
+        /** The new Task's priority, one of the four levels (task #12). */
+        priority: z.enum(TASK_PRIORITY_LEVELS).optional(),
       })
       .strict(),
   )

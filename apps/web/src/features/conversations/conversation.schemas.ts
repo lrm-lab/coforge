@@ -3,6 +3,7 @@ import {
   MENTION_HANDLE_PATTERN,
   MENTION_SELECTORS_MAX_LENGTH,
   MESSAGE_ANCHOR_SOURCE,
+  TASK_PRIORITY_LEVELS,
   UUID_LIKE_SOURCE,
 } from "@lrm/coforge-sdk/internal";
 import { z } from "zod";
@@ -97,6 +98,9 @@ export const sendConversationMessageInputSchema = directConversationInputSchema.
   threadRootId: uuid.optional(),
   /** "As task": the message is a Task from the moment it exists (top-level only). */
   asTask: z.boolean().optional(),
+  /** The new Task's priority when `asTask` (task #12); a send without it — a page from before
+   * priorities were required — lands `none`, as every send-as-task did then. */
+  taskPriority: z.enum(TASK_PRIORITY_LEVELS).optional(),
 });
 
 export const readConversationThreadInputSchema = directConversationInputSchema.extend({

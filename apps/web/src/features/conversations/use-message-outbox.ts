@@ -1,5 +1,8 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
+import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
+
+import { readLastTaskPriority } from "#src/features/settings/last-task-priority";
 import {
   createComposerOutbox,
   outboxLocalIdOfStorageKey,
@@ -82,6 +85,7 @@ export type ComposerRequest =
       body: string;
       idempotencyKey: string;
       asTask: boolean;
+      taskPriority?: TaskPriorityLevel;
       pins: OutgoingMessage["pins"];
       chips: PendingAttachment[];
     }
@@ -141,7 +145,12 @@ export function useMessageOutbox({
     const { body, mentions } = rewriteMentionPins(message.body, message.pins);
     return onSend(body, message.idempotencyKey, attachmentIds, {
       mentions,
-      ...(message.asTask && { asTask: true }),
+      // A Task send always names its priority (task #12): an entry stored before they were
+      // required carries none, so it takes the device's remembered one.
+      ...(message.asTask && {
+        asTask: true,
+        taskPriority: message.taskPriority ?? readLastTaskPriority(),
+      }),
     });
   }
 
@@ -198,6 +207,7 @@ export function useMessageOutbox({
         pins: entry.pins,
         idempotencyKey: entry.idempotencyKey,
         asTask: entry.asTask,
+        taskPriority: entry.taskPriority,
         chips: sentChips.get(entry.localId) ?? [],
       });
       if (!taken) return;

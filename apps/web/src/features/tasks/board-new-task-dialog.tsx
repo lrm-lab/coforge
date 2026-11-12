@@ -103,7 +103,7 @@ export function BoardNewTaskDialog({
             title: draft.title,
             ...(draft.description && { description: draft.description }),
             project: draft.project ?? null,
-            ...(draft.priority && { priority: draft.priority }),
+            priority: draft.priority,
             ...(draft.labels && { labels: draft.labels }),
             ...(assignee(assignTo) && { assignee: assignee(assignTo) }),
             ...(column !== "todo" && { status: column }),

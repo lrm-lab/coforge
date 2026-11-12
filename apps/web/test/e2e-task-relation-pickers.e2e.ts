@@ -180,6 +180,21 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
         '[role="dialog"] textarea[aria-label="Add a description…"]',
         `Copy notes ${tail}`,
       );
+      // A new Task names its priority (task #12); a phone's menu comes up as a sheet. The
+      // popup underneath has its own priority button, so scope to the sub-task dialog.
+      const subtaskDialog = '[role="dialog"][aria-label="New sub-task"]';
+      await browser("click", `${subtaskDialog} button[aria-label="Change priority: No priority"]`);
+      await browser(
+        "wait",
+        "--fn",
+        `[...document.querySelectorAll('[role="menuitemradio"]')].some((el) => el.textContent.includes("Medium"))`,
+      );
+      await browser("find", "role", "menuitemradio", "click", "--name", "Medium");
+      await browser(
+        "wait",
+        "--fn",
+        `document.querySelector('${subtaskDialog} button[aria-label="Change priority: Medium"]') != null`,
+      );
       await shoot(`${label}-subtask-dialog`);
       // A phone's New sub-task is a page with Create in its top bar; the desktop footer, whose
       // button submits the form, is hidden there (task #54).

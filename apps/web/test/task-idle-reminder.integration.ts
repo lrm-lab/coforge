@@ -243,7 +243,9 @@ test("a parent with an unfinished subtask is never stale", async () => {
 test("highest priority first, oldest first within one; five listed, the rest in the backlog", async () => {
   const { db, make, assign, nudge, ref } = await world();
   try {
-    const priorities = ["low", "none", "urgent", "medium", "high", "urgent", "none"] as const;
+    // `none` is not a choice a command may name (task #12): an unprioritized Task is made by
+    // leaving the field out, which still lands `none`.
+    const priorities = ["low", undefined, "urgent", "medium", "high", "urgent", undefined] as const;
     const numbers: number[] = [];
     for (const priority of priorities) numbers.push(...(await make("alice", 1, { priority })));
     for (const number of numbers) await assign(number);

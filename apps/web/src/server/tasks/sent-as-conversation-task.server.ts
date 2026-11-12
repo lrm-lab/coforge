@@ -1,3 +1,5 @@
+import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
+import type { Prisma } from "#src/generated/prisma/client";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { AppError } from "#src/lib/app-error";
 import {
@@ -26,7 +28,11 @@ const sentTaskRequestId = (messageId: string) => indexedRequestId(`${messageId}:
  * sender wrote the message, so no notice goes to its thread. The caller announces the task once
  * the send has committed (`announceSentTask`).
  */
-export const sentMessageSpawnsTask: SentMessageHook = async (tx, message) => {
+export async function sentMessageSpawnsTask(
+  tx: Prisma.TransactionClient,
+  message: Parameters<SentMessageHook>[1],
+  priority?: TaskPriorityLevel,
+) {
   if (message.threadRootId) throw new AppError("INVALID_INPUT");
   const [creator, stored] = await Promise.all([
     tx.conversationMember.findUniqueOrThrow({
@@ -47,8 +53,9 @@ export const sentMessageSpawnsTask: SentMessageHook = async (tx, message) => {
     assignee: null,
     requestId: await sentTaskRequestId(message.id),
     source: { id: message.id, senderMemberId: creator.id, ...stored },
+    priority,
   });
-};
+}
 
 /** Announces the task a send spawned, if it spawned one: false when the message made none. */
 export async function announceSpawnedTask(

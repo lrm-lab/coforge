@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
 import { setup } from "./fixtures/task-dependencies";
 
 /**
@@ -125,6 +126,84 @@ test("an Agent that is a Workspace admin sets any task's priority", async () => 
     expect((await show(byBob!)).tasks[0]!.priority).toBe("high");
   } finally {
     await db.$disconnect();
+  }
+});
+
+test("create and convert take a level, never none; a missing one still lands none (task #12)", async () => {
+  for (const tasksV2 of [true, false]) {
+    const { db, run, make, show, refusal, channel, principals } = await setup({ tasksV2 });
+    try {
+      // `none` is a stored value, never a choice: create, update and convert all refuse it,
+      // and the refusal names the four levels an Agent can act on.
+      const refused = await refusal(make("bob", 1, { priority: "none" as TaskPriorityLevel }));
+      expect(refused.code).toBe("INVALID_INPUT");
+      expect(refused.errorId).toBe("task_priority_invalid");
+      expect(refused.hint).toContain("urgent");
+
+      const [plain] = await make("bob", 1);
+      expect((await show(plain!)).tasks[0]!.priority).toBe("none");
+      expect(
+        (
+          await refusal(
+            run("bob", {
+              operation: "update",
+              number: plain!,
+              priority: "none" as TaskPriorityLevel,
+            }),
+          )
+        ).code,
+      ).toBe("INVALID_INPUT");
+
+      // A message to convert, sent by Bob. Sequences come from the conversation's own counter,
+      // as a send allocates them — a hand-picked number would collide with the next notice.
+      const sender = await db.conversationMember.findFirstOrThrow({
+        where: { conversationId: channel.id, userId: principals.bob.userId },
+      });
+      const sourceMessage = async () => {
+        const [row] = await db.$queryRaw<Array<{ sequence: number }>>`
+          UPDATE "conversations"
+          SET "lastSequence" = "lastSequence" + 1
+          WHERE "id" = ${channel.id}::uuid
+          RETURNING "lastSequence" AS "sequence"
+        `;
+        return db.message.create({
+          data: {
+            conversationId: channel.id,
+            workspaceId: channel.workspaceId,
+            senderMemberId: sender.id,
+            body: `convert me ${crypto.randomUUID().slice(0, 8)}`,
+            sequence: row!.sequence,
+          },
+        });
+      };
+      const source = await sourceMessage();
+      // Phase one of the rollout: a command that never names a priority is still accepted and
+      // lands `none` (old Computers), while an explicit `none` is refused above.
+      const [convertedPlain] = (await run("bob", { operation: "convert", messageId: source.id }))
+        .tasks;
+      expect((await show(convertedPlain!.number)).tasks[0]!.priority).toBe("none");
+
+      const second = await sourceMessage();
+      const [converted] = (
+        await run("bob", { operation: "convert", messageId: second.id, priority: "high" })
+      ).tasks;
+      expect((await show(converted!.number)).tasks[0]!.priority).toBe("high");
+
+      const third = await sourceMessage();
+      expect(
+        (
+          await refusal(
+            run("bob", {
+              operation: "convert",
+              messageId: third.id,
+              priority: "none" as TaskPriorityLevel,
+            }),
+          )
+        ).code,
+      ).toBe("INVALID_INPUT");
+    } finally {
+      await db.$disconnect();
+    }
   }
 });
 

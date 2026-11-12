@@ -176,7 +176,7 @@ export function TaskSection({
         </TaskProperty>
         <TaskProperty label={m.tasks_priority()} className="[[data-layout=chips]_&]:order-2">
           <TaskPriorityMenu
-            priority={task.priority ?? "none"}
+            priority={task.priority}
             disabled={pending}
             onSelect={(priority) =>
               void run({

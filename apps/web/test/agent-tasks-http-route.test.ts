@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 
 import { AppError } from "#src/lib/app-error";
 import { handleAgentTaskPost } from "#src/routes/api/agent/v1/tasks";
@@ -334,4 +334,72 @@ test("an amend may name any Project slug a Project can have, and null to follow 
   expect((await amend(null)).status).toBe(200);
   expect((await amend("p".repeat(101))).status).toBe(400);
   expect(received).toMatchObject([{ project: "p".repeat(100) }, { project: null }]);
+});
+
+// Task #12's rollout gate: a create or convert that never names a priority is still accepted
+// (it lands `none` while old Computers send none), and the route logs it with the Computer's
+// version so coverage can be measured before the refusal ships.
+test("a create or convert without a priority is accepted and logged with the client version", async () => {
+  const info = spyOn(console, "info").mockImplementation(() => {});
+  try {
+    const client = {
+      computerId: "computer-1",
+      computerVersion: async () => "1.4.2",
+    };
+    const board = { execute: async () => ({ tasks: [] }) };
+    const absent = (body: Record<string, unknown>) =>
+      handleAgentTaskPost(
+        request({ idempotencyKey: "k", ...body }),
+        principal,
+        board,
+        undefined,
+        client,
+      );
+
+    await absent({ operation: "create", target: "#general", title: "x" });
+    await absent({ operation: "convert", target: "#general", messageId: "m-1" });
+    // A priority named, and operations that make no task, log nothing.
+    await absent({ operation: "create", target: "#general", title: "x", priority: "high" });
+    await absent({ operation: "list", target: "#general" });
+
+    const events = info.mock.calls
+      .map(([line]) => JSON.parse(String(line)))
+      .filter((event) => event.event === "task_priority_absent");
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      operation: "create",
+      workspaceId: principal.workspaceId,
+      agentId: principal.agentId,
+      computerId: "computer-1",
+      computerVersion: "1.4.2",
+    });
+    expect(events[1]).toMatchObject({ operation: "convert" });
+  } finally {
+    info.mockRestore();
+  }
+});
+
+// `none` stays a stored value for legacy rows but is never a command value: the route's schema
+// refuses it before the board, where omission alone still lands `none` during the rollout.
+test("an explicit none priority is refused before the board is called", async () => {
+  let called = false;
+  const result = await handleAgentTaskPost(
+    request({
+      idempotencyKey: "k",
+      operation: "create",
+      target: "#general",
+      title: "x",
+      priority: "none",
+    }),
+    principal,
+    {
+      execute: async () => {
+        called = true;
+        return { tasks: [] };
+      },
+    },
+  );
+
+  expect(result.status).toBe(400);
+  expect(called).toBe(false);
 });
