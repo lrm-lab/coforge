@@ -91,7 +91,8 @@ export const openParam = `new URLSearchParams(location.search).get("open")`;
  * A channel shared by the viewer and the seeded peer, reset to this run's messages: the viewer's
  * thread root (`root`), which they follow, the peer's reply in it (`reply`), then a newer top-level
  * message from the peer (`newest`). The message `mention` names mentions the viewer. Every id comes
- * from `key`, so a rerun replaces the same rows.
+ * from `key` within the workspace, so a rerun replaces the same rows, and a run against another
+ * workspace (the dev user's first one can change) seeds its own rather than reaching into the old.
  */
 export async function seedChannel(
   db: PrismaClient,
@@ -105,7 +106,8 @@ export async function seedChannel(
     mention: "reply" | "newest";
   },
 ) {
-  const { workspaceId, key } = options;
+  const { workspaceId } = options;
+  const key = `${workspaceId}:${options.key}`;
   const peer = await db.user.upsert({
     where: { id: seededUuid("e2e-activity-inbox:peer") },
     update: {},
