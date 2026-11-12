@@ -1,7 +1,7 @@
 import { assertCanAssignOther } from "./task-assignment-authority.server";
 import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
-import { assigneeMention, noticeActor, noticeText } from "./task-notices.server";
+import { assigneeMention, noticeActor, noticeAssignee, noticeText } from "./task-notices.server";
 import { taskViewOf } from "./task-relations.server";
 import type { TaskBoardPorts, Member, ConversationRef } from "./task-board-ports.server";
 import { memberKey } from "./task-board-ports.server";
@@ -70,11 +70,7 @@ export async function assignmentReceipts(
             params: {
               actor: noticeActor(member),
               task: quoted,
-              assignee: {
-                memberId: assignee.id,
-                handle: assigneeMention(assignee).slice(1),
-                displayName: assigneeMention(assignee).slice(1),
-              },
+              assignee: noticeAssignee(assignee),
               ...(reason ? { reason } : {}),
             },
           },

@@ -15,7 +15,15 @@ export type SystemNoticeSource = { body: string; system?: { kind: string; params
 
 /** The notice a message carries, when its stored kind and params are ones a renderer can trust. */
 export function systemNoticeOf(message: SystemNoticeSource): SystemNotice | null {
-  return message.system && isSystemNotice(message.system) ? message.system : null;
+  const notice = message.system && isSystemNotice(message.system) ? message.system : null;
+  // The notice a Task's creation posts to its assignee says "you" to them in its body. One that
+  // names its assignee reads as every other assignment does, to whoever views it (task #92); an
+  // older one, which never stored who it went to, keeps its words.
+  if (notice?.kind === "task.assigned_you" && notice.params.assignee) {
+    const { actor, task, assignee } = notice.params;
+    return { kind: "task.assigned", params: { actor, task, assignee } };
+  }
+  return notice;
 }
 
 /** The emoji a task notice opens with, as the server's English text has it. */

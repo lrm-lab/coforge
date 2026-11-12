@@ -39,7 +39,11 @@ export type SystemNotice =
       kind: "task.unfollowed";
       params: { actor: SystemPerson; task: SystemTask; reason?: string };
     }
-  | { kind: "task.assigned_you"; params: { actor: SystemPerson; task: SystemTask } }
+  | {
+      kind: "task.assigned_you";
+      /** `assignee`: absent from notices posted before task #92. */
+      params: { actor: SystemPerson; task: SystemTask; assignee?: SystemPerson };
+    }
   | {
       kind: "task.blocked";
       /** `task`, already under way, now waits for `blockers`. */
@@ -125,8 +129,13 @@ export function isSystemNotice(value: { kind: string; params: unknown }): value 
     case "task.converted":
     case "task.from_message":
     case "task.unassigned":
-    case "task.assigned_you":
       return person(params.actor) && task(params.task);
+    case "task.assigned_you":
+      return (
+        person(params.actor) &&
+        task(params.task) &&
+        (params.assignee === undefined || person(params.assignee))
+      );
     case "task.assigned":
       return (
         person(params.actor) &&

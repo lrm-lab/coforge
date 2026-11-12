@@ -56,6 +56,17 @@ export function assigneeMention(member: {
   return `@${handle}` as AssigneeMention;
 }
 
+/** The person an assignment notice names as its assignee: by handle, as the notice's text
+ * mentions them. */
+export function noticeAssignee(member: {
+  id: string | null;
+  user?: { username: string } | null;
+  agent?: { name: string } | null;
+}) {
+  const handle = assigneeMention(member).slice(1);
+  return { memberId: member.id, handle, displayName: handle };
+}
+
 /** A Task as a notice quotes it; build it with `quotedTask`, never from a raw title. */
 export type QuotedTask = {
   /** Null for a hidden Task: nothing but that it exists is shown. */
