@@ -39,10 +39,12 @@ coforge artifact create --kind html --title 'Signup funnel, week 44' \
 
 - `coforge artifact read <id> [--output index.html]` prints the version line, then the text (a
   artifact's Markdown, a page's HTML).
-- `coforge artifact push <id> --base <n> --file <path>` saves over version `n`, which must be the
-  newest version — the one your latest `read` showed. When someone saved since `n`, the push is
-  refused (`artifact-agent-base-moved`): read the newest version, redo your change on it, and
-  push over that. Nothing is merged for you; a save never writes over a newer version.
+- `coforge artifact push <id> --base <n> --file <path>` saves over version `n`, the one your latest
+  `read` showed. When someone saved since `n`, the files they changed that you did not touch are
+  kept. When you both changed the same file, or the same title or description, the push is
+  refused (`artifact-agent-base-moved`) and names it: read the newest version, redo your change
+  on it, and push over that. Nothing is merged inside a file, and a web page's push must always be
+  on the newest version.
 - `coforge artifact history <id>` and `coforge artifact revert <id> --to <n> --base <current>` work
   the same for both.
 

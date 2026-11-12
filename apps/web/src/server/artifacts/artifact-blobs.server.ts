@@ -115,6 +115,16 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
     return new Set([...granted, ...used].map((row) => row.sha256));
   }
 
+  /** The bytes the Workspace stores that no saved version names yet: what the upload quota
+   * counts, since a version's own bytes belong to its artifact. */
+  async unreferencedBytes(workspaceId: string): Promise<number> {
+    const total = await this.db.artifactBlob.aggregate({
+      where: { workspaceId, referenced: false },
+      _sum: { sizeBytes: true },
+    });
+    return total._sum.sizeBytes ?? 0;
+  }
+
   async #store(input: { workspaceId: string; bytes: Uint8Array<ArrayBuffer>; sha256?: string }) {
     const { workspaceId, bytes } = input;
     // Text has the larger limit, so nothing larger is read as either.

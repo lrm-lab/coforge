@@ -39,7 +39,9 @@ function contractShapes(value: unknown, shapes: Set<string>): Set<string> {
   // for its `add`/`remove` children, which carry only the verbs.
   const path = record.path;
   if (typeof path === "string") shapes.add(shape(path));
-  else if (typeof path === "function") shapes.add(shape(path("__param__")));
+  // One placeholder per parameter: a file's route takes the artifact and the file path.
+  else if (typeof path === "function")
+    shapes.add(shape(path(...Array.from({ length: path.length }, () => "__param__"))));
   for (const [key, child] of Object.entries(record)) {
     if (key === "path" || key === "method") continue;
     contractShapes(child, shapes);

@@ -13,6 +13,8 @@ import {
   visibleChannelIdByName,
 } from "#src/server/conversations/channel-read-access.server";
 import { artifactsDisabled } from "./artifact-access.server";
+import { ARTIFACT_FILE_LIMIT } from "./artifact-files.server";
+import type { FileManifest } from "./artifact-manifest.server";
 import type { ArtifactShares } from "./artifact-shares.server";
 import type { ArtifactDocuments } from "./artifact-documents.server";
 import type { Artifacts } from "./artifacts.server";
@@ -21,7 +23,10 @@ import type { Artifacts } from "./artifacts.server";
 export type AgentArtifactServices = {
   db: PrismaClient;
   artifacts: Pick<Artifacts, "history">;
-  documents: Pick<ArtifactDocuments, "create" | "list" | "load" | "save" | "revert">;
+  documents: Pick<
+    ArtifactDocuments,
+    "create" | "list" | "listPage" | "load" | "save" | "revert" | "missingBytes"
+  >;
   shares?: Pick<ArtifactShares, "share">;
   send?: Parameters<ArtifactShares["share"]>[0]["send"];
   enabled: (workspaceId: string) => Promise<boolean>;
@@ -30,28 +35,65 @@ export type AgentArtifactServices = {
 const { id, version, baseVersion, text, title, description, note, label, historyLimit } =
   artifactInputs;
 
+/** A version sent as files: what it adds or replaces (uploaded bytes by sha256), what it deletes,
+ * and the file it opens at. Paths are the domain's to judge; here only their shape. */
+const manifest = {
+  files: z
+    .array(
+      z.object({ path: z.string().min(1).max(1024), sha256: z.string().regex(/^[0-9a-f]{64}$/) }),
+    )
+    .max(ARTIFACT_FILE_LIMIT)
+    .optional(),
+  delete: z.array(z.string().min(1).max(1024)).max(ARTIFACT_FILE_LIMIT).optional(),
+  entry: z.string().min(1).max(1024).optional(),
+};
+
+/** A version is one `text` or a manifest, never both (the SDK's decoder refuses the same). */
+const textOrManifest = (input: {
+  text?: string;
+  files?: unknown;
+  delete?: unknown;
+  entry?: unknown;
+}) =>
+  input.text === undefined ||
+  (input.files === undefined && input.delete === undefined && input.entry === undefined);
+
+/** A list page: 20 by default and 50 at most. */
+const LIST_PAGE_DEFAULT = 20;
+
 /** The web page's rules, for the same fields (`artifacts.functions.ts`). */
 const RULES = {
-  create: z.object({
-    title,
+  create: z
+    .object({
+      title,
+      target: z.string().optional(),
+      kind: z.enum(["markdown", "html"]).optional(),
+      description: description.optional(),
+      text: text.optional(),
+      idempotencyKey: id.optional(),
+      ...manifest,
+    })
+    .refine(textOrManifest, { path: ["text"] }),
+  list: z.object({
     target: z.string().optional(),
-    kind: z.enum(["markdown", "html"]).optional(),
-    description: description.optional(),
-    text: text.optional(),
-    idempotencyKey: id.optional(),
+    query: z.string().max(200).optional(),
+    after: z.string().max(200).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
   }),
-  list: z.object({ target: z.string().optional() }),
   read: z.object({ artifact: id, version: version.optional() }),
-  push: z.object({
-    artifact: id,
-    baseVersion,
-    idempotencyKey: id,
-    text: text.optional(),
-    title: title.optional(),
-    description: description.optional(),
-    note: note.optional(),
-    label: label.optional(),
-  }),
+  push: z
+    .object({
+      artifact: id,
+      baseVersion,
+      idempotencyKey: id,
+      text: text.optional(),
+      title: title.optional(),
+      description: description.optional(),
+      note: note.optional(),
+      label: label.optional(),
+      ...manifest,
+    })
+    .refine(textOrManifest, { path: ["text"] }),
   history: z.object({
     artifact: id,
     before: version.optional(),
@@ -68,10 +110,11 @@ const RULES = {
 
 /**
  * One `coforge artifact` operation, as the Agent (task #385). The rules are the web page's: the
- * same input limits, and the artifact service's experiment check and access rules. Agent saves
- * must use the current version and never merge over a person's newer save. The
- * experiment is checked first, so a Workspace without documents answers `artifacts-disabled`
- * whatever was asked.
+ * same input limits, and the artifact service's experiment check and access rules. An Agent
+ * sends a version as one `text` or as a manifest of uploaded files; bytes not uploaded yet come
+ * back as `{ status: "missing" }`, to upload and send the same request again. The experiment is
+ * checked first, so a Workspace without documents answers `artifacts-disabled` whatever was
+ * asked.
  */
 export async function runAgentArtifactOperation(
   services: AgentArtifactServices,
@@ -96,30 +139,63 @@ export async function runAgentArtifactOperation(
         input.target === undefined
           ? undefined
           : await resolveArtifactTarget(services.db, principal, input.target);
+      const files = manifestOf(input);
+      if (files) {
+        const missing = await services.documents.missingBytes(scope, {
+          manifest: files,
+          ...(input.kind !== undefined ? { kind: input.kind } : {}),
+        });
+        if (missing.length) return { status: "missing" as const, missing };
+      }
       return services.documents.create(scope, {
         conversationId,
         title: input.title,
         ...(input.kind !== undefined ? { kind: input.kind } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         text: input.text,
+        ...(files ? { manifest: files } : {}),
         ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
       });
     }
     case "list": {
-      const input = parsed.data as z.infer<typeof RULES.list>;
+      const { target, after, ...page } = parsed.data as z.infer<typeof RULES.list>;
       const conversationId =
-        input.target === undefined
+        target === undefined
           ? undefined
-          : await resolveArtifactTarget(services.db, principal, input.target);
-      return services.documents.list(scope, { conversationId });
+          : await resolveArtifactTarget(services.db, principal, target);
+      // A request that asks for no page gets the plain list it always did (an older Computer's).
+      if (after === undefined && Object.keys(page).length === 0)
+        return services.documents.list(scope, { conversationId });
+      return services.documents.listPage(scope, {
+        conversationId,
+        ...page,
+        ...(after !== undefined && { cursor: after }),
+        limit: page.limit ?? LIST_PAGE_DEFAULT,
+      });
     }
     case "read": {
       const input = parsed.data as z.infer<typeof RULES.read>;
-      return services.documents.load(scope, { artifactId: input.artifact, version: input.version });
+      const read = await services.documents.load(scope, {
+        artifactId: input.artifact,
+        version: input.version,
+      });
+      // The shown version's entry file, beside its files (`files` of `read`).
+      return { ...read, entryPath: read.version?.entryPath ?? read.artifact.entryPath };
     }
     case "push": {
-      const { artifact, ...input } = parsed.data as z.infer<typeof RULES.push>;
-      return services.documents.save(scope, { artifactId: artifact, ...input });
+      const {
+        artifact,
+        files: _files,
+        delete: _delete,
+        entry: _entry,
+        ...input
+      } = parsed.data as z.infer<typeof RULES.push>;
+      const files = manifestOf(parsed.data as z.infer<typeof RULES.push>);
+      return services.documents.save(scope, {
+        artifactId: artifact,
+        ...input,
+        ...(files ? { manifest: files } : {}),
+      });
     }
     case "history": {
       const { artifact, ...input } = parsed.data as z.infer<typeof RULES.history>;
@@ -145,6 +221,21 @@ export async function runAgentArtifactOperation(
       });
     }
   }
+}
+
+/** The manifest a create or push carries, or none when it sends `text` or settings only. */
+function manifestOf(input: {
+  files?: { path: string; sha256: string }[];
+  delete?: string[];
+  entry?: string;
+}): FileManifest | undefined {
+  if (input.files === undefined && input.delete === undefined && input.entry === undefined)
+    return undefined;
+  return {
+    ...(input.files !== undefined ? { files: input.files } : {}),
+    ...(input.delete !== undefined ? { deletedPaths: input.delete } : {}),
+    ...(input.entry !== undefined ? { entryPath: input.entry } : {}),
+  };
 }
 
 function withoutOperation(request: AgentArtifactRequest) {

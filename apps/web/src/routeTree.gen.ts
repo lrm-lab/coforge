@@ -162,6 +162,7 @@ import { Route as ApiAgentV1AppsAppIdConfigRouteImport } from './routes/api/agen
 import { Route as ApiAgentV1AppsAppIdTokenRouteImport } from './routes/api/agent/v1/apps/$appId/token'
 import { Route as ApiAgentV1AppsOwnedIndexRouteImport } from './routes/api/agent/v1/apps/owned/index'
 import { Route as ApiAgentV1AppsRegistrationsStatusRouteImport } from './routes/api/agent/v1/apps/registrations/status'
+import { Route as ApiAgentV1ArtifactsUploadsSha256RouteImport } from './routes/api/agent/v1/artifacts_.uploads.$sha256'
 import { Route as ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRouteImport } from './routes/api/agent/v1/attachment-upload-sessions/$uploadId.complete'
 import { Route as ApiAgentV1AttachmentsAttachmentIdCommentsRouteImport } from './routes/api/agent/v1/attachments/$attachmentId.comments'
 import { Route as ApiAgentV1ChannelsChannelArchiveRouteImport } from './routes/api/agent/v1/channels_.$channel.archive'
@@ -188,6 +189,7 @@ import { Route as ApiAgentV1AppsOwnedClientKeyRotateSecretRouteImport } from './
 import { Route as ApiAgentV1AppsOwnedClientKeyShareLinkRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/share-link'
 import { Route as ApiAgentV1AppsOwnedClientKeyTransferOwnerRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/transfer-owner'
 import { Route as ApiAgentV1AppsOwnedClientKeyUnpublishRequestRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/unpublish-request'
+import { Route as ApiAgentV1ArtifactsArtifactFilesPathRouteImport } from './routes/api/agent/v1/artifacts_.$artifact.files.$path'
 import { Route as ApiReleaseCatalogV1AppsAppReleasesVersionRouteImport } from './routes/api/release-catalog/v1/apps/$app/releases/$version'
 
 const IndexRoute = IndexRouteImport.update({
@@ -1023,6 +1025,12 @@ const ApiAgentV1AppsRegistrationsStatusRoute =
     path: '/api/agent/v1/apps/registrations/status',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1ArtifactsUploadsSha256Route =
+  ApiAgentV1ArtifactsUploadsSha256RouteImport.update({
+    id: '/api/agent/v1/artifacts_/uploads/$sha256',
+    path: '/api/agent/v1/artifacts/uploads/$sha256',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute =
   ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRouteImport.update({
     id: '/complete',
@@ -1179,6 +1187,12 @@ const ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute =
   ApiAgentV1AppsOwnedClientKeyUnpublishRequestRouteImport.update({
     id: '/api/agent/v1/apps/owned/$clientKey/unpublish-request',
     path: '/api/agent/v1/apps/owned/$clientKey/unpublish-request',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentV1ArtifactsArtifactFilesPathRoute =
+  ApiAgentV1ArtifactsArtifactFilesPathRouteImport.update({
+    id: '/api/agent/v1/artifacts_/$artifact/files/$path',
+    path: '/api/agent/v1/artifacts/$artifact/files/$path',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiReleaseCatalogV1AppsAppReleasesVersionRoute =
@@ -1339,6 +1353,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/apps/$appId/config': typeof ApiAgentV1AppsAppIdConfigRoute
   '/api/agent/v1/apps/$appId/token': typeof ApiAgentV1AppsAppIdTokenRoute
   '/api/agent/v1/apps/registrations/status': typeof ApiAgentV1AppsRegistrationsStatusRoute
+  '/api/agent/v1/artifacts/uploads/$sha256': typeof ApiAgentV1ArtifactsUploadsSha256Route
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
   '/api/agent/v1/attachments/$attachmentId/comments': typeof ApiAgentV1AttachmentsAttachmentIdCommentsRoute
   '/api/agent/v1/channels/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
@@ -1365,6 +1380,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/apps/owned/$clientKey/share-link': typeof ApiAgentV1AppsOwnedClientKeyShareLinkRoute
   '/api/agent/v1/apps/owned/$clientKey/transfer-owner': typeof ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute
   '/api/agent/v1/apps/owned/$clientKey/unpublish-request': typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
+  '/api/agent/v1/artifacts/$artifact/files/$path': typeof ApiAgentV1ArtifactsArtifactFilesPathRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
   '/api/agent/v1/apps/owned/$clientKey/': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
@@ -1517,6 +1533,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/apps/$appId/config': typeof ApiAgentV1AppsAppIdConfigRoute
   '/api/agent/v1/apps/$appId/token': typeof ApiAgentV1AppsAppIdTokenRoute
   '/api/agent/v1/apps/registrations/status': typeof ApiAgentV1AppsRegistrationsStatusRoute
+  '/api/agent/v1/artifacts/uploads/$sha256': typeof ApiAgentV1ArtifactsUploadsSha256Route
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
   '/api/agent/v1/attachments/$attachmentId/comments': typeof ApiAgentV1AttachmentsAttachmentIdCommentsRoute
   '/api/agent/v1/channels/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
@@ -1543,6 +1560,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/apps/owned/$clientKey/share-link': typeof ApiAgentV1AppsOwnedClientKeyShareLinkRoute
   '/api/agent/v1/apps/owned/$clientKey/transfer-owner': typeof ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute
   '/api/agent/v1/apps/owned/$clientKey/unpublish-request': typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
+  '/api/agent/v1/artifacts/$artifact/files/$path': typeof ApiAgentV1ArtifactsArtifactFilesPathRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
   '/api/agent/v1/apps/owned/$clientKey': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
@@ -1700,6 +1718,7 @@ export interface FileRoutesById {
   '/api/agent/v1/apps/$appId/config': typeof ApiAgentV1AppsAppIdConfigRoute
   '/api/agent/v1/apps/$appId/token': typeof ApiAgentV1AppsAppIdTokenRoute
   '/api/agent/v1/apps/registrations/status': typeof ApiAgentV1AppsRegistrationsStatusRoute
+  '/api/agent/v1/artifacts_/uploads/$sha256': typeof ApiAgentV1ArtifactsUploadsSha256Route
   '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
   '/api/agent/v1/attachments/$attachmentId/comments': typeof ApiAgentV1AttachmentsAttachmentIdCommentsRoute
   '/api/agent/v1/channels_/$channel/archive': typeof ApiAgentV1ChannelsChannelArchiveRoute
@@ -1726,6 +1745,7 @@ export interface FileRoutesById {
   '/api/agent/v1/apps/owned/$clientKey/share-link': typeof ApiAgentV1AppsOwnedClientKeyShareLinkRoute
   '/api/agent/v1/apps/owned/$clientKey/transfer-owner': typeof ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute
   '/api/agent/v1/apps/owned/$clientKey/unpublish-request': typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
+  '/api/agent/v1/artifacts_/$artifact/files/$path': typeof ApiAgentV1ArtifactsArtifactFilesPathRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
   '/api/agent/v1/apps/owned/$clientKey/': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
@@ -1882,6 +1902,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/$appId/config'
     | '/api/agent/v1/apps/$appId/token'
     | '/api/agent/v1/apps/registrations/status'
+    | '/api/agent/v1/artifacts/uploads/$sha256'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
     | '/api/agent/v1/attachments/$attachmentId/comments'
     | '/api/agent/v1/channels/$channel/archive'
@@ -1908,6 +1929,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/owned/$clientKey/share-link'
     | '/api/agent/v1/apps/owned/$clientKey/transfer-owner'
     | '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
+    | '/api/agent/v1/artifacts/$artifact/files/$path'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
     | '/api/agent/v1/apps/owned/$clientKey/'
   fileRoutesByTo: FileRoutesByTo
@@ -2060,6 +2082,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/$appId/config'
     | '/api/agent/v1/apps/$appId/token'
     | '/api/agent/v1/apps/registrations/status'
+    | '/api/agent/v1/artifacts/uploads/$sha256'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
     | '/api/agent/v1/attachments/$attachmentId/comments'
     | '/api/agent/v1/channels/$channel/archive'
@@ -2086,6 +2109,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/owned/$clientKey/share-link'
     | '/api/agent/v1/apps/owned/$clientKey/transfer-owner'
     | '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
+    | '/api/agent/v1/artifacts/$artifact/files/$path'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
     | '/api/agent/v1/apps/owned/$clientKey'
   id:
@@ -2242,6 +2266,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/$appId/config'
     | '/api/agent/v1/apps/$appId/token'
     | '/api/agent/v1/apps/registrations/status'
+    | '/api/agent/v1/artifacts_/uploads/$sha256'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
     | '/api/agent/v1/attachments/$attachmentId/comments'
     | '/api/agent/v1/channels_/$channel/archive'
@@ -2268,6 +2293,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/owned/$clientKey/share-link'
     | '/api/agent/v1/apps/owned/$clientKey/transfer-owner'
     | '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
+    | '/api/agent/v1/artifacts_/$artifact/files/$path'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
     | '/api/agent/v1/apps/owned/$clientKey/'
   fileRoutesById: FileRoutesById
@@ -2390,6 +2416,7 @@ export interface RootRouteChildren {
   ApiAgentV1AppsAppIdConfigRoute: typeof ApiAgentV1AppsAppIdConfigRoute
   ApiAgentV1AppsAppIdTokenRoute: typeof ApiAgentV1AppsAppIdTokenRoute
   ApiAgentV1AppsRegistrationsStatusRoute: typeof ApiAgentV1AppsRegistrationsStatusRoute
+  ApiAgentV1ArtifactsUploadsSha256Route: typeof ApiAgentV1ArtifactsUploadsSha256Route
   ApiAgentV1MessagesMessageIdMentionDeliveriesRoute: typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   ApiAgentV1MessagesMessageIdReactionsRoute: typeof ApiAgentV1MessagesMessageIdReactionsRoute
   ApiAgentV1MessagesMessageIdResolveRoute: typeof ApiAgentV1MessagesMessageIdResolveRoute
@@ -2405,6 +2432,7 @@ export interface RootRouteChildren {
   ApiAgentV1AppsOwnedClientKeyShareLinkRoute: typeof ApiAgentV1AppsOwnedClientKeyShareLinkRoute
   ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute: typeof ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute
   ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute: typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
+  ApiAgentV1ArtifactsArtifactFilesPathRoute: typeof ApiAgentV1ArtifactsArtifactFilesPathRoute
   ApiReleaseCatalogV1AppsAppReleasesVersionRoute: typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
   ApiAgentV1AppsOwnedClientKeyIndexRoute: typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
@@ -3482,6 +3510,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1AppsRegistrationsStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/artifacts_/uploads/$sha256': {
+      id: '/api/agent/v1/artifacts_/uploads/$sha256'
+      path: '/api/agent/v1/artifacts/uploads/$sha256'
+      fullPath: '/api/agent/v1/artifacts/uploads/$sha256'
+      preLoaderRoute: typeof ApiAgentV1ArtifactsUploadsSha256RouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/attachment-upload-sessions/$uploadId/complete': {
       id: '/api/agent/v1/attachment-upload-sessions/$uploadId/complete'
       path: '/complete'
@@ -3662,6 +3697,13 @@ declare module '@tanstack/react-router' {
       path: '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
       fullPath: '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
       preLoaderRoute: typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/artifacts_/$artifact/files/$path': {
+      id: '/api/agent/v1/artifacts_/$artifact/files/$path'
+      path: '/api/agent/v1/artifacts/$artifact/files/$path'
+      fullPath: '/api/agent/v1/artifacts/$artifact/files/$path'
+      preLoaderRoute: typeof ApiAgentV1ArtifactsArtifactFilesPathRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/release-catalog/v1/apps/$app/releases/$version': {
@@ -4040,6 +4082,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1AppsAppIdTokenRoute: ApiAgentV1AppsAppIdTokenRoute,
   ApiAgentV1AppsRegistrationsStatusRoute:
     ApiAgentV1AppsRegistrationsStatusRoute,
+  ApiAgentV1ArtifactsUploadsSha256Route: ApiAgentV1ArtifactsUploadsSha256Route,
   ApiAgentV1MessagesMessageIdMentionDeliveriesRoute:
     ApiAgentV1MessagesMessageIdMentionDeliveriesRoute,
   ApiAgentV1MessagesMessageIdReactionsRoute:
@@ -4067,6 +4110,8 @@ const rootRouteChildren: RootRouteChildren = {
     ApiAgentV1AppsOwnedClientKeyTransferOwnerRoute,
   ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute:
     ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute,
+  ApiAgentV1ArtifactsArtifactFilesPathRoute:
+    ApiAgentV1ArtifactsArtifactFilesPathRoute,
   ApiReleaseCatalogV1AppsAppReleasesVersionRoute:
     ApiReleaseCatalogV1AppsAppReleasesVersionRoute,
   ApiAgentV1AppsOwnedClientKeyIndexRoute:

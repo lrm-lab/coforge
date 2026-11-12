@@ -24,6 +24,8 @@ out" a move, not a split:
 - `artifact-access.server.ts` — the feature gate (`artifactsEnabled`) and the
   home/tier access predicates external callers need.
 - `agent-artifacts.server.ts` — the Agent HTTPS API surface.
+- `agent-artifact-files.server.ts` — the Agent API's file bytes: upload by sha256 and download by
+  path.
 - `artifact-sandbox-config.server.ts`, `artifact-sandbox-http.server.ts` — the
   sandbox origin and its HTTP serving.
 - `artifact-blob-sweep.server.ts` — the hourly blob sweep registration.

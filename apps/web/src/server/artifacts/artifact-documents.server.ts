@@ -6,9 +6,18 @@ import { errorType } from "#src/server/errors/error-type.server";
 import { canDeleteArtifact, type ArtifactActor } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { ARTIFACT_DOCUMENT_LIMIT } from "./artifact-files.server";
+import {
+  manifestKind,
+  planManifestCreate,
+  requireSinglePage,
+  type FileManifest,
+} from "./artifact-manifest.server";
 import { ARTIFACT_HTML_ENTRY } from "./artifact-sandbox.server";
 import type { ArtifactRevert } from "./artifact-revert.server";
 import type { Artifacts } from "./artifacts.server";
+
+/** The id of no artifact: what a save's bytes are checked against before the artifact exists. */
+const NO_ARTIFACT = "00000000-0000-0000-0000-000000000000";
 
 /** A document's one file. */
 export const DOCUMENT_PATH = "document.md";
@@ -44,7 +53,10 @@ export class ArtifactDocuments {
   constructor(
     private readonly db: PrismaClient,
     private readonly artifacts: Artifacts,
-    private readonly blobs: Pick<StoredArtifactBlobs, "upload" | "read">,
+    private readonly blobs: Pick<
+      StoredArtifactBlobs,
+      "upload" | "read" | "inspectMany" | "allowed"
+    >,
   ) {}
 
   /** A new document (or web page, `kind: "html"`) in a conversation, or the Workspace when none
@@ -52,7 +64,8 @@ export class ArtifactDocuments {
    * Agent's to make, and says what it is in its `description` (its card's line). An
    * `idempotencyKey` makes the create safe to retry: the same key with the same kind, title,
    * description, home and text returns the one already made, and a different one is a
-   * conflict. */
+   * conflict. An Agent may send a `manifest` of files instead of `text`: its entry file's
+   * extension then gives the kind (`planManifestCreate`). */
   async create(
     scope: DocumentScope,
     input: {
@@ -61,10 +74,12 @@ export class ArtifactDocuments {
       kind?: PageKind;
       description?: string;
       text?: string;
+      manifest?: FileManifest;
       idempotencyKey?: string;
     },
   ) {
-    const kind = input.kind ?? "markdown";
+    const plan = input.manifest && planManifestCreate(input.manifest, input.kind);
+    const kind = plan?.kind ?? input.kind ?? "markdown";
     if (!isPageKind(kind)) throw new AppError("INVALID_INPUT", { errorId: "artifact-kind" });
     const title = input.title.trim();
     if (!title || title.length > 200)
@@ -94,6 +109,7 @@ export class ArtifactDocuments {
             // A document made without a description hashes as before web pages did, so a retry
             // across the deploy still replays.
             ...(kind === "html" || description ? { kind, description } : {}),
+            ...(plan ? { manifest: plan } : {}),
           });
     const base = nameToSlug(title, 56) || PAGE_KINDS[kind].fallbackName;
     for (let attempt = 1; ; attempt += 1) {
@@ -111,17 +127,17 @@ export class ArtifactDocuments {
           title,
           ...(description ? { description } : {}),
           kind,
-          entryPath: PAGE_KINDS[kind].entryPath,
+          entryPath: plan?.entryPath ?? PAGE_KINDS[kind].entryPath,
           author: scope.actor,
           ...(input.idempotencyKey !== undefined
             ? { idempotencyKey: input.idempotencyKey, requestHash }
             : {}),
         });
-        if (input.text !== undefined)
-          await this.save(scope, {
+        if (input.text !== undefined || plan) {
+          const first = await this.save(scope, {
             artifactId: created.id,
             baseVersion: 0,
-            text: input.text,
+            ...(plan ? { manifest: { files: plan.files } } : { text: input.text }),
             // On a replayed create this save replays too (same key on the same artifact), so a
             // retry adds no second version; a fresh create gets its version 1.
             idempotencyKey:
@@ -129,6 +145,11 @@ export class ArtifactDocuments {
                 ? crypto.randomUUID()
                 : `${input.idempotencyKey}:v1`,
           });
+          // Bytes that vanished since `missingBytes` looked: the same request, sent again after
+          // uploading them, replays this create (with its key) and saves them.
+          if (first.status === "missing")
+            throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-bytes-missing" });
+        }
         return (
           await this.artifacts.reads.cards({ ...reader(scope), artifactIds: [created.id] })
         )[0]!;
@@ -137,6 +158,26 @@ export class ArtifactDocuments {
         if (!taken || attempt >= NAME_TRIES) throw error;
       }
     }
+  }
+
+  /** The sha256s of a manifest create's files the actor has not uploaded: asked before the
+   * artifact is made, so a create the client must retry after uploading leaves nothing behind.
+   * A manifest that would not make an artifact is refused here as `create` refuses it. */
+  async missingBytes(
+    scope: DocumentScope,
+    input: { manifest: FileManifest; kind?: PageKind },
+  ): Promise<string[]> {
+    const { files, entryPath, kind } = planManifestCreate(input.manifest, input.kind);
+    const named = [...new Set(files.map((file) => file.sha256))];
+    // No artifact exists yet, so only bytes the actor uploaded count as its own.
+    const [stored, granted] = await Promise.all([
+      this.blobs.inspectMany(scope.workspaceId, named),
+      this.blobs.allowed(scope.workspaceId, NO_ARTIFACT, scope.actor, named),
+    ]);
+    const entry = files.find((file) => file.path === entryPath)!;
+    if (kind === "markdown" && (stored.get(entry.sha256)?.sizeBytes ?? 0) > ARTIFACT_DOCUMENT_LIMIT)
+      throw new AppError("INVALID_INPUT", { errorId: "artifact-file-too-large" });
+    return named.filter((sha256) => !stored.has(sha256) || !granted.has(sha256));
   }
 
   /** The document at a version (its current one by default), with its text and whether the actor
@@ -176,13 +217,15 @@ export class ArtifactDocuments {
       baseVersion: number;
       idempotencyKey: string;
       text?: string;
+      /** An Agent's version as files (`FileManifest`) instead of `text`. */
+      manifest?: FileManifest;
       title?: string;
       description?: string;
       note?: string;
       label?: string;
     },
   ) {
-    const { text, ...settings } = input;
+    const { text, manifest, ...settings } = input;
     const bytes = text === undefined ? undefined : documentBytes(text);
     // Nothing is stored for someone who may not save here, or where documents are off.
     const artifact = await this.artifacts.reads.artifact(
@@ -198,7 +241,15 @@ export class ArtifactDocuments {
     // A web page is an Agent's to write (task #490): a person reads it, its source and history,
     // and goes back to a version, and asks an Agent for a change. Settings included.
     if (artifact.kind === "html") requireAgent(scope);
-    let files: { path: string; sha256: string }[] = [];
+    if (manifest) {
+      requireSinglePage(artifact.kind, manifest);
+      if (manifest.entryPath !== undefined && manifestKind(manifest.entryPath) !== artifact.kind)
+        throw new AppError("INVALID_INPUT", {
+          errorId: "artifact-kind",
+          hint: `the entry file of a ${artifact.kind} artifact stays one`,
+        });
+    }
+    let files: { path: string; sha256: string }[] = [...(manifest?.files ?? [])];
     if (bytes !== undefined) {
       const blob = await this.blobs.upload({
         workspaceId: scope.workspaceId,
@@ -212,6 +263,8 @@ export class ArtifactDocuments {
       workspaceId: scope.workspaceId,
       publisher: scope.actor,
       files,
+      ...(manifest?.deletedPaths && { deletedPaths: manifest.deletedPaths }),
+      ...(manifest?.entryPath !== undefined && { entryPath: manifest.entryPath }),
       ...settings,
       // A web page is replaced whole, so a save starts from the newest version or is refused
       // (`artifact-base-moved`): even a title someone changed since is not merged under it. An
@@ -236,6 +289,14 @@ export class ArtifactDocuments {
   /** The documents of a conversation (or the Workspace) the actor may read, newest first. */
   list(scope: DocumentScope, input: { conversationId?: string }) {
     return this.artifacts.reads.list({ ...reader(scope), ...input });
+  }
+
+  /** A page of the same list, filtered by title words (`ArtifactReads.listPage`). */
+  listPage(
+    scope: DocumentScope,
+    input: { conversationId?: string; query?: string; cursor?: string; limit: number },
+  ) {
+    return this.artifacts.reads.listPage({ ...reader(scope), ...input });
   }
 
   /** Cards of the named documents the actor may read; any other is left out. */
@@ -264,12 +325,20 @@ function createRequestHash(input: {
   text?: string;
   kind?: string;
   description?: string;
+  manifest?: { files: readonly { path: string; sha256: string }[]; entryPath: string };
 }): string {
   const parts = JSON.stringify([
     input.homeKey,
     input.title,
     input.text ?? null,
     ...(input.kind === undefined ? [] : [input.kind, input.description ?? ""]),
+    // A manifest create names its files and entry; a text create hashes as before.
+    ...(input.manifest
+      ? [
+          input.manifest.entryPath,
+          input.manifest.files.map((file) => [file.path, file.sha256]).sort(),
+        ]
+      : []),
   ]);
   return createHash("sha256").update(parts).digest("hex");
 }

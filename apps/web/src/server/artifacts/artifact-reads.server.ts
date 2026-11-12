@@ -21,6 +21,26 @@ const HISTORY_PAGE = 50;
 const LIST_LIMIT = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** A list cursor: the last artifact of a page, as its change time and id. Opaque to clients. */
+const writeCursor = (row: { updatedAt: Date; id: string }) =>
+  Buffer.from(JSON.stringify([row.updatedAt.getTime(), row.id])).toString("base64url");
+
+function readCursor(cursor: string): { at: Date; id: string } {
+  try {
+    const [time, id] = JSON.parse(Buffer.from(cursor, "base64url").toString()) as unknown[];
+    if (
+      typeof time === "number" &&
+      Number.isFinite(time) &&
+      typeof id === "string" &&
+      UUID.test(id)
+    )
+      return { at: new Date(time), id };
+  } catch {
+    // Not a cursor this server made.
+  }
+  throw new AppError("INVALID_INPUT", { errorId: "artifact-list-cursor" });
+}
+
 export type ArtifactMessageCard =
   | {
       kind: "artifact";
@@ -198,22 +218,69 @@ export class ArtifactReads {
   /** The live artifacts of one home the reader may read (a conversation's, or the Workspace's
    * when none is named), most recently changed first, at most 100. */
   async list(input: { workspaceId: string; reader: ArtifactActor; conversationId?: string }) {
+    return (await this.listPage({ ...input, limit: LIST_LIMIT })).artifacts;
+  }
+
+  /**
+   * One page of `list`, `limit` artifacts at a time: only those whose title holds every word of
+   * `query` (any case), after the artifact `cursor` names (a previous page's `nextCursor`, absent
+   * on the last page). Pages are stable while artifacts change: the cursor is the position in
+   * the newest-changed-first order, not an offset.
+   */
+  async listPage(input: {
+    workspaceId: string;
+    reader: ArtifactActor;
+    conversationId?: string;
+    query?: string;
+    cursor?: string;
+    limit: number;
+  }) {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const homeKey = input.conversationId ? `conversation:${input.conversationId}` : "workspace";
     await requireArtifactHome(this.db, input.workspaceId, input.reader, homeKey, "read");
+    const after = input.cursor === undefined ? undefined : readCursor(input.cursor);
     const rows = await this.db.artifact.findMany({
-      where: { workspaceId: input.workspaceId, homeKey, deletedAt: null },
-      orderBy: { updatedAt: "desc" },
-      take: LIST_LIMIT,
+      where: {
+        workspaceId: input.workspaceId,
+        homeKey,
+        deletedAt: null,
+        AND: [
+          // `contains` does not escape LIKE wildcards: `%` and `_` in a word match themselves.
+          ...(input.query?.split(/\s+/).filter(Boolean) ?? []).map((word) => ({
+            title: { contains: word.replace(/[\\%_]/g, "\\$&"), mode: "insensitive" as const },
+          })),
+          ...(after
+            ? [
+                {
+                  OR: [
+                    { updatedAt: { lt: after.at } },
+                    { updatedAt: after.at, id: { lt: after.id } },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      },
+      // `id` only orders artifacts changed in the same millisecond, so a cursor never skips one.
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: input.limit + 1,
       select: CARD_SELECT,
     });
+    const page = rows.slice(0, input.limit);
     const [role, owners] = await Promise.all([
       this.#actorRole(input.workspaceId, input.reader),
-      this.#authorOwners(rows),
+      this.#authorOwners(page),
     ]);
-    return rows.map((row) =>
-      card(row, canChangeArtifactAccessWithRole(input.reader, role, accessRuleInput(row, owners))),
-    );
+    const last = page.at(-1);
+    return {
+      artifacts: page.map((row) =>
+        card(
+          row,
+          canChangeArtifactAccessWithRole(input.reader, role, accessRuleInput(row, owners)),
+        ),
+      ),
+      ...(rows.length > input.limit && last ? { nextCursor: writeCursor(last) } : {}),
+    };
   }
 
   /** Cards of the named artifacts the reader may read, in the order named; any other is left
