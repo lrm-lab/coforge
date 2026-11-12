@@ -133,6 +133,11 @@ export class ImportantUnreadNotices {
     this.#notices.delete(agentId);
   }
 
+  /** The Agents with something still to hear about, for a sweep that writes what is due. */
+  agents(): string[] {
+    return [...this.#notices.keys()];
+  }
+
   /** What a starting Daemon takes over from the record a previous process left. */
   restore(notice: ImportantUnreadNotice): void {
     if (notice.highestSequence <= 0 || notice.conversations.length === 0) return;
