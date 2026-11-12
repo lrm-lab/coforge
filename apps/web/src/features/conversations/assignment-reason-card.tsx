@@ -1,25 +1,16 @@
-import { useLayoutEffect, useState, type ReactNode } from "react";
+import { useLayoutEffect, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 
 import { cn } from "#src/lib/utils";
 
 /**
- * An assignment that says what it is for (`task assign --reason`, task #83), as a card of two
- * lines centred on the stream's rule: the notice, wrapping under its time so who the Task went to
- * is never cut (even with text at 200%), then the reason in body ink. A reason past three lines
- * is clamped, and pressing it shows it whole in place for good: a phone has no hover, so a tooltip
- * would leave the rest unreachable there, and once open it is plain text again, which can be
- * selected and copied (a button's text cannot).
+ * The reason an assignment gives (`task assign --reason`, task #83), on a line of its own under
+ * the notice, in the notice's own size and ink: the stream draws it as one more notice row, not a
+ * card (Frank, task #92). A reason past three lines is clamped, and pressing it shows it whole in
+ * place for good: a phone has no hover, so a tooltip would leave the rest unreachable there, and
+ * once open it is plain text again, which can be selected and copied (a button's text cannot).
  */
-export function AssignmentReasonCard({
-  time,
-  notice,
-  reason,
-}: {
-  time: ReactNode;
-  notice: ReactNode;
-  reason: string;
-}) {
+export function AssignmentReason({ reason }: { reason: string }) {
   const [reasonElement, setReasonElement] = useState<HTMLSpanElement | null>(null);
   const [expanded, setExpanded] = useState(false);
   const clamped = useClamped(reasonElement, expanded);
@@ -28,35 +19,24 @@ export function AssignmentReasonCard({
       ref={setReasonElement}
       data-assignment-reason
       className={cn(
-        "block text-sm break-words whitespace-pre-line text-secondary",
+        "block break-words whitespace-pre-line text-tertiary",
         !expanded && "line-clamp-3",
       )}
     >
       {reason}
     </span>
   );
-  return (
-    <div
-      data-assignment-reason-card
-      className="flex max-w-xl min-w-0 flex-col gap-1 rounded-lg border border-secondary bg-primary px-3 py-2"
+  // Only a clamped reason has more to show, so only then is it a control.
+  return clamped && !expanded ? (
+    <AriaButton
+      aria-expanded={false}
+      onPress={() => setExpanded(true)}
+      className="min-w-0 cursor-pointer rounded-sm text-center outline-focus-ring transition-colors duration-100 focus-visible:outline-2 [&>span]:transition-colors [&>span]:duration-100 hover:[&>span]:text-secondary active:[&>span]:text-secondary"
     >
-      <p className="min-w-0 break-words">
-        <span className="mr-2">{time}</span>
-        {notice}
-      </p>
-      {/* Only a clamped reason has more to show, so only then is it a control. */}
-      {clamped && !expanded ? (
-        <AriaButton
-          aria-expanded={false}
-          onPress={() => setExpanded(true)}
-          className="min-w-0 cursor-pointer rounded-sm text-left outline-focus-ring transition-colors duration-100 focus-visible:outline-2 [&>span]:transition-colors [&>span]:duration-100 hover:[&>span]:text-primary active:[&>span]:text-primary"
-        >
-          {text}
-        </AriaButton>
-      ) : (
-        text
-      )}
-    </div>
+      {text}
+    </AriaButton>
+  ) : (
+    text
   );
 }
 
