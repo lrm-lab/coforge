@@ -248,6 +248,27 @@ save(state)
 return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
 `;
 
+// ARGV: [1] now, [2] workspaceId, [3] computerId, [4] agentId, [5] the failure's errorReason.
+// The Daemon reports the credential an Agent was held on works again (agent:credential:restored).
+// The live process sends nothing more, so this is what ends a held reason: only that very
+// failure's, still held, and its error row leaves the display as the Activity's idle row ends it.
+export const END_HELD_STOP = `${LUA_COMMON}
+local state = decode_state(redis.call("GET", KEYS[1]))
+local now = tonumber(ARGV[1])
+local projected = project(state, now)
+if not state.stopHeld or state.stopReason ~= ARGV[5] then
+  return reject_projection(projected, state)
+end
+state.stopReason = nil
+state.stopDetail = nil
+state.stopMessage = nil
+state.stopHeld = nil
+if state.activity and state.activity.kind == "error" then state.activityVisible = false end
+revision(state)
+save(state)
+return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
+`;
+
 // ARGV: [1] now, [2] workspaceId, [3] computerId, [4] agentId, [5] launchId,
 // [6] daemonInstanceId, [7] clientSeq, [8] observedAtMs, [9] usedTokens, [10] windowTokens
 export const PUT_CONTEXT_USAGE = `${LUA_COMMON}

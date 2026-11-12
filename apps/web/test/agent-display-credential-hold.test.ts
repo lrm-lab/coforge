@@ -135,6 +135,32 @@ describe.skipIf(!redisServer)("RedisAgentDisplay credential hold (task #90)", ()
     expect((await subject.snapshot(scope)).stopReason).toBeNull();
   });
 
+  test("the Daemon's restored report ends the held reason and its error row", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeActivity(signedOut(2), fence);
+    // Another failure's report changes nothing.
+    expect(await subject.endHeldStop(scope, "billing_exhausted")).toBeUndefined();
+    const ended = await subject.endHeldStop(scope, "auth_failed");
+    expect(ended?.stopReason).toBeNull();
+    expect(ended?.activityKind).toBe("online");
+    // Once over, a repeat is no news.
+    expect(await subject.endHeldStop(scope, "auth_failed")).toBeUndefined();
+  });
+
+  test("a heartbeat keeps the held reason", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await subject.observeStatus(status(1));
+    await subject.observeActivity(signedOut(2), fence);
+    const beat = await subject.observeActivity(
+      activity(3, "model_request_started", { isHeartbeat: true }),
+      fence,
+    );
+    expect(beat?.stopReason).toBe("auth_failed");
+  });
+
   test("an exhausted balance is held the same way", async () => {
     await redis.send("FLUSHDB", []);
     const subject = display();
