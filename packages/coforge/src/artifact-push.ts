@@ -125,7 +125,18 @@ export async function runPush(
   } catch (error) {
     throw baseMoved(error, state, draft.dir);
   }
-  const version = answer.status === "nothing" ? state.version : (answer.number ?? state.version);
+  // "Nothing" names no version: the server holds what this push names, but maybe in a version
+  // newer than the base, so the directory stays as pulled until the next pull.
+  if (answer.status === "nothing")
+    return asJson(
+      invocation,
+      answer,
+      [
+        `Nothing was sent: the artifact already holds what this push names. The directory is still at version ${state.version}.`,
+        `If others changed the artifact since, bring their files in: coforge artifact pull ${state.artifact} --dir ${shellWord(draft.dir)}`,
+      ].join("\n"),
+    );
+  const version = answer.number ?? state.version;
   const files = { ...state.files };
   for (const file of changed) files[file.path] = file.sha256;
   for (const path of deletes) delete files[path];
@@ -139,17 +150,14 @@ export async function runPush(
       : "",
     deletes.length > 0 ? `${deletes.length} deleted (${deletes.join(", ")})` : "",
   ].filter(Boolean);
-  const message =
-    answer.status === "nothing"
-      ? `Nothing to push: the server holds what the directory holds at version ${version}.`
-      : [
-          `${answer.status === "replayed" ? "Already pushed as" : "Pushed"} version ${version}${pushed.length ? `: ${pushed.join("; ")}` : ""}.`,
-          ...(merged.length > 0
-            ? [
-                `Merged with what others saved since version ${state.version}: ${merged.join(", ")}. Their files are now in the directory.`,
-              ]
-            : []),
-        ].join("\n");
+  const message = [
+    `${answer.status === "replayed" ? "Already pushed as" : "Pushed"} version ${version}${pushed.length ? `: ${pushed.join("; ")}` : ""}.`,
+    ...(merged.length > 0
+      ? [
+          `Merged with what others saved since version ${state.version}: ${merged.join(", ")}. Their files are now in the directory.`,
+        ]
+      : []),
+  ].join("\n");
   return asJson(invocation, answer, message);
 }
 

@@ -1,5 +1,6 @@
+import { lstat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { artifactPath } from "#src/artifact-directory";
+import { artifactPath, invalidArg } from "#src/artifact-directory";
 import type {
   ArtifactDirectoryDraft,
   ArtifactDirectoryInvocation,
@@ -64,6 +65,9 @@ async function runDownload(
     ...(draft.rev === undefined ? {} : { version: draft.rev }),
   });
   const output = resolve(cwd, draft.output ?? basename(path));
+  const existing = await lstat(output).catch(() => undefined);
+  if (existing && (existing.isSymbolicLink() || existing.isDirectory()))
+    throw invalidArg(`Cannot write ${output}: it is a symbolic link or a directory`);
   await Bun.write(output, bytes);
   return asJson(
     invocation,

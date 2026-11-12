@@ -5,6 +5,7 @@ import {
   folderName,
   invalidArg,
   pullTarget,
+  refuseCaseCollisions,
   removeInside,
   shellWord,
   writeState,
@@ -42,12 +43,21 @@ export async function runPull(
   const { id, title, currentVersion } = answer.artifact;
   const version = answer.version.number;
   const files = answer.files.map((file) => ({ ...file, path: artifactPath(file.path) }));
+  refuseCaseCollisions(files.map((file) => file.path));
   const shown = draft.dir ?? folderName(title, id);
   const dir = resolve(cwd, shown);
   const previous = await pullTarget(dir, id);
   await mkdir(dir, { recursive: true });
-  // Until the last file is in, the directory is a mix of versions: its state says so.
-  await writeState(dir, { artifact: id, version: 0, files: {} });
+  // Until the last file is in, the directory is a mix of versions: its state says so. It still
+  // names every file either version may have left, so a later pull removes the ones dropped.
+  await writeState(dir, {
+    artifact: id,
+    version: 0,
+    files: {
+      ...previous?.files,
+      ...Object.fromEntries(files.map((file) => [file.path, file.sha256])),
+    },
+  });
   const download = requireCall(transport.artifactDownload, "download");
   await inPool(files, 4, (file) => pullFile(download, dir, id, version, file));
   const keep = new Set(files.map((file) => file.path));

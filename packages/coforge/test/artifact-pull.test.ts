@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runArtifact } from "../src/artifact-commands";
+import { inPool } from "../src/artifact-transfer";
 import {
   BINARY,
   ID,
@@ -162,6 +163,90 @@ test("download saves one file's exact bytes", async () => {
   const error = await failure(run(server, ["download", ID, "missing.txt", "--output", out]));
   expect(error.code).toBe("NOT_FOUND");
   expect((await failure(run(server, ["download", ID, "../x", "--output", out]))).code).toBe(
+    "INVALID_ARG",
+  );
+});
+
+test("pull of files sharing a new subdirectory makes it once, whatever the order", async () => {
+  const server = fakeServer({
+    "css/a.css": "a",
+    "css/b.css": "b",
+    "css/c.css": "c",
+    "css/d.css": "d",
+    "deep/x/y/1.txt": "1",
+    "deep/x/y/2.txt": "2",
+  });
+  const dir = join(root, "site");
+  await run(server, ["pull", ID, "--dir", dir]);
+  expect((await readdir(join(dir, "css"))).sort()).toEqual(["a.css", "b.css", "c.css", "d.css"]);
+  expect((await readdir(join(dir, "deep", "x", "y"))).sort()).toEqual(["1.txt", "2.txt"]);
+  expect((await stateOf(dir)).version).toBe(1);
+});
+
+test("a pool starts no new work once one worker has failed", async () => {
+  const started: number[] = [];
+  const failed = inPool([1, 2, 3, 4, 5, 6, 7, 8], 2, async (item) => {
+    started.push(item);
+    if (item === 1) throw new Error("boom");
+    await Promise.resolve();
+  });
+  await expect(failed).rejects.toThrow("boom");
+  expect(started).toEqual([1, 2]);
+});
+
+test("a pull that stopped midway still removes the files the next version dropped", async () => {
+  const server = fakeServer({ "a.md": "a1", "b.md": "b1" });
+  const dir = join(root, "again");
+  await run(server, ["pull", ID, "--dir", dir]);
+  server.others({ "a.md": "a2" });
+  // Version 2 no longer lists b.md.
+  const next = server.transport;
+  const without = {
+    ...next,
+    artifact: async (request: Parameters<typeof next.artifact>[0]) => {
+      const answer = (await next.artifact(request)) as { files: { path: string }[] };
+      return { ...answer, files: answer.files.filter((file) => file.path !== "b.md") };
+    },
+  };
+  const broken = await failure(
+    runArtifact(invoke(["pull", ID, "--dir", dir]), {
+      ...without,
+      artifactDownload: async () => {
+        throw new Error("connection lost");
+      },
+    }),
+  );
+  expect(broken.message).toContain("connection lost");
+  expect((await stateOf(dir)).version).toBe(0);
+  await runArtifact(invoke(["pull", ID, "--dir", dir]), without);
+  await expect(readFile(join(dir, "b.md"))).rejects.toThrow();
+  expect(await read("again", "a.md")).toEqual(Buffer.from("a2"));
+  expect(await stateOf(dir)).toEqual({ artifact: ID, version: 2, files: { "a.md": sha256("a2") } });
+});
+
+test("pull refuses paths that differ only by case before writing anything", async () => {
+  const server = fakeServer({ "README.md": "upper", "docs/readme.md": "x", "readme.md": "lower" });
+  const dir = join(root, "cased");
+  const error = await failure(run(server, ["pull", ID, "--dir", dir]));
+  expect(error.code).toBe("INVALID_ARG");
+  expect(error.message).toContain("README.md");
+  expect(error.message).toContain("readme.md");
+  expect(await readdir(root)).not.toContain("cased");
+  expect(server.downloads).toEqual([]);
+});
+
+test("download refuses to write through a symbolic link", async () => {
+  const server = fakeServer({ "plan.md": "new" });
+  const victim = join(root, "victim.txt");
+  await writeFile(victim, "keep");
+  const link = join(root, "out.md");
+  await symlink(victim, link);
+  const error = await failure(run(server, ["download", ID, "plan.md", "--output", link]));
+  expect(error.code).toBe("INVALID_ARG");
+  expect(await readFile(victim, "utf8")).toBe("keep");
+  const folder = join(root, "folder");
+  await mkdir(folder);
+  expect((await failure(run(server, ["download", ID, "plan.md", "--output", folder]))).code).toBe(
     "INVALID_ARG",
   );
 });

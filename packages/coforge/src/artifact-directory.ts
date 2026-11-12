@@ -48,6 +48,22 @@ export function artifactPath(path: string): string {
   return path;
 }
 
+/** Refuses paths that differ only by case: on a case-insensitive filesystem they are one file,
+ * so a pull would silently keep only one of them. */
+export function refuseCaseCollisions(paths: readonly string[]): void {
+  const seen = new Map<string, string>();
+  for (const path of paths) {
+    const key = path.toLowerCase();
+    const other = seen.get(key);
+    if (other !== undefined && other !== path)
+      throw invalidArg(
+        `The version holds ${other} and ${path}, which differ only by case and cannot share a directory on every filesystem`,
+        "Rename one of them in the artifact, then pull again.",
+      );
+    seen.set(key, path);
+  }
+}
+
 /** A folder name made from an artifact's title, or its id when nothing usable is left. */
 export function folderName(title: string, id: string): string {
   const name = Array.from(title, (char) =>
@@ -121,9 +137,13 @@ async function prepareParents(root: string, rel: string): Promise<string> {
   let current = root;
   for (const segment of segments.slice(0, -1)) {
     current = join(current, segment);
-    const info = await lstat(current).catch(() => undefined);
-    if (!info) await mkdir(current);
-    else if (info.isSymbolicLink() || !info.isDirectory())
+    // Another writer may make the directory between the check and the mkdir: EEXIST is fine
+    // when what is there is a real directory, which the second look confirms.
+    await mkdir(current).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+    });
+    const info = await lstat(current);
+    if (info.isSymbolicLink() || !info.isDirectory())
       throw invalidArg(`Cannot write ${rel}: ${segment} is a symbolic link or not a directory`);
   }
   return join(root, rel);

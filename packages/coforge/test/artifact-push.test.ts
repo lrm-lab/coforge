@@ -220,3 +220,22 @@ test("creating from a directory needs a title, an entry it can name, and a page'
   await mkdir(empty);
   expect((await failure(run(server, ["push", empty, "--title", "E"]))).code).toBe("INVALID_ARG");
 });
+
+test("a push the server answers with nothing keeps the pulled version and says nothing was sent", async () => {
+  const { server, dir } = await pulled({ "a.md": "a" });
+  // Others moved the artifact on, and already hold this very change.
+  server.others({ "a.md": "a2", "o.md": "o" });
+  await writeFile(join(dir, "a.md"), "a2");
+  const transport = {
+    ...server.transport,
+    artifact: async (request: AgentArtifactRequest) =>
+      request.operation === "push" ? { status: "nothing" } : server.transport.artifact(request),
+  };
+  const before = await stateOf(dir);
+  const said = (await runArtifact(invoke(["push", dir]), transport)) as string;
+  expect(await stateOf(dir)).toEqual(before);
+  expect(said).toContain("Nothing was sent");
+  expect(said).toContain("version 1");
+  expect(said).not.toContain("holds what the directory holds");
+  expect(said).toContain(`coforge artifact pull ${ID}`);
+});
