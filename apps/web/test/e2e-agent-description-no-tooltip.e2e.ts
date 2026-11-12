@@ -9,7 +9,8 @@ import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chro
 
 /**
  * Task #27 (Frank): an Agent's description beside its name in the message stream is plain text,
- * cut to the room it has; hovering it opens no tooltip.
+ * cut to the room it has; hovering it opens no tooltip. The model label beside it keeps its
+ * tooltip (only the description lost it), so hovering the model still names it.
  *
  * Opt-in like the other browser E2Es: the real local Web and a headless Chrome over DevTools. The
  * Agent and channel are seeded per run and removed after it. Light, dark and phone frames, with
@@ -21,6 +22,8 @@ const chrome = chromePath();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-description-no-tooltip");
 
 /** Under the header's 160-character cap, and too wide for the line, so it is cut. */
+/** A model as an Agent's settings name it, shown on the author line when the setting is on. */
+const MODEL = "deepseek-v4.1-flash";
 const DESCRIPTION =
   "CoForge 后端功能实现（第三位，与另外两位后端分工）：服务端路由与存储、Agent API、daemon 运行时适配。按协调员拆好的子任务认领，先读最新 main 和模块规范，先写测试再实现，每项单独提交。";
 
@@ -43,7 +46,7 @@ test("an Agent's description in the message stream opens no tooltip on hover", a
       runtimeConfig: {
         runtime: "pi",
         provider: { kind: "default" },
-        model: "",
+        model: MODEL,
         modelProvider: "",
         reasoning: "",
       },
@@ -74,22 +77,30 @@ test("an Agent's description in the message stream opens no tooltip on hover", a
   let page!: Awaited<ReturnType<typeof browser.open>>;
   /** The description: the innermost header element whose whole text it is. */
   const description = `[...document.querySelectorAll('[data-message-id="${message.id}"] *')].find((el) => el.childElementCount === 0 && el.textContent === ${JSON.stringify(DESCRIPTION)})`;
+  /** The model label on the same author line. */
+  const model = `[...document.querySelectorAll('[data-message-id="${message.id}"] *')].find((el) => el.childElementCount === 0 && el.textContent === ${JSON.stringify(MODEL)})`;
   const shot = async (name: string) => {
     const { data } = await page.command<{ data: string }>("Page.captureScreenshot", {
       format: "png",
     });
     await Bun.write(join(artifacts, `${name}.png`), Buffer.from(data, "base64"));
   };
-  /** Rests the pointer on the description long past a tooltip's delay; whether one opened. */
-  const hoverOpensTooltip = async () => {
+  /** Rests the pointer on an element long past a tooltip's delay; the open tooltip's text, or
+   * null when none opened. The pointer leaves to an empty spot first, so a previous tooltip closes. */
+  const hoverTooltip = async (target = description) => {
+    await page.command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 5, y: 795 });
+    await Bun.sleep(600);
     const { x, y } = await page.evaluate<{ x: number; y: number }>(
-      `(() => { const r = ${description}.getBoundingClientRect(); return { x: r.left + Math.min(40, r.width / 2), y: r.top + r.height / 2 }; })()`,
+      `(() => { const r = ${target}.getBoundingClientRect(); return { x: r.left + Math.min(40, r.width / 2), y: r.top + r.height / 2 }; })()`,
     );
     await page.command("Input.dispatchMouseEvent", { type: "mouseMoved", x: x - 30, y });
     await page.command("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
     await Bun.sleep(1500);
-    return page.evaluate<boolean>(`document.querySelector('[role="tooltip"]') !== null`);
+    return page.evaluate<string | null>(
+      `document.querySelector('[role="tooltip"]')?.textContent ?? null`,
+    );
   };
+  const hoverOpensTooltip = async () => (await hoverTooltip()) !== null;
   const theme = async (dark: boolean) => {
     await page.evaluate(`document.documentElement.classList.toggle("dark-mode", ${dark})`);
     await Bun.sleep(600);
@@ -120,6 +131,11 @@ test("an Agent's description in the message stream opens no tooltip on hover", a
       await shot(`desktop-${dark ? "dark" : "light"}-hover`);
     }
     await theme(false);
+
+    // The model beside it still names itself on hover.
+    await until(() => page.evaluate<boolean>(`${model} != null`));
+    expect(await hoverTooltip(model)).toBe(MODEL);
+    await shot("desktop-light-model-hover");
 
     await viewport(390, 844, true);
     await until(() => page.evaluate<boolean>(`${description} != null`));
