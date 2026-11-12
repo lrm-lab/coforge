@@ -22,6 +22,28 @@ export type AgentLaunchClaim = {
   launchId?: string;
 };
 
+/** Why a launch claim was refused, as a stable code the route answers with: the Daemon logs it
+ * beside its own failure, so "the server refused the launch credentials" names the fence that
+ * fired instead of leaving the bare 403 that made grace's restart unreadable (task #14). */
+export type AgentLaunchRefusalCode =
+  | "AGENT_LAUNCH_NOT_AUTHORIZED"
+  | "AGENT_MIGRATING"
+  | "AGENT_LAUNCH_UNSOLICITED"
+  | "AGENT_LAUNCH_CONFIG_CHANGED"
+  | "AGENT_LAUNCH_SUPERSEDED";
+
+/** A refused launch claim. The message stays the sentence this receiver has always thrown; the
+ * code is what the route relays and the Daemon writes down. */
+export class AgentLaunchRefusalError extends Error {
+  constructor(
+    readonly code: AgentLaunchRefusalCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AgentLaunchRefusalError";
+  }
+}
+
 /** Records why a settled control operation failed onto the Agent's display state, so every
  * managed path that lands in a terminal failure explains it — including launches whose
  * runtime_error Activity never reached the display. */
@@ -56,16 +78,23 @@ export class AgentControlReceiver {
   async authorizeLaunch(input: AgentLaunchClaim): Promise<void> {
     const agent = await this.store.get(input.agentId);
     if (!agent || agent.workspaceId !== input.workspaceId || agent.computerId !== input.computerId)
-      throw new Error("Agent launch is not authorized");
+      throw new AgentLaunchRefusalError(
+        "AGENT_LAUNCH_NOT_AUTHORIZED",
+        "Agent launch is not authorized",
+      );
     // Whatever the control state says, a Computer never launches an Agent being moved off it.
-    if (agent.migrating) throw new Error("Agent is moving to another Computer");
+    if (agent.migrating)
+      throw new AgentLaunchRefusalError("AGENT_MIGRATING", "Agent is moving to another Computer");
     const state = agent.state;
     if (!state) {
       if (input.controlEpoch || input.requestId || input.launchId)
-        throw new Error("Unsolicited managed launch");
+        throw new AgentLaunchRefusalError("AGENT_LAUNCH_UNSOLICITED", "Unsolicited managed launch");
       return;
     }
-    if (!current(agent, state)) throw new Error("Stale Agent launch");
+    // The stored state describes another Workspace/Computer/runtime or an older configuration:
+    // the launch it belonged to is not this one, whatever its scope says.
+    if (!current(agent, state))
+      throw new AgentLaunchRefusalError("AGENT_LAUNCH_CONFIG_CHANGED", "Stale Agent launch");
     const sameScope =
       state.requestId === input.requestId &&
       state.epoch === input.controlEpoch &&
@@ -73,7 +102,7 @@ export class AgentControlReceiver {
       state.launchId === input.launchId;
     if (state.phase === "starting") {
       if (sameScope) return;
-      throw new Error("Stale Agent launch");
+      throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch");
     }
     // A daemon-initiated wake resends the same requestId/controlEpoch/launchId this
     // Agent's last managed operation completed under, instead of a fresh managed scope. Accepted
@@ -84,7 +113,7 @@ export class AgentControlReceiver {
     // checked explicitly so this never depends on that.
     if (state.phase === "completed" && state.action !== "stop" && sameScope && !agent.stoppedAt)
       return;
-    throw new Error("Stale Agent launch");
+    throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch");
   }
   /**
    * The Daemon's immediate `accepted` acknowledgement (task #584): it proves the command was

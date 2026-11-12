@@ -178,19 +178,23 @@ function namesVersionRefusal(error: AgentAuthorizationError): boolean {
   return /version/iu.test(error.upstreamCode ?? "") || /version/iu.test(error.message);
 }
 
+/** The server's own refusal code, when the error carries one: the launch route answers a refused
+ * handshake with a stable code (`AGENT_LAUNCH_SUPERSEDED` and friends), and writing it down is
+ * what lets a refused relaunch name its fence afterwards (task #14). */
+export function launchFailureUpstreamCode(error: unknown): string | undefined {
+  if (error instanceof AgentAuthorizationError) return error.upstreamCode;
+  if (error && typeof error === "object" && "upstreamCode" in error)
+    return (error as { upstreamCode?: string }).upstreamCode;
+  if (error instanceof Error && error.cause && typeof error.cause === "object")
+    return "upstreamCode" in error.cause
+      ? (error.cause as { upstreamCode?: string }).upstreamCode
+      : undefined;
+  return undefined;
+}
+
 /** The launch failure reason a typed error carries, or `runtime_spawn_failed`. */
 export function launchFailureReason(error: unknown): LaunchFailureReason {
-  const upstream =
-    error instanceof AgentAuthorizationError
-      ? error.upstreamCode
-      : error && typeof error === "object" && "upstreamCode" in error
-        ? (error as { upstreamCode?: string }).upstreamCode
-        : error instanceof Error &&
-            error.cause &&
-            typeof error.cause === "object" &&
-            "upstreamCode" in error.cause
-          ? (error.cause as { upstreamCode?: string }).upstreamCode
-          : undefined;
+  const upstream = launchFailureUpstreamCode(error);
   if (upstream === "RUNTIME_PRIVATE") return LAUNCH_FAILURE_REASON.RUNTIME_PRIVATE;
   if (upstream === "RUNTIME_NOT_INSTALLED") return LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED;
   if (upstream === "RUNTIME_UNUSABLE") return LAUNCH_FAILURE_REASON.RUNTIME_UNUSABLE;
@@ -393,9 +397,11 @@ export function launchFailureActivity(
 /** The structured log fields for a failed launch: its reason, its redacted message (the text
  * `providerMessage` carries for a classified refusal), and any SDK trace evidence. */
 export function launchFailureLogFields(error: unknown) {
+  const upstream = launchFailureUpstreamCode(error);
   return {
     failure_reason: launchFailureReason(error),
     error_message: scrubRuntimeErrorText(refusalText(error)),
+    ...(upstream === undefined ? {} : { upstream_code: upstream }),
     ...launchFailureTrace(error),
   };
 }
