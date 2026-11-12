@@ -90,6 +90,12 @@ const CASES: [SystemNotice, string, string][] = [
     'Frank An assigned you task #4 "Fix login"',
     "Frank An 给你指派了任务 #4「Fix login」",
   ],
+  // One that names its assignee reads as any assignment, to whoever views it (task #92).
+  [
+    { kind: "task.assigned_you", params: { actor: frank, task, assignee: coder } },
+    '📌 Frank An assigned #4 "Fix login" to @coder',
+    "📌 Frank An 把任务 #4「Fix login」指派给了 @coder",
+  ],
   [
     {
       kind: "channel.coordinator_changed",

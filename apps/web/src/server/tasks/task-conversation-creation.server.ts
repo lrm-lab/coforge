@@ -29,7 +29,7 @@ import { ensureTaskExecutionSession } from "./task-change.server";
 import { findSourceMessage } from "./task-claims.server";
 import { creationChanges, historyRows } from "./task-history.server";
 import { postSourceNotice, signalNotices, type PostedNotice } from "./task-notice-posting.server";
-import { noticeActor } from "./task-notices.server";
+import { noticeActor, noticeAssignee } from "./task-notices.server";
 import { announceNeighbours, announceTasks } from "./task-publication.server";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { indexedRequestId } from "./task-request-ids.server";
@@ -215,6 +215,9 @@ export async function createConversationTasks(
             params: {
               actor: noticeActor(member),
               task: { taskId: task.id, number: task.number, title: task.title },
+              // The body says "you" to the assignee it is delivered to; the conversation shows
+              // everyone who it went to (task #92).
+              assignee: noticeAssignee(assignee),
             },
           },
           deliverToAgentId: assignee.agentId,
@@ -363,6 +366,7 @@ export async function insertConversationTask(
         params: {
           actor: noticeActor(member),
           task: { taskId: task.id, number: task.number, title: input.title },
+          assignee: noticeAssignee(assignee),
         },
       },
       deliverToAgentId: assignee.agentId,

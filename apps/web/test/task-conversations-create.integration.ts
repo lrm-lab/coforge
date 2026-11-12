@@ -137,6 +137,13 @@ test("with it on, create makes a task with no message in the channel, followed b
   // First in the worker's queue: numbered, with nobody ahead (task #716).
   expect(notice.body).toContain("queue #1");
   expect(notice.body).not.toContain("ahead");
+  // The body says "you" to the worker; the stored notice names them, so the conversation can say
+  // who it went to (task #92).
+  const stored = await db.systemMessage.findUniqueOrThrow({ where: { messageId: notice.id } });
+  expect(stored.kind).toBe("task.assigned_you");
+  expect(stored.params).toMatchObject({
+    assignee: { memberId: agents.worker.memberId, handle: agents.worker.name },
+  });
   const history = await db.taskHistoryEvent.findMany({ where: { taskId: task.id } });
   expect(history.map((event) => event.eventType)).toEqual(["created", "assignee_changed"]);
 });
