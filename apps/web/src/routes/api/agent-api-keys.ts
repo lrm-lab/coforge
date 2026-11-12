@@ -18,6 +18,7 @@ import {
 } from "#src/server/agents/agent-runtime-credentials.server";
 import { PrismaAgentRuntimeCredentialRepository } from "#src/server/db/repositories/agent-runtime-credential.repositories.server";
 import { AgentControl } from "#src/server/agents/agent-control.server";
+import { AgentLaunchRefusalError } from "#src/server/agents/agent-control-receiver.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -136,7 +137,12 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           },
         });
         if (principal.workspaceId !== input.workspaceId || !agent)
-          return Response.json({ error: "forbidden" }, { status: 403 });
+          return errorResponse(
+            "AGENT_LAUNCH_NOT_AUTHORIZED",
+            "Agent launch is not authorized",
+            403,
+            false,
+          );
         try {
           const visibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
           const selection = await visibility.checkSelection(
@@ -154,7 +160,11 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             createCentrifugoServerApi(),
             getAgentRuntimeLock(),
           ).authorizeLaunch({ ...input, computerId: principal.computerId });
-        } catch {
+        } catch (error) {
+          // The Daemon writes this code down beside its own failure: a refused relaunch names the
+          // fence that refused it instead of one opaque 403 (task #14).
+          if (error instanceof AgentLaunchRefusalError)
+            return errorResponse(error.code, error.message, 403, false);
           return Response.json({ error: "forbidden" }, { status: 403 });
         }
         let providerConfig;

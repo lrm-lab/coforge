@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { mockModuleForFile } from "./helpers/file-module-mock";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
+import { AgentLaunchRefusalError } from "#src/server/agents/agent-control-receiver.server";
 import type { AgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 
 let runtimeConfig: AgentRuntimeConfig = {
@@ -12,7 +13,9 @@ let runtimeConfig: AgentRuntimeConfig = {
   reasoning: "",
 };
 let allowed = true;
-let launchAllowed = true;
+/** How `authorizeLaunch` refuses: not at all, an uncoded error, or the coded refusal a refused
+ * relaunch has to be able to name (task #14). */
+let launchRefusal: "none" | "plain" | "coded" = "none";
 let runtimeAllowed = true;
 let lookups = 0;
 let issued = 0;
@@ -95,7 +98,9 @@ await mockModuleForFile("#src/server/agents/agent-runtime-lock.server", () => ({
 await mockModuleForFile("#src/server/agents/agent-control.server", () => ({
   AgentControl: class {
     async authorizeLaunch() {
-      if (!launchAllowed) throw new Error("stale launch");
+      if (launchRefusal === "plain") throw new Error("stale launch");
+      if (launchRefusal === "coded")
+        throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch");
     }
   },
 }));
@@ -210,9 +215,21 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
     retryable: false,
   });
   runtimeAllowed = true;
-  launchAllowed = false;
-  expect(((await request("valid")) as Response).status).toBe(403);
-  launchAllowed = true;
+  launchRefusal = "plain";
+  const uncoded = (await request("valid")) as Response;
+  expect(uncoded.status).toBe(403);
+  expect(await uncoded.json()).toEqual({ error: "forbidden" });
+  // A coded refusal names the fence in the body's `code`: the Daemon writes that down, so a
+  // refused relaunch stops reading as one opaque 403 (task #14).
+  launchRefusal = "coded";
+  const coded = (await request("valid")) as Response;
+  expect(coded.status).toBe(403);
+  expect(await coded.json()).toEqual({
+    error: "Stale Agent launch",
+    code: "AGENT_LAUNCH_SUPERSEDED",
+    retryable: false,
+  });
+  launchRefusal = "none";
   const failed = (await request("valid")) as Response;
   expect(failed.status).toBe(503);
   expect(await failed.json()).toEqual({ error: "service unavailable" });

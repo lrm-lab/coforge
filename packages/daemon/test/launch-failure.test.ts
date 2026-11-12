@@ -8,6 +8,7 @@ import {
   AgentAuthorizationError,
   isNonRetryableLaunchFailure,
   launchFailureActivity,
+  launchFailureLogFields,
   launchFailureReason,
   launchFailureTrace,
 } from "#src/agent-runtime/launch-failure";
@@ -235,4 +236,24 @@ test("an unclassified launch failure carries no providerMessage", () => {
   );
   expect(activity.runtimeError.errorReason).toBe("runtime_start_failed");
   expect(activity.runtimeError.providerMessage).toBeUndefined();
+});
+
+test("a refused launch writes the server's own code beside the failure", () => {
+  const refused = new AgentAuthorizationError(
+    new AgentConfigRequestError(
+      "refused",
+      403,
+      "AGENT_LAUNCH_SUPERSEDED",
+      "Agent launch config request failed (403): Stale Agent launch",
+    ),
+  );
+  expect(launchFailureLogFields(refused)).toMatchObject({
+    failure_reason: "agent_authorization_failed",
+    upstream_code: "AGENT_LAUNCH_SUPERSEDED",
+  });
+  // A server that sends no code (an older one) adds no field, rather than an empty one.
+  const uncoded = new AgentAuthorizationError(
+    new AgentConfigRequestError("refused", 403, undefined, "Agent launch config request failed"),
+  );
+  expect(launchFailureLogFields(uncoded)).not.toHaveProperty("upstream_code");
 });
