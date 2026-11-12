@@ -50,6 +50,8 @@ Untitled 自己的暗色模式规则是**不改梯度数值，只改语义 token
 
 界面框架里紫色只用于主操作按钮、已勾选的控件（都走 `bg-brand-solid`）和键盘焦点环。其余品牌语义 token（激活 tab、选中卡片、浅色底、加载图标）在两个主题下都指向中性色，由 `coforge-theme.css` 统一覆盖，组件不用改。
 
+亮色下最浅的文字色 `--color-text-quaternary`（时间、计数、次要说明）由 `#737373`（neutral-500）改为 `#696969`：原值在悬停行、选中的会话和侧边栏上只有 4.0–4.5:1，低于 WCAG AA；新值在所有亮色底上都不低于 4.5:1，且仍比 `text-tertiary`（`#525252`）浅一档。讨论串卡片的回复数 `--color-thread-reply-count` 跟随它。暗色保持 Untitled 原值（neutral-400）。`coforge-theme.test.ts` 检查这两个 token 在每个亮色底上的对比度。
+
 消息正文里的引用是内容，不是框架：@ 提及、频道、讨论串和链接走 `--color-reference-bg` / `--color-reference-text`，保留紫色；@ 自己用 `bg-brand-solid`。读者要靠颜色在正文里找到它们。
 
 > **已知偏差，待 Frank 确认**：原计划是暗色模式下品牌主按钮（`bg-brand-solid`）改用更亮的 `#a993ff`
