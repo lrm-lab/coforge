@@ -5,6 +5,7 @@ import {
   artifactPath,
   existsInside,
   readState,
+  refuseCaseCollisions,
   removeInside,
   scanDirectory,
   shellWord,
@@ -295,6 +296,8 @@ async function bringMerged(
     version: state.version,
   })) as ArtifactReadAnswer;
   if (!answer.files) return state;
+  // Two names one folder on this disk would hold as one file are refused, as a pull does.
+  refuseCaseCollisions(answer.files.map((file) => file.path));
   const listed = answer.files.map((file) => ({
     path: artifactPath(file.path),
     sha256: file.sha256,

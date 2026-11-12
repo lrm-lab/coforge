@@ -352,6 +352,9 @@ test("a download of a missing file, version or artifact is not found, as a read 
   expect((await get(id, "a.md", "?version=x")).status).toBe(400);
   expect((await get(crypto.randomUUID(), "a.md")).status).toBe(404);
   expect((await get("not-an-id", "a.md")).status).toBe(404);
+  // A path no artifact can hold is answered as missing, never passed on to the database.
+  for (const path of ["a\u0000b", "../a.md", "/a.md"])
+    expect((await get(id, path)).status).toBe(404);
 
   // An artifact in a private channel the Agent cannot read answers as one that does not exist.
   const secret = await documents.create(

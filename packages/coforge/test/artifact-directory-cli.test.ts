@@ -213,6 +213,25 @@ test("a refused file transfer keeps the server's reason", async () => {
     }),
   );
   expect(gone.code).toBe("NOT_FOUND");
+  // The server's own hint for a missing file says more than "does not exist", and is kept.
+  const noFile = serveBytes(() =>
+    Response.json(
+      {
+        error: "not found (artifact-file-not-found)",
+        code: "NOT_FOUND",
+        retryable: false,
+        suggested_next_action: "the version has no such file",
+      },
+      { status: 404 },
+    ),
+  );
+  const missingFile = await failure(
+    artifactTransport(noFile.endpoint, CONTEXT, noFile.proxyUrl).artifactDownload({
+      artifact: ID,
+      path: "a",
+    }),
+  );
+  expect(missingFile.suggestedNextAction).toBe("the version has no such file");
   const unreachable = await failure(
     artifactTransport(
       () => new URL("http://127.0.0.1:1/x"),

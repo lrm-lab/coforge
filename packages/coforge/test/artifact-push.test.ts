@@ -3,6 +3,7 @@ import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ARTIFACT_UPLOAD_MAX_BYTES, type AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import { runArtifact } from "../src/artifact-commands";
+import type { CliError } from "../src/cli-error";
 import {
   ID,
   STATE,
@@ -151,6 +152,26 @@ test("a push the server merged brings the files it merged into the directory", a
   expect(said).toContain("Merged");
   expect(await read("work", "b.md")).toEqual(Buffer.from("b by someone else"));
   expect((await stateOf(dir)).files["b.md"]).toBe(sha256("b by someone else"));
+});
+
+test("a merged push whose files differ only by case refuses before writing them", async () => {
+  const { server, dir } = await pulled({ "a.md": "a" });
+  server.others({ "README.md": "upper", "readme.md": "lower" });
+  await writeFile(join(dir, "a.md"), "a2");
+  const transport = {
+    ...server.transport,
+    artifact: async (request: AgentArtifactRequest) => {
+      const answer = (await server.transport.artifact(request)) as { status?: string };
+      return answer.status === "created"
+        ? { ...answer, number: server.current, merged: ["README.md", "readme.md"] }
+        : answer;
+    },
+  };
+  const error = await runArtifact(invoke(["push", dir]), transport).catch(
+    (caught: unknown) => caught as CliError,
+  );
+  expect((error as CliError).code).toBe("INVALID_ARG");
+  expect(await read("work", "README.md").catch(() => null)).toBeNull();
 });
 
 test("push over a directory with no state creates an artifact from its files", async () => {

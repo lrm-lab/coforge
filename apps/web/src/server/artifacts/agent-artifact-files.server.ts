@@ -1,4 +1,8 @@
-import { ARTIFACT_SHA256_PATTERN, ARTIFACT_UPLOAD_MAX_BYTES } from "@lrm/coforge-sdk/agent";
+import {
+  ARTIFACT_SHA256_PATTERN,
+  ARTIFACT_UPLOAD_MAX_BYTES,
+  artifactPathValid,
+} from "@lrm/coforge-sdk/agent";
 import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
 import { AppError } from "#src/lib/app-error";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
@@ -85,7 +89,9 @@ export async function handleAgentArtifactDownload(
         errorId: "artifact-request",
         hint: "version is not accepted",
       });
-    if (!artifactInputs.id.safeParse(params.artifact).success) throw new AppError("NOT_FOUND");
+    // A path no artifact can hold names nothing; it never reaches the database.
+    if (!artifactInputs.id.safeParse(params.artifact).success || !artifactPathValid(params.path))
+      throw new AppError("NOT_FOUND");
     const file = await services.artifacts.reads.file({
       workspaceId,
       artifactId: params.artifact,

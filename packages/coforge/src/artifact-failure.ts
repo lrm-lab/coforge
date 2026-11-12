@@ -43,8 +43,10 @@ export async function artifactRefusal(response: Response, call: ArtifactCall): P
       retryable: false,
     });
   const notFound = json?.code === "NOT_FOUND";
+  // The server's own hint (a version without that file) says more than the general one.
   const next = notFound
-    ? "The artifact or conversation does not exist, or you cannot read it."
+    ? (json?.suggested_next_action ??
+      "The artifact or conversation does not exist, or you cannot read it.")
     : message.includes("(artifact-base-moved)") && call.baseMoved
       ? call.baseMoved
       : call.writes && response.status >= 500
