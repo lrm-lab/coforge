@@ -1,6 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { humanLabel } from "#src/lib/human-label";
 import { errorType } from "#src/server/errors/error-type.server";
+import { actorNames, actorOf } from "./artifact-actor-names.server";
 
 /** How many unseen versions a read lists (the newest); the count is of all of them. */
 const UNSEEN_VERSIONS_SHOWN = 5;
@@ -31,9 +31,6 @@ export type UnseenSummary = {
   versionCount: number;
   versions: UnseenVersion[];
 };
-
-/** What a publisher shows as when its account or Agent no longer exists. */
-const REMOVED = "someone removed";
 
 /**
  * Moves an Agent's position on an artifact to `version`, never backwards: a stored value that is
@@ -145,7 +142,10 @@ async function unseenVersions(
       },
     }),
   ]);
-  const names = await publisherNames(db, input.workspaceId, rows);
+  const names = await actorNames(db, input.workspaceId, {
+    userIds: rows.flatMap((row) => row.publisherUserId ?? []),
+    agentIds: rows.flatMap((row) => row.publisherAgentId ?? []),
+  });
   const versions = rows.map(
     ({ publisherUserId, publisherAgentId, changedPaths, ...version }): UnseenVersion => {
       const paths = pathsOf(changedPaths);
@@ -153,9 +153,7 @@ async function unseenVersions(
         ...version,
         changedPaths: paths.slice(0, CHANGED_PATHS_SHOWN),
         changedCount: paths.length,
-        publisher: publisherAgentId
-          ? { kind: "agent", name: names.get(publisherAgentId) || REMOVED }
-          : { kind: "user", name: (publisherUserId && names.get(publisherUserId)) || REMOVED },
+        publisher: actorOf(names, { userId: publisherUserId, agentId: publisherAgentId }),
       };
     },
   );
@@ -170,32 +168,4 @@ function pathsOf(changed: unknown): string[] {
   return [added, deleted].flatMap((paths) =>
     Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : [],
   );
-}
-
-/** Display names of the publishers of some versions, by id: an Agent's and a person's. */
-async function publisherNames(
-  db: Pick<PositionDb, "agent" | "user">,
-  workspaceId: string,
-  rows: readonly { publisherUserId: string | null; publisherAgentId: string | null }[],
-) {
-  const agentIds = [...new Set(rows.flatMap((row) => row.publisherAgentId ?? []))];
-  const userIds = [...new Set(rows.flatMap((row) => row.publisherUserId ?? []))];
-  const [agents, users] = await Promise.all([
-    agentIds.length
-      ? db.agent.findMany({
-          where: { id: { in: agentIds }, workspaceId },
-          select: { id: true, name: true, displayName: true },
-        })
-      : [],
-    userIds.length
-      ? db.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, displayName: true },
-        })
-      : [],
-  ]);
-  return new Map<string, string>([
-    ...agents.map((agent) => [agent.id, agent.displayName || agent.name] as const),
-    ...users.map((user) => [user.id, humanLabel(user)] as const),
-  ]);
 }
