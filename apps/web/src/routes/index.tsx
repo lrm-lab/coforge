@@ -1,9 +1,9 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { getInstallOrigin } from "#src/features/install/install.functions";
 import { LandingPage } from "#src/features/landing/landing-page";
 import { getAuthenticationStatus } from "#src/features/auth/current-user.functions";
 import { getStartPage } from "#src/features/workspaces/last-location.functions";
+import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
 import { forgetShownWorkspace } from "#src/features/workspaces/shown-workspace";
 
@@ -22,11 +22,8 @@ export const Route = createFileRoute("/")({
     // runs while a Workspace is still on screen, so it keeps that Workspace's cache.
     if (!preload) forgetShownWorkspace(context.queryClient);
   },
-  loader: async () => ({ installOrigin: await getInstallOrigin() }),
-  component: Landing,
+  head: () => ({
+    meta: [{ title: m.landing_title() }, { name: "description", content: m.landing_description() }],
+  }),
+  component: LandingPage,
 });
-
-function Landing() {
-  const { installOrigin } = Route.useLoaderData();
-  return <LandingPage installOrigin={installOrigin} />;
-}
