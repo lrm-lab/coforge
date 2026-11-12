@@ -11,7 +11,10 @@ import {
 
 /** A message as the surfaces that show a notice hold it: the stored English `body`, and the
  * structured content when the server attached it (`mapBrowserMessage`). */
-export type SystemNoticeSource = { body: string; system?: { kind: string; params: unknown } };
+export type SystemNoticeSource = {
+  body: string;
+  system?: { kind: string; params: unknown };
+};
 
 /** The notice a message carries, when its stored kind and params are ones a renderer can trust. */
 export function systemNoticeOf(message: SystemNoticeSource): SystemNotice | null {
@@ -204,7 +207,10 @@ function noticeText(notice: SystemNotice, locale?: Locale, names: Names = TEXT_N
       );
     case "task.deleted":
       return m.system_notice_task_deleted(
-        { actor: shown(notice.params.actor), task: reference(notice.params.task, locale) },
+        {
+          actor: shown(notice.params.actor),
+          task: reference(notice.params.task, locale),
+        },
         { locale },
       );
     case "task.released":
@@ -321,15 +327,8 @@ export function systemNoticeText(message: SystemNoticeSource, locale?: Locale): 
   return emoji ? `${emoji} ${text}` : text;
 }
 
-/** The reason an assignment notice gives (`task assign --reason`), which the stream draws on a
- * line of its own under the notice (task #83); undefined for any other notice or none given. */
-export function assignmentReason(message: SystemNoticeSource): string | undefined {
-  const notice = systemNoticeOf(message);
-  if (notice?.kind !== "task.assigned") return undefined;
-  return notice.params.reason?.trim() || undefined;
-}
-
-/** The same notice without its assignment reason: the first line of the two the stream draws. */
+/** The same notice without its assignment reason: the stream shows an assignment as its one line,
+ * the reason left to the assignee, who gets it in full (Frank, task #92). */
 export function withoutAssignmentReason(message: SystemNoticeSource): SystemNoticeSource {
   const notice = systemNoticeOf(message);
   if (notice?.kind !== "task.assigned") return message;
@@ -338,7 +337,10 @@ export function withoutAssignmentReason(message: SystemNoticeSource): SystemNoti
 }
 
 /** A person a notice names, with the text a plain notice writes for them. */
-export type NoticePerson = { person: SystemPerson & { kind?: string }; text: string };
+export type NoticePerson = {
+  person: SystemPerson & { kind?: string };
+  text: string;
+};
 
 /** Stands in for a person while the notice is split around them. */
 const MARK = "\u0000";

@@ -6,14 +6,12 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { ActorName, type NamedActor } from "#src/features/avatars/actor-name";
 import { cn } from "#src/lib/utils";
-import { AssignmentReason } from "./assignment-reason-card";
 import { CentredOnRule, DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
 import { ROW_CLASS } from "./message-row";
 import type { MessageView } from "./message-view";
 import { useMemberDirectory } from "./member-directory";
 import type { Mentionable } from "./mention-text";
 import {
-  assignmentReason,
   systemNoticeParts,
   systemNoticeText,
   withoutAssignmentReason,
@@ -51,11 +49,9 @@ export function SystemMessageRow({
   const groupDay = useContext(SystemGroupDayContext);
   // In the viewer's language from the notice's kind; an unstructured one reads as its body. The
   // line draws each person it names by face (task #521); the tooltip keeps the words alone.
-  // An assignment with a reason is the same notice row, its line allowed to wrap so who the Task
-  // went to is never cut on a phone, with the reason on a line of its own under it (task #83), in
-  // the same size and ink: a row, not a card (Frank, task #92). Any other notice keeps its one line.
-  const reason = assignmentReason(message);
-  const notice = reason ? withoutAssignmentReason(message) : message;
+  // An assignment's reason (task #83) is for its assignee, who gets it in full; the stream shows
+  // the notice alone (Frank, task #92: "直接不显示reason").
+  const notice = withoutAssignmentReason(message);
   const text = systemNoticeText(notice);
   const parts = systemNoticeParts(notice);
   const members = useMemberDirectory();
@@ -115,26 +111,7 @@ export function SystemMessageRow({
             "bg-tertiary ring-2 ring-brand/50 ring-offset-0 ring-offset-primary md:ring-offset-2",
         )}
       >
-        {reason ? (
-          <div
-            data-assignment-with-reason
-            className="flex min-w-0 flex-1 flex-col items-center gap-0.5"
-          >
-            <div className="flex w-full min-w-0 items-center gap-2">
-              <CentredOnRule>
-                <p data-assignment-notice className="max-w-xl min-w-0 text-center break-words">
-                  <span className="mr-2">{timeElement}</span>
-                  {named}
-                </p>
-              </CentredOnRule>
-            </div>
-            <div className="max-w-xl min-w-0 text-center">
-              <AssignmentReason reason={reason} />
-            </div>
-          </div>
-        ) : (
-          <CentredOnRule>{noticeLine}</CentredOnRule>
-        )}
+        <CentredOnRule>{noticeLine}</CentredOnRule>
       </div>
     </li>
   );
@@ -154,6 +131,11 @@ function noticeActor(
         candidate.handle === person.handle && (!person.kind || candidate.kind === person.kind),
     );
   return member
-    ? { kind: member.kind, id: member.id, name: text, avatarUrl: member.avatarUrl }
+    ? {
+        kind: member.kind,
+        id: member.id,
+        name: text,
+        avatarUrl: member.avatarUrl,
+      }
     : { kind: person.kind === "agent" ? "agent" : "user", name: text };
 }
