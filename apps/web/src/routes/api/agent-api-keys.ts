@@ -161,10 +161,33 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             getAgentRuntimeLock(),
           ).authorizeLaunch({ ...input, computerId: principal.computerId });
         } catch (error) {
-          // The Daemon writes this code down beside its own failure: a refused relaunch names the
-          // fence that refused it instead of one opaque 403 (task #14).
-          if (error instanceof AgentLaunchRefusalError)
+          // The Daemon writes this code down beside its own failure, and this warning is the
+          // server's own record of the same refusal: without it the only account of a refused
+          // relaunch was one opaque 403 (task #14). No credential is read here, let alone logged.
+          if (error instanceof AgentLaunchRefusalError) {
+            console.warn(
+              JSON.stringify({
+                event: "agent_launch.refused",
+                agent_id: input.agentId,
+                computer_id: principal.computerId,
+                code: error.code,
+                phase: error.facts.phase,
+                action: error.facts.action,
+                same_scope: error.facts.sameScope,
+                stopped_at: error.facts.stoppedAt,
+              }),
+            );
             return errorResponse(error.code, error.message, 403, false);
+          }
+          console.warn(
+            JSON.stringify({
+              event: "agent_launch.authorization_failed",
+              agent_id: input.agentId,
+              computer_id: principal.computerId,
+              error_class: error instanceof Error ? error.name : typeof error,
+              error_message: error instanceof Error ? error.message : String(error),
+            }),
+          );
           return Response.json({ error: "forbidden" }, { status: 403 });
         }
         let providerConfig;

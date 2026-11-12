@@ -1810,7 +1810,7 @@ test("an old stop result after a supersede is rejected as stale and leaves the n
   expect(current().state).toEqual(beforeResult);
 });
 
-test("an old authorizeLaunch after a supersede is rejected as stale and leaves the new epoch unchanged", async () => {
+test("an old authorizeLaunch after a person's Stop is refused as stopped", async () => {
   const { store, current } = pendingOpStore({
     id: "a",
     ownerId: "owner",
@@ -1859,7 +1859,7 @@ test("an old authorizeLaunch after a supersede is rejected as stale and leaves t
       requestId: "old-start",
       launchId: "late-launch",
     }),
-  ).rejects.toThrow("Stale Agent launch");
+  ).rejects.toThrow("Agent launch was stopped");
   expect(current().state).toEqual(beforeLaunch);
 });
 

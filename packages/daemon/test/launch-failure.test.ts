@@ -257,3 +257,20 @@ test("a refused launch writes the server's own code beside the failure", () => {
   );
   expect(launchFailureLogFields(uncoded)).not.toHaveProperty("upstream_code");
 });
+
+test("a refused launch names the server's code in the Activity a person reads", () => {
+  const activity = launchFailureActivity(
+    new AgentAuthorizationError(
+      new AgentConfigRequestError("refused", 403, "AGENT_LAUNCH_STOPPED", "stale"),
+    ),
+    "Claude Code",
+  );
+  expect(activity.runtimeError.errorReason).toBe("agent_authorization_failed");
+  expect(activity.detail).toContain("The server's code was AGENT_LAUNCH_STOPPED.");
+  // A refusal with no code keeps the sentence it always had.
+  const uncoded = launchFailureActivity(
+    new AgentAuthorizationError(new AgentConfigRequestError("refused", 403, undefined, "stale")),
+    "Claude Code",
+  );
+  expect(uncoded.detail).not.toContain("The server's code was");
+});

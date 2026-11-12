@@ -140,7 +140,7 @@ export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[
   LAUNCH_FAILURE_REASON.RUNTIME_MEMORY_UNSUPPORTED,
 ];
 
-/** Whether a failed launch is one no retry can fix. */
+/** Whether no retry can fix this failed launch. */
 export function isNonRetryableLaunchFailure(error: unknown): boolean {
   if (error instanceof AgentSessionSupersededError) return true;
   if (NON_RETRYABLE_LAUNCH_FAILURE_REASONS.includes(launchFailureReason(error))) return true;
@@ -157,8 +157,8 @@ export class AgentSessionSupersededError extends Error {
 }
 
 /** The server did not hand this launch its configuration and Agent API key. The reason code stays
- * one, but what actually happened is kept: a Computer that could not reach the server must not be
- * told to upgrade, which is what someone read out of the one generic sentence before. */
+ * one; what actually happened is kept so a Computer that could not reach the server is not told
+ * to upgrade. */
 export class AgentAuthorizationError extends Error {
   readonly code = LAUNCH_FAILURE_REASON.AGENT_AUTHORIZATION_FAILED;
   readonly failure: AgentConfigFailure | undefined;
@@ -172,8 +172,8 @@ export class AgentAuthorizationError extends Error {
   }
 }
 
-/** Whether the refusal itself says this Computer's version is the problem. Only then does the
- * explanation suggest an upgrade; a 403 alone means many things. */
+/** Whether the refusal says this Computer's version is the problem: only then does the
+ * explanation suggest an upgrade. */
 function namesVersionRefusal(error: AgentAuthorizationError): boolean {
   return /version/iu.test(error.upstreamCode ?? "") || /version/iu.test(error.message);
 }
@@ -192,7 +192,7 @@ export function launchFailureUpstreamCode(error: unknown): string | undefined {
   return undefined;
 }
 
-/** The launch failure reason a typed error carries, or `runtime_spawn_failed`. */
+/** The launch failure reason a typed error carries, else `runtime_spawn_failed`. */
 export function launchFailureReason(error: unknown): LaunchFailureReason {
   const upstream = launchFailureUpstreamCode(error);
   if (upstream === "RUNTIME_PRIVATE") return LAUNCH_FAILURE_REASON.RUNTIME_PRIVATE;
@@ -277,12 +277,16 @@ function launchFailureDetail(
           "Agent's owner. Make sure the runtime is installed and marked public on this Computer, " +
           "or choose a different runtime."
         );
-      if (authorization?.failure === "refused")
+      if (authorization?.failure === "refused") {
+        // The server's own code, when it sent one (task #14).
+        const code = authorization.upstreamCode;
         return (
           "Agent authorization could not be prepared: the server refused this Computer's request " +
           "for the Agent's launch credentials. Check that this Computer is still connected to the " +
-          "Workspace with `coforge-computer status`, then start the Agent again."
+          "Workspace with `coforge-computer status`, then start the Agent again." +
+          (code ? ` The server's code was ${code}.` : "")
         );
+      }
       return (
         "Agent authorization could not be prepared: this Computer could not obtain the Agent's " +
         "launch credentials from the server. Check the Workspace connection with " +
@@ -319,8 +323,8 @@ function launchFailureDetail(
       return `${stem} Correct it in the Agent's environment variables, then start the Agent again.`;
     }
     case LAUNCH_FAILURE_REASON.RUNTIME_START_FAILED: {
-      // The CLI's own first stderr line, redacted where it was read: it says what the launcher hit
-      // ("No version is set for shim: node") far better than "could not be started" alone.
+      // The CLI's own first stderr line, redacted where read: it names what the launcher hit
+      // ("No version is set for shim: node") better than "could not be started" alone.
       const diagnostic =
         error instanceof RuntimeStartFailedError && error.diagnostic
           ? ` (${error.diagnostic})`
@@ -331,9 +335,8 @@ function launchFailureDetail(
       );
     }
     case LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED: {
-      // A runtime that knows where its own sign-in lives names it — Antigravity's is the
-      // Computer page. A bare provider message (Kiro's "not logged in") keeps the generic
-      // sentence, which alone carries the next step.
+      // A runtime that knows where its sign-in lives names it (Antigravity: the Computer page);
+      // a bare provider message (Kiro's "not logged in") keeps the generic sentence.
       const hint = error instanceof RuntimeLoginRequiredError ? error.detailHint : undefined;
       if (hint) return hint;
       return (
@@ -350,9 +353,9 @@ function launchFailureDetail(
 }
 
 /** Launch failure reasons whose `runtimeError` carries `providerMessage`: the classified
- * refusals a person must act on, whose runtime wording is written for the user (#686,
- * #682). Anything else — an untyped spawn failure above all — keeps its text in the Computer
- * log only, because the redactor recognizes credential shapes, not arbitrary internals. */
+ * refusals a person must act on (#686, #682). Anything else — an untyped spawn failure above all
+ * — keeps its text in the Computer log only, because the redactor knows credential shapes, not
+ * arbitrary internals. */
 export const PROVIDER_MESSAGE_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED,
   LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED,
