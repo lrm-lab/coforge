@@ -15,6 +15,7 @@ import { MESSAGE_FONT_SIZE_BOOT } from "#src/features/settings/message-font-size
 import { CONVERSATION_LIST_BOOT } from "#src/features/conversations/conversation-list-width";
 import { TASK_HIDDEN_COLUMNS_BOOT } from "#src/features/settings/task-hidden-columns";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
+import { BuildUpdateWatcher } from "#src/features/updates/build-update-watcher";
 const themeScript = `try{var theme=localStorage.getItem("coforge-theme");if(theme==="dark"||(theme==="system"&&matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.classList.add("dark-mode")}${SIDEBAR_EXPANDED_BOOT}${CONVERSATION_LIST_BOOT}${HIDE_EMPTY_SIDEBAR_SECTIONS_BOOT}${MESSAGE_WIDTH_BOOT}${MESSAGE_FONT_SIZE_BOOT}${TASK_HIDDEN_COLUMNS_BOOT}}catch{}`;
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -68,6 +69,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeldEnterGuard />
         <HotkeysProvider defaultOptions={HOTKEY_DEFAULTS}>
           <AppToastProvider>
+            <BuildUpdateWatcher />
             <div className="isolate">{children}</div>
           </AppToastProvider>
         </HotkeysProvider>
