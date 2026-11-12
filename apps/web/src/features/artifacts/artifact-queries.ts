@@ -16,7 +16,7 @@ export type ArtifactDocument = Awaited<ReturnType<typeof loadArtifactDocument>>;
 /** Who published or wrote: a person or an Agent, or nobody left (a deleted account). */
 export type ArtifactActorRef = { userId: string } | { agentId: string } | null;
 
-/** Every documents query, to refresh after a save, a revert, a delete or a published version. */
+/** Every documents query, to refresh after a delete, a change of access or a published version. */
 export const ARTIFACTS_KEY = ["artifacts"] as const;
 
 /** Whether documents are on in the Workspace; read again on a page's next use after a minute. */
@@ -48,12 +48,12 @@ export const artifactCardQuery = (artifactId: string) =>
     staleTime: 30_000,
   });
 
-/** A document at a version, or at its current one when `version` is absent. */
-export const artifactDocumentQuery = (artifactId: string, version?: number) =>
+/** A document at its current version. */
+export const artifactDocumentQuery = (artifactId: string) =>
   queryOptions({
-    queryKey: [...ARTIFACTS_KEY, "document", artifactId, version ?? "current"],
-    queryFn: () => loadArtifactDocument({ data: { artifactId, version } }),
-    staleTime: version === undefined ? 0 : Infinity,
+    queryKey: [...ARTIFACTS_KEY, "document", artifactId],
+    queryFn: () => loadArtifactDocument({ data: { artifactId } }),
+    staleTime: 0,
   });
 
 /** Whether an artifact can have a public link, and the one it has. */
@@ -63,17 +63,13 @@ export const artifactLinkSharingQuery = (artifactId: string) =>
     queryFn: () => loadArtifactLinkSharing({ data: { artifactId } }),
   });
 
-/** After a document changed: its current read, its history, its cards and its home's list. A
- * kept version's read never changes, so it stays. */
+/** After an artifact changed: its read, its cards and its home's list. */
 export function refreshArtifact(queryClient: QueryClient, artifactId: string): Promise<void> {
   return queryClient.invalidateQueries({
-    predicate: ({ queryKey: [root, kind, id, version] }) => {
+    predicate: ({ queryKey: [root, kind, id] }) => {
       if (root !== ARTIFACTS_KEY[0]) return false;
       if (kind === "list") return true;
-      if (id !== artifactId) return false;
-      return (
-        kind === "card" || kind === "history" || (kind === "document" && version === "current")
-      );
+      return id === artifactId && (kind === "card" || kind === "document");
     },
   });
 }

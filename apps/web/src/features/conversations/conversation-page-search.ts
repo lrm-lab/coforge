@@ -52,7 +52,6 @@ export function pickConversationPageSearch({
   agentTab,
   doc,
   docFull,
-  docDraft,
 }: ConversationPageSearch): ConversationPageSearch {
   // `satisfies` names every field of the shape: one added there must be picked here too.
   return {
@@ -71,7 +70,6 @@ export function pickConversationPageSearch({
     agentTab,
     doc,
     docFull,
-    docDraft,
   } satisfies Record<keyof ConversationPageSearch, unknown>;
 }
 

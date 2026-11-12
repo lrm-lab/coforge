@@ -81,12 +81,7 @@ export function ArtifactActor({ actor }: { actor: ArtifactActorView | undefined 
   );
 }
 
-/** A publisher's name in a sentence ("X published version N"): the viewer's own is "You". */
-export const actorName = (actor: ArtifactActorView | undefined) =>
-  actor ? (actor.viewer ? m.conversation_you() : actor.name) : m.doc_someone();
-
-/** A new document's pane beside the conversation until its first save; in full screen, the whole
- * page; on a phone, over it. */
+/** An artifact's pane beside the conversation; in full screen, the whole page; on a phone, over it. */
 export function PaneFrame({ full, children }: { full?: boolean; children: React.ReactNode }) {
   return (
     <section

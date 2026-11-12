@@ -101,7 +101,7 @@ test("an artifact's Share: who can see it", async () => {
   const share = `[...document.querySelectorAll("main header button")].find((b) => b.textContent.trim() === "Share")`;
   const dialog = `document.querySelector('[role="dialog"]')`;
   const workspaceRow = `${dialog}?.textContent.includes("Everyone in the Workspace")`;
-  const editor = `${pageHydrated} && document.querySelector("main .ProseMirror") != null`;
+  const viewer = `${pageHydrated} && document.querySelector("main .ProseMirror") != null`;
   const text = (needle: string) => `document.body.textContent.includes(${JSON.stringify(needle)})`;
   const pageOf = (id: string) => `${origin}/en/w/${workspace.slug}/artifacts/${id}`;
   try {
@@ -117,7 +117,7 @@ test("an artifact's Share: who can see it", async () => {
 
     // The viewer may manage the public link: Share says every member reads it, with no choice.
     await browser("open", pageOf(plan.id));
-    await browser("wait", "--fn", editor);
+    await browser("wait", "--fn", viewer);
     await press(share);
     await until(workspaceRow);
     expect(
@@ -134,7 +134,7 @@ test("an artifact's Share: who can see it", async () => {
       { title: "Workspace notes", text: `Notes (run ${tail}).` },
     );
     await browser("open", pageOf(notes.id));
-    await browser("wait", "--fn", editor);
+    await browser("wait", "--fn", viewer);
     expect(
       await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
     ).toEndWith(`/w/${workspace.slug}`);
@@ -150,18 +150,13 @@ test("an artifact's Share: who can see it", async () => {
       text: `Leads (run ${tail}).`,
     });
     await browser("open", pageOf(leads.id));
-    await browser("wait", "--fn", editor);
+    await browser("wait", "--fn", viewer);
     expect(
       await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
     ).toEndWith(`/w/${workspace.slug}`);
     expect(await evaluate<string>(`document.querySelector("main header a").textContent`)).toBe(
       "Back to the Workspace",
     );
-    expect(
-      await evaluate<string>(
-        `document.querySelector("main .ProseMirror").getAttribute("contenteditable")`,
-      ),
-    ).toBe("false");
     await shoot("2-workspace-read");
     await press(share);
     await until(workspaceRow);
@@ -186,7 +181,7 @@ test("an artifact's Share: who can see it", async () => {
       { conversationId: noorChannel.id, title: "Brief", text: `Brief (run ${tail}).` },
     );
     await browser("open", `${origin}/en/w/${other.slug}/artifacts/${brief.id}`);
-    await browser("wait", "--fn", editor);
+    await browser("wait", "--fn", viewer);
     await press(share);
     await until(workspaceRow);
     expect(

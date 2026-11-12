@@ -1,4 +1,3 @@
-import { ArtifactDraftPane } from "./artifact-draft-pane";
 import { ArtifactPage } from "./artifact-page";
 import {
   closedArtifactSearch,
@@ -6,31 +5,14 @@ import {
   type ArtifactSearch,
 } from "./artifact-search";
 
-/**
- * The artifact open beside a conversation's chat: one saved (`doc`), or a new document not saved
- * yet (`docDraft`).
- */
-export function ConversationArtifactPane({
-  conversationId,
-  search,
-}: {
-  conversationId: string;
-  search: ArtifactSearch;
-}) {
+/** The artifact open beside a conversation's chat (`doc`). */
+export function ConversationArtifactPane({ search }: { search: ArtifactSearch }) {
   const navigate = useArtifactNavigation();
+  if (search.doc === undefined) return null;
   const pane = {
     full: Boolean(search.docFull),
     onToggleFull: () => navigate({ docFull: search.docFull ? undefined : true }, { replace: true }),
     onClose: () => navigate(closedArtifactSearch),
   };
-  if (search.doc === undefined)
-    return (
-      <ArtifactDraftPane
-        // A draft belongs to its conversation: another one starts its own.
-        key={conversationId}
-        conversationId={conversationId}
-        search={search}
-      />
-    );
   return <ArtifactPage artifactId={search.doc} pane={pane} />;
 }

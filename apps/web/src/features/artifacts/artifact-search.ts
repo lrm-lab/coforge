@@ -5,13 +5,11 @@ import { loadArtifactsOn } from "./artifacts-on.functions";
 
 /**
  * An artifact's fields on a conversation page's address (task #385; Frank, 11-05): `doc` the one
- * open beside the chat, `docDraft` a new document not saved yet, `docFull` either in full screen. Each falls back to absent when
- * malformed.
+ * open beside the chat, `docFull` it in full screen. Each falls back to absent when malformed.
  */
 export const artifactSearchShape = {
   doc: z.uuid().optional().catch(undefined),
   docFull: z.boolean().optional().catch(undefined),
-  docDraft: z.boolean().optional().catch(undefined),
 };
 
 export type ArtifactSearch = z.output<z.ZodObject<typeof artifactSearchShape>>;
@@ -28,22 +26,14 @@ export function useArtifactNavigation() {
     });
 }
 
-/** The address of a new document, unsaved until its first save. */
-export const draftArtifactSearch: ArtifactSearch = {
-  doc: undefined,
-  docDraft: true,
-};
-
 /** The address of an artifact beside the chat (Frank, 11-05), at its latest version. */
 export const openArtifactSearch = (artifactId: string): ArtifactSearch => ({
   doc: artifactId,
-  docDraft: undefined,
 });
 
 export const closedArtifactSearch: ArtifactSearch = {
   doc: undefined,
   docFull: undefined,
-  docDraft: undefined,
 };
 
 /** The route of an artifact's own page, for a `Link`, `navigate` or `buildLocation`. */
@@ -54,7 +44,7 @@ export const artifactPageRoute = (workspaceSlug: string, artifactId: string) =>
   }) as const;
 
 /** The fields of a `?doc=` link, which a conversation page drops when it opens without it. */
-const DOC_LINK_FIELDS = ["doc", "docVersion", "docHistory", "docFull"] as const;
+const DOC_LINK_FIELDS = ["doc", "docFull"] as const;
 
 /**
  * A `?doc=` link, for its route's `beforeLoad`. A channel or DM opens it beside its chat
