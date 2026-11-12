@@ -124,3 +124,30 @@ test("toActionCardAction requires `to` on a questions card, as on a choice", () 
   expect((error as CliError).code).toBe("INVALID_ACTION");
   expect(toActionCardAction({ ...base, to: "@alice" }).type).toBe("questions");
 });
+
+test("toActionCardAction takes a deadline on a choice card within thirty days and refuses the rest", () => {
+  const choice = {
+    type: "choice",
+    prompt: "Which?",
+    to: "@alice",
+    options: [
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+    ],
+  };
+  const code = (json: unknown) => {
+    try {
+      toActionCardAction(json);
+      return undefined;
+    } catch (thrown) {
+      return (thrown as CliError).code;
+    }
+  };
+  expect(code({ ...choice, expiresInMinutes: 120 })).toBeUndefined();
+  expect(code({ ...choice, expiresInMinutes: 0 })).toBe("INVALID_ACTION");
+  expect(code({ ...choice, expiresInMinutes: -1 })).toBe("INVALID_ACTION");
+  expect(code({ ...choice, expiresInMinutes: 30 * 24 * 60 + 1 })).toBe("INVALID_ACTION");
+  expect(code({ type: "channel:create", name: "demo", expiresInMinutes: 60 })).toBe(
+    "INVALID_ACTION",
+  );
+});

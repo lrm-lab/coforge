@@ -5,10 +5,11 @@ import {
   type QuestionsAction,
   type ResolvedQuestionsPayload,
 } from "@lrm/coforge-sdk/agent";
-import type {
-  ActionCardPersonRef,
-  ActionCardView,
-  ActionCardViewBase,
+import {
+  deadlineIn,
+  type ActionCardPersonRef,
+  type ActionCardView,
+  type ActionCardViewBase,
 } from "./action-card-view.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
@@ -95,6 +96,7 @@ export async function resolveQuestionsPayload(
     ...(action.prompt ? { prompt: action.prompt } : {}),
     questions,
     to: user.id,
+    ...deadlineIn(action.expiresInMinutes),
     ...(warnings.length ? { warning: warnings.join(" ") } : {}),
   };
 }
@@ -111,6 +113,7 @@ export function questionsActionCardView(
   const asked = person ? { ...person, isViewer: person.id === viewerUserId } : undefined;
   return {
     ...base,
+    ...(payload.deadline && base.state === "pending" ? { deadline: payload.deadline } : {}),
     kind: "questions",
     ...(payload.prompt ? { prompt: payload.prompt } : {}),
     questions: payload.questions,

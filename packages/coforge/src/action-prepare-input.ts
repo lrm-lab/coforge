@@ -1,5 +1,6 @@
 import {
   actionCardActionSchema,
+  deadlineMisuse,
   validateActionCardAction as validateActionCardCrossFields,
   type ActionCardAction,
 } from "@lrm/coforge-sdk/agent";
@@ -79,6 +80,13 @@ export function toActionCardAction(json: unknown): ActionCardAction {
       code: "INVALID_ACTION",
       message:
         'Action failed validation: to: a choice or questions card must name who it asks (set "to" to their handle or user id)',
+      retryable: false,
+    });
+  const misuse = deadlineMisuse(json);
+  if (misuse)
+    throw new CliError({
+      code: "INVALID_ACTION",
+      message: `Action failed validation: ${misuse}`,
       retryable: false,
     });
   const parsed = actionCardActionSchema.safeParse(json);

@@ -5,6 +5,8 @@ import {
   agentCreateActionSchema,
   channelAddMemberActionSchema,
   channelCreateActionSchema,
+  CHOICE_DEADLINE_MAX_MINUTES,
+  deadlineMisuse,
   pageFillActionSchema,
   validateActionCardAction,
 } from "./action-cards";
@@ -447,6 +449,64 @@ describe("questionsActionSchema", () => {
     });
     expect(validateActionCardAction(parsed)).toBe(
       "questions marks at most one option recommended per question",
+    );
+  });
+});
+
+describe("a choice or questions card's deadline", () => {
+  const choice = {
+    type: "choice",
+    prompt: "Which?",
+    to: "@alice",
+    options: [
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+    ],
+  };
+  const questions = {
+    type: "questions",
+    to: "@alice",
+    questions: [
+      {
+        id: "q",
+        prompt: "Which?",
+        options: [
+          { id: "a", label: "A" },
+          { id: "b", label: "B" },
+        ],
+      },
+    ],
+  };
+
+  test("accepts a whole number of minutes from one to thirty days, on either kind", () => {
+    expect(CHOICE_DEADLINE_MAX_MINUTES).toBe(30 * 24 * 60);
+    for (const base of [choice, questions])
+      for (const expiresInMinutes of [1, 90, CHOICE_DEADLINE_MAX_MINUTES]) {
+        const parsed = actionCardActionSchema.parse({ ...base, expiresInMinutes });
+        expect("expiresInMinutes" in parsed && parsed.expiresInMinutes).toBe(expiresInMinutes);
+      }
+  });
+
+  test("is optional", () => {
+    const parsed = actionCardActionSchema.parse(choice);
+    expect("expiresInMinutes" in parsed && parsed.expiresInMinutes).toBeFalsy();
+  });
+
+  test("refuses zero, a negative, a fraction, and more than thirty days", () => {
+    for (const base of [choice, questions])
+      for (const expiresInMinutes of [0, -5, 1.5, CHOICE_DEADLINE_MAX_MINUTES + 1, "2h"])
+        expect(actionCardActionSchema.safeParse({ ...base, expiresInMinutes }).success).toBe(false);
+  });
+
+  test("is refused on any other kind, which the schema would otherwise strip silently", () => {
+    expect(deadlineMisuse({ ...choice, expiresInMinutes: 5 })).toBeNull();
+    expect(deadlineMisuse({ ...questions, expiresInMinutes: 5 })).toBeNull();
+    expect(deadlineMisuse(choice)).toBeNull();
+    expect(deadlineMisuse({ type: "channel:create", name: "demo", expiresInMinutes: 5 })).toContain(
+      "choice",
+    );
+    expect(deadlineMisuse({ type: "desktop:takeover", expiresInMinutes: 5 })).toContain(
+      "expiresInMinutes",
     );
   });
 });

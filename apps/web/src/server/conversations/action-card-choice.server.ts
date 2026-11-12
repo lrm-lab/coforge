@@ -5,10 +5,11 @@ import {
   type ChoiceAction,
   type ResolvedChoicePayload,
 } from "@lrm/coforge-sdk/agent";
-import type {
-  ActionCardPersonRef,
-  ActionCardView,
-  ActionCardViewBase,
+import {
+  deadlineIn,
+  type ActionCardPersonRef,
+  type ActionCardView,
+  type ActionCardViewBase,
 } from "./action-card-view.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
@@ -82,6 +83,7 @@ export async function resolveChoicePayload(
     prompt: action.prompt,
     options,
     to: user.id,
+    ...deadlineIn(action.expiresInMinutes),
     ...(moved ? { warning: `Recommended option "${moved.label}" moved to first position.` } : {}),
     // On unless the Agent turned it off; only cards made with this field (or after it existed) get it.
     ...(action.other?.enabled === false
@@ -102,6 +104,7 @@ export function choiceActionCardView(
   const asked = person ? { ...person, isViewer: person.id === viewerUserId } : undefined;
   return {
     ...base,
+    ...(payload.deadline && base.state === "pending" ? { deadline: payload.deadline } : {}),
     kind: "choice",
     prompt: payload.prompt,
     options: payload.options,

@@ -50,5 +50,13 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   fenced on the lines below, when that result is present, with
   ` (recommended)` after the id when it is the recommended option. A choice card's body numbers its
   options in the card's order, a recommended one first.
+- A pending card expires (`expiresAt`, set in `createActionCardMessage`) 24 hours after it posts,
+  except a `choice`/`questions` card, which waits 30 days (`actionCardExpiresAt`): a stale approval of a
+  resource action is risky, an answer to a question is not. Those two kinds take `expiresInMinutes`
+  (positive whole number, at most 30 days; any other kind is refused at `parseActionCardAction`,
+  since the schema would strip it silently). `prepare` turns it into an absolute `deadline` in
+  the stored payload, which also sets `expiresAt` and which the view exposes as `deadline` only
+  when the Agent chose one (the default has none). An older server or CLI strips the unknown field,
+  so the card keeps that side's default wait.
 - Agent-facing message reads append ` [action card: <state>]` (or the choice form above) to a
   card message's body so an Agent never claims a resource exists before a human commits it.

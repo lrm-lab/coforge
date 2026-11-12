@@ -162,6 +162,13 @@ const choiceOtherSchema = z.object({
   label: z.string().trim().min(1).max(80).optional(),
 });
 
+/** The longest a `choice` or `questions` card may wait, and the default: 30 days in minutes. */
+export const CHOICE_DEADLINE_MAX_MINUTES = 30 * 24 * 60;
+
+/** A shorter deadline an Agent may give a `choice` or `questions` card, as a duration (not a
+ * timestamp) counted from when the card is posted. Absent, the card waits the full 30 days. */
+const choiceDeadlineSchema = z.number().int().positive().max(CHOICE_DEADLINE_MAX_MINUTES);
+
 export const choiceActionSchema = z.object({
   type: z.literal("choice"),
   prompt: z.string().trim().min(1).max(200),
@@ -175,6 +182,8 @@ export const choiceActionSchema = z.object({
   /** An answer of the person's own, as a final row that is itself an input (Frank, #447). On
    * unless `enabled: false`; only cards made with this field offer it. */
   other: choiceOtherSchema.optional(),
+  /** Minutes the card waits before it expires, at most 30 days; absent, 30 days. */
+  expiresInMinutes: choiceDeadlineSchema.optional(),
   draftHint: draftHintSchema,
 });
 export type ChoiceAction = z.infer<typeof choiceActionSchema>;
@@ -211,6 +220,8 @@ export const questionsActionSchema = z.object({
   questions: z.array(questionsQuestionSchema).min(1).max(4),
   /** The person the card asks; same semantics and fallback as `choice`. */
   to: idOrHandleSchema.optional(),
+  /** Same meaning as `choice`'s `expiresInMinutes`. */
+  expiresInMinutes: choiceDeadlineSchema.optional(),
   draftHint: draftHintSchema,
 });
 export type QuestionsAction = z.infer<typeof questionsActionSchema>;
@@ -241,6 +252,23 @@ export type ActionCardAction = z.infer<typeof actionCardActionSchema>;
 /** The server-posted approval card for an Agent's use of an app; never an Agent's action. */
 export const APP_GRANT_AGENT_CARD_KIND = "app:grant_agent";
 export type ActionCardKind = ActionCardAction["type"] | typeof APP_GRANT_AGENT_CARD_KIND;
+
+/** The kinds that ask a person something: they name whom they ask, wait 30 days by default, and
+ * take an Agent's own deadline. */
+export function isAskingCardKind(kind: unknown): kind is "choice" | "questions" {
+  return kind === "choice" || kind === "questions";
+}
+
+/**
+ * `expiresInMinutes` on a raw action of any kind but `choice` or `questions`: the schema strips
+ * an unknown key silently, so a card that would then wait 24 hours instead of what the Agent
+ * asked is refused here, on the raw value. Returns a message, or `null`.
+ */
+export function deadlineMisuse(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object" || !("expiresInMinutes" in raw)) return null;
+  if (isAskingCardKind((raw as { type?: unknown }).type)) return null;
+  return "expiresInMinutes: only a choice or questions card takes a deadline; other cards expire after 24 hours";
+}
 
 /**
  * Cross-field rules the schema alone cannot express. Returns a human-readable
@@ -341,6 +369,9 @@ export type ResolvedChoicePayload = {
   /** Present when the card offers an answer of the person's own; absent when the Agent disabled
    * it and on cards made before the field existed. */
   other?: { label?: string };
+  /** The Agent's own deadline (ISO time), present only when it set `expiresInMinutes`; the card
+   * shows it, and absent means the 30-day default. */
+  deadline?: string;
   /** A note for the prepare response, e.g. that a recommended option was moved to the front. */
   warning?: string;
 };
@@ -356,6 +387,8 @@ export type ResolvedQuestionsPayload = {
   }[];
   /** The asked person's user id; every questions card names one. */
   to: string;
+  /** Same as `ResolvedChoicePayload.deadline`. */
+  deadline?: string;
   /** A note for the prepare response, e.g. that a recommended option was moved to the front. */
   warning?: string;
 };

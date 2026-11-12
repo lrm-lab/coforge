@@ -1,15 +1,43 @@
 import type { PreviewCard } from "#src/features/conversations/action-card-preview";
 
 /** What the browser sees of an action card (`ActionCards.viewsFor`), one shape per kind. */
-import type { AgentActionPrepareResponse } from "@lrm/coforge-sdk/agent";
+import {
+  CHOICE_DEADLINE_MAX_MINUTES,
+  isAskingCardKind,
+  type ActionCardKind,
+  type AgentActionPrepareResponse,
+  type ResolvedActionCardPayload,
+} from "@lrm/coforge-sdk/agent";
 
 /** What `prepare` answers, exactly the shape the Agent API promises. */
 export type ActionCardPrepareResult = AgentActionPrepareResponse;
 
 export type ActionCardState = "pending" | "executed" | "cancelled" | "expired";
 
-/** How long a pending card waits before it expires, from the moment it is posted. */
+/** How long a pending resource-action card waits before it expires, from the moment it is posted:
+ * a stale approval of a resource action is risky, so every kind but the two below keeps a day. */
 export const ACTION_CARD_TTL_MS = 24 * 60 * 60 * 1_000;
+
+/** How long a `choice` or `questions` card waits by default, and the most an Agent's deadline may
+ * ask: an answer to a question does not go stale in a day. */
+export const CHOICE_CARD_TTL_MS = CHOICE_DEADLINE_MAX_MINUTES * 60_000;
+
+/** The default wait for a card of this kind. */
+export function actionCardTtlMs(kind: ActionCardKind): number {
+  return isAskingCardKind(kind) ? CHOICE_CARD_TTL_MS : ACTION_CARD_TTL_MS;
+}
+
+/** The Agent's own deadline for a card posted now, as its resolved payload keeps it: absent when
+ * the Agent set none. */
+export function deadlineIn(minutes: number | undefined): { deadline?: string } {
+  return minutes ? { deadline: new Date(Date.now() + minutes * 60_000).toISOString() } : {};
+}
+
+/** When a card posted now expires: at the Agent's own deadline, else after its kind's wait. */
+export function actionCardExpiresAt(kind: ActionCardKind, payload: ResolvedActionCardPayload) {
+  const deadline = "deadline" in payload ? payload.deadline : undefined;
+  return deadline ? new Date(deadline) : new Date(Date.now() + actionCardTtlMs(kind));
+}
 
 /**
  * The state a reader sees: a pending row whose `expiresAt` has passed reads as expired even before
@@ -42,8 +70,12 @@ export type ActionCardViewBase = {
   /** Who committed it; `isViewer` lets the handled line name only someone else. */
   committedBy?: ActionCardActor;
   committedAt?: string;
-  /** When a pending card expires (24 hours after it was posted). */
+  /** When a pending card expires: 24 hours after it was posted, or 30 days for a choice or
+   * questions card. */
   expiresAt?: string;
+  /** The deadline the Agent itself chose for a pending choice or questions card (ISO time);
+   * absent when it left the 30-day default and once the card stops waiting. */
+  deadline?: string;
   /** Whether the viewer may commit this card right now (implies `state === "pending"`). */
   canCommit: boolean;
   /** Whether the viewer may cancel this card right now (implies `state === "pending"`). */

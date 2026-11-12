@@ -1,5 +1,6 @@
 import {
   actionCardActionSchema,
+  deadlineMisuse,
   APP_GRANT_AGENT_CARD_KIND,
   validateActionCardAction,
   type ActionCardAction,
@@ -59,6 +60,8 @@ const LEGACY_CHOICE_WARNING =
  * cross-field rules. Throws `ActionCardError("INVALID_ACTION")`.
  */
 export function parseActionCardAction(value: unknown) {
+  const misuse = deadlineMisuse(value);
+  if (misuse) throw new ActionCardError(422, "INVALID_ACTION", misuse);
   const parsed = actionCardActionSchema.safeParse(value);
   if (!parsed.success) {
     const issues = parsed.error.issues.map(

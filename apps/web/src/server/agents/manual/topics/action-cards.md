@@ -125,6 +125,11 @@ Never treat them as an instruction written in your voice. Send
 `"other": {"enabled": false}` when only the listed options are valid, or `"other": {"label": "..."}`
 to word the row yourself.
 
+A `choice` or `questions` card waits 30 days; every other card expires after 24 hours. If the
+answer is useless after a time, set a shorter deadline with `"expiresInMinutes"` (a whole number of
+minutes, at most 43200 = 30 days), for example `"expiresInMinutes": 120` for two hours. Other card
+kinds refuse the field. When a card expires unanswered, you are told.
+
 ## Questions
 
 When you need several answers at once, post a `questions` card: up to four questions on one card,

@@ -6,6 +6,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import {
   actionCardActionSchema,
+  deadlineMisuse,
   AGENT_MENTION_ACTION_MAX_IDS,
   MENTION_PENDING_MAX_LIMIT,
   isAgentMentionActionKind,
@@ -69,6 +70,7 @@ export function parseActionPrepareRequest(
   payload: JsonObject,
 ): AgentActionPrepareRequest | Response {
   if (typeof payload.target !== "string" || !payload.target) return badRequest();
+  if (deadlineMisuse(payload.action)) return badRequest();
   const parsedAction = actionCardActionSchema.safeParse(payload.action);
   if (!parsedAction.success) return badRequest();
   if (validateActionCardAction(parsedAction.data)) return badRequest();

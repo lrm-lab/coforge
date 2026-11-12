@@ -6,7 +6,10 @@ import { setupActionCards } from "./helpers/action-cards-fixture";
 import { actionCardViews } from "#src/server/conversations/action-card-views.server";
 import { waitingChoiceCards } from "#src/server/conversations/waiting-choice-cards.server";
 import { expireActionCards } from "#src/server/conversations/action-card-expiry.server";
-import { ACTION_CARD_TTL_MS } from "#src/server/conversations/action-card-view.server";
+import {
+  ACTION_CARD_TTL_MS,
+  CHOICE_CARD_TTL_MS,
+} from "#src/server/conversations/action-card-view.server";
 import { actionCardBodySuffix } from "#src/server/conversations/agent-message-view.server";
 import { commitChoiceCard } from "#src/server/conversations/action-card-choice.server";
 
@@ -20,12 +23,12 @@ const choice = (to: string, prompt = "Which color?") => ({
   ],
 });
 
-test("a prepared card expires 24 hours after it is posted, and reads expired before the sweep", async () => {
+test("a prepared resource card expires 24 hours after it is posted, and reads expired before the sweep", async () => {
   const ctx = await setupActionCards();
   try {
     const prepared = await ctx.actionCards.prepare(ctx.principal, {
       target: `#${ctx.hub.channelName}`,
-      action: choice(ctx.alice.username),
+      action: { type: "channel:create", name: `ttl-${ctx.suffix}` },
     });
     const card = await ctx.db.actionCard.findUniqueOrThrow({
       where: { messageId: prepared.messageId },
@@ -36,16 +39,131 @@ test("a prepared card expires 24 hours after it is posted, and reads expired bef
     const window = card.expiresAt!.getTime() - card.createdAt.getTime();
     expect(window).toBeLessThanOrEqual(ACTION_CARD_TTL_MS);
     expect(window).toBeGreaterThan(ACTION_CARD_TTL_MS - 5_000);
-    await ctx.db.actionCard.update({
-      where: { messageId: prepared.messageId },
+    const asked = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: choice(ctx.alice.username),
+    });
+    await ctx.db.actionCard.updateMany({
+      where: { messageId: { in: [prepared.messageId, asked.messageId] } },
       data: { expiresAt: new Date(Date.now() - 1_000) },
     });
     const views = await actionCardViews(ctx.db, ctx.workspace.id, ctx.alice.id, [
       prepared.messageId,
+      asked.messageId,
     ]);
-    expect(views.get(prepared.messageId)?.state).toBe("expired");
-    expect(views.get(prepared.messageId)?.canCommit).toBe(false);
+    for (const id of [prepared.messageId, asked.messageId]) {
+      expect(views.get(id)?.state).toBe("expired");
+      expect(views.get(id)?.canCommit).toBe(false);
+    }
     expect(await waitingChoiceCards(ctx.db, ctx.workspace.id, ctx.alice.id)).toEqual([]);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+const questions = (to: string, expiresInMinutes?: number) => ({
+  type: "questions" as const,
+  to,
+  ...(expiresInMinutes === undefined ? {} : { expiresInMinutes }),
+  questions: [
+    {
+      id: "q",
+      prompt: "Which?",
+      options: [
+        { id: "a", label: "Red" },
+        { id: "b", label: "Blue" },
+      ],
+    },
+  ],
+});
+
+test("a choice or questions card waits 30 days, any other kind 24 hours", async () => {
+  const ctx = await setupActionCards();
+  try {
+    expect(CHOICE_CARD_TTL_MS).toBe(30 * 24 * 60 * 60 * 1_000);
+    const target = `#${ctx.hub.channelName}`;
+    const waits = async (action: unknown) => {
+      const prepared = await ctx.actionCards.prepare(ctx.principal, { target, action });
+      const card = await ctx.db.actionCard.findUniqueOrThrow({
+        where: { messageId: prepared.messageId },
+        select: { expiresAt: true, createdAt: true },
+      });
+      const views = await actionCardViews(ctx.db, ctx.workspace.id, ctx.alice.id, [
+        prepared.messageId,
+      ]);
+      return {
+        window: card.expiresAt!.getTime() - card.createdAt.getTime(),
+        view: views.get(prepared.messageId),
+      };
+    };
+    const choiceCard = await waits(choice(ctx.alice.username));
+    expect(Math.abs(choiceCard.window - CHOICE_CARD_TTL_MS)).toBeLessThan(5_000);
+    expect(choiceCard.view?.deadline).toBeUndefined();
+    const questionsCard = await waits(questions(ctx.alice.username));
+    expect(Math.abs(questionsCard.window - CHOICE_CARD_TTL_MS)).toBeLessThan(5_000);
+    expect(questionsCard.view?.deadline).toBeUndefined();
+    const other = await waits({ type: "channel:create", name: `ttl-${ctx.suffix}` });
+    expect(Math.abs(other.window - ACTION_CARD_TTL_MS)).toBeLessThan(5_000);
+    expect(other.view?.deadline).toBeUndefined();
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("an Agent's deadline on a choice or questions card sets when it expires and shows on its view", async () => {
+  const ctx = await setupActionCards();
+  try {
+    const target = `#${ctx.hub.channelName}`;
+    for (const action of [
+      { ...choice(ctx.alice.username), expiresInMinutes: 90 },
+      questions(ctx.alice.username, 90),
+    ]) {
+      const prepared = await ctx.actionCards.prepare(ctx.principal, { target, action });
+      const card = await ctx.db.actionCard.findUniqueOrThrow({
+        where: { messageId: prepared.messageId },
+        select: { expiresAt: true, createdAt: true },
+      });
+      expect(
+        Math.abs(card.expiresAt!.getTime() - card.createdAt.getTime() - 90 * 60_000),
+      ).toBeLessThan(5_000);
+      const view = (
+        await actionCardViews(ctx.db, ctx.workspace.id, ctx.alice.id, [prepared.messageId])
+      ).get(prepared.messageId);
+      expect(view?.deadline).toBe(card.expiresAt!.toISOString());
+      expect(view?.expiresAt).toBe(view?.deadline);
+
+      // A card no longer waiting has no deadline to meet.
+      await ctx.db.actionCard.update({
+        where: { messageId: prepared.messageId },
+        data: { state: "expired" },
+      });
+      const closed = (
+        await actionCardViews(ctx.db, ctx.workspace.id, ctx.alice.id, [prepared.messageId])
+      ).get(prepared.messageId);
+      expect(closed?.deadline).toBeUndefined();
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("a deadline of zero, below zero, past 30 days, or on another kind is refused", async () => {
+  const ctx = await setupActionCards();
+  try {
+    const target = `#${ctx.hub.channelName}`;
+    const refused = [
+      { ...choice(ctx.alice.username), expiresInMinutes: 0 },
+      { ...choice(ctx.alice.username), expiresInMinutes: -1 },
+      questions(ctx.alice.username, 30 * 24 * 60 + 1),
+      { type: "channel:create", name: `late-${ctx.suffix}`, expiresInMinutes: 60 },
+    ];
+    for (const action of refused)
+      await expect(
+        ctx.actionCards.prepare(ctx.principal, { target, action }),
+      ).rejects.toMatchObject({
+        code: "INVALID_ACTION",
+      });
+    expect(await ctx.db.actionCard.count({ where: { workspaceId: ctx.workspace.id } })).toBe(0);
   } finally {
     await ctx.cleanup();
   }
