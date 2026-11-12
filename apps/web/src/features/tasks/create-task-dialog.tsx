@@ -1,6 +1,13 @@
 import type { TaskProjectRef, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
 import { ChevronRight, XClose } from "@untitledui/icons";
-import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Heading, TextArea } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -28,6 +35,7 @@ import { useTaskAssignmentAccess } from "./use-task-assignment-access";
 import { useLastTaskProject } from "./use-last-task-project";
 import { draftLabels, useWorkspaceLabels } from "./workspace-labels";
 import { emptyDraft, type TaskDraft } from "./task-draft";
+import { registerUnsavedTemporaryState } from "#src/features/updates/build-update";
 
 /**
  * A new Task, laid out as the Task popup lays out a Task (Frank, 11-05: "按照我们目前 task 的设计"):
@@ -80,6 +88,16 @@ export function CreateTaskDialog({
   // "Create more" (task #54): after each Task the form stays open, its title and description
   // cleared and what it was set to kept, for the next one.
   const [more, setMore] = useState(false);
+  useEffect(() => {
+    const dirty =
+      draft.title.trim() !== "" ||
+      draft.description?.trim() !== "" ||
+      draft.assignee !== undefined ||
+      (draft.labels?.length ?? 0) > 0 ||
+      draft.priority !== undefined ||
+      draft.project !== undefined;
+    return registerUnsavedTemporaryState(open && dirty);
+  }, [open, draft]);
   const busy = useRef(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);

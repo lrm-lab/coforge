@@ -19,6 +19,7 @@ import { Route as ApiAgentApiKeysRouteImport } from './routes/api/agent-api-keys
 import { Route as ApiAppAgentEventsRouteImport } from './routes/api.app-agent-events'
 import { Route as ApiAppAgentRequestsRouteImport } from './routes/api.app-agent-requests'
 import { Route as ApiAttachmentsRouteImport } from './routes/api/attachments'
+import { Route as ApiBuildIdRouteImport } from './routes/api/build-id'
 import { Route as ApiJwksRouteImport } from './routes/api/jwks'
 import { Route as ApiMeRouteImport } from './routes/api/me'
 import { Route as AuthGithubRouteImport } from './routes/auth/github'
@@ -241,6 +242,11 @@ const ApiAppAgentRequestsRoute = ApiAppAgentRequestsRouteImport.update({
 const ApiAttachmentsRoute = ApiAttachmentsRouteImport.update({
   id: '/api/attachments',
   path: '/api/attachments',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBuildIdRoute = ApiBuildIdRouteImport.update({
+  id: '/api/build-id',
+  path: '/api/build-id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiJwksRoute = ApiJwksRouteImport.update({
@@ -1213,6 +1219,7 @@ export interface FileRoutesByFullPath {
   '/api/app-agent-events': typeof ApiAppAgentEventsRoute
   '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
+  '/api/build-id': typeof ApiBuildIdRoute
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
   '/auth/github': typeof AuthGithubRouteWithChildren
@@ -1395,6 +1402,7 @@ export interface FileRoutesByTo {
   '/api/app-agent-events': typeof ApiAppAgentEventsRoute
   '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
+  '/api/build-id': typeof ApiBuildIdRoute
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
   '/auth/github': typeof AuthGithubRouteWithChildren
@@ -1576,6 +1584,7 @@ export interface FileRoutesById {
   '/api/app-agent-events': typeof ApiAppAgentEventsRoute
   '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
+  '/api/build-id': typeof ApiBuildIdRoute
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
   '/auth/github': typeof AuthGithubRouteWithChildren
@@ -1762,6 +1771,7 @@ export interface FileRouteTypes {
     | '/api/app-agent-events'
     | '/api/app-agent-requests'
     | '/api/attachments'
+    | '/api/build-id'
     | '/api/jwks'
     | '/api/me'
     | '/auth/github'
@@ -1944,6 +1954,7 @@ export interface FileRouteTypes {
     | '/api/app-agent-events'
     | '/api/app-agent-requests'
     | '/api/attachments'
+    | '/api/build-id'
     | '/api/jwks'
     | '/api/me'
     | '/auth/github'
@@ -2124,6 +2135,7 @@ export interface FileRouteTypes {
     | '/api/app-agent-events'
     | '/api/app-agent-requests'
     | '/api/attachments'
+    | '/api/build-id'
     | '/api/jwks'
     | '/api/me'
     | '/auth/github'
@@ -2309,6 +2321,7 @@ export interface RootRouteChildren {
   ApiAppAgentEventsRoute: typeof ApiAppAgentEventsRoute
   ApiAppAgentRequestsRoute: typeof ApiAppAgentRequestsRouteWithChildren
   ApiAttachmentsRoute: typeof ApiAttachmentsRouteWithChildren
+  ApiBuildIdRoute: typeof ApiBuildIdRoute
   ApiJwksRoute: typeof ApiJwksRoute
   ApiMeRoute: typeof ApiMeRouteWithChildren
   AuthGithubRoute: typeof AuthGithubRouteWithChildren
@@ -2507,6 +2520,13 @@ declare module '@tanstack/react-router' {
       path: '/api/attachments'
       fullPath: '/api/attachments'
       preLoaderRoute: typeof ApiAttachmentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/build-id': {
+      id: '/api/build-id'
+      path: '/api/build-id'
+      fullPath: '/api/build-id'
+      preLoaderRoute: typeof ApiBuildIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/jwks': {
@@ -3957,6 +3977,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAppAgentEventsRoute: ApiAppAgentEventsRoute,
   ApiAppAgentRequestsRoute: ApiAppAgentRequestsRouteWithChildren,
   ApiAttachmentsRoute: ApiAttachmentsRouteWithChildren,
+  ApiBuildIdRoute: ApiBuildIdRoute,
   ApiJwksRoute: ApiJwksRoute,
   ApiMeRoute: ApiMeRouteWithChildren,
   AuthGithubRoute: AuthGithubRouteWithChildren,

@@ -1,9 +1,11 @@
 import { ErrorPageFrame } from "./error-page-frame";
+import { useEffect } from "react";
 import { useRouter } from "@tanstack/react-router";
 
 import { Button } from "#src/components/base/buttons/button";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { isChunkLoadError, showBuildUpdateToast } from "#src/features/updates/build-update-watcher";
 
 export function PageLoadError({ error }: { error: unknown }) {
   const router = useRouter();
@@ -41,6 +43,11 @@ export function PageLoadError({ error }: { error: unknown }) {
 }
 
 export function GlobalError({ error }: { error: unknown }) {
+  const chunkLoadError = isChunkLoadError(error);
+  useEffect(() => {
+    if (chunkLoadError) showBuildUpdateToast();
+  }, [chunkLoadError]);
+  if (chunkLoadError) return <ErrorPageFrame />;
   return (
     <ErrorPageFrame>
       <div className="w-full max-w-lg">
