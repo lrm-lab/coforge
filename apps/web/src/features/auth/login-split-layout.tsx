@@ -31,10 +31,13 @@ export function LoginSplitLayout({ children }: { children: ReactNode }) {
           <Link to="/" aria-label="CoForge" className="self-start xl:hidden">
             <CoForgeMark className="h-7" />
           </Link>
-          {/* From the top, not centred, so the title stays put when the tabs differ in height; on
-              the card the form starts about where centring would put it (it is some 25rem tall),
-              and never so low that the page has to scroll (jing, 11-10: one screen). */}
-          <main className="flex flex-1 items-start justify-center pt-12 pb-12 xl:rounded-[1.875rem] xl:bg-primary xl:px-[7.875rem] xl:pt-[max(2rem,calc(50dvh-16.5rem))] xl:pb-8">
+          {/* From the top, not centred, so the title stays put when the tabs differ in height. On
+              the card the form's middle sits level with the arch's (jing, 11-12, her two boxes: the
+              arch without its shadow, the title to GitHub): the arch centres at about 50dvh - 5.4rem
+              whatever the window and the form is some 24.4rem tall, so it starts 12.2rem above
+              that, less the card's 4rem inset; never so high that it meets the card's top (jing,
+              11-10: one screen). */}
+          <main className="flex flex-1 items-start justify-center pt-12 pb-12 xl:rounded-[1.875rem] xl:bg-primary xl:px-[7.875rem] xl:pt-[max(2rem,calc(50dvh-22rem))] xl:pb-8">
             <div className="w-full max-w-sm xl:w-sm">{children}</div>
           </main>
         </div>
