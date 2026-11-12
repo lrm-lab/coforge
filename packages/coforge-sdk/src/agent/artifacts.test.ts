@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { decodeAgentArtifactRequest } from "./artifacts";
+import {
+  ARTIFACT_SHA256_PATTERN,
+  artifactPathValid,
+  decodeAgentArtifactRequest,
+} from "./artifacts";
 import { agentApiRoutes } from "./routes";
 
 test("an artifact request is one known operation with exactly its own fields", () => {
@@ -150,4 +154,13 @@ test("file bytes go up and come down on their own routes", () => {
       "/api/agent/v1/artifacts/a1/files/css%2Fsite.css",
     );
   }
+});
+
+test("an artifact file path is relative plain segments, and a sha256 is lowercase hex", () => {
+  for (const path of ["index.html", "css/site.css", "a..b.txt", "docs/v1.2/notes.md"])
+    expect(artifactPathValid(path)).toBe(true);
+  for (const path of ["", "/abs", "dir/", "a//b", "./a", "a/../b", "a\\b", "c:x", "a\u0000b"])
+    expect(artifactPathValid(path)).toBe(false);
+  expect(ARTIFACT_SHA256_PATTERN.test("a".repeat(64))).toBe(true);
+  expect(ARTIFACT_SHA256_PATTERN.test("A".repeat(64))).toBe(false);
 });

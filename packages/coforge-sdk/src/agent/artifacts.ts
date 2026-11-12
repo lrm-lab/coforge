@@ -143,7 +143,26 @@ export function decodeAgentArtifactRequest(value: unknown): AgentArtifactRequest
   return request as AgentArtifactRequest;
 }
 
-const SHA256 = /^[0-9a-f]{64}$/;
+/** A file's bytes are named by their sha256, as 64 lowercase hex digits, on every artifact route. */
+export const ARTIFACT_SHA256_PATTERN = /^[0-9a-f]{64}$/;
+
+/**
+ * A file path inside an artifact, as segments: no empty segment (`a//b`, a trailing `/`), no
+ * `.`/`..`, no backslash, colon or control character, nothing absolute. `a..b.txt` is a normal
+ * name and passes. The server refuses any other path; a client checks the same rule.
+ */
+export function artifactPathValid(path: string): boolean {
+  if (!path || path.startsWith("/") || path.endsWith("/")) return false;
+  return path
+    .split("/")
+    .every(
+      (segment) =>
+        segment.length > 0 &&
+        segment !== "." &&
+        segment !== ".." &&
+        !/[\\:\u0000-\u001f\u007f]/.test(segment),
+    );
+}
 
 function isManifestFile(value: unknown): value is AgentArtifactFile {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -153,6 +172,6 @@ function isManifestFile(value: unknown): value is AgentArtifactFile {
     keys.length === 2 &&
     typeof file.path === "string" &&
     typeof file.sha256 === "string" &&
-    SHA256.test(file.sha256)
+    ARTIFACT_SHA256_PATTERN.test(file.sha256)
   );
 }

@@ -1,3 +1,4 @@
+export { artifactPathValid } from "@lrm/coforge-sdk/agent";
 import type { Prisma } from "#src/generated/prisma/client";
 
 /** One file a push adds or replaces: bytes already uploaded under `sha256`. Its size and kind
@@ -49,23 +50,6 @@ export const ARTIFACT_BINARY_LIMIT = 15 * 1024 * 1024;
 export const ARTIFACT_FILE_LIMIT = 200;
 /** A document's (a `markdown` artifact's) own file: what a person edits in one page. */
 export const ARTIFACT_DOCUMENT_LIMIT = 2 * 1024 * 1024;
-
-/**
- * A file path as segments: no empty segment (`a//b`, a trailing `/`), no `.`/`..`, no backslash,
- * no control character, nothing absolute. `a..b.txt` is a normal name and passes.
- */
-export function artifactPathValid(path: string): boolean {
-  if (!path || path.startsWith("/") || path.endsWith("/")) return false;
-  return path
-    .split("/")
-    .every(
-      (segment) =>
-        segment.length > 0 &&
-        segment !== "." &&
-        segment !== ".." &&
-        !/[\\:\u0000-\u001f\u007f]/.test(segment),
-    );
-}
 
 /** The server's own reading of a file's kind, from its extension; the client cannot choose it. */
 export function artifactKindOfPath(path: string): string {
