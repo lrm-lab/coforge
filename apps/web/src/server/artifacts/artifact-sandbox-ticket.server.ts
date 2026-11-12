@@ -23,8 +23,11 @@ export type SandboxTicket = {
   u: string;
   /** The application origin that may frame the page (`frame-ancestors`). */
   o: string;
+  /** When it was made, seconds since the epoch: the wrapper opens for `SANDBOX_TICKET_TTL_SECONDS`
+   * after it. */
+  iat: number;
   /** When its files stop opening, seconds since the epoch: `SANDBOX_FILE_TTL_SECONDS` after it
-   * was made. The wrapper's own end is earlier (`sandboxWrapperOpen`). */
+   * was made. */
   exp: number;
 };
 
@@ -37,25 +40,26 @@ export const SANDBOX_TICKET_TTL_SECONDS = 5 * 60;
 export const SANDBOX_FILE_TTL_SECONDS = 30 * 60;
 
 export function signSandboxTicket(
-  input: Omit<SandboxTicket, "exp">,
+  input: Omit<SandboxTicket, "iat" | "exp">,
   secret: string,
   now: Date,
 ): { ticket: string; expiresAt: Date } {
-  const made = Math.floor(now.getTime() / 1000);
-  const exp = made + SANDBOX_FILE_TTL_SECONDS;
+  const iat = Math.floor(now.getTime() / 1000);
   return {
-    ticket: signValue("artifact-sandbox", { ...input, exp }, secret),
+    ticket: signValue(
+      "artifact-sandbox",
+      { ...input, iat, exp: iat + SANDBOX_FILE_TTL_SECONDS },
+      secret,
+    ),
     // When the link itself (its wrapper) stops opening; its files go on until `exp`.
-    expiresAt: new Date((made + SANDBOX_TICKET_TTL_SECONDS) * 1000),
+    expiresAt: new Date((iat + SANDBOX_TICKET_TTL_SECONDS) * 1000),
   };
 }
 
 /** Whether the ticket still opens its wrapper (a ticket `readSandboxTicket` returned is always
  * good for its files). */
 export function sandboxWrapperOpen(ticket: SandboxTicket, now: Date): boolean {
-  return (
-    (ticket.exp - SANDBOX_FILE_TTL_SECONDS + SANDBOX_TICKET_TTL_SECONDS) * 1000 > now.getTime()
-  );
+  return (ticket.iat + SANDBOX_TICKET_TTL_SECONDS) * 1000 > now.getTime();
 }
 
 /** The ticket's grant, `expired` past its expiry, or null when it is not one we signed (or not
@@ -78,6 +82,7 @@ function isTicket(value: Partial<SandboxTicket>): value is SandboxTicket {
     typeof value.o === "string" &&
     Number.isSafeInteger(value.v) &&
     (value.v ?? 0) > 0 &&
+    Number.isSafeInteger(value.iat) &&
     Number.isSafeInteger(value.exp)
   );
 }

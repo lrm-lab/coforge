@@ -12,13 +12,17 @@ const WINDOW_MS = 60_000;
 export const APP_TOKEN_LIMIT_PER_MINUTE = 30;
 /** Reads a minute per installation across the four endpoints. The docs state this number too. */
 export const APP_INSTALLATION_LIMIT_PER_MINUTE = 120;
-/** Public artifact reads a minute per client IP. */
+/** Public artifact page loads (the wrapper and its frames) a minute per client IP. */
 export const PUBLIC_ARTIFACT_LIMIT_PER_MINUTE = 120;
+/** The other files of public artifact pages (styles, scripts, images, fonts) a minute per client
+ * IP: a page may be up to 200 files, and a reader opens several. */
+export const PUBLIC_ARTIFACT_FILE_LIMIT_PER_MINUTE = 2000;
 
 export type AppRateLimits = {
   token: AppRateLimit;
   installation: AppRateLimit;
   publicArtifact: AppRateLimit;
+  publicArtifactFile: AppRateLimit;
 };
 
 let limits: AppRateLimits | undefined;
@@ -58,6 +62,12 @@ function createAppRateLimits(redisUrl: string | undefined): AppRateLimits {
       windowMs: WINDOW_MS,
       outageLog,
     }),
+    publicArtifactFile: new RedisAppRateLimit(redis, {
+      keyPrefix: "coforge:ratelimit:public-artifact-file:v1",
+      limit: PUBLIC_ARTIFACT_FILE_LIMIT_PER_MINUTE,
+      windowMs: WINDOW_MS,
+      outageLog,
+    }),
   };
 }
 
@@ -72,5 +82,5 @@ function unconfiguredLimits(outageLog: RateLimitOutageLog): AppRateLimits {
       return NO_RATE_LIMIT.admit(id);
     },
   };
-  return { token: limit, installation: limit, publicArtifact: limit };
+  return { token: limit, installation: limit, publicArtifact: limit, publicArtifactFile: limit };
 }

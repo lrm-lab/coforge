@@ -213,7 +213,7 @@ describe("a file that is not html", () => {
       ["app.js", "script", "text/javascript; charset=utf-8"],
       ["img/a.png", "image", "image/png"],
       ["fonts/x.woff2", "font", "font/woff2"],
-      ["data.unknownext", "empty", "application/octet-stream"],
+      ["data.unknownext", "video", "application/octet-stream"],
     ];
     for (const [path, dest, type] of cases) {
       const response = await service.serve(sub(url, path, dest));
@@ -224,7 +224,8 @@ describe("a file that is not html", () => {
         String(text(site().files[path]!).byteLength),
       );
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-      expect(response.headers.get("cache-control")).toBe("no-store");
+      // A signed link pins one version, so its files do not change under it.
+      expect(response.headers.get("cache-control")).toBe("private, max-age=1800, immutable");
       expect(response.headers.get("referrer-policy")).toBe("no-referrer");
       expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
       expect(response.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
@@ -272,20 +273,23 @@ describe("a file that is not html", () => {
       { "Sec-Fetch-Dest": "embed", "Sec-Fetch-Site": "cross-site" },
       { "Sec-Fetch-Dest": "object", "Sec-Fetch-Site": "cross-site" },
       { "Sec-Fetch-Dest": "worker", "Sec-Fetch-Site": "cross-site" },
+      // A fetch or XHR (`connect-src` stops a page making one; the sandbox does not serve one).
+      { "Sec-Fetch-Dest": "empty", "Sec-Fetch-Site": "cross-site" },
+      { "Sec-Fetch-Dest": "empty", "Sec-Fetch-Site": "same-origin" },
       { "Sec-Fetch-Site": "cross-site" },
     ];
     for (const headers of refused)
       expect(
         (await service.serve(new Request(`${url}/page/css/site.css`, { headers }))).status,
       ).toBe(404);
-    for (const dest of ["script", "style", "image", "font", "audio", "video", "track", "empty"])
+    for (const dest of ["script", "style", "image", "font", "audio", "video", "track"])
       for (const site of ["same-origin", "cross-site"])
         expect((await service.serve(sub(url, "css/site.css", dest, site))).status, dest).toBe(200);
   });
 });
 
 describe("an html file", () => {
-  test("is only a frame document: the wrapper's, or a navigation of that frame", async () => {
+  test("is only a frame document: the wrapper's, or a navigation of a frame (never a document)", async () => {
     const { service, url } = await opened();
     // The wrapper's frame, and a link followed inside it (the browser sends an opaque-origin
     // document's navigation as cross-site).
@@ -307,6 +311,13 @@ describe("an html file", () => {
       expect((await service.serve(new Request(`${url}/page/other.html`, { headers }))).status).toBe(
         404,
       );
+  });
+
+  test("is never cached: each load asks again whether its reader may still read it", async () => {
+    const { service, url } = await opened();
+    const served = await service.serve(frame(url, "other.html"));
+    expect(served.headers.get("cache-control")).toBe("no-store");
+    expect((await service.serve(new Request(url))).headers.get("cache-control")).toBe("no-store");
   });
 
   test("gets WebRTC removed first, whatever its name", async () => {

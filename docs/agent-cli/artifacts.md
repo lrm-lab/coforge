@@ -120,9 +120,16 @@ number of files (up to 200) with any `.html` or `.htm` file as its entry.
 The sandbox serves every file of the linked version under the link's own path, so relative
 references (`css/site.css`, `img/a.png`, a link to `other.html`) resolve inside the artifact:
 
-- An `.html` file is served only as the frame of the page (and the pages it links to); any other file
-  only as a script, style, image, font, audio or video request of a page, never as a document of its
-  own. A file of another version or artifact is not reachable through the link.
+- An `.html` file is served only as a frame (the wrapper's, or a link followed inside it); any other
+  file only as a script, style, image, font, audio or video request of a page. None is ever a
+  document of its own, and no origin but the sandbox's and the app's may frame an `.html` file. A
+  link followed inside the page's frame reaches the next file cross-site, exactly as the app
+  framing it directly would: the app's own code can therefore frame an `.html` file without the
+  wrapper. The page stays an opaque, sandboxed origin with nothing reaching outside, but loses the
+  wrapper's guard on where it may send its own frame. A file of another version or artifact is not
+  reachable through the link.
+- A signed link's other files are cached by the browser for the thirty minutes (they never change
+  under it); a public link's for one minute. `.html` files and the wrapper are never cached.
 - A page may also load scripts and styles from a fixed set of public hosts (cdnjs.cloudflare.com,
   cdn.jsdelivr.net, unpkg.com, esm.sh, cdn.tailwindcss.com, code.jquery.com, cdn.plot.ly), web fonts
   from fonts.googleapis.com and fonts.gstatic.com, and images and fonts from those CDNs. The list

@@ -132,7 +132,11 @@ describe("a sandbox ticket", () => {
   test("reads back what was signed; its files open for 30 minutes, the wrapper for 5", () => {
     const { ticket, expiresAt } = signSandboxTicket(grant, SECRET, NOW);
     expect(expiresAt.getTime()).toBe(NOW.getTime() + SANDBOX_TICKET_TTL_SECONDS * 1000);
-    expect(readSandboxTicket(ticket, SECRET, NOW)).toMatchObject(grant);
+    expect(readSandboxTicket(ticket, SECRET, NOW)).toMatchObject({
+      ...grant,
+      iat: NOW.getTime() / 1000,
+      exp: NOW.getTime() / 1000 + SANDBOX_FILE_TTL_SECONDS,
+    });
     expect(readSandboxTicket(ticket, SECRET, expiresAt)).toMatchObject(grant);
     const filesEnd = new Date(NOW.getTime() + SANDBOX_FILE_TTL_SECONDS * 1000);
     expect(readSandboxTicket(ticket, SECRET, new Date(filesEnd.getTime() - 1))).not.toBe("expired");
@@ -265,7 +269,7 @@ describe("the sandbox's answer", () => {
     expect(again.headers.get("content-security-policy")).not.toContain(nonce!);
   });
 
-  test("the page is served only as a frame: never a document of its own, nor the app's frame", async () => {
+  test("the page is served only as a frame: never a document of its own, nor a same-site app's frame", async () => {
     const { service, url } = await opened();
     const cases: Record<string, string>[] = [
       {},

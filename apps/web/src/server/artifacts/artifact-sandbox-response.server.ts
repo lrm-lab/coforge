@@ -58,8 +58,11 @@ export function sandboxPageHeaders(input: {
       "base-uri 'none'",
       // Where a browser enforces it; Chrome does not, hence `WEBRTC_OFF`.
       "webrtc 'block'",
-      // Every ancestor is checked: the wrapper, and the app framing the wrapper. That the app does
-      // not frame the page directly is `serve`'s `Sec-Fetch-Site` check.
+      // Every ancestor is checked: the wrapper, and the app framing the wrapper; no other origin
+      // may frame a page file. The app framing a page file directly is not refused: a link
+      // followed inside the opaque frame arrives the same way (cross-site, `iframe`), so only app
+      // code could do it. The page would still be opaque and sandboxed, but without the wrapper's
+      // `frame-src` guard on where it can send its frame.
       `frame-ancestors ${input.sandboxOrigin} ${input.appOrigin}`,
     ]).join("; "),
     ...COMMON,
@@ -72,13 +75,18 @@ export function sandboxPageHeaders(input: {
  * script and a font are fetched with CORS from the page's opaque origin (`Origin: null`), so the
  * answer admits that origin and no other.
  */
-export function sandboxFileHeaders(contentType: string, length: number): Headers {
+export function sandboxFileHeaders(
+  contentType: string,
+  length: number,
+  cacheControl: string,
+): Headers {
   return new Headers({
     "Content-Type": contentType,
     "Content-Length": String(length),
     "Content-Security-Policy": "sandbox; default-src 'none'",
     "Access-Control-Allow-Origin": "null",
     ...COMMON,
+    "Cache-Control": cacheControl,
   });
 }
 
@@ -91,6 +99,8 @@ export function sandboxFileHeaders(contentType: string, length: number): Headers
  * in a tab.
  */
 export function sandboxWrapper(input: {
+  /** A HEAD request gets the headers and no body. */
+  method: string;
   pagePath: string;
   sandboxOrigin: string;
   appOrigin: string;
@@ -101,7 +111,7 @@ export function sandboxWrapper(input: {
 </head><body><iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src="${input.pagePath}"></iframe>
 <script nonce="${nonce}">(()=>{const f=document.querySelector("iframe");document.addEventListener("securitypolicyviolation",(e)=>{if(!e.violatedDirective.startsWith("frame-src")||!f.isConnected)return;f.remove();const p=document.createElement("p");p.textContent=${JSON.stringify(NAVIGATED_NOTICE)};document.body.append(p);});})();</script>
 </body></html>`;
-  return new Response(body, {
+  return new Response(input.method === "HEAD" ? null : body, {
     status: 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",

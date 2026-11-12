@@ -3,23 +3,29 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
 import { NAVIGATED_NOTICE } from "#src/server/artifacts/artifact-sandbox-response.server";
-import { multiFileSite, onePage, otherLinkSite, type Site } from "./helpers/artifact-sandbox-site";
+import {
+  multiFileSite,
+  onePage,
+  otherLinkSite,
+  siteBytes,
+  siteRow,
+  type Site,
+} from "./helpers/artifact-sandbox-site";
 import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
 
 /**
- * A web-page artifact in a real browser (task #490): its own inline scripts run, its own files
- * (stylesheet, script, module and its import, image, font) load from under its link, and a link
- * to another file of the artifact opens in the frame; and no request it tries goes out — no fetch, XHR, beacon, WebSocket, WebRTC, image, script, stylesheet, form,
- * popup, nor moving the top page — framed in the app or opened in a tab of its own. It reads no
- * cookie and no storage, and an origin other than the one the link was made for cannot frame it.
+ * A web-page artifact in a real browser (task #490): its scripts run, its own files (style,
+ * script, module and its import, image, font) load from under its link, and a link to another
+ * file opens in the frame; and no request it tries goes out — no fetch, XHR, beacon, WebSocket,
+ * WebRTC, image, script, stylesheet, form, popup, nor moving the top page — framed in the app or
+ * opened in a tab. It reads no cookie and no storage, and no other origin can frame it.
  * Everything it tries is aimed at an "outside" server that counts what reaches it. The public
- * hosts its CSP names (`artifact-sandbox-cdns.server.ts`) are pinned as text only: this test never
- * reaches them. A page cannot load a file of another link, whose prefix its CSP does not name.
+ * hosts its CSP names are pinned as text only (this test never reaches them); a page cannot load
+ * a file of another link, whose prefix its CSP does not name.
  *
  * What the browser sends for a page's requests from its opaque frame (`Sec-Fetch-*`, `Origin`) is
  * recorded at the sandbox server and written, with what the page saw, to
- * `.amp/e2e/artifact-sandbox-files/summary.json` (and a screenshot beside it), the repeatable
- * record of the run.
+ * `.amp/e2e/artifact-sandbox-files/summary.json` (and a screenshot), the record of the run.
  *
  * Nor can it navigate its own frame away, which no header of its own forbids: the wrapper's
  * `frame-src` stops the navigation, and the wrapper puts a notice in the frame's place.
@@ -110,22 +116,8 @@ const SITES: Record<string, Site> = {
   hints: onePage(HINTS),
   multi: await multiFileSite(),
 };
-/** `SITES` entries are by artifact id, a file's sha256 here is `<artifact id>/<path>`. */
-const bytesOf = (sha256: string): Uint8Array | null => {
-  const at = sha256.indexOf("/");
-  const content = SITES[sha256.slice(0, at)]?.files[sha256.slice(at + 1)];
-  return content === undefined
-    ? null
-    : typeof content === "string"
-      ? new TextEncoder().encode(content)
-      : content;
-};
-const rowOf = (artifactId: string, path: string) => {
-  const bytes = bytesOf(`${artifactId}/${path}`);
-  return bytes
-    ? { path, sha256: `${artifactId}/${path}`, sizeBytes: bytes.byteLength, kind: "text" }
-    : null;
-};
+const bytesOf = (sha256: string) => siteBytes(SITES, sha256);
+const rowOf = (artifactId: string, path: string) => siteRow(SITES, artifactId, path);
 
 /** What the sandbox server was asked for a file of a page, and how (`Sec-Fetch-*`, `Origin`). */
 type Seen = {
@@ -246,15 +238,47 @@ test("another origin cannot frame a link made for the app", async () => {
   await tab.close();
 });
 
-test("the app cannot frame the page without the wrapper", async () => {
+test("a page file is no document of its own, and no other origin may frame it", async () => {
+  const page = `${await linkFor("probe")}/page/index.html`;
+  // Opened as a top-level document: refused, nothing runs.
   hits.length = 0;
-  const tab = await browser.open(inApp(`${await linkFor("probe")}/page`), {
-    everyDocument: COLLECT,
+  const top = await browser.open(page, { everyDocument: COLLECT });
+  await Bun.sleep(1000);
+  expect(await top.evaluate<string>("document.body.innerText")).toContain("Not found");
+  expect(await top.evaluate<number>("window.__messages.length")).toBe(0);
+  await top.close();
+  // Framed by a cross-site origin that is not the app (so the file is asked for as a frame, and
+  // only `frame-ancestors`, naming the sandbox origin and the app, stops it).
+  const third = Bun.serve({
+    port: 0,
+    hostname: "localhost",
+    fetch: (request) => framing(new URL(request.url).searchParams.get("src")!),
   });
-  await Bun.sleep(1500);
-  expect(await tab.evaluate<number>("window.__messages.length")).toBe(0);
+  try {
+    const embedded = await browser.open(
+      `http://localhost:${third.port}/?src=${encodeURIComponent(page)}`,
+      { everyDocument: COLLECT },
+    );
+    await Bun.sleep(1500);
+    expect(await embedded.evaluate<number>("window.__messages.length")).toBe(0);
+    await embedded.close();
+  } finally {
+    third.stop(true);
+  }
   expect(hits).toEqual([]);
-  await tab.close();
+});
+
+/**
+ * The accepted residual: a link followed inside the frame reaches a page file cross-site, as the
+ * app framing one directly does, so the app's own code can frame one without the wrapper. The
+ * page stays opaque and sandboxed with nothing reaching outside; it lacks only the wrapper's
+ * `frame-src` guard on where it may send its frame.
+ */
+test("the app framing a page file directly leaves it opaque, with nothing reaching outside", async () => {
+  const probe = await probeIn(inApp(`${await linkFor("probe")}/page/index.html`));
+  expect(probe).toMatchObject({ ran: true, origin: "null", storage: "threw", webrtc: "threw" });
+  expect(probe.cookie === "" || probe.cookie === "threw").toBe(true);
+  expect(hits).toEqual([]);
 });
 
 test("a page cannot navigate its own frame away either: the wrapper shows a notice", async () => {

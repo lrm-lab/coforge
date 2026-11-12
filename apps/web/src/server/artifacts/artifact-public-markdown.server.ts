@@ -38,3 +38,31 @@ export function publicMarkdownPage(title: string, text: string): Uint8Array<Arra
     `<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><style>${STYLE}</style></head><body>${heading}${body}</body></html>`,
   );
 }
+
+/**
+ * A public Markdown page as the sandbox answers it: the rendered text, framed by its wrapper on the
+ * sandbox origin (`frame-ancestors` names that origin; `'none'` would leave a broken frame), with
+ * no script and no loading. Null when the text is over `limit` or its bytes are gone.
+ */
+export function publicMarkdownResponse(input: {
+  method: string;
+  title: string;
+  bytes: Uint8Array | null;
+  limit: number;
+  sandboxOrigin: string;
+}): Response | null {
+  if (!input.bytes || input.bytes.byteLength > input.limit) return null;
+  const served = publicMarkdownPage(input.title, new TextDecoder().decode(input.bytes));
+  return new Response(input.method === "HEAD" ? null : new Blob([served]), {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; frame-ancestors ${input.sandboxOrigin}`,
+      "Content-Length": String(served.byteLength),
+      "X-Content-Type-Options": "nosniff",
+      "X-Robots-Tag": "noindex, nofollow",
+      "Referrer-Policy": "no-referrer",
+      "Cache-Control": "no-store",
+    },
+  });
+}

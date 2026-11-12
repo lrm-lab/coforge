@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { ArtifactPublicLinks } from "#src/server/artifacts/artifact-public-links.server";
+import { publicPageLookup } from "#src/server/artifacts/artifact-public-page.server";
 import { rememberArtifactSandboxConfig } from "#src/server/artifacts/artifact-sandbox-config.server";
 
 /**
@@ -131,4 +132,65 @@ test("nothing is read while the Workspace has artifacts off", async () => {
   } finally {
     switchedOn = true;
   }
+});
+
+test("a public link shows the current version's entry and any one file of it", async () => {
+  const made = await db.artifact.create({
+    data: {
+      workspaceId,
+      homeKey: `conversation:${channelId}`,
+      name: `files-${crypto.randomUUID()}`,
+      title: "Site",
+      kind: "html",
+      entryPath: "home.html",
+      currentVersion: 2,
+      authorUserId: owner,
+    },
+  });
+  const version = (number: number, files: Record<string, string>) =>
+    db.artifactVersion.create({
+      data: {
+        artifactId: made.id,
+        number,
+        entryPath: "home.html",
+        changedPaths: [],
+        idempotencyKey: `k${number}`,
+        files: {
+          create: Object.entries(files).map(([path, sha256]) => ({
+            artifactId: made.id,
+            path,
+            sha256,
+            sizeBytes: 1,
+            kind: "text",
+          })),
+        },
+      },
+    });
+  await version(1, { "home.html": "old-home", "old.css": "old-css" });
+  await version(2, { "home.html": "home", "site.css": "css", "img/a.png": "png" });
+  const set = await links.set({ workspaceId, artifactId: made.id, userId: owner, enabled: true });
+  const token = set.enabled ? set.url.slice(set.url.lastIndexOf("/") + 1) : "";
+  let enabled = true;
+  const lookup = publicPageLookup(db, async () => enabled);
+
+  expect(await lookup(token)).toEqual({
+    workspaceId,
+    artifactId: made.id,
+    title: "Site",
+    kind: "html",
+    entryPath: "home.html",
+    sha256: "home",
+  });
+  expect(await lookup(token, "site.css")).toMatchObject({ sha256: "css", entryPath: "home.html" });
+  expect(await lookup(token, "img/a.png")).toMatchObject({ sha256: "png" });
+  // The current version only; and no file means no answer.
+  expect(await lookup(token, "old.css")).toBeNull();
+  expect(await lookup(token, "nope.css")).toBeNull();
+  expect(await lookup("x".repeat(43))).toBeNull();
+  // Off while the experiment is off, and once the link is revoked.
+  enabled = false;
+  expect(await lookup(token, "site.css")).toBeNull();
+  enabled = true;
+  await links.set({ workspaceId, artifactId: made.id, userId: owner, enabled: false });
+  expect(await lookup(token, "site.css")).toBeNull();
 });

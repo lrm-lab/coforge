@@ -84,3 +84,22 @@ export const onePage = (html: string): Site => ({
   entry: "index.html",
   files: { "index.html": html },
 });
+
+/** The bytes of a file by the sha256 the fake read gives it, `<artifact id>/<path>`. */
+export function siteBytes(sites: Record<string, Site>, sha256: string): Uint8Array | null {
+  const at = sha256.indexOf("/");
+  const content = sites[sha256.slice(0, at)]?.files[sha256.slice(at + 1)];
+  return content === undefined
+    ? null
+    : typeof content === "string"
+      ? new TextEncoder().encode(content)
+      : content;
+}
+
+/** One file of a site as the fake read lists it, or null when there is none. */
+export function siteRow(sites: Record<string, Site>, artifactId: string, path: string) {
+  const bytes = siteBytes(sites, `${artifactId}/${path}`);
+  return bytes
+    ? { path, sha256: `${artifactId}/${path}`, sizeBytes: bytes.byteLength, kind: "text" }
+    : null;
+}

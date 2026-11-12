@@ -174,6 +174,71 @@ describe("a public link", () => {
     expect((await service.serve(asking("site.css", "iframe", "same-origin"))).status).toBe(404);
   });
 
+  test("a public page's files are cached briefly, the page and wrapper not at all", async () => {
+    const { service } = multi("html", "index.html");
+    const css = await service.serve(asking("site.css", "style", "cross-site"));
+    expect(css.headers.get("cache-control")).toBe("private, max-age=60");
+    const page = await service.serve(asking("index.html", "iframe", "same-origin"));
+    expect(page.headers.get("cache-control")).toBe("no-store");
+    expect(
+      (await service.serve(new Request(`${SANDBOX}/p/${token}`))).headers.get("cache-control"),
+    ).toBe("no-store");
+  });
+
+  test("the wrapper and its frames spend the page limit; a page's files a far higher one of their own", async () => {
+    const spent = { pages: 0, files: 0 };
+    const counting = (name: "pages" | "files", cap = Infinity): AppRateLimit => {
+      let count = 0;
+      return {
+        admit: async () => {
+          spent[name] += 1;
+          return ++count > cap ? { allowed: false, retryAfterSeconds: 9 } : { allowed: true };
+        },
+      };
+    };
+    const build = (pageLimit: AppRateLimit, fileLimit: AppRateLimit) =>
+      new ArtifactSandbox({
+        reads: {} as never,
+        readBlob: async (_workspaceId, sha256) => new TextEncoder().encode(files[sha256] ?? ""),
+        origin: SANDBOX,
+        secret: async () => SECRET,
+        now: () => NOW,
+        publicPage: async (_token, path) => {
+          const at = path ?? "index.html";
+          return at in files
+            ? {
+                workspaceId: "w1",
+                artifactId: "a1",
+                title: "T",
+                kind: "html",
+                entryPath: "index.html",
+                sha256: at,
+              }
+            : null;
+        },
+        publicRateLimit: pageLimit,
+        publicFileRateLimit: fileLimit,
+        publicClientAddress: () => "192.0.2.1",
+      });
+    // A page of 150 files loads, though the page limit would stop it at 120 requests.
+    const generous = build(counting("pages", 2), counting("files"));
+    expect((await generous.serve(new Request(`${SANDBOX}/p/${token}`))).status).toBe(200);
+    expect((await generous.serve(asking("index.html", "iframe", "same-origin"))).status).toBe(200);
+    for (let i = 0; i < 150; i++)
+      expect((await generous.serve(asking("site.css", "style", "cross-site"))).status).toBe(200);
+    expect(spent).toEqual({ pages: 2, files: 150 });
+    // The files' own limit still holds, and answers 429 with its Retry-After.
+    const tight = build(counting("pages"), counting("files", 1));
+    expect((await tight.serve(asking("site.css", "style", "cross-site"))).status).toBe(200);
+    const refused = await tight.serve(asking("site.css", "style", "cross-site"));
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("retry-after")).toBe("9");
+    // A page file asked for as a frame is a page load; the files limit does not pay for it.
+    const pagesOnly = build(counting("pages", 1), counting("files", 0));
+    expect((await pagesOnly.serve(asking("index.html", "iframe", "same-origin"))).status).toBe(200);
+    expect((await pagesOnly.serve(asking("index.html", "iframe", "same-origin"))).status).toBe(429);
+  });
+
   test("a public Markdown page serves its entry file only", async () => {
     const { service } = multi("markdown", "document.md");
     expect((await service.serve(asking("document.md", "iframe", "same-origin"))).status).toBe(200);

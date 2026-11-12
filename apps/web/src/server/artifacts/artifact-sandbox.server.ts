@@ -10,7 +10,9 @@ import {
   fileRequestUse,
   isPageFile,
   pageFileResponse,
-  type FileRequestUse,
+  PUBLIC_FILE_CACHE,
+  requiredUse,
+  SIGNED_FILE_CACHE,
 } from "./artifact-sandbox-files.server";
 import { decodeSandboxFilePath, sandboxFileUrlPath } from "./artifact-sandbox-path.server";
 import { sandboxRefusal, sandboxWrapper } from "./artifact-sandbox-response.server";
@@ -19,7 +21,7 @@ import {
   sandboxWrapperOpen,
   signSandboxTicket,
 } from "./artifact-sandbox-ticket.server";
-import { publicMarkdownPage } from "./artifact-public-markdown.server";
+import { publicMarkdownResponse } from "./artifact-public-markdown.server";
 
 type SandboxDependencies = {
   reads: Pick<ArtifactReads, "read" | "file">;
@@ -42,7 +44,11 @@ type SandboxDependencies = {
     entryPath: string;
     sha256: string;
   } | null>;
+  /** Spent by a public page's wrapper and frames, per client address. */
   publicRateLimit?: AppRateLimit;
+  /** Spent by each other file of a public page, per client address: far higher, so a page of many
+   * files loads. Falls back to `publicRateLimit`. */
+  publicFileRateLimit?: AppRateLimit;
   publicClientAddress?: (request: Request) => string | undefined;
 };
 
@@ -99,8 +105,10 @@ export class ArtifactSandbox {
    * The sandbox origin's every answer. A valid link (`/a/<ticket>`) is the wrapper; every file of
    * the link's version is under it (`/a/<ticket>/page/<path>`): a page file only as a frame (the
    * wrapper's, or a link followed inside it), any other file only as a subresource of a page
-   * (`fileRequestUse`), so none is ever a document of its own, nor the app's frame; anything else
-   * is a refusal. The wrapper opens for five minutes after the link was made, its files for thirty.
+   * (`fileRequestUse`), so none is ever a document of its own; anything else is a refusal. A page
+   * file is also asked for, cross-site, by a link followed inside the page's opaque frame, so the
+   * app framing one directly is not told apart (an accepted residual: only app code can do it, and
+   * the page stays sandboxed, just without the wrapper's `frame-src` guard). The wrapper opens for five minutes after the link was made, its files for thirty.
    */
   async serve(request: Request): Promise<Response> {
     if (request.method !== "GET" && request.method !== "HEAD")
@@ -135,11 +143,11 @@ export class ArtifactSandbox {
         version: ticket.v,
       }).catch(refusable);
       if (!page) return sandboxRefusal(404, "Not found.");
-      const wrapper = sandboxWrapper({
+      return sandboxWrapper({
+        method: request.method,
         pagePath: `/a/${match[1]}/page/${sandboxFileUrlPath(page.entryPath)}`,
         ...origins,
       });
-      return request.method === "HEAD" ? new Response(null, wrapper) : wrapper;
     }
     const row = await this.deps.reads
       .file({
@@ -159,70 +167,71 @@ export class ArtifactSandbox {
         bytes: await this.deps.readBlob(ticket.w, row.sha256),
         origins,
         filePrefix: `${this.deps.origin}/a/${match[1]}/page/`,
+        fileCache: SIGNED_FILE_CACHE,
       }) ?? sandboxRefusal(404, "Not found.")
     );
   }
 
   private async servePublic(request: Request, token: string, raw?: string): Promise<Response> {
     if (!this.deps.publicPage) return sandboxRefusal(404, "Not found.");
-    const rateLimit = await (this.deps.publicRateLimit ?? NO_RATE_LIMIT).admit(
+    // A public link is the wrapper (no path) or one file of its artifact's current version, a frame
+    // or a subresource by the same rules as a signed link's; a Markdown page has only its entry,
+    // always a frame. Nothing is looked up for a path that names no file or a request no browser
+    // makes of one.
+    const path = raw === undefined ? undefined : decodeSandboxFilePath(raw);
+    const use = path === undefined ? null : fileRequestUse(request.headers);
+    if (
+      path === null ||
+      (path !== undefined && (!use || (use === "subresource" && requiredUse(path) === "frame")))
+    )
+      return sandboxRefusal(404, "Not found.");
+    // A page load (the wrapper, a frame) spends the page limit; each of its other files only the
+    // far higher one of their own, so a page of many files loads.
+    const limit =
+      use === "subresource"
+        ? (this.deps.publicFileRateLimit ?? this.deps.publicRateLimit)
+        : this.deps.publicRateLimit;
+    const admitted = await (limit ?? NO_RATE_LIMIT).admit(
       (this.deps.publicClientAddress ?? clientAddress)(request) ?? "unknown",
     );
-    if (!rateLimit.allowed) {
+    if (!admitted.allowed) {
       const response = sandboxRefusal(429, "Too many requests.");
-      response.headers.set("Retry-After", String(rateLimit.retryAfterSeconds));
+      response.headers.set("Retry-After", String(admitted.retryAfterSeconds));
       return response;
     }
     const origin = this.deps.origin!;
     const origins = { sandboxOrigin: origin, appOrigin: "'none'" };
-    // A public link is the wrapper (no path) or one file of its artifact's current version, which
-    // is a frame or a subresource by the same rules as a signed link's; a Markdown page has only
-    // its entry, always a frame.
-    const path = raw === undefined ? undefined : decodeSandboxFilePath(raw);
-    const use = path === undefined ? null : fileRequestUse(request.headers);
-    if (path === null || (path !== undefined && (!use || (use !== "frame" && isPageFile(path)))))
-      return sandboxRefusal(404, "Not found.");
     const page = await this.deps.publicPage(token, path);
     if (!page) return sandboxRefusal(404, "Not found.");
-    if (path === undefined) {
-      const wrapper = sandboxWrapper({
+    if (path === undefined)
+      return sandboxWrapper({
+        method: request.method,
         pagePath: `/p/${token}/page/${sandboxFileUrlPath(page.entryPath)}`,
         ...origins,
       });
-      return request.method === "HEAD" ? new Response(null, wrapper) : wrapper;
-    }
-    const framed: FileRequestUse =
-      page.kind === "markdown" || isPageFile(path) ? "frame" : "subresource";
-    if (use !== framed || (page.kind === "markdown" && path !== page.entryPath))
+    if (
+      use !== requiredUse(path, page.kind) ||
+      (page.kind === "markdown" && path !== page.entryPath)
+    )
       return sandboxRefusal(404, "Not found.");
     const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
-    if (page.kind === "markdown") {
-      if (!bytes || bytes.byteLength > ARTIFACT_HTML_LIMIT)
-        return sandboxRefusal(404, "Not found.");
-      const served = publicMarkdownPage(page.title, new TextDecoder().decode(bytes));
-      const headers = new Headers({
-        "Content-Type": "text/html; charset=utf-8",
-        // Framed by its wrapper, on this origin; 'none' here leaves a broken frame.
-        "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; frame-ancestors ${origin}`,
-        "X-Content-Type-Options": "nosniff",
-        "X-Robots-Tag": "noindex, nofollow",
-        "Referrer-Policy": "no-referrer",
-        "Cache-Control": "no-store",
-      });
-      headers.set("Content-Length", String(served.byteLength));
-      return new Response(request.method === "HEAD" ? null : new Blob([served]), {
-        status: 200,
-        headers,
-      });
-    }
     return (
-      pageFileResponse({
-        method: request.method,
-        path,
-        bytes,
-        origins,
-        filePrefix: `${origin}/p/${token}/page/`,
-      }) ?? sandboxRefusal(404, "Not found.")
+      (page.kind === "markdown"
+        ? publicMarkdownResponse({
+            method: request.method,
+            title: page.title,
+            bytes,
+            limit: ARTIFACT_HTML_LIMIT,
+            sandboxOrigin: origin,
+          })
+        : pageFileResponse({
+            method: request.method,
+            path,
+            bytes,
+            origins,
+            filePrefix: `${origin}/p/${token}/page/`,
+            fileCache: PUBLIC_FILE_CACHE,
+          })) ?? sandboxRefusal(404, "Not found.")
     );
   }
 
@@ -254,7 +263,7 @@ function requestedFile(request: Request, raw: string): string | null {
   const path = decodeSandboxFilePath(raw);
   if (!path) return null;
   const use = fileRequestUse(request.headers);
-  return use === (isPageFile(path) ? "frame" : "subresource") ? path : null;
+  return use === requiredUse(path) ? path : null;
 }
 
 /** An http(s) origin and nothing else, so it goes into `frame-ancestors` as it is. */
