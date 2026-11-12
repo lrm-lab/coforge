@@ -33,10 +33,9 @@ model MessageForward {
   /// The Workspace the carrying message belongs to, stamped beside it (denormalized from the
   /// message, which the forward row cascades from): the forward picker's "most forwarded" read
   /// counts a member's forwards from here, without joining messages to find them (task #78).
-  /// Nullable for now — a Web instance of the previous release, still live in a rolling deploy,
-  /// writes rows without it; release two backfills those and sets NOT NULL (task #93). The read
-  /// is by equality, so an unfilled row only misses the order until then.
-  workspaceId            String?  @db.Uuid
+  /// NOT NULL since release two: the backfill filled the rows a rolling deploy's old instances
+  /// wrote without it, and the only writer stamps it from the message (task #93).
+  workspaceId            String   @db.Uuid
   /// The person who made the forward — the carrying message's sender's User id, denormalized
   /// from their member row (a member row names a conversation, but the history is the person's).
   /// Null only where the sender was not a person; the picker reads it by equality, so those rows
