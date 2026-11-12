@@ -31,7 +31,11 @@ async function activityRecipients(
   if (message.userId) return [message.userId];
   if (message.threadRootId) {
     const followers = await db.threadFollow.findMany({
-      where: { rootMessageId: message.threadRootId, conversationId: message.conversationId },
+      where: {
+        rootMessageId: message.threadRootId,
+        conversationId: message.conversationId,
+        unfollowedAt: null,
+      },
       select: { member: { select: { userId: true } } },
     });
     return [...new Set(followers.flatMap((row) => (row.member.userId ? [row.member.userId] : [])))];

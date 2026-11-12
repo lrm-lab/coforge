@@ -50,10 +50,21 @@ export async function enrollThreadReplyFollowers(
   const { workspaceId, conversationId, root } = reply;
   const followerIds = new Set(reply.participantMemberIds);
   const existingFollower = await tx.threadFollow.findFirst({
-    where: { rootMessageId: root.id },
+    where: { rootMessageId: root.id, unfollowedAt: null },
     select: { memberId: true },
   });
-  if (root.senderMemberId && !existingFollower) followerIds.add(root.senderMemberId);
+  if (root.senderMemberId && !existingFollower) {
+    const rootAuthorFollow = await tx.threadFollow.findUnique({
+      where: {
+        memberId_rootMessageId: {
+          memberId: root.senderMemberId,
+          rootMessageId: root.id,
+        },
+      },
+      select: { unfollowedAt: true },
+    });
+    if (!rootAuthorFollow?.unfollowedAt) followerIds.add(root.senderMemberId);
+  }
   await tx.threadFollow.createMany({
     data: [...followerIds].map((memberId) => ({
       memberId,
@@ -63,6 +74,14 @@ export async function enrollThreadReplyFollowers(
     })),
     skipDuplicates: true,
   });
+  if (followerIds.size > 0)
+    await tx.threadFollow.updateMany({
+      where: {
+        rootMessageId: root.id,
+        memberId: { in: [...followerIds] },
+      },
+      data: { unfollowedAt: null },
+    });
 }
 
 async function setThreadFollowed(
@@ -80,12 +99,26 @@ async function setThreadFollowed(
       await tx.threadFollow.upsert({
         where: { memberId_rootMessageId: { memberId, rootMessageId } },
         create: { memberId, workspaceId, conversationId, rootMessageId },
-        update: {},
+        update: { unfollowedAt: null },
       });
     } else {
-      const { count } = await tx.threadFollow.deleteMany({ where: { memberId, rootMessageId } });
+      const now = new Date();
+      const existing = await tx.threadFollow.findUnique({
+        where: { memberId_rootMessageId: { memberId, rootMessageId } },
+        select: { unfollowedAt: true },
+      });
+      if (existing) {
+        await tx.threadFollow.update({
+          where: { memberId_rootMessageId: { memberId, rootMessageId } },
+          data: { unfollowedAt: now },
+        });
+      } else {
+        await tx.threadFollow.create({
+          data: { memberId, workspaceId, conversationId, rootMessageId, unfollowedAt: now },
+        });
+      }
       // Only a follow that ended leaves a notice; unfollowing again is not another decision.
-      if (unfollowNotice && count > 0) {
+      if (unfollowNotice && existing && !existing.unfollowedAt) {
         const sequence = await allocateSequence(tx, conversationId);
         await tx.message.create({
           data: {
@@ -108,9 +141,9 @@ async function setThreadFollowed(
 }
 
 /**
- * The thread notice an Agent's unfollow leaves behind: the follow row is deleted, so this is the
- * record. The reason is one line, trimmed to 200 code points, and defaults to "no longer
- * following".
+ * The thread notice an Agent's unfollow leaves behind. The follow row keeps the durable
+ * `unfollowedAt` marker; the notice is only the user-facing explanation. The reason is one line,
+ * trimmed to 200 code points, and defaults to "no longer following".
  */
 export function agentUnfollowNotice(
   displayName: string | null,
@@ -190,6 +223,7 @@ export async function threadFollowingAgents(
       where: {
         rootMessageId: root.id,
         conversationId: channelId,
+        unfollowedAt: null,
         member: {
           agentId: { not: null },
           ...ACTIVE_MEMBER_WHERE,

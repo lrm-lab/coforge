@@ -102,7 +102,7 @@ async function unreadThreads(
            NULL::text AS peer, NULL::text AS "peerKind", mine.muted, COALESCE(tr."readThroughSequence", 0)::int AS "readSeq",
            u.unread, u.mentions, u."latestSeq", u."latestAt"
     FROM (${activeMemberships(workspaceId, agentId)}) mine
-    JOIN "thread_follows" tf ON tf."memberId" = mine."memberId"
+    JOIN "thread_follows" tf ON tf."memberId" = mine."memberId" AND tf."unfollowedAt" IS NULL
     LEFT JOIN "thread_reads" tr
       ON tr."memberId" = tf."memberId" AND tr."rootMessageId" = tf."rootMessageId"
     CROSS JOIN LATERAL (

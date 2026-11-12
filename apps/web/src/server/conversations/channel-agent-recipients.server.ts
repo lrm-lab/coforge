@@ -67,7 +67,11 @@ export async function channelAgentRecipients(
               agentId: { not: null },
               ...ACTIVE_MEMBER_WHERE,
               ...(message.threadRootId
-                ? { threadFollows: { some: { rootMessageId: message.threadRootId } } }
+                ? {
+                    threadFollows: {
+                      some: { rootMessageId: message.threadRootId, unfollowedAt: null },
+                    },
+                  }
                 : { notificationLevel: "all" }),
             },
             select: { agentId: true },

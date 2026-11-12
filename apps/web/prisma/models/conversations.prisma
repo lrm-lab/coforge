@@ -182,6 +182,8 @@ model ThreadFollow {
   conversationId String             @db.Uuid
   workspaceId    String             @db.Uuid
   createdAt      DateTime           @default(now())
+  /// Set when the member explicitly unfollows; the row stays to prevent automatic re-enrollment.
+  unfollowedAt   DateTime?
   member         ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
   root           Message            @relation(fields: [rootMessageId, conversationId], references: [id, conversationId], onDelete: Cascade)
 

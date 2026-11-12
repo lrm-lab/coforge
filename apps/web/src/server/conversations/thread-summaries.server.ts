@@ -164,7 +164,11 @@ export async function followedThreadRootIds(
 ): Promise<string[]> {
   if (!input.viewerMemberId || input.rootIds.length === 0) return [];
   const follows = await db.threadFollow.findMany({
-    where: { memberId: input.viewerMemberId, rootMessageId: { in: [...input.rootIds] } },
+    where: {
+      memberId: input.viewerMemberId,
+      rootMessageId: { in: [...input.rootIds] },
+      unfollowedAt: null,
+    },
     select: { rootMessageId: true },
   });
   return follows.map((follow) => follow.rootMessageId);

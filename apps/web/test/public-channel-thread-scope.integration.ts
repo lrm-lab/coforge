@@ -372,16 +372,16 @@ test("channel threads enforce channel scope and isolate reads, recovery, notific
       undefined,
       agentOnlyRoot.id,
     );
-    expect(
-      await db.threadFollow.findUnique({
-        where: {
-          memberId_rootMessageId: {
-            memberId: aliceMember.id,
-            rootMessageId: agentOnlyRoot.id,
-          },
+    const aliceFollow = await db.threadFollow.findUnique({
+      where: {
+        memberId_rootMessageId: {
+          memberId: aliceMember.id,
+          rootMessageId: agentOnlyRoot.id,
         },
-      }),
-    ).toBeNull();
+      },
+    });
+    expect(aliceFollow).not.toBeNull();
+    expect(aliceFollow?.unfollowedAt).not.toBeNull();
   } finally {
     await db.workspace.deleteMany({ where: { id: { in: [workspace.id, foreignWorkspace.id] } } });
     await db.computer.deleteMany({ where: { ownerId: alice.id } });

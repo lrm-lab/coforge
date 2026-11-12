@@ -37,7 +37,7 @@ function viewerMemberRow(db: PrismaClient, channelId: string, userId: string) {
     include: {
       // Every thread the viewer ever read or followed here, so only the columns the page sends.
       threadReads: { select: { rootMessageId: true, readThroughSequence: true } },
-      threadFollows: { select: { rootMessageId: true } },
+      threadFollows: { where: { unfollowedAt: null }, select: { rootMessageId: true } },
       user: { select: { username: true } },
       pins: { select: { sortOrder: true } },
     },

@@ -19,6 +19,7 @@ export async function listAgentFollowedThreads(
   const follows = await db.threadFollow.findMany({
     where: {
       workspaceId,
+      unfollowedAt: null,
       member: { agentId, ...ACTIVE_MEMBER_WHERE },
       root: { conversation: { channelName: { not: null }, ...VISIBLE_CONVERSATION_WHERE } },
     },

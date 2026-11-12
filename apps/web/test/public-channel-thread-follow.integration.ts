@@ -81,10 +81,93 @@ test("a thread's root author starts following that thread, so later replies reac
       body: "second reply by bob",
       threadRootId: root.id,
     });
-    expect(await followed(alice.id)).toBeNull();
+    expect((await followed(alice.id))?.unfollowedAt).toBeInstanceOf(Date);
+
+    // Explicitly following again clears the marker and makes the root author eligible immediately.
+    await channels.setUserThreadFollowed(workspace.id, alice.id, channel.id, root.id, true);
+    expect((await followed(alice.id))?.unfollowedAt).toBeNull();
   } finally {
     await db.workspace.deleteMany({ where: { id: workspace.id } });
     await db.user.deleteMany({ where: { id: { in: [alice.id, bob.id] } } });
+    await db.$disconnect();
+  }
+});
+
+test("an Agent's explicit thread unfollow survives a later reply from another member", async () => {
+  const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+  if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const owner = await db.user.create({
+    data: { displayName: `owner${suffix}`, username: `owner${suffix}` },
+  });
+  const replier = await db.user.create({
+    data: { displayName: `reply${suffix}`, username: `reply${suffix}` },
+  });
+  const workspace = await db.workspace.create({
+    data: {
+      slug: `agent-unfollow-${suffix}`,
+      name: "Agent unfollow",
+      members: { create: [{ userId: owner.id }, { userId: replier.id }] },
+    },
+  });
+  try {
+    const agent = await db.agent.create({
+      data: {
+        workspaceId: workspace.id,
+        ownerId: owner.id,
+        name: `helper-${suffix}`,
+        displayName: "Helper",
+        runtimeConfig: {},
+      },
+    });
+    await enrollGeneral(db, workspace.id);
+    const channels = new PublicChannels(
+      db,
+      new RedisMessageRequestIdempotency(redis),
+      quietCentrifugo(),
+    );
+    const repo = new PrismaDirectConversationRepository(db);
+    const general = (await channels.list(workspace.id, owner.id))[0]!;
+
+    const root = await repo.sendAgentMessage(general.id, agent.id, "agent root");
+    const target = `#general:${root.id}`;
+    await repo.setAgentThreadFollowed(workspace.id, agent.id, target, true);
+    await repo.setAgentThreadFollowed(workspace.id, agent.id, target, false);
+    await channels.send({
+      workspaceId: workspace.id,
+      userId: replier.id,
+      channelId: general.id,
+      idempotencyKey: crypto.randomUUID(),
+      body: "ordinary human reply",
+      threadRootId: root.id,
+    });
+
+    const agentMember = await db.conversationMember.findUniqueOrThrow({
+      where: { conversationId_agentId: { conversationId: general.id, agentId: agent.id } },
+      select: { id: true },
+    });
+    const unfollowed = await db.threadFollow.findUnique({
+      where: { memberId_rootMessageId: { memberId: agentMember.id, rootMessageId: root.id } },
+    });
+    expect(unfollowed).not.toBeNull();
+    expect(unfollowed?.unfollowedAt).not.toBeNull();
+
+    // Explicitly following again also clears the marker and makes the Agent eligible immediately.
+    await repo.setAgentThreadFollowed(workspace.id, agent.id, target, false);
+    await repo.setAgentThreadFollowed(workspace.id, agent.id, target, true);
+    expect(
+      (
+        await db.threadFollow.findUnique({
+          where: { memberId_rootMessageId: { memberId: agentMember.id, rootMessageId: root.id } },
+        })
+      )?.unfollowedAt,
+    ).toBeNull();
+  } finally {
+    await db.workspace.delete({ where: { id: workspace.id } });
+    await db.user.deleteMany({ where: { id: { in: [owner.id, replier.id] } } });
+    redis.close();
     await db.$disconnect();
   }
 });

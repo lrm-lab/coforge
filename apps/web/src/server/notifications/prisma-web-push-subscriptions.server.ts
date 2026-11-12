@@ -239,7 +239,13 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
         { notificationLevel: "all" },
         { userId: { in: mentionedUserIds } },
         ...(message.threadRootId
-          ? [{ threadFollows: { some: { rootMessageId: message.threadRootId } } }]
+          ? [
+              {
+                threadFollows: {
+                  some: { rootMessageId: message.threadRootId, unfollowedAt: null },
+                },
+              },
+            ]
           : []),
       ],
       user: { preferences: { browserNotificationsEnabled: true } },

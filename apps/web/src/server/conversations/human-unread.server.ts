@@ -279,7 +279,8 @@ export function followedChannelThreadsSql(workspaceId: string, userId: string) {
      AND c."hiddenFromWorkspaceAt" IS NULL
     WHERE cm."userId" = ${userId}::uuid
       AND cm."workspaceId" = ${workspaceId}::uuid
-      AND cm."leftAt" IS NULL`;
+      AND cm."leftAt" IS NULL
+      AND tf."unfollowedAt" IS NULL`;
 }
 
 /**
