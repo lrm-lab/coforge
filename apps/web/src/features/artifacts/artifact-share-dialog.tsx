@@ -1,5 +1,5 @@
 import { Heading } from "react-aria-components";
-import { Building02, Check, Copy01, Globe02, Send01, XClose } from "@untitledui/icons";
+import { Building02, Copy01, Globe02, Send01, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -102,17 +102,9 @@ function ShareBody({
           onClick={close}
         />
       </div>
-      <div className="mt-4 flex items-start gap-3 rounded-xl bg-secondary p-3 ring-1 ring-inset ring-primary">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary ring-1 ring-secondary">
-          <Building02 aria-hidden="true" className="size-4 text-fg-secondary" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium text-primary">{m.doc_share_workspace()}</span>
-          <span className="mt-0.5 block text-sm text-tertiary">
-            {m.doc_share_workspace_detail()}
-          </span>
-        </span>
-        <Check aria-hidden="true" className="mt-1 size-4 shrink-0 text-fg-primary" />
+      <div className="mt-4 flex items-center gap-3">
+        <Building02 aria-hidden="true" className="size-4 shrink-0 text-fg-secondary" />
+        <span className="text-sm font-medium text-primary">{m.doc_share_workspace()}</span>
       </div>
       {link.available && (
         <PublicLink

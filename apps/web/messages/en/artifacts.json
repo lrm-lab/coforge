@@ -53,7 +53,6 @@
   "doc_share": "Share",
   "doc_share_title": "Share “{title}”",
   "doc_share_workspace": "Everyone in the Workspace",
-  "doc_share_workspace_detail": "Any member of the Workspace, in the conversation or not.",
   "doc_share_link": "Anyone with the link",
   "doc_share_link_detail": "No sign-in needed. They can view it, not change it.",
   "doc_copy_public_link": "Copy public link",
