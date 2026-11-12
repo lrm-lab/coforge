@@ -14,12 +14,16 @@ import { useConversationTasksCollection } from "./use-conversation-tasks";
  */
 export function ConversationTaskDemand({
   conversationId,
+  channelName,
   messages,
   hasNewer,
   readWindow,
   openTaskNumber,
 }: {
   conversationId: string;
+  /** The channel's name in the channel list the messages render with: a body's `#name:#N` under
+   * it names this conversation's own Task. Undefined for a direct message. */
+  channelName: string | undefined;
   messages: readonly { sequence: number; body: string }[];
   /** Whether the window is pinned in history, with newer messages past its end. */
   hasNewer: boolean;
@@ -27,8 +31,8 @@ export function ConversationTaskDemand({
   openTaskNumber: number | undefined;
 }) {
   const window = useMemo(
-    () => messageWindowTasks(messages, hasNewer, conversationId),
-    [messages, hasNewer, conversationId],
+    () => messageWindowTasks(messages, hasNewer, conversationId, channelName),
+    [messages, hasNewer, conversationId, channelName],
   );
   // Only what the reads depend on reaches them, so a message that changes none of it (most
   // realtime messages) rebuilds no query.

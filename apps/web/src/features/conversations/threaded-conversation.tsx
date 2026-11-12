@@ -193,6 +193,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     <>
       <ConversationTaskDemand
         conversationId={conversation.conversationId}
+        channelName={channelNames.get(conversation.conversationId)}
         messages={!taskPopup ? conversation.messages : openTaskRoot ? [openTaskRoot] : NO_MESSAGES}
         hasNewer={conversation.hasNewer ?? false}
         readWindow={!taskPopup}
