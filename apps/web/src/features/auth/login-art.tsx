@@ -22,12 +22,23 @@ const LEAN: Keyframe[] = [
   { transform: "rotate(-4deg) translateX(-2%)" },
 ];
 
+/** A hop to each side and back when the pointer comes onto the agent (jing, 11-12). */
+const HOP: Keyframe[] = [
+  { transform: "translateX(0)" },
+  { transform: "translateX(-5%)", offset: 0.25 },
+  { transform: "translateX(4%)", offset: 0.55 },
+  { transform: "translateX(-1.5%)", offset: 0.8 },
+  { transform: "translateX(0)" },
+];
+const HOP_MS = 520;
+
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * The brand panel's picture, in the designer's own layers (`public/login/`): the door frame, the
- * white door standing ajar in it (it swings further in on hover), the agent in front and its shadow
- * on the ground. The motion is `login-art.css`.
+ * The brand panel's picture, in the designer's own layers (`public/login/`): the arch with its white
+ * door ajar (one still picture), the agent in front and its shadow on the ground. The float and the
+ * shadow's breath are `login-art.css`; the pointer coming onto the agent makes it hop side to side
+ * once.
  *
  * The agent answers the forms beside it (jing, 11-10; `login-art-state.tsx`): while a password is
  * typed it shuts its eyes and leans away; once signed in it smiles and sways hello with a bubble
@@ -38,6 +49,7 @@ export function LoginArt() {
   const attach = useAttachLoginArt();
   const root = useRef<HTMLDivElement>(null);
   const agent = useRef<HTMLDivElement>(null);
+  const hop = useRef<HTMLDivElement>(null);
   const [away, setAway] = useState(false);
   const [greeting, setGreeting] = useState<LoginWelcome | null>(null);
 
@@ -77,29 +89,38 @@ export function LoginArt() {
     return () => attach(null);
   }, [attach]);
 
+  // One hop at a time, none during the greeting, none for someone who asked for less motion.
+  const onHop = () => {
+    const el = hop.current;
+    if (!el || greeting !== null || el.getAnimations().length > 0) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    el.animate(HOP, { duration: HOP_MS, easing: "ease-in-out" });
+  };
+
   // The greeting's smile wins over eyes shut: pressing Enter in the field greets at once.
   const smiling = greeting !== null;
   const shut = away && !smiling;
   return (
     <div ref={root} className="login-art" aria-hidden="true">
       <img src="/login/frame.webp" alt="" className="login-art__frame" />
-      <img src="/login/door.webp" alt="" className="login-art__door" />
       <img src="/login/shadow.webp" alt="" className="login-art__shadow" />
-      <div ref={agent} className="login-art__agent">
-        <div className="login-art__float">
-          <img src="/login/agent.webp" alt="" className="login-art__face" />
-          <img
-            src="/login/agent-eyes-shut.webp"
-            alt=""
-            className="login-art__face login-art__face--over login-art__face--shut"
-            data-shown={shut || undefined}
-          />
-          <img
-            src="/login/agent-smile.webp"
-            alt=""
-            className="login-art__face login-art__face--over login-art__face--smile"
-            data-shown={smiling || undefined}
-          />
+      <div ref={agent} className="login-art__agent" onPointerEnter={onHop}>
+        <div ref={hop}>
+          <div className="login-art__float">
+            <img src="/login/agent.webp" alt="" className="login-art__face" />
+            <img
+              src="/login/agent-eyes-shut.webp"
+              alt=""
+              className="login-art__face login-art__face--over login-art__face--shut"
+              data-shown={shut || undefined}
+            />
+            <img
+              src="/login/agent-smile.webp"
+              alt=""
+              className="login-art__face login-art__face--over login-art__face--smile"
+              data-shown={smiling || undefined}
+            />
+          </div>
         </div>
       </div>
       {greeting ? (
