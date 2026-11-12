@@ -7,11 +7,10 @@ export { API_KEY_ENV_BY_PROVIDER, SessionEnvironmentError } from "#src/runtime-p
 export {
   createSession,
   discoverModels,
-  discoverPiModels,
   findSessionFile,
-  PI_MODEL_REFRESH_TIMEOUT_MS,
   resolveAgentSessionFile,
 } from "#src/runner";
+export { discoverPiModels, PI_MODEL_REFRESH_TIMEOUT_MS } from "#src/pi-model-catalog";
 export {
   EVAL_DISABLE_HOST_PI_INJECTION,
   evalDisablesHostPiInjection,
