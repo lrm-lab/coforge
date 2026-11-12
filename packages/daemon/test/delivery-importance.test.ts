@@ -18,6 +18,8 @@ test("a named Agent, a direct message, assigned work and a card's answer are rel
     { ...plain, nonMemberMention: true },
     { target: "@coforge-runtime" },
     { ...plain, taskExecutionSessionId: "01a1c000-0000-7000-8000-000000000000" },
+    // Assigned work and its discussion, as the server's task ref reports it.
+    { ...plain, taskDiscussion: true },
     { ...plain, reason: "choice" },
     { ...plain, reason: "expired" },
   ])
@@ -36,4 +38,10 @@ test("channel traffic and maintenance items get one notice", () => {
   // A channel name that merely contains an `@` is not a direct message: the target names the
   // Agent only when it starts with one.
   expect(deliveryImportance({ target: "#team@work" })).toBe(DELIVERY_IMPORTANCE.BEST_EFFORT);
+  // A task-shaped target alone is not a task: only the server's own task ref makes it one, so a
+  // channel thread whose id happens to be digits stays channel traffic.
+  expect(deliveryImportance({ target: "#board:#12" })).toBe(DELIVERY_IMPORTANCE.BEST_EFFORT);
+  expect(deliveryImportance({ target: "#board:#12", taskDiscussion: false })).toBe(
+    DELIVERY_IMPORTANCE.BEST_EFFORT,
+  );
 });
