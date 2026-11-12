@@ -258,10 +258,10 @@ test("who may resolve: the thread's author, the artifact's author, an Agent's ow
   expect((await resolve(f.agents.other, second.body.id)).body.changed).toBe(true);
 });
 
-test("a person resolves as the thread's author, the artifact's author, the authoring Agent's owner, or an admin", async () => {
+test("a person resolves as the thread's author, the authoring Agent's owner, or an admin", async () => {
   const artifact = await f.make("People resolve");
   const row = await f.db.artifact.findUniqueOrThrow({ where: { id: artifact } });
-  const artifactAuthor = { authorUserId: row.authorUserId, authorAgentId: row.authorAgentId };
+  const artifactAuthor = { authorAgentId: row.authorAgentId };
   const thread = (author: { authorUserId?: string | null; authorAgentId?: string | null }) => ({
     authorUserId: null,
     authorAgentId: null,
@@ -273,18 +273,7 @@ test("a person resolves as the thread's author, the artifact's author, the autho
   expect(await can(f.alice)).toBe(true);
   expect(await can(f.bob)).toBe(false);
   expect(await can(f.bob, thread({ authorUserId: f.bob }))).toBe(true);
-  const made = await f.db.artifact.update({
-    where: { id: artifact },
-    data: { authorAgentId: null, authorUserId: f.bob },
-  });
-  expect(
-    await canResolveArtifactComment(
-      f.db,
-      f.workspaceId,
-      { userId: f.bob },
-      { artifact: { authorUserId: made.authorUserId, authorAgentId: null }, root: thread({}) },
-    ),
-  ).toBe(true);
+  // An Agent that neither started the thread nor made the artifact may not.
   expect(
     await canResolveArtifactComment(
       f.db,

@@ -35,6 +35,7 @@ let documents: ArtifactDocuments;
 let workspaceId: string;
 let alice: string;
 let agentId: string;
+let insiderId: string;
 let secretId: string;
 
 beforeAll(async () => {
@@ -64,13 +65,27 @@ beforeAll(async () => {
       },
     })
   ).id;
+  insiderId = (
+    await db.agent.create({
+      data: {
+        workspaceId,
+        name: `ab-insider-${handle}`,
+        displayName: "Insider",
+        ownerId: alice,
+        runtimeConfig: {},
+      },
+    })
+  ).id;
   secretId = (
     await db.conversation.create({
       data: { workspaceId, channelName: `ab-secret-${handle}`, visibility: "private" },
     })
   ).id;
-  await db.conversationMember.create({
-    data: { conversationId: secretId, workspaceId, userId: alice },
+  await db.conversationMember.createMany({
+    data: [
+      { conversationId: secretId, workspaceId, userId: alice },
+      { conversationId: secretId, workspaceId, agentId: insiderId },
+    ],
   });
 });
 
@@ -276,7 +291,8 @@ async function made(
 ) {
   for (const bytes of Object.values(files)) await upload(bytes);
   const created = await post({
-    operation: "create",
+    operation: "push",
+    idempotencyKey: crypto.randomUUID(),
     title: "Bytes",
     ...extra,
     files: Object.entries(files).map(([path, bytes]) => ({ path, sha256: sha256(bytes) })),
@@ -358,11 +374,20 @@ test("a download of a missing file, version or artifact is not found, as a read 
 
   // An artifact in a private channel the Agent is not a member of is still readable: every
   // Workspace member reads every artifact; the private home only keeps the Agent from writing.
+  const hush = await blobs.upload({
+    workspaceId,
+    bytes: text("hush\n"),
+    actor: { agentId: insiderId },
+  });
   const secret = await documents.create(
-    { workspaceId, actor: { userId: alice } },
-    { conversationId: secretId, title: "Secret", text: "hush\n" },
+    { workspaceId, actor: { agentId: insiderId } },
+    {
+      conversationId: secretId,
+      title: "Secret",
+      manifest: { files: [{ path: "hush.md", sha256: hush.sha256 }] },
+    },
   );
-  const readable = await get(secret.id, "document.md");
+  const readable = await get(secret.id, "hush.md");
   expect(readable.status).toBe(200);
   expect(await readable.text()).toBe("hush\n");
 });

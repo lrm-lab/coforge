@@ -7,7 +7,7 @@ import type {
   StoredFile,
 } from "#src/server/files/file-storage.server";
 import { errorType } from "#src/server/errors/error-type.server";
-import type { ArtifactActor } from "./artifact-access.server";
+import type { ArtifactPublisher } from "./artifact-access.server";
 import {
   ARTIFACT_BINARY_LIMIT,
   ARTIFACT_TEXT_LIMIT,
@@ -78,7 +78,7 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
     workspaceId: string;
     bytes: Uint8Array<ArrayBuffer>;
     sha256?: string;
-    actor?: ArtifactActor;
+    actor?: ArtifactPublisher;
     unreferencedQuotaBytes?: number;
   }) {
     const blob = await this.#store(input);
@@ -103,7 +103,7 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
   async allowed(
     workspaceId: string,
     artifactId: string | undefined,
-    actor: ArtifactActor,
+    actor: ArtifactPublisher,
     sha256s: readonly string[],
   ): Promise<Set<string>> {
     if (sha256s.length === 0) return new Set();
@@ -260,6 +260,5 @@ function invalid(errorId: string, hint?: string): never {
   throw new AppError("INVALID_INPUT", { errorId, ...(hint ? { hint } : {}) });
 }
 
-/** How a grant names its actor. */
-const actorKey = (actor: ArtifactActor) =>
-  actor.agentId ? `agent:${actor.agentId}` : `user:${actor.userId}`;
+/** How a grant names its Agent. */
+const actorKey = (actor: ArtifactPublisher) => `agent:${actor.agentId}`;

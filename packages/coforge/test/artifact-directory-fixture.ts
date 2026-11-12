@@ -99,12 +99,11 @@ export function fakeServer(initial: Files = {}, title = "Launch plan") {
             ...(unseen !== undefined && request.version === undefined ? { unseen } : {}),
           };
         }
-        if (request.operation !== "push" && request.operation !== "create")
-          throw new Error(`unexpected ${request.operation}`);
+        if (request.operation !== "push") throw new Error(`unexpected ${request.operation}`);
         if (server.clash)
           throw new CliError({
             code: "CONFLICT",
-            message: "conflict (artifact-agent-base-moved): the artifact changed after you read it",
+            message: "conflict (artifact-base-moved): the artifact changed after you read it",
             details: { files: server.clash.join("\n"), settings: "title" },
           });
         const missing = (request.files ?? [])
@@ -113,9 +112,9 @@ export function fakeServer(initial: Files = {}, title = "Launch plan") {
         if (missing.length > 0) return { status: "missing", missing };
         const next = new Map(versions.at(-1));
         for (const file of request.files ?? []) next.set(file.path, file.sha256);
-        for (const path of request.delete ?? []) next.delete(path);
+        for (const path of "delete" in request ? (request.delete ?? []) : []) next.delete(path);
         versions.push(next);
-        return request.operation === "create"
+        return request.artifact === undefined
           ? {
               id: ID,
               name: "launch-plan",

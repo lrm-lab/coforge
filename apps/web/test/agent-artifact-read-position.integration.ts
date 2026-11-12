@@ -17,7 +17,8 @@ import { handleAgentArtifactPost } from "#src/routes/api/agent/v1/artifacts";
 /**
  * An Agent's read position on an artifact: reading the current version says what others
  * published since the Agent last looked, and moves the position forward, never back. Its own
- * create and push move it too; reading an older version moves nothing.
+ * push (a new artifact's first, or one over a version) moves it too; reading an older version
+ * moves nothing.
  */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -25,16 +26,22 @@ const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const handle = crypto.randomUUID().slice(0, 8);
 
 let root: string;
+let blobs: StoredArtifactBlobs;
 let documents: ArtifactDocuments;
 let artifacts: Artifacts;
 let workspaceId: string;
 let alice: string;
-const agents: Record<"reader" | "writer" | "fresh", string> = { reader: "", writer: "", fresh: "" };
+const agents: Record<"reader" | "writer" | "fresh" | "other", string> = {
+  reader: "",
+  writer: "",
+  fresh: "",
+  other: "",
+};
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-read-position-"));
   const storage = new LocalFileStorage(root);
-  const blobs = new StoredArtifactBlobs(db, async () => storage);
+  blobs = new StoredArtifactBlobs(db, async () => storage);
   artifacts = new Artifacts(db, blobs, { enabled: async () => true });
   documents = new ArtifactDocuments(db, artifacts, blobs);
   alice = (await db.user.create({ data: { username: `rp-a-${handle}`, displayName: "Alice" } })).id;
@@ -51,6 +58,7 @@ beforeAll(async () => {
     ["reader", "Reader Bot"],
     ["writer", "Writer Bot"],
     ["fresh", "Fresh Bot"],
+    ["other", "Other Bot"],
   ] as const) {
     agents[key] = (
       await db.agent.create({
@@ -95,47 +103,61 @@ async function post(agentId: string, body: unknown, services: { db: typeof db } 
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db: services.db, artifacts, documents, enabled: async () => true },
+    { db: services.db, documents, enabled: async () => true },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
 
 const key = () => crypto.randomUUID();
 
-/** A Workspace document made by the Writer Bot (its version 1). */
+/** The `document.md` file of some text, uploaded by the Agent and named as a manifest. */
+async function document(agentId: string, text: string) {
+  const { sha256 } = await blobs.upload({
+    workspaceId,
+    bytes: new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>,
+    actor: { agentId },
+  });
+  return [{ path: "document.md", sha256 }];
+}
+
+/** A Workspace artifact made by the Writer Bot (its version 1). */
 async function make(title: string) {
-  const created = await post(agents.writer, { operation: "create", title, text: "one\n" });
+  const created = await post(agents.writer, {
+    operation: "push",
+    title,
+    idempotencyKey: key(),
+    files: await document(agents.writer, "one\n"),
+  });
   expect(created.status).toBe(200);
   return created.body.id as string;
 }
 
-/** A save over the newest version, by a person or by an Agent. */
+/** A push over the newest version, by an Agent. */
 async function save(
   artifact: string,
-  by: { userId: string } | { agentId: string },
+  by: { agentId: string },
   text: string,
   extra: { note?: string; label?: string } = {},
 ) {
   const current = (await db.artifact.findUniqueOrThrow({ where: { id: artifact } })).currentVersion;
-  if ("agentId" in by) {
-    const saved = await post(by.agentId, {
-      operation: "push",
-      artifact,
-      baseVersion: current,
-      idempotencyKey: key(),
-      text,
-      ...extra,
-    });
-    expect(saved.body.status).toBe("created");
-    return saved.body.number as number;
-  }
-  const saved = await documents.save(
-    { workspaceId, actor: by },
-    { artifactId: artifact, baseVersion: current, idempotencyKey: key(), text, ...extra },
-  );
-  expect(saved.status).toBe("created");
-  return current + 1;
+  const saved = await post(by.agentId, {
+    operation: "push",
+    artifact,
+    baseVersion: current,
+    idempotencyKey: key(),
+    files: await document(by.agentId, text),
+    ...extra,
+  });
+  expect(saved.body.status).toBe("created");
+  return saved.body.number as number;
 }
+
+/** The Other Bot, whose pushes are others' (read when used: the ids exist after `beforeAll`). */
+const other = {
+  get agentId() {
+    return agents.other;
+  },
+};
 
 const positionOf = async (artifactId: string, agentId: string) =>
   (
@@ -146,7 +168,7 @@ const positionOf = async (artifactId: string, agentId: string) =>
 
 test("a first read lists what others published, newest first, and says it is the first", async () => {
   const artifact = await make("First read");
-  await save(artifact, { userId: alice }, "two\n", { note: "tightened", label: "draft" });
+  await save(artifact, other, "two\n", { note: "tightened", label: "draft" });
   const read = await post(agents.reader, { operation: "read", artifact });
   expect(read.status).toBe(200);
   // Every field a read answered before is still there.
@@ -155,7 +177,7 @@ test("a first read lists what others published, newest first, and says it is the
   expect(read.body.unseen.versions).toEqual([
     {
       number: 2,
-      publisher: { kind: "user", name: "Alice" },
+      publisher: { kind: "agent", name: "Other Bot" },
       createdAt: expect.any(String),
       note: "tightened",
       label: "draft",
@@ -182,7 +204,7 @@ test("a first read lists what others published, newest first, and says it is the
 test("others' versions since the position are listed and counted; the Agent's own are left out", async () => {
   const artifact = await make("Own and others");
   await post(agents.reader, { operation: "read", artifact });
-  await save(artifact, { userId: alice }, "two\n");
+  await save(artifact, other, "two\n");
   await save(artifact, { agentId: agents.reader }, "three\n");
   await save(artifact, { agentId: agents.writer }, "four\n");
   // The Reader's own push moved its position to 3, so only the Writer's version 4 is new.
@@ -196,7 +218,7 @@ test("others' versions since the position are listed and counted; the Agent's ow
   expect(fresh.body.unseen).toMatchObject({ firstRead: true, versionCount: 4 });
   // Its own version 5 in the middle of the range is excluded from list and count.
   await save(artifact, { agentId: agents.fresh }, "five\n");
-  await save(artifact, { userId: alice }, "six\n");
+  await save(artifact, other, "six\n");
   await db.artifactReadPosition.deleteMany({
     where: { artifactId: artifact, agentId: agents.fresh },
   });
@@ -209,7 +231,7 @@ test("others' versions since the position are listed and counted; the Agent's ow
 
 test("a read lists the newest five of many and counts them all", async () => {
   const artifact = await make("Many");
-  for (let n = 2; n <= 8; n += 1) await save(artifact, { userId: alice }, `v${n}\n`);
+  for (let n = 2; n <= 8; n += 1) await save(artifact, other, `v${n}\n`);
   const read = await post(agents.reader, { operation: "read", artifact });
   expect(read.body.unseen).toMatchObject({ firstRead: true, versionCount: 8 });
   expect(read.body.unseen.versions.map((v: { number: number }) => v.number)).toEqual([
@@ -219,8 +241,8 @@ test("a read lists the newest five of many and counts them all", async () => {
 
 test("the position moves on a read of the current version, not of an older one", async () => {
   const artifact = await make("Older");
-  await save(artifact, { userId: alice }, "two\n");
-  await save(artifact, { userId: alice }, "three\n");
+  await save(artifact, other, "two\n");
+  await save(artifact, other, "three\n");
 
   const older = await post(agents.reader, { operation: "read", artifact, version: 1 });
   expect(older.body.unseen).toBeNull();
@@ -236,11 +258,11 @@ test("the position moves on a read of the current version, not of an older one",
   expect(await positionOf(artifact, agents.reader)).toBe(3);
 });
 
-test("an Agent's create and push move its position to its own version", async () => {
+test("an Agent's first push and its pushes over a version move its position to its own version", async () => {
   const artifact = await make("Mine");
-  // The Writer made version 1 and has not read it: its create moved it.
+  // The Writer made version 1 and has not read it: its push moved it.
   expect(await positionOf(artifact, agents.writer)).toBe(1);
-  await save(artifact, { userId: alice }, "two\n");
+  await save(artifact, other, "two\n");
   await save(artifact, { agentId: agents.fresh }, "three\n");
   expect(await positionOf(artifact, agents.fresh)).toBe(3);
   const read = await post(agents.fresh, { operation: "read", artifact });
@@ -274,12 +296,17 @@ test("deleting an artifact removes its read positions", async () => {
   expect(await db.artifactReadPosition.count({ where: { artifactId: artifact } })).toBe(0);
 });
 
-test("a failing position store never fails a committed create or push, or a read", async () => {
+test("a failing position store never fails a committed push, or a read", async () => {
   const warn = spyOn(console, "warn").mockImplementation(() => undefined);
   try {
     const created = await post(
       agents.writer,
-      { operation: "create", title: "Bookkeeping", text: "one\n" },
+      {
+        operation: "push",
+        title: "Bookkeeping",
+        idempotencyKey: key(),
+        files: await document(agents.writer, "one\n"),
+      },
       { db: positionStoreDown({ reads: true }) },
     );
     expect(created.status).toBe(200);
@@ -288,7 +315,13 @@ test("a failing position store never fails a committed create or push, or a read
 
     const pushed = await post(
       agents.writer,
-      { operation: "push", artifact, baseVersion: 1, idempotencyKey: key(), text: "two\n" },
+      {
+        operation: "push",
+        artifact,
+        baseVersion: 1,
+        idempotencyKey: key(),
+        files: await document(agents.writer, "two\n"),
+      },
       { db: positionStoreDown({ reads: true }) },
     );
     expect(pushed.status).toBe(200);
@@ -314,7 +347,7 @@ test("a failing position store never fails a committed create or push, or a read
 
 test("a read whose position write fails still returns what it computed", async () => {
   const artifact = await make("Computed");
-  await save(artifact, { userId: alice }, "two\n");
+  await save(artifact, other, "two\n");
   const warn = spyOn(console, "warn").mockImplementation(() => undefined);
   try {
     const failingWrite = positionStoreDown({ reads: false });
@@ -328,12 +361,6 @@ test("a read whose position write fails still returns what it computed", async (
 });
 
 test("publishers show by their display name; a blank one never shows a username", async () => {
-  const blankUser = await db.user.create({
-    data: { username: `rp-blank-${handle}`, displayName: "  " },
-  });
-  await db.workspaceMembership.create({
-    data: { workspaceId, userId: blankUser.id, role: "member" },
-  });
   const blankAgent = await db.agent.create({
     data: {
       workspaceId,
@@ -345,13 +372,12 @@ test("publishers show by their display name; a blank one never shows a username"
   });
   try {
     const artifact = await make("Names");
-    await save(artifact, { userId: blankUser.id }, "two\n");
     const saved = await post(blankAgent.id, {
       operation: "push",
       artifact,
-      baseVersion: 2,
+      baseVersion: 1,
       idempotencyKey: key(),
-      text: "three\n",
+      files: await document(blankAgent.id, "two\n"),
     });
     expect(saved.body.status).toBe("created");
     const read = await post(agents.reader, { operation: "read", artifact });
@@ -360,19 +386,17 @@ test("publishers show by their display name; a blank one never shows a username"
     );
     expect(names).toEqual([
       { kind: "agent", name: `rp-blank-agent-${handle}` },
-      { kind: "user", name: "Unnamed" },
       { kind: "agent", name: "Writer Bot" },
     ]);
   } finally {
     await db.agent.deleteMany({ where: { id: blankAgent.id } });
-    await db.user.deleteMany({ where: { id: blankUser.id } });
   }
 });
 
 test("the unseen range stops at the version the read shows", async () => {
   const artifact = await make("Bounded");
-  await save(artifact, { userId: alice }, "two\n");
-  await save(artifact, { userId: alice }, "three\n");
+  await save(artifact, other, "two\n");
+  await save(artifact, other, "three\n");
   // A version published between the load (which showed 2) and the position read is not counted,
   // and the position moves to what was shown, so the next read still reports it.
   const summary = await readWithPosition(db, {
@@ -412,7 +436,7 @@ test("a version lists at most ten changed paths and counts them all", async () =
     data: {
       artifactId: artifact,
       number: 2,
-      publisherUserId: alice,
+      publisherAgentId: agents.other,
       entryPath: "document.md",
       changedPaths: { added: paths.slice(0, 11), deleted: paths.slice(11) },
       idempotencyKey: key(),

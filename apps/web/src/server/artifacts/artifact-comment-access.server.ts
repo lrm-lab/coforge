@@ -15,7 +15,6 @@ export type CommentedArtifact = {
   id: string;
   homeKey: string;
   currentVersion: number;
-  authorUserId: string | null;
   authorAgentId: string | null;
 };
 
@@ -37,7 +36,6 @@ export async function requireReadableArtifact(
       id: true,
       homeKey: true,
       currentVersion: true,
-      authorUserId: true,
       authorAgentId: true,
     },
   });
@@ -47,25 +45,26 @@ export async function requireReadableArtifact(
 }
 
 /**
- * Whether the actor resolves or reopens a thread: whoever started it, whoever made the artifact
- * (a person, or the Agent that did), the owner of the Agent that made it, and a Workspace owner or
- * admin. The last two are people; an Agent is allowed as the thread's or the artifact's author.
+ * Whether the actor resolves or reopens a thread: whoever started it (a person or an Agent), the
+ * Agent that made the artifact, the owner of that Agent, and a Workspace owner or admin. The last
+ * two are people.
  */
 export async function canResolveArtifactComment(
   db: Pick<PrismaClient, "workspaceMembership" | "agent">,
   workspaceId: string,
   actor: ArtifactActor,
   thread: {
-    artifact: { authorUserId: string | null; authorAgentId: string | null };
+    artifact: { authorAgentId: string | null };
     root: { authorUserId: string | null; authorAgentId: string | null };
   },
 ): Promise<boolean> {
-  const is = (author: { authorUserId: string | null; authorAgentId: string | null }) =>
+  const startedIt =
     actor.agentId !== undefined
-      ? author.authorAgentId === actor.agentId
-      : author.authorUserId === actor.userId;
-  if (is(thread.root) || is(thread.artifact)) return true;
-  // The artifact's author, its authoring Agent's owner and the admins: the public-link rule.
+      ? thread.root.authorAgentId === actor.agentId
+      : thread.root.authorUserId === actor.userId;
+  const madeIt = actor.agentId !== undefined && thread.artifact.authorAgentId === actor.agentId;
+  if (startedIt || madeIt) return true;
+  // The authoring Agent's owner and the admins: the public-link rule.
   if (actor.userId === undefined) return false;
   const { authorAgentId } = thread.artifact;
   const ownerId = authorAgentId

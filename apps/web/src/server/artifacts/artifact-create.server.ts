@@ -1,26 +1,17 @@
 import type { Artifact, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import type { ArtifactActor } from "./artifact-access.server";
-import {
-  ARTIFACT_BINARY_LIMIT,
-  ARTIFACT_DOCUMENT_LIMIT,
-  ARTIFACT_TEXT_LIMIT,
-  type ArtifactBlobStore,
-  type ArtifactFileInput,
-} from "./artifact-files.server";
+import type { ArtifactPublisher } from "./artifact-access.server";
 import { idempotencyMismatch } from "./artifact-idempotency.server";
-import { writeVersion } from "./artifact-version-write.server";
 
 /**
  * Creating an artifact (task #385): the one insert, with idempotent-create replay on top. A
  * create that carries a key the Workspace already used returns the artifact it made (replay)
  * when the inputs match, and is a conflict when they differ, so a lost response on the first
  * try does not leave a second document behind. The caller has already checked the experiment,
- * the name, the kind and the home.
+ * the name and the home.
  */
 
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const KINDS = new Set(["html", "markdown", "text", "csv", "image", "pdf", "video", "other"]);
 
 export type CreateArtifactInput = {
   workspaceId: string;
@@ -28,9 +19,8 @@ export type CreateArtifactInput = {
   name: string;
   title?: string;
   description?: string;
-  kind: string;
   entryPath: string;
-  author: ArtifactActor;
+  author: ArtifactPublisher;
   /** An idempotent create: the client's key, and a hash of this create's inputs. The same key
    * with the same hash returns the artifact already made; with a different hash it is a
    * conflict. */
@@ -38,122 +28,50 @@ export type CreateArtifactInput = {
   requestHash?: string;
 };
 
-/** Validates the name, kind and description, then inserts the artifact row. */
+/** Validates the name and description, then inserts the artifact — or replays the one this
+ * key already made. */
 export async function createArtifact(
-  db: Pick<PrismaClient, "artifact">,
+  db: PrismaClient,
   input: CreateArtifactInput,
 ): Promise<Artifact> {
   if (!NAME.test(input.name)) invalid("artifact-name");
-  if (!KINDS.has(input.kind)) invalid("artifact-kind");
   if (input.description && input.description.length > 1000) invalid("artifact-description");
-  return db.artifact.create({
-    data: {
-      workspaceId: input.workspaceId,
-      homeKey: input.homeKey,
-      name: input.name,
-      title: input.title ?? "",
-      description: input.description ?? "",
-      kind: input.kind,
-      entryPath: input.entryPath,
-      ...actorColumns(input.author),
-      ...(input.idempotencyKey !== undefined
-        ? { idempotencyKey: input.idempotencyKey, requestHash: input.requestHash ?? null }
-        : {}),
-    },
-  });
-}
-
-/**
- * A create and, given `version`, its version 1 in one transaction (task #25): the row, its
- * files and its idempotent replay land together or not at all, and version 1 never meets the
- * comment gate — no comment can exist on an artifact not yet made. Missing or ungranted bytes
- * refuse the whole create before anything is written, so no artifact row is left without its
- * version. `fresh` is false on an idempotent replay.
- */
-export async function createVersionedArtifact(
-  db: PrismaClient,
-  blobs: ArtifactBlobStore,
-  input: CreateArtifactInput & {
-    version?: { files: readonly ArtifactFileInput[]; idempotencyKey: string };
-  },
-): Promise<{ artifact: Artifact; fresh: boolean }> {
-  const files = input.version?.files ?? [];
-  const named = [...new Set(files.map((file) => file.sha256))];
-  const [stored, granted] = await Promise.all([
-    blobs.inspectMany(input.workspaceId, named),
-    blobs.allowed(input.workspaceId, undefined, input.author, named),
-  ]);
-  const missing = named.filter((sha256) => !stored.has(sha256) || !granted.has(sha256));
-  if (missing.length)
-    throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-bytes-missing" });
-  for (const file of files) {
-    const blob = stored.get(file.sha256)!;
-    // A document's own file is held to the document limit a save gives it.
-    const document = input.kind === "markdown" && file.path === input.entryPath;
-    const limit = document
-      ? ARTIFACT_DOCUMENT_LIMIT
-      : blob.kind === "text"
-        ? ARTIFACT_TEXT_LIMIT
-        : ARTIFACT_BINARY_LIMIT;
-    if (blob.sizeBytes > limit) invalid("artifact-file-too-large");
+  // A create that already ran under this key returns its artifact again (replay), unless its
+  // inputs differ, which is a mistake, not a retry.
+  if (input.idempotencyKey !== undefined) {
+    const replay = await createReplay(
+      db,
+      input.workspaceId,
+      input.idempotencyKey,
+      input.requestHash,
+    );
+    if (replay) return replay;
   }
-
   try {
-    return await db.$transaction(async (tx) => {
-      if (input.idempotencyKey !== undefined) {
-        const replay = await createReplay(
-          tx,
-          input.workspaceId,
-          input.idempotencyKey,
-          input.requestHash,
-        );
-        if (replay) return { artifact: replay, fresh: false };
-      }
-      const artifact = await createArtifact(tx, input);
-      if (input.version !== undefined) {
-        // In this transaction, so the sweep of unused blobs leaves them.
-        const gone = await blobs.use(tx, input.workspaceId, named);
-        if (gone.length)
-          throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-bytes-missing" });
-        await writeVersion(tx, {
-          artifactId: artifact.id,
-          number: 1,
-          publisher: input.author,
-          settings: {
-            entryPath: artifact.entryPath,
-            title: artifact.title,
-            description: artifact.description,
-          },
-          added: files,
-          deleted: [],
-          merged: { files: [], settings: [] },
-          idempotencyKey: input.version.idempotencyKey,
-          files: files.map((file) => {
-            const blob = stored.get(file.sha256)!;
-            return {
-              path: file.path,
-              sha256: file.sha256,
-              sizeBytes: blob.sizeBytes,
-              kind: blob.kind,
-            };
-          }),
-        });
-      }
-      return { artifact, fresh: true };
+    return await db.artifact.create({
+      data: {
+        workspaceId: input.workspaceId,
+        homeKey: input.homeKey,
+        name: input.name,
+        title: input.title ?? "",
+        description: input.description ?? "",
+        entryPath: input.entryPath,
+        authorAgentId: input.author.agentId,
+        ...(input.idempotencyKey !== undefined
+          ? { idempotencyKey: input.idempotencyKey, requestHash: input.requestHash ?? null }
+          : {}),
+      },
     });
   } catch (error) {
     // Two racing creates with one key: the loser reads the winner's row and replays it.
-    if (
-      isUniqueViolation(error, "artifacts_idempotency_key") &&
-      input.idempotencyKey !== undefined
-    ) {
+    if (isUniqueViolation(error, "artifacts_idempotency_key") && input.idempotencyKey) {
       const replay = await createReplay(
         db,
         input.workspaceId,
         input.idempotencyKey,
         input.requestHash,
       );
-      if (replay) return { artifact: replay, fresh: false };
+      if (replay) return replay;
     }
     // The live-name unique index is the authority: a soft-deleted row releases the name.
     if (isUniqueViolation(error))
@@ -164,8 +82,8 @@ export async function createVersionedArtifact(
 
 /** The live artifact a create's key already made, when its inputs match (replay); a different
  * `requestHash` is a conflict. Null when the key has made nothing. */
-export async function createReplay(
-  db: Pick<PrismaClient, "artifact">,
+async function createReplay(
+  db: PrismaClient,
   workspaceId: string,
   idempotencyKey: string,
   requestHash?: string,
@@ -176,13 +94,6 @@ export async function createReplay(
   if (!existing) return null;
   if ((existing.requestHash ?? null) !== (requestHash ?? null)) throw idempotencyMismatch();
   return existing;
-}
-
-/** The author columns for an actor: a person's or an Agent's, never both. */
-export function actorColumns(actor: ArtifactActor) {
-  return actor.agentId
-    ? { authorAgentId: actor.agentId, authorUserId: null }
-    : { authorUserId: actor.userId, authorAgentId: null };
 }
 
 /** Whether an error is a Postgres unique violation (P2002), optionally for a named constraint

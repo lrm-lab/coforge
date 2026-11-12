@@ -244,13 +244,13 @@ export class ArtifactSandbox {
     userId: string;
     version?: number;
   }): Promise<{ version: number; entryPath: string } | null> {
-    const { artifact, version, files } = await this.deps.reads.read({
+    const { version, files } = await this.deps.reads.read({
       workspaceId: input.workspaceId,
       artifactId: input.artifactId,
       reader: { userId: input.userId },
       version: input.version,
     });
-    if (artifact.kind !== "html" || !version || !isPageFile(version.entryPath)) return null;
+    if (!version || !isPageFile(version.entryPath)) return null;
     const entry = files.find((file) => file.path === version.entryPath);
     if (!entry || entry.sizeBytes > ARTIFACT_HTML_LIMIT) return null;
     return { version: version.number, entryPath: version.entryPath };

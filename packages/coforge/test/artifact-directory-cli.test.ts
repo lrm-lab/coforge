@@ -76,10 +76,13 @@ test("pull, push and download parse into their own commands", () => {
     command: "artifact",
     directory: { operation: "download", artifact: ID, path: "css/site.css", output: "x", rev: 3 },
   });
-  // The older form, over one text file, keeps working.
-  expect(parseArgs(["artifact", "push", ID, "--base", "3", "--file", "plan.md"])).toMatchObject({
-    request: { operation: "push", artifact: ID, baseVersion: 3 },
-  });
+  // A push takes a directory only: the single-text form is gone.
+  for (const args of [
+    ["artifact", "push", ID, "--base", "3", "--file", "plan.md"],
+    ["artifact", "push", "dir", "--file", "plan.md"],
+    ["artifact", "push", "dir", "--base", "3"],
+  ])
+    expect(() => parseArgs(args)).toThrow(CliError);
   expect(
     parseArgs(["artifact", "list", "--query", "launch plan", "--after", "c1", "--limit", "5"]),
   ).toEqual({

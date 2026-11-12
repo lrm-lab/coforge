@@ -66,7 +66,7 @@ export function parseDirectoryArgs(args: readonly string[]): ArtifactDirectoryIn
       operation === "download"
         ? "Name the artifact and the file: coforge artifact download <id> <path>"
         : operation === "pull"
-          ? "Name the artifact: its id, as create printed it"
+          ? "Name the artifact: its id, as push printed it"
           : "Name one directory",
     );
   const extra = json ? { json: true as const } : {};

@@ -8,6 +8,7 @@ import {
   type ArtifactBlobInfo,
   type ArtifactBlobStore,
   type ArtifactHome,
+  type ArtifactPublisher,
 } from "#src/server/artifacts/artifacts.server";
 
 /**
@@ -29,9 +30,6 @@ const store: ArtifactBlobStore = {
   use: async () => [],
   read: async () => null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
-  upload: async () => {
-    throw new Error("no bytes are stored in this test");
-  },
 };
 const artifacts = new Artifacts(db, store, { enabled: async () => true });
 const documents = new ArtifactDocuments(db, artifacts, store);
@@ -116,16 +114,20 @@ afterAll(async () => {
 });
 
 let made = 0;
-const create = (home: ArtifactHome, author: ArtifactActor, kind = "markdown") =>
+const create = (home: ArtifactHome, author: ArtifactPublisher) =>
   artifacts.create({
     workspaceId,
     home,
     name: `doc-${(made += 1)}-${handle}`,
-    kind,
     entryPath: "document.md",
     author,
   });
-const push = (artifactId: string, publisher: ArtifactActor, sha256 = "sha-doc", baseVersion = 0) =>
+const push = (
+  artifactId: string,
+  publisher: ArtifactPublisher,
+  sha256 = "sha-doc",
+  baseVersion = 0,
+) =>
   artifacts.push({
     workspaceId,
     artifactId,
@@ -142,8 +144,8 @@ const inConversation = (conversationId: string): ArtifactHome => ({
 });
 
 test("every member reads every artifact; the home still decides writes and hides itself", async () => {
-  const shared = await create(inConversation(privateChannel), { userId: people.alice });
-  await push(shared.id, { userId: people.alice });
+  const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
+  await push(shared.id, { agentId: agents.helper });
 
   // Bob is a member who cannot read the private channel: he reads the artifact, but the home's
   // key, its write verbs and its delete stay his refusals — and the read carries no tier.
@@ -171,34 +173,13 @@ test("every member reads every artifact; the home still decides writes and hides
     canChange: true,
   });
 
-  // Writes never follow the read: Bob hears ACCESS_DENIED on every verb, as if he knew it was
-  // there — which he does — while the outsider hears NOT_FOUND everywhere.
-  await expect(push(shared.id, { userId: people.bob }, "sha-doc", 1)).rejects.toMatchObject({
+  // Writes never follow the read: an Agent outside the channel hears ACCESS_DENIED on a push,
+  // as if it knew the artifact was there — which it does — while the outsider hears NOT_FOUND.
+  await expect(push(shared.id, { agentId: agents.stranger }, "sha-doc", 1)).rejects.toMatchObject({
     code: "ACCESS_DENIED",
   });
   await expect(
     artifacts.delete({ workspaceId, artifactId: shared.id, actor: { userId: people.bob } }),
-  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-  await expect(
-    artifacts.revert({
-      workspaceId,
-      artifactId: shared.id,
-      actor: { userId: people.bob },
-      to: 1,
-      baseVersion: 1,
-      idempotencyKey: crypto.randomUUID(),
-    }),
-  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-  await expect(
-    documents.save(
-      { workspaceId, actor: { userId: people.bob } },
-      {
-        artifactId: shared.id,
-        baseVersion: 1,
-        idempotencyKey: crypto.randomUUID(),
-        text: "changed",
-      },
-    ),
   ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
   const loaded = await documents.load(
     { workspaceId, actor: { userId: people.bob } },
@@ -207,24 +188,10 @@ test("every member reads every artifact; the home still decides writes and hides
   expect(loaded.canDelete).toBe(false);
   expect(loaded.artifact.homeKey).toBeNull();
   await expect(
-    documents.save(
-      { workspaceId, actor: { userId: people.outsider } },
-      {
-        artifactId: shared.id,
-        baseVersion: 1,
-        idempotencyKey: crypto.randomUUID(),
-        text: "changed",
-      },
-    ),
+    artifacts.delete({ workspaceId, artifactId: shared.id, actor: { userId: people.outsider } }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
 
-  // History and cards open to the member too; the card hides the home and says no link change.
-  const history = await artifacts.reads.history({
-    workspaceId,
-    artifactId: shared.id,
-    reader: { userId: people.bob },
-  });
-  expect(history.versions.map((version) => version.number)).toContain(1);
+  // Cards open to the member too; the card hides the home and says no link change.
   const bobCards = await artifacts.reads.cards({
     workspaceId,
     reader: { userId: people.bob },
@@ -306,8 +273,8 @@ test("cards and message cards keep the home from a member who cannot read it", a
 });
 
 test("a public channel's artifact keeps its home source for every member", async () => {
-  const shared = await create(inConversation(publicChannel), { userId: people.alice });
-  await push(shared.id, { userId: people.alice });
+  const shared = await create(inConversation(publicChannel), { agentId: agents.helper });
+  await push(shared.id, { agentId: agents.helper });
   const [bobCards] = await artifacts.reads.messageCards({
     workspaceId,
     reader: { userId: people.bob },
@@ -321,8 +288,8 @@ test("a public channel's artifact keeps its home source for every member", async
 });
 
 test("a home the Workspace hides takes its artifacts with it", async () => {
-  const shared = await create(inConversation(privateChannel), { userId: people.alice });
-  await push(shared.id, { userId: people.alice });
+  const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
+  await push(shared.id, { agentId: agents.helper });
   await db.conversation.update({
     where: { id: privateChannel },
     data: { hiddenFromWorkspaceAt: new Date() },
