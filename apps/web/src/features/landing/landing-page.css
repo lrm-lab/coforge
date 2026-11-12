@@ -1,0 +1,630 @@
+/*
+ * The public homepage, the designer's v8 (jing, #designers:#4): one 1440 x 900 screen on a
+ * desktop, a scrolling column on a phone. Light in every theme (jing, 11-12), so its colours are
+ * the design's own hexes rather than the app's semantic tokens.
+ *
+ * On a desktop the whole screen scales as one to fit the window, s = min(100vw / 1440,
+ * 100vh / 900, 1.5), and is centred; the lavender fills around it. `--u` is one design pixel at
+ * that scale (a length, so no script has to work out a number before the first paint); every
+ * size below is a count of it. The sign-in page places its logo by the same formula
+ * (`features/auth/login-art.css`), so moving between the two pages keeps the logo still.
+ */
+.home-page {
+  --brand: #5d36dc;
+  --brand-hover: #4c2ab8;
+  --ink: #101319;
+  --ink-2: #777d8d;
+  /* Beyond the background's 1440 design px the page is this colour. */
+  --page: #eeebfe;
+  --u: 1px;
+  position: relative;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background: var(--page);
+  color: var(--ink);
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+}
+
+.home-page :where(h1, h2, p, ul) {
+  margin: 0;
+}
+
+.home-page :where(a, button):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.home-wrap {
+  position: relative;
+  width: 100%;
+  max-width: calc(1440 * var(--u));
+  margin-inline: auto;
+  padding-inline: calc(94 * var(--u));
+}
+
+/* ---------- nav ---------- */
+.home-nav {
+  position: relative;
+  z-index: 5;
+}
+
+.home-nav-inner {
+  display: flex;
+  height: calc(75 * var(--u));
+  align-items: center;
+}
+
+.home-logo img {
+  display: block;
+  width: calc(170 * var(--u));
+  height: auto;
+}
+
+.home-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: calc(28 * var(--u));
+  margin-left: auto;
+  margin-right: calc(-50 * var(--u));
+  font-size: calc(15 * var(--u));
+}
+
+.home-icon-link {
+  display: grid;
+  width: calc(28 * var(--u));
+  height: calc(28 * var(--u));
+  place-items: center;
+}
+
+.home-icon-link svg {
+  width: calc(21 * var(--u));
+  height: calc(21 * var(--u));
+}
+
+.home-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--u));
+  cursor: pointer;
+}
+
+.home-lang svg {
+  width: calc(20 * var(--u));
+  height: calc(20 * var(--u));
+}
+
+.home-lang .home-chevron {
+  width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
+  margin-left: calc(2 * var(--u));
+}
+
+.home-text-link,
+.home-lang,
+.home-icon-link {
+  transition: color 150ms ease;
+}
+
+.home-button {
+  display: inline-flex;
+  height: calc(36 * var(--u));
+  align-items: center;
+  justify-content: center;
+  padding: 0 calc(14 * var(--u));
+  border-radius: calc(8 * var(--u));
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 calc(6 * var(--u)) calc(14 * var(--u)) calc(-6 * var(--u)) rgb(93 54 220 / 0.55);
+  transition: background-color 150ms ease;
+}
+
+@media (hover: hover) {
+  .home-button:hover {
+    background: var(--brand-hover);
+  }
+
+  .home-text-link:hover,
+  .home-lang:hover,
+  .home-lang[data-pressed],
+  .home-icon-link:hover {
+    color: var(--brand);
+  }
+}
+
+/* ---------- hero ---------- */
+.home-hero {
+  position: relative;
+}
+
+.home-hero-inner {
+  min-height: calc(620 * var(--u));
+}
+
+/* The design's lettering, as text so it reads in every language: a pill, two heavy lines with
+ * the last words in brand purple, and a grey paragraph, all inside its 465-wide box. */
+.home-hero-copy {
+  position: relative;
+  z-index: 3;
+  width: calc(465 * var(--u));
+  max-width: 100%;
+  padding-top: calc(98 * var(--u));
+}
+
+.home-eyebrow {
+  display: inline-flex;
+  height: calc(40 * var(--u));
+  align-items: center;
+  gap: calc(8 * var(--u));
+  padding: 0 calc(18 * var(--u)) 0 calc(14 * var(--u));
+  border: 1px solid rgb(137 96 229 / 0.33);
+  border-radius: 999px;
+  background: rgb(228 222 255 / 0.46);
+  color: var(--brand);
+  font-size: calc(17 * var(--u));
+  line-height: 1;
+}
+
+.home-eyebrow svg {
+  width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
+}
+
+.home-title {
+  margin-top: calc(32 * var(--u));
+  font-size: calc(58 * var(--u));
+  font-weight: 600;
+  line-height: calc(67 * var(--u));
+  letter-spacing: 0.01em;
+}
+
+.home-title-highlight {
+  color: var(--brand);
+}
+
+.home-body {
+  margin-top: calc(28 * var(--u));
+  color: var(--ink-2);
+  font-size: calc(19 * var(--u));
+  line-height: calc(31 * var(--u));
+  text-wrap: pretty;
+}
+
+/* The stage: the designer's 5760 x 3600 canvas at 1440 x 900 design px, from the top of the page,
+ * centred; every layer is a percentage of it. */
+.home-art-frame {
+  position: absolute;
+  z-index: 0;
+  top: calc(-75 * var(--u));
+  right: 0;
+  left: 0;
+  height: 0;
+}
+
+.home-stage {
+  position: relative;
+  width: min(calc(1440 * var(--u)), 100vw);
+  margin-inline: auto;
+  aspect-ratio: 1440 / 900;
+}
+
+.home-stage img {
+  display: block;
+}
+
+/* Its bottom fades into the page colour, so the page goes on below it without a line. */
+.home-stage-bg {
+  width: 100%;
+  height: 100%;
+  mask-image: linear-gradient(180deg, #000 88%, transparent);
+}
+
+.home-art-shift {
+  position: absolute;
+  inset: 0;
+}
+
+/* The art's haze runs off the picture's right edge: it fades out before it, or a window wider than
+ * the stage shows that edge as a line. */
+.home-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  mask-image: linear-gradient(90deg, #000 95%, transparent);
+}
+
+.home-agent {
+  position: absolute;
+}
+
+.home-agent img {
+  width: 100%;
+  height: auto;
+}
+
+.home-agent .home-agent-closed {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+}
+
+/* ---------- features ---------- */
+.home-features {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(16 * var(--u));
+  margin-top: calc(-40 * var(--u));
+  padding: calc(25 * var(--u)) calc(28 * var(--u));
+  border-radius: calc(24 * var(--u));
+  background: #fff;
+  list-style: none;
+  box-shadow: 0 calc(24 * var(--u)) calc(60 * var(--u)) calc(-30 * var(--u)) rgb(80 60 180 / 0.25);
+}
+
+.home-features li {
+  display: flex;
+  align-items: center;
+  gap: calc(14 * var(--u));
+}
+
+.home-features img {
+  width: calc(97 * var(--u));
+  height: calc(97 * var(--u));
+  flex: none;
+  border-radius: 50%;
+}
+
+.home-features h2 {
+  font-size: calc(20 * var(--u));
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.home-features p {
+  margin-top: calc(10 * var(--u));
+  color: var(--ink-2);
+  font-size: calc(14.5 * var(--u));
+  line-height: 1.65;
+}
+
+.home-main {
+  padding-bottom: 60px;
+}
+
+/* ---------- one screen ---------- */
+@media (min-width: 1001px) {
+  .home-page {
+    --u: min(100vw / 1440, 100dvh / 900, 1.5px);
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .home-screen {
+    position: relative;
+    width: calc(1440 * var(--u));
+    height: calc(900 * var(--u));
+    margin-inline: auto;
+    overflow: hidden;
+  }
+
+  .home-main {
+    padding-bottom: 0;
+  }
+
+  /* A little more air (the designer, v7): the words, logo and card's left edge 15 px further
+   * left, the artwork, account links and card's right edge 15 px further right. */
+  .home-logo,
+  .home-hero-copy {
+    translate: calc(-15 * var(--u)) 0;
+  }
+
+  .home-nav-actions,
+  .home-art-shift {
+    translate: calc(15 * var(--u)) 0;
+  }
+
+  .home-features {
+    margin-inline: calc(-15 * var(--u));
+  }
+}
+
+/* Narrower than the window (a window wider than 16:10, or past the 1.5 cap), the background's
+ * sides fade into the page colour too: its left edge is white. */
+@media (min-width: 1001px) and (min-aspect-ratio: 8/5), (min-width: 2161px) {
+  .home-stage-bg {
+    mask-image:
+      linear-gradient(180deg, #000 88%, transparent),
+      linear-gradient(90deg, transparent, #000 10%, #000 94%, transparent);
+    mask-composite: intersect;
+  }
+}
+
+/* ---------- smaller screens ---------- */
+@media (max-width: 1280px) {
+  .home-wrap {
+    padding-inline: calc(48 * var(--u));
+  }
+
+  .home-nav-actions {
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 1000px) {
+  .home-hero {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .home-hero > .home-hero-inner {
+    order: -1;
+    min-height: 0;
+  }
+
+  .home-hero-copy {
+    padding-top: 48px;
+  }
+
+  /* Under the words, the artwork's own part of the stage (x 288-1436, y 100-640), faded top and
+   * bottom into the page. */
+  .home-art-frame {
+    position: relative;
+    top: auto;
+    width: 100%;
+    max-width: 760px;
+    height: auto;
+    margin: 8px auto -40px;
+    overflow: hidden;
+    aspect-ratio: 1148 / 540;
+    mask-image:
+      linear-gradient(180deg, transparent 0, #000 14%, #000 88%, transparent 100%),
+      linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+    mask-composite: intersect;
+  }
+
+  .home-stage {
+    width: 125.436%;
+    margin: -8.711% 0 0 -25.087%;
+  }
+
+  .home-features {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin-top: 0;
+  }
+
+  .home-features br {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .home-wrap {
+    padding-inline: 20px;
+  }
+
+  .home-nav-inner {
+    height: 60px;
+  }
+
+  .home-logo img {
+    width: 124px;
+  }
+
+  /* GitHub goes; the language switch stays beside the account links (jing, 11-12). */
+  .home-nav-actions {
+    gap: 14px;
+    font-size: 14px;
+  }
+
+  .home-icon-link {
+    display: none;
+  }
+
+  .home-button {
+    height: 32px;
+    padding: 0 12px;
+  }
+
+  .home-hero-copy {
+    padding-top: 28px;
+  }
+
+  .home-title {
+    margin-top: 24px;
+    font-size: 40px;
+    line-height: 48px;
+  }
+
+  .home-body {
+    margin-top: 18px;
+    font-size: 16px;
+    line-height: 26px;
+  }
+
+  .home-art-frame {
+    width: calc(100% + 40px);
+    max-width: none;
+    margin: 0 -20px -24px;
+  }
+
+  .home-features {
+    padding: 20px;
+    border-radius: 18px;
+  }
+
+  .home-features img {
+    width: 72px;
+    height: 72px;
+  }
+
+  .home-features h2 {
+    font-size: 17px;
+  }
+
+  .home-features p {
+    margin-top: 4px;
+    font-size: 13.5px;
+  }
+}
+
+/* ---------- motion ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  /* All three float on one beat, a third of it apart: never up or down together. Green and purple
+   * tilt a little as they float, one way going up and the other coming down (the designer, v6). */
+  .home-agent {
+    will-change: transform;
+    animation: home-float 4.8s ease-in-out infinite;
+  }
+
+  .home-agent--purple,
+  .home-agent--green {
+    transform-origin: 50% 75%;
+    animation-name: home-float-tilt;
+  }
+
+  .home-agent--green {
+    animation-delay: -1.6s;
+  }
+
+  .home-agent--yellow {
+    animation-delay: -3.2s;
+  }
+
+  /* A blink lays the closed eyes over the open ones for a beat; green blinks at another point of
+   * the beat than purple. */
+  .home-agent .home-agent-closed {
+    animation: home-blink 4.8s ease-in-out infinite;
+  }
+
+  .home-agent--purple .home-agent-closed {
+    animation-delay: -0.8s;
+  }
+
+  .home-agent--green .home-agent-closed {
+    animation-delay: -3.4s;
+  }
+}
+
+@keyframes home-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(calc(-9 * var(--u)));
+  }
+}
+
+@keyframes home-float-tilt {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1.6deg);
+  }
+  50% {
+    transform: translateY(calc(-9 * var(--u))) rotate(1.6deg);
+  }
+}
+
+/* An eyelid, not a cut (the designer, v6): over about 0.45 s the closed eyes come in over seven
+ * steps, hold, and go out over seven more. The open eyes stay underneath throughout. */
+@keyframes home-blink {
+  0%,
+  44% {
+    opacity: 0;
+  }
+  44.6% {
+    opacity: 0.08;
+  }
+  45.2% {
+    opacity: 0.22;
+  }
+  45.8% {
+    opacity: 0.42;
+  }
+  46.4% {
+    opacity: 0.64;
+  }
+  47% {
+    opacity: 0.82;
+  }
+  47.6% {
+    opacity: 0.94;
+  }
+  48.2%,
+  49.2% {
+    opacity: 1;
+  }
+  49.8% {
+    opacity: 0.94;
+  }
+  50.4% {
+    opacity: 0.82;
+  }
+  51% {
+    opacity: 0.64;
+  }
+  51.6% {
+    opacity: 0.42;
+  }
+  52.2% {
+    opacity: 0.22;
+  }
+  52.8% {
+    opacity: 0.08;
+  }
+  53.4%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---------- pointer effects (use-landing-pointer-effects.ts) ---------- */
+/* A soft white light that follows the mouse; white particles spreading out where it clicks. */
+.home-glow {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  width: 90px;
+  height: 90px;
+  margin: -45px 0 0 -45px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255 / 0.7) 0%,
+    rgb(255 255 255 / 0.25) 35%,
+    transparent 68%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms;
+  will-change: transform;
+}
+
+.home-glow[data-on] {
+  opacity: 1;
+}
+
+.home-sparks {
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-glow,
+  .home-sparks {
+    display: none;
+  }
+}

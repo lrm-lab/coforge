@@ -1,18 +1,14 @@
 import { Check, ChevronDown, Translate01 as Languages } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
-import { MotionConfig, useReducedMotion } from "motion/react";
+import { Fragment, useRef } from "react";
 
 import { Button as AriaButton } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { AnimatedSpan, Terminal, TypingAnimation } from "#src/components/magicui/terminal";
-import AnimatedGradient from "#src/components/spell/animated-gradient";
-import { BlurReveal } from "#src/components/spell/blur-reveal";
-import { ShimmerText } from "#src/components/spell/shimmer-text";
-import { installCommands, setupCommand } from "#src/features/install/install-commands";
-import { AgentMark, heroGradient, supportedAgents, useWebGl2 } from "./landing-brand-panel";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import { useLandingPointerEffects } from "./use-landing-pointer-effects";
+import "./landing-page.css";
 
 export const repositoryUrl = "https://github.com/lrm-lab/coforge";
 
@@ -46,15 +42,12 @@ function LocaleSwitch() {
   const active = getLocale();
   return (
     <Dropdown.Root>
-      <AriaButton
-        aria-label={m.landing_language()}
-        className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2 text-xs font-medium text-white/70 outline-none hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-      >
-        <Languages aria-hidden="true" className="size-4" />
+      <AriaButton aria-label={m.landing_language()} className="home-lang outline-none">
+        <Languages aria-hidden="true" />
         {locales.find((locale) => locale.code === active)?.label}
-        <ChevronDown aria-hidden="true" className="size-3" />
+        <ChevronDown aria-hidden="true" className="home-chevron" />
       </AriaButton>
-      <Dropdown.Popover placement="bottom end" className="dark-mode w-40">
+      <Dropdown.Popover placement="bottom end" className="w-40">
         <Dropdown.Menu
           aria-label={m.landing_language()}
           selectionMode="none"
@@ -76,123 +69,174 @@ function LocaleSwitch() {
   );
 }
 
-export function LandingPage({ installOrigin }: { installOrigin: string }) {
-  const gradientReady = useWebGl2();
-  const reducedMotion = useReducedMotion() ?? false;
-  const headline = `${m.landing_headline_line_1()} ${m.landing_headline_line_2()}`;
+/** The three things CoForge's agents do, each with the designer's picture. */
+const FEATURES = [
+  {
+    image: "/landing/feature-1.webp",
+    title: () => m.landing_feature_memory_title(),
+    body: () => m.landing_feature_memory_body(),
+  },
+  {
+    image: "/landing/feature-2.webp",
+    title: () => m.landing_feature_collaboration_title(),
+    body: () => m.landing_feature_collaboration_body(),
+  },
+  {
+    image: "/landing/feature-3.webp",
+    title: () => m.landing_feature_evolving_title(),
+    body: () => m.landing_feature_evolving_body(),
+  },
+] as const;
+
+/** The pill's four-point star, in the design's lilac-to-brand gradient. */
+function Sparkle() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <defs>
+        <linearGradient
+          id="home-sparkle"
+          x1="1"
+          y1="15"
+          x2="13"
+          y2="3"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop stopColor="#E1B2F7" />
+          <stop offset="1" stopColor="#5D36DC" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M8 0c.5 4.3 3.7 7.5 8 8-4.3.5-7.5 3.7-8 8-.5-4.3-3.7-7.5-8-8 4.3-.5 7.5-3.7 8-8Z"
+        fill="url(#home-sparkle)"
+      />
+    </svg>
+  );
+}
+
+/**
+ * The public homepage, jing's v8 (#designers:#4): the logo and account links, the headline beside
+ * the designer's picture of a person working with three agents, and a card of what the agents do.
+ * One screen on a desktop, scaled to the window; a column on a phone. Light in every theme. The
+ * layout, motion and pointer effects are `landing-page.css` and `use-landing-pointer-effects.ts`.
+ */
+export function LandingPage() {
+  const glow = useRef<HTMLDivElement>(null);
+  const sparks = useRef<HTMLCanvasElement>(null);
+  useLandingPointerEffects(glow, sparks);
 
   return (
-    <MotionConfig reducedMotion="user">
-      {/* The document itself goes dark too, so overscroll and rounded window corners never show white. */}
-      <style>{`html,body{background:#0a0912;color-scheme:dark}`}</style>
-      <div className="landing-page relative isolate flex min-h-dvh flex-col overflow-x-clip bg-[#0a0912] font-display text-white antialiased">
-        {/* The animated gradient is the whole picture; the type sits on it like a poster. */}
-        {gradientReady && (
-          <AnimatedGradient config={heroGradient} theme="dark" paused={reducedMotion} />
-        )}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-[1] bg-[linear-gradient(180deg,rgba(10,9,18,0.35)_0%,rgba(10,9,18,0.05)_35%,rgba(10,9,18,0.55)_75%,rgba(10,9,18,0.85)_100%)]"
-        />
-
-        <header className="flex h-19 w-full shrink-0 items-center justify-between px-5 sm:px-8">
-          <a href="/" className="shrink-0" aria-label="CoForge">
-            <img src="/coforge-brand.svg" alt="" className="h-5 w-auto min-[400px]:h-6 sm:h-8" />
-          </a>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <a
-              href={repositoryUrl}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={m.landing_action_repository()}
-              className="flex size-8 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <GitHubMark className="size-[18px]" />
+    <div className="home-page font-display">
+      {/* The document itself is the page colour too, so overscroll never shows the app theme. */}
+      <style>{`html,body{background:#eeebfe;color-scheme:light}`}</style>
+      <div className="home-screen">
+        <header className="home-nav">
+          <div className="home-wrap home-nav-inner">
+            <a className="home-logo" href="/" aria-label="CoForge">
+              <img src="/login/homepage-logo.webp" alt="" />
             </a>
-            <LocaleSwitch />
-            <Link
-              to="/login"
-              className="flex h-9 items-center rounded-full px-2 text-sm font-medium whitespace-nowrap text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:px-3"
-            >
-              <span>{m.landing_action_sign_in()}</span>
-            </Link>
-            <Link
-              to="/login"
-              className="flex h-9 items-center rounded-lg bg-white px-4 text-sm font-medium whitespace-nowrap text-gray-900 transition-colors hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-            >
-              <span>{m.landing_action_sign_up()}</span>
-            </Link>
+            <nav className="home-nav-actions">
+              <a
+                className="home-icon-link"
+                href={repositoryUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={m.landing_action_repository()}
+              >
+                <GitHubMark className="" />
+              </a>
+              <LocaleSwitch />
+              <Link to="/login" className="home-text-link">
+                {m.landing_action_sign_in()}
+              </Link>
+              <Link to="/login" className="home-button">
+                {m.landing_action_sign_up()}
+              </Link>
+            </nav>
           </div>
         </header>
 
-        <main className="relative mx-auto flex min-h-[calc(100dvh-4.75rem)] w-full max-w-[1400px] shrink-0 flex-col justify-center px-6 pt-4 pb-8">
-          <div className="flex flex-col items-center">
-            <div className="relative w-full py-12 sm:py-10">
-              <div className="mx-auto w-full min-w-0 max-w-2xl px-12 text-center sm:px-24 lg:w-[64%] lg:px-0">
-                <ShimmerText
-                  className="text-sm font-medium text-white/55 [--shimmer-contrast:rgba(255,255,255,1)]"
-                  duration={1.6}
-                  delay={1.4}
-                >
-                  {m.landing_eyebrow()}
-                </ShimmerText>
-
-                <h1 className="sr-only">{headline}</h1>
-                <div
-                  aria-hidden="true"
-                  className="mt-5 text-[clamp(1.25rem,6.8vw,1.65rem)] leading-[1.1] font-semibold tracking-[-0.03em] sm:text-[clamp(2rem,4.8vw,4.25rem)]"
-                >
-                  <BlurReveal as="span" className="block" speedReveal={1.2}>
-                    {m.landing_headline_line_1()}
-                  </BlurReveal>
-                  <BlurReveal as="span" className="block" speedReveal={1.2} delay={0.35}>
-                    {m.landing_headline_line_2()}
-                  </BlurReveal>
+        <main className="home-main">
+          <section className="home-hero">
+            {/* The designer's 5760 x 3600 canvas at a quarter, back to front: the background, the
+                ring and cards, the purple agent, the green one, the person at the desk and the
+                yellow one. Positions are percentages of that canvas. Each agent floats a third
+                of a beat apart; green and purple blink. */}
+            <div className="home-art-frame" aria-hidden="true">
+              <div className="home-stage">
+                <img className="home-stage-bg" src="/landing/page-bg.webp" alt="" />
+                <div className="home-art-shift">
+                  <img className="home-layer" src="/landing/mid.webp" alt="" />
+                  <div
+                    className="home-agent home-agent--purple"
+                    style={{ left: "60.59%", top: "17.889%", width: "13.889%" }}
+                  >
+                    <img src="/landing/purple-open.webp" alt="" />
+                    <img className="home-agent-closed" src="/landing/purple-closed.webp" alt="" />
+                  </div>
+                  <div
+                    className="home-agent home-agent--green"
+                    style={{ left: "47.483%", top: "33.833%", width: "11.528%" }}
+                  >
+                    <img src="/landing/green-open.webp" alt="" />
+                    <img className="home-agent-closed" src="/landing/green-closed.webp" alt="" />
+                  </div>
+                  <img className="home-layer" src="/landing/fg.webp" alt="" />
+                  <div
+                    className="home-agent home-agent--yellow"
+                    style={{ left: "84.444%", top: "36.444%", width: "12.5%" }}
+                  >
+                    <img src="/landing/yellow.webp" alt="" />
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div
-              role="region"
-              aria-label={m.landing_terminal_label()}
-              className="mt-4 w-full max-w-2xl text-left"
-            >
-              <InstallTerminal installOrigin={installOrigin} />
+            <div className="home-wrap home-hero-inner">
+              <div className="home-hero-copy">
+                <p className="home-eyebrow">
+                  <Sparkle />
+                  {m.landing_hero_eyebrow()}
+                </p>
+                <h1 className="home-title">
+                  {m.landing_hero_title_line_1()}
+                  <br />
+                  {m.landing_hero_title_line_2()}
+                  <span className="home-title-highlight">{m.landing_hero_title_highlight()}</span>
+                </h1>
+                <p className="home-body">{m.landing_hero_body()}</p>
+              </div>
             </div>
-          </div>
+
+            <div className="home-wrap">
+              <ul className="home-features">
+                {FEATURES.map((feature) => (
+                  <li key={feature.image}>
+                    <img src={feature.image} alt="" />
+                    <div>
+                      <h2>{feature.title()}</h2>
+                      <p>
+                        {/* The design breaks each line at its comma on a desktop; a column lets
+                            it wrap. */}
+                        {feature
+                          .body()
+                          .split("\n")
+                          .map((line, index) => (
+                            <Fragment key={index}>
+                              {index > 0 && <br />}
+                              {line}
+                            </Fragment>
+                          ))}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
         </main>
       </div>
-    </MotionConfig>
-  );
-}
-
-// This walkthrough is a demonstration; actionable setup belongs in the Computer UI.
-function InstallTerminal({ installOrigin }: { installOrigin: string }) {
-  return (
-    <Terminal className="dark-mode min-h-88 max-h-none max-w-none border-secondary bg-terminal/85 shadow-2xl shadow-black/40 backdrop-blur-md [&>div:first-child]:border-secondary [&_code]:grid-cols-1 [&_code]:font-display-mono [&_code]:[overflow-wrap:anywhere] [&_pre]:text-xs [&_pre]:leading-6 [&_pre]:whitespace-pre-wrap">
-      <TypingAnimation className="text-white/90" duration={28} delay={300}>
-        {`$ ${installCommands(installOrigin).posix}`}
-      </TypingAnimation>
-      <AnimatedSpan className="text-emerald-400">✔ {m.landing_terminal_installed()}</AnimatedSpan>
-      <TypingAnimation className="text-white/90" duration={28}>
-        {`$ ${setupCommand("acme")}`}
-      </TypingAnimation>
-      <AnimatedSpan className="text-emerald-400">✔ {m.landing_terminal_connected()}</AnimatedSpan>
-      <AnimatedSpan className="text-white/60">
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          ℹ {m.landing_terminal_runtimes()}
-          {supportedAgents.map((agent) => (
-            <span key={agent.name} className="inline-flex items-center gap-1.5 text-white/85">
-              <AgentMark mark={agent.mark} monochrome={agent.monochrome} />
-              {agent.name}
-            </span>
-          ))}
-        </span>
-      </AnimatedSpan>
-      <AnimatedSpan className="text-emerald-400">
-        ✔ {m.landing_terminal_agent_online()}
-      </AnimatedSpan>
-      <AnimatedSpan className="text-white/50">{m.landing_terminal_hint()}</AnimatedSpan>
-    </Terminal>
+      <canvas ref={sparks} className="home-sparks" aria-hidden="true" />
+      <div ref={glow} className="home-glow" aria-hidden="true" />
+    </div>
   );
 }
