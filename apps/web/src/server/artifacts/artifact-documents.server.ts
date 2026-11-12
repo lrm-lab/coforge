@@ -183,8 +183,8 @@ export class ArtifactDocuments {
       file.sizeBytes <= ARTIFACT_DOCUMENT_LIMIT;
     const bytes = document ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
     // The author came with the read (no second query); the rule is the one `delete` enforces —
-    // and a reader the widened tier let in cannot delete at all: a delete is the home's write
-    // (task #529).
+    // and a reader the home's rule kept out cannot delete at all: a delete is the home's write
+    // (task #20).
     const canDelete =
       read.artifact.homeRead &&
       (await canDeleteArtifact(this.db, scope.workspaceId, scope.actor, read.artifact));
@@ -226,8 +226,8 @@ export class ArtifactDocuments {
       input.artifactId,
       scope.actor,
     );
-    // A save is the home's write; a reader the widened tier let in hears ACCESS_DENIED, since it
-    // already knows the artifact is there (task #529).
+    // A save is the home's write; a member the home's rule keeps out hears ACCESS_DENIED, since
+    // it already knows the artifact is there (task #20).
     if (!artifact.canWrite) throw new AppError("ACCESS_DENIED");
     if (!isPageKind(artifact.kind))
       throw new AppError("INVALID_INPUT", { errorId: "artifact-kind" });

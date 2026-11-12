@@ -59,7 +59,7 @@ export function ArtifactPageHeader({
   status: ArtifactStatus;
   home: ArtifactHome | undefined;
   canDelete: boolean;
-  /** The artifact's access level's icon on the Share button. */
+  /** The icon on the Share button: the public link's, or the Workspace's. */
   shareIcon?: typeof ArrowLeft;
   /** Absent until the artifact is read. */
   onShare?: () => void;
@@ -171,8 +171,8 @@ export function useHomeName(home: ArtifactHome | undefined): string | undefined 
 }
 
 /** Back to the conversation the artifact lives in: a channel by its name, a DM as "Back"; with no
- * conversation to go back to (one of the Workspace, or one read only through the Workspace
- * level, task #529), back to the Workspace. */
+ * conversation to go back to (one of the Workspace, or one the reader reaches only
+ * workspace-wide, task #20), back to the Workspace. */
 function BackToHome({ home }: { home: ArtifactHome | undefined }) {
   const workspaceSlug = useWorkspaceSlug();
   const toWorkspace = home !== undefined && (!home.conversationId || home.kind === "workspace");

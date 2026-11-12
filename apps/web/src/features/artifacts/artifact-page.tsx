@@ -24,11 +24,9 @@ import { LatestVersion } from "./artifact-document-body";
 import { ArtifactBanner } from "./artifact-pane-header";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { useArtifactLeaveGuard } from "./artifact-leave-guard";
-import { useArtifactAccess } from "./artifact-access";
 import {
   ARTIFACT_TITLE_ID,
   ArtifactPageHeader,
-  useHomeName,
   type ArtifactHome,
   type ArtifactPaneControls,
 } from "./artifact-page-header";
@@ -95,14 +93,6 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     kind: current.homeKind,
     conversationId: homeId ?? null,
   };
-  const homeName = useHomeName(home);
-  // Narrowed past the viewer: their page is not theirs any more; back to the Workspace, saying so.
-  const access = useArtifactAccess(artifactId, current?.artifact, async () => {
-    deleted.current = true;
-    if (pane) pane.onClose();
-    else await router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } });
-    toast.success(m.doc_share_locked_out({ title }));
-  });
   const link = useArtifactLinkSharing(artifactId, current !== undefined);
   useRealtimeSubscription({
     channel:
@@ -170,7 +160,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         status={webPage ? "page" : editor.status}
         home={home}
         canDelete={current?.canDelete === true}
-        shareIcon={shareIcon(access.access, link)}
+        shareIcon={shareIcon(link)}
         onShare={
           current &&
           (() => {
@@ -246,21 +236,15 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         open={sharing}
         onOpenChange={(open) => {
           setSharing(open);
-          if (!open) {
-            access.dismiss();
-            link.dismiss();
-          }
+          if (!open) link.dismiss();
         }}
         title={title}
-        homeKind={home?.kind ?? "channel"}
-        homeName={homeName}
-        state={access}
+        canChange={current?.artifact.canChange}
         link={link}
         onCopyLink={() => void copy(pageHref(), m.doc_link_copied())}
         onCopyPublicLink={(url) => void copy(url, m.doc_public_link_copied())}
         onSend={() => {
           setSharing(false);
-          access.dismiss();
           link.dismiss();
           setSendingTo(true);
         }}

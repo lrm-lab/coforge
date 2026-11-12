@@ -16,7 +16,6 @@ import {
   artifactsDisabled,
   artifactsEnabled,
   canDeleteArtifact,
-  changeArtifactAccess,
   type ArtifactActor,
 } from "./artifact-access.server";
 import {
@@ -105,7 +104,6 @@ export class Artifacts {
       where: { id: artifactId, workspaceId, deletedAt: null },
       select: {
         homeKey: true,
-        access: true,
         authorUserId: true,
         authorAgentId: true,
         kind: true,
@@ -412,20 +410,6 @@ export class Artifacts {
         publisher: input.publisher,
       });
     return saved;
-  }
-
-  /** Moves the artifact between read tiers (task #529): `conversation` keeps reads to its home
-   * conversation's readers, `workspace` widens them to every Workspace member; writes never
-   * follow the tier. Its author, the authoring Agent's owner, or a Workspace owner or admin may;
-   * an Agent never may. */
-  async changeAccess(input: {
-    workspaceId: string;
-    artifactId: string;
-    actor: ArtifactActor;
-    access: "conversation" | "workspace";
-  }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
-    await changeArtifactAccess(this.db, input.workspaceId, input.actor, input);
   }
 
   /** Soft-deletes the artifact (its name is free again at once); its author's, or a Workspace

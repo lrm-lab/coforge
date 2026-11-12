@@ -184,6 +184,12 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     expect((await shareAsNoor(secret.id)).outcome).toBe("success");
     expect((await shareAsNoor(gone.id)).outcome).toBe("success");
     await db.artifact.update({ where: { id: gone.id }, data: { deletedAt: new Date() } });
+    // Every member reads every artifact now (task #20), so a member meets "no access" only at a
+    // home the Workspace hides: hide Noor's channel now that the shares are posted.
+    await db.conversation.update({
+      where: { id: closed.id },
+      data: { hiddenFromWorkspaceAt: new Date() },
+    });
 
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${target.id}`);
     await waitFor(`document.body.textContent.includes("For Thursday's review")`, 60_000);

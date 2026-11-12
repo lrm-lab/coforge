@@ -63,8 +63,8 @@ export function useArtifactEditor(artifactId: string) {
   const [missed, setMissed] = useState<PublishedVersion | null>(null);
 
   const data = document.data;
-  // Read only from the start where the read says the viewer may not write (task #529: a reader
-  // through the Workspace level), or once a save was refused.
+  // Read only from the start where the read says the viewer may not write (task #20: a member
+  // whose home rule kept them out), or once a save was refused.
   const readOnly = denied || data?.artifact.canWrite === false;
   const entryPath = data?.artifact.entryPath ?? "document.md";
   // The first read sets what is being edited; later reads replace it only when nothing is

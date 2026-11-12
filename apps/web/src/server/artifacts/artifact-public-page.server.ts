@@ -1,5 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { artifactsEnabled } from "./artifact-access.server";
+import { artifactHomeHidden, artifactsEnabled } from "./artifact-access.server";
 
 type PublicPage = {
   workspaceId: string;
@@ -35,6 +35,7 @@ export function publicPageLookup(
             deletedAt: true,
             currentVersion: true,
             entryPath: true,
+            homeKey: true,
           },
         },
       },
@@ -44,7 +45,7 @@ export function publicPageLookup(
     const kind =
       artifact.kind === "html" ? "html" : artifact.kind === "markdown" ? "markdown" : null;
     if (!kind) return null;
-    const [on, version] = await Promise.all([
+    const [on, version, homeHidden] = await Promise.all([
       enabled(artifact.workspaceId),
       db.artifactVersion.findUnique({
         where: {
@@ -55,9 +56,12 @@ export function publicPageLookup(
           files: { where: { path: path ?? artifact.entryPath }, select: { sha256: true } },
         },
       }),
+      // A home the Workspace hides is gone for everyone, its public page with it (task #20).
+      artifactHomeHidden(db, artifact.workspaceId, artifact.homeKey),
     ]);
     const file = version?.files[0];
-    if (!on || !version || version.entryPath !== artifact.entryPath || !file) return null;
+    if (!on || homeHidden || !version || version.entryPath !== artifact.entryPath || !file)
+      return null;
     return {
       workspaceId: artifact.workspaceId,
       artifactId: artifact.id,

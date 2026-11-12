@@ -267,7 +267,7 @@ test("an idempotent create replays over the Agent API, and a reused key with new
   expect(mismatch.status).toBe(409);
 });
 
-test("a channel the Agent cannot read is missing, for making and for reading", async () => {
+test("a channel the Agent cannot read is missing for making; reading reaches every artifact", async () => {
   expect(
     await post({ operation: "create", title: "Secret", target: `#secret-${handle}` }),
   ).toMatchObject({ status: 404, body: { code: "NOT_FOUND" } });
@@ -275,10 +275,20 @@ test("a channel the Agent cannot read is missing, for making and for reading", a
     { workspaceId, actor: { userId: alice } },
     { conversationId: secretId, title: "Secret", text: "hush\n" },
   );
-  expect(await post({ operation: "read", artifact: secret.id })).toMatchObject({
-    status: 404,
-    body: { code: "NOT_FOUND" },
-  });
+  // Every Workspace member reads every artifact (task #20): the Agent reads it, but the home's
+  // key and its write stay alice's.
+  const read = await post({ operation: "read", artifact: secret.id });
+  expect(read.status).toBe(200);
+  expect(read.body.artifact.homeKey).toBeNull();
+  expect(
+    await post({
+      operation: "push",
+      artifact: secret.id,
+      baseVersion: 1,
+      idempotencyKey: key(),
+      text: "changed\n",
+    }),
+  ).toMatchObject({ status: 403, body: { code: "ACCESS_DENIED" } });
 });
 
 test("a request outside the web page's rules is refused", async () => {
@@ -316,8 +326,9 @@ test("a Workspace without the Artifacts experiment says so, whatever was asked",
   }
 });
 
-test("an Agent reads an artifact widened to the Workspace tier", async () => {
-  // Alice writes a document in a private channel the Agent is not in.
+test("an Agent reads an artifact whose home it cannot read", async () => {
+  // Alice writes a document in a private channel the Agent is not in; every member reads it
+  // (task #20), but the home's identity stays hidden and writes stay the home's.
   const artifact = await documents.create(
     { workspaceId, actor: { userId: alice } },
     {
@@ -327,19 +338,12 @@ test("an Agent reads an artifact widened to the Workspace tier", async () => {
       idempotencyKey: key(),
     },
   );
-  // Before widening the Agent hears nothing; after widening it reads.
-  expect(await post({ operation: "read", artifact: artifact.id })).toMatchObject({ status: 404 });
-  await artifacts.changeAccess({
-    workspaceId,
-    artifactId: artifact.id,
-    actor: { userId: alice },
-    access: "workspace",
-  });
   const read = await post({ operation: "read", artifact: artifact.id });
   expect(read.status).toBe(200);
   expect(read.body).toMatchObject({
     text: "# Secret\n",
-    // A tier-only reader never learns the private channel's id — only its kind (task #529).
-    artifact: { access: "workspace", canChange: false, homeKey: null, homeKind: "channel" },
+    // Not even the home's kind leaks to a reader the home's rule kept out (task #20).
+    artifact: { canChange: false, canWrite: false, homeKey: null, homeKind: "workspace" },
   });
+  expect("access" in (read.body.artifact as object)).toBe(false);
 });

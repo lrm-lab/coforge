@@ -22,7 +22,7 @@ out" a move, not a split:
 - `artifact-composition.server.ts` — production wiring: `productionArtifacts`,
   `productionArtifactSandbox`.
 - `artifact-access.server.ts` — the feature gate (`artifactsEnabled`) and the
-  home/tier access predicates external callers need.
+  home access predicates external callers need.
 - `agent-artifacts.server.ts` — the Agent HTTPS API surface.
 - `agent-artifact-files.server.ts` — the Agent API's file bytes: upload by sha256 and download by
   path.

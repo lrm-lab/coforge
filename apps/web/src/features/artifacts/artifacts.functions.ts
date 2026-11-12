@@ -95,22 +95,6 @@ export const saveArtifactDocument = createServerFn({ method: "POST" })
     productionArtifacts(context.db).documents.save(scopeOf(context), data),
   );
 
-/** Moves an artifact between read tiers (task #529): `conversation` keeps it to its home
- * conversation's readers, `workspace` widens it to every Workspace member. Its author, the
- * authoring Agent's owner, or a Workspace owner or admin may; reads never widen writes. */
-export const changeArtifactAccess = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(z.object({ artifactId: id, access: z.enum(["conversation", "workspace"]) }).strict())
-  .handler(async ({ context, data }) => {
-    await productionArtifacts(context.db).artifacts.changeAccess({
-      workspaceId: context.workspaceId,
-      artifactId: data.artifactId,
-      actor: { userId: context.user.id },
-      access: data.access,
-    });
-    return { access: data.access };
-  });
-
 /** Whether an artifact can have a public link, and the one it has (task #646). */
 export const loadArtifactLinkSharing = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
@@ -151,8 +135,8 @@ export const deleteArtifact = createServerFn({ method: "POST" })
 /**
  * Sends an artifact's link into channels and DMs as the signed-in person (artifacts task #2): one
  * message per destination, the optional note above the link. The actor is always the session's
- * person, never the request's. The service refuses the whole request when they may not read the
- * artifact, or documents are off; each destination then takes the person's own send there (a
+ * person, never the request's. The service refuses the whole request when they are no member of
+ * the Workspace or a home is hidden, or documents are off; each destination then takes the person's own send there (a
  * channel they are in and that is not archived, a DM they may write in), so one can fail while the
  * rest go through, and a retry with the same `requestId` sends only to those that failed.
  */

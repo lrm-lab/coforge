@@ -164,7 +164,7 @@ test("an idempotent create replays the same document, and a different input with
   expect(other.id).not.toBe(first.id);
 });
 
-test("a list and cards show only documents the reader can read", async () => {
+test("a list by home shows only the home's documents; cards read for every member", async () => {
   const open = await documents.create(scope(alice), { conversationId: channelId, title: "Open" });
   const closed = await documents.create(scope(alice), {
     conversationId: secretId,
@@ -172,16 +172,17 @@ test("a list and cards show only documents the reader can read", async () => {
   });
   const listed = await documents.list(scope(bob), { conversationId: channelId });
   expect(listed.map((doc) => doc.id)).toContain(open.id);
+  // Listing a home's documents still needs the home; a card by id is every member's read.
   await expect(documents.list(scope(bob), { conversationId: secretId })).rejects.toMatchObject({
     code: "NOT_FOUND",
   });
   const cards = await documents.cards(scope(bob), [open.id, closed.id, crypto.randomUUID()]);
-  expect(cards.map((card) => card.id)).toEqual([open.id]);
+  expect(cards.map((card) => card.id)).toEqual([open.id, closed.id]);
 });
 
 test("a save may name only bytes its publisher uploaded or the document already uses", async () => {
   const doc = await documents.create(scope(alice), { conversationId: channelId, title: "Private" });
-  // Bytes alice stored for a document bob cannot read.
+  // Bytes alice stored for a document of hers in a channel bob is not in.
   const hidden = await documents.create(scope(alice), {
     conversationId: secretId,
     title: "Hidden",
@@ -229,7 +230,7 @@ test("a save by someone who may not write stores nothing, and text that is not t
       text: unique,
       idempotencyKey: crypto.randomUUID(),
     }),
-  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
   expect(await db.artifactBlob.count({ where: { workspaceId, sha256 } })).toBe(0);
   await expect(
     documents.save(scope(alice), {

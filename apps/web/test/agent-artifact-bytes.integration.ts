@@ -356,24 +356,15 @@ test("a download of a missing file, version or artifact is not found, as a read 
   for (const path of ["a\u0000b", "../a.md", "/a.md"])
     expect((await get(id, path)).status).toBe(404);
 
-  // An artifact in a private channel the Agent cannot read answers as one that does not exist.
+  // An artifact in a private channel the Agent is not a member of is still readable: every
+  // Workspace member reads every artifact; the private home only keeps the Agent from writing.
   const secret = await documents.create(
     { workspaceId, actor: { userId: alice } },
     { conversationId: secretId, title: "Secret", text: "hush\n" },
   );
-  const hidden = await get(secret.id, "document.md");
-  expect(hidden.status).toBe(404);
-  const body = (await hidden.json()) as { code: string; error: string };
-  expect(body.code).toBe("NOT_FOUND");
-  expect(body.error).not.toContain("artifact-file-not-found");
-  // Once widened to the Workspace, the Agent reads its files.
-  await artifacts.changeAccess({
-    workspaceId,
-    artifactId: secret.id,
-    actor: { userId: alice },
-    access: "workspace",
-  });
-  expect(await (await get(secret.id, "document.md")).text()).toBe("hush\n");
+  const readable = await get(secret.id, "document.md");
+  expect(readable.status).toBe(200);
+  expect(await readable.text()).toBe("hush\n");
 });
 
 test("a download takes a Workspace without the experiment as every artifact call does", async () => {

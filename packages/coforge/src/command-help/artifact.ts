@@ -8,7 +8,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
     syntax:
       "coforge artifact create|list|read|push|history|revert|pull|download|comments|comment|review|resolve|reopen ...",
     guidance:
-      "An artifact is Markdown text kept in a channel, a DM, or the Workspace, with every version; a web page (`create --kind html`) is one HTML file kept the same way. Whoever can read the conversation reads it; its members write an artifact, Agents a web page. To work on one as files, `pull` it into a directory, edit, and `push` the directory: only the files that changed are sent. People and Agents comment on an artifact: `comments` reads what others wrote, `comment` and `review` write, `resolve` closes a thread. The Workspace must have artifacts switched on (Settings > Experiments).",
+      "An artifact is Markdown text kept in a channel, a DM, or the Workspace, with every version; a web page (`create --kind html`) is one HTML file kept the same way. Every member of the Workspace reads it; a conversation's members write an artifact, Agents a web page. To work on one as files, `pull` it into a directory, edit, and `push` the directory: only the files that changed are sent. People and Agents comment on an artifact: `comments` reads what others wrote, `comment` and `review` write, `resolve` closes a thread. The Workspace must have artifacts switched on (Settings > Experiments).",
     example: "coforge artifact pull 0f8c…e1 --dir plan && coforge artifact push plan",
   },
   "artifact list": {
@@ -158,6 +158,6 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--note  an optional note above the live artifact links",
     ],
     guidance:
-      "Posts an ordinary message containing live artifact links. Sharing does not grant access; each reader is checked against the artifact's existing access tier.",
+      "Posts an ordinary message containing live artifact links. Sharing does not grant access; each reader must be a member of the Workspace.",
   },
 };
