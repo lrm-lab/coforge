@@ -111,6 +111,10 @@ test("a recycled session can itself be recycled at the next wake", async () => {
     await logged(records, sweepWith(1));
     await h.deliver(1);
     h.sessions[1]!.finish();
+    // The notice written as that turn ended is written again, which opens another turn of its own:
+    // the mock's turn has to end before the sweep can judge the session idle.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    h.sessions[1]!.finish();
     setSystemTime(minutes(200));
     await h.activityWith(/idle 110m/);
     await logged(records, (r) => sweepWith(1)(r) && records.filter(sweepWith(1)).length >= 2);

@@ -99,11 +99,9 @@ export class AgentMessageAttentionIndex {
   /** The pending sequences that are a Memory Agent's ordinary channel updates: observed in a
    * batch, not delivered to the Agent as messages awaiting it. Pruned with `#pendingSequences`. */
   readonly #observedSequences = new Map<string, Map<string, Set<number>>>();
-  /** The newest unreviewed deliveries per Agent and target, with the moment the daemon learned
-   * about each. Kept so a locally decided freshness hold can show the Agent the same bounded
-   * window the server's hold would have shown — and so the hold can count that window as
-   * reviewed, which is what lets a resend through instead of holding it again. Bounded by
-   * `PENDING_WINDOW_LIMIT`; pruned as the boundary advances and dropped with the Agent. */
+  /** The newest unreviewed deliveries per Agent and target, with when the daemon learned of each:
+   * a freshness hold shows the same bounded window the server's would, and counting it reviewed
+   * is what lets a resend through. Bounded by `PENDING_WINDOW_LIMIT`. */
   readonly #pendingWindow = new Map<string, Map<string, PendingWindowEntry[]>>();
   /** Durable snapshots of the same aggregate; each consumption operation writes at most once. */
   readonly #consumedSeqs?: AgentConsumedSeqPort;
@@ -136,18 +134,18 @@ export class AgentMessageAttentionIndex {
       busy(agentId: string): void;
       /** Admission resolved or rejected; this is not a turn outcome. */
       noticeSettled?(agentId: string): void;
-      /** The deliveries held for this Agent that it has not been shown yet. The notice counts
-       * these, so its number is always a count of messages the daemon is holding right now rather
-       * than a running total it would have to invalidate later. Concrete deliveries rather than a
-       * number because one message can be held as more than one delivery, and a notice must
-       * count messages, not deliveries. Optional: a composition without a delivery queue holds
-       * nothing. */
+      /** The deliveries held for this Agent that it has not been shown yet: the notice counts
+       * messages the daemon holds right now, not a total it would have to invalidate later. One
+       * message can be held as more than one delivery, and a notice counts messages. Optional: a
+       * composition without a delivery queue holds nothing. */
       queued?(agentId: string): readonly AgentMessageDelivery[];
       /** The Agent's durable consumed cursor (its state database). Without it the index is
        * exactly as volatile as it was: the cursor then only lives as long as this process. */
       consumedSeqs?: AgentConsumedSeqPort;
       /** A line owed before the next notice, with its newline; empty when none. */
       noticePrefix?(agentId: string): string;
+      /** The words just written, so an unconsumed boundary can write them again. */
+      recordNotice?(agentId: string, deliveryIds: readonly string[], text: string): void;
     } = { shouldHold: () => false, enqueue: () => {}, busy: () => {} },
     updateOptions: { schedule?: MemoryChannelUpdateSchedule } = {},
   ) {
@@ -536,6 +534,11 @@ export class AgentMessageAttentionIndex {
       .then(() => {
         if (this.#generations.get(message.agentId) === generation) {
           markNotified(generation, [message]);
+          this.hold.recordNotice?.(
+            message.agentId,
+            announced.map((item) => item.deliveryId),
+            notice,
+          );
           this.#previewSeen.record(message.agentId, view.whole);
           this.noticeActionClocks.noteNoticeAccepted(message.agentId);
           this.messageReceived(message.agentId, conversation);

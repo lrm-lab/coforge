@@ -166,6 +166,11 @@ export class AgentConfigApply {
     return this.#held;
   }
 
+  /** Whether a configuration still waits for this Agent to go idle: a stop is coming. */
+  pending(agentId: string): boolean {
+    return this.#pending.has(agentId);
+  }
+
   /** Cancels the retry timer; a stopped runtime applies nothing further. */
   dispose(): void {
     this.#disposed = true;

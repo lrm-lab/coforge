@@ -67,6 +67,25 @@ test("a busy Agent keeps its turn until it ends, then stops and wakes on the new
   expect(outcomes(records)).toEqual(["pending", "idle_stop"]);
 });
 
+test("the notice that turn left unconsumed goes with the launch the apply wakes, not the old turn", async () => {
+  let notice: string | undefined;
+  const { result: h } = await run({}, async (h) => {
+    await busyAgent(h);
+    notice = h.sessions[0]!.inputs.at(-1);
+    await h.runtime.handleAgentConfig(push(2, { model: "opus" }));
+    h.sessions[0]!.finish();
+    await until(() => h.sessions[0]!.disposed);
+    await h.deliver(2);
+    await until(() => h.sessions[1]!.inputs.length > 0);
+    return h;
+  });
+  expect(h.sessions).toHaveLength(2);
+  // The stop the push waits for wins: the words are written once, into the launch that follows,
+  // never again into the turn that ended.
+  expect(h.sessions[0]!.inputs.filter((text) => text === notice)).toHaveLength(1);
+  expect(h.sessions[1]!.inputs).toContain(notice!);
+});
+
 test("an idle Agent is stopped at once and its next message wakes it", async () => {
   const { result: h } = await run({}, async (h) => {
     await h.runtime.handleAgentStart(h.intent({ controlEpoch: 1, launchId: "launch-1" }));

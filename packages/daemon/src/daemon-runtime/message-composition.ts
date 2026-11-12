@@ -12,6 +12,7 @@ import {
   type AgentMessageDeliveryRejection,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentFeatureSync } from "./agent-feature-sync";
+import type { AgentConfigApply } from "./agent-config-apply";
 import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
@@ -51,6 +52,8 @@ export type MessageCompositionPorts = {
     extra?: Partial<ActivityDraft>,
   ): ActivityDraft;
   sync: Pick<AgentFeatureSync, "noticePrefix">;
+  /** The pending runtime-configuration apply: its stop is coming. */
+  configApply: Pick<AgentConfigApply, "pending">;
   /** The launch identity a tracked mention's envelope must name, while that launch runs. */
   /** The running process's launch and session, or with `reported` the last ones reported. */
   runningMentionIdentity(agentId: string, reported?: true): RunningMentionIdentity | undefined;
@@ -173,6 +176,8 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         },
       },
       noticePrefix: (agentId) => ports.sync.noticePrefix(agentId),
+      recordNotice: (agentId, deliveryIds, text) =>
+        ports.deliveryGate.consumption.recordNotice(agentId, deliveryIds, text),
     },
   );
   // A new context (a launch, or a finished compaction) drops the previews the model no longer
@@ -185,6 +190,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     messageAttention,
     deliveryGate: ports.deliveryGate,
     runtimeRelease: ports.runtimeRelease,
+    configApplyPending: (agentId) => ports.configApply.pending(agentId),
     processManager: ports.processManager,
     startAgent: (agentId, config, sessionId) => ports.startAgent(agentId, config, sessionId),
     currentActivityLaunch: (agentId) => ports.currentActivityLaunch(agentId),
@@ -193,6 +199,10 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     assertRunning: () => ports.assertRunning(),
     agentIdForContext: (context) => ports.agentIdForContext(context),
   });
+  // A notice the turn consumed nothing of is written again from here (see `InboxCoordinator`).
+  ports.deliveryGate.consumption.reofferTo((agentId, notices) =>
+    inboxCoordinator.reofferUnconsumedNotices(agentId, notices),
+  );
   const messageOperations = new MessageOperations({
     connection: { workspaceId: connection.workspaceId, computerId: connection.computerId },
     attention: messageAttention,

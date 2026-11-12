@@ -14,9 +14,13 @@ import { forgetLocalAgent, type AgentLocalFootprint } from "./agent-forget";
 import { agentInbox, appInbox, appInboxSeals } from "./agent-inbox-factories";
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import type { AgentDeliveryGate } from "./agent-delivery-gate";
+import type { UnconsumedNotice } from "./delivery-consumption-watch";
 import type { ActivityLaunch } from "./activity-launch";
 import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
 import type { RuntimeRelease } from "./runtime-release";
+
+/** The one notice an App Inbox item is announced with, a due reminder included. */
+const APP_ITEM_NOTICE = "New app item available. Run coforge inbox check.";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -27,6 +31,8 @@ export type AgentInboxCoordinatorPorts = {
   messageAttention: Pick<AgentMessageAttentionIndex, "check">;
   deliveryGate: AgentDeliveryGate;
   runtimeRelease: Pick<RuntimeRelease<ActivityLaunch>, "isRecovering">;
+  /** A runtime-configuration apply still waits for this Agent: its stop and relaunch are coming. */
+  configApplyPending?(agentId: string): boolean;
   processManager: Pick<AgentProcessManager, "session" | "restartConfig">;
   startAgent: (
     agentId: string,
@@ -207,8 +213,22 @@ export class AgentInboxCoordinator {
       }
       this.ports.deliveryGate.busy(agentId);
       const launch = this.ports.currentActivityLaunch(agentId);
+      // Same watch as a delivery: an app-item notice written as the turn ends starts no turn of
+      // its own, so a turn boundary writes its words again once (a due reminder included).
+      const write = { deliveryId: `appitem:${itemId}`, notice: APP_ITEM_NOTICE };
+      if (launch)
+        this.ports.deliveryGate.consumption.recordWrite(agentId, launch.launchId, launch, write);
       try {
-        await session.notify("New app item available. Run coforge inbox check.");
+        await session.notify(APP_ITEM_NOTICE);
+      } catch (error) {
+        if (launch)
+          this.ports.deliveryGate.consumption.cancelWrite(
+            agentId,
+            launch.launchId,
+            launch,
+            write.deliveryId,
+          );
+        throw error;
       } finally {
         if (launch && this.ports.processManager.session(agentId) === session)
           this.ports.reconcileIdleTurn(agentId, launch);
@@ -267,6 +287,37 @@ export class AgentInboxCoordinator {
             error_code: diagnosticErrorName(error),
           });
           return this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
+        },
+      );
+    }
+  }
+
+  /**
+   * Writes again a notice that a turn boundary passed unconsumed (`DeliveryConsumptionWatch`): the
+   * notice's words, never the message behind them. That delivery is already indexed and its ACK
+   * already went out, so this must produce neither a second ACK nor a second watch entry — the same
+   * rule `releaseFallbackNotices` follows. The write starts the Agent's next turn, which is exactly
+   * what a notice written as the previous turn ended never did. A stop already on its way (a
+   * runtime-configuration apply) wins: the words wait for the launch that follows, as any other
+   * held fallback notice does, rather than starting a turn this Agent is about to lose.
+   */
+  reofferUnconsumedNotices(agentId: string, notices: readonly UnconsumedNotice[]): void {
+    const session = this.ports.processManager.session(agentId);
+    if (!session?.notify || this.ports.configApplyPending?.(agentId) === true) {
+      for (const notice of notices) this.ports.deliveryGate.holdFallbackNotice(agentId, notice);
+      return;
+    }
+    for (const { text, deliveryIds } of notices) {
+      void session.notify(text, deliveryIds.length ? { deliveryIds } : undefined).then(
+        () => this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, true),
+        (error: unknown) => {
+          logger.warn("An unconsumed notice was not accepted again", {
+            event: "agent.delivery.reoffer_rejected",
+            agent_id: agentId,
+            delivery_ids: deliveryIds,
+            error_code: diagnosticErrorName(error),
+          });
+          this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
         },
       );
     }

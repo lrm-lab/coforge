@@ -327,8 +327,7 @@ export class DaemonRuntime {
   readonly #inboxCoordinator: AgentInboxCoordinator;
   readonly #stopCoordinator: AgentStopCoordinator;
   readonly #launchCoordinator: AgentLaunchCoordinator;
-  /** Per-Agent MEMORY.md and disk hints. Inert until a cloud config for an Agent is applied to
-   * it (`applyConfig`/`replaceOwnerSnapshot`). */
+  /** Per-Agent MEMORY.md and disk hints; inert until a cloud config is applied to it. */
   readonly systemCleaner: SystemCleaner;
   readonly #runtimeInstanceId = crypto.randomUUID();
   /** The consumed cursor and draft ledger; its store says why it is durable. */
@@ -538,6 +537,7 @@ export class DaemonRuntime {
       activity: (agentId, detailKind, level, detail, extra) =>
         this.#activity(agentId, detailKind, level, detail, extra),
       sync: this.#sync,
+      configApply: this.#configApply,
       contexts: this.#contexts,
       memoryAgent: (agentId) => this.memoryFence(agentId),
       reconcileIdleTurn: this.#turn.reconcileIdleTurn,
@@ -1023,6 +1023,7 @@ export class DaemonRuntime {
       runnerHold: this.#runnerHold,
       runtimeRelease: this.#runtimeRelease,
       sync: this.#sync,
+      configApply: this.#configApply,
       exitedDelivery: this.#exitedDelivery,
       wakeLaunches: this.#wakeLaunches,
       agentLaunches: this.#agentLaunches,
@@ -1155,8 +1156,7 @@ export class DaemonRuntime {
     return handleAgentStop(this.#controlIntentPorts(), intent);
   }
 
-  /** A pushed runtime configuration: applied when the Agent is next idle, never by cutting a
-   * turn short. */
+  /** A pushed runtime configuration: applied when the Agent is next idle, never mid-turn. */
   async handleAgentConfig(sync: AgentConfigSync): Promise<void> {
     this.#assertOwnIntent(sync);
     await this.#configApply.accept(sync);
@@ -1307,7 +1307,7 @@ export class DaemonRuntime {
       (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
     );
 
-  /** The error Activity for a launch that did not start; `agent-failure-presentation` builds it. */
+  /** The error Activity for a launch that never started. */
   #launchFailureActivity = (agentId: string, provider: RuntimeProvider, error: unknown) =>
     buildLaunchFailureActivity(agentId, provider, error, this.#drafts);
 
