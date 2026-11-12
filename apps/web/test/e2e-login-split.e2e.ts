@@ -12,7 +12,6 @@ import {
   passwordFieldSelector,
   passwordTab,
   requireLocalServices,
-  signInTab,
   startSignInStack,
   type Person,
 } from "./e2e-sign-in-harness";
@@ -253,8 +252,8 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     expect(
       await evaluate<number>(`document.querySelector(".login-art__frame").getAnimations().length`),
     ).toBe(0);
-    // The pointer coming onto the agent makes it hop side to side, once.
-    const hops = `document.querySelector(".login-art__agent > div").getAnimations().length`;
+    // The pointer coming onto the agent makes it sway side to side, once.
+    const hops = `document.querySelector(".login-art__hop").getAnimations().length`;
     expect(await evaluate<number>(hops)).toBe(0);
     await browser("hover", ".login-art__agent");
     await browser("wait", "120");
