@@ -29,10 +29,17 @@ async function showPushNotification(event) {
 async function openNotificationTarget(url) {
   if (typeof url !== "string" || !url.startsWith("/")) return;
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  const existing = windows[0];
+  const existing =
+    windows.find((client) => client.focused === true) ??
+    windows.find((client) => client.visibilityState === "visible") ??
+    windows[0];
   if (existing) {
-    await existing.navigate(url);
-    return existing.focus();
+    try {
+      const navigated = await existing.navigate(url);
+      if (navigated) return navigated.focus();
+    } catch {
+      // An uncontrolled window may reject navigation; open the target in a new window below.
+    }
   }
   return self.clients.openWindow(url);
 }
