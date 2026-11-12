@@ -209,7 +209,9 @@ export async function seedDirectConversation(
  * scrolls. Returns the thread's root and its newest reply.
  */
 export async function seedQuietThread(db: PrismaClient, workspaceId: string) {
-  const quietChannelId = seededUuid("e2e-activity-inbox:quiet-channel");
+  // Keyed by the workspace, as `seedChannel` keys its own: a run in another workspace seeds its
+  // own channel rather than reaching into the old one.
+  const quietChannelId = seededUuid(`${workspaceId}:e2e-activity-inbox:quiet-channel`);
   await db.conversation.upsert({
     where: { id: quietChannelId },
     update: { archivedAt: null },
@@ -234,13 +236,13 @@ export async function seedQuietThread(db: PrismaClient, workspaceId: string) {
       doneThroughSequence: 1,
     },
   });
-  const quietRootId = seededUuid("e2e-activity-inbox:quiet-root");
-  const quietNewestId = seededUuid("e2e-activity-inbox:quiet-newest");
+  const quietRootId = seededUuid(`${quietChannelId}:quiet-root`);
+  const quietNewestId = seededUuid(`${quietChannelId}:quiet-newest`);
   // Enough replies that the thread pane scrolls: the newest one is out of view at the root.
   const quietRows = [
     { id: quietRootId, body: "E2E quiet root", threadRootId: null },
     ...Array.from({ length: 39 }, (_, index) => ({
-      id: seededUuid(`e2e-activity-inbox:quiet-reply-${index}`),
+      id: seededUuid(`${quietChannelId}:quiet-reply-${index}`),
       body: `E2E quiet reply ${index + 1}`,
       threadRootId: quietRootId,
     })),
