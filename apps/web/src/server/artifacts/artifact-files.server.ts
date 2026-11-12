@@ -2,6 +2,7 @@ import { ARTIFACT_UPLOAD_MAX_BYTES } from "@lrm/coforge-sdk/agent";
 import type { Prisma } from "#src/generated/prisma/client";
 
 export { artifactPathValid } from "@lrm/coforge-sdk/agent";
+export { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 
 /** One file a push adds or replaces: bytes already uploaded under `sha256`. Its size and kind
  * come from the blob, never from the client. */
@@ -56,15 +57,3 @@ export const ARTIFACT_HTML_ENTRY = "index.html";
 /** A document's (a `markdown` artifact's) own file: what a person edits in one page. */
 export const ARTIFACT_DOCUMENT_LIMIT = 2 * 1024 * 1024;
 
-/** The server's own reading of a file's kind, from its extension; the client cannot choose it. */
-export function artifactKindOfPath(path: string): string {
-  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  if (["html", "htm"].includes(extension)) return "html";
-  if (["md", "markdown"].includes(extension)) return "markdown";
-  if (["txt", "log"].includes(extension)) return "text";
-  if (extension === "csv") return "csv";
-  if (["png", "jpg", "jpeg", "gif", "webp", "avif", "svg"].includes(extension)) return "image";
-  if (extension === "pdf") return "pdf";
-  if (["mp4", "webm", "mov"].includes(extension)) return "video";
-  return "other";
-}
