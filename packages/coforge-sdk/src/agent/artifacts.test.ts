@@ -73,3 +73,81 @@ test("the artifacts route is the same under proxy, local and cloud, with room fo
     expect(routes.artifacts).toMatchObject({ method: "POST", path: "/api/agent/v1/artifacts" });
   expect(agentApiRoutes.proxy.artifacts.maxBodyBytes).toBeGreaterThan(4 * 1024 * 1024);
 });
+
+test("a create or push may carry a file manifest instead of text", () => {
+  expect(
+    decodeAgentArtifactRequest({
+      operation: "push",
+      artifact: "a1",
+      baseVersion: 3,
+      idempotencyKey: "k",
+      files: [{ path: "index.html", sha256: "a".repeat(64) }],
+      delete: ["old.css"],
+      entry: "index.html",
+    }),
+  ).toEqual({
+    operation: "push",
+    artifact: "a1",
+    baseVersion: 3,
+    idempotencyKey: "k",
+    files: [{ path: "index.html", sha256: "a".repeat(64) }],
+    delete: ["old.css"],
+    entry: "index.html",
+  });
+  expect(
+    decodeAgentArtifactRequest({
+      operation: "create",
+      title: "Funnel",
+      files: [{ path: "report.md", sha256: "b".repeat(64) }],
+      entry: "report.md",
+    }),
+  ).toMatchObject({ operation: "create", entry: "report.md" });
+  // A manifest entry is exactly a path and a lowercase sha256.
+  for (const files of [
+    [{ path: "a.md" }],
+    [{ path: "a.md", sha256: "A".repeat(64) }],
+    [{ path: "a.md", sha256: "a".repeat(63) }],
+    [{ path: "a.md", sha256: "a".repeat(64), size: 3 }],
+    ["a.md"],
+    { path: "a.md", sha256: "a".repeat(64) },
+  ])
+    expect(
+      decodeAgentArtifactRequest({
+        operation: "push",
+        artifact: "a1",
+        baseVersion: 1,
+        idempotencyKey: "k",
+        files,
+      }),
+    ).toBeNull();
+  // Text and a manifest are two ways to send one version, never both.
+  expect(
+    decodeAgentArtifactRequest({
+      operation: "push",
+      artifact: "a1",
+      baseVersion: 1,
+      idempotencyKey: "k",
+      text: "x",
+      files: [],
+    }),
+  ).toBeNull();
+});
+
+test("list may search titles and page", () => {
+  expect(
+    decodeAgentArtifactRequest({ operation: "list", query: "funnel", after: "c1", limit: 20 }),
+  ).toEqual({ operation: "list", query: "funnel", after: "c1", limit: 20 });
+});
+
+test("file bytes go up and come down on their own routes", () => {
+  const sha = "c".repeat(64);
+  for (const side of ["local", "cloud"] as const) {
+    const routes = agentApiRoutes[side].artifactFiles;
+    expect(routes.upload.method).toBe("PUT");
+    expect(routes.upload.path(sha)).toBe(`/api/agent/v1/artifacts/uploads/${sha}`);
+    expect(routes.download.method).toBe("GET");
+    expect(routes.download.path("a1", "css/site.css")).toBe(
+      "/api/agent/v1/artifacts/a1/files/css%2Fsite.css",
+    );
+  }
+});

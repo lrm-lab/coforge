@@ -1,5 +1,5 @@
 import { APP_REGISTRATION_REQUEST_MAX_BYTES } from "./app-management";
-import { ARTIFACT_REQUEST_MAX_BYTES } from "./artifacts";
+import { ARTIFACT_REQUEST_MAX_BYTES, ARTIFACT_UPLOAD_MAX_BYTES } from "./artifacts";
 
 /** Mention delivery (`coforge mention delivery`): what became of each @mention in a message the
  * Agent sent, by the message's full id or short prefix. */
@@ -62,6 +62,21 @@ const ARTIFACTS_ROUTE = {
   method: "POST",
   path: "/api/agent/v1/artifacts",
   maxBodyBytes: ARTIFACT_REQUEST_MAX_BYTES,
+} as const;
+
+/** An artifact file's bytes: uploaded by sha256 before a push names them, and downloaded by path
+ * (`version` in the query, the current one without). Same routes under `local` and `cloud`. */
+const ARTIFACT_FILE_ROUTES = {
+  upload: {
+    method: "PUT",
+    path: (sha256: string) => `/api/agent/v1/artifacts/uploads/${encodeURIComponent(sha256)}`,
+    maxBodyBytes: ARTIFACT_UPLOAD_MAX_BYTES,
+  },
+  download: {
+    method: "GET",
+    path: (artifact: string, filePath: string) =>
+      `/api/agent/v1/artifacts/${encodeURIComponent(artifact)}/files/${encodeURIComponent(filePath)}`,
+  },
 } as const;
 
 /** `coforge mention pending|execute`. Same routes under `proxy`, `local` and `cloud`. */
@@ -214,6 +229,7 @@ export const agentApiRoutes = {
     labels: LABELS_ROUTE,
     labelWrite: LABEL_WRITE_ROUTE,
     artifacts: ARTIFACTS_ROUTE,
+    artifactFiles: ARTIFACT_FILE_ROUTES,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
@@ -265,6 +281,7 @@ export const agentApiRoutes = {
     labels: LABELS_ROUTE,
     labelWrite: LABEL_WRITE_ROUTE,
     artifacts: ARTIFACTS_ROUTE,
+    artifactFiles: ARTIFACT_FILE_ROUTES,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
@@ -386,6 +403,7 @@ export const agentApiRoutes = {
     labels: LABELS_ROUTE,
     labelWrite: LABEL_WRITE_ROUTE,
     artifacts: ARTIFACTS_ROUTE,
+    artifactFiles: ARTIFACT_FILE_ROUTES,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_CLOUD_ROUTES,
