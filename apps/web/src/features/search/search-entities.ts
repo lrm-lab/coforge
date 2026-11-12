@@ -2,8 +2,9 @@ import type { GroupAvatarMember } from "#src/features/conversations/group-avatar
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { nameMatchTier } from "#src/lib/name-match";
 
-/** A place or participant search can open directly: a channel, a Computer, an Agent, or
- * the viewer's direct message with a member (`id` is the conversation's; Frequently used only). */
+/** A place or participant search can open directly: a channel, a Computer, an Agent, a member
+ * (`id` is theirs; a search result), or the viewer's direct message with a member (`id` is the
+ * conversation's; Frequently used only). */
 export type SearchEntity =
   | {
       kind: "channel";
@@ -27,6 +28,14 @@ export type SearchEntity =
       dmId: string | null;
     }
   | {
+      kind: "person";
+      id: string;
+      name: string;
+      avatarUrl: string | null;
+      /** The viewer's direct conversation with this member, once there is one. */
+      dmId: string | null;
+    }
+  | {
       kind: "dm";
       id: string;
       peerId: string;
@@ -37,11 +46,13 @@ export type SearchEntity =
 /** Most matches listed above the messages. */
 const SEARCH_ENTITY_LIMIT = 5;
 
+/** People and Agents first: who someone is looking for comes before where (Frank, task #95). */
 const KIND_ORDER: Record<SearchEntity["kind"], number> = {
-  channel: 0,
-  computer: 1,
-  agent: 2,
-  dm: 3,
+  person: 0,
+  dm: 0,
+  agent: 1,
+  channel: 2,
+  computer: 3,
 };
 
 /** A description match ranks below every name match. */
@@ -58,6 +69,7 @@ function matchTier(entity: SearchEntity, lowerQuery: string): number | undefined
       return nameMatchTier(entity.name, [entity.hostname], lowerQuery);
     case "agent":
       return nameMatchTier(entity.name, [entity.handle], lowerQuery);
+    case "person":
     case "dm":
       return nameMatchTier(entity.name, [], lowerQuery);
   }
@@ -74,16 +86,20 @@ function compareSearchMatches(left: SearchMatch, right: SearchMatch): number {
 }
 
 /**
- * The entities a query names, best first: closer name matches (`nameMatchTier`), then channels,
- * Computers and Agents in that order, then by name. A leading `#` keeps only channels and a
- * leading `@` only Agents, the way references are written in a message.
+ * The entities a query names, best first: closer name matches (`nameMatchTier`), then people,
+ * Agents, channels and Computers in that order, then by name. A leading `#` keeps only channels
+ * and a leading `@` only people and Agents, the way references are written in a message.
  */
 export function matchSearchEntities(
   entities: readonly SearchEntity[],
   query: string,
 ): SearchEntity[] {
   const trimmed = query.trim();
-  const only = trimmed.startsWith("#") ? "channel" : trimmed.startsWith("@") ? "agent" : undefined;
+  const only: readonly SearchEntity["kind"][] | undefined = trimmed.startsWith("#")
+    ? ["channel"]
+    : trimmed.startsWith("@")
+      ? ["person", "dm", "agent"]
+      : undefined;
   const lowerQuery = trimmed
     .replace(/^[#@]+/, "")
     .trim()
@@ -92,7 +108,7 @@ export function matchSearchEntities(
   // Keep only the five best matches; equal ranks retain their original input order.
   const matches: SearchMatch[] = [];
   for (const entity of entities) {
-    if (only && entity.kind !== only) continue;
+    if (only && !only.includes(entity.kind)) continue;
     const tier = matchTier(entity, lowerQuery);
     if (tier === undefined) continue;
     const match = { entity, tier };

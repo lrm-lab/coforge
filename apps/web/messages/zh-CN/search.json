@@ -67,6 +67,7 @@
   "search_clear_filters": "清除筛选",
   "search_no_matching_messages": "没有匹配的消息",
   "search_try_different_filters": "试试其他筛选组合。",
+  "search_entity_person": "人",
   "search_entity_channel": "群聊",
   "search_entity_computer": "电脑",
   "search_entity_agent": "Agent",

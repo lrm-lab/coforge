@@ -104,15 +104,42 @@ describe("matchSearchEntities", () => {
       },
     ];
     expect(matchSearchEntities(entities, "atlas").map(({ id }) => id)).toEqual([
+      "exact-dm",
+      "exact-agent",
       "exact-channel",
       "exact-computer",
-      "exact-agent",
-      "exact-dm",
       "prefix",
     ]);
     expect(matchSearchEntities(entities, "#atlas").map(({ id }) => id)).toEqual([
       "exact-channel",
       "description",
+    ]);
+  });
+
+  test("a member is found by name, and a leading @ keeps people and Agents", () => {
+    const person: SearchEntity = {
+      kind: "person",
+      id: "user-2",
+      name: "Atlas Lee",
+      avatarUrl: null,
+      dmId: null,
+    };
+    const channel: SearchEntity = {
+      kind: "channel",
+      id: "channel-1",
+      name: "atlas",
+      description: "",
+      archived: false,
+      visibility: "public",
+    };
+    expect(matchSearchEntities([channel, agent, person], "atlas").map(({ id }) => id)).toEqual([
+      "agent-1",
+      "channel-1",
+      "user-2",
+    ]);
+    expect(matchSearchEntities([channel, agent, person], "@atlas").map(({ id }) => id)).toEqual([
+      "agent-1",
+      "user-2",
     ]);
   });
 });

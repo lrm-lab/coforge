@@ -8,11 +8,12 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 
 /**
- * Channels, Agents and Computers matching the query, listed in the search dialog above the
- * messages, grouped under their kind with the closest match first in each group. A leading `#`
- * keeps only channels and a leading `@` only Agents. A channel opens itself, the viewer's own
- * Agent opens their direct conversation with it once there is one, another member's Agent its
- * profile, and a Computer its page; opening one closes the dialog.
+ * People, Agents, channels and Computers matching the query, listed in the search dialog in that
+ * order above its Tasks and messages (task #95), grouped under their kind with the closest match
+ * first in each group. A leading `#` keeps only channels and a leading `@` only people and Agents.
+ * A channel opens itself, the viewer's own Agent opens their direct conversation with it once
+ * there is one, another member's Agent its profile, a member the viewer's DM with them or else
+ * their profile, and a Computer its page; opening one closes the dialog.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Seeds are deterministic
  * and reset on every run; the Computer is seed-dev's "Mac Studio". Screenshots are written under
@@ -34,7 +35,7 @@ function seededUuid(key: string): string {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 
-test("the search dialog lists matching channels, Agents and Computers and opens them", async () => {
+test("the search dialog lists matching people, Agents, channels and Computers and opens them", async () => {
   const db = new PrismaClient({
     adapter: new PrismaPg({ connectionString: databaseUrl }),
   });
@@ -112,12 +113,35 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
     await db.conversation.deleteMany({
       where: { workspaceId, channelName: "e2e-lighthouse" },
     });
-    await db.conversation.create({
+    const channel = await db.conversation.create({
       data: {
         id: channelId,
         workspaceId,
         channelName: "e2e-lighthouse",
         description: "Beacon",
+        members: { create: [{ userId: DEV_BROWSER_USER.id }] },
+      },
+      include: { members: true },
+    });
+    // A Task in it whose title matches too, so the Tasks group shows below the names.
+    const mine = channel.members[0]!;
+    const work = await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: channelId,
+        senderMemberId: mine.id,
+        sequence: 1,
+        body: "Relight the lighthouse",
+      },
+    });
+    await db.task.create({
+      data: {
+        messageId: work.id,
+        conversationId: channelId,
+        workspaceId,
+        number: 1,
+        title: "Relight the lighthouse",
+        creatorMemberId: mine.id,
       },
     });
     await db.agent.upsert({
@@ -172,35 +196,41 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
-    // Grouped under their kind: Channels, then Agents. Within the Agents the closer match is
+    // Grouped under their kind: Agents, then Channels. Within the Agents the closer match is
     // first. Each row names its place, with no kind label of its own.
     await searchFor("lighthouse", [
-      `channel:${channelId}`,
       `agent:${agentId}`,
       `agent:${othersAgentId}`,
+      `channel:${channelId}`,
     ]);
-    // No message matches, so the Messages section says so under the matches.
-    // Wait for it: the matches can show before the message search has answered.
-    await waitFor(
-      `document.querySelector('[role="dialog"]').innerText.includes("No messages match.")`,
-    );
+    // The Task's message matches too. Wait for it: the matches can show before the message search
+    // has answered.
+    await waitFor(`/\\b1 result\\b/.test(document.querySelector('[role="dialog"]').innerText)`);
     const groups = await evaluate<Record<string, string[]>>(
       `Object.fromEntries([...document.querySelectorAll('[role="dialog"] section[aria-label]')].map((section) => [section.getAttribute("aria-label"), [...section.querySelectorAll("[data-search-entity]")].map((row) => row.dataset.searchEntity)]))`,
     );
     expect(groups).toEqual({
-      Channels: [`channel:${channelId}`],
       Agents: [`agent:${agentId}`, `agent:${othersAgentId}`],
+      Channels: [`channel:${channelId}`],
     });
+    // Who and where come before the Tasks, which come before the messages (task #95).
+    await waitFor(
+      `document.querySelector('[role="dialog"] [aria-labelledby="search-tasks-heading"]') !== null`,
+    );
+    const headings = await evaluate<string[]>(
+      `[...document.querySelectorAll('[role="dialog"] h2')].map((heading) => heading.textContent.trim())`,
+    );
+    expect(headings.slice(0, 3)).toEqual(["Agents", "Channels", "Tasks"]);
     const rows = await evaluate<string[]>(
       `[...document.querySelectorAll('[role="dialog"] [data-search-entity]')].map((row) => row.textContent)`,
     );
     // A channel's row reads its name with no `#`: its group avatar says what it is (task #74).
-    expect(rows[0]).toContain("e2e-lighthouse");
-    expect(rows[0]).not.toContain("#");
-    expect(rows[1]).toContain("Lighthouse Bot");
+    expect(rows[0]).toContain("Lighthouse Bot");
+    expect(rows[2]).toContain("e2e-lighthouse");
+    expect(rows[2]).not.toContain("#");
     await browser("screenshot", join(artifacts, "entities.png"));
 
-    // `#` keeps channels only, `@` keeps Agents only.
+    // `#` keeps channels only, `@` keeps people and Agents.
     await searchFor("#lighthouse", [`channel:${channelId}`]);
     await searchFor("@lighthouse", [`agent:${agentId}`, `agent:${othersAgentId}`]);
 
@@ -211,7 +241,7 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
     // Opening closes the dialog and goes there: a channel opens itself, the viewer's own Agent
     // their DM with it, a Computer its page. Each opens search afresh, as the dialog keeps
     // nothing once it closes.
-    const lighthouse = [`channel:${channelId}`, `agent:${agentId}`, `agent:${othersAgentId}`];
+    const lighthouse = [`agent:${agentId}`, `agent:${othersAgentId}`, `channel:${channelId}`];
     await searchFor("lighthouse", lighthouse);
     await openResult(`channel:${channelId}`);
     await waitFor(`location.pathname === "${workspacePath}/channel/${channelId}"`);
@@ -223,6 +253,18 @@ test("the search dialog lists matching channels, Agents and Computers and opens 
     await openResult(`agent:${othersAgentId}`);
     await waitFor(
       `location.pathname === "${workspacePath}/members" && new URLSearchParams(location.search).get("profile") === "agent:${othersAgentId}"`,
+    );
+    // A member is listed first, under People, and opens the viewer's DM with them or, while there
+    // is none, their profile.
+    await searchFinds("jordan", "People", `person:${colleague.id}`);
+    const groupOrder = await evaluate<string[]>(
+      `[...document.querySelectorAll('[role="dialog"] section[aria-label]')].map((section) => section.getAttribute("aria-label"))`,
+    );
+    expect(groupOrder[0]).toBe("People");
+    await browser("screenshot", join(artifacts, "people.png"));
+    await openResult(`person:${colleague.id}`);
+    await waitFor(
+      `location.pathname.startsWith("${workspacePath}/dm/") || (location.pathname === "${workspacePath}/members" && new URLSearchParams(location.search).get("profile") === "user:${colleague.id}")`,
     );
     await searchFinds("mac studio", "Computers", `computer:${computer.id}`);
     await openResult(`computer:${computer.id}`);

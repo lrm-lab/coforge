@@ -40,8 +40,9 @@ import type { SearchFilters } from "./search-filters";
 import { messageSearchQuery, searchDirectoryQuery, taskSearchQuery } from "./search-queries";
 
 /**
- * The results of a committed search: the channels, Agents and Computers its query names, then its
- * messages, each opening where it was said.
+ * The results of a committed search: the people, Agents, channels and Computers its query names,
+ * then its Tasks, then its messages, each opening where it was said. Who comes before what was said
+ * (Frank, task #95).
  */
 export function SearchResults({
   workspaceId,
@@ -97,14 +98,11 @@ export function SearchResults({
 
   return (
     <div className="pb-2" aria-busy={refreshing}>
+      {entities.length > 0 && (
+        <SearchEntityList entities={entities} onOpen={(entity) => onOpen(rememberedKey(entity))} />
+      )}
       {tasks.length > 0 && (
         <SearchTaskList tasks={tasks} terms={terms} onOpen={() => onOpen(undefined)} />
-      )}
-      {entities.length > 0 && (
-        <SearchEntityList
-          entities={entities}
-          onOpen={(entity) => onOpen(searchEntityKey(entity))}
-        />
       )}
       <MessageResults
         workspaceId={workspaceId}
@@ -132,7 +130,13 @@ function useMessageSearch(
   });
 }
 
-/** The channels, Computers and Agents the query names; none without a query. */
+/** What opening an entity remembers: a member by the DM it opens, as Frequently used lists them. */
+function rememberedKey(entity: SearchEntity): SearchEntityKey | undefined {
+  if (entity.kind !== "person") return searchEntityKey(entity);
+  return entity.dmId ? searchEntityKey({ kind: "dm", id: entity.dmId }) : undefined;
+}
+
+/** The Tasks the query finds; none without a query. */
 function useSearchTasks(workspaceId: string, query: string, conversationId: string | undefined) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const here = conversationAt(pathname);
@@ -146,6 +150,8 @@ function useSearchTasks(workspaceId: string, query: string, conversationId: stri
   return { tasks: query ? (data ?? []) : [], pending: Boolean(query) && isPending };
 }
 
+/** The people (but the viewer), Agents, channels and Computers the query names; none without a
+ * query. */
 function useSearchEntities(
   workspaceId: string,
   query: string,
@@ -156,6 +162,9 @@ function useSearchEntities(
     () =>
       directory
         ? [
+            ...directory.people
+              .filter((person) => person.id !== directory.viewerId)
+              .map((person) => ({ kind: "person" as const, ...person })),
             ...directory.channels.map((channel) => ({ kind: "channel" as const, ...channel })),
             ...directory.computers.map((computer) => ({
               kind: "computer" as const,

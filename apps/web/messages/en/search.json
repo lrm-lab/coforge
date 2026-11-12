@@ -69,6 +69,7 @@
   "search_clear_filters": "Clear all",
   "search_no_matching_messages": "No matching messages",
   "search_try_different_filters": "Try a different filter set.",
+  "search_entity_person": "People",
   "search_entity_channel": "Channels",
   "search_entity_computer": "Computers",
   "search_entity_agent": "Agents",

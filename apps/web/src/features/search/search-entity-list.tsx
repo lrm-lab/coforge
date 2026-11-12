@@ -6,7 +6,10 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
-import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
+import {
+  formatAgentProfileParam,
+  formatPersonProfileParam,
+} from "#src/features/agents/profile-panel/profile-panel-search";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import { Badge } from "#src/components/base/badges/badges";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -24,7 +27,8 @@ export const SEARCH_ROW_CLASS =
 /**
  * An entity as a link to where it opens: a channel itself; the viewer's own Agent its direct
  * messages (the Web opens an Agent's DM only for its owner), any other Agent its profile; a
- * Computer its page; a direct message with a member that DM. Each branch is its own `Link`, so the
+ * Computer its page; a member the viewer's DM with them, or their profile while there is none; a
+ * direct message with a member that DM. Each branch is its own `Link`, so the
  * router checks every destination. `onOpen` runs as it opens.
  */
 export function SearchEntityRow({
@@ -41,7 +45,7 @@ export function SearchEntityRow({
   const dmId =
     entity.kind === "dm"
       ? entity.id
-      : entity.kind === "agent" && entity.canMessage
+      : entity.kind === "person" || (entity.kind === "agent" && entity.canMessage)
         ? entity.dmId
         : null;
   const props = {
@@ -68,6 +72,17 @@ export function SearchEntityRow({
       );
     case "dm":
       return <Link {...conversationRoute({ dmId: entity.id }, workspaceSlug)} {...props} />;
+    case "person":
+      return dmId ? (
+        <Link {...conversationRoute({ dmId }, workspaceSlug)} {...props} />
+      ) : (
+        <Link
+          to="/w/$workspaceSlug/members"
+          params={{ workspaceSlug }}
+          search={{ profile: formatPersonProfileParam(entity.id) }}
+          {...props}
+        />
+      );
     case "agent":
       // Opens the viewer's DM with the Agent when there is one, as in Chat; else its profile.
       return dmId ? (
@@ -108,13 +123,15 @@ function EntityContent({
   );
 }
 
+/** People and Agents first (Frank, task #95), then the places. */
 const GROUPS = [
-  { kind: "channel", heading: () => m.search_entity_channel() },
+  { kind: "person", heading: () => m.search_entity_person() },
   { kind: "agent", heading: () => m.search_entity_agent() },
+  { kind: "channel", heading: () => m.search_entity_channel() },
   { kind: "computer", heading: () => m.search_entity_computer() },
 ] as const;
 
-/** The channels, Computers and Agents a query names, listed above the messages. */
+/** The people, Agents, channels and Computers a query names, listed above its Tasks. */
 export function SearchEntityList({
   entities,
   onOpen,
@@ -186,13 +203,13 @@ function EntityMark({
       </>
     );
   }
-  if (entity.kind === "dm")
+  if (entity.kind === "dm" || entity.kind === "person")
     // The row's own text names the member.
     return (
       <span aria-hidden="true" className="shrink-0">
         <ActorAvatar
           presence
-          userId={entity.peerId}
+          userId={entity.kind === "dm" ? entity.peerId : entity.id}
           name={entity.name}
           src={entity.avatarUrl}
           size="xs"
