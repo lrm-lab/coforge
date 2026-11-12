@@ -33,6 +33,29 @@ describe("notificationOpenResponse", () => {
     expect(response.headers.get("location")).toBe(direct);
   });
 
+  test.each([
+    ["an ordinary channel message", target],
+    [
+      "a channel thread reply",
+      target.replace(
+        "01991890-89ec-7000-8000-000000000002",
+        "01991890-89ec-7000-8000-000000000003",
+      ),
+    ],
+    ["a direct message", target.replace("/channel/", "/dm/")],
+  ])("redirects %s to its anchored conversation", async (_name, destination) => {
+    const response = await notificationOpenResponse({
+      request: new Request(
+        `https://coforge.example/notifications/open?workspace=acme&target=${encodeURIComponent(destination)}`,
+      ),
+      userId: "user-a",
+      canAccessWorkspace: async () => true,
+    });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(destination);
+  });
+
   test("does not select or open inaccessible and malformed targets", async () => {
     for (const url of [
       `https://coforge.example/notifications/open?workspace=other&target=${encodeURIComponent(target)}`,
