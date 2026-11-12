@@ -317,14 +317,14 @@ export async function runArtifact(
     case "revert": {
       const answer = result as ArtifactSaveAnswer;
       const base = request.baseVersion;
-      if (answer.status === "conflict" || answer.status === "missing") {
+      if (answer.status === "missing") {
         const formatted = formatArtifactSave(request.artifact, base, answer);
         throw new CliError({
-          code: answer.status === "conflict" ? "ARTIFACT_CONFLICT" : "ARTIFACT_MISSING",
+          code: "ARTIFACT_MISSING",
           message: formatted.message,
-          retryable: answer.status === "missing",
+          retryable: true,
           suggestedNextAction: formatted.next,
-          ...(json ? { details: answer, outputMode: "json" } : { stdoutText: formatted.stdout }),
+          ...(json ? { details: answer, outputMode: "json" } : {}),
         });
       }
       return json ? result : formatArtifactSave(request.artifact, base, answer).message;

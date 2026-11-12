@@ -34,19 +34,11 @@ type HistoryPage = {
   nextBefore: number | null;
 };
 
-type Chunk = { ok: string } | { conflict: { base: string; mine: string; theirs: string } };
-
 export type ArtifactSaveAnswer =
   | { status: "created"; number: number; merged: string[]; mergedSettings: string[] }
   | { status: "replayed"; number: number }
   | { status: "nothing" }
-  | { status: "missing"; missing: string[] }
-  | {
-      status: "conflict";
-      currentVersion: number;
-      files: { path: string; chunks: Chunk[] }[];
-      settings: { name: string; base: string | null; mine: string; theirs: string }[];
-    };
+  | { status: "missing"; missing: string[] };
 
 const readCommand = (id: string) => `coforge artifact read ${id}`;
 const pushCommand = (id: string, base: number) =>
@@ -127,16 +119,13 @@ export function formatArtifactHistory(id: string, page: HistoryPage): string {
   return lines.join("\n");
 }
 
-/**
- * A save's answer. A conflict prints the artifact with git-style markers at each place both
- * sides changed (`stdout`, to edit and save again over `currentVersion`), and every setting
- * both changed.
- */
+/** A save's answer. An Agent's save is never merged inside a file: a clash is refused by the
+ * server (`artifact-agent-base-moved`), never answered here. */
 export function formatArtifactSave(
   id: string,
   base: number,
   answer: ArtifactSaveAnswer,
-): { message: string; stdout?: string; next?: string } {
+): { message: string; next?: string } {
   switch (answer.status) {
     case "created": {
       const merged = [...answer.merged, ...answer.mergedSettings];
@@ -153,33 +142,5 @@ export function formatArtifactSave(
         message: "The server no longer has the bytes this save names; nothing was written.",
         next: "Save again.",
       };
-    case "conflict": {
-      const current = answer.currentVersion;
-      const settings = answer.settings.map(
-        (setting) =>
-          `  ${setting.name}: yours ${JSON.stringify(setting.mine)}, theirs ${JSON.stringify(setting.theirs)}${setting.base === null ? "" : `, before both ${JSON.stringify(setting.base)}`}`,
-      );
-      const files = answer.files.map((file) => file.chunks.map(markChunk).join(""));
-      return {
-        message: [
-          `Conflict: version ${current} was saved since version ${base}, changing the same places. Nothing was written.`,
-          ...(files.length
-            ? [
-                "The artifact is printed with <<<<<<< yours / ======= / >>>>>>> theirs at each conflict.",
-              ]
-            : []),
-          ...(settings.length ? ["Settings both sides changed:", ...settings] : []),
-        ].join("\n"),
-        stdout: files.join("\n"),
-        next: `Resolve each conflict (keep one side, or join them), then save over version ${current}: ${pushCommand(id, current)}`,
-      };
-    }
   }
-}
-
-function markChunk(chunk: Chunk): string {
-  if ("ok" in chunk) return chunk.ok;
-  const { mine, base, theirs } = chunk.conflict;
-  const line = (text: string) => (text === "" || text.endsWith("\n") ? text : `${text}\n`);
-  return `<<<<<<< yours\n${line(mine)}||||||| before both\n${line(base)}=======\n${line(theirs)}>>>>>>> theirs\n`;
 }

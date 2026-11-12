@@ -30,7 +30,6 @@ type SaveAnswer = {
   number?: number;
   merged?: string[];
   missing?: string[];
-  currentVersion?: number;
 };
 
 export async function runPush(
@@ -126,13 +125,6 @@ export async function runPush(
   } catch (error) {
     throw baseMoved(error, state, draft.dir);
   }
-  if (answer.status === "conflict")
-    throw new CliError({
-      code: "ARTIFACT_CONFLICT",
-      message: `Version ${answer.currentVersion} was saved since version ${state.version}, changing the same places. Nothing was written.`,
-      retryable: false,
-      suggestedNextAction: pullAdvice(state.artifact, draft.dir),
-    });
   const version = answer.status === "nothing" ? state.version : (answer.number ?? state.version);
   const files = { ...state.files };
   for (const file of changed) files[file.path] = file.sha256;

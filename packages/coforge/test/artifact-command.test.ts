@@ -121,7 +121,9 @@ test("artifact --help describes the family and each command", async () => {
   expect(await run(["artifact", "--help"], transport)).toContain(
     "coforge artifact create|list|read|push|history|revert",
   );
-  expect(await run(["artifact", "push", "--help"], transport)).toContain("ARTIFACT_CONFLICT");
+  expect(await run(["artifact", "push", "--help"], transport)).toContain(
+    "artifact-agent-base-moved",
+  );
   expect(await run(["artifact", "list", "--help"], transport)).toContain("coforge artifact list");
 });
 
@@ -156,43 +158,6 @@ test("a save sends the file's text with a fresh idempotency key and says what it
   expect(sent[0]).toHaveProperty("idempotencyKey");
   expect(said).toContain("Saved version 4.");
   expect(said).toContain("Merged with what others saved since version 3: artifact.md");
-});
-
-test("a conflict prints the artifact with markers to stdout and fails", async () => {
-  const { transport } = transportAnswering({
-    status: "conflict",
-    currentVersion: 5,
-    files: [
-      {
-        path: "artifact.md",
-        chunks: [
-          { ok: "# Plan\n\n" },
-          {
-            conflict: {
-              base: "Ship in May.\n",
-              mine: "Ship in July.\n",
-              theirs: "Ship in June.\n",
-            },
-          },
-          { ok: "\nRisks.\n" },
-        ],
-      },
-    ],
-    settings: [{ name: "title", base: "Plan", mine: "Plan B", theirs: "Plan C" }],
-  });
-  const error = await runArtifact(
-    invocation(["push", ID, "--base", "3", "--file", "plan.md"]),
-    transport,
-    async () => "x",
-  ).catch((caught: unknown) => caught as CliError);
-  expect(error).toBeInstanceOf(CliError);
-  const cli = error as CliError;
-  expect(cli.code).toBe("ARTIFACT_CONFLICT");
-  expect(cli.stdoutText).toBe(
-    "# Plan\n\n<<<<<<< yours\nShip in July.\n||||||| before both\nShip in May.\n=======\nShip in June.\n>>>>>>> theirs\n\nRisks.\n",
-  );
-  expect(cli.message).toContain('title: yours "Plan B", theirs "Plan C"');
-  expect(cli.suggestedNextAction).toContain(`coforge artifact push ${ID} --base 5`);
 });
 
 test("list prints a line per artifact, newest first, and how to read one", async () => {
