@@ -3,6 +3,7 @@ import { createCollection, type ChangeMessage, type LoadSubsetOptions } from "@t
 import { parseLoadSubsetOptions, queryCollectionOptions } from "@tanstack/query-db-collection";
 import { createStore } from "@tanstack/react-store";
 import {
+  CHANNEL_TASK_REFERENCE_PATTERN,
   TASK_REFERENCE_TOKEN_PATTERN,
   readTaskReferenceToken,
   type TaskStatus,
@@ -66,20 +67,36 @@ function conversationTaskSubset(options: LoadSubsetOptions | undefined) {
 }
 
 /** The task numbers one body names of its own conversation's Tasks, read once per message
- * object: `<@task:68>`, or a `#name:#68` that names this very conversation. */
-const referencesByMessage = new WeakMap<object, readonly number[]>();
-function referencedNumbers(message: { body: string }, conversationId: string) {
-  let numbers = referencesByMessage.get(message);
-  if (!numbers) {
-    numbers = [...message.body.matchAll(TASK_REFERENCE_TOKEN_PATTERN)].flatMap((match) => {
-      const reference = readTaskReferenceToken(match);
-      if (!reference) return [];
-      return reference.kind === "local" || reference.conversationId === conversationId
-        ? [reference.number]
-        : [];
-    });
-    referencesByMessage.set(message, numbers);
-  }
+ * object: `<@task:68>`, or a `#name:#68` written under this very channel's name (`channelName`),
+ * which the body keeps as typed and `message-markdown` draws as this conversation's Task badge. */
+const referencesByMessage = new WeakMap<
+  object,
+  { channelName: string | undefined; numbers: readonly number[] }
+>();
+/** The written `#name:#68`, case-insensitive as `message-markdown` reads it. */
+const CHANNEL_TASK_REFERENCE = new RegExp(CHANNEL_TASK_REFERENCE_PATTERN.source, "giu");
+function referencedNumbers(
+  message: { body: string },
+  conversationId: string,
+  channelName: string | undefined,
+) {
+  const cached = referencesByMessage.get(message);
+  if (cached && cached.channelName === channelName) return cached.numbers;
+  const tokens = [...message.body.matchAll(TASK_REFERENCE_TOKEN_PATTERN)].flatMap((match) => {
+    const reference = readTaskReferenceToken(match);
+    if (!reference) return [];
+    return reference.kind === "local" || reference.conversationId === conversationId
+      ? [reference.number]
+      : [];
+  });
+  const name = channelName?.toLowerCase();
+  const written = name
+    ? [...message.body.matchAll(CHANNEL_TASK_REFERENCE)].flatMap(([, channel, number]) =>
+        channel!.toLowerCase() === name ? [Number(number)] : [],
+      )
+    : [];
+  const numbers = [...tokens, ...written];
+  referencesByMessage.set(message, { channelName, numbers });
   return numbers;
 }
 
@@ -99,6 +116,8 @@ export function messageWindowTasks(
   messages: readonly { sequence: number; body: string }[],
   hasNewer: boolean,
   conversationId: string,
+  /** The conversation's channel name, when it is a channel: its written `#name:#N` are its own. */
+  channelName?: string,
 ) {
   if (messages.length === 0) return undefined;
   let sequenceFrom = Infinity;
@@ -107,7 +126,7 @@ export function messageWindowTasks(
   for (const message of messages) {
     sequenceFrom = Math.min(sequenceFrom, message.sequence);
     sequenceTo = Math.max(sequenceTo, message.sequence);
-    const numbers = referencedNumbers(message, conversationId);
+    const numbers = referencedNumbers(message, conversationId, channelName);
     if (numbers.length === 0) continue;
     const stretch = Math.floor(message.sequence / MESSAGES_PER_READ);
     const named = stretches.get(stretch) ?? new Set<number>();

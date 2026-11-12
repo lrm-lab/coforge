@@ -68,6 +68,7 @@ export function TaskDiscussionPane({
           stayed a bare "#N" unless its Task happened to be read for something else (Frank, 11-04). */}
       <ConversationTaskDemand
         conversationId={board.conversationId}
+        channelName={pane.channelNames?.get(board.conversationId)}
         messages={messages}
         hasNewer={false}
         readWindow={false}

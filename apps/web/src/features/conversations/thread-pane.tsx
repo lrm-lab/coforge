@@ -42,6 +42,7 @@ export function ThreadPane({
       {/* The Tasks its replies name: the window's own read covers only its top-level messages. */}
       <ConversationTaskDemand
         conversationId={conversation.conversationId}
+        channelName={pane.channelNames?.get(conversation.conversationId)}
         messages={thread.data.replies}
         hasNewer={false}
         readWindow={false}

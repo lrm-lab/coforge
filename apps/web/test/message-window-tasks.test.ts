@@ -82,3 +82,18 @@ test("a window's named Tasks are read a stretch of messages at a time, however h
   for (const read of before.reads) expect(paged.reads).toContainEqual(read);
   expect(paged.reads).toHaveLength(before.reads.length + 1);
 });
+
+test("a written `#name:#N` under this channel's own name asks for its Task; another channel's does not", () => {
+  // An Agent's reply keeps `#artifacts:#20` as typed and the message draws it as this channel's
+  // Task, so the window reads it too (task #coforge-designer-team:#97, where it stayed a bare "#20").
+  const messages = [
+    { sequence: 41, body: "It's filed as #artifacts:#20, see also #Artifacts:#4 and #design:#7" },
+    { sequence: 42, body: "#artifacts:#20x and #artifacts:#3:#9 are not references" },
+  ];
+  expect(messageWindowTasks(messages, false, HERE, "artifacts")).toEqual({
+    sequenceFrom: 41,
+    reads: [{ key: "2.0", numbers: [4, 20] }],
+  });
+  // A direct message has no channel name: nothing written names it.
+  expect(messageWindowTasks(messages, false, HERE)).toEqual({ sequenceFrom: 41, reads: [] });
+});
