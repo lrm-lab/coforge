@@ -1,6 +1,7 @@
 import type { Artifact, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type { ArtifactActor } from "./artifact-access.server";
+import { idempotencyMismatch } from "./artifact-idempotency.server";
 
 /**
  * Creating an artifact (task #385): the one insert, with idempotent-create replay on top. A
@@ -97,8 +98,7 @@ async function createReplay(
     where: { workspaceId, idempotencyKey, deletedAt: null },
   });
   if (!existing) return null;
-  if ((existing.requestHash ?? null) !== (requestHash ?? null))
-    throw new AppError("CONFLICT", { errorId: "artifact-idempotency-mismatch" });
+  if ((existing.requestHash ?? null) !== (requestHash ?? null)) throw idempotencyMismatch();
   return existing;
 }
 

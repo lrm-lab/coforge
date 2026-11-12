@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { hasControlOrBidiCharacter } from "#src/features/profiles/person-name";
 
 /**
@@ -31,23 +29,6 @@ const inert = (json: string) => json.replace(/"(?:[^"\\]|\\.)*"/g, escapeText);
 
 /** `value` as a JSON string with the characters that could mean something to a reader escaped. */
 export const inertString = (value: string) => inert(JSON.stringify(value));
-
-/** `value` as JSON, sorted by key at every level, so equal payloads hash alike. */
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (typeof value === "object" && value !== null)
-    return `{${Object.keys(value)
-      .sort()
-      .map(
-        (key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`,
-      )
-      .join(",")}}`;
-  return JSON.stringify(value);
-}
-
-/** The SHA-256 (hex) of the payload in its canonical form. */
-export const payloadHash = (payload: unknown) =>
-  createHash("sha256").update(canonicalJson(payload)).digest("hex");
 
 export type AgentEventMessage = {
   app: { key: string; name: string };

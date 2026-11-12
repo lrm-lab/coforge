@@ -3,11 +3,8 @@ import { expect, test } from "bun:test";
 import { agentGrantScopes } from "#src/features/apps/agent-app-access";
 import { parseAgentEventInput } from "#src/features/apps/app-agent-events";
 import { APP_SCOPES, appLoginScopes } from "#src/features/apps/app-registration";
-import {
-  agentEventBody,
-  canonicalJson,
-  payloadHash,
-} from "#src/server/app-agent-events/event-message.server";
+import { agentEventBody } from "#src/server/app-agent-events/event-message.server";
+import { canonicalJson, payloadHash } from "#src/server/canonical-hash.server";
 import {
   autoApprovalApplies,
   decideInboundAccess,

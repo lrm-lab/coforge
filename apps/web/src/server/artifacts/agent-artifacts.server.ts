@@ -1,18 +1,23 @@
 import { z } from "zod";
 import { ARTIFACT_SHA256_PATTERN, type AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { commentInputs } from "#src/features/artifacts/artifact-comment-inputs";
 import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
 import {
   ARTIFACT_SHARE_MAX_ARTIFACTS,
   ARTIFACT_SHARE_MAX_TARGETS,
 } from "#src/features/artifacts/artifact-share-input";
 import { AppError } from "#src/lib/app-error";
+import { errorType } from "#src/server/errors/error-type.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
   directConversationIdBetween,
   visibleChannelIdByName,
 } from "#src/server/conversations/channel-read-access.server";
 import { artifactsDisabled } from "./artifact-access.server";
+import { listComments, unseenCommentSummary } from "./artifact-comment-reads.server";
+import { reopenComment, resolveComment } from "./artifact-comment-threads.server";
+import { postComment, postReview } from "./artifact-comments.server";
 import { ARTIFACT_FILE_LIMIT } from "./artifact-files.server";
 import { noteReadPosition, readWithPosition } from "./artifact-read-positions.server";
 import type { FileManifest } from "./artifact-manifest.server";
@@ -110,6 +115,7 @@ const RULES = {
     note: note.optional(),
     requestId: id,
   }),
+  ...commentInputs,
 } satisfies Record<AgentArtifactRequest["operation"], z.ZodType>;
 
 /**
@@ -187,16 +193,25 @@ export async function runAgentArtifactOperation(
         artifactId: input.artifact,
         version: input.version,
       });
-      // What others published since this Agent last looked, when the current version is read.
-      const unseen = await readWithPosition(services.db, {
-        artifactId: read.artifact.id,
-        agentId,
-        workspaceId,
-        shown: read.version?.number ?? 0,
-        current: read.artifact.currentVersion,
-      });
+      // What others published since this Agent last looked, when the current version is read, and
+      // the comments of others it has not read, whichever version is.
+      const [unseen, unseenComments] = await Promise.all([
+        readWithPosition(services.db, {
+          artifactId: read.artifact.id,
+          agentId,
+          workspaceId,
+          shown: read.version?.number ?? 0,
+          current: read.artifact.currentVersion,
+        }),
+        unseenCommentsOf(services.db, principal, read.artifact.id),
+      ]);
       // The shown version's entry file, beside its files (`files` of `read`).
-      return { ...read, entryPath: read.version?.entryPath ?? read.artifact.entryPath, unseen };
+      return {
+        ...read,
+        entryPath: read.version?.entryPath ?? read.artifact.entryPath,
+        unseen,
+        unseenComments,
+      };
     }
     case "push": {
       const {
@@ -211,6 +226,7 @@ export async function runAgentArtifactOperation(
         artifactId: artifact,
         ...input,
         ...(fileManifest ? { manifest: fileManifest } : {}),
+        gateByComments: true,
       });
       // The Agent has seen what it published; a merged push's answer says what was merged.
       if (saved.status === "created" || saved.status === "replayed")
@@ -221,6 +237,16 @@ export async function runAgentArtifactOperation(
         });
       return saved;
     }
+    case "comments":
+      return listComments(services.db, principal, parsed.data as z.infer<typeof RULES.comments>);
+    case "comment":
+      return postComment(services.db, principal, parsed.data as z.infer<typeof RULES.comment>);
+    case "review":
+      return postReview(services.db, principal, parsed.data as z.infer<typeof RULES.review>);
+    case "resolve":
+      return resolveComment(services.db, principal, parsed.data as z.infer<typeof RULES.resolve>);
+    case "reopen":
+      return reopenComment(services.db, principal, parsed.data as z.infer<typeof RULES.reopen>);
     case "history": {
       const { artifact, ...input } = parsed.data as z.infer<typeof RULES.history>;
       return services.artifacts.history({
@@ -244,6 +270,23 @@ export async function runAgentArtifactOperation(
         send: services.send,
       });
     }
+  }
+}
+
+/** What a read says of the comments the Agent has not read, beside the versions: bookkeeping, so
+ * a failure is logged and the read answers `null` for it. */
+async function unseenCommentsOf(
+  db: PrismaClient,
+  principal: { workspaceId: string; agentId: string },
+  artifactId: string,
+) {
+  try {
+    return await unseenCommentSummary(db, { ...principal, artifactId });
+  } catch (error) {
+    console.warn(
+      JSON.stringify({ event: "artifacts:unseen_comments_failed", error_type: errorType(error) }),
+    );
+    return null;
   }
 }
 

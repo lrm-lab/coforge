@@ -31,6 +31,8 @@ import { refuseMovedBase, refuseOverlap } from "./artifact-agent-base.server";
 import { createArtifact } from "./artifact-create.server";
 import { ArtifactReads } from "./artifact-reads.server";
 import { revertArtifact, type ArtifactRevert } from "./artifact-revert.server";
+import { requireNoUnseenCommentsOnPush } from "./artifact-comment-gate.server";
+import { lockComments } from "./artifact-comment-write.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
 import { writeVersion } from "./artifact-version-write.server";
 
@@ -157,6 +159,9 @@ export class Artifacts {
     merge?: "exact" | "byPath";
     /** The version this save goes back to (`revert`). */
     revertedFrom?: number;
+    /** An Agent's own save: refused while others commented, since the Agent last read comments, on
+     * a file it changes (`artifact-comment-gate.server.ts`). A revert is not. */
+    gateByComments?: boolean;
   }): Promise<
     | {
         status: "created";
@@ -201,7 +206,11 @@ export class Artifacts {
       if (document && blob.sizeBytes > ARTIFACT_DOCUMENT_LIMIT) invalid("artifact-file-too-large");
     }
 
+    const gateAgentId = input.gateByComments ? input.publisher.agentId : undefined;
     const saved = await this.db.$transaction(async (tx) => {
+      // The comment lock before the row lock, the order a comment write takes them in; the check
+      // below then sees every comment that committed, and none lands before this commits.
+      if (gateAgentId) await lockComments(tx, input.artifactId);
       // Serialize every push for this artifact: the base check, the replay check and the version
       // number are decided under one row lock, so a concurrent push cannot slip between them.
       const [locked] = await tx.$queryRaw<
@@ -232,6 +241,13 @@ export class Artifacts {
       });
       if (replay)
         return { status: "replayed", versionId: replay.id, number: replay.number } as const;
+      if (gateAgentId)
+        await requireNoUnseenCommentsOnPush(tx, {
+          artifactId: locked.id,
+          agentId: gateAgentId,
+          touched,
+          entry: { current: locked.entryPath, pushed: input.entryPath },
+        });
 
       if (input.baseVersion > current || input.baseVersion < 0)
         throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });

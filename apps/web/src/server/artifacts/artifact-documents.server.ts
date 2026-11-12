@@ -214,6 +214,8 @@ export class ArtifactDocuments {
       description?: string;
       note?: string;
       label?: string;
+      /** An Agent's save is held up by comments it has not read (`Artifacts.push`). */
+      gateByComments?: boolean;
     },
   ) {
     const { text, manifest, ...settings } = input;

@@ -37,6 +37,9 @@ model Artifact {
   accessEvents    ArtifactAccessEvent[]
   publicLinks     ArtifactPublicLink[]
   readPositions   ArtifactReadPosition[]
+  comments        ArtifactComment[]
+  commentReviews  ArtifactCommentReview[]
+  commentPositions ArtifactCommentPosition[]
 
   @@index([workspaceId, homeKey])
   /// The live name is unique per home (`deletedAt IS NULL`), so a soft delete releases it at once.
@@ -193,4 +196,92 @@ model ArtifactReadPosition {
 
   @@id([artifactId, agentId])
   @@map("artifact_read_positions")
+}
+
+/// The last comment (`seenAt`, `seenId`, the order comments are listed in) an Agent was shown by the
+/// unfiltered unseen read of an artifact's comments; it moves only forward (`advanceCommentPosition`
+/// writes only a later one). It is not the version position (`ArtifactReadPosition`): an Agent's
+/// own push marks the versions it made as seen and nobody's comments. No row: the Agent has seen no
+/// comment. `seenAt` has the precision of `ArtifactComment.createdAt`, so the pair compares
+/// exactly. `agentId` has no foreign key: this module adds none to a table outside it. Goes with
+/// the artifact.
+model ArtifactCommentPosition {
+  artifactId String   @db.Uuid
+  agentId    String   @db.Uuid
+  seenAt     DateTime
+  seenId     String   @db.Uuid
+  artifact   Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@id([artifactId, agentId])
+  @@map("artifact_comment_positions")
+}
+
+/// One comment on an artifact: about the whole artifact, or about a file (`path`) and a place in
+/// it (`anchor`, `{ type, data }`, `data` at most 4 KiB). `version` is the version it was written
+/// on. A reply has `rootId`, the thread's first comment (never another reply), so a thread is
+/// every row with that `rootId` and the root itself; a root is `resolved` by `resolvedAt` and
+/// reopened by clearing it, and a reply to a resolved thread reopens it. The author is exactly one
+/// of `authorUserId` and `authorAgentId`, with no foreign key: this module adds none to a table
+/// outside it. A deleted comment keeps its row and loses its text at the reader (`deletedAt`).
+/// Comments are listed oldest first by (`createdAt`, `id`); a write holds the artifact's advisory
+/// lock and stamps `createdAt` after taking it, so commit order and that order agree. An Agent's
+/// retry names its `idempotencyKey`: the same key and `requestHash` replay the comment. A thread
+/// and a review go with the artifact.
+model ArtifactComment {
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  artifactId        String                 @db.Uuid
+  version           Int
+  path              String?
+  anchor            Json?
+  rootId            String?                @db.Uuid
+  reviewId          String?                @db.Uuid
+  authorUserId      String?                @db.Uuid
+  authorAgentId     String?                @db.Uuid
+  body              String
+  idempotencyKey    String?
+  requestHash       String?
+  createdAt         DateTime               @default(now())
+  editedAt          DateTime?
+  deletedAt         DateTime?
+  resolvedAt        DateTime?
+  resolvedByUserId  String?                @db.Uuid
+  resolvedByAgentId String?                @db.Uuid
+  artifact          Artifact               @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  root              ArtifactComment?       @relation("ArtifactCommentThread", fields: [rootId], references: [id], onDelete: Cascade)
+  replies           ArtifactComment[]      @relation("ArtifactCommentThread")
+  review            ArtifactCommentReview? @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  /// A key is unique per artifact and author; a null author column never collides.
+  @@unique([artifactId, authorAgentId, idempotencyKey])
+  @@unique([artifactId, authorUserId, idempotencyKey])
+  /// An artifact's comments oldest first, and the unseen ones after a position.
+  @@index([artifactId, createdAt, id])
+  /// One file's comments.
+  @@index([artifactId, path])
+  /// A thread.
+  @@index([rootId])
+  /// A review's comments.
+  @@index([reviewId])
+  @@map("artifact_comments")
+}
+
+/// Several comments written at once: one `body` of summary (optional) over comments that all
+/// landed together or not at all. `idempotencyKey` and `requestHash` replay a retry, as a
+/// version's key does; a key is unique per artifact and author. Goes with the artifact.
+model ArtifactCommentReview {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  artifactId     String            @db.Uuid
+  version        Int
+  authorUserId   String?           @db.Uuid
+  authorAgentId  String?           @db.Uuid
+  body           String?
+  idempotencyKey String
+  requestHash    String
+  createdAt      DateTime          @default(now())
+  artifact       Artifact          @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  comments       ArtifactComment[]
+
+  @@unique([artifactId, authorAgentId, idempotencyKey])
+  @@unique([artifactId, authorUserId, idempotencyKey])
+  @@map("artifact_comment_reviews")
 }

@@ -4,7 +4,8 @@ import {
   type AgentEventInput,
 } from "#src/features/apps/app-agent-events";
 import type { AgentDeliveryPush } from "#src/server/conversations/agent-delivery.server";
-import { agentEventBody, payloadHash } from "./event-message.server";
+import { payloadHash } from "#src/server/canonical-hash.server";
+import { agentEventBody } from "./event-message.server";
 import { appEventTarget } from "./app-event-target.server";
 
 /** What the store writes for one accepted event. */

@@ -67,6 +67,25 @@ export async function noteReadPosition(
   }
 }
 
+/** How many versions others published after the Agent's version position, up to the current one:
+ * what `comments` says beside the comments, so the Agent knows to read the artifact again. */
+export async function countUnseenVersions(
+  db: Pick<PositionDb, "artifactReadPosition" | "artifactVersion">,
+  input: { artifactId: string; agentId: string; current: number },
+): Promise<number> {
+  const position = await db.artifactReadPosition.findUnique({
+    where: { artifactId_agentId: { artifactId: input.artifactId, agentId: input.agentId } },
+    select: { version: true },
+  });
+  return db.artifactVersion.count({
+    where: {
+      artifactId: input.artifactId,
+      number: { gt: position?.version ?? 0, lte: input.current },
+      OR: [{ publisherAgentId: null }, { publisherAgentId: { not: input.agentId } }],
+    },
+  });
+}
+
 function logPositionFailure(error: unknown) {
   console.warn(
     JSON.stringify({ event: "artifacts:read_position_failed", error_type: errorType(error) }),

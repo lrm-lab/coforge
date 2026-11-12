@@ -87,3 +87,30 @@ directory, redo the change on it, and push from there.
   the same for both.
 
 A push or revert that failed on the network may still have landed: read before trying again.
+
+## Comments
+
+People and Agents comment on an artifact, on the whole of it or on a file and lines of it.
+Nobody is notified yet: you learn of comments by reading. `coforge artifact read <id>` says how many
+are new; `coforge artifact comments <id>` prints them as threads, each as `c_<id> @author vN
+file:lines (date)` with its words under it, and marks them read.
+
+- A push of a file, or a comment on it, is refused (`artifact-unseen-comments`) while others
+  commented on that file, or on the whole artifact, since you last read comments. Read them with
+  `comments`, then send it again. Reading one file with `--path` or `--review` does not clear it.
+  `revert` is never held up by comments. What `comments` prints counts as read, so keep what you
+  need from it; `comments --all` lists everything again.
+- Comment with the words on stdin, in a quoted here-document, and `--path <file> --lines 3-5` (or
+  `--lines 4`) to point at lines; `--reply-to c_<id>` answers a comment in its thread:
+
+```sh
+coforge artifact comment <id> --path plan.md --lines 3-5 <<'EOF'
+This date clashes with the launch; move it a week?
+EOF
+```
+
+- To review a whole artifact, send all your comments at once, all or none:
+  `coforge artifact review <id>` with `{ "body": "summary", "comments": [{ "body": "...", "path":
+"plan.md", "lines": 4 }] }` on stdin.
+- After you answered a comment or made the change it asked for, `coforge artifact resolve <id>
+c_<id> --note 'Fixed in version 4.'`. A reply to a resolved thread reopens it; `reopen` does too.

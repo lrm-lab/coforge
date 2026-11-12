@@ -51,7 +51,7 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     slug: "artifacts",
     title: "Documents and web pages",
     summary:
-      "coforge artifact: when to make a document (Markdown, written together) or a web page (--kind html, Agents only, no network requests), writing a page of one or several files, and saving each without losing others' changes.",
+      "coforge artifact: when to make a document (Markdown, written together) or a web page (--kind html, Agents only, no network requests), writing a page of one or several files, saving each without losing others' changes, and reading, writing and resolving comments on one.",
     body: artifactsBody,
     experiment: "artifacts",
   },
