@@ -13,6 +13,7 @@ import {
 import type { PendingAgentDelivery } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { deliveryFeatures } from "./agent-delivery-features.server";
+import { deliveryNoticeViews, type DeliveryNoticeView } from "./agent-delivery-notice.server";
 import { withForwarded } from "./agent-message-view.server";
 import { agentReadableBody, type MessageMentionRef } from "./mentions.server";
 
@@ -93,7 +94,10 @@ export class AgentDeliveryPublisher {
     pushes: readonly AgentDeliveryPush[],
   ): Promise<PromiseSettledResult<void>[]> {
     if (!pushes.length) return [];
-    const features = await deliveryFeatures(workspaceId);
+    const [features, notices] = await Promise.all([
+      deliveryFeatures(workspaceId),
+      deliveryNoticeViews(workspaceId, pushes),
+    ]);
     const envelopes = await this.mentions?.issue(
       workspaceId,
       pushes.map((push) => ({
@@ -108,6 +112,7 @@ export class AgentDeliveryPublisher {
       if (!computerId) return [];
       try {
         const data = encodeAgentDelivery({
+          ...notices.get(push.messageId),
           ...push,
           workspaceId,
           mentionDelivery: envelopes?.get(push.deliveryId),
@@ -158,6 +163,7 @@ export function pendingDeliveryPublication(
   delivery: PendingAgentDelivery,
   features: Awaited<ReturnType<typeof deliveryFeatures>>,
   tracked?: { mentionDelivery?: MentionDeliveryEnvelope },
+  notice?: DeliveryNoticeView,
 ): { channel: string; data: Uint8Array } {
   return {
     channel: daemonControlChannel(scope.workspaceId, scope.computerId),
@@ -165,6 +171,7 @@ export function pendingDeliveryPublication(
       requestId: crypto.randomUUID(),
       workspaceId: scope.workspaceId,
       agentId: scope.agentId,
+      ...notice,
       ...delivery,
       // Pending deliveries are already read back as text; reading again is a no-op.
       mentions: [],
