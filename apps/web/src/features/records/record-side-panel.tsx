@@ -450,7 +450,6 @@ export function RecordSidePanel({
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
         isComposing: event.nativeEvent.isComposing || isComposingRef.current,
-        keyCode: event.keyCode,
       },
       { lastCompositionEndAt: lastCompositionEndAtRef.current, now: Date.now() },
       { newlineModifier: "ctrl" },

@@ -27,8 +27,6 @@ export type EnterKeyLikeEvent = {
   metaKey?: boolean;
   /** `event.nativeEvent.isComposing` OR'd with the composer's own compositionstart/compositionend tracking. */
   isComposing: boolean;
-  /** `event.keyCode`; Safari/Chrome fire keydown with 229 while a composition is in progress. */
-  keyCode: number;
 };
 
 export type EnterSendOptions = {
@@ -54,7 +52,12 @@ export function shouldSendOnEnter(
   const newlineModifier = options?.newlineModifier ?? "shift";
   if (newlineModifier === "shift" && event.shiftKey) return false;
   if (newlineModifier === "ctrl" && (event.ctrlKey || event.metaKey)) return false;
-  if (event.isComposing || event.keyCode === 229) return false;
+  // Composing is `isComposing` and the composer's own compositionstart/compositionend tracking,
+  // never keyCode 229 alone: Chrome on macOS with a Chinese input method marks the Enter after a
+  // sent message (the field cleared under the IME) 229 with no composition, and ignoring it left
+  // Cmd+Enter the only way to send again (task #98). Safari's confirming Enter, which comes just
+  // after compositionend, is the guard below.
+  if (event.isComposing) return false;
   const { lastCompositionEndAt, now } = composition;
   if (lastCompositionEndAt !== null && now - lastCompositionEndAt < IME_ENTER_GUARD_MS)
     return false;

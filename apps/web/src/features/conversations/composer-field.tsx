@@ -124,7 +124,6 @@ export function ComposerField({
       metaKey: event.metaKey,
       ctrlKey: event.ctrlKey,
       isComposing: event.nativeEvent.isComposing || isComposingRef.current,
-      keyCode: event.keyCode,
     };
     if (taskMode && shouldSendAsTaskOnEnter(key, composition)) {
       event.preventDefault();

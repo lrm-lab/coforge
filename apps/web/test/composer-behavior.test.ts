@@ -12,7 +12,7 @@ import {
 import { localId } from "#src/features/conversations/composer-behavior";
 import { INLINE_IMAGE_TYPES, imageUrlsFromPaste } from "#src/features/conversations/paste-image";
 
-const baseEnter = { key: "Enter", shiftKey: false, isComposing: false, keyCode: 13 };
+const baseEnter = { key: "Enter", shiftKey: false, isComposing: false };
 const noComposition = { lastCompositionEndAt: null, now: 0 };
 
 describe("forcesStackedLayout", () => {
@@ -46,7 +46,6 @@ describe("shouldSendAsTaskOnEnter", () => {
   test("ignores the shortcut while an IME composition is being confirmed", () => {
     const shortcut = { ...baseEnter, shiftKey: true, metaKey: true };
     expect(shouldSendAsTaskOnEnter({ ...shortcut, isComposing: true }, noComposition)).toBe(false);
-    expect(shouldSendAsTaskOnEnter({ ...shortcut, keyCode: 229 }, noComposition)).toBe(false);
     expect(
       shouldSendAsTaskOnEnter(shortcut, { lastCompositionEndAt: 0, now: IME_ENTER_GUARD_MS - 1 }),
     ).toBe(false);
@@ -87,10 +86,6 @@ describe("shouldSendOnEnter", () => {
 
   test("ignores Enter while nativeEvent.isComposing is true", () => {
     expect(shouldSendOnEnter({ ...baseEnter, isComposing: true }, noComposition)).toBe(false);
-  });
-
-  test("ignores Enter carrying the legacy keyCode 229 IME marker", () => {
-    expect(shouldSendOnEnter({ ...baseEnter, keyCode: 229 }, noComposition)).toBe(false);
   });
 
   test("ignores Enter fired just after compositionend (Safari)", () => {

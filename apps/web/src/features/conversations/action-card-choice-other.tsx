@@ -85,7 +85,6 @@ export function OtherRow({
                 key: event.key,
                 shiftKey: event.shiftKey,
                 isComposing: event.nativeEvent.isComposing || composing.current,
-                keyCode: event.keyCode,
               },
               {
                 lastCompositionEndAt: lastCompositionEndAt.current,
