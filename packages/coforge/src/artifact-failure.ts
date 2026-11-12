@@ -16,8 +16,6 @@ export type ArtifactCall = {
   writes: boolean;
   /** The next step after a failure of a write that may have landed. */
   mayHaveLanded?: string;
-  /** The next step when the artifact has a newer version than the call's base. */
-  baseMoved?: string;
   /** The next step when others commented on what the call changes since the Agent last read comments. */
   unseenComments?: string;
   /** A bare 404 from the proxy means the file is not there. */
@@ -35,8 +33,7 @@ export function artifactNetworkFailure(message: string, call: ArtifactCall): Cli
 }
 
 /** The server's error ids (the `(artifact-...)` of its message) whose next step the call names. */
-const NEXT_STEP_OF_ERROR: Record<string, "baseMoved" | "unseenComments"> = {
-  "artifact-base-moved": "baseMoved",
+const NEXT_STEP_OF_ERROR: Record<string, "unseenComments"> = {
   "artifact-unseen-comments": "unseenComments",
 };
 

@@ -48,7 +48,7 @@ export function ArtifactSendDialog({
       copy={sendCopy(title || m.doc_untitled())}
       summary={
         <>
-          {card && <ArtifactIcon kind={card.kind} size="sm" />}
+          {card && <ArtifactIcon entryPath={card.entryPath} size="sm" />}
           <span className="min-w-0 truncate font-semibold text-secondary">
             {title || m.doc_untitled()}
           </span>

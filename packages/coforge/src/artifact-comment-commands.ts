@@ -24,18 +24,18 @@ type ReviewComment = ReviewRequest["comments"][number];
 
 /**
  * Sends one comment operation and says what came of it. A comment's words, and a review's JSON,
- * are read from stdin (`readText("-")`) before anything is sent; a retry of a lost response is a
+ * are read from stdin (`readStdin`) before anything is sent; a retry of a lost response is a
  * new request with a new key, so the writes name what may have landed (`artifactRequest`).
  */
 export async function runArtifactComment(
   invocation: ArtifactCommentInvocation,
   transport: { artifact?: (request: AgentArtifactRequest) => Promise<unknown> },
-  readText: (file: string) => Promise<string>,
+  readStdin: () => Promise<string>,
 ): Promise<unknown> {
   if (!transport.artifact) throw new Error("Artifact transport is unavailable");
   const json = invocation.json === true;
   const draft = invocation.comment;
-  const request = await buildRequest(draft, readText);
+  const request = await buildRequest(draft, readStdin);
   const result = await transport.artifact(request).catch((error: unknown) => {
     throw error instanceof CliError ? withOutputMode(error, json ? "json" : "text") : error;
   });
@@ -56,7 +56,7 @@ export async function runArtifactComment(
 
 async function buildRequest(
   draft: ArtifactCommentDraft,
-  readText: (file: string) => Promise<string>,
+  readStdin: () => Promise<string>,
 ): Promise<AgentArtifactRequest> {
   switch (draft.operation) {
     case "comments":
@@ -64,7 +64,7 @@ async function buildRequest(
     case "reopen":
       return draft;
     case "comment": {
-      const body = (await readText("-")).trim();
+      const body = (await readStdin()).trim();
       if (!body)
         throw invalidArg(
           "Write the comment on stdin, for example with a quoted here-document (<<'EOF')",
@@ -72,7 +72,7 @@ async function buildRequest(
       return { ...draft, body, idempotencyKey: crypto.randomUUID() };
     }
     case "review": {
-      const { body, comments } = parseReview(await readText("-"));
+      const { body, comments } = parseReview(await readStdin());
       return {
         ...draft,
         ...(body === undefined ? {} : { body }),

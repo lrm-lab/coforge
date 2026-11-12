@@ -83,7 +83,7 @@ function sandbox(version: Version = site(), options: { readable?: () => boolean 
     read: async () => {
       check();
       return {
-        artifact: { kind: "html", currentVersion: 3 },
+        artifact: { currentVersion: 3 },
         version: { number: 3, entryPath: version.entryPath },
         files: Object.keys(version.files).map(row),
       };

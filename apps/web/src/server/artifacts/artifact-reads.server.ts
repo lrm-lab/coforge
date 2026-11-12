@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
+import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { AppError } from "#src/lib/app-error";
 import { escapeLikeTerm, searchTerms } from "#src/lib/search-terms";
 import { canReadConversationHome } from "#src/server/conversations/channel-read-access.server";
@@ -16,8 +17,6 @@ import {
   type ArtifactHomeAccess,
 } from "./artifact-access.server";
 
-/** Versions one history page lists by default, and at most. */
-const HISTORY_PAGE = 50;
 /** Artifacts one list or one batch of cards shows at most. */
 const LIST_LIMIT = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -63,12 +62,11 @@ const CARD_SELECT = {
   id: true,
   name: true,
   title: true,
-  kind: true,
+  entryPath: true,
   homeKey: true,
   access: true,
   currentVersion: true,
   preview: true,
-  authorUserId: true,
   authorAgentId: true,
   updatedAt: true,
 } as const;
@@ -78,47 +76,40 @@ function card(
     id: string;
     name: string;
     title: string;
-    kind: string;
+    entryPath: string;
     homeKey: string;
     access: string;
     currentVersion: number;
     preview: string;
-    authorUserId: string | null;
     authorAgentId: string | null;
     updatedAt: Date;
   },
   canChange: boolean,
   homeRead = true,
 ) {
-  const { authorUserId, authorAgentId, ...shown } = row;
+  const { authorAgentId, ...shown } = row;
   return {
     ...shown,
     // A reader the widened tier let in never learns the home's key (task #529).
     homeKey: homeRead ? row.homeKey : null,
     access: row.access as ArtifactAccessTier,
     canChange,
-    author: authorAgentId
-      ? { agentId: authorAgentId }
-      : authorUserId
-        ? { userId: authorUserId }
-        : null,
+    author: authorAgentId ? { agentId: authorAgentId } : null,
   };
 }
 
-/** What the `canChange` rule reads off a card row: the two author columns and the authoring
- * Agent's owner, looked up once per batch (`authorAgentId` is a bare column, task #529). */
+/** What the `canChange` rule reads off a card row: the authoring Agent's owner, looked up once
+ * per batch (`authorAgentId` is a bare column, task #529). */
 const accessRuleInput = (
-  row: { authorUserId: string | null; authorAgentId: string | null },
+  row: { authorAgentId: string | null },
   owners: ReadonlyMap<string, string>,
 ) => ({
-  authorUserId: row.authorUserId,
-  authorAgentId: row.authorAgentId,
   authorAgentOwnerId: (row.authorAgentId ? owners.get(row.authorAgentId) : undefined) ?? null,
 });
 
 /**
- * Reading artifacts (task #385): one version with its files, and the history, newest first. Both
- * ask the experiment, then the reader's access to the artifact's home, as every operation does.
+ * Reading artifacts (task #385): one version with its files, a list, and cards. Each asks the
+ * experiment, then the reader's access to the artifact's home, as every operation does.
  */
 export class ArtifactReads {
   constructor(
@@ -136,19 +127,17 @@ export class ArtifactReads {
         name: true,
         title: true,
         description: true,
-        kind: true,
         entryPath: true,
         homeKey: true,
         access: true,
         currentVersion: true,
         // Read with the artifact so `canDelete` needs no second query (task #385).
-        authorUserId: true,
         authorAgentId: true,
       },
     });
     if (!artifact) throw new AppError("NOT_FOUND");
     // The access check already read the home's conversation, so its kind comes free (task #385).
-    const { homeKind, homeRead, write } = await requireArtifactRead(
+    const { homeKind, homeRead } = await requireArtifactRead(
       this.db,
       workspaceId,
       reader,
@@ -170,12 +159,8 @@ export class ArtifactReads {
       // id is not theirs to know (task #529).
       homeKey: homeRead ? artifact.homeKey : null,
       homeRead,
-      // Whether the home's own rule lets this reader write; a tier only ever widens reading.
-      canWrite: write,
       access: artifact.access as ArtifactAccessTier,
       canChange: await canChangeArtifactAccess(this.db, workspaceId, reader, {
-        authorUserId: artifact.authorUserId,
-        authorAgentId: artifact.authorAgentId,
         authorAgentOwnerId: ownerId ?? null,
       }),
       homeKind,
@@ -203,7 +188,6 @@ export class ArtifactReads {
         title: true,
         description: true,
         merged: true,
-        revertedFrom: true,
         createdAt: true,
       },
     });
@@ -372,7 +356,7 @@ export class ArtifactReads {
         id: true,
         title: true,
         preview: true,
-        kind: true,
+        entryPath: true,
         currentVersion: true,
         homeKey: true,
         access: true,
@@ -455,7 +439,7 @@ export class ArtifactReads {
         href: `/w/${row.workspace.slug}/artifacts/${id}`,
         title: row.title,
         preview: row.preview,
-        contentType: row.kind,
+        contentType: artifactKindOfPath(row.entryPath),
         version: row.currentVersion,
         source: conversationId
           ? {
@@ -492,54 +476,5 @@ export class ArtifactReads {
           })
         )?.role
       : null;
-  }
-
-  /**
-   * The artifact's versions, newest first, `limit` (at most 50) at a time: `before` is the
-   * previous page's `nextBefore`, and a null `nextBefore` is the last page.
-   */
-  async history(input: {
-    workspaceId: string;
-    artifactId: string;
-    reader: ArtifactActor;
-    limit?: number;
-    before?: number;
-  }) {
-    const artifact = await this.artifact(input.workspaceId, input.artifactId, input.reader);
-    const whole = (value: number | undefined) => value === undefined || Number.isSafeInteger(value);
-    if (!whole(input.limit) || !whole(input.before))
-      throw new AppError("INVALID_INPUT", { errorId: "artifact-history-page" });
-    const limit = Math.min(Math.max(1, input.limit ?? HISTORY_PAGE), HISTORY_PAGE);
-    const rows = await this.db.artifactVersion.findMany({
-      where: {
-        artifactId: artifact.id,
-        ...(input.before !== undefined && { number: { lt: input.before } }),
-      },
-      orderBy: { number: "desc" },
-      take: limit + 1,
-      select: {
-        number: true,
-        publisherUserId: true,
-        publisherAgentId: true,
-        note: true,
-        label: true,
-        title: true,
-        merged: true,
-        revertedFrom: true,
-        createdAt: true,
-      },
-    });
-    const page = rows.slice(0, limit);
-    return {
-      versions: page.map(({ publisherUserId, publisherAgentId, ...version }) => ({
-        ...version,
-        publisher: publisherAgentId
-          ? { agentId: publisherAgentId }
-          : publisherUserId
-            ? { userId: publisherUserId }
-            : null,
-      })),
-      nextBefore: rows.length > limit ? page.at(-1)!.number : null,
-    };
   }
 }

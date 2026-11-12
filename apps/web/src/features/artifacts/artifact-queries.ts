@@ -13,8 +13,8 @@ import { loadArtifactsOn } from "./artifacts-on.functions";
 /** A document as a list row and a card show it (`listArtifacts`, `loadArtifactCards`). */
 export type ArtifactCard = Awaited<ReturnType<typeof listArtifacts>>[number];
 export type ArtifactDocument = Awaited<ReturnType<typeof loadArtifactDocument>>;
-/** Who published or wrote: a person or an Agent, or nobody left (a deleted account). */
-export type ArtifactActorRef = { userId: string } | { agentId: string } | null;
+/** Who wrote an artifact: the Agent that did, or nobody (the field is absent). */
+export type ArtifactActorRef = { agentId: string } | null;
 
 /** Every documents query, to refresh after a delete, a change of access or a published version. */
 export const ARTIFACTS_KEY = ["artifacts"] as const;
@@ -79,25 +79,17 @@ export function artifactHomeConversation(homeKey: string): string | null {
   return homeKey.startsWith("conversation:") ? homeKey.slice("conversation:".length) : null;
 }
 
-/** A publisher or author as a document shows them: their name and face, and whether it is the
- * viewer. */
-export type ArtifactActorView = { name: string; avatarUrl?: string; viewer: boolean };
+/** An artifact's author as the page shows it: the Agent's name and face. */
+export type ArtifactActorView = { name: string; avatarUrl?: string };
 
-/** Names publishers and authors from the Workspace directory, read once for every document; an
- * actor it does not list (deleted, or not yet read) is undefined. */
+/** Names authors from the Workspace directory, read once for every artifact; an Agent it does not
+ * list (deleted, or not yet read) is undefined. */
 export function useArtifactActor() {
   const { data } = useWorkspaceDirectory();
   return (actor: ArtifactActorRef): ArtifactActorView | undefined => {
     if (!actor || !data) return undefined;
-    const found =
-      "agentId" in actor
-        ? data.agents.find((agent) => agent.id === actor.agentId)
-        : data.people.find((person) => person.id === actor.userId);
+    const found = data.agents.find((agent) => agent.id === actor.agentId);
     if (!found) return undefined;
-    return {
-      name: found.name,
-      avatarUrl: found.avatarUrl ?? undefined,
-      viewer: "userId" in actor && actor.userId === data.viewerId,
-    };
+    return { name: found.name, avatarUrl: found.avatarUrl ?? undefined };
   };
 }

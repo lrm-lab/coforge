@@ -2,7 +2,6 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
   ARTIFACT_BINARY_LIMIT,
-  ARTIFACT_DOCUMENT_LIMIT,
   ARTIFACT_FILE_LIMIT,
   ARTIFACT_TEXT_LIMIT,
   artifactPathValid,
@@ -18,19 +17,18 @@ import {
   canDeleteArtifact,
   changeArtifactAccess,
   type ArtifactActor,
+  type ArtifactPublisher,
 } from "./artifact-access.server";
 import {
   ARTIFACT_SETTINGS,
   mergeSettings,
-  mergeDocumentFile,
-  type ArtifactConflict,
   type ArtifactSettingName,
   type ArtifactSettings,
 } from "./artifact-merge.server";
-import { refuseMovedBase, refuseOverlap } from "./artifact-agent-base.server";
+import { refuseOverlap, refuseUnknownBase } from "./artifact-agent-base.server";
 import { createArtifact } from "./artifact-create.server";
+import { requireOpenableEntry } from "./artifact-manifest.server";
 import { ArtifactReads } from "./artifact-reads.server";
-import { revertArtifact, type ArtifactRevert } from "./artifact-revert.server";
 import { requireNoUnseenCommentsOnPush } from "./artifact-comment-gate.server";
 import { lockComments } from "./artifact-comment-write.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
@@ -42,11 +40,9 @@ export type ArtifactHome =
   | { kind: "workspace" }
   | { kind: "public" };
 
-export type { ArtifactActor };
+export type { ArtifactActor, ArtifactPublisher };
 export * from "./artifact-files.server";
 
-/** Longer than Prisma's 5 s default: a save may line-merge a 2 MiB document under its lock. */
-const PUSH_TRANSACTION = { timeout: 15_000 };
 export const ARTIFACT_NOTE_LIMIT = 500;
 export const ARTIFACT_LABEL_LIMIT = 60;
 
@@ -61,14 +57,14 @@ function invalid(errorId: string): never {
 /**
  * Versioned artifacts: create, push a new immutable version, and read one. A push sends only
  * changed files; unlisted files carry over from its base version — and when the artifact moved on,
- * a push over an older base is merged with the others' changes: by file, a document's text by
- * line, and settings by item (`artifact-merge.server.ts`); what does not merge is a conflict.
- * Content lives in content-addressed blobs, and this module only records which bytes a version
- * uses.
+ * a push over an older base is merged with the others' changes by file, and its settings by item
+ * (`artifact-merge.server.ts`); a file or setting both sides changed refuses the push
+ * (`artifact-base-moved`). Content lives in content-addressed blobs, and this module only records
+ * which bytes a version uses.
  */
 export class Artifacts {
   private readonly enabled: (workspaceId: string) => Promise<boolean>;
-  /** Reading artifacts: a version, the history, a list and cards (`ArtifactReads`). */
+  /** Reading artifacts: a version, a list and cards (`ArtifactReads`). */
   readonly reads: ArtifactReads;
   private readonly signals?: ArtifactSignals;
 
@@ -98,7 +94,7 @@ export class Artifacts {
     await requireArtifactHome(this.db, workspaceId, actor, homeKey, need);
   }
 
-  /** A live artifact's home and author, after the experiment check: what every access needs. */
+  /** A live artifact's home, author and entry, after the experiment check: what every access needs. */
   private async live(workspaceId: string, artifactId: string) {
     if (!(await this.enabled(workspaceId))) throw artifactsDisabled();
     const artifact = await this.db.artifact.findFirst({
@@ -106,9 +102,7 @@ export class Artifacts {
       select: {
         homeKey: true,
         access: true,
-        authorUserId: true,
         authorAgentId: true,
-        kind: true,
         entryPath: true,
       },
     });
@@ -122,9 +116,8 @@ export class Artifacts {
     name: string;
     title?: string;
     description?: string;
-    kind: string;
     entryPath: string;
-    author: ArtifactActor;
+    author: ArtifactPublisher;
     /** An idempotent create: the client's key, and a hash of this create's inputs. The same key
      * with the same hash returns the artifact already made; with a different hash it is a
      * conflict (task #385). */
@@ -136,7 +129,7 @@ export class Artifacts {
     // Anyone with the link is a home a later step adds, with its own switch and refusals.
     if (input.home.kind === "public") invalid("artifact-home");
     await this.requireHome(input.workspaceId, input.author, artifactHomeKey(input.home), "write");
-    // The insert, name/kind validation and idempotent replay live in artifact-create.server.ts.
+    // The insert, name validation and idempotent replay live in artifact-create.server.ts.
     const { home, ...rest } = input;
     return createArtifact(this.db, { ...rest, homeKey: artifactHomeKey(home) });
   }
@@ -145,7 +138,7 @@ export class Artifacts {
     workspaceId: string;
     artifactId: string;
     baseVersion: number;
-    publisher: ArtifactActor;
+    publisher: ArtifactPublisher;
     idempotencyKey: string;
     note?: string;
     label?: string;
@@ -154,14 +147,6 @@ export class Artifacts {
     description?: string;
     files?: readonly ArtifactFileInput[];
     deletedPaths?: readonly string[];
-    /** Over an older base: `exact` refuses (going back); `byPath` merges by path and refuses an
-     * overlap (an Agent's, `refuseOverlap`); absent, files merge by line where they can. */
-    merge?: "exact" | "byPath";
-    /** The version this save goes back to (`revert`). */
-    revertedFrom?: number;
-    /** An Agent's own save: refused while others commented, since the Agent last read comments, on
-     * a file it changes (`artifact-comment-gate.server.ts`). A revert is not. */
-    gateByComments?: boolean;
   }): Promise<
     | {
         status: "created";
@@ -173,7 +158,6 @@ export class Artifacts {
     | { status: "replayed"; versionId: string; number: number }
     | { status: "nothing" }
     | { status: "missing"; missing: string[] }
-    | ArtifactConflict
   > {
     const live = await this.live(input.workspaceId, input.artifactId);
     const { homeKey } = live;
@@ -200,17 +184,12 @@ export class Artifacts {
       const blob = blobs.get(file.sha256)!;
       const limit = blob.kind === "text" ? ARTIFACT_TEXT_LIMIT : ARTIFACT_BINARY_LIMIT;
       if (blob.sizeBytes > limit) invalid("artifact-file-too-large");
-      // A document's own file is refused before anything merges it.
-      const document =
-        live.kind === "markdown" && file.path === (input.entryPath ?? live.entryPath);
-      if (document && blob.sizeBytes > ARTIFACT_DOCUMENT_LIMIT) invalid("artifact-file-too-large");
     }
 
-    const gateAgentId = input.gateByComments ? input.publisher.agentId : undefined;
     const saved = await this.db.$transaction(async (tx) => {
       // The comment lock before the row lock, the order a comment write takes them in; the check
       // below then sees every comment that committed, and none lands before this commits.
-      if (gateAgentId) await lockComments(tx, input.artifactId);
+      await lockComments(tx, input.artifactId);
       // Serialize every push for this artifact: the base check, the replay check and the version
       // number are decided under one row lock, so a concurrent push cannot slip between them.
       const [locked] = await tx.$queryRaw<
@@ -220,9 +199,8 @@ export class Artifacts {
           entryPath: string;
           title: string;
           description: string;
-          kind: string;
         }[]
-      >`SELECT "id", "currentVersion", "entryPath", "title", "description", "kind"
+      >`SELECT "id", "currentVersion", "entryPath", "title", "description"
          FROM "artifacts"
          WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid
            AND "deletedAt" IS NULL
@@ -241,18 +219,14 @@ export class Artifacts {
       });
       if (replay)
         return { status: "replayed", versionId: replay.id, number: replay.number } as const;
-      if (gateAgentId)
-        await requireNoUnseenCommentsOnPush(tx, {
-          artifactId: locked.id,
-          agentId: gateAgentId,
-          touched,
-          entry: { current: locked.entryPath, pushed: input.entryPath },
-        });
+      await requireNoUnseenCommentsOnPush(tx, {
+        artifactId: locked.id,
+        agentId: input.publisher.agentId,
+        touched,
+        entry: { current: locked.entryPath, pushed: input.entryPath },
+      });
 
-      if (input.baseVersion > current || input.baseVersion < 0)
-        throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
-      if (input.merge === "exact" && input.baseVersion !== current)
-        refuseMovedBase(input.publisher);
+      if (input.baseVersion > current || input.baseVersion < 0) refuseUnknownBase();
 
       // A version's files, and the settings it recorded; before the first version, none of either.
       const versionAt = async (number: number) => {
@@ -292,74 +266,39 @@ export class Artifacts {
       // Deleting something the push's own base never held is a mistake, not a no-op.
       for (const path of deleted) if (!baseFiles.has(path)) invalid("artifact-file-path");
 
-      // What others changed between the push's base and the current version.
+      // What others changed between the push's base and the current version; files merge by path,
+      // and what both sides changed refuses the push.
       const othersChanged = new Set<string>();
-      const lineMerged = new Map<string, FileRow>();
-      const fileConflicts: ArtifactConflict["files"] = [];
       if (input.baseVersion < current) {
         for (const path of new Set([...baseFiles.keys(), ...currentFiles.keys()])) {
           const before = baseFiles.get(path);
           const now = currentFiles.get(path);
           if (before?.sha256 !== now?.sha256) othersChanged.add(path);
         }
-        if (input.merge === "byPath")
-          refuseOverlap({
-            changed: othersChanged,
-            current: currentFiles,
-            added,
-            deleted,
-            settings: settings.conflicts,
-          });
-        else {
-          // A file both sides changed merges line by line when it is a document's text; any other
-          // file, or a file one side deleted, cannot be merged without a human.
-          for (const path of deleted)
-            if (othersChanged.has(path))
-              throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
-          for (const file of added) {
-            if (!othersChanged.has(file.path)) continue;
-            const document = locked.kind === "markdown" && file.path === settings.result.entryPath;
-            const merge = await mergeDocumentFile(this.blobs, input.workspaceId, document, {
-              base: baseFiles.get(file.path),
-              theirs: currentFiles.get(file.path),
-              mine: { ...file, ...blobs.get(file.sha256)! },
-            });
-            if (!merge) throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
-            if ("chunks" in merge) fileConflicts.push({ path: file.path, chunks: merge.chunks });
-            else lineMerged.set(file.path, merge);
-          }
-        }
-      }
-      if (settings.conflicts.length || fileConflicts.length)
-        return {
-          status: "conflict",
-          currentVersion: current,
-          files: fileConflicts,
+        refuseOverlap({
+          changed: othersChanged,
+          current: currentFiles,
+          added,
+          deleted,
           settings: settings.conflicts,
-        } as const;
+        });
+      }
 
       const result = new Map(currentFiles);
       for (const path of deleted) result.delete(path);
       for (const file of added) {
         const blob = blobs.get(file.sha256)!;
-        result.set(
-          file.path,
-          lineMerged.get(file.path) ?? {
-            path: file.path,
-            sha256: file.sha256,
-            sizeBytes: blob.sizeBytes,
-            kind: blob.kind,
-          },
-        );
+        result.set(file.path, {
+          path: file.path,
+          sha256: file.sha256,
+          sizeBytes: blob.sizeBytes,
+          kind: blob.kind,
+        });
       }
       if (result.size > ARTIFACT_FILE_LIMIT) invalid("artifact-too-many-files");
       const { entryPath } = settings.result;
       if (result.size && !result.has(entryPath)) invalid("artifact-entry-missing");
-      if (
-        locked.kind === "markdown" &&
-        (result.get(entryPath)?.sizeBytes ?? 0) > ARTIFACT_DOCUMENT_LIMIT
-      )
-        invalid("artifact-file-too-large");
+      if (entryPath !== locked.entryPath) requireOpenableEntry(entryPath);
 
       const merged = [...othersChanged].sort();
       const settingsChanged = ARTIFACT_SETTINGS.some(
@@ -391,7 +330,6 @@ export class Artifacts {
         deleted,
         merged: { files: merged, settings: settings.merged },
         idempotencyKey: input.idempotencyKey,
-        ...(input.revertedFrom !== undefined && { revertedFrom: input.revertedFrom }),
         files: result.values(),
       });
       return {
@@ -401,8 +339,7 @@ export class Artifacts {
         merged,
         mergedSettings: settings.merged,
       } as const;
-      // A line merge reads three documents of up to 2 MiB and stores one under this lock.
-    }, PUSH_TRANSACTION);
+    });
     if (saved.status === "created")
       await announceVersion(this.signals, {
         workspaceId: input.workspaceId,
@@ -416,8 +353,8 @@ export class Artifacts {
 
   /** Moves the artifact between read tiers (task #529): `conversation` keeps reads to its home
    * conversation's readers, `workspace` widens them to every Workspace member; writes never
-   * follow the tier. Its author, the authoring Agent's owner, or a Workspace owner or admin may;
-   * an Agent never may. */
+   * follow the tier. The authoring Agent's owner, or a Workspace owner or admin may; an Agent
+   * never may. */
   async changeAccess(input: {
     workspaceId: string;
     artifactId: string;
@@ -428,8 +365,8 @@ export class Artifacts {
     await changeArtifactAccess(this.db, input.workspaceId, input.actor, input);
   }
 
-  /** Soft-deletes the artifact (its name is free again at once); its author's, or a Workspace
-   * owner's or admin's, among those who can read it. An Agent deletes only its own. */
+  /** Soft-deletes the artifact (its name is free again at once); a Workspace owner or admin, among
+   * those who can read it. An Agent deletes only its own. */
   async delete(input: { workspaceId: string; artifactId: string; actor: ArtifactActor }) {
     const artifact = await this.live(input.workspaceId, input.artifactId);
     await requireArtifactWrite(this.db, input.workspaceId, input.actor, artifact, "read");
@@ -449,15 +386,5 @@ export class Artifacts {
   /** The artifact and one version (its current one by default) with that version's files. */
   read(input: Parameters<ArtifactReads["read"]>[0]) {
     return this.reads.read(input);
-  }
-
-  /** The artifact's versions, newest first, a page at a time. */
-  history(input: Parameters<ArtifactReads["history"]>[0]) {
-    return this.reads.history(input);
-  }
-
-  /** Goes back to version `to` (`revertArtifact`): its content saved as a new version. */
-  revert(input: ArtifactRevert) {
-    return revertArtifact(this.reads, (save) => this.push(save), input);
   }
 }

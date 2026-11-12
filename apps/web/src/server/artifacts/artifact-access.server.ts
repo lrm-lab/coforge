@@ -11,6 +11,10 @@ export type ArtifactActor =
   | { userId: string; agentId?: undefined }
   | { agentId: string; userId?: undefined };
 
+/** Who writes an artifact: an Agent. A person views and comments; they never publish a version
+ * nor upload the bytes of one. */
+export type ArtifactPublisher = Extract<ArtifactActor, { agentId: string }>;
+
 /** Which kind of home an artifact lives in: a channel, a DM, or the Workspace. The web page
  * builds a document's link from this (a channel and a DM route differently). */
 export type ArtifactHomeKind = "channel" | "dm" | "workspace";
@@ -91,19 +95,15 @@ export async function requireArtifactRead(
   throw new AppError("NOT_FOUND");
 }
 
-/** Whether the actor may change an artifact's read tier (task #529): a person who authored it,
- * the owner of the Agent that did, or a Workspace owner or admin. An Agent never may. The
+/** Whether the actor may change an artifact's read tier (task #529): the owner of the Agent that
+ * authored it, or a Workspace owner or admin. An Agent never may. The
  * authoring Agent's `ownerId` comes with the artifact row, so a missing Agent means it was
  * deleted — no special case. */
 export async function canChangeArtifactAccess(
   db: Pick<PrismaClient, "workspaceMembership">,
   workspaceId: string,
   actor: ArtifactActor,
-  artifact: {
-    authorUserId: string | null;
-    authorAgentId: string | null;
-    authorAgentOwnerId: string | null;
-  },
+  artifact: { authorAgentOwnerId: string | null },
 ): Promise<boolean> {
   const role = actor.userId
     ? (
@@ -121,17 +121,11 @@ export async function canChangeArtifactAccess(
 export function canChangeArtifactAccessWithRole(
   actor: ArtifactActor,
   role: string | null | undefined,
-  artifact: {
-    authorUserId: string | null;
-    authorAgentId: string | null;
-    authorAgentOwnerId: string | null;
-  },
+  artifact: { authorAgentOwnerId: string | null },
 ): boolean {
   return (
     actor.userId !== undefined &&
-    (artifact.authorUserId === actor.userId ||
-      artifact.authorAgentOwnerId === actor.userId ||
-      isWorkspaceAdminRole(role ?? undefined))
+    (artifact.authorAgentOwnerId === actor.userId || isWorkspaceAdminRole(role ?? undefined))
   );
 }
 
@@ -166,10 +160,9 @@ export async function changeArtifactAccess(
         id: string;
         homeKey: string;
         access: string;
-        authorUserId: string | null;
         authorAgentId: string | null;
       }[]
-    >`SELECT "id", "homeKey", "access", "authorUserId", "authorAgentId"
+    >`SELECT "id", "homeKey", "access", "authorAgentId"
         FROM "artifacts"
         WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${workspaceId}::uuid
           AND "deletedAt" IS NULL
@@ -187,8 +180,6 @@ export async function changeArtifactAccess(
       : undefined;
     if (
       !(await canChangeArtifactAccess(tx, workspaceId, actor, {
-        authorUserId: artifact.authorUserId,
-        authorAgentId: artifact.authorAgentId,
         authorAgentOwnerId: ownerId ?? null,
       }))
     )
@@ -260,16 +251,15 @@ export async function inWorkspace(db: Db, workspaceId: string, actor: ArtifactAc
   );
 }
 
-/** Whether the actor deletes an artifact it can read: its author, or a Workspace owner or admin
- * (a person); an Agent only its own. */
+/** Whether the actor deletes an artifact it can read: a Workspace owner or admin (a person); an
+ * Agent only its own. */
 export async function canDeleteArtifact(
   db: Pick<PrismaClient, "workspaceMembership">,
   workspaceId: string,
   actor: ArtifactActor,
-  artifact: { authorUserId: string | null; authorAgentId: string | null },
+  artifact: { authorAgentId: string | null },
 ): Promise<boolean> {
   if (actor.userId === undefined) return artifact.authorAgentId === actor.agentId;
-  if (artifact.authorUserId === actor.userId) return true;
   const membership = await db.workspaceMembership.findUnique({
     where: { workspaceId_userId: { workspaceId, userId: actor.userId } },
     select: { role: true },

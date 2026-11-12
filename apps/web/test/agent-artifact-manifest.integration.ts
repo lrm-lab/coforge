@@ -12,10 +12,9 @@ import { LocalFileStorage } from "#src/server/files/file-storage.server";
 import { handleAgentArtifactPost } from "#src/routes/api/agent/v1/artifacts";
 
 /**
- * An Agent's artifacts as files over `POST /api/agent/v1/artifacts`: a create or push carries a
- * manifest of uploaded bytes instead of a text, a read lists the shown version's files, and a
- * list searches by title and pages. A web page stays one `index.html` until the sandbox serves
- * more.
+ * An Agent's artifacts as files over `POST /api/agent/v1/artifacts`: a push (with an artifact, or
+ * with none to make one) carries a manifest of uploaded bytes, a read lists the shown version's
+ * files, and a list searches by title and pages. The entry file gives the artifact's type.
  */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -29,6 +28,7 @@ let blobs: StoredArtifactBlobs;
 let workspaceId: string;
 let alice: string;
 let agentId: string;
+let otherId: string;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-artifact-manifest-"));
@@ -57,6 +57,17 @@ beforeAll(async () => {
       },
     })
   ).id;
+  otherId = (
+    await db.agent.create({
+      data: {
+        workspaceId,
+        name: `mf-other-${handle}`,
+        displayName: "Other",
+        ownerId: alice,
+        runtimeConfig: {},
+      },
+    })
+  ).id;
 });
 
 afterAll(async () => {
@@ -74,6 +85,10 @@ const services = () => ({
   enabled: async () => true,
 });
 
+/** A push with no artifact makes one; this names its fields, with a fresh idempotency key. */
+const create = (body: Record<string, unknown>) =>
+  post({ operation: "push", idempotencyKey: crypto.randomUUID(), ...body });
+
 async function post(body: unknown) {
   const response = await handleAgentArtifactPost(
     new Request("http://local/api/agent/v1/artifacts", {
@@ -90,7 +105,7 @@ const sha256 = (bytes: Uint8Array<ArrayBuffer>) =>
   new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 
 /** Uploads a file as the Agent does, and names it in a manifest. */
-async function file(path: string, content: string | Uint8Array<ArrayBuffer>) {
+async function file(path: string, content: string | Uint8Array<ArrayBuffer>, by = agentId) {
   const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
   const response = await handleAgentArtifactUpload(
     new Request(`http://local/api/agent/v1/artifacts/uploads/${sha256(bytes)}`, {
@@ -99,7 +114,7 @@ async function file(path: string, content: string | Uint8Array<ArrayBuffer>) {
       body: bytes,
     }),
     sha256(bytes),
-    { workspaceId, agentId },
+    { workspaceId, agentId: by },
     services(),
   );
   expect(response.status).toBe(204);
@@ -111,9 +126,9 @@ const paths = (read: Record<string, any>) =>
   read.files.map((entry: { path: string }) => entry.path).sort();
 const sha = (content: string) => sha256(new TextEncoder().encode(content));
 
-test("a create names bytes it has not uploaded: answered missing, nothing made, then the same request lands", async () => {
+test("a push with no artifact names bytes it has not uploaded: answered missing, nothing made, then the same request lands", async () => {
   const request = {
-    operation: "create",
+    operation: "push",
     title: "Funnel report",
     idempotencyKey: key(),
     files: [
@@ -139,8 +154,9 @@ test("a create names bytes it has not uploaded: answered missing, nothing made, 
   const created = await post(request);
   expect(created).toMatchObject({
     status: 200,
-    body: { kind: "markdown", currentVersion: 1, title: "Funnel report" },
+    body: { currentVersion: 1, title: "Funnel report", entryPath: "report.md" },
   });
+  expect(created.body).not.toHaveProperty("kind");
   expect(await db.artifact.count({ where: { workspaceId, title: "Funnel report" } })).toBe(1);
 
   const read = await post({ operation: "read", artifact: created.body.id });
@@ -151,63 +167,56 @@ test("a create names bytes it has not uploaded: answered missing, nothing made, 
       { path: "data.csv", sha256: sha("day,signups\n1,10\n"), sizeBytes: 17, kind: "text" },
       { path: "report.md", sha256: sha("# Funnel\n"), sizeBytes: 9, kind: "text" },
     ],
-    artifact: { kind: "markdown", entryPath: "report.md" },
+    artifact: { entryPath: "report.md" },
   });
-  // The same create again replays the one artifact.
+  expect(read.body.artifact).not.toHaveProperty("kind");
+  // The same push again replays the one artifact.
   expect((await post(request)).body.id).toBe(created.body.id);
 });
 
-test("a manifest create takes its kind from the entry file, and its entry defaults", async () => {
+test("a push with no artifact takes its entry from its files, and its entry defaults", async () => {
   const notes = await file("notes.md", "# Notes\n");
   // The only file is the entry.
-  const only = await post({ operation: "create", title: "Only notes", files: [notes] });
-  expect(only.body).toMatchObject({ kind: "markdown", currentVersion: 1 });
+  const only = await create({ title: "Only notes", files: [notes] });
+  expect(only.body).toMatchObject({ currentVersion: 1, entryPath: "notes.md" });
   expect((await post({ operation: "read", artifact: only.body.id })).body.entryPath).toBe(
     "notes.md",
   );
-  // An index.html among several files is the entry; here that is a page, which is one file.
+  // An index.html among several files is the entry; a web page needs no description.
   const page = await file("index.html", "<!doctype html><p>hi</p>");
-  const html = await post({
-    operation: "create",
-    title: "A page",
-    description: "Says hi",
-    files: [page],
-  });
-  expect(html.body).toMatchObject({ kind: "html", currentVersion: 1 });
-  // A document with several files opens at the one it names.
+  const html = await create({ title: "A page", files: [page] });
+  expect(html.body).toMatchObject({ currentVersion: 1, entryPath: "index.html", preview: "" });
+  // Several files open at the one named.
   const more = await file("more.md", "# More\n");
-  const several = await post({
-    operation: "create",
-    title: "Several",
-    files: [notes, more],
-    entry: "more.md",
-  });
-  expect(several.body).toMatchObject({ kind: "markdown", currentVersion: 1 });
+  const several = await create({ title: "Several", files: [notes, more], entry: "more.md" });
+  expect(several.body).toMatchObject({ currentVersion: 1 });
   expect((await post({ operation: "read", artifact: several.body.id })).body.entryPath).toBe(
     "more.md",
   );
 });
 
-test("a manifest create that cannot name an entry, or whose entry is no .md or .html, is refused", async () => {
+test("a push with no artifact that cannot name an entry, or whose entry is no .md or .html, is refused", async () => {
   const notes = await file("notes.md", "# Notes\n");
   const more = await file("more.md", "# More\n");
   const csv = await file("data.csv", "a,b\n");
   const refused = async (body: Record<string, unknown>, errorId: string) => {
-    const answer = await post({ operation: "create", title: "Refused", ...body });
+    const answer = await create({ title: "Refused", ...body });
     expect(answer).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
     expect(answer.body.error).toContain(errorId);
     return answer;
   };
   // Two files and none is index.html: the entry must be named.
   await refused({ files: [notes, more] }, "artifact-entry-missing");
-  await refused({ files: [] }, "artifact-entry-missing");
   await refused({ files: [notes], entry: "other.md" }, "artifact-entry-missing");
-  await refused({ files: [csv] }, "artifact-kind");
-  await refused({ files: [notes, csv], entry: "data.csv" }, "artifact-kind");
-  // A stated kind must be the entry's.
-  await refused({ files: [notes], kind: "html", description: "x" }, "artifact-kind");
-  await refused({ files: [notes], delete: ["old.md"] }, "artifact-file-path");
+  await refused({ files: [csv] }, "artifact-entry-type");
+  await refused({ files: [notes, csv], entry: "data.csv" }, "artifact-entry-type");
   await refused({ files: [{ path: "../notes.md", sha256: notes.sha256 }] }, "artifact-file-path");
+  // A new artifact has no files to delete or base to push over, and no kind is stated: the
+  // request itself is outside the contract.
+  await refused({ files: [notes], delete: ["old.md"] }, "artifact-request");
+  await refused({ files: [notes], baseVersion: 0 }, "artifact-request");
+  await refused({ files: [notes], kind: "html" }, "artifact-request");
+  await refused({ files: [] }, "artifact-request");
   expect(await db.artifact.count({ where: { workspaceId, title: "Refused" } })).toBe(0);
 });
 
@@ -215,18 +224,18 @@ test("a web page may be several files, with any .html file as its entry", async 
   const page = await file("index.html", "<!doctype html><p>one</p>");
   const style = await file("css/site.css", "p { color: red }\n");
   const home = await file("home.html", "<!doctype html><p>home</p>");
-  const create = (body: Record<string, unknown>) =>
-    post({ operation: "create", title: "Pages", description: "A page", ...body });
+  const make = (body: Record<string, unknown>) =>
+    create({ title: "Pages", description: "A page", ...body });
   const entryOf = async (id: string) =>
     (await post({ operation: "read", artifact: id })).body.entryPath;
-  const made = await create({ files: [page, style] });
-  expect(made.body).toMatchObject({ kind: "html", currentVersion: 1 });
+  const made = await make({ files: [page, style] });
+  expect(made.body).toMatchObject({ currentVersion: 1, entryPath: "index.html" });
   expect(await entryOf(made.body.id)).toBe("index.html");
-  expect(await entryOf((await create({ files: [home, style], entry: "home.html" })).body.id)).toBe(
+  expect(await entryOf((await make({ files: [home, style], entry: "home.html" })).body.id)).toBe(
     "home.html",
   );
   for (const body of [{ files: [home, style] }, { files: [page, style], entry: "css/site.css" }])
-    expect(await create(body)).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
+    expect(await make(body)).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
 
   const artifact = made.body.id as string;
   const push = (baseVersion: number, body: Record<string, unknown>) =>
@@ -245,8 +254,7 @@ test("a web page may be several files, with any .html file as its entry", async 
 });
 
 test("a push of files adds, replaces and deletes by path, and keeps what it does not name", async () => {
-  const created = await post({
-    operation: "create",
+  const created = await create({
     title: "Handbook",
     files: [await file("README.md", "# Handbook\n"), await file("a.txt", "a\n")],
     entry: "README.md",
@@ -278,15 +286,11 @@ test("a push of files adds, replaces and deletes by path, and keeps what it does
   });
   const answer = await push(3, { entry: "b.txt" });
   expect(answer).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
-  expect(answer.body.error).toContain("artifact-kind");
+  expect(answer.body.error).toContain("artifact-entry-type");
 });
 
 test("a push naming bytes not uploaded is answered missing, and lands when sent again", async () => {
-  const created = await post({
-    operation: "create",
-    title: "Retry files",
-    files: [await file("a.md", "# A\n")],
-  });
+  const created = await create({ title: "Retry files", files: [await file("a.md", "# A\n")] });
   const request = {
     operation: "push",
     artifact: created.body.id,
@@ -301,20 +305,7 @@ test("a push naming bytes not uploaded is answered missing, and lands when sent 
   await file("later.txt", "later bytes\n");
   expect(await post(request)).toMatchObject({ body: { status: "created", number: 2 } });
   // Bytes another Agent uploaded are not this Agent's to name: missing until it uploads them.
-  const other = await db.agent.create({
-    data: {
-      workspaceId,
-      name: `mf-other-${handle}`,
-      displayName: "Other",
-      ownerId: alice,
-      runtimeConfig: {},
-    },
-  });
-  await blobs.upload({
-    workspaceId,
-    bytes: new TextEncoder().encode("theirs\n"),
-    actor: { agentId: other.id },
-  });
+  await file("theirs.txt", "theirs\n", otherId);
   expect(
     await post({
       ...request,
@@ -324,47 +315,20 @@ test("a push naming bytes not uploaded is answered missing, and lands when sent 
   ).toMatchObject({ body: { status: "missing", missing: [sha("theirs\n")] } });
 });
 
-test("a text create and push work as they did", async () => {
-  const created = await post({ operation: "create", title: "Plain", text: "# Plain\n" });
-  expect(created.body).toMatchObject({ kind: "markdown", currentVersion: 1 });
-  const saved = await post({
-    operation: "push",
-    artifact: created.body.id,
-    baseVersion: 1,
-    idempotencyKey: key(),
-    text: "# Plain\n\nmore\n",
-  });
-  expect(saved.body).toMatchObject({ status: "created", number: 2 });
-  const read = await post({ operation: "read", artifact: created.body.id });
-  expect(read.body).toMatchObject({
-    text: "# Plain\n\nmore\n",
-    entryPath: "document.md",
-    files: [{ path: "document.md", kind: "text", sizeBytes: 14 }],
-  });
-  // Nothing saved yet: no version, so no entry or files of a version.
-  const empty = await post({ operation: "create", title: "Empty" });
-  expect((await post({ operation: "read", artifact: empty.body.id })).body).toMatchObject({
-    entryPath: "document.md",
-    files: [],
-    version: null,
-  });
-});
-
 test("an Agent's file push over an older version keeps what others changed in other files", async () => {
-  const created = await post({
-    operation: "create",
+  const created = await create({
     title: "Shared files",
     files: [await file("a.md", "# A\n"), await file("b.txt", "b\n"), await file("c.txt", "c\n")],
     entry: "a.md",
   });
   const artifact = created.body.id as string;
-  await documents.save(
-    { workspaceId, actor: { userId: alice } },
+  await documents.push(
+    { workspaceId, actor: { agentId: otherId } },
     {
       artifactId: artifact,
       baseVersion: 1,
       idempotencyKey: key(),
-      text: "# A, edited by a person\n",
+      manifest: { files: [await file("a.md", "# A, edited by another Agent\n", otherId)] },
     },
   );
   const c = await file("c.txt", "c by the Agent\n");
@@ -387,14 +351,16 @@ test("an Agent's file push over an older version keeps what others changed in ot
     status: 409,
     body: { code: "CONFLICT", details: { files: "a.md" } },
   });
-  expect(clash.body.error).toContain("artifact-agent-base-moved");
+  expect(clash.body.error).toContain("artifact-base-moved");
 });
 
 test("list searches titles by every word, pages newest first, and ends without a cursor", async () => {
   const titles = ["Alpha one", "Alpha two", "Beta alpha three", "Gamma", "100% sure", "a_b c"];
   const made: Record<string, string> = {};
   for (const title of titles) {
-    made[title] = (await post({ operation: "create", title: `${title} ${handle}` })).body.id;
+    made[title] = (
+      await create({ title: `${title} ${handle}`, files: [await file("t.md", `# ${title}\n`)] })
+    ).body.id;
     // Distinct change times, oldest first, so the order below is the order of creation.
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
@@ -447,9 +413,9 @@ test("list searches titles by every word, pages newest first, and ends without a
   await post({
     operation: "push",
     artifact: made["Alpha one"],
-    baseVersion: 0,
+    baseVersion: 1,
     idempotencyKey: key(),
-    text: "now it has text\n",
+    files: [await file("t.md", "now it has other text\n")],
   });
   expect(ids((await post({ operation: "list", query: handle, limit: 1 })).body)).toEqual([
     made["Alpha one"],

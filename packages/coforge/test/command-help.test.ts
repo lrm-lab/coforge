@@ -195,20 +195,20 @@ test("artifact help hides when the Workspace's features say artifacts are off", 
     const disabled = commandHelp(["artifact"]);
     expect(disabled).toContain("not enabled");
     expect(disabled).toContain("coforge attachment upload");
-    expect(commandHelp(["artifact", "create"])).toBe(disabled);
+    expect(commandHelp(["artifact", "push"])).toBe(disabled);
     expect(commandHelp([])).not.toContain("artifact");
     expect(commandHelp(["task"])).toContain("coforge task");
     expect(cliUsage()).not.toContain("coforge artifact");
     expect(cliUsage()).toContain("coforge task list");
 
     Bun.env[name] = JSON.stringify({ taskConversations: true, artifacts: true });
-    expect(commandHelp(["artifact"])).toContain("coforge artifact create|list|read|push");
+    expect(commandHelp(["artifact"])).toContain("coforge artifact list|read|pull|push");
     expect(commandHelp([])).toContain("artifact");
     expect(cliUsage()).toBe(CLI_USAGE);
 
     // A launch that states no features (an older Daemon) keeps the help as it was.
     delete Bun.env[name];
-    expect(commandHelp(["artifact"])).toContain("coforge artifact create|list|read|push");
+    expect(commandHelp(["artifact"])).toContain("coforge artifact list|read|pull|push");
     expect(commandHelp([])).toContain("artifact");
     expect(cliUsage()).toBe(CLI_USAGE);
   } finally {

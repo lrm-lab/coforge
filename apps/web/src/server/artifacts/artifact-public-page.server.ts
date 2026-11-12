@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactsEnabled } from "./artifact-access.server";
+import { artifactKindOfPath } from "./artifact-files.server";
 
 type PublicPage = {
   workspaceId: string;
@@ -31,7 +32,6 @@ export function publicPageLookup(
             id: true,
             workspaceId: true,
             title: true,
-            kind: true,
             deletedAt: true,
             currentVersion: true,
             entryPath: true,
@@ -41,8 +41,8 @@ export function publicPageLookup(
     });
     const artifact = link?.artifact;
     if (!artifact || artifact.deletedAt || artifact.currentVersion <= 0) return null;
-    const kind =
-      artifact.kind === "html" ? "html" : artifact.kind === "markdown" ? "markdown" : null;
+    const entryKind = artifactKindOfPath(artifact.entryPath);
+    const kind = entryKind === "html" || entryKind === "markdown" ? entryKind : null;
     if (!kind) return null;
     const [on, version] = await Promise.all([
       enabled(artifact.workspaceId),

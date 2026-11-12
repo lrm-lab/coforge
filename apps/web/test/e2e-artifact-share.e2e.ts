@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
+import { agentWrites } from "./helpers/artifact-agent-writes";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import {
   browserSession,
@@ -33,7 +34,7 @@ test("an artifact's Share: who can see it", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `artifact-share-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
-  const { documents } = productionArtifacts(db);
+  const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
@@ -110,11 +111,11 @@ test("an artifact's Share: who can see it", async () => {
     await experiments.write(workspaceId, "artifacts", true);
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
-    const bot = { workspaceId, actor: { agentId: agent.id } };
-    const plan = await documents.create(bot, {
+    const bot = agentWrites(services, workspaceId, agent.id);
+    const plan = await bot.create({
       conversationId: channel.id,
       title: "Launch plan",
-      text: `Plan (run ${tail}).`,
+      files: { "plan.md": `Plan (run ${tail}).` },
     });
 
     // The viewer may change who can see it: the change is stored, and shown.
@@ -141,10 +142,10 @@ test("an artifact's Share: who can see it", async () => {
     expect(await evaluate<boolean>(`document.querySelector('[role="dialog"]') == null`)).toBe(true);
 
     // An artifact of the Workspace itself: one level, everyone in it; the way back is the Workspace.
-    const notes = await documents.create(
-      { workspaceId, actor: { userId: DEV_BROWSER_USER.id } },
-      { title: "Workspace notes", text: `Notes (run ${tail}).` },
-    );
+    const notes = await bot.create({
+      title: "Workspace notes",
+      files: { "notes.md": `Notes (run ${tail}).` },
+    });
     await browser("open", pageOf(notes.id));
     await browser("wait", "--fn", viewer);
     expect(
@@ -161,10 +162,10 @@ test("an artifact's Share: who can see it", async () => {
 
     // Shared with the Workspace from a channel the viewer is not in: read through that level
     // alone, with no conversation to go back to.
-    const leads = await documents.create(bot, {
+    const leads = await bot.create({
       conversationId: closed.id,
       title: "Leads",
-      text: `Leads (run ${tail}).`,
+      files: { "leads.md": `Leads (run ${tail}).` },
     });
     await db.artifact.update({ where: { id: leads.id }, data: { access: "workspace" } });
     await browser("open", pageOf(leads.id));
@@ -212,10 +213,24 @@ test("an artifact's Share: who can see it", async () => {
         members: { create: [{ userId: noor.id }, { userId: DEV_BROWSER_USER.id }] },
       },
     });
-    const brief = await documents.create(
-      { workspaceId: other.id, actor: { userId: noor.id } },
-      { conversationId: noorChannel.id, title: "Brief", text: `Brief (run ${tail}).` },
-    );
+    // An Agent of Noor's makes it; the viewer neither owns that Agent nor administers the Workspace.
+    const noorAgent = await db.agent.create({
+      data: {
+        workspaceId: other.id,
+        name: `e2e-share-noor-bot-${tail}`,
+        displayName: "Noor's bot",
+        ownerId: noor.id,
+        runtimeConfig: {},
+      },
+    });
+    await db.conversationMember.create({
+      data: { conversationId: noorChannel.id, workspaceId: other.id, agentId: noorAgent.id },
+    });
+    const brief = await agentWrites(services, other.id, noorAgent.id).create({
+      conversationId: noorChannel.id,
+      title: "Brief",
+      files: { "brief.md": `Brief (run ${tail}).` },
+    });
     await browser("open", `${origin}/en/w/${other.slug}/artifacts/${brief.id}`);
     await browser("wait", "--fn", viewer);
     await press(share);
@@ -226,7 +241,7 @@ test("an artifact's Share: who can see it", async () => {
       await evaluate<string>(
         `document.getElementById(${group}.getAttribute("aria-describedby")).textContent`,
       ),
-    ).toContain("Only its author");
+    ).toContain("Only the owner of the Agent");
     await shoot("4-member-greyed");
     await browser("press", "Escape");
   } finally {

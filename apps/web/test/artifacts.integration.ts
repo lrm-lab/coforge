@@ -17,6 +17,7 @@ const handle = crypto.randomUUID().slice(0, 8);
 
 let workspaceId: string;
 let userId: string;
+let agentId: string;
 
 const blobs = new Map<string, ArtifactBlobInfo>();
 let inspections = 0;
@@ -28,12 +29,8 @@ const store: ArtifactBlobStore = {
     );
   },
   use: async (_tx, _workspaceId, sha256s) => sha256s.filter((sha256) => !blobs.has(sha256)),
-  // No bytes are stored here: a line merge of documents is `artifact-merge.integration.ts`'s.
   read: async () => null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
-  upload: async () => {
-    throw new Error("no bytes are stored in this test");
-  },
 };
 const artifacts = new Artifacts(db, store, { enabled: async () => true });
 
@@ -54,6 +51,17 @@ beforeAll(async () => {
     },
   });
   workspaceId = workspace.id;
+  agentId = (
+    await db.agent.create({
+      data: {
+        workspaceId,
+        name: `artifact-writer-${handle}`,
+        displayName: "Writer",
+        ownerId: userId,
+        runtimeConfig: {},
+      },
+    })
+  ).id;
 });
 
 afterAll(async () => {
@@ -62,14 +70,13 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-const create = (name: string, entryPath = "index.md", kind = "markdown") =>
+const create = (name: string, entryPath = "index.md") =>
   artifacts.create({
     workspaceId,
     home: { kind: "workspace" },
     name: `${name}-${handle}`,
-    kind,
     entryPath,
-    author: { userId },
+    author: { agentId },
   });
 
 test("an artifact's live name is unique, and a soft delete releases it", async () => {
@@ -92,7 +99,7 @@ test("a push inherits unlisted files and records what changed", async () => {
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "push-1",
     files: [file("index.md", "sha-a"), file("notes.txt", "sha-b")],
   });
@@ -102,7 +109,7 @@ test("a push inherits unlisted files and records what changed", async () => {
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 1,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "push-2",
     files: [file("index.md", "sha-c")],
     deletedPaths: ["notes.txt"],
@@ -126,14 +133,12 @@ test("a push over an older base merges others' files, and conflicts on the same 
   blob("sha-2");
   blob("sha-3");
   blob("sha-4");
-  // A file set, not a document: the same file on both sides is merged only by a human here
-  // (a document merges line by line, `artifact-merge.integration.ts`).
-  const artifact = await create("merge", "index.md", "other");
+  const artifact = await create("merge");
   await artifacts.push({
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "merge-0",
     files: [file("index.md", "sha-1")],
   });
@@ -142,7 +147,7 @@ test("a push over an older base merges others' files, and conflicts on the same 
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 1,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "merge-1",
     files: [file("notes.txt", "sha-2")],
   });
@@ -151,7 +156,7 @@ test("a push over an older base merges others' files, and conflicts on the same 
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 1,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "merge-2",
     files: [file("index.md", "sha-3")],
   });
@@ -159,13 +164,13 @@ test("a push over an older base merges others' files, and conflicts on the same 
   const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
   expect(read.files.map((entry) => entry.path)).toEqual(["index.md", "notes.txt"]);
 
-  // The same file on both sides cannot be merged.
+  // The same file on both sides cannot be merged, whatever its type: nothing merges inside a file.
   await expect(
     artifacts.push({
       workspaceId,
       artifactId: artifact.id,
       baseVersion: 2,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: "merge-3",
       files: [file("index.md", "sha-4")],
     }),
@@ -177,7 +182,7 @@ test("a push over an older base merges others' files, and conflicts on the same 
       workspaceId,
       artifactId: artifact.id,
       baseVersion: 2,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: "merge-4",
     }),
   ).toEqual({ status: "nothing" });
@@ -191,7 +196,7 @@ test("concurrent pushes serialize: each gets its version, or a replay — never 
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "concurrent-0",
     files: [file("index.md", "sha-x")],
   });
@@ -200,7 +205,7 @@ test("concurrent pushes serialize: each gets its version, or a replay — never 
       workspaceId,
       artifactId: artifact.id,
       baseVersion: 1,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: "concurrent-1",
       files: [file("a.txt", "sha-y")],
     }),
@@ -208,7 +213,7 @@ test("concurrent pushes serialize: each gets its version, or a replay — never 
       workspaceId,
       artifactId: artifact.id,
       baseVersion: 1,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: "concurrent-1",
       files: [file("a.txt", "sha-y")],
     }),
@@ -223,14 +228,13 @@ test("size and kind come from the blob, not the request", async () => {
   blob("sha-big-text", "text", ARTIFACT_TEXT_LIMIT + 1);
   blob("sha-big-image", "image", ARTIFACT_BINARY_LIMIT + 1);
   blob("sha-ok-image", "image", ARTIFACT_BINARY_LIMIT);
-  // Not a document: a file set keeps the general limits (a document's own file has 2 MiB).
-  const artifact = await create("sizes", "index.md", "other");
+  const artifact = await create("sizes");
   await expect(
     artifacts.push({
       workspaceId,
       artifactId: artifact.id,
       baseVersion: 0,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: "size-1",
       files: [file("index.md", "sha-big-text")],
     }),
@@ -240,7 +244,7 @@ test("size and kind come from the blob, not the request", async () => {
       workspaceId,
       artifactId: artifact.id,
       baseVersion: 0,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: "size-2",
       files: [file("photo.png", "sha-big-image")],
     }),
@@ -249,13 +253,43 @@ test("size and kind come from the blob, not the request", async () => {
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "size-3",
     files: [file("index.md", "sha-ok-image")],
   });
   expect(ok.status).toBe("created");
   const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
   expect(read.files[0]).toMatchObject({ kind: "image", sizeBytes: ARTIFACT_BINARY_LIMIT });
+});
+
+test("an entry file has no limit of its own: a text over 2 MiB is stored as any file is", async () => {
+  blob("sha-big-entry", "text", 3 * 1024 * 1024);
+  const artifact = await create("big-entry");
+  const pushed = await artifacts.push({
+    workspaceId,
+    artifactId: artifact.id,
+    baseVersion: 0,
+    publisher: { agentId },
+    idempotencyKey: "big-entry-1",
+    files: [file("index.md", "sha-big-entry")],
+  });
+  expect(pushed.status).toBe("created");
+});
+
+test("an entry file the web page cannot show is refused when a push sets it", async () => {
+  blob("sha-data");
+  const artifact = await create("entry-type");
+  await expect(
+    artifacts.push({
+      workspaceId,
+      artifactId: artifact.id,
+      baseVersion: 0,
+      publisher: { agentId },
+      idempotencyKey: "entry-type-1",
+      entryPath: "data.csv",
+      files: [file("data.csv", "sha-data")],
+    }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "artifact-entry-type" });
 });
 
 test("the file limit counts the merged version", async () => {
@@ -269,7 +303,7 @@ test("the file limit counts the merged version", async () => {
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "limit-0",
     files: [...files, file("index.md", "sha-limit-0")],
     entryPath: "f0.md",
@@ -280,7 +314,7 @@ test("the file limit counts the merged version", async () => {
       workspaceId,
       artifactId: artifact.id,
       baseVersion: 1,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: "limit-1",
       files: [file("extra.md", "sha-limit-extra")],
     }),
@@ -296,7 +330,7 @@ test("paths are checked per segment, and deleting an absent file is refused", as
         workspaceId,
         artifactId: artifact.id,
         baseVersion: 0,
-        publisher: { userId },
+        publisher: { agentId },
         idempotencyKey: `path-${path}`,
         files: [file(path, "sha-path")],
       }),
@@ -306,7 +340,7 @@ test("paths are checked per segment, and deleting an absent file is refused", as
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "path-ok",
     entryPath: "a..b.md",
     files: [file("a..b.md", "sha-path")],
@@ -317,7 +351,7 @@ test("paths are checked per segment, and deleting an absent file is refused", as
       workspaceId,
       artifactId: artifact.id,
       baseVersion: 1,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: "path-missing-delete",
       deletedPaths: ["nope.md"],
     }),
@@ -333,7 +367,7 @@ test("one blob lookup serves a whole push", async () => {
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "batch-0",
     files: [file("index.md", "sha-batch-a"), file("b.md", "sha-batch-b")],
   });
@@ -347,7 +381,7 @@ test("replaying a push returns the version it already made", async () => {
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "same-key",
     files: [file("index.txt", "sha-replay")],
   });
@@ -355,7 +389,7 @@ test("replaying a push returns the version it already made", async () => {
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: "same-key",
     files: [file("index.txt", "sha-replay")],
   });

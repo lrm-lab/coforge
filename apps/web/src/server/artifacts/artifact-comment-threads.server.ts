@@ -23,7 +23,7 @@ type Principal = { workspaceId: string; agentId: string };
 async function threadRoot(
   tx: CommentTx,
   principal: Principal,
-  artifact: { id: string; authorUserId: string | null; authorAgentId: string | null },
+  artifact: { id: string; authorAgentId: string | null },
   commentId: string,
 ) {
   const root = await tx.artifactComment.findFirst({

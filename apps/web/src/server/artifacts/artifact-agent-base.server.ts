@@ -3,21 +3,19 @@ import type { ArtifactFileInput, ArtifactFileRow } from "./artifact-files.server
 import type { ArtifactSettingConflict } from "./artifact-merge.server";
 
 /**
- * An Agent's save over a version others moved past. What the others changed and the Agent's save
+ * A save over a version others moved past. What the others changed and the Agent's save
  * does not touch is kept (`Artifacts.push` merges by path); nothing is merged inside a file, and
  * what both sides changed refuses the whole save, naming it, so the Agent reads the newest
  * version and redoes its change on it.
  */
 
-const REFUSAL = "artifact-agent-base-moved";
+const REFUSAL = "artifact-base-moved";
 
-/** The refusal of a save the artifact moved past, where the save must be on the newest version. */
-export function refuseMovedBase(publisher: { agentId?: string }): never {
+/** The refusal of a save whose base is a version the artifact never had. */
+export function refuseUnknownBase(): never {
   throw new AppError("CONFLICT", {
-    errorId: publisher.agentId ? REFUSAL : "artifact-base-moved",
-    hint: publisher.agentId
-      ? "the artifact changed after you read it; run `coforge artifact read` for the newest version, then save again"
-      : undefined,
+    errorId: REFUSAL,
+    hint: "the base version is not one the artifact has; `coforge artifact pull` the newest version into a fresh directory, redo your change on it, then push again",
   });
 }
 
@@ -55,6 +53,6 @@ export function refuseOverlap(input: {
       ...(files.length && { files: files.join("\n") }),
       ...(settings.length && { settings: settings.join("\n") }),
     },
-    hint: `others changed ${named} after you read the artifact; run \`coforge artifact read\` for the newest version, redo that change on it, then save again`,
+    hint: `others changed ${named} after you read the artifact; \`coforge artifact pull\` the newest version into a fresh directory, redo that change on it, then push again`,
   });
 }

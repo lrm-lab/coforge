@@ -13,13 +13,11 @@ model Artifact {
   name            String
   title           String            @default("")
   description     String            @default("")
-  /// A document's first two lines with text, plain, for its card and list; kept from its
-  /// current version (`artifactPreview`). Empty for any other artifact.
+  /// A Markdown entry's first two lines with text, plain, for its card and list; kept from its
+  /// current version (`artifactPreview`). An html entry's is its description's. The type of an
+  /// artifact is its entry file's (`entryPath`); no column holds it.
   preview         String            @default("")
-  /// html | markdown | text | csv | image | pdf | video | other
-  kind            String
   entryPath       String
-  authorUserId    String?           @db.Uuid
   authorAgentId   String?           @db.Uuid
   /// The client's key for an idempotent create, and a hash of that create's inputs (task #385):
   /// the same key with the same inputs replays this row; the same key with different inputs is a
@@ -79,7 +77,6 @@ model ArtifactVersion {
   id               String         @id @default(uuid(7)) @db.Uuid
   artifactId       String         @db.Uuid
   number           Int
-  publisherUserId  String?        @db.Uuid
   publisherAgentId String?        @db.Uuid
   note             String         @default("")
   label            String         @default("")
@@ -92,9 +89,6 @@ model ArtifactVersion {
   /// What this version took from others' saves since its base: `{ files: paths, settings: names }`;
   /// null when it took nothing.
   merged           Json?
-  /// The version this one went back to (`Artifacts.revert`): its content saved again as a new
-  /// version. Null for an ordinary save.
-  revertedFrom     Int?
   idempotencyKey   String
   createdAt        DateTime       @default(now())
   artifact         Artifact       @relation(fields: [artifactId], references: [id], onDelete: Cascade)
@@ -169,10 +163,9 @@ model ArtifactBlob {
   @@map("artifact_blobs")
 }
 
-/// Who may name a stored blob in a save: whoever uploaded those bytes (`user:<id>` or
-/// `agent:<id>`). A save may name only bytes its publisher uploaded or its artifact already uses,
-/// so a hash learned from a home the publisher cannot read does not copy its bytes into one it
-/// can write. Goes with the blob.
+/// Who may name a stored blob in a save: the Agent that uploaded those bytes (`agent:<id>`). A
+/// save may name only bytes its publisher uploaded or its artifact already uses, so a hash learned
+/// from a home the publisher cannot read does not copy its bytes into one it can write. Goes with the blob.
 model ArtifactBlobGrant {
   workspaceId String       @db.Uuid
   sha256      String

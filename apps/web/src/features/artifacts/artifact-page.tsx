@@ -34,7 +34,8 @@ import {
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
 import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactShareDialog, shareIcon } from "./artifact-share-dialog";
-import { isWebPage, PaneFrame } from "./artifact-parts";
+import { isWebPageEntry } from "./artifact-path-kind";
+import { PaneFrame } from "./artifact-parts";
 import {
   artifactDocumentQuery,
   artifactHomeConversation,
@@ -124,8 +125,8 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     );
     return pane ? <PaneFrame full={pane.full}>{unavailable}</PaneFrame> : unavailable;
   }
-  const kind = current?.artifact.kind;
-  const webPage = kind !== undefined && isWebPage(kind);
+  const entryPath = current?.artifact.entryPath;
+  const webPage = entryPath !== undefined && isWebPageEntry(entryPath);
   const title = current?.artifact.title || m.doc_untitled();
   const copy = async (text: string, done: string) => {
     if (await copyText(text)) toast.success(done);
@@ -149,7 +150,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   const body = (
     <>
       <ArtifactPageHeader
-        kind={kind}
+        entryPath={entryPath}
         title={title}
         version={current?.artifact.currentVersion}
         home={home}

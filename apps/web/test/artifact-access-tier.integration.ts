@@ -5,6 +5,7 @@ import { ArtifactDocuments } from "#src/server/artifacts/artifact-documents.serv
 import {
   Artifacts,
   type ArtifactActor,
+  type ArtifactPublisher,
   type ArtifactBlobInfo,
   type ArtifactBlobStore,
   type ArtifactHome,
@@ -13,7 +14,7 @@ import {
 /**
  * An artifact's read tier (task #529): `conversation` keeps it to its home conversation's
  * readers, `workspace` widens it to every Workspace member, people and Agents alike — while
- * writes stay the home's. Its author, the authoring Agent's owner, or a Workspace owner or admin
+ * writes stay the home's (an Agent's). The authoring Agent's owner, or a Workspace owner or admin
  * moves the tier; an Agent never may. Every move is recorded in `artifact_access_events`.
  */
 const connectionString = Bun.env.DATABASE_URL;
@@ -28,9 +29,6 @@ const store: ArtifactBlobStore = {
   use: async () => [],
   read: async () => null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
-  upload: async () => {
-    throw new Error("no bytes are stored in this test");
-  },
 };
 const artifacts = new Artifacts(db, store, { enabled: async () => true });
 const documents = new ArtifactDocuments(db, artifacts, store);
@@ -111,16 +109,20 @@ afterAll(async () => {
 });
 
 let made = 0;
-const create = (home: ArtifactHome, author: ArtifactActor, kind = "markdown") =>
+const create = (home: ArtifactHome, author: ArtifactPublisher) =>
   artifacts.create({
     workspaceId,
     home,
     name: `doc-${(made += 1)}-${handle}`,
-    kind,
     entryPath: "document.md",
     author,
   });
-const push = (artifactId: string, publisher: ArtifactActor, sha256 = "sha-doc", baseVersion = 0) =>
+const push = (
+  artifactId: string,
+  publisher: ArtifactPublisher,
+  sha256 = "sha-doc",
+  baseVersion = 0,
+) =>
   artifacts.push({
     workspaceId,
     artifactId,
@@ -139,8 +141,8 @@ const inConversation = (conversationId: string): ArtifactHome => ({
 test("a workspace-shared artifact is every member's read, while writes stay the home's", async () => {
   const change = (artifactId: string, actor: ArtifactActor, access: "conversation" | "workspace") =>
     artifacts.changeAccess({ workspaceId, artifactId, actor, access });
-  const shared = await create(inConversation(privateChannel), { userId: people.alice });
-  await push(shared.id, { userId: people.alice });
+  const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
+  await push(shared.id, { agentId: agents.helper });
   await expect(read(shared.id, { userId: people.bob })).rejects.toMatchObject({
     code: "NOT_FOUND",
   });
@@ -148,7 +150,7 @@ test("a workspace-shared artifact is every member's read, while writes stay the 
     code: "NOT_FOUND",
   });
 
-  // Who may move it: its author, the authoring Agent's owner, or a Workspace owner or admin.
+  // Who may move it: the authoring Agent's owner, or a Workspace owner or admin.
   // Bob cannot read it yet, so his change hears what a missing artifact says.
   await expect(change(shared.id, { userId: people.bob }, "workspace")).rejects.toMatchObject({
     code: "NOT_FOUND",
@@ -162,32 +164,22 @@ test("a workspace-shared artifact is every member's read, while writes stay the 
   await expect(change(shared.id, { userId: people.bob }, "conversation")).rejects.toMatchObject({
     code: "ACCESS_DENIED",
   });
-  await expect(push(shared.id, { userId: people.bob }, "sha-doc", 1)).rejects.toMatchObject({
+  await expect(push(shared.id, { agentId: agents.stranger }, "sha-doc", 1)).rejects.toMatchObject({
     code: "ACCESS_DENIED",
   });
-  // Every write verb answers the same refusal to a tier-only reader — delete, revert, and a
-  // document save — and the document's own read reports `canDelete: false` (task #529).
+  // Every write verb answers the same refusal to a tier-only reader — delete, and a push through
+  // the documents — and the artifact's own read reports `canDelete: false` (task #529).
   await expect(
     artifacts.delete({ workspaceId, artifactId: shared.id, actor: { userId: people.bob } }),
   ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
   await expect(
-    artifacts.revert({
-      workspaceId,
-      artifactId: shared.id,
-      actor: { userId: people.bob },
-      to: 1,
-      baseVersion: 1,
-      idempotencyKey: crypto.randomUUID(),
-    }),
-  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-  await expect(
-    documents.save(
-      { workspaceId, actor: { userId: people.bob } },
+    documents.push(
+      { workspaceId, actor: { agentId: agents.stranger } },
       {
         artifactId: shared.id,
         baseVersion: 1,
         idempotencyKey: crypto.randomUUID(),
-        text: "changed",
+        title: "changed",
       },
     ),
   ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
@@ -196,13 +188,12 @@ test("a workspace-shared artifact is every member's read, while writes stay the 
     { artifactId: shared.id },
   );
   expect(loaded.canDelete).toBe(false);
-  // A tier-only reader sees no homeKey — a private conversation's id is not theirs — nor the
-  // write/deletion verbs it cannot use, only the home's kind.
+  // A tier-only reader sees no homeKey — a private conversation's id is not theirs — only the
+  // home's kind.
   const widened = await read(shared.id, { userId: people.bob });
   expect(widened.artifact).toMatchObject({
     homeKey: null,
     homeRead: false,
-    canWrite: false,
     access: "workspace",
     canChange: false,
     homeKind: "channel",
@@ -240,7 +231,7 @@ test("a workspace-shared artifact is every member's read, while writes stay the 
   expect(events[3].actorUserId).toBe(people.admin);
 
   // A workspace-home artifact has only the workspace tier.
-  const workspaceHome = await create({ kind: "workspace" }, { userId: people.alice });
+  const workspaceHome = await create({ kind: "workspace" }, { agentId: agents.helper });
   await expect(
     change(workspaceHome.id, { userId: people.alice }, "conversation"),
   ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "artifact-access-tier" });
@@ -251,10 +242,10 @@ test("a workspace-shared artifact is every member's read, while writes stay the 
 });
 
 test("concurrent changes serialize under the row lock — no stale-read decisions", async () => {
-  const shared = await create(inConversation(publicChannel), { userId: people.alice });
+  const shared = await create(inConversation(publicChannel), { agentId: agents.helper });
   const change = (actor: ArtifactActor, access: "conversation" | "workspace") =>
     artifacts.changeAccess({ workspaceId, artifactId: shared.id, actor, access });
-  // Alice authored it; an admin may change it too — and both read a public channel, so the lock
+  // Alice owns the authoring Agent; an admin may change it too — and both read a public channel, so the lock
   // order is the only thing the outcome depends on.
   await Promise.all([
     change({ userId: people.alice }, "workspace"),
@@ -277,7 +268,7 @@ test("concurrent changes serialize under the row lock — no stale-read decision
 
   // Two racing changes to the same tier: one wins the lock, the other reads the new value and
   // returns early — one event, not two.
-  const same = await create(inConversation(publicChannel), { userId: people.alice });
+  const same = await create(inConversation(publicChannel), { agentId: agents.helper });
   const changeSame = (actor: ArtifactActor) =>
     artifacts.changeAccess({ workspaceId, artifactId: same.id, actor, access: "workspace" });
   await Promise.all([changeSame({ userId: people.alice }), changeSame({ userId: people.admin })]);
@@ -336,18 +327,18 @@ test("list and cards carry access and canChange; a tier-only reader's card hides
   });
   expect(listed.map((row) => row.id)).toContain(shared.id);
 
-  // A tier-only reader may page its history too.
-  const history = await artifacts.reads.history({
+  // A tier-only reader reads its versions too.
+  const read = await artifacts.read({
     workspaceId,
     artifactId: shared.id,
     reader: { userId: people.bob },
   });
-  expect(history.versions.map((version) => version.number)).toContain(1);
+  expect(read.version?.number).toBe(1);
 });
 
 test("the backfill moves only workspace-home rows to the workspace tier", async () => {
-  const wsHome = await create({ kind: "workspace" }, { userId: people.alice });
-  const convHome = await create(inConversation(privateChannel), { userId: people.alice });
+  const wsHome = await create({ kind: "workspace" }, { agentId: agents.helper });
+  const convHome = await create(inConversation(privateChannel), { agentId: agents.helper });
   // Rows as they stood before the backfill: the column had defaulted `conversation` everywhere.
   await db.$executeRaw`UPDATE "artifacts" SET "access" = 'conversation'
     WHERE "id" IN (${wsHome.id}::uuid, ${convHome.id}::uuid)`;

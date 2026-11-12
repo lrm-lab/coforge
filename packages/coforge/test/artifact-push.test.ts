@@ -191,7 +191,7 @@ test("push over a directory with no state creates an artifact from its files", a
     "A page",
   ])) as string;
   expect(server.requests[0]).toMatchObject({
-    operation: "create",
+    operation: "push",
     title: "Site",
     target: "#launch",
     description: "A page",
@@ -201,7 +201,8 @@ test("push over a directory with no state creates an artifact from its files", a
       { path: "index.html", sha256: sha256("<h1>hi</h1>") },
     ],
   });
-  expect(server.requests[0]).not.toHaveProperty("kind");
+  expect(server.requests[0]).not.toHaveProperty("artifact");
+  expect(server.requests[0]).not.toHaveProperty("baseVersion");
   // missing, then the same request again with the same key
   expect(server.requests).toHaveLength(2);
   expect(server.requests[1]).toEqual(server.requests[0]!);
@@ -214,7 +215,7 @@ test("push over a directory with no state creates an artifact from its files", a
   expect(server.requests[0]).toMatchObject({ operation: "push", artifact: ID, baseVersion: 1 });
 });
 
-test("creating from a directory needs a title, an entry it can name, and a page's description", async () => {
+test("creating from a directory needs a title and an entry it can name", async () => {
   const server = fakeServer();
   const dir = join(root, "docs");
   await mkdir(dir);
@@ -227,12 +228,12 @@ test("creating from a directory needs a title, an entry it can name, and a page'
   );
   await run(server, ["push", dir, "--title", "Docs", "--entry", "two.md"]);
   expect(server.requests[0]).toMatchObject({ entry: "two.md" });
+  // A web page needs no description: it is optional, as for any artifact.
   const page = join(root, "page");
   await mkdir(page);
   await writeFile(join(page, "index.html"), "<p>");
-  expect((await failure(run(server, ["push", page, "--title", "P"]))).message).toContain(
-    "--description",
-  );
+  await run(server, ["push", page, "--title", "P"]);
+  expect(server.requests.at(-1)).not.toHaveProperty("description");
   // A directory that is already an artifact's cannot be sent as a new one.
   const { dir: owned } = await pulled({ "a.md": "a" }, "owned");
   expect((await failure(run(server, ["push", owned, "--target", "#x"]))).code).toBe("INVALID_ARG");

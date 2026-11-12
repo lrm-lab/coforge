@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
+import { agentWrites } from "./helpers/artifact-agent-writes";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
@@ -25,7 +26,7 @@ test("an artifact's Share: a public link on and off", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `artifact-link-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
-  const { documents } = productionArtifacts(db);
+  const services = productionArtifacts(db);
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
     orderBy: { createdAt: "asc" },
@@ -124,29 +125,27 @@ test("an artifact's Share: a public link on and off", async () => {
     await experiments.write(workspaceId, "artifacts", true);
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
-    const viewer = { workspaceId, actor: { userId: DEV_BROWSER_USER.id } };
-    const doc = await documents.create(viewer, {
+    const bot = agentWrites(services, workspaceId, agent.id);
+    const doc = await bot.create({
       conversationId: channel.id,
       title: "Launch plan",
-      text: [
-        `We open signups on Monday (run ${tail}).`,
-        "## What ships",
-        "- The invite flow, with **two seats** free\n- A public changelog",
-        "## Dates",
-        "| Step | Owner | When |\n| --- | --- | --- |\n| Freeze | Noor | Friday |\n| Open | Amir | Monday |",
-        "> Roll back if signups fail for ten minutes.",
-      ].join("\n\n"),
-    });
-    const web = await documents.create(
-      { workspaceId, actor: { agentId: agent.id } },
-      {
-        conversationId: channel.id,
-        kind: "html",
-        title: "Signup funnel",
-        description: "Signups by day",
-        text: `<!doctype html><html><body><h1>Signups ${tail}</h1></body></html>`,
+      files: {
+        "plan.md": [
+          `We open signups on Monday (run ${tail}).`,
+          "## What ships",
+          "- The invite flow, with **two seats** free\n- A public changelog",
+          "## Dates",
+          "| Step | Owner | When |\n| --- | --- | --- |\n| Freeze | Noor | Friday |\n| Open | Amir | Monday |",
+          "> Roll back if signups fail for ten minutes.",
+        ].join("\n\n"),
       },
-    );
+    });
+    const web = await bot.create({
+      conversationId: channel.id,
+      title: "Signup funnel",
+      description: "Signups by day",
+      files: { "index.html": `<!doctype html><html><body><h1>Signups ${tail}</h1></body></html>` },
+    });
 
     await openShare(doc.id);
     const first = await roundTrip(doc.id, "desktop");

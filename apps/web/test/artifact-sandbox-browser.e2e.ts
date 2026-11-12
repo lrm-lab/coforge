@@ -164,7 +164,7 @@ beforeAll(async () => {
       read: async (input: { artifactId: string }) => {
         const site = SITES[input.artifactId]!;
         return {
-          artifact: { kind: "html" },
+          artifact: {},
           version: { number: 1, entryPath: site.entry },
           files: Object.keys(site.files).map((path) => rowOf(input.artifactId, path)),
         } as never;

@@ -181,9 +181,10 @@ test("an artifact the Agent cannot read has no comments to write or read", async
 
 test("a Workspace-wide artifact is commented by any Agent of the Workspace", async () => {
   const created = await f.post(f.agents.writer, {
-    operation: "create",
+    operation: "push",
+    idempotencyKey: f.key(),
     title: "Everyone's",
-    text: "shared\n",
+    files: await f.manifestOf(f.agents.writer, { "shared.md": "shared\n" }),
   });
   expect(created.status).toBe(200);
   expect((await comment(f.agents.reader, created.body.id, "Seen.")).status).toBe(200);

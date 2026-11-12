@@ -16,7 +16,7 @@ export type ArtifactVersionPublishedEvent = {
   workspaceId: string;
   artifactId: string;
   number: number;
-  publisher: { userId: string } | { agentId: string };
+  publisher: { agentId: string };
 };
 
 const artifactVersionPublishedEvent = z.object({
@@ -24,10 +24,7 @@ const artifactVersionPublishedEvent = z.object({
   workspaceId: z.string().min(1),
   artifactId: z.string().min(1),
   number: z.number().int().positive(),
-  publisher: z.union([
-    z.object({ userId: z.string().min(1) }),
-    z.object({ agentId: z.string().min(1) }),
-  ]),
+  publisher: z.object({ agentId: z.string().min(1) }),
 });
 
 export function decodeArtifactVersionPublishedEvent(

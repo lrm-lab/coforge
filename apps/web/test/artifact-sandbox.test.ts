@@ -158,7 +158,7 @@ describe("a sandbox ticket", () => {
   });
 });
 
-type Page = { kind?: string; entryPath?: string; sizeBytes?: number; number?: number };
+type Page = { entryPath?: string; sizeBytes?: number; number?: number };
 
 const entry = (page: Page, number: number) => ({
   path: page.entryPath ?? "index.html",
@@ -177,7 +177,7 @@ function sandbox(
       if (options.readable && !options.readable()) throw new AppError("NOT_FOUND");
       const number = input.version ?? page.number ?? 2;
       return {
-        artifact: { kind: page.kind ?? "html", currentVersion: page.number ?? 2 },
+        artifact: { currentVersion: page.number ?? 2 },
         version: { number, entryPath: page.entryPath ?? "index.html" },
         files: [entry(page, number)],
       };
@@ -220,8 +220,8 @@ describe("a web page's link", () => {
     ).rejects.toMatchObject({ errorId: "artifact-sandbox-off" });
   });
 
-  test("is not given for a document, nor a page whose entry is over 2 MiB", async () => {
-    for (const page of [{ kind: "markdown" }, { sizeBytes: ARTIFACT_HTML_LIMIT + 1 }])
+  test("is not given for a document (a Markdown entry), nor a page whose entry is over 2 MiB", async () => {
+    for (const page of [{ entryPath: "document.md" }, { sizeBytes: ARTIFACT_HTML_LIMIT + 1 }])
       await expect(sandbox(page).service.link(linkInput)).rejects.toMatchObject({
         code: "NOT_FOUND",
       });

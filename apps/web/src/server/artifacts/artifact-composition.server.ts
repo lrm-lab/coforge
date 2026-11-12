@@ -13,7 +13,7 @@ import { publicPageLookup } from "./artifact-public-page.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
 import type { ArtifactActor } from "./artifact-access.server";
 import type { ArtifactMessageCard } from "./artifact-reads.server";
-import { ArtifactShares, type ArtifactShareTargetResolver } from "./artifact-shares.server";
+import { ArtifactShares } from "./artifact-shares.server";
 export type { ArtifactMessageCard } from "./artifact-reads.server";
 
 /** The artifact services of production: bytes in the private file bucket, each new version
@@ -34,9 +34,8 @@ export function productionArtifacts(db: PrismaClient) {
 export function productionArtifactShares(
   db: PrismaClient,
   enabled: (workspaceId: string) => Promise<boolean>,
-  resolveTarget?: ArtifactShareTargetResolver,
 ) {
-  return new ArtifactShares(db, enabled, resolveTarget);
+  return new ArtifactShares(db, enabled);
 }
 
 /** Web pages on the sandbox origin (task #490): the same reads and bytes, signed with the

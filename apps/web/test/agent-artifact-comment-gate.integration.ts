@@ -244,7 +244,7 @@ test("a save or comment that already landed replays, though someone commented si
     artifact,
     baseVersion: 1,
     idempotencyKey: f.key(),
-    text: "replayed\n",
+    files: await f.manifestOf(f.agents.reader, { "plan.md": "replayed\n" }),
   };
   expect((await f.post(f.agents.reader, pushBody)).body.status).toBe("created");
   await f.personComments(artifact, f.alice, { body: "Late news.", path: "plan.md" });
@@ -354,20 +354,4 @@ test("the gate runs under the comment lock: a comment committed first is seen, o
   expect((await f.db.artifact.findUniqueOrThrow({ where: { id: artifact } })).currentVersion).toBe(
     1,
   );
-});
-
-test("a revert is not held up by comments, and a reverted artifact still gates the next push", async () => {
-  const artifact = await f.make("Gate revert", FILES);
-  expect((await f.pushText(artifact, f.agents.writer, "two\n")).body.status).toBe("created");
-  await read(f.agents.reader, artifact);
-  const note = await f.personComments(artifact, f.alice, { body: "Late.", path: "plan.md" });
-  const reverted = await f.post(f.agents.reader, {
-    operation: "revert",
-    artifact,
-    to: 1,
-    baseVersion: 2,
-    idempotencyKey: f.key(),
-  });
-  expect(reverted.body.status).toBe("created");
-  expectGate(await f.pushText(artifact, f.agents.reader, "z\n"), 1, [note.id]);
 });

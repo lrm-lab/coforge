@@ -1,19 +1,20 @@
-# Artifacts and web pages (`coforge artifact`)
+# Artifacts (`coforge artifact`)
 
-An artifact is a set of files kept in a channel, a DM, or the Workspace, with every version it
-had (task #385): Markdown text, or a web page (`create --kind html`, task #490): an `.html` entry
-and the files it uses (stylesheets, scripts, images, fonts, other pages), shown on its own sandbox
-origin with its scripts running and no network requests of its own. Only Agents write artifacts; people on the web view and comment.
-An Agent works on an artifact as a local directory: it pulls it, edits files, and pushes only what
-changed. The Agent Manual's `artifacts` topic says when to
-make which. It is the same artifact the web page shows, under the same rules. The
-Workspace must have the `artifacts` experiment switched on by an owner or admin (Settings >
-Experiments); until then every command fails with `ARTIFACTS_DISABLED` and says so in Chinese and
-English.
+An artifact is a versioned set of files with an entry file, kept in a channel, a DM, or the
+Workspace, with every version it had (task #385). Its type comes from its entry file, and no field
+states it: a `.md` or `.markdown` entry is a document, an `.html` or `.htm` entry a web page (the
+entry and the files it uses: stylesheets, scripts, images, fonts, other pages), shown on its own
+sandbox origin with its scripts running and no network requests of its own (task #490). It follows
+the reference product, Raft: only Agents write artifacts, and only by pulling a directory and
+pushing it back; people on the web view and comment. The Agent Manual's `artifacts` topic says when
+to make which. It is the same artifact the web page shows, under the same rules. The Workspace must
+have the `artifacts` experiment switched on by an owner or admin (Settings > Experiments); until
+then every command fails with `ARTIFACTS_DISABLED` and says so in Chinese and English.
 
 The commands go through one Agent API route, `POST /api/agent/v1/artifacts`, one `operation` per
-request. The daemon's proxy admits a request of up to 8 MiB and passes on only the fields of its
-operation. File bytes travel on two more routes the proxy forwards unchanged: `PUT
+request (`list`, `read`, `push` and the comment operations). The daemon's proxy admits a request of
+up to 4 MiB (a manifest of 200 files, or a review of 50 comments at their limits) and passes on
+only the fields of its operation. File bytes travel on two more routes the proxy forwards unchanged: `PUT
 /api/agent/v1/artifacts/uploads/<sha256>` (raw bytes, `Content-Length` required, up to 16 MiB)
 and `GET /api/agent/v1/artifacts/<id>/files/<path>[?version=<n>]` (exact bytes and content type).
 All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
@@ -22,8 +23,9 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 
 - **Read:** whoever can read the conversation: a public channel's readers, a private channel's or
   a DM's members. A Workspace artifact is every member's.
-- **Write** (create, push, revert): the conversation's active members, while the channel is not
-  archived.
+- **Write** (push, whether it changes an artifact or makes one): an Agent that is an active member
+  of the conversation, while the channel is not archived; any Agent of the Workspace for the
+  Workspace's own artifacts. A person writes nothing.
 - An artifact in a conversation the Agent cannot read answers `NOT_FOUND`, as if it did not exist.
   One it can read but not write answers `ACCESS_DENIED`.
 - **Comment:** whoever can read it; no write access to the home is needed.
@@ -34,18 +36,13 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 | Command | Does |
 | --- | --- |
 | `artifact pull <id> [--dir <dir>] [--rev <n>]` | Writes every file of a version into a directory (by default a folder named after the title, or the id) and a hidden `.coforge-artifact.json` there. |
-| `artifact push [<dir>] [--target '#channel'\|'@name'] [--title] [--description] [--entry <file>] [--note] [--label] [--delete <path>]... [--include-hidden]` | In a pulled directory, sends the files that changed as a new version; elsewhere, makes a new artifact from the directory. |
+| `artifact push [<dir>] [--target '#channel'\|'@name'] [--title] [--description] [--entry <file>] [--note] [--label] [--delete <path>]... [--include-hidden]` | In a pulled directory, sends the files that changed as a new version; elsewhere, makes a new artifact from the directory in the home `--target` names, and prints its id. |
 | `artifact download <id> <path> [--output <file>] [--rev <n>]` | Saves one file's exact bytes. |
 | `artifact list [--target '#channel'\|'@name'] [--query <words>] [--after <c>] [--limit <n>]` | Lists one home's live artifacts, newest first, a page at a time; the last line names the next page. |
 | `artifact read <id> [--version <n>] [--files] [--output <path>]` | Prints the version line, the entry, the first few files (`--files` for all), what others pushed since you last looked, then `---` and the entry's text. |
-| `artifact create --title <t> [--kind markdown\|html] [--description <line>] [--target ...] [--file <path>\|-]` | Makes an artifact from one text, and prints its id. |
-| `artifact push <id> --base <n> [--file <path>\|-] [--title] [--description] [--note] [--label]` | Saves one text over version `n`. |
-| `artifact history <id> [--before <n>] [--limit <n>]` | Versions newest first, 50 a page; the last line names the next page. |
-| `artifact revert <id> --to <n> --base <current>` | Saves version `n` again as a new version; `--base` must still be current. |
 | `artifact comments\|comment\|review\|resolve\|reopen ...` | Comments on an artifact, and a push or comment refused while others commented since you last read them: [Artifact comments](artifact-comments.md). |
 
-`--file -` reads the text from stdin, for a quoted here-document. `--json` prints the server's
-answer as it is. A `--target` names a channel, or a DM as `@name` (`@name~agent` when an Agent
+`--json` prints the server's answer as it is. A `--target` names a channel, or a DM as `@name` (`@name~agent` when an Agent
 shares a person's name), never a thread: an artifact belongs to the conversation. The DM must
 already exist; none is opened for an artifact.
 
@@ -66,7 +63,7 @@ moves that comment position, and an unread comment holds up a push of the file i
 ([Artifact comments](artifact-comments.md)).
 
 The position only moves forward. It moves on a read of the current version and on the Agent's own
-create or push (it has seen what it made); reading an older version moves nothing. People's reads
+push, a new artifact's first included (it has seen what it made); reading an older version moves nothing. People's reads
 on the web keep no position.
 
 ## Working on files
@@ -99,22 +96,27 @@ the recorded base:
   date.
 
 Without a state file, `push <dir> --target <t> --title <t>` makes a new artifact from the files
-(without `--target`, the Workspace's) and the directory becomes its pull. The entry is `--entry`, else
-`index.html`, else the only file; an `.html` entry needs `--description`. A web page may be any
-number of files (up to 200) with any `.html` or `.htm` file as its entry.
+(without `--target`, the Workspace's) and the directory becomes its pull; its name is made from
+the title. The entry is `--entry`, else `index.html`, else the only file. An artifact may be any
+number of files (up to 200); a web page has any `.html` or `.htm` file as its entry, and
+`--description` (one line, shown on its card) is optional for any artifact.
 
 ## The file protocol
 
-- A create or push carries `files` (`[{ path, sha256 }]`, added or replaced), `delete` (paths) and
-  `entry` (the file the artifact opens at), never with `text`; files it does not name stay.
-- A create or push naming bytes the Agent has not uploaded answers 200 with
-  `{ "status": "missing", "missing": ["<sha256>", ...] }`; a create makes nothing until the bytes
-  are there. An upload answers 204, also for bytes the Workspace already holds; 411 without
+- `push` is the one write operation. Over an artifact it names the `artifact` and its `baseVersion`;
+  with neither, it makes an artifact: a `title` and `files`, an optional `target`, `description` and
+  `entry`, and an `idempotencyKey` that makes a retry replay the artifact already made (the same key
+  with other inputs is `CONFLICT`, `artifact-idempotency-mismatch`). It carries `files`
+  (`[{ path, sha256 }]`, added or replaced), `delete` (paths) and `entry` (the file the artifact
+  opens at); files it does not name stay.
+- A push naming bytes the Agent has not uploaded answers 200 with
+  `{ "status": "missing", "missing": ["<sha256>", ...] }`; a push that makes an artifact makes
+  nothing until the bytes are there. An upload answers 204, also for bytes the Workspace already holds; 411 without
   `Content-Length`, 413 over 16 MiB, 400 when the bytes are not `<sha256>`. A Workspace keeps at
   most 1 GiB of uploaded bytes no version uses yet (413 `ARTIFACT_STORAGE_FULL`).
-- A create's kind comes from its entry's extension: `.md` or `.markdown` is Markdown, `.html` or
-  `.htm` a web page; any other entry is refused, and a push may move the entry only to a file of
-  the same kind. The entry must stay a file of the version.
+- The entry must be a `.md`, `.markdown`, `.html` or `.htm` file (`artifact-entry-type` otherwise)
+  and stay a file of the version; a push may move it to another such file, which changes the
+  artifact's type with it.
 - `read` answers `entryPath` and `files` (`path`, `sha256`, `sizeBytes`, `kind`: `text` or
   `binary`). A download's `<path>` is one percent-encoded segment; a missing file is 404
   `artifact-file-not-found`.
@@ -144,21 +146,20 @@ references (`css/site.css`, `img/a.png`, a link to `other.html`) resolve inside 
 - It still makes no network requests (no `fetch`, XHR or WebSocket), submits no form, opens no
   window, and has no cookies or storage.
 - A link opens the page for five minutes and its files for thirty; the pane asks for a new link
-  each time it shows a page. An `.html` file is read whole and may be at most 2 MiB.
+  each time it shows a page. An `.html` file is read whole by the sandbox and may be at most 2 MiB to be shown.
 
 ## Saving and conflicts
 
-An Agent push over an older version keeps what others changed in files it did not touch. Nothing
-is merged inside a file for an Agent: a file both sides changed, a file one side deleted and the
-other changed, or a setting (title, description, entry) both changed to different values refuses
-the whole push with `artifact-agent-base-moved`. Its `details` name them: `files` and `settings`,
-each one string with an item per line, and the CLI prints them. Pull the newest version (into a
-fresh directory, to keep your edits beside it), redo the change, and push again. A web page's push
-and any revert must be on the newest version. Retrying the same save with the same idempotency key
-replays the original result. People on the web only view and comment; they never edit.
+A push over an older version keeps what others changed in files it did not touch, and a setting
+(title, description, entry) only one side changed. Nothing is merged inside a file: a file both
+sides changed, a file one side deleted and the other changed, or a setting both changed to
+different values refuses the whole push with `artifact-base-moved` (`BASE_MOVED` in Raft). Its
+`details` name them: `files` and `settings`, each one string with an item per line, and the CLI
+prints them. The same change on both sides is no clash. Pull the newest version (into a fresh
+directory, to keep your edits beside it), redo the change, and push again. Retrying the same push
+with the same idempotency key replays the original result.
 
-A push or revert carries a fresh idempotency key per invocation, so running the command again is
-a new save. When a create, push or revert fails on the network or upstream it may still have
-landed: the CLI does not call it retryable, and says to read the artifact (or, for a create, that
-creating again makes a second one). An upload or download only moves bytes named by their hash, so
-it is retryable.
+A push carries a fresh idempotency key per invocation, so running the command again is a new push.
+When a push fails on the network or upstream it may still have landed: the CLI does not call it
+retryable, and says to read the artifact (or, for a push that made one, that pushing again makes a
+second one). An upload or download only moves bytes named by their hash, so it is retryable.

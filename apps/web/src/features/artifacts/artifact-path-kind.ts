@@ -1,4 +1,5 @@
-/** The server's own reading of a file's kind, from its extension; the client cannot choose it. */
+/** What a file is, from its extension. An artifact's type is its entry file's kind: no column
+ * holds it, and the client cannot choose it. */
 export function artifactKindOfPath(path: string): string {
   const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
   if (["html", "htm"].includes(extension)) return "html";
@@ -10,3 +11,7 @@ export function artifactKindOfPath(path: string): string {
   if (["mp4", "webm", "mov"].includes(extension)) return "video";
   return "other";
 }
+
+/** Whether an artifact whose entry file is `entryPath` is a web page (an html entry); any other
+ * artifact the page shows is a document. */
+export const isWebPageEntry = (entryPath: string) => artifactKindOfPath(entryPath) === "html";

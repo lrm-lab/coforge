@@ -1,5 +1,5 @@
 import type { Prisma } from "#src/generated/prisma/client";
-import type { ArtifactActor } from "./artifact-access.server";
+import type { ArtifactPublisher } from "./artifact-access.server";
 import type { ArtifactFileInput, ArtifactFileRow } from "./artifact-files.server";
 import type { ArtifactSettingName, ArtifactSettings } from "./artifact-merge.server";
 
@@ -13,16 +13,15 @@ export async function writeVersion(
   input: {
     artifactId: string;
     number: number;
-    publisher: ArtifactActor;
+    publisher: ArtifactPublisher;
     note?: string;
     label?: string;
     settings: ArtifactSettings;
     added: readonly ArtifactFileInput[];
     deleted: readonly string[];
-    /** What came from others: files (by path) and settings (by name), for the history. */
+    /** What came from others: files (by path) and settings (by name), as the unseen read lists them. */
     merged: { files: readonly string[]; settings: readonly ArtifactSettingName[] };
     idempotencyKey: string;
-    revertedFrom?: number;
     files: Iterable<ArtifactFileRow>;
   },
 ) {
@@ -32,9 +31,7 @@ export async function writeVersion(
     data: {
       artifactId,
       number: input.number,
-      ...(input.publisher.agentId
-        ? { publisherAgentId: input.publisher.agentId, publisherUserId: null }
-        : { publisherUserId: input.publisher.userId ?? null, publisherAgentId: null }),
+      publisherAgentId: input.publisher.agentId,
       note: input.note ?? "",
       label: input.label ?? "",
       entryPath,
@@ -51,7 +48,6 @@ export async function writeVersion(
         } satisfies Prisma.InputJsonObject,
       }),
       idempotencyKey: input.idempotencyKey,
-      revertedFrom: input.revertedFrom ?? null,
     },
     select: { id: true, number: true },
   });

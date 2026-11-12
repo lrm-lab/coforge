@@ -1,6 +1,6 @@
 import type { Artifact, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import type { ArtifactActor } from "./artifact-access.server";
+import type { ArtifactPublisher } from "./artifact-access.server";
 import { idempotencyMismatch } from "./artifact-idempotency.server";
 
 /**
@@ -8,11 +8,10 @@ import { idempotencyMismatch } from "./artifact-idempotency.server";
  * create that carries a key the Workspace already used returns the artifact it made (replay)
  * when the inputs match, and is a conflict when they differ, so a lost response on the first
  * try does not leave a second document behind. The caller has already checked the experiment,
- * the name, the kind and the home.
+ * the name and the home.
  */
 
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const KINDS = new Set(["html", "markdown", "text", "csv", "image", "pdf", "video", "other"]);
 
 export type CreateArtifactInput = {
   workspaceId: string;
@@ -20,9 +19,8 @@ export type CreateArtifactInput = {
   name: string;
   title?: string;
   description?: string;
-  kind: string;
   entryPath: string;
-  author: ArtifactActor;
+  author: ArtifactPublisher;
   /** An idempotent create: the client's key, and a hash of this create's inputs. The same key
    * with the same hash returns the artifact already made; with a different hash it is a
    * conflict. */
@@ -30,14 +28,13 @@ export type CreateArtifactInput = {
   requestHash?: string;
 };
 
-/** Validates the name, kind and description, then inserts the artifact — or replays the one this
+/** Validates the name and description, then inserts the artifact — or replays the one this
  * key already made. */
 export async function createArtifact(
   db: PrismaClient,
   input: CreateArtifactInput,
 ): Promise<Artifact> {
   if (!NAME.test(input.name)) invalid("artifact-name");
-  if (!KINDS.has(input.kind)) invalid("artifact-kind");
   if (input.description && input.description.length > 1000) invalid("artifact-description");
   // A create that already ran under this key returns its artifact again (replay), unless its
   // inputs differ, which is a mistake, not a retry.
@@ -60,9 +57,8 @@ export async function createArtifact(
         name: input.name,
         title: input.title ?? "",
         description: input.description ?? "",
-        kind: input.kind,
         entryPath: input.entryPath,
-        ...actorColumns(input.author),
+        authorAgentId: input.author.agentId,
         ...(input.idempotencyKey !== undefined
           ? { idempotencyKey: input.idempotencyKey, requestHash: input.requestHash ?? null }
           : {}),
@@ -100,13 +96,6 @@ async function createReplay(
   if (!existing) return null;
   if ((existing.requestHash ?? null) !== (requestHash ?? null)) throw idempotencyMismatch();
   return existing;
-}
-
-/** The author columns for an actor: a person's or an Agent's, never both. */
-export function actorColumns(actor: ArtifactActor) {
-  return actor.agentId
-    ? { authorAgentId: actor.agentId, authorUserId: null }
-    : { authorUserId: actor.userId, authorAgentId: null };
 }
 
 /** Whether an error is a Postgres unique violation (P2002), optionally for a named constraint

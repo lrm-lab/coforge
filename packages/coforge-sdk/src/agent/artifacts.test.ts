@@ -8,13 +8,9 @@ import {
 } from "./artifacts";
 import { agentApiRoutes } from "./routes";
 
+const FILE = { path: "report.md", sha256: "b".repeat(64) };
+
 test("an artifact request is one known operation with exactly its own fields", () => {
-  expect(
-    decodeAgentArtifactRequest({ operation: "create", title: "Plan", target: "#launch" }),
-  ).toEqual({ operation: "create", title: "Plan", target: "#launch" });
-  expect(
-    decodeAgentArtifactRequest({ operation: "create", title: "Plan", idempotencyKey: "k1" }),
-  ).toEqual({ operation: "create", title: "Plan", idempotencyKey: "k1" });
   expect(decodeAgentArtifactRequest({ operation: "list" })).toEqual({ operation: "list" });
   expect(decodeAgentArtifactRequest({ operation: "list", target: "#launch" })).toEqual({
     operation: "list",
@@ -26,20 +22,18 @@ test("an artifact request is one known operation with exactly its own fields", (
       artifact: "a1",
       baseVersion: 2,
       idempotencyKey: "k",
-      text: "# Plan\n",
+      title: "Plan",
     }),
   ).toMatchObject({ operation: "push", baseVersion: 2 });
-  // A save's internal options, an unknown operation, a missing field, a wrong type: refused.
+  // A save's internal options, a removed operation, an unknown one, a missing field, a wrong type:
+  // refused.
   for (const body of [
     { operation: "push", artifact: "a1", baseVersion: 2, idempotencyKey: "k", exactBase: true },
-    {
-      operation: "revert",
-      artifact: "a1",
-      to: 1,
-      baseVersion: 2,
-      idempotencyKey: "k",
-      revertedFrom: 1,
-    },
+    { operation: "push", artifact: "a1", baseVersion: 2, idempotencyKey: "k", text: "# Plan\n" },
+    { operation: "create", title: "Plan", idempotencyKey: "k", files: [FILE] },
+    { operation: "history", artifact: "a1" },
+    { operation: "revert", artifact: "a1", to: 1, baseVersion: 2, idempotencyKey: "k" },
+    { operation: "share", artifactIds: ["a"], targets: ["#launch"], requestId: "r" },
     { operation: "delete", artifact: "a1" },
     { operation: "read" },
     { operation: "read", artifact: "a1", version: -1 },
@@ -48,50 +42,17 @@ test("an artifact request is one known operation with exactly its own fields", (
     null,
   ])
     expect(decodeAgentArtifactRequest(body)).toBeNull();
-
-  expect(
-    decodeAgentArtifactRequest({
-      operation: "share",
-      artifactIds: ["a", "b"],
-      targets: ["#launch", "@ada"],
-      note: "Read this",
-      requestId: "request-1",
-    }),
-  ).toEqual({
-    operation: "share",
-    artifactIds: ["a", "b"],
-    targets: ["#launch", "@ada"],
-    note: "Read this",
-    requestId: "request-1",
-  });
-  expect(
-    decodeAgentArtifactRequest({
-      operation: "share",
-      artifactIds: ["a", 1],
-      targets: ["#launch"],
-      requestId: "request-1",
-    }),
-  ).toBeNull();
 });
 
-test("the artifacts route is the same under proxy, local and cloud, with room for a document", () => {
+test("the artifacts route is the same under proxy, local and cloud, with room for a manifest", () => {
   for (const routes of [agentApiRoutes.proxy, agentApiRoutes.local, agentApiRoutes.cloud])
     expect(routes.artifacts).toMatchObject({ method: "POST", path: "/api/agent/v1/artifacts" });
-  expect(agentApiRoutes.proxy.artifacts.maxBodyBytes).toBeGreaterThan(4 * 1024 * 1024);
+  // 200 files at the longest path, JSON-escaped, fit with room to spare.
+  expect(agentApiRoutes.proxy.artifacts.maxBodyBytes).toBeGreaterThan(200 * (1024 * 6 + 100));
 });
 
-test("a create or push may carry a file manifest instead of text", () => {
-  expect(
-    decodeAgentArtifactRequest({
-      operation: "push",
-      artifact: "a1",
-      baseVersion: 3,
-      idempotencyKey: "k",
-      files: [{ path: "index.html", sha256: "a".repeat(64) }],
-      delete: ["old.css"],
-      entry: "index.html",
-    }),
-  ).toEqual({
+test("a push carries a file manifest", () => {
+  const over: AgentArtifactRequest = {
     operation: "push",
     artifact: "a1",
     baseVersion: 3,
@@ -99,15 +60,8 @@ test("a create or push may carry a file manifest instead of text", () => {
     files: [{ path: "index.html", sha256: "a".repeat(64) }],
     delete: ["old.css"],
     entry: "index.html",
-  });
-  expect(
-    decodeAgentArtifactRequest({
-      operation: "create",
-      title: "Funnel",
-      files: [{ path: "report.md", sha256: "b".repeat(64) }],
-      entry: "report.md",
-    }),
-  ).toMatchObject({ operation: "create", entry: "report.md" });
+  };
+  expect(decodeAgentArtifactRequest(over)).toEqual(over);
   // A manifest entry is exactly a path and a lowercase sha256.
   for (const files of [
     [{ path: "a.md" }],
@@ -117,26 +71,43 @@ test("a create or push may carry a file manifest instead of text", () => {
     ["a.md"],
     { path: "a.md", sha256: "a".repeat(64) },
   ])
-    expect(
-      decodeAgentArtifactRequest({
-        operation: "push",
-        artifact: "a1",
-        baseVersion: 1,
-        idempotencyKey: "k",
-        files,
-      }),
-    ).toBeNull();
-  // Text and a manifest are two ways to send one version, never both.
-  expect(
-    decodeAgentArtifactRequest({
-      operation: "push",
-      artifact: "a1",
-      baseVersion: 1,
-      idempotencyKey: "k",
-      text: "x",
-      files: [],
-    }),
-  ).toBeNull();
+    expect(decodeAgentArtifactRequest({ ...over, files })).toBeNull();
+});
+
+test("a push with no artifact makes one: a title, files and a target, and no base", () => {
+  const made: AgentArtifactRequest = {
+    operation: "push",
+    title: "Funnel",
+    target: "#launch",
+    description: "Weekly funnel",
+    idempotencyKey: "k",
+    files: [FILE],
+    entry: "report.md",
+  };
+  expect(decodeAgentArtifactRequest(made)).toEqual(made);
+  // It needs a title and files, and takes nothing that only a push over a version has.
+  for (const body of [
+    { ...made, title: undefined },
+    { ...made, files: undefined },
+    { ...made, baseVersion: 0 },
+    { ...made, note: "n" },
+    { ...made, label: "l" },
+    { ...made, delete: ["a.md"] },
+  ])
+    expect(decodeAgentArtifactRequest(body)).toBeNull();
+  // A push over an artifact needs its base and has no target.
+  const over: AgentArtifactRequest = {
+    operation: "push",
+    artifact: "a1",
+    baseVersion: 1,
+    idempotencyKey: "k",
+  };
+  expect(decodeAgentArtifactRequest(over)).toEqual(over);
+  for (const body of [
+    { ...over, baseVersion: undefined },
+    { ...over, target: "#launch" },
+  ])
+    expect(decodeAgentArtifactRequest(body)).toBeNull();
 });
 
 test("list may search titles and page", () => {
@@ -265,7 +236,7 @@ test("a comment request with a stray, missing or mistyped field is refused", () 
 test("each operation says whether it reads, is held up by unseen comments, or writes a comment", () => {
   const traits = (operation: AgentArtifactRequest["operation"]) =>
     artifactOperationTraits(operation);
-  for (const operation of ["list", "read", "history", "comments"] as const)
+  for (const operation of ["list", "read", "comments"] as const)
     expect(traits(operation)).toEqual({
       readOnly: true,
       gatedByComments: false,
@@ -275,6 +246,5 @@ test("each operation says whether it reads, is held up by unseen comments, or wr
     expect(traits(operation).gatedByComments).toBe(true);
   for (const operation of ["comment", "review", "resolve", "reopen"] as const)
     expect(traits(operation)).toMatchObject({ readOnly: false, commentWrite: true });
-  for (const operation of ["create", "push", "revert", "share"] as const)
-    expect(traits(operation)).toMatchObject({ readOnly: false, commentWrite: false });
+  expect(traits("push")).toMatchObject({ readOnly: false, commentWrite: false });
 });

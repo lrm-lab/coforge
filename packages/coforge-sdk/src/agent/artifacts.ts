@@ -7,68 +7,53 @@ import {
 } from "./artifact-comments";
 
 /**
- * `coforge artifact create|list|read|push|history|revert|comments|comment|review|resolve|reopen`
- * (task #385): an Agent's documents, one
- * operation per request on `POST /api/agent/v1/artifacts`. A document is sent and read as its
- * text, as the web page does; the server checks the `artifacts` experiment and the document's
- * home (a conversation, or the Workspace) for every operation.
+ * `coforge artifact list|read|push|comments|comment|review|resolve|reopen`, plus `pull` and
+ * `download` over the file routes (task #385): an Agent's artifacts, one operation per request on
+ * `POST /api/agent/v1/artifacts`. An artifact is a versioned set of files with an entry file, and
+ * its type is that file's; an Agent writes only by `push`. The server checks the `artifacts`
+ * experiment and the artifact's home (a conversation, or the Workspace) for every operation.
  */
 
-/** The largest artifact request the local proxy admits: a 2 MiB document, JSON-escaped. */
-export const ARTIFACT_REQUEST_MAX_BYTES = 8 * 1024 * 1024;
+/** The largest artifact request the local proxy admits: a manifest of 200 files, or a review of
+ * 50 comments at their size limits, JSON-escaped. */
+export const ARTIFACT_REQUEST_MAX_BYTES = 4 * 1024 * 1024;
 
 /** The largest file an Agent uploads for a push: a text file's limit (a binary one's is 15 MiB). */
 export const ARTIFACT_UPLOAD_MAX_BYTES = 16 * 1024 * 1024;
 
-/** One file a create or push adds or replaces: its path in the artifact and the sha256 of bytes
- * already uploaded. A push answered `missing` names the sha256s to upload before sending it
- * again. */
+/** One file a push adds or replaces: its path in the artifact and the sha256 of bytes already
+ * uploaded. A push answered `missing` names the sha256s to upload before sending it again. */
 export type AgentArtifactFile = { path: string; sha256: string };
-
-/** A version's files go either as one `text` (the entry file's) or as a manifest: `files` added or
- * replaced, `delete` removed, `entry` the file it opens at. Never both. */
-type ArtifactManifest = { files?: AgentArtifactFile[]; delete?: string[]; entry?: string };
 
 /** One artifact operation. `target` is `#channel` or `dm:@person`; none is the Workspace. */
 export type AgentArtifactRequest =
-  | ({
-      operation: "create";
-      title: string;
-      target?: string;
-      /** `html` makes a web page (task #490); a document (`markdown`) by default. */
-      kind?: "markdown" | "html";
-      /** One line saying what it is, shown on its card; a web page needs one. */
-      description?: string;
-      text?: string;
-      idempotencyKey?: string;
-    } & ArtifactManifest)
   | { operation: "list"; target?: string; query?: string; after?: string; limit?: number }
   | { operation: "read"; artifact: string; version?: number }
-  | ({
+  | {
+      /** A new version of an artifact over `baseVersion`: `files` added or replaced, `delete`
+       * removed, `entry` the file it opens at. */
       operation: "push";
       artifact: string;
       baseVersion: number;
       idempotencyKey: string;
-      text?: string;
       title?: string;
       description?: string;
       note?: string;
       label?: string;
-    } & ArtifactManifest)
-  | { operation: "history"; artifact: string; before?: number; limit?: number }
-  | {
-      operation: "revert";
-      artifact: string;
-      to: number;
-      baseVersion: number;
-      idempotencyKey: string;
+      files?: AgentArtifactFile[];
+      delete?: string[];
+      entry?: string;
     }
   | {
-      operation: "share";
-      artifactIds: string[];
-      targets: string[];
-      note?: string;
-      requestId: string;
+      /** A new artifact made from `files` (version 1) in the home `target` names. */
+      operation: "push";
+      artifact?: undefined;
+      target?: string;
+      title: string;
+      description?: string;
+      idempotencyKey: string;
+      files: AgentArtifactFile[];
+      entry?: string;
     }
   | {
       operation: "comments";
@@ -122,9 +107,6 @@ const FIELD_CHECKS: Record<FieldKind, (value: unknown) => boolean> = {
   reviewComments: (value) => Array.isArray(value) && value.every(isReviewCommentShape),
 };
 
-/** The fields a version sent as files carries, which `text` never comes with. */
-const MANIFEST_FIELDS = { files: "files", delete: "strings", entry: "string" } as const;
-
 type OperationShape = {
   fields: Record<string, FieldKind>;
   required: readonly string[];
@@ -137,18 +119,6 @@ type OperationShape = {
 };
 
 const OPERATIONS = {
-  create: {
-    fields: {
-      title: "string",
-      target: "string",
-      kind: "string",
-      description: "string",
-      text: "string",
-      idempotencyKey: "string",
-      ...MANIFEST_FIELDS,
-    },
-    required: ["title"],
-  },
   list: {
     fields: { target: "string", query: "string", after: "string", limit: "number" },
     required: [],
@@ -162,30 +132,19 @@ const OPERATIONS = {
   push: {
     fields: {
       artifact: "string",
+      target: "string",
       idempotencyKey: "string",
-      text: "string",
       title: "string",
       description: "string",
       note: "string",
       label: "string",
       baseVersion: "number",
-      ...MANIFEST_FIELDS,
+      files: "files",
+      delete: "strings",
+      entry: "string",
     },
-    required: ["artifact", "idempotencyKey", "baseVersion"],
+    required: ["idempotencyKey"],
     gatedByComments: true,
-  },
-  history: {
-    fields: { artifact: "string", before: "number", limit: "number" },
-    required: ["artifact"],
-    readOnly: true,
-  },
-  revert: {
-    fields: { artifact: "string", idempotencyKey: "string", to: "number", baseVersion: "number" },
-    required: ["artifact", "idempotencyKey", "to", "baseVersion"],
-  },
-  share: {
-    fields: { note: "string", requestId: "string", artifactIds: "strings", targets: "strings" },
-    required: ["artifactIds", "targets", "requestId"],
   },
   comments: {
     fields: {
@@ -247,10 +206,14 @@ export function artifactOperationTraits(operation: AgentArtifactRequest["operati
   };
 }
 
+/** The fields only a push over an artifact carries, which a push that makes one never does. */
+const PUSH_OVER_ONLY = ["baseVersion", "note", "label", "delete"] as const;
+
 /**
  * The request a body is, or null: a known operation with exactly its own fields, strings as
  * strings and numbers as whole non-negative numbers. Nothing else is passed on, so a client
- * cannot reach a save's internal options.
+ * cannot reach a save's internal options. A push names an `artifact` and its `baseVersion`, or
+ * names neither and makes one: it then needs a `title` and `files`, and takes a `target`.
  */
 export function decodeAgentArtifactRequest(value: unknown): AgentArtifactRequest | null {
   if (!isRecord(value)) return null;
@@ -264,8 +227,16 @@ export function decodeAgentArtifactRequest(value: unknown): AgentArtifactRequest
     request[key] = field;
   }
   if (known.required.some((key) => request[key] === undefined)) return null;
-  const manifest = Object.keys(MANIFEST_FIELDS).some((key) => request[key] !== undefined);
-  if (manifest && request.text !== undefined) return null;
+  if (operation === "push") {
+    if (request.artifact !== undefined) {
+      if (request.baseVersion === undefined || request.target !== undefined) return null;
+    } else if (
+      request.title === undefined ||
+      request.files === undefined ||
+      PUSH_OVER_ONLY.some((key) => request[key] !== undefined)
+    )
+      return null;
+  }
   return request as AgentArtifactRequest;
 }
 

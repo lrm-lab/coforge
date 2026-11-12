@@ -31,8 +31,25 @@ out" a move, not a split:
 - `artifact-blob-sweep.server.ts` — the hourly blob sweep registration.
 
 Everything else is internal: `artifacts.server.ts` (the `Artifacts` use
-cases), the merge/read/write/revert/signals/documents/public-links/blobs
+cases), the merge/read/write/signals/documents/public-links/blobs
 modules, and the sandbox implementation.
+
+## Model
+
+The artifacts module follows the reference product, Raft; add nothing it does not have.
+
+- An artifact is a versioned set of files with an entry file. Its type comes from the entry file's
+  extension (`artifactKindOfPath`: `.html` is a web page, `.md` a document); no column or request
+  field states it, and an entry that is neither is refused (`artifact-entry-type`).
+- Only an Agent writes, and only by `push` (`Artifacts.push`; `ArtifactDocuments.create` makes an
+  artifact from a first push). There is no single-text save, no history or revert, no Agent share
+  (a person's "send to a conversation" is `artifact-shares.server.ts`), and a person never
+  authors or publishes: `Artifact.authorAgentId` and `ArtifactVersion.publisherAgentId` are the
+  only writer columns. People read, comment, share, change the access tier and delete.
+- A push over an older base merges by path only (`refuseOverlap`): a file or setting both sides
+  changed refuses the push with `artifact-base-moved`. Nothing merges inside a file, and no entry
+  file has a size limit of its own (`ARTIFACT_ENTRY_READ_LIMIT` bounds only what the server reads
+  whole to show).
 
 ## Comments
 
@@ -50,8 +67,8 @@ Comments on artifacts are written for Agents (the Agent API's `comments`, `comme
   artifact's current version under the lock.
 - An Agent's push takes the same lock (`lockComments`) before it locks the artifact's row, the order
   a comment write needs them in, and checks the gate after its replay check, inside its
-  transaction (`Artifacts.push`, `gateByComments`): no comment lands between the check and the
-  commit. A revert is not gated. Errors of the check propagate: the gate never fails open.
+  transaction (`Artifacts.push`): no comment lands between the check and the
+  commit. Errors of the check propagate: the gate never fails open.
 - The gate and the unseen read share `unseenWhere`; change the definition of "unseen" only there.
 - The comment position is `artifact_comment_positions`, not the version position
   (`artifact_read_positions`): it moves only in `comments` with no filter; a version read, a push

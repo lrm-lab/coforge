@@ -25,9 +25,6 @@ const store: ArtifactBlobStore = {
   use: async () => [],
   read: async () => null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
-  upload: async () => {
-    throw new Error("no bytes are stored in this test");
-  },
 };
 
 let workspaceId: string;
@@ -126,13 +123,24 @@ beforeAll(async () => {
   rooms.bobCarol = await direct(people.bob, people.carol);
 
   const artifacts = new Artifacts(db, store, { enabled: async () => true });
+  const writer = await db.agent.create({
+    data: {
+      workspaceId,
+      name: `aws-writer-${handle}`,
+      displayName: "Writer",
+      ownerId: people.alice,
+      runtimeConfig: {},
+    },
+  });
+  await db.conversationMember.create({
+    data: { conversationId: rooms.closed, workspaceId, agentId: writer.id },
+  });
   const made = await artifacts.create({
     workspaceId,
     home: { kind: "conversation", conversationId: rooms.closed },
     name: `plan-${handle}`,
-    kind: "markdown",
     entryPath: "document.md",
-    author: { userId: people.alice },
+    author: { agentId: writer.id },
   });
   artifactId = made.id;
 });

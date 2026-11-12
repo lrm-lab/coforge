@@ -29,6 +29,7 @@ let artifacts: Artifacts;
 let workspaceId: string;
 let otherWorkspaceId: string;
 let userId: string;
+let agentId: string;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "artifact-blobs-"));
@@ -41,6 +42,17 @@ beforeAll(async () => {
       data: { slug, name: slug, members: { create: { userId, role: "owner" } } },
     });
   workspaceId = (await workspace(`ab-${handle}`)).id;
+  agentId = (
+    await db.agent.create({
+      data: {
+        workspaceId,
+        name: `ab-writer-${handle}`,
+        displayName: "Writer",
+        ownerId: userId,
+        runtimeConfig: {},
+      },
+    })
+  ).id;
   otherWorkspaceId = (await workspace(`ab-other-${handle}`)).id;
 });
 
@@ -106,17 +118,16 @@ test("a blob no version names goes a day after its upload; one any version names
     workspaceId,
     home: { kind: "workspace" },
     name: `kept-${handle}`,
-    kind: "markdown",
     entryPath: "document.md",
-    author: { userId },
+    author: { agentId },
   });
   const save = async (content: string, baseVersion: number) => {
-    const blob = await blobs.upload({ workspaceId, bytes: text(content), actor: { userId } });
+    const blob = await blobs.upload({ workspaceId, bytes: text(content), actor: { agentId } });
     await artifacts.push({
       workspaceId,
       artifactId: artifact.id,
       baseVersion,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: crypto.randomUUID(),
       files: [{ path: "document.md", sha256: blob.sha256 }],
     });
@@ -184,14 +195,13 @@ test("a save naming a blob that was removed meanwhile is told to upload it again
     workspaceId,
     home: { kind: "workspace" },
     name: `late-${handle}`,
-    kind: "markdown",
     entryPath: "document.md",
-    author: { userId },
+    author: { agentId },
   });
   const blob = await blobs.upload({
     workspaceId,
     bytes: text(`late ${handle}`),
-    actor: { userId },
+    actor: { agentId },
   });
   await age(workspaceId, blob.sha256, ARTIFACT_BLOB_GRACE_MS + 60_000);
   await blobs.removeUnreferenced();
@@ -200,7 +210,7 @@ test("a save naming a blob that was removed meanwhile is told to upload it again
       workspaceId,
       artifactId: artifact.id,
       baseVersion: 0,
-      publisher: { userId },
+      publisher: { agentId },
       idempotencyKey: crypto.randomUUID(),
       files: [{ path: "document.md", sha256: blob.sha256 }],
     }),

@@ -8,6 +8,7 @@ import { useTimeZone } from "#src/lib/time-zone-context";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import { isWebPageEntry } from "./artifact-path-kind";
 import type { ArtifactActorView } from "./artifact-queries";
 
 /** When a document changed, as a chat row reads it: today's clock time, else the day. */
@@ -24,17 +25,21 @@ export function useArtifactTime() {
     });
 }
 
-/** What an artifact is, from its card's `kind`: a web page (`html`), else a document. */
-export const isWebPage = (kind: string) => kind === "html";
+/** The artifact's type in words, as its card and its row say it beside the title: its entry
+ * file's, a web page (an html entry) or else a document. */
+export const kindLabel = (entryPath: string) =>
+  isWebPageEntry(entryPath) ? m.doc_kind_html() : m.doc_kind_markdown();
 
-/** The artifact's kind in words, as its card and its row say it beside the title. */
-export const kindLabel = (kind: string) =>
-  isWebPage(kind) ? m.doc_kind_html() : m.doc_kind_markdown();
-
-/** An artifact's kind as a gray tile, as its card, its row and its page lead with it: gray, so
+/** An artifact's type as a gray tile, as its card, its row and its page lead with it: gray, so
  * the content keeps the color (Frank, 11-04). */
-export function ArtifactIcon({ kind, size = "md" }: { kind: string; size?: "sm" | "md" }) {
-  const Icon = isWebPage(kind) ? Browser : File02;
+export function ArtifactIcon({
+  entryPath,
+  size = "md",
+}: {
+  entryPath: string;
+  size?: "sm" | "md";
+}) {
+  const Icon = isWebPageEntry(entryPath) ? Browser : File02;
   return (
     <span
       aria-hidden="true"
@@ -64,7 +69,7 @@ export function ArtifactEditedLine({
   );
 }
 
-/** Who did it, as a small face and a name; the viewer reads as "You". */
+/** Who did it, as a small face and a name. */
 export function ArtifactActor({ actor }: { actor: ArtifactActorView | undefined }) {
   if (!actor) return null;
   return (
@@ -76,7 +81,7 @@ export function ArtifactActor({ actor }: { actor: ArtifactActorView | undefined 
         name={actor.name}
         className="size-4"
       />
-      <span className="truncate">{actor.viewer ? m.conversation_you() : actor.name}</span>
+      <span className="truncate">{actor.name}</span>
     </span>
   );
 }

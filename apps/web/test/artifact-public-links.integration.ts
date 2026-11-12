@@ -23,15 +23,14 @@ let reader: string;
 let bystander: string;
 let channelId: string;
 
-const artifact = (kind: string) =>
+/** An artifact whose entry file is `index.<extension>`: its type is that file's. */
+const artifact = (extension: string) =>
   db.artifact.create({
     data: {
       workspaceId,
       homeKey: `conversation:${channelId}`,
-      name: `${kind}-${crypto.randomUUID()}`,
-      kind,
-      entryPath: "index",
-      authorUserId: owner,
+      name: `${extension}-${crypto.randomUUID()}`,
+      entryPath: `index.${extension}`,
     },
   });
 const refusal = (run: Promise<unknown>) =>
@@ -80,7 +79,7 @@ afterAll(async () => {
 });
 
 test("one who can read it sees the link, on and after it is off", async () => {
-  const { id: artifactId } = await artifact("markdown");
+  const { id: artifactId } = await artifact("md");
   const read = () => links.read({ workspaceId, artifactId, userId: reader });
   expect(await read()).toEqual({ available: true, url: null });
   const set = await links.set({ workspaceId, artifactId, userId: owner, enabled: true });
@@ -101,7 +100,7 @@ test("one who cannot read it gets what a missing artifact gets", async () => {
   expect(denied).toBe(missing);
 });
 
-test("a kind with no public link is not available", async () => {
+test("an artifact whose entry file is neither a web page nor Markdown has no public link", async () => {
   const { id: artifactId } = await artifact("pdf");
   expect(await links.read({ workspaceId, artifactId, userId: owner })).toEqual({
     available: false,
@@ -110,7 +109,7 @@ test("a kind with no public link is not available", async () => {
 });
 
 test("no link can be made while the sandbox origin is unset", async () => {
-  const { id: artifactId } = await artifact("markdown");
+  const { id: artifactId } = await artifact("md");
   rememberArtifactSandboxConfig(null);
   try {
     expect(await links.read({ workspaceId, artifactId, userId: owner })).toEqual({
@@ -123,7 +122,7 @@ test("no link can be made while the sandbox origin is unset", async () => {
 });
 
 test("nothing is read while the Workspace has artifacts off", async () => {
-  const { id: artifactId } = await artifact("markdown");
+  const { id: artifactId } = await artifact("md");
   switchedOn = false;
   try {
     expect(await refusal(links.read({ workspaceId, artifactId, userId: owner }))).toBe(
@@ -141,10 +140,8 @@ test("a public link shows the current version's entry and any one file of it", a
       homeKey: `conversation:${channelId}`,
       name: `files-${crypto.randomUUID()}`,
       title: "Site",
-      kind: "html",
       entryPath: "home.html",
       currentVersion: 2,
-      authorUserId: owner,
     },
   });
   const version = (number: number, files: Record<string, string>) =>

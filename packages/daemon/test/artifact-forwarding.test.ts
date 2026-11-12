@@ -8,7 +8,7 @@ import { startAgentProxy } from "#src/agent-proxy";
 import { DaemonConnection } from "#src/connection/daemon-connection";
 import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 
-/** `coforge artifact create|read|push|history|revert` through the daemon (task #385): the local
+/** `coforge artifact list|read|push|comments|...` through the daemon (task #385): the local
  * proxy admits one artifact operation with exactly its own fields, and the connection forwards it
  * to the cloud with the Agent's credentials, answering the cloud's response as it came. */
 
@@ -43,19 +43,19 @@ test("the proxy hands an artifact operation to the runtime and answers the cloud
   const calls: AgentArtifactRequest[] = [];
   const { token, url } = proxyWith(async (request) => {
     calls.push(request);
-    return Response.json({ status: "conflict" }, { status: 200 });
+    return Response.json({ status: "missing", missing: [SHA] }, { status: 200 });
   });
-  // A document of a few hundred KiB fits: the route admits more than the proxy's usual 64 KiB.
-  const text = "x".repeat(300 * 1024);
-  const response = await fetch(
-    url,
-    post(token, { operation: "push", artifact: "a1", baseVersion: 2, idempotencyKey: "k", text }),
-  );
+  // A manifest of 200 files at long paths (some 200 KiB) fits: the route admits more than the
+  // proxy's usual 64 KiB.
+  const files = Array.from({ length: 200 }, (_, index) => ({
+    path: `${"d".repeat(1000)}/${index}.md`,
+    sha256: SHA,
+  }));
+  const push = { operation: "push", artifact: "a1", baseVersion: 2, idempotencyKey: "k", files };
+  const response = await fetch(url, post(token, push));
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ status: "conflict" });
-  expect(calls).toEqual([
-    { operation: "push", artifact: "a1", baseVersion: 2, idempotencyKey: "k", text },
-  ]);
+  expect(await response.json()).toEqual({ status: "missing", missing: [SHA] });
+  expect(calls).toEqual([push as AgentArtifactRequest]);
 });
 
 test("the proxy refuses an operation outside the contract", async () => {
@@ -64,6 +64,8 @@ test("the proxy refuses an operation outside the contract", async () => {
   });
   for (const body of [
     { operation: "push", artifact: "a1", baseVersion: 2, idempotencyKey: "k", exactBase: true },
+    { operation: "push", artifact: "a1", baseVersion: 2, idempotencyKey: "k", text: "x" },
+    { operation: "history", artifact: "a1" },
     { operation: "delete", artifact: "a1" },
     { operation: "read" },
   ])

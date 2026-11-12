@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
+import { agentWrites } from "./helpers/artifact-agent-writes";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
@@ -63,7 +64,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `artifact-page-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
-  const { documents } = productionArtifacts(db);
+  const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
@@ -87,9 +88,10 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       channelName: `e2e-closed-${tail}`,
       description: "",
       visibility: "private",
-      members: { create: [{ userId: lin.id }] },
+      members: { create: [{ userId: lin.id }, { agentId: agent.id }] },
     },
   });
+  const bot = agentWrites(services, workspaceId, agent.id);
   const settled = () =>
     browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
   const shoot = async (shot: string) => {
@@ -120,22 +122,15 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await experiments.write(workspaceId, "artifacts", true);
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
-    const bot = { workspaceId, actor: { agentId: agent.id } };
     const html = (heading: string) =>
       `<!doctype html><html><body style="background:#fff"><h1>${heading}</h1><p>run ${tail}</p></body></html>`;
-    const web = await documents.create(bot, {
+    const web = await bot.create({
       conversationId: channel.id,
-      kind: "html",
       title: "Signup funnel",
       description: "Signups by day",
-      text: html("Signups v1"),
+      files: { "index.html": html("Signups v1") },
     });
-    await documents.save(bot, {
-      artifactId: web.id,
-      baseVersion: 1,
-      idempotencyKey: crypto.randomUUID(),
-      text: html("Signups v2"),
-    });
+    await bot.push(web.id, 1, { "index.html": html("Signups v2") });
 
     // The web page: its preview, framed from the sandbox origin.
     await browser("open", pageOf(web.id));
@@ -176,12 +171,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     ).toBe(false);
 
     // The Agent saves a new version while the page shows: it shows it, saying nothing.
-    await documents.save(bot, {
-      artifactId: web.id,
-      baseVersion: 2,
-      idempotencyKey: crypto.randomUUID(),
-      text: html("Signups v3"),
-    });
+    await bot.push(web.id, 2, { "index.html": html("Signups v3") });
     // Polled here: agent-browser's own wait does not come back on this page (its frame is on
     // another origin) while the new frame is already there.
     await until(
@@ -222,10 +212,11 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
     const missing = await evaluate<string>(`document.querySelector("main").textContent`);
     await shoot("3-unavailable");
-    const secret = await documents.create(
-      { workspaceId, actor: { userId: lin.id } },
-      { conversationId: closed.id, title: "Salaries", text: `Private (run ${tail}).` },
-    );
+    const secret = await bot.create({
+      conversationId: closed.id,
+      title: "Salaries",
+      files: { "salaries.md": `Private (run ${tail}).` },
+    });
     await browser("open", pageOf(secret.id));
     await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
     expect(await evaluate<string>(`document.querySelector("main").textContent`)).toBe(missing);
@@ -289,17 +280,12 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser("set", "viewport", "1280", "860");
 
     // A document beside the chat: its text, read at the latest version.
-    const doc = await documents.create(bot, {
+    const doc = await bot.create({
       conversationId: channel.id,
       title: "Launch plan",
-      text: `# Goal\n\nShip it (run ${tail}).\n`,
+      files: { "plan.md": `# Goal\n\nShip it (run ${tail}).\n` },
     });
-    await documents.save(bot, {
-      artifactId: doc.id,
-      baseVersion: 1,
-      idempotencyKey: crypto.randomUUID(),
-      text: `# Goal\n\nShip it on Friday (run ${tail}).\n`,
-    });
+    await bot.push(doc.id, 1, { "plan.md": `# Goal\n\nShip it on Friday (run ${tail}).\n` });
     await browser("open", `${chat}?doc=${doc.id}`);
     await browser(
       "wait",
@@ -344,10 +330,10 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     expect(await evaluate<boolean>(`document.querySelector('[role="dialog"]') == null`)).toBe(true);
 
     // A first read that fails for a moment: said so, and Try again reads it.
-    const later = await documents.create(bot, {
+    const later = await bot.create({
       conversationId: channel.id,
       title: "Later",
-      text: `Later (run ${tail}).`,
+      files: { "later.md": `Later (run ${tail}).` },
     });
     refusingFor = later.id;
     await browser("open", pageOf(later.id));

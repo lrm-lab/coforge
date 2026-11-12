@@ -3,86 +3,63 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { nameToSlug } from "#src/lib/slug";
 import { errorType } from "#src/server/errors/error-type.server";
-import { canDeleteArtifact, type ArtifactActor } from "./artifact-access.server";
+import {
+  canDeleteArtifact,
+  type ArtifactActor,
+  type ArtifactPublisher,
+} from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
-import { ARTIFACT_DOCUMENT_LIMIT, ARTIFACT_HTML_ENTRY } from "./artifact-files.server";
-import { manifestKind, planManifestCreate, type FileManifest } from "./artifact-manifest.server";
-import type { ArtifactRevert } from "./artifact-revert.server";
+import { ARTIFACT_ENTRY_READ_LIMIT, artifactKindOfPath } from "./artifact-files.server";
+import { planManifestCreate, type FileManifest } from "./artifact-manifest.server";
 import type { Artifacts } from "./artifacts.server";
 
-/** A document's one file. */
-export const DOCUMENT_PATH = "document.md";
-
-/**
- * The kinds a page of one text file comes in (task #490): a document (Markdown, written together,
- * merged paragraph by paragraph) and a web page (HTML, an Agent's to write, replaced whole and
- * shown on the sandbox origin). Each names its one file and the name a title of no Latin letters
- * or digits falls back to. A later kind (a chart, a diagram, slides) is one more row.
- */
-export const PAGE_KINDS = {
-  markdown: { entryPath: DOCUMENT_PATH, fallbackName: "document" },
-  html: { entryPath: ARTIFACT_HTML_ENTRY, fallbackName: "page" },
-} as const;
-export type PageKind = keyof typeof PAGE_KINDS;
-
-const isPageKind = (kind: string): kind is PageKind => Object.hasOwn(PAGE_KINDS, kind);
-/** Names tried in sequence for a document whose title's name is taken in its home (`plan`,
+/** The name a title of no Latin letters or digits falls back to. */
+const FALLBACK_NAME = "artifact";
+/** Names tried in sequence for an artifact whose title's name is taken in its home (`plan`,
  * `plan-2`, `plan-3`), before a short random suffix, which a title of no Latin letters or digits
- * (named `document`) reaches soon. */
+ * (named `artifact`) reaches soon. */
 const SEQUENTIAL_NAMES = 3;
 const NAME_TRIES = 8;
 
-/** Who acts, and in which Workspace. */
+/** Who reads, and in which Workspace. */
 export type DocumentScope = { workspaceId: string; actor: ArtifactActor };
 
+/** Who writes, and in which Workspace: an Agent. */
+export type WriteScope = { workspaceId: string; actor: ArtifactPublisher };
+
 /**
- * Documents as the web page uses them (task #385): a `markdown` artifact with one file,
- * `document.md`, whose text the page sends and receives — it never handles blobs. Every
+ * The artifact use cases the Agent API and the web page share (task #385): an Agent writes an
+ * artifact as a manifest of files (`create` for a new one, `push` over a version), and either
+ * reads one back — the web page shows the entry file's text and never handles blobs. Every
  * operation is the artifact service's, with its experiment check, access rules and merge.
  */
 export class ArtifactDocuments {
   constructor(
     private readonly db: PrismaClient,
     private readonly artifacts: Artifacts,
-    private readonly blobs: Pick<
-      StoredArtifactBlobs,
-      "upload" | "read" | "inspectMany" | "allowed"
-    >,
+    private readonly blobs: Pick<StoredArtifactBlobs, "read" | "inspectMany" | "allowed">,
   ) {}
 
-  /** A new document (or web page, `kind: "html"`) in a conversation, or the Workspace when none
-   * is named; named from its title, with `text` (when given) as version 1. A web page is an
-   * Agent's to make, and says what it is in its `description` (its card's line). An
-   * `idempotencyKey` makes the create safe to retry: the same key with the same kind, title,
-   * description, home and text returns the one already made, and a different one is a
-   * conflict. An Agent may send a `manifest` of files instead of `text`: its entry file's
-   * extension then gives the kind (`planManifestCreate`). */
+  /** A new artifact in a conversation, or the Workspace when none is named; named from its title,
+   * with the `manifest`'s files as version 1. An `idempotencyKey` makes the create safe to retry:
+   * the same key with the same home, title, description and files returns the one already made,
+   * and a different one is a conflict. The manifest's entry file gives its type
+   * (`planManifestCreate`). */
   async create(
-    scope: DocumentScope,
+    scope: WriteScope,
     input: {
       conversationId?: string;
       title: string;
-      kind?: PageKind;
       description?: string;
-      text?: string;
-      manifest?: FileManifest;
+      manifest: FileManifest;
       idempotencyKey?: string;
     },
   ) {
-    const plan = input.manifest && planManifestCreate(input.manifest, input.kind);
-    const kind = plan?.kind ?? input.kind ?? "markdown";
-    if (!isPageKind(kind)) throw new AppError("INVALID_INPUT", { errorId: "artifact-kind" });
+    const plan = planManifestCreate(input.manifest);
     const title = input.title.trim();
     if (!title || title.length > 200)
       throw new AppError("INVALID_INPUT", { errorId: "artifact-title" });
     const description = input.description?.trim() ?? "";
-    if (kind === "html" && !description)
-      throw new AppError("INVALID_INPUT", {
-        errorId: "artifact-description-required",
-        hint: "a web page says what it is in one line (--description), shown on its card",
-      });
-    // Checked before anything is made, so a refused text leaves no empty document behind.
-    if (input.text !== undefined) documentBytes(input.text);
     const home = input.conversationId
       ? ({ kind: "conversation", conversationId: input.conversationId } as const)
       : ({ kind: "workspace" } as const);
@@ -93,13 +70,10 @@ export class ArtifactDocuments {
         : createRequestHash({
             homeKey: input.conversationId ? `conversation:${input.conversationId}` : "workspace",
             title,
-            text: input.text,
-            // A document made without a description hashes as before web pages did, so a retry
-            // across the deploy still replays.
-            ...(kind === "html" || description ? { kind, description } : {}),
-            ...(plan ? { manifest: plan } : {}),
+            description,
+            ...plan,
           });
-    const base = nameToSlug(title, 56) || PAGE_KINDS[kind].fallbackName;
+    const base = nameToSlug(title, 56) || FALLBACK_NAME;
     for (let attempt = 1; ; attempt += 1) {
       const name =
         attempt === 1
@@ -114,30 +88,25 @@ export class ArtifactDocuments {
           name,
           title,
           ...(description ? { description } : {}),
-          kind,
-          entryPath: plan?.entryPath ?? PAGE_KINDS[kind].entryPath,
+          entryPath: plan.entryPath,
           author: scope.actor,
           ...(input.idempotencyKey !== undefined
             ? { idempotencyKey: input.idempotencyKey, requestHash }
             : {}),
         });
-        if (input.text !== undefined || plan) {
-          const first = await this.save(scope, {
-            artifactId: created.id,
-            baseVersion: 0,
-            ...(plan ? { manifest: { files: plan.files } } : { text: input.text }),
-            // On a replayed create this save replays too (same key on the same artifact), so a
-            // retry adds no second version; a fresh create gets its version 1.
-            idempotencyKey:
-              input.idempotencyKey === undefined
-                ? crypto.randomUUID()
-                : `${input.idempotencyKey}:v1`,
-          });
-          // Bytes that vanished since `missingBytes` looked: the same request, sent again after
-          // uploading them, replays this create (with its key) and saves them.
-          if (first.status === "missing")
-            throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-bytes-missing" });
-        }
+        const first = await this.push(scope, {
+          artifactId: created.id,
+          baseVersion: 0,
+          manifest: { files: plan.files },
+          // On a replayed create this push replays too (same key on the same artifact), so a
+          // retry adds no second version; a fresh create gets its version 1.
+          idempotencyKey:
+            input.idempotencyKey === undefined ? crypto.randomUUID() : `${input.idempotencyKey}:v1`,
+        });
+        // Bytes that vanished since `missingBytes` looked: the same request, sent again after
+        // uploading them, replays this create (with its key) and saves them.
+        if (first.status === "missing")
+          throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-bytes-missing" });
         return (
           await this.artifacts.reads.cards({ ...reader(scope), artifactIds: [created.id] })
         )[0]!;
@@ -148,37 +117,27 @@ export class ArtifactDocuments {
     }
   }
 
-  /** The sha256s of a manifest create's files the actor has not uploaded: asked before the
+  /** The sha256s of a manifest create's files the Agent has not uploaded: asked before the
    * artifact is made, so a create the client must retry after uploading leaves nothing behind.
    * A manifest that would not make an artifact is refused here as `create` refuses it. */
-  async missingBytes(
-    scope: DocumentScope,
-    input: { manifest: FileManifest; kind?: PageKind },
-  ): Promise<string[]> {
-    const { files, entryPath, kind } = planManifestCreate(input.manifest, input.kind);
+  async missingBytes(scope: WriteScope, input: { manifest: FileManifest }): Promise<string[]> {
+    const { files } = planManifestCreate(input.manifest);
     const named = [...new Set(files.map((file) => file.sha256))];
-    // No artifact exists yet, so only bytes the actor uploaded count as its own.
+    // No artifact exists yet, so only bytes the Agent uploaded count as its own.
     const [stored, granted] = await Promise.all([
       this.blobs.inspectMany(scope.workspaceId, named),
       this.blobs.allowed(scope.workspaceId, undefined, scope.actor, named),
     ]);
-    const entry = files.find((file) => file.path === entryPath)!;
-    if (kind === "markdown" && (stored.get(entry.sha256)?.sizeBytes ?? 0) > ARTIFACT_DOCUMENT_LIMIT)
-      throw new AppError("INVALID_INPUT", { errorId: "artifact-file-too-large" });
     return named.filter((sha256) => !stored.has(sha256) || !granted.has(sha256));
   }
 
-  /** The document at a version (its current one by default), with its text and whether the actor
-   * may delete it; a non-document artifact has no text here. */
+  /** The artifact at a version (its current one by default), with its entry file's text and
+   * whether the actor may delete it; an entry file too large to read whole has no text here. */
   async load(scope: DocumentScope, input: { artifactId: string; version?: number }) {
     const read = await this.artifacts.read({ ...reader(scope), ...input });
     const file = read.files.find((entry) => entry.path === read.artifact.entryPath);
-    // A web page's source reads like a document's text (the pane's Source, an Agent's read).
-    const document =
-      isPageKind(read.artifact.kind) &&
-      file?.kind === "text" &&
-      file.sizeBytes <= ARTIFACT_DOCUMENT_LIMIT;
-    const bytes = document ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
+    const readable = file?.kind === "text" && file.sizeBytes <= ARTIFACT_ENTRY_READ_LIMIT;
+    const bytes = readable ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
     // The author came with the read (no second query); the rule is the one `delete` enforces —
     // and a reader the widened tier let in cannot delete at all: a delete is the home's write
     // (task #529).
@@ -194,85 +153,37 @@ export class ArtifactDocuments {
   }
 
   /**
-   * Saves the document's text (and settings) over `baseVersion`. The actor's access is checked
-   * first, then the text is stored as its bytes and saved as any artifact save is: merged with
-   * what others saved meanwhile, or answered with a conflict that wrote nothing.
+   * Pushes a version over `baseVersion`: the manifest's files and the settings, saved as any
+   * artifact save is — merged by path with what others saved meanwhile, or refused when both
+   * changed the same file or setting (`artifact-base-moved`), and nothing written.
    */
-  async save(
-    scope: DocumentScope,
+  async push(
+    scope: WriteScope,
     input: {
       artifactId: string;
       baseVersion: number;
       idempotencyKey: string;
-      text?: string;
-      /** An Agent's version as files (`FileManifest`) instead of `text`. */
       manifest?: FileManifest;
       title?: string;
       description?: string;
       note?: string;
       label?: string;
-      /** An Agent's save is held up by comments it has not read (`Artifacts.push`). */
-      gateByComments?: boolean;
     },
   ) {
-    const { text, manifest, ...settings } = input;
-    const bytes = text === undefined ? undefined : documentBytes(text);
-    // Nothing is stored for someone who may not save here, or where documents are off.
-    const artifact = await this.artifacts.reads.artifact(
-      scope.workspaceId,
-      input.artifactId,
-      scope.actor,
-    );
-    // A save is the home's write; a reader the widened tier let in hears ACCESS_DENIED, since it
-    // already knows the artifact is there (task #529).
-    if (!artifact.canWrite) throw new AppError("ACCESS_DENIED");
-    if (!isPageKind(artifact.kind))
-      throw new AppError("INVALID_INPUT", { errorId: "artifact-kind" });
-    if (manifest) {
-      if (manifest.entryPath !== undefined && manifestKind(manifest.entryPath) !== artifact.kind)
-        throw new AppError("INVALID_INPUT", {
-          errorId: "artifact-kind",
-          hint: `the entry file of a ${artifact.kind} artifact stays one`,
-        });
-    }
-    let files: { path: string; sha256: string }[] = [...(manifest?.files ?? [])];
-    if (bytes !== undefined) {
-      const blob = await this.blobs.upload({
-        workspaceId: scope.workspaceId,
-        bytes,
-        actor: scope.actor,
-      });
-      // The document's own file, which `load` reads: `document.md` for one the page made.
-      files = [{ path: artifact.entryPath, sha256: blob.sha256 }];
-    }
+    const { manifest, ...settings } = input;
     const saved = await this.artifacts.push({
       workspaceId: scope.workspaceId,
       publisher: scope.actor,
-      files,
+      ...(manifest?.files && { files: manifest.files }),
       ...(manifest?.deletedPaths && { deletedPaths: manifest.deletedPaths }),
       ...(manifest?.entryPath !== undefined && { entryPath: manifest.entryPath }),
       ...settings,
-      // A web page is replaced whole, so a save starts from the newest version or is refused
-      // (`artifact-base-moved`): even a title someone changed since is not merged under it. An
-      // Agent's save over an older version keeps what others changed in files it does not touch.
-      ...(artifact.kind === "html"
-        ? { merge: "exact" as const }
-        : scope.actor.agentId
-          ? { merge: "byPath" as const }
-          : {}),
     });
     if (saved.status === "created") await this.#refreshPreview(scope, input.artifactId);
     return saved;
   }
 
-  /** Goes back to a version, and keeps the card's preview from it. */
-  async revert(input: ArtifactRevert) {
-    const saved = await this.artifacts.revert(input);
-    if (saved.status === "created") await this.#refreshPreview(input, input.artifactId);
-    return saved;
-  }
-
-  /** The documents of a conversation (or the Workspace) the actor may read, newest first. */
+  /** The artifacts of a conversation (or the Workspace) the actor may read, newest first. */
   list(scope: DocumentScope, input: { conversationId?: string }) {
     return this.artifacts.reads.list({ ...reader(scope), ...input });
   }
@@ -285,7 +196,7 @@ export class ArtifactDocuments {
     return this.artifacts.reads.listPage({ ...reader(scope), ...input });
   }
 
-  /** Cards of the named documents the actor may read; any other is left out. */
+  /** Cards of the named artifacts the actor may read; any other is left out. */
   cards(scope: DocumentScope, artifactIds: readonly string[]) {
     return this.artifacts.reads.cards({ ...reader(scope), artifactIds });
   }
@@ -303,49 +214,31 @@ export class ArtifactDocuments {
 }
 
 /** A stable hash of a create's inputs, so a retry with the same idempotency key but a different
- * title, home or text is caught as a conflict rather than silently returning the first document.
- * A missing text is distinct from an empty one. */
+ * title, home or files is caught as a conflict rather than silently returning the first artifact. */
 function createRequestHash(input: {
   homeKey: string;
   title: string;
-  text?: string;
-  kind?: string;
-  description?: string;
-  manifest?: { files: readonly { path: string; sha256: string }[]; entryPath: string };
+  description: string;
+  entryPath: string;
+  files: readonly { path: string; sha256: string }[];
 }): string {
   const parts = JSON.stringify([
     input.homeKey,
     input.title,
-    input.text ?? null,
-    ...(input.kind === undefined ? [] : [input.kind, input.description ?? ""]),
-    // A manifest create names its files and entry; a text create hashes as before.
-    ...(input.manifest
-      ? [
-          input.manifest.entryPath,
-          input.manifest.files.map((file) => [file.path, file.sha256]).sort(),
-        ]
-      : []),
+    input.description,
+    input.entryPath,
+    input.files.map((file) => [file.path, file.sha256]).sort(),
   ]);
   return createHash("sha256").update(parts).digest("hex");
-}
-
-/** A document's text as the bytes stored: at most 2 MiB, and text (no NUL), so it reads back as
- * the same text. */
-function documentBytes(text: string) {
-  if (text.includes("\u0000")) throw new AppError("INVALID_INPUT", { errorId: "artifact-text" });
-  const bytes = new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>;
-  if (bytes.length > ARTIFACT_DOCUMENT_LIMIT)
-    throw new AppError("INVALID_INPUT", { errorId: "artifact-file-too-large" });
-  return bytes;
 }
 
 const reader = (scope: DocumentScope) => ({ workspaceId: scope.workspaceId, reader: scope.actor });
 
 /**
- * A document's card line: its first two lines with text, without the Markdown marks that open
+ * A Markdown file's card line: its first two lines with text, without the Markdown marks that open
  * them (headings, quotes, list bullets), each at most 200 characters.
  */
-export function artifactPreview(text: string): string {
+function artifactPreview(text: string): string {
   return text
     .split("\n")
     .map((line) =>
@@ -360,29 +253,31 @@ export function artifactPreview(text: string): string {
 }
 
 /**
- * Keeps a document's preview from its current version, and a web page's from its description:
- * read after a save, written only while that version is still the current one, best effort (a
- * card shows the previous preview until the next save).
+ * Keeps an artifact's preview from its current version: a Markdown entry's first lines, and a web
+ * page's description. Read after a save, written only while that version is still the current
+ * one, best effort (a card shows the previous preview until the next save).
  */
-export async function refreshPreview(
+async function refreshPreview(
   db: PrismaClient,
   blobs: Pick<StoredArtifactBlobs, "read">,
   workspaceId: string,
   artifactId: string,
 ) {
   const artifact = await db.artifact.findFirst({
-    where: { id: artifactId, workspaceId, kind: { in: ["markdown", "html"] }, deletedAt: null },
-    select: { currentVersion: true, entryPath: true, kind: true, description: true },
+    where: { id: artifactId, workspaceId, deletedAt: null },
+    select: { currentVersion: true, entryPath: true, description: true },
   });
   if (!artifact || artifact.currentVersion <= 0) return;
+  const kind = artifactKindOfPath(artifact.entryPath);
   // A web page's card line is its description (task #490): its source reads as nothing.
-  if (artifact.kind === "html") {
+  if (kind === "html") {
     await db.artifact.updateMany({
       where: { id: artifactId, currentVersion: artifact.currentVersion },
       data: { preview: artifactPreview(artifact.description) },
     });
     return;
   }
+  if (kind !== "markdown") return;
   const file = await db.artifactFile.findFirst({
     where: {
       artifactId,
@@ -393,7 +288,7 @@ export async function refreshPreview(
     select: { sha256: true, sizeBytes: true },
   });
   const bytes =
-    file && file.sizeBytes <= ARTIFACT_DOCUMENT_LIMIT
+    file && file.sizeBytes <= ARTIFACT_ENTRY_READ_LIMIT
       ? await blobs.read(workspaceId, file.sha256)
       : null;
   await db.artifact.updateMany({

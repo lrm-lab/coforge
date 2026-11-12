@@ -132,13 +132,13 @@ function ArtifactRow({ card }: { card: ArtifactCard }) {
         {...linkTo(card.id)}
         className="flex w-full min-w-0 items-center gap-3 rounded-xl border border-secondary bg-primary p-3 text-left outline-focus-ring hover:border-primary hover:bg-primary_hover focus-visible:outline-2"
       >
-        <ArtifactIcon kind={card.kind} />
+        <ArtifactIcon entryPath={card.entryPath} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-baseline gap-2">
             <span className="truncate text-sm font-medium text-primary">
               {card.title || m.doc_untitled()}
             </span>
-            <span className="shrink-0 text-xs text-quaternary">{kindLabel(card.kind)}</span>
+            <span className="shrink-0 text-xs text-quaternary">{kindLabel(card.entryPath)}</span>
           </span>
           <ArtifactEditedLine actor={actorOf(card.author)} time={time(card.updatedAt)} />
         </span>

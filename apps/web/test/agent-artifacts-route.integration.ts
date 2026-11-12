@@ -12,9 +12,10 @@ import { LocalFileStorage } from "#src/server/files/file-storage.server";
 import { handleAgentArtifactPost } from "#src/routes/api/agent/v1/artifacts";
 
 /**
- * `POST /api/agent/v1/artifacts` (task #385, step 5): an Agent's documents, by the web page's
- * rules. The experiment is answered first, a home the Agent cannot read is missing, and a save's
- * internal options cannot be sent.
+ * `POST /api/agent/v1/artifacts` (task #385, step 5): an Agent's artifacts, by the web page's
+ * rules. An Agent writes only by `push` (a push with no artifact makes one). The experiment is
+ * answered first, a home the Agent cannot read is missing, and a save's internal options cannot
+ * be sent.
  */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -23,17 +24,19 @@ const handle = crypto.randomUUID().slice(0, 8);
 
 let root: string;
 let enabled = true;
+let blobs: StoredArtifactBlobs;
 let documents: ArtifactDocuments;
 let artifacts: Artifacts;
 let workspaceId: string;
 let alice: string;
 let agentId: string;
+let insiderId: string;
 let secretId: string;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-artifacts-"));
   const storage = new LocalFileStorage(root);
-  const blobs = new StoredArtifactBlobs(db, async () => storage);
+  blobs = new StoredArtifactBlobs(db, async () => storage);
   artifacts = new Artifacts(db, blobs, { enabled: async () => enabled });
   documents = new ArtifactDocuments(db, artifacts, blobs);
   alice = (await db.user.create({ data: { username: `ag-a-${handle}`, displayName: "Alice" } })).id;
@@ -57,6 +60,17 @@ beforeAll(async () => {
       },
     })
   ).id;
+  insiderId = (
+    await db.agent.create({
+      data: {
+        workspaceId,
+        name: `ag-insider-${handle}`,
+        displayName: "Insider",
+        ownerId: alice,
+        runtimeConfig: {},
+      },
+    })
+  ).id;
   const conversation = async (
     data: { channelName?: string; visibility?: string; directKey?: string },
     members: ({ userId: string } | { agentId: string })[],
@@ -73,6 +87,7 @@ beforeAll(async () => {
   ]);
   secretId = await conversation({ channelName: `secret-${handle}`, visibility: "private" }, [
     { userId: alice },
+    { agentId: insiderId },
   ]);
   await conversation({ channelName: `lobby-${handle}`, visibility: "public" }, [{ userId: alice }]);
   const archived = await conversation({ channelName: `old-${handle}`, visibility: "public" }, [
@@ -100,20 +115,46 @@ async function post(body: unknown) {
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db, artifacts, documents, enabled: async () => enabled },
+    { db, documents, enabled: async () => enabled },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
 
 const key = () => crypto.randomUUID();
 
-test("an Agent in a channel creates, reads, saves, pages and reverts a document there", async () => {
-  const created = await post({
-    operation: "create",
-    title: "Launch plan",
-    target: `#launch-${handle}`,
-    text: "# Launch plan\n\nShip in May.\n\nRisks: none.\n",
-  });
+/** Uploads each file's text as `agent` and names them as a manifest. */
+async function put(files: Record<string, string>, agent = agentId) {
+  return Promise.all(
+    Object.entries(files).map(async ([path, text]) => ({
+      path,
+      sha256: (
+        await blobs.upload({
+          workspaceId,
+          bytes: new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>,
+          actor: { agentId: agent },
+        })
+      ).sha256,
+    })),
+  );
+}
+
+/** A push with no artifact: it makes one. */
+const make = async (title: string, files: Record<string, string>, extra: object = {}) => ({
+  operation: "push",
+  title,
+  idempotencyKey: key(),
+  files: await put(files),
+  ...extra,
+});
+
+test("an Agent in a channel makes an artifact there, reads it, pushes over it and is refused a clash", async () => {
+  const created = await post(
+    await make(
+      "Launch plan",
+      { "plan.md": "# Launch plan\n\nShip in May.\n\nRisks: none.\n" },
+      { target: `#launch-${handle}` },
+    ),
+  );
   expect(created).toMatchObject({ status: 200, body: { name: "launch-plan", currentVersion: 1 } });
   const artifact = created.body.id as string;
 
@@ -121,8 +162,10 @@ test("an Agent in a channel creates, reads, saves, pages and reverts a document 
   expect(read.body.text).toBe("# Launch plan\n\nShip in May.\n\nRisks: none.\n");
   // The Agent authored it, so it may delete it; the read also says which kind of home it is in.
   expect(read.body).toMatchObject({ canDelete: true, homeKind: "channel" });
+  expect(read.body.artifact).not.toHaveProperty("kind");
+  expect(read.body.artifact).not.toHaveProperty("canWrite");
 
-  // The read-only list finds the document in its channel, newest first.
+  // The read-only list finds the artifact in its channel, newest first.
   const listed = await post({ operation: "list", target: `#launch-${handle}` });
   expect(listed.status).toBe(200);
   expect((listed.body as unknown as { id: string }[]).map((row) => row.id)).toContain(artifact);
@@ -132,49 +175,57 @@ test("an Agent in a channel creates, reads, saves, pages and reverts a document 
     artifact,
     baseVersion: 1,
     idempotencyKey: key(),
-    text: "# Launch plan\n\nShip in June.\n\nRisks: none.\n",
+    files: await put({ "plan.md": "# Launch plan\n\nShip in June.\n\nRisks: none.\n" }),
     note: "moved a month",
   });
   expect(saved.body).toMatchObject({ status: "created" });
 
-  // A save over version 1 that changes the file version 2 changed: an Agent's save is never merged
-  // inside a file, so it is refused, naming the file.
+  // A push over version 1 that changes the file version 2 changed is never merged inside the
+  // file: it is refused, naming the file.
   const conflict = await post({
     operation: "push",
     artifact,
     baseVersion: 1,
     idempotencyKey: key(),
-    text: "# Launch plan\n\nShip in July.\n\nRisks: none.\n",
+    files: await put({ "plan.md": "# Launch plan\n\nShip in July.\n\nRisks: none.\n" }),
   });
   expect(conflict.status).toBe(409);
   expect(conflict.body).toMatchObject({ code: "CONFLICT", retryable: false });
-  expect(conflict.body.error).toContain("artifact-agent-base-moved");
-  expect(conflict.body.details).toEqual({ files: "document.md" });
+  expect(conflict.body.error).toContain("artifact-base-moved");
+  expect(conflict.body.details).toEqual({ files: "plan.md" });
+});
 
-  const history = await post({ operation: "history", artifact, limit: 1 });
-  expect(history.body.versions).toHaveLength(1);
-  expect(history.body.nextBefore).toBe(2);
-
-  const reverted = await post({
-    operation: "revert",
+test("an Agent's other files survive a push over an older version that changes a different file", async () => {
+  const created = await post(
+    await make("Two files", { "a.md": "a\n", "b.md": "b\n" }, { entry: "a.md" }),
+  );
+  const artifact = created.body.id as string;
+  await post({
+    operation: "push",
     artifact,
-    to: 1,
-    baseVersion: 2,
+    baseVersion: 1,
     idempotencyKey: key(),
+    files: await put({ "b.md": "b2\n" }),
   });
-  expect(reverted.body).toMatchObject({ status: "created" });
-  expect((await post({ operation: "read", artifact })).body.text).toContain("Ship in May.");
+  const merged = await post({
+    operation: "push",
+    artifact,
+    baseVersion: 1,
+    idempotencyKey: key(),
+    files: await put({ "a.md": "a2\n" }),
+  });
+  expect(merged.body).toMatchObject({ status: "created", number: 3, merged: ["b.md"] });
 });
 
 test("a retried Agent push replays its version even after the artifact moved on", async () => {
-  const created = await post({ operation: "create", title: "Plan", text: "one\n" });
+  const created = await post(await make("Plan", { "plan.md": "one\n" }));
   const artifact = created.body.id as string;
   const push = {
     operation: "push",
     artifact,
     baseVersion: 1,
     idempotencyKey: key(),
-    text: "two\n",
+    files: await put({ "plan.md": "two\n" }),
   };
   const saved = await post(push);
   expect(saved.body).toMatchObject({ status: "created", number: 2 });
@@ -184,26 +235,28 @@ test("a retried Agent push replays its version even after the artifact moved on"
     artifact,
     baseVersion: 2,
     idempotencyKey: key(),
-    text: "three\n",
+    files: await put({ "plan.md": "three\n" }),
   });
   const retried = await post(push);
   expect(retried.status).toBe(200);
   expect(retried.body).toMatchObject({ status: "replayed", number: 2 });
 });
 
-test("an Agent makes a document in its DM with a person", async () => {
-  const created = await post({ operation: "create", title: "Notes", target: `dm:@ag-a-${handle}` });
-  expect(created).toMatchObject({ status: 200, body: { currentVersion: 0 } });
+test("an Agent makes an artifact in its DM with a person", async () => {
+  const created = await post(
+    await make("Notes", { "notes.md": "n\n" }, { target: `dm:@ag-a-${handle}` }),
+  );
+  expect(created).toMatchObject({ status: 200, body: { currentVersion: 1 } });
 });
 
-test("an Agent names a DM as message send does, and makes Workspace documents", async () => {
-  expect(
-    await post({ operation: "create", title: "Notes", target: `@ag-a-${handle}~human` }),
-  ).toMatchObject({ status: 200 });
-  // No DM with this Agent exists, and none is opened for a document.
-  expect(
-    await post({ operation: "create", title: "Notes", target: `@ag-bot-${handle}~agent` }),
-  ).toMatchObject({ status: 404, body: { code: "NOT_FOUND" } });
+test("an Agent names a DM as message send does, and makes Workspace artifacts", async () => {
+  const notes = (target: string) => make("Notes", { "notes.md": "n\n" }, { target });
+  expect(await post(await notes(`@ag-a-${handle}~human`))).toMatchObject({ status: 200 });
+  // No DM with this Agent exists, and none is opened for an artifact.
+  expect(await post(await notes(`@ag-bot-${handle}~agent`))).toMatchObject({
+    status: 404,
+    body: { code: "NOT_FOUND" },
+  });
   // A name a person and another Agent share is refused bare, as message send refuses it.
   const twin = await db.agent.create({
     data: {
@@ -215,65 +268,67 @@ test("an Agent names a DM as message send does, and makes Workspace documents", 
     },
   });
   try {
-    expect(
-      await post({ operation: "create", title: "Notes", target: `@ag-a-${handle}` }),
-    ).toMatchObject({ status: 409, body: { code: "AMBIGUOUS_TARGET" } });
-    expect(
-      await post({ operation: "create", title: "Notes", target: `@ag-a-${handle}~human` }),
-    ).toMatchObject({ status: 200 });
+    expect(await post(await notes(`@ag-a-${handle}`))).toMatchObject({
+      status: 409,
+      body: { code: "AMBIGUOUS_TARGET" },
+    });
+    expect(await post(await notes(`@ag-a-${handle}~human`))).toMatchObject({ status: 200 });
   } finally {
     await db.agent.delete({ where: { id: twin.id } });
   }
-  expect(await post({ operation: "create", title: "Handbook", text: "# Hi\n" })).toMatchObject({
+  expect(await post(await make("Handbook", { "handbook.md": "# Hi\n" }))).toMatchObject({
     status: 200,
     body: { currentVersion: 1 },
   });
 });
 
-test("a channel the Agent reads but may not write refuses a document", async () => {
+test("a channel the Agent reads but may not write refuses an artifact", async () => {
   // A public channel it is not in, and an archived one it is in.
   for (const target of [`#lobby-${handle}`, `#old-${handle}`])
-    expect(await post({ operation: "create", title: "Plan", target })).toMatchObject({
+    expect(await post(await make("Plan", { "plan.md": "p\n" }, { target }))).toMatchObject({
       status: 403,
       body: { code: "ACCESS_DENIED" },
     });
 });
 
-test("an idempotent create replays over the Agent API, and a reused key with new text conflicts", async () => {
+test("an idempotent create replays over the Agent API, and a reused key with other files conflicts", async () => {
   const idempotencyKey = key();
-  const first = await post({
-    operation: "create",
-    title: "Retry plan",
-    text: "# Retry\n\nOnce.\n",
-    idempotencyKey,
-  });
+  const create = async (text: string) =>
+    post(await make("Retry plan", { "retry.md": text }, { idempotencyKey }));
+  const first = await create("# Retry\n\nOnce.\n");
   expect(first.status).toBe(200);
-  const replay = await post({
-    operation: "create",
-    title: "Retry plan",
-    text: "# Retry\n\nOnce.\n",
-    idempotencyKey,
-  });
+  const replay = await create("# Retry\n\nOnce.\n");
   expect(replay.status).toBe(200);
   expect(replay.body.id).toBe(first.body.id);
   expect(replay.body.currentVersion).toBe(first.body.currentVersion);
-  // The same key with different text is refused, nothing new made.
-  const mismatch = await post({
-    operation: "create",
-    title: "Retry plan",
-    text: "# Retry\n\nTwice.\n",
-    idempotencyKey,
+  // The same key with different files is refused, nothing new made.
+  expect((await create("# Retry\n\nTwice.\n")).status).toBe(409);
+});
+
+test("bytes the Agent never uploaded are asked for before an artifact is made", async () => {
+  const before = await db.artifact.count({ where: { workspaceId } });
+  const sha256 = "d".repeat(64);
+  const asked = await post({
+    operation: "push",
+    title: "Not yet",
+    idempotencyKey: key(),
+    files: [{ path: "plan.md", sha256 }],
   });
-  expect(mismatch.status).toBe(409);
+  expect(asked).toMatchObject({ status: 200, body: { status: "missing", missing: [sha256] } });
+  expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
 });
 
 test("a channel the Agent cannot read is missing, for making and for reading", async () => {
   expect(
-    await post({ operation: "create", title: "Secret", target: `#secret-${handle}` }),
+    await post(await make("Secret", { "secret.md": "s\n" }, { target: `#secret-${handle}` })),
   ).toMatchObject({ status: 404, body: { code: "NOT_FOUND" } });
   const secret = await documents.create(
-    { workspaceId, actor: { userId: alice } },
-    { conversationId: secretId, title: "Secret", text: "hush\n" },
+    { workspaceId, actor: { agentId: insiderId } },
+    {
+      conversationId: secretId,
+      title: "Secret",
+      manifest: { files: await put({ "secret.md": "hush\n" }, insiderId) },
+    },
   );
   expect(await post({ operation: "read", artifact: secret.id })).toMatchObject({
     status: 404,
@@ -282,20 +337,26 @@ test("a channel the Agent cannot read is missing, for making and for reading", a
 });
 
 test("a request outside the web page's rules is refused", async () => {
+  const files = await put({ "plan.md": "p\n" });
   for (const body of [
     { operation: "push", artifact: key(), baseVersion: 0, idempotencyKey: key(), exactBase: true },
     { operation: "read", artifact: "not-an-id" },
-    { operation: "history", artifact: key(), limit: 51 },
-    { operation: "create", title: "   " },
-    { operation: "create", title: "Plan", text: "a\u0000b" },
+    { operation: "list", limit: 51 },
+    { operation: "push", title: "   ", idempotencyKey: key(), files },
+    { operation: "push", title: "Plan", idempotencyKey: "not-a-key", files },
+    // Removed operations, and the single-text form of a push.
+    { operation: "create", title: "Plan", files },
+    { operation: "history", artifact: key() },
+    { operation: "revert", artifact: key(), to: 1, baseVersion: 2, idempotencyKey: key() },
+    { operation: "push", artifact: key(), baseVersion: 1, idempotencyKey: key(), text: "x" },
   ])
     expect(await post(body)).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
   // The refusal names the field.
-  expect(await post({ operation: "history", artifact: key(), limit: 51 })).toMatchObject({
+  expect(await post({ operation: "list", limit: 51 })).toMatchObject({
     body: { error: expect.stringContaining("limit is not accepted") },
   });
   expect(
-    await post({ operation: "create", title: "Plan", target: `#launch-${handle}:01a199fb` }),
+    await post(await make("Plan", { "plan.md": "p\n" }, { target: `#launch-${handle}:01a199fb` })),
   ).toMatchObject({ status: 400, body: { error: expect.stringContaining("artifact-target") } });
 });
 
@@ -303,8 +364,8 @@ test("a Workspace without the Artifacts experiment says so, whatever was asked",
   enabled = false;
   try {
     for (const body of [
-      { operation: "create", title: "Plan", target: "#nowhere" },
-      { operation: "create", kind: "html", title: "Page", description: "A page", text: "<p>x</p>" },
+      await make("Plan", { "plan.md": "p\n" }, { target: "#nowhere" }),
+      { operation: "push", title: "Page", idempotencyKey: key(), files: [] },
       { operation: "read", artifact: key() },
     ])
       expect(await post(body)).toMatchObject({
@@ -317,13 +378,13 @@ test("a Workspace without the Artifacts experiment says so, whatever was asked",
 });
 
 test("an Agent reads an artifact widened to the Workspace tier", async () => {
-  // Alice writes a document in a private channel the Agent is not in.
+  // An Agent writes an artifact in a private channel the other Agent is not in.
   const artifact = await documents.create(
-    { workspaceId, actor: { userId: alice } },
+    { workspaceId, actor: { agentId: insiderId } },
     {
       conversationId: secretId,
       title: "Secret plan",
-      text: "# Secret\n",
+      manifest: { files: await put({ "secret.md": "# Secret\n" }, insiderId) },
       idempotencyKey: key(),
     },
   );

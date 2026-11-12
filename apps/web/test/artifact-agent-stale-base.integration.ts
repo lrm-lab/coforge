@@ -10,10 +10,10 @@ import { ArtifactDocuments } from "#src/server/artifacts/artifact-documents.serv
 import { LocalFileStorage } from "#src/server/files/file-storage.server";
 
 /**
- * An Agent's save over a version others moved past: what the others changed and the Agent did
- * not touch is kept, and nothing is ever merged inside a file. A file, or a setting, both sides
- * changed (or one deleted and the other changed) refuses the whole save with
- * `artifact-agent-base-moved`, naming each of them. A person's save keeps merging by line.
+ * A push over a version others moved past: what the others changed and the push did not touch is
+ * kept, and nothing is ever merged inside a file. A file, or a setting, both sides changed (or one
+ * deleted and the other changed) refuses the whole push with `artifact-base-moved`, naming each
+ * of them.
  */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -27,6 +27,7 @@ let documents: ArtifactDocuments;
 let workspaceId: string;
 let userId: string;
 let agentId: string;
+let otherId: string;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "artifact-agent-base-"));
@@ -40,17 +41,20 @@ beforeAll(async () => {
       data: { slug: `ab-${handle}`, name: "Base", members: { create: { userId, role: "owner" } } },
     })
   ).id;
-  agentId = (
-    await db.agent.create({
-      data: {
-        workspaceId,
-        name: `ab-bot-${handle}`,
-        displayName: "Bot",
-        ownerId: userId,
-        runtimeConfig: {},
-      },
-    })
-  ).id;
+  const newAgent = async (name: string) =>
+    (
+      await db.agent.create({
+        data: {
+          workspaceId,
+          name: `ab-${name}-${handle}`,
+          displayName: name,
+          ownerId: userId,
+          runtimeConfig: {},
+        },
+      })
+    ).id;
+  agentId = await newAgent("bot");
+  otherId = await newAgent("other");
 });
 
 afterAll(async () => {
@@ -66,22 +70,28 @@ const agent = {
     return agentId;
   },
 };
-const person = {
+/** The other Agent, whose pushes move an artifact on beneath the first's. */
+const other = {
+  get agentId() {
+    return otherId;
+  },
+};
+const reader = {
   get userId() {
     return userId;
   },
 };
 
-const upload = async (text: string, actor: { agentId: string } | { userId: string }) =>
+const upload = async (text: string, actor: { agentId: string }) =>
   (await blobs.upload({ workspaceId, bytes: new TextEncoder().encode(text), actor })).sha256;
 
-/** One push of text files by path (`undefined` text deletes the path), as an Agent saves. */
+/** One push of text files by path (`undefined` text deletes the path). */
 async function push(
   artifactId: string,
   baseVersion: number,
   files: Record<string, string | undefined>,
   options: Partial<Parameters<Artifacts["push"]>[0]> = {},
-  actor: { agentId: string } | { userId: string } = agent,
+  actor: { agentId: string } = agent,
 ) {
   const entries = Object.entries(files);
   return artifacts.push({
@@ -100,7 +110,6 @@ async function push(
   });
 }
 
-const BY_PATH = { merge: "byPath" } as const;
 let made = 0;
 
 /** An artifact whose version 1 holds `a.md` (the entry), `b.txt` and `c.txt`. */
@@ -110,18 +119,17 @@ async function artifact(title = "Plan") {
     home: { kind: "workspace" },
     name: `base-${(made += 1)}-${handle}`,
     title,
-    kind: "markdown",
     entryPath: "a.md",
-    author: person,
+    author: other,
   });
-  await push(created.id, 0, { "a.md": "a\n", "b.txt": "b\n", "c.txt": "c\n" }, {}, person);
+  await push(created.id, 0, { "a.md": "a\n", "b.txt": "b\n", "c.txt": "c\n" }, {}, other);
   return created.id;
 }
 
 const filesAt = async (artifactId: string, version?: number) =>
   Object.fromEntries(
     await Promise.all(
-      (await artifacts.read({ workspaceId, artifactId, reader: person, version })).files.map(
+      (await artifacts.read({ workspaceId, artifactId, reader, version })).files.map(
         async (file) => [
           file.path,
           new TextDecoder().decode((await blobs.read(workspaceId, file.sha256))!),
@@ -136,14 +144,14 @@ async function refusal(promise: Promise<unknown>) {
     (cause: unknown) =>
       cause as { code?: string; errorId?: string; details?: Record<string, string> },
   );
-  expect(error).toMatchObject({ code: "CONFLICT", errorId: "artifact-agent-base-moved" });
+  expect(error).toMatchObject({ code: "CONFLICT", errorId: "artifact-base-moved" });
   return error!.details!;
 }
 
 test("files others changed that the Agent's save does not touch are kept", async () => {
   const id = await artifact();
-  await push(id, 1, { "b.txt": "b by someone\n", "d.txt": "d by someone\n" }, {}, person);
-  const saved = await push(id, 1, { "c.txt": "c by the Agent\n" }, BY_PATH);
+  await push(id, 1, { "b.txt": "b by someone\n", "d.txt": "d by someone\n" }, {}, other);
+  const saved = await push(id, 1, { "c.txt": "c by the Agent\n" });
   expect(saved).toMatchObject({
     status: "created",
     number: 3,
@@ -159,45 +167,38 @@ test("files others changed that the Agent's save does not touch are kept", async
 
 test("a file both sides changed refuses the whole save and names it", async () => {
   const id = await artifact();
-  await push(id, 1, { "b.txt": "b by someone\n", "c.txt": "c by someone\n" }, {}, person);
+  await push(id, 1, { "b.txt": "b by someone\n", "c.txt": "c by someone\n" }, {}, other);
   const details = await refusal(
-    push(
-      id,
-      1,
-      { "b.txt": "b by the Agent\n", "c.txt": "c by the Agent\n", "e.txt": "e\n" },
-      BY_PATH,
-    ),
+    push(id, 1, { "b.txt": "b by the Agent\n", "c.txt": "c by the Agent\n", "e.txt": "e\n" }),
   );
   expect(details.files).toBe("b.txt\nc.txt");
   // Nothing of the save landed, not even the file nobody else touched.
   expect(await filesAt(id)).not.toHaveProperty("e.txt");
   expect(
-    (await artifacts.read({ workspaceId, artifactId: id, reader: person })).artifact.currentVersion,
+    (await artifacts.read({ workspaceId, artifactId: id, reader })).artifact.currentVersion,
   ).toBe(2);
 });
 
 test("both sides making the same change to a file is no conflict", async () => {
   const id = await artifact();
-  await push(id, 1, { "b.txt": "same\n" }, {}, person);
-  const saved = await push(id, 1, { "b.txt": "same\n", "c.txt": "c by the Agent\n" }, BY_PATH);
+  await push(id, 1, { "b.txt": "same\n" }, {}, other);
+  const saved = await push(id, 1, { "b.txt": "same\n", "c.txt": "c by the Agent\n" });
   expect(saved).toMatchObject({ status: "created", merged: ["b.txt"] });
   expect(await filesAt(id)).toMatchObject({ "b.txt": "same\n", "c.txt": "c by the Agent\n" });
 });
 
 test("a file one side deleted and the other changed refuses the save", async () => {
   const id = await artifact();
-  await push(id, 1, { "b.txt": undefined, "c.txt": "c by someone\n" }, {}, person);
+  await push(id, 1, { "b.txt": undefined, "c.txt": "c by someone\n" }, {}, other);
   // The Agent changes what someone deleted, and deletes what someone changed.
-  const details = await refusal(
-    push(id, 1, { "b.txt": "b by the Agent\n", "c.txt": undefined }, BY_PATH),
-  );
+  const details = await refusal(push(id, 1, { "b.txt": "b by the Agent\n", "c.txt": undefined }));
   expect(details.files).toBe("b.txt\nc.txt");
 });
 
 test("both sides deleting a file is no conflict", async () => {
   const id = await artifact();
-  await push(id, 1, { "b.txt": undefined }, {}, person);
-  const saved = await push(id, 1, { "b.txt": undefined, "c.txt": "c by the Agent\n" }, BY_PATH);
+  await push(id, 1, { "b.txt": undefined }, {}, other);
+  const saved = await push(id, 1, { "b.txt": undefined, "c.txt": "c by the Agent\n" });
   expect(saved).toMatchObject({ status: "created" });
   expect(await filesAt(id)).toEqual({ "a.md": "a\n", "c.txt": "c by the Agent\n" });
 });
@@ -208,66 +209,64 @@ test("a setting both sides changed to different values refuses the save and name
     workspaceId,
     artifactId: id,
     baseVersion: 1,
-    publisher: person,
+    publisher: other,
     idempotencyKey: crypto.randomUUID(),
     title: "Launch plan",
     description: "by someone",
   });
-  const details = await refusal(
-    push(id, 1, {}, { ...BY_PATH, title: "Roadmap", description: "by the Agent" }),
-  );
+  const details = await refusal(push(id, 1, {}, { title: "Roadmap", description: "by the Agent" }));
   expect(details.settings).toBe("title\ndescription");
   // The same value on both sides, and a setting only the Agent changed, merge.
-  const saved = await push(
-    id,
-    1,
-    {},
-    { ...BY_PATH, title: "Launch plan", description: "by someone" },
-  );
+  const saved = await push(id, 1, {}, { title: "Launch plan", description: "by someone" });
   expect(saved).toMatchObject({ status: "nothing" });
-  expect(
-    await push(id, 1, { "c.txt": "c2\n" }, { ...BY_PATH, title: "Launch plan" }),
-  ).toMatchObject({
+  expect(await push(id, 1, { "c.txt": "c2\n" }, { title: "Launch plan" })).toMatchObject({
     status: "created",
     mergedSettings: ["title", "description"],
   });
 });
 
-test("an Agent's save never merges inside a file, a person's does", async () => {
+test("a push never merges inside a file", async () => {
   const created = await artifacts.create({
     workspaceId,
     home: { kind: "workspace" },
     name: `base-lines-${handle}`,
-    kind: "markdown",
     entryPath: "document.md",
-    author: person,
+    author: other,
   });
   const lines = (first: string, last: string) => `${first}\n\nmiddle\n\n${last}\n`;
-  await push(created.id, 0, { "document.md": lines("one", "three") }, {}, person);
-  await push(created.id, 1, { "document.md": lines("one by someone", "three") }, {}, person);
-  // The Agent's paragraph is another one, which a line merge would join.
+  await push(created.id, 0, { "document.md": lines("one", "three") }, {}, other);
+  await push(created.id, 1, { "document.md": lines("one by someone", "three") }, {}, other);
+  // The push's paragraph is another one, which a line merge would join.
   const details = await refusal(
-    push(created.id, 1, { "document.md": lines("one", "three by the Agent") }, BY_PATH),
+    push(created.id, 1, { "document.md": lines("one", "three by the Agent") }),
   );
   expect(details.files).toBe("document.md");
-  expect(
-    await push(created.id, 1, { "document.md": lines("one", "three by a person") }, {}, person),
-  ).toMatchObject({ status: "created", merged: ["document.md"] });
 });
 
-test("a saved document is saved by an Agent over an older version the same way", async () => {
+test("an artifact made and pushed through the documents keeps what others pushed meanwhile", async () => {
+  const sha256 = await upload("# Notes\n\nfirst\n\nsecond\n", other);
   const created = await documents.create(
-    { workspaceId, actor: person },
-    { title: "Notes", text: "# Notes\n\nfirst\n\nsecond\n" },
+    { workspaceId, actor: other },
+    { title: "Notes", manifest: { files: [{ path: "document.md", sha256 }] } },
   );
-  const save = (baseVersion: number, input: { text?: string; title?: string }) =>
-    documents.save(
+  const save = async (baseVersion: number, input: { text?: string; title?: string }) =>
+    documents.push(
       { workspaceId, actor: agent },
-      { artifactId: created.id, baseVersion, idempotencyKey: crypto.randomUUID(), ...input },
+      {
+        artifactId: created.id,
+        baseVersion,
+        idempotencyKey: crypto.randomUUID(),
+        ...(input.title !== undefined && { title: input.title }),
+        ...(input.text !== undefined && {
+          manifest: {
+            files: [{ path: "document.md", sha256: await upload(input.text, agent) }],
+          },
+        }),
+      },
     );
-  // Someone retitles it; the Agent's text save over version 1 keeps the title.
-  await documents.save(
-    { workspaceId, actor: person },
+  // Someone retitles it; the push of the file over version 1 keeps the title.
+  await documents.push(
+    { workspaceId, actor: other },
     {
       artifactId: created.id,
       baseVersion: 1,
@@ -279,7 +278,7 @@ test("a saved document is saved by an Agent over an older version the same way",
     status: "created",
     mergedSettings: ["title"],
   });
-  // Another save of the same file over version 1 is refused, not merged.
+  // Another push of the same file over version 1 is refused, not merged.
   const details = await refusal(save(1, { text: "# Notes\n\nfirst, edited\n\nsecond\n" }));
   expect(details.files).toBe("document.md");
   // Settings of its own over the version it read still save.

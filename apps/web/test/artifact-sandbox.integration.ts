@@ -42,9 +42,6 @@ const store: ArtifactBlobStore = {
   use: async (_tx, _workspaceId, sha256s) => sha256s.filter((sha256) => !bytes.has(sha256)),
   read: async (_workspaceId, sha256) => bytes.get(sha256) ?? null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
-  upload: async () => {
-    throw new Error("bytes are put in the map directly");
-  },
 };
 /** Seconds are added to the sandbox's clock by the test that ages a link. */
 let clockOffsetMs = 0;
@@ -59,6 +56,7 @@ const sandbox = new ArtifactSandbox({
 
 let workspaceId: string;
 let userId: string;
+let agentId: string;
 
 beforeAll(async () => {
   userId = (
@@ -73,7 +71,16 @@ beforeAll(async () => {
       },
     })
   ).id;
+  agentId = await newAgent(`sandbox-writer-${handle}`);
 });
+
+/** An Agent of the Workspace, the writer of a page. */
+const newAgent = async (name: string) =>
+  (
+    await db.agent.create({
+      data: { workspaceId, name, displayName: name, ownerId: userId, runtimeConfig: {} },
+    })
+  ).id;
 
 afterAll(async () => {
   await db.workspace.delete({ where: { id: workspaceId } }).catch(() => undefined);
@@ -96,9 +103,8 @@ async function multiPage(name: string, files?: Record<string, string | Uint8Arra
     workspaceId,
     home: { kind: "workspace" },
     name: `${name}-${handle}`,
-    kind: "html",
     entryPath: "home.html",
-    author: { userId },
+    author: { agentId },
   });
   const set = files ?? {
     "home.html": '<!doctype html><link rel="stylesheet" href="css/site.css"><p>home</p>',
@@ -111,7 +117,7 @@ async function multiPage(name: string, files?: Record<string, string | Uint8Arra
     workspaceId,
     artifactId: page.id,
     baseVersion: 0,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: crypto.randomUUID(),
     files: Object.entries(set).map(([path, content]) => ({ path, sha256: put(content) })),
   });
@@ -125,7 +131,7 @@ async function save(artifactId: string, baseVersion: number, html: string) {
     workspaceId,
     artifactId,
     baseVersion,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: crypto.randomUUID(),
     files: [{ path: "index.html", sha256: put(html) }],
   });
@@ -134,31 +140,27 @@ async function save(artifactId: string, baseVersion: number, html: string) {
 test("a narrowed tier-reader's next link refuses at once", async () => {
   // A second member authors a document in a private channel the reader is not in, widens it,
   // then narrows it again: the tier's read reaches the sandbox's own check.
-  const author = (
-    await db.user.create({ data: { username: `sb-author-${handle}`, displayName: "A" } })
-  ).id;
-  await db.workspaceMembership.create({ data: { workspaceId, userId: author, role: "member" } });
+  const author = await newAgent(`sb-author-${handle}`);
   const channel = (
     await db.conversation.create({
       data: { workspaceId, channelName: `closed-${handle}`, visibility: "private" },
     })
   ).id;
   await db.conversationMember.create({
-    data: { conversationId: channel, workspaceId, userId: author },
+    data: { conversationId: channel, workspaceId, agentId: author },
   });
   const page = await artifacts.create({
     workspaceId,
     home: { kind: "conversation", conversationId: channel },
     name: `page-shared-${handle}`,
-    kind: "html",
     entryPath: "index.html",
-    author: { userId: author },
+    author: { agentId: author },
   });
   await artifacts.push({
     workspaceId,
     artifactId: page.id,
     baseVersion: 0,
-    publisher: { userId: author },
+    publisher: { agentId: author },
     idempotencyKey: crypto.randomUUID(),
     files: [{ path: "index.html", sha256: put("<p>shared</p>") }],
   });
@@ -169,7 +171,6 @@ test("a narrowed tier-reader's next link refuses at once", async () => {
   await db.artifact.update({ where: { id: page.id }, data: { access: "conversation" } });
   await expect(link()).rejects.toMatchObject({ code: "NOT_FOUND" });
   await db.conversation.delete({ where: { id: channel } });
-  await db.user.delete({ where: { id: author } });
 });
 
 test("a link opens its own version, and stops once its reader cannot read the page", async () => {
@@ -177,9 +178,8 @@ test("a link opens its own version, and stops once its reader cannot read the pa
     workspaceId,
     home: { kind: "workspace" },
     name: `page-${handle}`,
-    kind: "html",
     entryPath: "index.html",
-    author: { userId },
+    author: { agentId },
   });
   await save(page.id, 0, "<p>one</p>");
   const first = await sandbox.link({
@@ -272,7 +272,7 @@ test("a ticket reaches only its own artifact's version", async () => {
     workspaceId,
     artifactId: one.id,
     baseVersion: 1,
-    publisher: { userId },
+    publisher: { agentId },
     idempotencyKey: crypto.randomUUID(),
     files: [
       { path: "added-later.css", sha256: put("c{}") },
@@ -309,31 +309,27 @@ test("a ticket's files stop opening 30 minutes after the link, as access ends, a
 });
 
 test("a file stops opening for a reader who can no longer read the page's home", async () => {
-  const author = (
-    await db.user.create({ data: { username: `sb-files-${handle}`, displayName: "F" } })
-  ).id;
-  await db.workspaceMembership.create({ data: { workspaceId, userId: author, role: "member" } });
+  const author = await newAgent(`sb-files-${handle}`);
   const channel = (
     await db.conversation.create({
       data: { workspaceId, channelName: `files-${handle}`, visibility: "private" },
     })
   ).id;
   await db.conversationMember.create({
-    data: { conversationId: channel, workspaceId, userId: author },
+    data: { conversationId: channel, workspaceId, agentId: author },
   });
   const page = await artifacts.create({
     workspaceId,
     home: { kind: "conversation", conversationId: channel },
     name: `files-home-${handle}`,
-    kind: "html",
     entryPath: "home.html",
-    author: { userId: author },
+    author: { agentId: author },
   });
   await artifacts.push({
     workspaceId,
     artifactId: page.id,
     baseVersion: 0,
-    publisher: { userId: author },
+    publisher: { agentId: author },
     idempotencyKey: crypto.randomUUID(),
     files: [
       { path: "home.html", sha256: put("<p>home</p>") },
@@ -347,5 +343,4 @@ test("a file stops opening for a reader who can no longer read the page's home",
   expect((await sandbox.serve(asset(link.url, "a.css", "style"))).status).toBe(404);
   expect((await sandbox.serve(frame(link.url, "home.html"))).status).toBe(404);
   await db.conversation.delete({ where: { id: channel } });
-  await db.user.delete({ where: { id: author } });
 });

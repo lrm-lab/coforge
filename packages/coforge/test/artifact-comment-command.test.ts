@@ -125,7 +125,7 @@ test("comment sends the body read from stdin, trimmed, with a fresh idempotency 
   const said = (await runArtifact(
     invocation(["comment", ID, "--path", "plan.md", "--lines", "3-4"]),
     transport,
-    async (file) => (file === "-" ? "\n  Why three lines?\nSecond line.\n\n" : "wrong"),
+    async () => "\n  Why three lines?\nSecond line.\n\n",
   )) as string;
   expect(sent[0]).toMatchObject({
     operation: "comment",
