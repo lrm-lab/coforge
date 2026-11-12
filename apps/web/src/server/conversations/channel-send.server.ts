@@ -17,7 +17,7 @@ import { channelAgentRecipients } from "./channel-agent-recipients.server";
 import { enrollThreadReplyFollowers } from "./channel-threads.server";
 import { lockConversation } from "./conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
-import { browserMessageFields } from "./conversation-history.server";
+import { browserMessageFields } from "./browser-message-projection.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { deliveryMentionsAgent } from "./mentions.server";

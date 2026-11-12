@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { AttachmentComments } from "#src/server/attachments/attachment-comments.server";
-import { attachmentCommentCounts } from "#src/server/conversations/conversation-history.server";
+import { attachmentCommentCounts } from "#src/server/conversations/browser-message-projection.server";
 import { PrismaAttachmentCommentStore } from "#src/server/db/repositories/attachment-comments.repositories.server";
 import { attachmentCommentsFixture } from "./helpers/attachment-comments-fixture";
 

@@ -9,7 +9,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { readableConversationWhere } from "./channel-read-access.server";
-import { browserMessageFields, mapBrowserMessage } from "./conversation-history.server";
+import { browserMessageFields, mapBrowserMessage } from "./browser-message-projection.server";
 import { attachForwardedAccess } from "./message-forward-view.server";
 import { announceViewerEvent, type ConversationRealtime } from "./conversation-realtime.server";
 

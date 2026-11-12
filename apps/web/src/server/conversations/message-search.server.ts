@@ -11,7 +11,7 @@ import {
   findMessageSearchIds,
   type MessageSearchSort,
 } from "#src/server/db/repositories/message-search.repositories.server";
-import { browserMessageFields, mapBrowserMessage } from "./conversation-history.server";
+import { browserMessageFields, mapBrowserMessage } from "./browser-message-projection.server";
 import { attachForwardedAccess } from "./message-forward-view.server";
 import { browserSenderName } from "./sender-display.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";

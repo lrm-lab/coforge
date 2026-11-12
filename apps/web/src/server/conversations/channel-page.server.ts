@@ -19,11 +19,8 @@ import {
   mentionables,
   viewerRecentMentions,
 } from "./channel-mentionables.server";
-import {
-  browserMessageFields,
-  browserMessageUpdates,
-  mapBrowserMessages,
-} from "./conversation-history.server";
+import { browserMessageUpdates } from "./conversation-history.server";
+import { browserMessageFields, mapBrowserMessages } from "./browser-message-projection.server";
 import { othersReadThroughSequence } from "./conversation-read-state.server";
 import { mentionAffinityScores } from "./mentions.server";
 import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.server";

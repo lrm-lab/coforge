@@ -5,7 +5,7 @@ import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import {
   mapBrowserMessage,
   type BrowserMessageRow,
-} from "#src/server/conversations/conversation-history.server";
+} from "#src/server/conversations/browser-message-projection.server";
 import { buildWeeklyReportAssistantRequestBody } from "#src/server/records/weekly-report-assistant-request.server";
 import { buildPersonalKeyPointWakeText } from "#src/server/records/weekly-report-key-points.server";
 

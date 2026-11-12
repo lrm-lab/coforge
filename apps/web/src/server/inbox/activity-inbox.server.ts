@@ -15,7 +15,7 @@ import { channelListMembers } from "#src/server/conversations/channel-list-previ
 import {
   browserMessageFields,
   mapBrowserMessage,
-} from "#src/server/conversations/conversation-history.server";
+} from "#src/server/conversations/browser-message-projection.server";
 import { attachForwardedAccess } from "#src/server/conversations/message-forward-view.server";
 import {
   browserSenderAvatarUrl,

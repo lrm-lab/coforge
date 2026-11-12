@@ -10,7 +10,7 @@ import {
 import {
   mapBrowserMessage,
   type BrowserMessageRow,
-} from "#src/server/conversations/conversation-history.server";
+} from "#src/server/conversations/browser-message-projection.server";
 
 // A re-read of a conversation's window (a refetch on focus or remount, an invalidation, a
 // reconcile) hands the Query cache freshly decoded messages. TanStack Query's structural sharing

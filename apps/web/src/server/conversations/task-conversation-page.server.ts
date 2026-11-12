@@ -5,11 +5,8 @@ import { windowPageFlags } from "#src/lib/conversation-window";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { HistoryWindow } from "#src/server/db/repositories/direct-conversation-types.server";
 import { conversationMentionables } from "#src/server/db/repositories/user-direct-reads.repositories.server";
-import {
-  browserMessageFields,
-  ConversationHistory,
-  mapBrowserMessages,
-} from "./conversation-history.server";
+import { ConversationHistory } from "./conversation-history.server";
+import { browserMessageFields, mapBrowserMessages } from "./browser-message-projection.server";
 
 /**
  * A task's own conversation as the message list shows it: the newest page of its messages, older
