@@ -31,6 +31,7 @@ function subject(
 ) {
   const rows: TrustedAgentActivity[] = [];
   const published: { channel: string; data: Uint8Array }[] = [];
+  const ended: string[] = [];
   const restored = new CredentialRestoredActivity({
     agents: async () => [{ id: "agent-1", visibility: options.visibility ?? "public" }],
     newest: async () =>
@@ -42,8 +43,10 @@ function subject(
       },
     record: async (activities) => void rows.push(...activities),
     publish: async (channel, data) => void published.push({ channel, data }),
+    endHeldStop: async (_scope, agent, errorReason) =>
+      void ended.push(`${agent.id}:${errorReason}`),
   });
-  return { restored, rows, published };
+  return { restored, rows, published, ended };
 }
 
 test("an Agent whose newest Activity is the failure gets an idle row that supersedes it", async () => {
@@ -71,6 +74,15 @@ test("an Agent that has moved on since is left as it is", async () => {
   await expect(restored.receive(scope, report)).resolves.toBe(true);
   expect(rows).toEqual([]);
   expect(published).toEqual([]);
+});
+
+test("the live display is told the failure is over, whatever the Agent showed since (task #90)", async () => {
+  const moved = subject({ newest: { detailKind: "tool_started", level: "info" } });
+  await moved.restored.receive(scope, { ...report, reason: "BillingError" });
+  expect(moved.ended).toEqual(["agent-1:billing_exhausted"]);
+  const refused = subject();
+  await refused.restored.receive(scope, { ...report, agentId: "agent-other" });
+  expect(refused.ended).toEqual([]);
 });
 
 test("an Agent that is not assigned to the Computer is refused", async () => {
@@ -131,6 +143,7 @@ test("a failed publish is logged and does not undo the stored row", async () => 
       publish: async () => {
         throw new Error("down");
       },
+      endHeldStop: async () => {},
     });
     await expect(restored.receive(scope, report)).resolves.toBe(true);
     expect(rows).toHaveLength(1);

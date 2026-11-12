@@ -27,6 +27,13 @@ export type CredentialRestoredActivityPorts = {
   >;
   record(activities: TrustedAgentActivity[]): Promise<void>;
   publish(channel: string, data: Uint8Array): Promise<void>;
+  /** Ends the reason the failure (its `errorReason`) left on the Agent's live display, and
+   * publishes the result (task #90). */
+  endHeldStop(
+    scope: Scope,
+    agent: { id: string; visibility: AgentVisibility },
+    errorReason: string,
+  ): Promise<void>;
 };
 
 /**
@@ -45,10 +52,23 @@ export class CredentialRestoredActivity {
   async receive(scope: Scope, report: AgentCredentialRestored): Promise<boolean> {
     const agent = (await this.ports.agents(scope)).find(({ id }) => id === report.agentId);
     if (!agent) return false;
+    const errorReason = CREDENTIAL_FAILURE_ERROR_REASONS[report.reason];
+    // The display keeps a held reason for as long as the hold lasts; the display decides whether
+    // this very failure is still what it shows.
+    await this.ports.endHeldStop(scope, agent, errorReason).catch((cause: unknown) =>
+      console.warn(
+        JSON.stringify({
+          event: "credential_restored_display.failed",
+          workspace_id: scope.workspaceId,
+          agent_id: agent.id,
+          error_type: cause instanceof Error ? cause.name : typeof cause,
+        }),
+      ),
+    );
     const newest = await this.ports.newest(scope.workspaceId, agent.id);
     if (
       newest?.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR ||
-      newest.runtimeErrorReason !== CREDENTIAL_FAILURE_ERROR_REASONS[report.reason]
+      newest.runtimeErrorReason !== errorReason
     )
       return true;
     await writeSelfLaunchActivities(this.ports, scope, {

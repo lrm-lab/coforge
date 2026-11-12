@@ -13,6 +13,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { AGENT_STATUS_LEASE_MS } from "./agent-status.server";
 import {
+  END_HELD_STOP,
   OBSERVE_ACTIVITY,
   OBSERVE_STATUS,
   PUT_CONTEXT_USAGE,
@@ -85,6 +86,9 @@ export interface AgentDisplay {
     reason: string,
     detail?: string,
   ): Promise<AgentDisplaySnapshot | undefined>;
+  /** Ends the reason a credential hold left on a live Agent (`errorReason`, the failure's) once
+   * the Daemon reports the credential works again; undefined when nothing changed. */
+  endHeldStop(scope: Scope, errorReason: string): Promise<AgentDisplaySnapshot | undefined>;
   snapshot(scope: Scope): Promise<AgentDisplaySnapshot>;
   /** Many snapshots in one round trip (a Workspace's Agent list); same value per scope as
    * `snapshot`, in the scopes' order. */
@@ -167,6 +171,10 @@ export class RedisAgentDisplay implements AgentDisplay {
 
   async recordStopReason(scope: Scope, reason: string, detail?: string) {
     return this.execute(RECORD_STOP_REASON, scope, [reason, detail ?? ""]);
+  }
+
+  async endHeldStop(scope: Scope, errorReason: string) {
+    return this.execute(END_HELD_STOP, scope, [errorReason]);
   }
 
   async snapshot(scope: Scope) {

@@ -70,6 +70,14 @@
 （`apps/web/src/server/agents/credential-restored-activity.server.ts`，写入与发布同 Computer 生命周期行共用
 `self-launch-activity.server.ts`）。
 
+云端显示（`apps/web/src/server/agents/agent-display-lua.ts`，task #90）：hold 期间进程活着，所以失败的
+`runtime_error` 帧（`requiredAction` 有值，或 `errorClass` 为 `BillingError`，SDK 的 `credentialHoldReason`）记下
+`stopHeld`，快照在 Agent 在线时也带上它的 `stopReason`，页面据此显示“需要人处理”的红字和警示图标，资料页
+横幅提供 Retry（就是普通的 Start，不先 Stop）。同一进程的租约续期、结束失败那一轮的 `idle` /
+`subagent_activity` 行和无内容的进度帧都不清除它；清除它的只有：新的进程（`active` 状态来自未在线的进程或别的
+daemon 实例）、之后一轮的模型输出（working/thinking），以及 `agent:v1:credential:restored`
+（`END_HELD_STOP`，只结束这次失败对应的 reason，并把错误行从显示上撤掉）。
+
 ## 模块（`packages/daemon/src/daemon-runtime/`）
 
 - `credential-invalid-ledger.ts`：哪些键已知失效、各 Agent 看到过什么；释放时通知订阅者。

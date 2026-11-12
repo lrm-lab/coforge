@@ -27,7 +27,9 @@ mechanics only; domain rules stay in the owning `src/server/` module.
   credential works again (`agent:v1:credential:restored`, fire-and-forget like the receivers above).
   `CredentialRestoredActivity` answers it with an `idle` row of its own launch, only while the Agent's
   newest Activity is still the `runtime_error` the report's reason names, dated by the report's
-  `restoredAtMs`; a late report never turns a working Agent idle.
+  `restoredAtMs`; a late report never turns a working Agent idle. It also ends the reason a credential
+  hold left on the live display (`AgentDisplay.endHeldStop`, only while that very failure is held) and
+  publishes the snapshot; a failure there is logged and never undoes the row.
 - The context-usage receiver accepts a reading only when
   `AgentControlState.launchId` matches the message's own. It writes the
   display read model (`agent-display.server.ts`), never the control record.

@@ -4,6 +4,12 @@ import {
   decodeAgentCredentialRestored,
 } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
+import {
+  agentStatusChannelFor,
+  publishAgentDisplay,
+} from "#src/features/agents/agent-status-channel";
+import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { CredentialRestoredActivity } from "#src/server/agents/credential-restored-activity.server";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
@@ -86,6 +92,20 @@ export function agentCredentialRestoredMethods(
         newest: (workspaceId, agentId) => activity.newest(workspaceId, agentId),
         record: (activities) => activity.recordMany(activities),
         publish: (channel, data) => createCentrifugoServerApi().publish(channel, data),
+        endHeldStop: async (scope, agent, errorReason) => {
+          const snapshot = await getAgentDisplay().endHeldStop(
+            { ...scope, agentId: agent.id },
+            errorReason,
+          );
+          if (!snapshot) return;
+          const visibility = normalizeAgentVisibility(agent.visibility);
+          await publishAgentDisplay(
+            (channel, data) => createCentrifugoServerApi().publishJson(channel, data),
+            agentStatusChannelFor(scope.workspaceId, agent.id, visibility),
+            snapshot,
+            visibility !== AGENT_VISIBILITY.PUBLIC,
+          );
+        },
       }),
     ),
   };
