@@ -40,6 +40,14 @@ RUN bun build apps/web/scripts/backfill-owner-agent-names.ts \
   --target bun --outfile apps/web/.ops/backfill-owner-agent-names.js
 RUN bun build apps/web/scripts/backfill-message-references.ts \
   --target bun --outfile apps/web/.ops/backfill-message-references.js
+# These two reach urllib through the file-storage graph; its optional `proxy-agent` peer is not
+# installed, and the require is lazy (only behind a configured proxy), so it stays external.
+RUN bun build apps/web/scripts/backfill-attachment-image-dimensions.ts \
+  --target bun --external proxy-agent \
+  --outfile apps/web/.ops/backfill-attachment-image-dimensions.js
+RUN bun build apps/web/scripts/backfill-workspace-assistants.ts \
+  --target bun --external proxy-agent \
+  --outfile apps/web/.ops/backfill-workspace-assistants.js
 
 # The migration toolchain only: the schema and migrations it applies join it in the final stage.
 FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS migrate
