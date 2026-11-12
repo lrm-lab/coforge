@@ -35,9 +35,11 @@
 
 - `turn_stalled_armed`（info）：本 turn 的计时第一次起算。带 `stalled_window`、`threshold_ms`、
   `silence_started_at`（毫秒时间戳）、`fires_in_ms`。
-- `turn_stalled_rearmed`（debug）：起点被后一个工作量事件顺延，带 `previous_started_at`。
-- `turn_stalled_finished`（info）：计时被取消，带 `reason`：`event:<type>`、
-  `turn_idle_reconciled`、`turn_interrupted`、`new_turn`、`disposed`。
+- `turn_stalled_rearmed`（info）：起点或窗口变了，带 `previous_started_at`、`previous_window`、
+  `window_changed`、`rearms`（本 turn 第几次移动）。同一个起点被重复报到只计数、不写行，免得一条跑
+  了 25 分钟的命令把日志刷满。
+- `turn_stalled_finished`（info）：计时被取消，带 `fired`、`rearms`、`last_rearm_at`（移动过才有）和
+  `reason`：`event:<type>`、`turn_idle_reconciled`、`turn_interrupted`、`new_turn`、`disposed`。
 - `turn_stalled`（warning）：判定成立。带 `stalled_window`、`threshold_ms`、`silent_for_ms`、
   `last_event_at`，有工具时另加 `open_tool` 与 `open_tool_for_ms`。
 - `turn_stalled_dropped`（info）：到期了但 launch 已不是当前或正在停止。

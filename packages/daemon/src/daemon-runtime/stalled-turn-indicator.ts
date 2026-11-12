@@ -77,6 +77,10 @@ type StalledTurnState = {
   window: "tool" | "model";
   watchdog: ReturnType<typeof setTimeout> | undefined;
   warned: boolean;
+  /** How many times this turn's clock moved after it was first armed. */
+  rearms: number;
+  /** When it last moved; undefined while the first clock still stands. */
+  lastRearmAtMs: number | undefined;
 };
 
 /** The launch's provider clock, as both the silence clock and the notice's line read it. */
@@ -220,7 +224,8 @@ export class StalledTurnTracker {
 
   /** Ends the current turn and cancels its watchdog, saying why: a clock that never fired and one
    * that was cancelled read the same without this line (task #41). Info like the arming line: the
-   * next real-machine run has to show it without a debug setting. */
+   * next real-machine run has to show it without a debug setting. `rearms` is what tells a clock
+   * that stood still from one a stream of events kept pushing back. */
   finish(agentId: string, reason = "unspecified"): void {
     const state = this.#states.get(agentId);
     if (!state) return;
@@ -233,6 +238,8 @@ export class StalledTurnTracker {
       threshold_ms: state.thresholdMs,
       silence_started_at: state.startAtMs,
       fired: state.warned,
+      rearms: state.rearms,
+      ...(state.lastRearmAtMs === undefined ? {} : { last_rearm_at: state.lastRearmAtMs }),
       reason,
       outcome: "finished",
     });
@@ -252,6 +259,20 @@ export class StalledTurnTracker {
 
   #arm(agentId: string, startAtMs: number, thresholdMs: number, window: "tool" | "model"): void {
     const current = this.#states.get(agentId);
+    // The same clock asked again is not news: an event that moved nothing (the same provider
+    // timestamp, a repeat of the frame that armed it) only counts, and the count is reported when
+    // the turn ends. Writing a line per event is what would bury a 25-minute command's log.
+    if (
+      current !== undefined &&
+      !current.warned &&
+      current.startAtMs === startAtMs &&
+      current.window === window &&
+      current.thresholdMs === thresholdMs
+    ) {
+      current.rearms += 1;
+      current.lastRearmAtMs = this.now();
+      return;
+    }
     if (current?.watchdog !== undefined) clearTimeout(current.watchdog);
     const delayMs = Math.max(0, startAtMs + thresholdMs - this.now());
     const state: StalledTurnState = {
@@ -260,13 +281,16 @@ export class StalledTurnTracker {
       window,
       warned: false,
       watchdog: undefined,
+      rearms: current === undefined ? 0 : current.rearms + 1,
+      lastRearmAtMs: current === undefined ? undefined : this.now(),
     };
     state.watchdog = setTimeout(() => this.#markStalled(agentId, startAtMs), delayMs);
     this.#states.set(agentId, state);
     // A watchdog that never fires leaves no trace of itself, so a turn that was never watched and
     // a turn that was watched and never passed its window read the same in a real machine's log
-    // (task #41). One line when a clock begins, and the rest at debug so a debug log shows the
-    // whole trail: which events moved the silence's start and when it would fire.
+    // (task #41). One line when a clock begins, and one each time the clock moves for a reason a
+    // reader can act on — a new window, or a new start. Which of the two moved is in the line, and
+    // a turn's whole trail is `rearms` on its `finished` line.
     const clock = {
       agent_id: agentId,
       stalled_window: window,
@@ -281,10 +305,13 @@ export class StalledTurnTracker {
         outcome: "armed",
       });
     else
-      logger.debug("Agent runtime turn silence clock moved", {
+      logger.info("Agent runtime turn silence clock moved", {
         event: "agent_runtime:turn_stalled_rearmed",
         ...clock,
         previous_started_at: current.startAtMs,
+        previous_window: current.window,
+        window_changed: current.window !== window,
+        rearms: state.rearms,
         outcome: "rearmed",
       });
   }

@@ -320,6 +320,35 @@ function handle(request: Request): void {
       });
       return;
     }
+    if (textInput(request.params) === "hold-tool-traffic") {
+      write({
+        method: "item/started",
+        params: {
+          threadId,
+          turnId,
+          item: { id: "current-command", type: "commandExecution", command: "sleep 1500" },
+        },
+      });
+      // What a provider keeps sending while a command runs, and what it never sends for a quiet
+      // one: its own thread status and token readings. A plain `active` status yields no event and
+      // the token reading a context reading — neither is the command's own output (task #41).
+      const traffic = setInterval(() => {
+        write({
+          method: "thread/status/changed",
+          params: { threadId, status: { type: "active" } },
+        });
+        write({
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId,
+            turnId,
+            tokenUsage: { last: { totalTokens: 15_853 }, modelContextWindow: 475_000 },
+          },
+        });
+      }, 250);
+      traffic.unref();
+      return;
+    }
     if (
       textInput(request.params) === "finish" ||
       textInput(request.params) === "New message available. Run coforge message check."
