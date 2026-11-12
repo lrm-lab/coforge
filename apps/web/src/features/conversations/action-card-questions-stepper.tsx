@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-  type TouchEvent,
-} from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -18,7 +11,8 @@ import {
   setActiveQuestionsCard,
   useIsActiveQuestionsCard,
 } from "./action-card-questions-active";
-import { dragOffset, moveStep, swipeAxis, swipeDelta } from "./action-card-questions-steps";
+import { moveStep } from "./action-card-questions-steps";
+import { useQuestionSwipe } from "./use-question-swipe";
 
 /** A single pick moves on once its key has filled. */
 const AUTO_NEXT_MS = 180;
@@ -57,10 +51,11 @@ export function QuestionsStepper({
   const last = questions.length - 1;
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
+  // A question a finger brought in is already in place: it does not slide in again.
+  const [swiped, setSwiped] = useState(false);
   const card = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const pages = useRef<HTMLDivElement>(null);
-  const touch = useRef<{ x: number; y: number; axis?: "x" | "y" }>(undefined);
   const autoNext = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(autoNext.current), []);
   // The card ← → turn while focus is elsewhere: the one under the pointer or last focused.
@@ -75,11 +70,12 @@ export function QuestionsStepper({
     body.current?.focus({ preventScroll: true });
   }, [step]);
 
-  const goTo = (next: number) => {
+  const goTo = (next: number, bySwipe = false) => {
     clearTimeout(autoNext.current);
     const clamped = moveStep(next, 0, last);
     if (clamped === step) return;
     setDirection(clamped > step ? 1 : -1);
+    setSwiped(bySwipe);
     focusFollows.current = Boolean(card.current?.contains(document.activeElement));
     setStep(clamped);
   };
@@ -101,6 +97,12 @@ export function QuestionsStepper({
     return () => document.removeEventListener("keydown", onKey);
   });
 
+  const swipe = useQuestionSwipe({
+    pages,
+    hasNext: step < last,
+    hasPrevious: step > 0,
+    onTurn: (delta) => goTo(step + delta, true),
+  });
   const question = questions[step];
   if (!question) return null;
   const isLast = step === last;
@@ -153,36 +155,6 @@ export function QuestionsStepper({
     event.stopPropagation();
     goTo(step + (event.key === "ArrowRight" ? 1 : -1));
   };
-  // A finger moving sideways carries the question with it, the next one coming in from the edge
-  // (task #560: nothing showed the card could be swiped); let go far enough and it turns.
-  const drag = (offset: number | undefined) => {
-    const grid = pages.current;
-    if (!grid) return;
-    grid.toggleAttribute("data-dragging", offset !== undefined);
-    grid.style.setProperty("--drag", `${offset ?? 0}px`);
-  };
-  const onTouchStart = (event: TouchEvent) => {
-    const point = event.touches[0];
-    touch.current = point && { x: point.clientX, y: point.clientY };
-  };
-  const onTouchMove = (event: TouchEvent) => {
-    const start = touch.current;
-    const point = event.touches[0];
-    if (!start || !point || questions.length < 2) return;
-    const dx = point.clientX - start.x;
-    start.axis ??= swipeAxis(dx, point.clientY - start.y);
-    if (start.axis === "x") drag(dragOffset(dx, step < last, step > 0));
-  };
-  const onTouchEnd = (event: TouchEvent) => {
-    const start = touch.current;
-    const point = event.changedTouches[0];
-    touch.current = undefined;
-    drag(undefined);
-    if (!start || !point || start.axis === "y") return;
-    const delta = swipeDelta(point.clientX - start.x, point.clientY - start.y);
-    if (delta) goTo(step + delta);
-  };
-
   // A question's page: its prompt, its note, and its keyed rows.
   const page = (entry: Question, onPick: (draft: Draft) => void) => {
     const entryDone = answered(drafts[entry.id]);
@@ -235,33 +207,28 @@ export function QuestionsStepper({
           Frank 11-11), and the dots and arrows say there is more. */}
       <div
         ref={pages}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onTouchCancel={onTouchEnd}
+        {...swipe}
         className={cn(
-          "group/pages grid touch-pan-y",
+          "grid touch-pan-y",
           // Clipped on a touch screen only: on a desktop the rows' focus rings reach past the edge.
           questions.length > 1 &&
             "pointer-coarse:grid-cols-[minmax(0,1fr)] pointer-coarse:overflow-x-clip",
         )}
       >
         {questions.map((entry, index) => {
-          // The page under a finger and the ones either side move with it; let go, they go back.
-          const follows =
-            "[transform:translateX(var(--drag,0px))] transition-transform duration-200 ease-out group-data-dragging/pages:transition-none motion-reduce:transition-none";
           return index === step ? (
             <div
               ref={body}
               key={`current-${step}`}
               tabIndex={-1}
               data-question={question.id}
-              className={cn(follows, "flex flex-col gap-1.5 outline-none [grid-area:1/1]")}
+              className="flex flex-col gap-1.5 outline-none [grid-area:1/1]"
             >
               <div
                 className={cn(
-                  "flex flex-col gap-1.5 animate-in motion-enter-sm fade-in motion-reduce:animate-none",
-                  direction > 0 ? "slide-in-from-right-2" : "slide-in-from-left-2",
+                  "flex flex-col gap-1.5",
+                  !swiped && "animate-in motion-enter-sm fade-in motion-reduce:animate-none",
+                  !swiped && (direction > 0 ? "slide-in-from-right-2" : "slide-in-from-left-2"),
                 )}
               >
                 {page(entry, pick)}
@@ -273,18 +240,11 @@ export function QuestionsStepper({
               aria-hidden="true"
               inert
               data-question-peek={Math.abs(index - step) === 1 ? "" : undefined}
-              className={cn(
-                follows,
-                "invisible flex flex-col gap-1.5 [grid-area:1/1]",
-                // Beside the current page, a gap away, shown only while a finger drags it in; let go
-                // short of turning, it slides back out before it hides.
-                Math.abs(index - step) === 1 &&
-                  "transition-[transform,visibility] group-data-dragging/pages:transition-none",
-                index === step + 1 &&
-                  "pointer-coarse:translate-x-[calc(100%+--spacing(1))] pointer-coarse:group-data-dragging/pages:visible",
-                index === step - 1 &&
-                  "pointer-coarse:-translate-x-[calc(100%+--spacing(1))] pointer-coarse:group-data-dragging/pages:visible",
-              )}
+              // Beside the current page, a gap away, shown only while a finger brings it in
+              // (`useQuestionSwipe` places it); at rest hidden where it lies.
+              data-question-next={index === step + 1 ? "" : undefined}
+              data-question-previous={index === step - 1 ? "" : undefined}
+              className="invisible flex flex-col gap-1.5 [grid-area:1/1]"
             >
               {page(entry, () => undefined)}
             </div>
