@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
   ARTIFACT_BINARY_LIMIT,
@@ -32,6 +32,7 @@ import { createArtifact } from "./artifact-create.server";
 import { ArtifactReads } from "./artifact-reads.server";
 import { revertArtifact, type ArtifactRevert } from "./artifact-revert.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
+import { writeVersion } from "./artifact-version-write.server";
 
 /** Where an artifact lives; its home is its only access rule. */
 export type ArtifactHome =
@@ -336,7 +337,7 @@ export class Artifacts {
         );
       }
       if (result.size > ARTIFACT_FILE_LIMIT) invalid("artifact-too-many-files");
-      const { entryPath, title, description } = settings.result;
+      const { entryPath } = settings.result;
       if (result.size && !result.has(entryPath)) invalid("artifact-entry-missing");
       if (
         locked.kind === "markdown" &&
@@ -363,49 +364,19 @@ export class Artifacts {
       ]);
       if (gone.length) return { status: "missing", missing: gone } as const;
 
-      const version = await tx.artifactVersion.create({
-        data: {
-          artifactId: locked.id,
-          number: current + 1,
-          ...(input.publisher.agentId
-            ? { publisherAgentId: input.publisher.agentId, publisherUserId: null }
-            : { publisherUserId: input.publisher.userId ?? null, publisherAgentId: null }),
-          note: input.note ?? "",
-          label: input.label ?? "",
-          entryPath,
-          title,
-          description,
-          changedPaths: {
-            added: added.map((file) => file.path),
-            deleted,
-          } satisfies Prisma.InputJsonObject,
-          // What came from others: files (by path) and settings (by name), for the history.
-          ...((merged.length || settings.merged.length) && {
-            merged: { files: merged, settings: settings.merged } satisfies Prisma.InputJsonObject,
-          }),
-          idempotencyKey: input.idempotencyKey,
-          revertedFrom: input.revertedFrom ?? null,
-        },
-        select: { id: true, number: true },
-      });
-      await tx.artifactFile.createMany({
-        data: [...result.values()].map((file) => ({
-          versionId: version.id,
-          artifactId: locked.id,
-          path: file.path,
-          sha256: file.sha256,
-          sizeBytes: file.sizeBytes,
-          kind: file.kind,
-        })),
-      });
-      await tx.artifact.update({
-        where: { id: locked.id },
-        data: {
-          currentVersion: version.number,
-          entryPath,
-          title,
-          description,
-        },
+      const version = await writeVersion(tx, {
+        artifactId: locked.id,
+        number: current + 1,
+        publisher: input.publisher,
+        ...(input.note !== undefined && { note: input.note }),
+        ...(input.label !== undefined && { label: input.label }),
+        settings: settings.result,
+        added,
+        deleted,
+        merged: { files: merged, settings: settings.merged },
+        idempotencyKey: input.idempotencyKey,
+        ...(input.revertedFrom !== undefined && { revertedFrom: input.revertedFrom }),
+        files: result.values(),
       });
       return {
         status: "created",
