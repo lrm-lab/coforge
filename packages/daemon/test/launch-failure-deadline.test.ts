@@ -1,8 +1,39 @@
 import { expect, test } from "bun:test";
+import {
+  isNonRetryableLaunchFailure,
+  LAUNCH_FAILURE_REASON,
+  launchFailureActivity,
+  launchFailureReason,
+} from "#src/agent-runtime/launch-failure";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
+import {
+  AgentStartupDeadlineExceededError,
+  STARTUP_DEADLINE_EXCEEDED_DETAIL,
+} from "#src/agent-runtime/startup-deadline-failure";
 
 /** What a slow runtime gets: twice its 600 s startup window plus a minute. */
 const DEADLINE = 21 * 60_000;
+
+test("the cause the wakes ended is named, so the report is not a guess", () => {
+  const backoff = new LaunchFailureBackoff();
+  expect(backoff.exhaustedBy("a", 7)).toBeUndefined();
+  backoff.recordFailure("a", 0);
+  // One failure, time and count both still have room.
+  expect(backoff.exhaustedBy("a", 7, 1_000, DEADLINE)).toBeUndefined();
+  expect(backoff.exhaustedBy("a", 7, DEADLINE, DEADLINE)).toBe("deadline");
+  // The count cap keeps its own name even once the window has passed too: the attempts, not the
+  // clock, are what ended it.
+  expect(backoff.exhaustedBy("a", 1, DEADLINE, DEADLINE)).toBe("streak");
+  backoff.recordFailure("b", 0, undefined, true);
+  expect(backoff.exhaustedBy("b", 7, 0, DEADLINE)).toBe("terminal");
+});
+
+test("the deadline's failure carries the reason, the sentence, and the no-retry verdict", () => {
+  const error = new AgentStartupDeadlineExceededError(3, DEADLINE, DEADLINE + 1);
+  expect(launchFailureReason(error)).toBe(LAUNCH_FAILURE_REASON.STARTUP_DEADLINE_EXCEEDED);
+  expect(launchFailureActivity(error, "Pi").detail).toBe(STARTUP_DEADLINE_EXCEEDED_DETAIL);
+  expect(isNonRetryableLaunchFailure(error)).toBe(true);
+});
 
 test("a streak's clock starts at its first failure and never restarts on a later one", () => {
   const backoff = new LaunchFailureBackoff();

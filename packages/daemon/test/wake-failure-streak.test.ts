@@ -3,6 +3,7 @@ import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff"
 import { assembleExitedDelivery } from "#src/daemon-runtime/assemble-exited-delivery";
 import type { TrackedMentionDelivery } from "#src/daemon-runtime/mention-delivery-tracker";
 import { beginWakeLaunch, WAKE_FAILURE_STREAK_CAP } from "#src/daemon-runtime/wake-launch";
+import { captureDaemonLogs } from "./log-capture";
 
 const AGENT = "agent-a";
 const restart = { config: { provider: "pi" } };
@@ -77,6 +78,46 @@ test("a wake that keeps failing gives up after the streak cap and refuses what i
   const wakes = state.wakes;
   await new Promise((resolve) => setTimeout(resolve, 30));
   expect(state.wakes).toBe(wakes);
+});
+
+test("a streak that outlives its deadline gives up with the startup deadline code", async () => {
+  const { exited, state, failures, refused, settled, kept } = subject(new Error("spawn blew up"));
+
+  // This streak began ten minutes ago: a ninth-minute Agent whose next wake still has attempts
+  // left, but no time (pi's window is two 120 s startups plus a minute).
+  failures.recordFailure(AGENT, Date.now() - 10 * 60_000);
+  kept.add("delivery-2");
+  exited.deliverMention(mention(1));
+  await settled();
+
+  expect(state.wakes).toBe(1);
+  // Not IDENTITY_UNKNOWN: nothing is expected to wake it again, and the reason is the deadline.
+  expect(refused).toEqual(["delivery-1:DELIVERY_REJECTED", "delivery-2:STARTUP_DEADLINE_EXCEEDED"]);
+  expect(state.forgotten).toBe(1);
+});
+
+test("giving up on a spent deadline reports the launch failure with its numbers", async () => {
+  const givenUp = (records: readonly { properties: Record<string, unknown> }[]) =>
+    records.find((entry) => entry.properties.event === "agent.wake.given_up");
+  const { records } = await captureDaemonLogs(async (records) => {
+    const { exited, failures, kept, settled } = subject(new Error("spawn blew up"));
+    failures.recordFailure(AGENT, Date.now() - 10 * 60_000);
+    kept.add("delivery-2");
+    exited.deliverMention(mention(1));
+    await settled();
+    for (let i = 0; i < 100 && !givenUp(records); i++)
+      await new Promise((resolve) => setTimeout(resolve, 2));
+  });
+
+  expect(givenUp(records)?.properties).toMatchObject({
+    agent_id: AGENT,
+    reason: "deadline",
+    // The launch-failure report rides the same line: its code, and the numbers that ended it.
+    failure_reason: "startup_deadline_exceeded",
+    attempts: 2,
+    deadline_ms: 300_000,
+  });
+  expect(givenUp(records)?.properties.elapsed_ms).toBeGreaterThanOrEqual(10 * 60_000);
 });
 
 test("a wake that no retry can fix gives up at its first failure", async () => {

@@ -57,10 +57,15 @@ It never becomes `no_process`.
 - Those wakes end. The reference Computer stops relaunching an Agent locally after five failed starts
   in a row, or at once for a configuration failure (login, install, model setup), and leaves what it
   buffered to the server. Here the fifth failed wake (`WAKE_FAILURE_STREAK_CAP`; a wait on a named
-  quota reset is not counted), or a failure `isNonRetryableLaunchFailure` names, forgets the Agent's
-  restart config and cooldown and refuses what is still kept as `IDENTITY_UNKNOWN`
-  (`giveUpWake`), after the trigger's own `DELIVERY_REJECTED`. The next delivery is rejected
-  `no_process`, so the server decides whether to start the Agent. The reference Computer reports no
+  quota reset is not counted), a failure `isNonRetryableLaunchFailure` names, or a streak that
+  outlives the wake deadline (twice the provider's startup window plus a minute) forgets the Agent's
+  restart config and cooldown and refuses what is still kept (`giveUpWake`), after the trigger's own
+  `DELIVERY_REJECTED`. The code says which cause ended it: a spent deadline is
+  `STARTUP_DEADLINE_EXCEEDED` — a failure no single attempt named, reported on the same log line as
+  its typed reason — and every other cause stays `IDENTITY_UNKNOWN`. The next delivery is rejected
+  `no_process`, so the server decides whether to start the Agent, and a `STARTUP_DEADLINE_EXCEEDED`
+  mention settles lost as not launched for good: its code is non-empty, so the daemon's own later ACK
+  cannot re-settle it. The reference Computer reports no
   outcome for its dropped buffer; ours settles every kept mention exactly once.
 - Refused exactly once, in addition: an inbox purge (`DELIVERY_REJECTED`).
 - A Stop and the daemon stopping report nothing for a tracked mention: the tracker holds every report

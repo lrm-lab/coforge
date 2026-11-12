@@ -10,6 +10,7 @@ import {
   RuntimeStartFailedError,
 } from "@lrm/coforge-anvil";
 import { fingerprintRuntimeError } from "./runtime-error-activity";
+import { STARTUP_DEADLINE_EXCEEDED_DETAIL } from "./startup-deadline-failure";
 import {
   AgentConfigRequestError,
   type AgentConfigFailure,
@@ -95,6 +96,8 @@ export const LAUNCH_FAILURE_REASON = {
   AGENT_ENVIRONMENT_INVALID: "agent_environment_invalid",
   /** The runtime cannot host this kind of session (a Memory Agent's conversation sessions). */
   RUNTIME_MEMORY_UNSUPPORTED: "runtime_memory_unsupported",
+  /** Every attempt to start the Agent ran out the wake deadline (task #33). */
+  STARTUP_DEADLINE_EXCEEDED: "startup_deadline_exceeded",
   /** No typed error said why. */
   RUNTIME_SPAWN_FAILED: "runtime_spawn_failed",
 } as const;
@@ -115,6 +118,7 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
   LAUNCH_FAILURE_REASON.RUNTIME_MEMORY_UNSUPPORTED,
+  LAUNCH_FAILURE_REASON.STARTUP_DEADLINE_EXCEEDED,
 ];
 
 /** The reasons a launch failure carries when no typed error named the cause, so the runtime's own
@@ -138,6 +142,7 @@ export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
   LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
   LAUNCH_FAILURE_REASON.RUNTIME_MEMORY_UNSUPPORTED,
+  LAUNCH_FAILURE_REASON.STARTUP_DEADLINE_EXCEEDED,
 ];
 
 /** Whether no retry can fix this failed launch. */
@@ -344,6 +349,8 @@ function launchFailureDetail(
         `${runtimeName} there, then start the Agent again.`
       );
     }
+    case LAUNCH_FAILURE_REASON.STARTUP_DEADLINE_EXCEEDED:
+      return STARTUP_DEADLINE_EXCEEDED_DETAIL;
     case LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED:
       return (
         "Agent runtime could not be started. See `coforge-computer logs` for the cause, then " +

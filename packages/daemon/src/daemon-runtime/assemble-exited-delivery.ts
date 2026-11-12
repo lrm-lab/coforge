@@ -4,6 +4,8 @@ import type {
   AgentProcessManager,
 } from "#src/agent-runtime/agent-process-manager";
 import type { AgentControl } from "#src/agent-runtime/agent-control";
+import { launchFailureLogFields } from "#src/agent-runtime/launch-failure";
+import { AgentStartupDeadlineExceededError } from "#src/agent-runtime/startup-deadline-failure";
 import type { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { MENTION_DELIVERY_TERMINAL_CODES } from "@lrm/coforge-sdk/internal";
@@ -76,30 +78,45 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
       // refused here (task #39: the launch ladder stops at the refused key, the hold goes on).
       if (waitsOnProvider(ports.deliveryGate.explicitHold(agentId))) return;
       const deadlineMs = startupDeadlineMs(ports, agentId);
-      if (
-        !ports.wakeLaunchFailures.exhausted(
-          agentId,
-          WAKE_FAILURE_STREAK_CAP,
-          Date.now(),
-          deadlineMs,
-        )
-      )
-        return;
+      const cause = ports.wakeLaunchFailures.exhaustedBy(
+        agentId,
+        WAKE_FAILURE_STREAK_CAP,
+        Date.now(),
+        deadlineMs,
+      );
+      if (cause === undefined) return;
       // No launch is coming: with the wake config gone a later delivery is rejected `no_process`
       // and the server decides whether to start the Agent.
+      const attempts = ports.wakeLaunchFailures.attempts(agentId);
       const startedAtMs = ports.wakeLaunchFailures.streakStart(agentId);
+      const elapsedMs = startedAtMs === undefined ? undefined : Date.now() - startedAtMs;
+      // A spent deadline is its own reason: no single attempt named it, so the code and its
+      // sentence come from the deadline, not from the last failure (task #33).
+      const spentDeadline =
+        cause === "deadline" && deadlineMs !== undefined && elapsedMs !== undefined;
       logger.warning("Agent wake given up after repeated launch failures", {
         event: "agent.wake.given_up",
         agent_id: agentId,
-        attempts: ports.wakeLaunchFailures.attempts(agentId),
-        // The window and how long this streak actually ran, so "gave up because it outlived its
-        // window" is distinguishable in the log from "gave up after N failures" (task #32).
+        attempts,
+        // Why the wakes ended, so "outlived its window" is distinguishable from "hit the cap"
+        // and from "a failure no retry can fix" (task #32).
+        reason: cause,
+        ...(spentDeadline
+          ? launchFailureLogFields(
+              new AgentStartupDeadlineExceededError(attempts, deadlineMs, elapsedMs),
+            )
+          : {}),
         ...(deadlineMs !== undefined ? { deadline_ms: deadlineMs } : {}),
-        ...(startedAtMs !== undefined ? { elapsed_ms: Date.now() - startedAtMs } : {}),
+        ...(elapsedMs !== undefined ? { elapsed_ms: elapsedMs } : {}),
       });
       ports.wakeLaunchFailures.reset(agentId);
       ports.agentProcessManager().forgetRestart(agentId);
-      exited.refuseKept(agentId, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
+      exited.refuseKept(
+        agentId,
+        spentDeadline
+          ? MENTION_DELIVERY_TERMINAL_CODES.STARTUP_DEADLINE_EXCEEDED
+          : MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN,
+      );
     },
     whenCancelled: (agentId, hook) => ports.mentionDeliveries().whenCancelled(agentId, hook),
     enqueueInputDelivery: (agentId, message) =>
