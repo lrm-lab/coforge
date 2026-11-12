@@ -18,8 +18,9 @@ test("a named Agent, a direct message, assigned work and a card's answer are rel
     { ...plain, nonMemberMention: true },
     { target: "@coforge-runtime" },
     { ...plain, taskExecutionSessionId: "01a1c000-0000-7000-8000-000000000000" },
-    // Assigned work and its discussion, as the server's task ref reports it.
+    // Assigned work and its discussion, as the server reports them.
     { ...plain, taskDiscussion: true },
+    { ...plain, noticeKind: "task.assigned_you" },
     { ...plain, reason: "choice" },
     { ...plain, reason: "expired" },
   ])
@@ -42,6 +43,10 @@ test("channel traffic and maintenance items get one notice", () => {
   // channel thread whose id happens to be digits stays channel traffic.
   expect(deliveryImportance({ target: "#board:#12" })).toBe(DELIVERY_IMPORTANCE.BEST_EFFORT);
   expect(deliveryImportance({ target: "#board:#12", taskDiscussion: false })).toBe(
+    DELIVERY_IMPORTANCE.BEST_EFFORT,
+  );
+  // The platform's own narration is not work for the Agent, however a notice reads.
+  expect(deliveryImportance({ ...plain, noticeKind: "channel.member_joined" })).toBe(
     DELIVERY_IMPORTANCE.BEST_EFFORT,
   );
 });
