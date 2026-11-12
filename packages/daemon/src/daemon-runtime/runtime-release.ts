@@ -11,7 +11,7 @@ import type { AgentRestartConfig, AgentRuntime } from "#src/agent-runtime/agent-
 import type { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
 import type { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import type { ColdIdleStop } from "#src/agent-runtime/wake-session-recycle";
-import { UnattendedRecoveries, reportUnattendedLimit } from "./stalled-recovery-unattended";
+import { StalledReplacements, reportStalledLimit } from "./stalled-recovery-unattended";
 import { logStalledRecovery } from "./agent-failure-logs";
 import { idleBlocker, type ColdIdleAgent } from "./cold-idle-sweep";
 import type { DaemonIdleFacts } from "./agent-idle-facts";
@@ -123,7 +123,7 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
 export class RuntimeRelease<L extends ReleasableLaunch> {
   readonly #ports: RuntimeReleasePorts<L>;
   readonly #recovering = new Set<string>();
-  readonly #unattended = new UnattendedRecoveries();
+  readonly #replacements = new StalledReplacements();
 
   constructor(ports: RuntimeReleasePorts<L>) {
     this.#ports = ports;
@@ -154,15 +154,22 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
   ): Promise<void> {
     const { launch, session, restart, basis } = stalled;
     logStalledRecovery(agentId, basis);
+    // A background command or subagent may be what the turn waits on: never killed for this.
+    if (options.unattended && (launch.backgroundTasks?.count ?? 0) > 0) return;
+    // Every automatic replacement counts in one run, a message waiting or not (task #14): a turn
+    // that hangs again after every restart is not helped by another one (task #404).
+    const admission = this.#replacements.admit(agentId, launch, launch.progress?.lastCompletedAtMs);
+    if (admission === "held") return;
+    if (admission === "limit")
+      return reportStalledLimit(
+        this.#ports.publish,
+        agentId,
+        launch,
+        restart,
+        options.unattended !== true,
+      );
     let resumePrompt: string | undefined;
     if (options.unattended) {
-      // No message waits: the restart is the sweep's own, capped per stuck spell (task #404).
-      // A background command or subagent may be what the turn waits on: never killed for this.
-      if ((launch.backgroundTasks?.count ?? 0) > 0) return;
-      const admission = this.#unattended.admit(agentId, launch, launch.progress?.lastCompletedAtMs);
-      if (admission === "held") return;
-      if (admission === "limit")
-        return reportUnattendedLimit(this.#ports.publish, agentId, launch, restart);
       resumePrompt = unattendedResumePrompt(
         basis.silentForMs,
         this.#ports.lastBusy(agentId)?.activity.detail,

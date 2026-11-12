@@ -12,7 +12,7 @@ import {
 import {
   ProviderProgress,
   STALLED_RECOVERY_SILENCE_QUEUE_ONLY_MS,
-  UNATTENDED_RECOVERY_LIMIT,
+  STALLED_REPLACEMENT_MAX_STREAK,
   stalledRecoveryDisplayText,
 } from "#src/daemon-runtime/stalled-recovery";
 
@@ -166,20 +166,20 @@ test("each reason says what the daemon observed, not that the Agent is broken", 
 
 test("restarts with nothing waiting stop at the limit, tell the owner once, and reset after a completed turn", async () => {
   const { runtimeRelease, stalled, launch, woken, published } = release();
-  for (let n = 0; n < UNATTENDED_RECOVERY_LIMIT; n++)
+  for (let n = 0; n < STALLED_REPLACEMENT_MAX_STREAK; n++)
     await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
-  expect(woken).toHaveLength(UNATTENDED_RECOVERY_LIMIT);
+  expect(woken).toHaveLength(STALLED_REPLACEMENT_MAX_STREAK);
 
   published.length = 0;
   await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
   await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
-  expect(woken).toHaveLength(UNATTENDED_RECOVERY_LIMIT);
+  expect(woken).toHaveLength(STALLED_REPLACEMENT_MAX_STREAK);
   expect(published).toEqual([
     expect.objectContaining({
       level: "error",
       // A stall, not a turn-ending kind: the hung turn must still read as stalled.
       detailKind: "runtime_stalled",
-      text: expect.stringContaining(`after ${UNATTENDED_RECOVERY_LIMIT} automatic restarts`),
+      text: expect.stringContaining(`after ${STALLED_REPLACEMENT_MAX_STREAK} automatic restarts`),
       // What the profile reads as the reason (`failureReason`, task #418) while the process lives.
       runtimeError: {
         errorClass: "TurnStallError",
@@ -193,7 +193,7 @@ test("restarts with nothing waiting stop at the limit, tell the owner once, and 
   await Bun.sleep(2);
   launch.progress!.observe({ type: "completed" });
   await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
-  expect(woken).toHaveLength(UNATTENDED_RECOVERY_LIMIT + 1);
+  expect(woken).toHaveLength(STALLED_REPLACEMENT_MAX_STREAK + 1);
 });
 
 test("a turn waiting on a background task is not restarted when nothing is queued", async () => {
@@ -203,14 +203,32 @@ test("a turn waiting on a background task is not restarted when nothing is queue
   expect(woken).toEqual([]);
 });
 
+test("a message waiting does not lift the limit: replacements stop and the owner is told", async () => {
+  const { runtimeRelease, stalled, woken, published } = release();
+  for (let n = 0; n < STALLED_REPLACEMENT_MAX_STREAK; n++)
+    await runtimeRelease.recoverStalled("agent-a", stalled);
+  expect(woken).toHaveLength(STALLED_REPLACEMENT_MAX_STREAK);
+
+  published.length = 0;
+  await runtimeRelease.recoverStalled("agent-a", stalled);
+  expect(woken).toHaveLength(STALLED_REPLACEMENT_MAX_STREAK);
+  expect(published).toEqual([
+    expect.objectContaining({
+      level: "error",
+      detailKind: "runtime_stalled",
+      text: expect.stringContaining("a message still waiting for it"),
+    }),
+  ]);
+});
+
 test("past the limit, a different launch (a message or a person restarted it) starts a new run", async () => {
   const { runtimeRelease, stalled, woken } = release();
-  for (let n = 0; n <= UNATTENDED_RECOVERY_LIMIT; n++)
+  for (let n = 0; n <= STALLED_REPLACEMENT_MAX_STREAK; n++)
     await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
-  expect(woken).toHaveLength(UNATTENDED_RECOVERY_LIMIT);
+  expect(woken).toHaveLength(STALLED_REPLACEMENT_MAX_STREAK);
   const relaunched = { ...stalled, launch: { stopping: false, progress: new ProviderProgress() } };
   await runtimeRelease.recoverStalled("agent-a", relaunched, { unattended: true });
-  expect(woken).toHaveLength(UNATTENDED_RECOVERY_LIMIT + 1);
+  expect(woken).toHaveLength(STALLED_REPLACEMENT_MAX_STREAK + 1);
 });
 
 test("with the real publisher, the limit notice leaves the hung turn judged stalled", async () => {
@@ -270,7 +288,7 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     setSystemTime(new Date(Date.now() + 16 * 60_000));
     const stalled = runtimeRelease.stalled("agent-a")!;
     expect(stalled).toBeDefined();
-    for (let n = 0; n <= UNATTENDED_RECOVERY_LIMIT; n++) {
+    for (let n = 0; n <= STALLED_REPLACEMENT_MAX_STREAK; n++) {
       launch.stopping = false;
       await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
     }
