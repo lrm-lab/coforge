@@ -98,24 +98,47 @@ pull/push，网页仍限一个 `index.html`）、#9（`download`）、#10（`lis
 ## 已定：人只评论、不编辑（Frank，2026-11-12）
 
 Artifact 的内容只由 Agent 写。人在 Web 上看、评论，要改就在评论里 @ Agent。随之删除：Markdown
-文档的 Web 编辑器、自动保存、离开提醒、冲突界面，人保存时的逐行合并和按文件合并。人能否回到
-旧版本（这也是一次写入）尚未定，在第 3 步的设计里一并决定。文档和网页因此不再按"谁能保存"区分，只是入口文件
+文档的 Web 编辑器、自动保存、离开提醒、冲突界面，人保存时的逐行合并和按文件合并。人不回到
+旧版本（这也是一次写入）：Raft 的 Web 只看版本历史。文档和网页因此不再按"谁能保存"区分，只是入口文件
 类型不同（Markdown 或 HTML），与 Raft 一致。Agent 同一文件的冲突按 Raft 处理：拒绝，读最新版
 后重做（#0），不再做行级合并。
 
 ## 对齐顺序
 
-0. **先有评论，再删编辑。** 删掉编辑后，人唯一的反馈方式就是评论，所以 #3 必须和删除同时
-   上线，不能先删。
-1. **（已完成）Agent 侧多文件 pull/push、download、list 搜索与分页。**
-1b. **（已完成）沙箱按路径提供多个文件。** 解除网页只能是一个 `index.html` 的限制；改动沙箱的 CSP、访问
-   票据和公开链接，属于安全边界，单独出方案给 Frank 批准。
-2. **（已完成）已读位置与 `read` 的"新变化"摘要（#2）。** 只改 Agent 侧，需要一张新表。
-3. **评论体系（#3–#7）并删除人工编辑（H）。** 分三片：第 1 片 Agent 侧评论（已完成）；第 2 片
-   给 Agent 的通知与 follow/unfollow（#7）；第 3 片 Web 评论界面，先按 UI 规则出设计 Artifact，
-   等 Frank 确认后再写代码，同一批次里删除编辑器。
-4. **发布检查（#8）。** 需要一个服务端浏览器运行环境，另写方案，说明运维成本。
-5. **`save`、`move`（#12、#13）**，最后才讨论 Agent 删除（#11）。
+Frank 2026-11-12 追加：对齐后删掉所有和 Raft 不一致的旧功能，不留兼容（artifacts 还没有用户），
+可以大改。
+
+1. **（已完成）** Agent 侧多文件 pull/push、download、list 搜索与分页；1b 沙箱按路径提供多个文件与
+   CDN 白名单；第 2 步已读位置；第 3 步第 1 片 Agent 侧评论、review、resolve/reopen、未读评论门槛。
+2. **删除不对齐的功能（进行中，分支 `chore/artifacts-raft-only`，未进 `main`）。**
+   - 已提交：人在 Web 上只看不编辑（删编辑器、自动保存、冲突界面、`docDraft`、人保存的服务端
+     函数）；Agent 只剩 pull/push，`push --target` 新建；删除 Agent 的 create、share、history、
+     revert，单段文本 push，`kind` 列（类型由入口文件决定），逐行合并与 `diff` 依赖，
+     `revertedFrom`，人作为发布者的列；四个删列迁移。全量 test/check/build 已通过。
+   - 审查后的修复（进行中）：新建合成一个事务；push 拒绝超过 2 MiB 的 Markdown/HTML 入口；
+     删除权限为管理员或作者 Agent 的主人；查看页只在 Markdown 时读正文；沙箱子资源不算权限；
+     入口类型一个函数；实时事件去掉 `publisher`；去掉只转发的一层；分享改成单个 artifact。
+   - 收尾：重跑全量检查，私有环境（独立 Postgres/Redis，Web 8788，不碰共享开发库）跑
+     `e2e-artifact-page/share/send/public-link` 和 `artifact-sandbox-browser`，再推 `main`。
+3. **第 2 片：给 Agent 的通知与 follow/unfollow（#7）。** 按 Raft `artifactAgentNotice`：
+   理由 mentioned、subscribed、your_file_changed、your_comment_resolved。
+   - 投递沿用应用事件的做法：每个 artifact 和 Agent 一个专用会话（`directKey` 字符串，不对
+     artifacts 建外键），一条真 Message 加一行 delivery（`reason`），由 artifacts 模块之外的代码
+     经端口写入（在 `artifact-composition.server.ts` 接线），与评论同一事务写、提交后推送，重放
+     不重发。正文只指向 artifact（标题、理由、条数、`coforge artifact comments <id>`），评论内容
+     不离开 `artifact_*` 表。
+   - 新表 `artifact_follows`（含 `unfollowedAt`，同 `ThreadFollow`）；push 和评论自动关注，
+     显式 unfollow 后只有 @ 还送达。每次写入每个 Agent 一条；不通知自己；逐个复查读权限。
+   - SDK/CLI：`follow`、`unfollow`；comment/review/resolve 回答 `notified`、`notNotified`
+     （@ 到的人在第 3 片前列为未通知）。
+   - 先确认：旧 daemon 对新 `reason` 和会话类型的处理；Agent 用什么命令读这个会话、什么清除
+     delivery；所有枚举会话 kind 的地方（`APP_EVENTS_KIND` 的各处）。
+4. **第 3 片：人在 Web 上评论。** 先按 UI 规则做设计 Artifact 给 Frank 确认：评论开关、选元素
+   锚定、行/文件锚定、线程、resolve/reopen、@ 提示"会通知谁"、图片（最多 4 张）。人不回到
+   旧版本（Raft 的 Web 只看版本历史），版本历史只读。
+5. **之后的差距，需要 Frank 批准或涉及运维：** 发布检查（#8，服务端无头浏览器）；每个 artifact
+   一个独立源（#15，通配 DNS/TLS）；页面数据库、图表库与桥接（#14）；Agent `save`、`move`、
+   `delete`（#11–#13，权限规则）；入口支持 PDF 等其他类型（现在只认 Markdown/HTML）。
 
 ## 证据边界
 
