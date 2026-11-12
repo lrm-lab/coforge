@@ -1,5 +1,5 @@
 import type { FC, ReactNode } from "react";
-import { Pressable } from "react-aria-components";
+import { Button as AriaButton, Pressable } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
@@ -17,6 +17,13 @@ import { cx } from "#src/utils/cx";
  * tooltip away from the icon once the caption was gone.
  */
 export const SIDEBAR_RAIL_WIDTH = "3.5rem";
+
+// The rail's icon: a 2.75rem hit target around a 2.5rem tile, shared by its links and buttons.
+const RAIL_TARGET =
+  "group mx-auto flex size-11 items-center justify-center rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2";
+const RAIL_TILE =
+  "relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-linear";
+const RAIL_ICON = "size-5 stroke-[2.4] transition-colors duration-100 ease-linear";
 
 type RailItemType = NavItemType & {
   icon: FC<{ className?: string }>;
@@ -38,18 +45,18 @@ function RailItem({ href, icon: Icon, label, current, badge, unreadCount }: Rail
               : label
           }
           aria-current={current ? "page" : undefined}
-          className="group mx-auto flex size-11 items-center justify-center rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={RAIL_TARGET}
         >
           <span
             className={cx(
-              "relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-linear",
+              RAIL_TILE,
               current ? "bg-nav-bg-current" : "group-hover:bg-sidebar-accent",
             )}
           >
             <Icon
               aria-hidden="true"
               className={cx(
-                "size-5 stroke-[2.4] transition-colors duration-100 ease-linear",
+                RAIL_ICON,
                 current ? "text-nav-fg-current" : "text-nav-fg group-hover:text-secondary",
               )}
             />
@@ -70,30 +77,69 @@ function RailItem({ href, icon: Icon, label, current, badge, unreadCount }: Rail
   );
 }
 
+/** A rail icon that opens something rather than a page, named by its tooltip; `dot` marks it
+ * unread. */
+export function RailButton({
+  icon: Icon,
+  label,
+  tooltip,
+  onPress,
+  dot = false,
+  ...aria
+}: {
+  icon: FC<{ className?: string }>;
+  label: string;
+  /** The tooltip, when it says more than the name. */
+  tooltip?: ReactNode;
+  onPress: () => void;
+  dot?: boolean;
+  "aria-haspopup"?: "dialog";
+  "aria-keyshortcuts"?: string;
+}) {
+  return (
+    <Tooltip title={tooltip ?? label} placement="right" offset={4}>
+      <AriaButton {...aria} aria-label={label} onPress={onPress} className={RAIL_TARGET}>
+        <span className={cx(RAIL_TILE, "group-hover:bg-sidebar-accent")}>
+          <Icon
+            aria-hidden="true"
+            className={cx(RAIL_ICON, "text-nav-fg group-hover:text-secondary")}
+          />
+          {dot && <UnreadDot className="absolute top-1.5 right-1.5" />}
+        </span>
+      </AriaButton>
+    </Tooltip>
+  );
+}
+
 interface SidebarRailProps {
   activeUrl?: string;
   items: RailItemType[];
-  /** What sits at the bottom (What's new). */
+  /** What sits above the nav: the expand toggle, the Workspace mark and search. */
+  header: ReactNode;
+  /** What sits at the bottom: What's new, the bell and the user's avatar. */
   footer: ReactNode;
 }
 
-export const SidebarRail = ({ activeUrl, items, footer }: SidebarRailProps) => {
+export const SidebarRail = ({ activeUrl, items, header, footer }: SidebarRailProps) => {
   const rail = (
     // [data-sidebar] retints official components' bg-primary/bg-secondary/etc
     // via src/styles/coforge-theme.css.
     <aside
       data-sidebar
       style={{ width: SIDEBAR_RAIL_WIDTH }}
-      className="flex h-full max-h-full w-full flex-col items-center justify-between overflow-x-hidden overflow-y-auto pb-4"
+      className="flex h-full max-h-full w-full flex-col items-center justify-between overflow-x-hidden overflow-y-auto pb-3"
     >
-      <ul className="mt-2 flex w-full flex-col gap-1">
-        {items.map((item) => (
-          <li key={item.label} className="flex w-full min-w-0 justify-center">
-            <RailItem {...item} current={item.href === activeUrl} />
-          </li>
-        ))}
-      </ul>
-      {footer}
+      <div className="flex w-full flex-col items-center">
+        <div className="mt-2 flex flex-col items-center gap-1">{header}</div>
+        <ul className="mt-2 flex w-full flex-col gap-1">
+          {items.map((item) => (
+            <li key={item.label} className="flex w-full min-w-0 justify-center">
+              <RailItem {...item} current={item.href === activeUrl} />
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="flex flex-col items-center gap-2">{footer}</div>
     </aside>
   );
 

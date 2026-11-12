@@ -12,7 +12,8 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
 /**
  * The bell (task #641): an owner sees one card per Computer and provider, opening
  * the list marks them seen, Dismiss hides one, and a close on the owner's channel takes the card
- * away live. Seeds a Computer, its Agents and two events, and removes them after the run.
+ * away live; a member, who is not shown usage limits, still has the bell, empty. Seeds a Computer,
+ * its Agents and the events, and removes them (and restores the owner's role) after the run.
  * Screenshots, light, dark and phone, are written under `.amp/e2e/usage-limit-notifications/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
@@ -208,3 +209,56 @@ test("usage-limit cards count, get seen, get dismissed and leave live", async ()
     await db.$disconnect();
   }
 }, 180_000);
+
+test("a member's bell is there and empty while a usage limit is open", async () => {
+  const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const { browser } = browserSession(browserPath, `usage-limit-member-${process.pid}`);
+  const suffix = `${process.pid}-${Date.now().toString(36)}`;
+  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
+    where: { userId: DEV_BROWSER_USER.id, role: "owner" },
+    orderBy: { createdAt: "asc" },
+    include: { workspace: { select: { slug: true } } },
+  });
+  const membership = { userId: DEV_BROWSER_USER.id, workspaceId };
+  const computer = await db.computer.create({
+    data: {
+      ownerId: DEV_BROWSER_USER.id,
+      machineId: `e2e-limit-member-${suffix}`,
+      name: `e2e-limit-member-${suffix}.local`,
+      displayName: "E2E Studio",
+      kind: "local",
+      workspaces: { create: { workspaceId } },
+    },
+  });
+  const event = await db.usageLimitEvent.create({
+    data: { workspaceId, computerId: computer.id, provider: "codex", resetsAt: null },
+  });
+  const bell = `[...document.querySelectorAll('button[aria-label^="Notifications"]')].find((el) => el.getBoundingClientRect().width > 0)`;
+  try {
+    // The same person as a member: usage limits are an owner's or admin's, so the bell is empty.
+    await db.workspaceMembership.updateMany({ where: membership, data: { role: "member" } });
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${proxy.origin}/en/w/${workspace.slug}/members`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && ${bell}?.getAttribute("aria-label") === "Notifications"`,
+    );
+    await browser("eval", `${bell}.click()`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"][aria-label="Notifications"]')?.textContent.includes("No notifications") === true`,
+    );
+  } finally {
+    await db.workspaceMembership
+      .updateMany({ where: membership, data: { role: "owner" } })
+      .catch(() => undefined);
+    await browser("close").catch(() => undefined);
+    proxy.stop();
+    await db.usageLimitEvent.deleteMany({ where: { id: event.id } }).catch(() => undefined);
+    await db.computer.deleteMany({ where: { id: computer.id } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+}, 120_000);

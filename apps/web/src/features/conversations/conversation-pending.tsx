@@ -16,10 +16,13 @@ import { cx } from "#src/utils/cx";
  */
 export function MessagesPending() {
   return (
-    <main className="flex h-full min-w-0 flex-col bg-primary lg:flex-row">
+    <main
+      data-panel-cards
+      className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
+    >
       <section
         className={cx(
-          "hidden min-h-0 flex-col lg:flex lg:flex-none lg:overflow-hidden",
+          "hidden min-h-0 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
           LIST_COLUMN_CLASS,
         )}
       >
@@ -44,7 +47,7 @@ export function MessagesPending() {
           ))}
         </div>
       </section>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:overflow-hidden lg:rounded-xl lg:bg-primary">
         <ConversationPending />
       </div>
     </main>

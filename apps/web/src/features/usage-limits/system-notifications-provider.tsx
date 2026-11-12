@@ -32,14 +32,23 @@ type SystemNotifications = {
   dismiss: (id: string) => void;
 };
 
-const SystemNotificationsContext = createContext<SystemNotifications | null>(null);
+/** What a viewer with nothing of this kind to see has: an empty bell. */
+const NO_NOTIFICATIONS: SystemNotifications = {
+  notices: [],
+  unseen: 0,
+  markSeen: () => {},
+  dismiss: () => {},
+};
 
-/** The bell's data, or null for a viewer who has no notifications to see. */
+const SystemNotificationsContext = createContext<SystemNotifications>(NO_NOTIFICATIONS);
+
+/** The bell's data. */
 export const useSystemNotifications = () => use(SystemNotificationsContext);
 
 /**
- * The system notifications of the Workspace for an owner or admin (task #641): today usage-limit
- * events. Any change on the viewer's own channel, or a gap in it, rereads the list.
+ * The Workspace's system notifications, which every member's bell shows (task #641). Today they
+ * are usage-limit events, read only for an owner or admin (`enabled`), so anyone else's bell is
+ * empty. Any change on the viewer's own channel, or a gap in it, rereads the list.
  */
 export function SystemNotificationsProvider({
   viewerId,
@@ -60,7 +69,7 @@ export function SystemNotificationsProvider({
     },
   });
   const value = useMemo(() => {
-    if (!enabled) return null;
+    if (!enabled) return NO_NOTIFICATIONS;
     // A mark shows at once; a failed save rereads what the server holds.
     const mark = (
       ids: readonly string[],

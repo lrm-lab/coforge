@@ -33,8 +33,8 @@ export function WorkspaceSwitcher({
   current: WorkspaceOption | null;
   onSelect?: (slug: string) => Promise<void> | void;
   onCreate?: (input: CreateWorkspaceInput) => Promise<void>;
-  /** The button is the CoForge mark and the Workspace's name (the desktop top bar), or the mark
-   * alone (a phone's tab home header, which has no room for the name). */
+  /** The button is the CoForge mark and the Workspace's name (the sidebar's top row), or the mark
+   * alone (the collapsed rail, a phone's tab home header). */
   markOnly?: boolean;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
@@ -56,7 +56,8 @@ export function WorkspaceSwitcher({
           aria-label={m.workspace_switcher()}
           className={cx(
             "flex h-8 min-w-0 shrink-0 items-center rounded-lg outline-focus-ring transition-colors duration-100 ease-linear hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2",
-            markOnly ? "w-8 justify-center" : "max-w-full shrink gap-2 px-1.5 text-left",
+            // gap-3: the name starts on the nav labels' line.
+            markOnly ? "w-8 justify-center" : "max-w-full shrink gap-3 px-1.5 text-left",
           )}
         >
           <CoForgeMark className="size-5 shrink-0" />

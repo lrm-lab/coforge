@@ -107,7 +107,7 @@ export function SearchFilterChips({
   ].filter((chip) => !!chip);
   if (chips.length === 0) return null;
   return (
-    <div role="group" aria-label={m.search_filters()} className="flex flex-wrap gap-2 lg:pb-3">
+    <div role="group" aria-label={m.search_filters()} className="flex flex-wrap gap-2">
       {chips.map((chip) => (
         <AriaButton
           key={chip.name}

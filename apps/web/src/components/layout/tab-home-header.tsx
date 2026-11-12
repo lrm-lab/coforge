@@ -10,8 +10,8 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 /**
  * The header every tab home shows on a phone, below `lg`: the CoForge mark that opens the
  * Workspace switcher, the page's title, the busy Agents filling the space after it, and the
- * notification bell. `actions` follow the bell (Chat's "new conversation"). A desktop has the top
- * bar instead.
+ * notification bell. `actions` follow the bell (Chat's "new conversation"). A desktop has these
+ * in the sidebar instead.
  */
 export function TabHomeHeader({
   title,
@@ -35,7 +35,7 @@ export function TabHomeHeader({
       {meta}
       <div className="flex h-full min-w-0 flex-1 items-center">{agents}</div>
       <div className="flex shrink-0 items-center gap-1">
-        <NotificationBell workspaceSlug={workspaceSlug} />
+        <NotificationBell workspaceSlug={workspaceSlug} badgeRing="ring-bg-primary" />
         {actions}
       </div>
     </header>

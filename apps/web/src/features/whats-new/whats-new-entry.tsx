@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { Announcement02 } from "@untitledui/icons";
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { RailButton } from "#src/components/layout/sidebar/sidebar-rail";
 import { UnreadDot } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
 import { useWhatsNew } from "./use-whats-new";
@@ -44,7 +44,7 @@ export function WhatsNewRow() {
       {entry.visible && (
         <AriaButton
           onPress={entry.open}
-          className="group mb-0.5 flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-nav-fg outline-focus-ring transition-colors duration-100 ease-linear hover:bg-sidebar-item-active hover:text-secondary focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="group flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-nav-fg outline-focus-ring transition-colors duration-100 ease-linear hover:bg-sidebar-item-active hover:text-secondary focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           <Announcement02
             aria-hidden="true"
@@ -65,21 +65,7 @@ export function WhatsNewRailButton() {
   return (
     <>
       {entry.visible && (
-        <Tooltip title={m.whats_new_entry()} placement="right" offset={4}>
-          <AriaButton
-            onPress={entry.open}
-            aria-label={m.whats_new_entry()}
-            className="group mx-auto flex size-11 items-center justify-center rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            <span className="relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-linear group-hover:bg-sidebar-accent">
-              <Announcement02
-                aria-hidden="true"
-                className="size-5 stroke-[2.4] text-nav-fg transition-colors duration-100 ease-linear group-hover:text-secondary"
-              />
-              <UnreadDot className="absolute top-1.5 right-1.5" />
-            </span>
-          </AriaButton>
-        </Tooltip>
+        <RailButton icon={Announcement02} label={m.whats_new_entry()} onPress={entry.open} dot />
       )}
       {entry.dialog}
     </>

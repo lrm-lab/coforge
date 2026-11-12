@@ -8,7 +8,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { hydratedElement } from "./helpers/browser-e2e";
 
 /**
- * The search dialog in a real browser. The top bar's search field opens it over the page, empty;
+ * The search dialog in a real browser. The sidebar's search field opens it over the page, empty;
  * typing a Chinese phrase lists the matching message with the phrase highlighted, including a
  * message in a channel the viewer never joined. Clicking a result closes the dialog and opens its
  * channel at that message. With no match the dialog says so and keeps the search box.
@@ -118,10 +118,10 @@ test("the search dialog finds a message and opens it in its channel", async () =
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}`);
     await browser("eval", "localStorage.clear()");
-    // The top bar's search field opens the empty dialog with the box focused, once its handler is
+    // The sidebar's search field opens the empty dialog with the box focused, once its handler is
     // attached: it is a button, not a link that works before hydration.
-    await waitFor(hydratedElement(`document.querySelector("header [data-search-button]")`));
-    await browser("click", "header [data-search-button]");
+    await waitFor(hydratedElement(`document.querySelector("aside [data-search-button]")`));
+    await browser("click", "aside [data-search-button]");
     await waitFor(
       `document.querySelector('[role="dialog"]')?.textContent.includes("Search everything")`,
     );
@@ -161,8 +161,8 @@ test("the search dialog finds a message and opens it in its channel", async () =
     await waitFor(`document.querySelector('li[data-message-id="${match.id}"]') !== null`);
     await browser("screenshot", join(artifacts, "jumped.png"));
 
-    // Search opens fresh from the top bar; a query with no match keeps the box and says so.
-    await browser("click", "header [data-search-button]");
+    // Search opens fresh from the sidebar; a query with no match keeps the box and says so.
+    await browser("click", "aside [data-search-button]");
     await waitFor(`${box} !== null && ${box}.value === ""`);
     await browser("fill", 'input[type="search"]', "不存在的暗号");
     await waitFor(

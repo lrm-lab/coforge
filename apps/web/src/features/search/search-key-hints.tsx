@@ -1,6 +1,6 @@
 import { m } from "#src/paraglide/messages";
 
-/** A key as search shows it: the top bar field's shortcut and the panel's foot. */
+/** A key as search shows it: the sidebar field's shortcut and the panel's foot. */
 export const SEARCH_KEY =
   "inline-flex min-w-5 shrink-0 justify-center rounded-sm px-1 font-body text-xs text-tertiary ring-1 ring-primary ring-inset";
 

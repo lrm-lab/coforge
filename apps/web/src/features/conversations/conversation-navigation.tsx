@@ -196,10 +196,13 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     <ConversationListContext value={listControls}>
       <ConversationHostProvider channels={channelNames}>
         <UnreadStoreContext value={unread.store}>
-          <main className="flex h-full min-w-0 flex-col bg-primary lg:flex-row">
+          <main
+            data-panel-cards
+            className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
+          >
             <section
               className={cx(
-                "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden",
+                "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
                 LIST_COLUMN_CLASS,
                 showList ? "flex" : "hidden",
               )}
@@ -255,7 +258,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
             </section>
             <div
               className={cx(
-                "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:overflow-hidden",
+                "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:overflow-hidden lg:rounded-xl lg:bg-primary",
                 showList ? "hidden" : "flex",
               )}
             >

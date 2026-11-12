@@ -44,11 +44,10 @@ import type { CreateWorkspaceInput } from "#src/features/workspaces/create-works
 import { useReportActivityUnread, useWorkspaceTabTitle } from "#src/lib/browser-tab";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
-import { ShellBusyAgents } from "#src/features/agents/shell-busy-agents";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
-import { SearchField } from "#src/features/search/search-field";
-import { AppTopBar } from "#src/components/layout/app-top-bar";
+import { SearchField, SearchRailButton } from "#src/features/search/search-field";
+import { SidebarToggle } from "#src/components/layout/sidebar/sidebar-toggle";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { cx } from "#src/utils/cx";
@@ -99,8 +98,6 @@ function useNavItems(
   bareHref: string;
   /** Sections under `base` this item is also current for. */
   sections?: readonly string[];
-  /** A heading that starts a new group at this item. */
-  groupLabel?: string;
   /** The phone's tab bar carries this item itself; the Workspace tab lists the rest. */
   tab?: "chat" | "activity";
 })[] {
@@ -145,14 +142,7 @@ function useNavItems(
         tab: "activity" as const,
       },
       ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
-      // What the Workspace shares sits under its own heading, apart from the viewer's own
-      // conversations and activity.
-      {
-        label: m.projects_title(),
-        ...item("projects"),
-        icon: Folder,
-        groupLabel: m.navigation_workspace_group(),
-      },
+      { label: m.projects_title(), ...item("projects"), icon: Folder },
       {
         label: m.navigation_agents(),
         ...item("members"),
@@ -302,44 +292,61 @@ export function AppShell({
               !tabBar && "pb-safe-bottom",
             )}
           >
-            <ShellLinks>
-              <AppTopBar
-                workspace={workspaceSwitcher}
-                agents={
-                  // The top bar shows from `lg` up; a phone's tab homes carry their own.
-                  phone ? null : (
-                    <div className="flex h-12 w-48 min-w-0">
-                      <ShellBusyAgents />
-                    </div>
-                  )
-                }
-                search={<SearchField />}
-                end={
-                  <>
-                    <NotificationBell workspaceSlug={currentWorkspace.slug} />
-                    <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
-                  </>
-                }
-              />
-            </ShellLinks>
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
               {/* `contents` keeps the sidebars direct flex items of this row. On desktop
             `sidebar-collapsed` on <html> picks the expanded one or the rail; a phone has neither, its
             tab bar below the content takes their place. */}
               <ShellLinks>
-                <SidebarExpanded activeUrl={activeUrl} items={navItems} footer={<WhatsNewRow />} />
+                <SidebarExpanded
+                  activeUrl={activeUrl}
+                  items={navItems}
+                  header={
+                    <>
+                      <div className="flex min-w-0 flex-1">{workspaceSwitcher}</div>
+                      <SidebarToggle />
+                    </>
+                  }
+                  search={<SearchField />}
+                  footer={
+                    <>
+                      <WhatsNewRow />
+                      <UserRow
+                        base={base}
+                        user={user}
+                        onSignOut={onSignOut}
+                        workspaceSlug={currentWorkspace.slug}
+                      />
+                    </>
+                  }
+                />
                 <SidebarRail
                   activeUrl={activeUrl}
                   items={navItems}
-                  footer={<WhatsNewRailButton />}
+                  header={
+                    <>
+                      <SidebarToggle expand />
+                      {phoneShell.workspaceSwitcher}
+                      <SearchRailButton />
+                    </>
+                  }
+                  footer={
+                    <>
+                      <WhatsNewRailButton />
+                      <NotificationBell
+                        workspaceSlug={currentWorkspace.slug}
+                        badgeRing="ring-sidebar"
+                      />
+                      <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
+                    </>
+                  }
                 />
               </ShellLinks>
 
-              {/* On desktop the content is one white card under the top bar, inset 8px from the sidebar's
-            background; a page made of several panels (Chat) divides the card with hairlines, never
-            separate cards, so what belongs together reads as one block. */}
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pt-0 lg:pl-0">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl">
+              {/* On desktop the content is one white card inset 8px from the sidebar's background; a
+            page made of several panels (Chat, Settings, Records) marks itself `data-panel-cards` and
+            draws a card per panel, 8px apart. */}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
                   {children}
                 </div>
               </div>
@@ -366,6 +373,29 @@ export function AppShell({
   );
 }
 
+/** The foot of the expanded sidebar: the user and the bell as one row on the nav rows' grid, the
+ * avatar on the icons' column and the name on the labels' line, one hover surface for the whole
+ * row. The email is in the menu, not under the name. */
+function UserRow({
+  workspaceSlug,
+  ...menu
+}: {
+  base: string;
+  user: AppUser;
+  onSignOut: () => Promise<void> | void;
+  workspaceSlug: string;
+}) {
+  return (
+    <div className="group/user flex h-10 items-center rounded-lg transition-colors duration-100 ease-linear hover:bg-sidebar-item-active has-[[aria-expanded=true]]:bg-sidebar-item-active">
+      <UserMenuCard {...menu} />
+      <NotificationBell
+        workspaceSlug={workspaceSlug}
+        badgeRing="ring-sidebar group-hover/user:ring-sidebar-item-active group-has-[[aria-expanded=true]]/user:ring-sidebar-item-active"
+      />
+    </div>
+  );
+}
+
 function UserMenuCard({
   base,
   user,
@@ -376,7 +406,7 @@ function UserMenuCard({
   base: string;
   user: AppUser;
   onSignOut: () => Promise<void> | void;
-  /** The avatar alone, in the desktop top bar; the menu drops below it. */
+  /** The avatar alone, at the foot of the collapsed rail. */
   compact?: boolean;
 }) {
   const avatar = (
@@ -386,8 +416,8 @@ function UserMenuCard({
       name={user.name}
       alt={user.name}
       src={user.avatarUrl}
-      // An uploaded photo is a rounded square in the full card, a circle in the top bar; a sticker
-      // is bare either way.
+      // An uploaded photo is a rounded square in the row, a circle on the rail; a sticker is bare
+      // either way.
       rounded={compact}
       className={compact ? undefined : "rounded-md"}
     />
@@ -397,25 +427,24 @@ function UserMenuCard({
       {compact ? (
         <AriaButton
           aria-label={`${m.controls_current_user()}: ${user.name}`}
-          className="relative flex size-8 items-center justify-center rounded-full outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="relative flex size-10 items-center justify-center rounded-full outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           {avatar}
         </AriaButton>
       ) : (
         <AriaButton
           aria-label={m.controls_current_user()}
-          className="relative flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left outline-focus-ring transition duration-100 ease-linear hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2 aria-expanded:bg-sidebar-accent"
+          className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-lg pl-2.5 text-left outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           {avatar}
-          <UserIdentity user={user} />
+          <span className="min-w-0 truncate text-sm font-medium text-nav-fg transition-colors duration-100 ease-linear group-hover/user:text-secondary">
+            {user.name}
+          </span>
         </AriaButton>
       )}
-      <Dropdown.Popover
-        placement={compact ? "bottom end" : "top left"}
-        className={compact ? "w-64" : "w-(--trigger-width) min-w-56"}
-      >
+      <Dropdown.Popover placement={compact ? "right bottom" : "top left"} className="w-64">
         <div className="flex items-center gap-3 border-b border-secondary px-3.5 py-3">
-          {compact ? null : avatar}
+          {avatar}
           <UserIdentity user={user} />
         </div>
         <Dropdown.Menu

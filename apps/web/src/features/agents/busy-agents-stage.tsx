@@ -62,7 +62,7 @@ const sameIds = (a: ReadonlySet<string>, b: ReadonlySet<string>) =>
   a.size === b.size && [...a].every((id) => b.has(id));
 
 /**
- * The busy Agents' stage (the desktop top bar, the phone's Chat header): up to five mascots slide
+ * The busy Agents' stage (the Chat list's header, and a phone tab home's): up to five mascots slide
  * out from its end, work and wander a while, and slide back in to make room for others. Each is
  * the Agent's avatar anywhere else: hovering peeks at its card, pressing opens its profile. While
  * some wait off stage, a button at the end opens all of them. The cast is decided by `busy-agents-cast.ts`, the motion by

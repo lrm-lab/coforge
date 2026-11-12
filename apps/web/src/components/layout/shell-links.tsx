@@ -22,7 +22,7 @@ function useSpaNavigation() {
   );
 }
 
-/** The shell's own links (the top bar's, the sidebars', the tab bar's and the hub's), routed
+/** The shell's own links (the sidebars', the tab bar's and the hub's), routed
  * through the router. */
 export function ShellLinks({ children }: { children: React.ReactNode }) {
   const onClickCapture = useSpaNavigation();

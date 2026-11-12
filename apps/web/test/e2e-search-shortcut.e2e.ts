@@ -7,7 +7,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
- * Search as a dialog over the current page: Cmd/Ctrl+K, the top bar's search field and a channel's "Search
+ * Search as a dialog over the current page: Cmd/Ctrl+K, the sidebar's search field and a channel's "Search
  * this channel" open it without leaving the page; focus starts in the box, Up and Down walk the
  * results, Enter opens one (a message lands on it, however old), Esc closes and returns focus. An
  * old search address opens the dialog with its search.
@@ -205,15 +205,15 @@ test("search opens over the page, walks by keyboard and lands on the message", a
     await browser("press", "Escape");
     await waitFor(`${dialog} === null`);
 
-    // The top bar's search field opens the dialog fresh, staying on the page.
-    await browser("click", "header [data-search-button]");
+    // The sidebar's search field opens the dialog fresh, staying on the page.
+    await browser("click", "aside [data-search-button]");
     await waitFor(`${box} !== null && ${box}.value === ""`);
     expect(await evaluate<string>("location.pathname")).toBe(channelPath);
     await browser("press", "Escape");
     await waitFor(`${dialog} === null`);
 
     // Esc gives the focus back to what had it before the dialog opened.
-    const searchField = `document.querySelector("header [data-search-button]")`;
+    const searchField = `document.querySelector("aside [data-search-button]")`;
     await settled();
     await browser("eval", `${searchField}.focus()`);
     await browser("press", "Meta+k");

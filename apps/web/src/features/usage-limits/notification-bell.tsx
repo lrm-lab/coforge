@@ -13,6 +13,7 @@ import {
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Fold } from "#src/components/ui/fold";
+import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { formatMonthDayTime } from "#src/lib/dates";
@@ -88,7 +89,7 @@ function NoticeList({
 }) {
   const navigate = useNavigate();
   const notifications = useSystemNotifications();
-  const rows = useLeavingItems(notifications?.notices ?? []);
+  const rows = useLeavingItems(notifications.notices);
   return (
     <>
       <h2 className="border-b border-secondary px-4 py-3 text-sm font-semibold text-primary">
@@ -113,7 +114,7 @@ function NoticeList({
                       params: { workspaceSlug, computerId: item.computerId },
                     });
                   }}
-                  onDismiss={() => notifications?.dismiss(item.id)}
+                  onDismiss={() => notifications.dismiss(item.id)}
                 />
               </Fold>
             </li>
@@ -153,16 +154,24 @@ function NoticeSheet({ children }: { children: ReactNode }) {
 }
 
 /**
- * The bell (task #641), with the unread count, for a viewer who has notifications
- * to see. In the desktop top bar it drops below the bell; on a phone, in a tab home's header, it opens as a sheet. What
- * was open counts as seen once the panel closes, so its dots stay for as long as it is read.
+ * Every member's bell (task #641), with the unread count in the same badge as the Activity row's.
+ * In the sidebar it opens to the right, clear of the sidebar's edge; on a phone, in a tab home's
+ * header, it opens as a sheet. What was open counts as seen once the panel closes, so its dots stay
+ * for as long as it is read.
  */
-export function NotificationBell({ workspaceSlug }: { workspaceSlug: string }) {
+export function NotificationBell({
+  workspaceSlug,
+  badgeRing,
+}: {
+  workspaceSlug: string;
+  /** The badge's ring, in the colour of what the bell sits on, so the count reads apart from the
+   * bell's outline. */
+  badgeRing: string;
+}) {
   const notifications = useSystemNotifications();
   const wide = useBreakpoint("lg");
   const [open, setOpen] = useState(false);
   const [shownUnseen, setShownUnseen] = useState<ReadonlySet<string>>(new Set());
-  if (!notifications) return null;
   const { notices, unseen, markSeen } = notifications;
   const onOpenChange = (next: boolean) => {
     setOpen(next);
@@ -197,18 +206,20 @@ export function NotificationBell({ workspaceSlug }: { workspaceSlug: string }) {
           }
         />
         {unseen > 0 && (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-error-solid px-1 text-xs font-semibold text-white tabular-nums"
-          >
-            {Math.min(unseen, 99)}
-          </span>
+          <UnreadBadge
+            count={unseen}
+            className={cn(
+              "pointer-events-none absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 ring-2 transition-colors duration-100 ease-linear",
+              badgeRing,
+            )}
+          />
         )}
       </span>
       {wide ? (
         <AriaPopover
-          placement="bottom end"
-          offset={8}
+          // The bell sits 0.75rem in from the sidebar's edge; the panel opens 0.5rem past it.
+          placement="right bottom"
+          offset={20}
           className={cn(
             "flex max-h-[32.5rem] w-[23.75rem] origin-(--trigger-anchor-point) flex-col overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary",
             POPOVER_MOTION,
