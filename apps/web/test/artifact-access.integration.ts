@@ -278,6 +278,17 @@ test("deleting is the author's or an owner's or admin's; an Agent deletes only i
   });
   expect(row.deletedAt).not.toBeNull();
   expect(row.deletedByAgentId).toBe(agents.helper);
+
+  // The authoring Agent's owner deletes what its Agent made, admin or not (task #25);
+  // another member still cannot.
+  const byHelper = await create({ kind: "workspace" }, { agentId: agents.helper });
+  await expect(del(byHelper.id, { userId: people.bob })).rejects.toMatchObject({
+    code: "ACCESS_DENIED",
+  });
+  await del(byHelper.id, { userId: people.alice });
+  await expect(read(byHelper.id, { userId: people.alice })).rejects.toMatchObject({
+    code: "NOT_FOUND",
+  });
   // Deleting still needs the home's read: an owner outside the private channel hears
   // ACCESS_DENIED, as a member who cannot write does.
   const closed = await create(inConversation(privateChannel), { userId: people.alice });
