@@ -27,7 +27,12 @@ const workspaceAliases = [
   },
 ];
 
+const buildId = process.env.COFORGE_BUILD_ID?.trim() || "development";
+
 const config = defineConfig({
+  define: {
+    __COFORGE_BUILD_ID__: JSON.stringify(buildId),
+  },
   resolve: {
     tsconfigPaths: true,
     alias: workspaceAliases,

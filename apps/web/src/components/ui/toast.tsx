@@ -63,12 +63,29 @@ function successId(title: string, key?: string) {
   return key === undefined ? `success:${title}` : `success:${title}:${key}`;
 }
 
-const appToast = {
+export const appToast = {
+  info(
+    title: string,
+    options?: {
+      durationMs?: number;
+      action?: { label: string; onClick: () => void };
+      description?: string;
+      key?: string;
+    },
+  ) {
+    toast(title, {
+      id: successId(title, options?.key),
+      duration: options?.durationMs,
+      action: options?.action,
+      description: options?.description,
+    });
+  },
   success(
     title: string,
     options?: {
       durationMs?: number;
       action?: { label: string; onClick: () => void };
+      description?: string;
       key?: string;
     },
   ) {
@@ -76,6 +93,7 @@ const appToast = {
       id: successId(title, options?.key),
       duration: options?.durationMs,
       action: options?.action,
+      description: options?.description,
     });
   },
   /** Takes a success toast away early, for an Undo that no longer applies. */

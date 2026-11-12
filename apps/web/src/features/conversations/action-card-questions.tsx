@@ -21,6 +21,7 @@ import { WaitingOn } from "./action-card-waiting-on";
 import { cardActor } from "./action-card-actor";
 import { focusIgnore, IgnoredLine } from "./action-card-ignored";
 import { useUndoableIgnore } from "./use-undoable-ignore";
+import { registerUnsavedTemporaryState } from "#src/features/updates/build-update";
 
 /** One question's answer, as `commitQuestionsActionCard` takes it. */
 export type QuestionsAnswer = { questionId: string; selection: string[]; text?: string };
@@ -77,6 +78,10 @@ export function QuestionsActionCard({
     if (pending) keepDrafts(view.messageId, drafts);
     else dropDrafts(view.messageId);
   }, [view.messageId, pending, drafts]);
+  useEffect(
+    () => registerUnsavedTemporaryState(pending && Object.values(drafts).some(answered)),
+    [drafts, pending],
+  );
   const canAnswer = pending && view.canCommit;
   const waitingOn = pending && !canAnswer ? view.asked : undefined;
   const withdrawable = pending && view.canCancel && !canAnswer;

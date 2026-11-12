@@ -1,6 +1,8 @@
 FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS build
 
 WORKDIR /app
+ARG COFORGE_BUILD_ID=development
+ENV COFORGE_BUILD_ID=$COFORGE_BUILD_ID
 COPY package.json bun.lock tsconfig.base.json ./
 # Every `workspace:*` dependency of these manifests must be listed here. The pruned checkout has no
 # directory for one it omits, so `bun install --frozen-lockfile` fails against a lockfile that
@@ -50,9 +52,11 @@ RUN bun install --frozen-lockfile --production
 FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a
 
 WORKDIR /app
+ARG COFORGE_BUILD_ID=development
 ENV HOST=0.0.0.0 \
     PORT=3000 \
-    NODE_ENV=production
+    NODE_ENV=production \
+    COFORGE_BUILD_ID=$COFORGE_BUILD_ID
 
 # Least often changed first: the migration toolchain (the largest layer, renewed by its manifest,
 # lockfile, or base image), then the schema and migrations, then the build output (every commit).

@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil01 } from "@untitledui/icons";
 import { CHOICE_OTHER_OPTION_ID, CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
 
 import { Spinner } from "#src/components/ui/spinner";
 import { cn } from "#src/lib/utils";
 import { shouldSendOnEnter } from "./composer-behavior";
+import { registerUnsavedTemporaryState } from "#src/features/updates/build-update";
 
 /** A key named on a row: an option's number, or Enter on the person's own answer. */
 export const KEY_HINT =
@@ -35,6 +36,7 @@ export function OtherRow({
   const lastCompositionEndAt = useRef<number | null>(null);
   const sending = picking === CHOICE_OTHER_OPTION_ID;
   const words = text.trim();
+  useEffect(() => registerUnsavedTemporaryState(words.length > 0), [words]);
   return (
     <li>
       <label

@@ -68,6 +68,8 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: true
+          build-args: |
+            COFORGE_BUILD_ID=${{ github.sha }}
           outputs: type=image,name=ghcr.io/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,rewrite-timestamp=true
         # A constant timestamp for the files the build writes: a layer rebuilt from unchanged
         # inputs, such as the migration toolchain, keeps its digest without a build cache, which
