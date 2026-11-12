@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+import "coforge/rpc/v1/workspace.proto";
+
+// What the daemon reports about a tracked @mention delivery: the ACK that drains it, the
+// progress notices, and the terminal errors. The envelope they all name stays with
+// AgentMessageDelivery in workspace.proto, which imports nothing from here.
+
+message AgentMessageDeliveryAck {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string delivery_id = 3;
+  string message_id = 4;
+  string workspace_id = 5;
+  string agent_id = 6;
+  uint64 sequence = 7;
+  string method = 8;
+  // The envelope of the tracked delivery this ACK drained, echoed unchanged.
+  MentionDeliveryEnvelope mention_delivery = 9;
+}
+
+// Daemon-to-server progress of a tracked @mention delivery. `stage` is "daemon_received",
+// "daemon_pending" or "daemon_drained"; `outcome` is "accepted" for a first sighting and
+// "coalesced" for a repeat of a delivery still pending. Diagnostic only; never an ACK.
+message AgentMentionDeliveryTransition {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string agent_id = 4;
+  string delivery_id = 5;
+  string stage = 6;
+  string outcome = 7;
+  MentionDeliveryEnvelope mention_delivery = 8;
+}
+
+// Daemon-to-server final result of a tracked @mention delivery the daemon will not drain.
+// `code` is an upper-case identifier such as "IDENTITY_UNKNOWN" or "QUOTA_LIMITED"; the server
+// maps it to the recorded outcome.
+message AgentMentionDeliveryTerminalError {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string agent_id = 4;
+  string delivery_id = 5;
+  string code = 6;
+  MentionDeliveryEnvelope mention_delivery = 7;
+}
+
+// Versioned daemon-to-server rejection of a delivery the daemon did not take custody of; it
+// is never an acknowledgement. Closed vocabulary for `reason`: "no_process" (the Agent has no
+// running process, no launch in progress, and nothing the daemon can relaunch it from).
+message AgentMessageDeliveryRejection {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string delivery_id = 3;
+  string message_id = 4;
+  string workspace_id = 5;
+  string agent_id = 6;
+  uint64 sequence = 7;
+  string method = 8;
+  string reason = 9;
+}

@@ -2,6 +2,8 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   AgentMentionDeliveryTerminalErrorSchema,
   AgentMentionDeliveryTransitionSchema,
+} from "#src/internal/gen/coforge/rpc/v1/mention_delivery_pb";
+import {
   MentionDeliveryEnvelopeSchema,
   type MentionDeliveryEnvelope as MentionDeliveryEnvelopeMessage,
 } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
