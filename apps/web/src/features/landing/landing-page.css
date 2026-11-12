@@ -177,7 +177,8 @@
   font-size: calc(58 * var(--u));
   font-weight: 600;
   line-height: calc(67 * var(--u));
-  letter-spacing: 0.01em;
+  /* Each line is the design's line: text a hair wider than the lettering must not wrap a word. */
+  white-space: nowrap;
 }
 
 .home-title-highlight {
@@ -400,7 +401,8 @@
     margin-top: 0;
   }
 
-  .home-features br {
+  .home-features br,
+  .home-body br {
     display: none;
   }
 }
@@ -441,6 +443,7 @@
     margin-top: 24px;
     font-size: 40px;
     line-height: 48px;
+    white-space: normal;
   }
 
   .home-body {

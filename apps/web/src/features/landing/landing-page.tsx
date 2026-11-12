@@ -88,6 +88,16 @@ const FEATURES = [
   },
 ] as const;
 
+/** A message's lines, broken where the design breaks them on a desktop; a column lets them wrap. */
+function Lines({ text }: { text: string }) {
+  return text.split("\n").map((line, index) => (
+    <Fragment key={index}>
+      {index > 0 && <br />}
+      {line}
+    </Fragment>
+  ));
+}
+
 /** The pill's four-point star, in the design's lilac-to-brand gradient. */
 function Sparkle() {
   return (
@@ -203,7 +213,9 @@ export function LandingPage() {
                   {m.landing_hero_title_line_2()}
                   <span className="home-title-highlight">{m.landing_hero_title_highlight()}</span>
                 </h1>
-                <p className="home-body">{m.landing_hero_body()}</p>
+                <p className="home-body">
+                  <Lines text={m.landing_hero_body()} />
+                </p>
               </div>
             </div>
 
@@ -215,17 +227,7 @@ export function LandingPage() {
                     <div>
                       <h2>{feature.title()}</h2>
                       <p>
-                        {/* The design breaks each line at its comma on a desktop; a column lets
-                            it wrap. */}
-                        {feature
-                          .body()
-                          .split("\n")
-                          .map((line, index) => (
-                            <Fragment key={index}>
-                              {index > 0 && <br />}
-                              {line}
-                            </Fragment>
-                          ))}
+                        <Lines text={feature.body()} />
                       </p>
                     </div>
                   </li>
