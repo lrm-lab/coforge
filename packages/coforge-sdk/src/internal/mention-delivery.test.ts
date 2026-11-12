@@ -3,6 +3,8 @@ import {
   AgentMentionDeliveryTerminalErrorSchema,
   AgentMentionDeliveryTransitionSchema,
   AgentMessageDeliveryAckSchema,
+} from "#src/internal/gen/coforge/rpc/v1/mention_delivery_pb";
+import {
   AgentMessageDeliverySchema,
   MentionDeliveryEnvelopeSchema,
 } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
