@@ -214,8 +214,13 @@ export class ArtifactDocuments {
       files,
       ...settings,
       // A web page is replaced whole, so a save starts from the newest version or is refused
-      // (`artifact-base-moved`): even a title someone changed since is not merged under it.
-      ...(artifact.kind === "html" || scope.actor.agentId ? { exactBase: true } : {}),
+      // (`artifact-base-moved`): even a title someone changed since is not merged under it. An
+      // Agent's save over an older version keeps what others changed in files it does not touch.
+      ...(artifact.kind === "html"
+        ? { exactBase: true }
+        : scope.actor.agentId
+          ? { byPath: true }
+          : {}),
     });
     if (saved.status === "created") await this.#refreshPreview(scope, input.artifactId);
     return saved;

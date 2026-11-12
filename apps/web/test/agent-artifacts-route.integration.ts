@@ -137,8 +137,8 @@ test("an Agent in a channel creates, reads, saves, pages and reverts a document 
   });
   expect(saved.body).toMatchObject({ status: "created" });
 
-  // A save over version 1 that changes the same paragraph again: task #540 refuses a stale
-  // Agent base outright instead of merging under it.
+  // A save over version 1 that changes the file version 2 changed: an Agent's save is never merged
+  // inside a file, so it is refused, naming the file.
   const conflict = await post({
     operation: "push",
     artifact,
@@ -149,6 +149,7 @@ test("an Agent in a channel creates, reads, saves, pages and reverts a document 
   expect(conflict.status).toBe(409);
   expect(conflict.body).toMatchObject({ code: "CONFLICT", retryable: false });
   expect(conflict.body.error).toContain("artifact-agent-base-moved");
+  expect(conflict.body.details).toEqual({ files: "document.md" });
 
   const history = await post({ operation: "history", artifact, limit: 1 });
   expect(history.body.versions).toHaveLength(1);

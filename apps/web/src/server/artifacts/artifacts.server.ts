@@ -27,6 +27,7 @@ import {
   type ArtifactSettingName,
   type ArtifactSettings,
 } from "./artifact-merge.server";
+import { refuseMovedBase, refuseOverlap } from "./artifact-agent-base.server";
 import { createArtifact } from "./artifact-create.server";
 import { ArtifactReads } from "./artifact-reads.server";
 import { revertArtifact, type ArtifactRevert } from "./artifact-revert.server";
@@ -152,6 +153,8 @@ export class Artifacts {
     deletedPaths?: readonly string[];
     /** Refuse, rather than merge, when the artifact moved past `baseVersion` (going back). */
     exactBase?: boolean;
+    /** An Agent's save over an older base: by path only, an overlap refuses (`refuseOverlap`). */
+    byPath?: boolean;
     /** The version this save goes back to (`revert`). */
     revertedFrom?: number;
   }): Promise<
@@ -233,13 +236,7 @@ export class Artifacts {
 
       if (input.baseVersion > current || input.baseVersion < 0)
         throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
-      if (input.exactBase && input.baseVersion !== current)
-        throw new AppError("CONFLICT", {
-          errorId: input.publisher.agentId ? "artifact-agent-base-moved" : "artifact-base-moved",
-          hint: input.publisher.agentId
-            ? "the artifact changed after you read it; run `coforge artifact read` for the newest version, then save again"
-            : undefined,
-        });
+      if (input.exactBase && input.baseVersion !== current) refuseMovedBase(input.publisher);
 
       // A version's files, and the settings it recorded; before the first version, none of either.
       const versionAt = async (number: number) => {
@@ -289,13 +286,21 @@ export class Artifacts {
           const now = currentFiles.get(path);
           if (before?.sha256 !== now?.sha256) othersChanged.add(path);
         }
+        if (input.byPath)
+          refuseOverlap({
+            base: baseFiles,
+            current: currentFiles,
+            added,
+            deleted,
+            settings: settings.conflicts,
+          });
         // A file both sides changed merges line by line when it is a document's text; any other
         // file, or a file one side deleted, cannot be merged without a human.
         for (const path of deleted)
-          if (othersChanged.has(path))
+          if (othersChanged.has(path) && !input.byPath)
             throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
         for (const file of added) {
-          if (!othersChanged.has(file.path)) continue;
+          if (!othersChanged.has(file.path) || input.byPath) continue;
           const document = locked.kind === "markdown" && file.path === settings.result.entryPath;
           const merge = await mergeDocumentFile(this.blobs, input.workspaceId, document, {
             base: baseFiles.get(file.path),
