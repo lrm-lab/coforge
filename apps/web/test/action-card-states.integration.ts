@@ -117,7 +117,12 @@ test("the expiry wake carries the delivery's reason on the wire", async () => {
     });
     const pushes = batches.flat();
     expect(pushes).toHaveLength(1);
-    expect(decodeAgentMessageDelivery(pushes[0]!.data).reason).toBe("expired");
+    const wake = decodeAgentMessageDelivery(pushes[0]!.data);
+    expect(wake.reason).toBe("expired");
+    // The same shape as the answered and declined notices, naming the person who was asked.
+    expect(wake.body).toBe(
+      `@${ctx.alice.username} did not answer your choice "Which color?" in #${ctx.hub.channelName} before it expired.`,
+    );
   } finally {
     await ctx.cleanup();
   }

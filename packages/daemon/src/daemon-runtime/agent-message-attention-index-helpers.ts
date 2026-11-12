@@ -41,8 +41,8 @@ export function containsSorted(values: readonly number[] | undefined, value: num
 }
 
 /** The deliveries that carry news about a message the Agent itself authored: its action card was
- * answered (`choice`) or expired (`expired`). The read state that already covers the card cannot
- * cover the event, so these always deserve a notice. */
+ * answered or declined (`choice`) or expired (`expired`). The read state that already covers the
+ * card cannot cover the event, so these always deserve a notice. */
 const CARD_EVENT_REASONS: ReadonlySet<string> = new Set(["choice", "expired"]);
 
 export function isCardEvent(message: { reason?: string }): boolean {

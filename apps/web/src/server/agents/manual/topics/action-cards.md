@@ -48,7 +48,10 @@ it, as ` by @<handle>` before the closing bracket — `[action card: cancelled b
 `[action card: executed; choice=password by @alice]` — unless that person's account is gone. Only
 `executed` means the channel, Agent, membership, fill, desktop step, or choice now stands;
 `pending` means still waiting on a human, and `cancelled` means the person it asked chose not to
-answer (or its owner withdrew the card). A `cancelled` card is a decision, not a lost message: do
+answer (or its owner withdrew the card). When the person declines a `choice` or `questions`
+card you are woken with `@alice declined your choice "How should we sign in?" in #general.`, and
+when nobody answers in time, with `@alice did not answer your choice "..." in #general before it
+expired.`. A `cancelled` card is a decision, not a lost message: do
 not repeat the same question, and if a follow-up is truly needed, open a new card worded
 differently. Do not claim the resource exists on the strength of having posted the card alone.
 
@@ -139,7 +142,7 @@ COFORGEACTION
 The person may skip questions but must answer at least one to submit; an answered multi-select
 has at least one pick, and "Something else" carries its text. The delivery names who answered and
 lists every question's prompt with its picks, a skipped one as `(skipped)`, for example
-`@alice answered your questions in #general: Deploy where? → staging · Staging; Run which checks? →
+`@alice answered your questions "Settle the deploy" in #general: Deploy where? → staging · Staging; Run which checks? →
 (skipped)`. Ask a skipped question again if you still need it. The card's `result.answers` records
 the same per question, a skipped one with `"skipped": true` and no picks. Reading the message
 again, it ends with each question's picks by id and who answered,

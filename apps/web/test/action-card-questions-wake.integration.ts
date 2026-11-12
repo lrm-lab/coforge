@@ -161,7 +161,9 @@ test("one submit answers every question, locks the card, and the Agent hears eac
   const decoded = new TextDecoder().decode(
     Uint8Array.from(Object.values((published[0] as { data: Record<string, number> }).data)),
   );
-  expect(decoded).toContain(`@quest-${suffix} answered your questions in #quest-${suffix}`);
+  expect(decoded).toContain(
+    `@quest-${suffix} answered your questions "Settle the deploy" in #quest-${suffix}`,
+  );
   expect(decoded).toContain("Deploy where? → staging · Staging (recommended)");
   expect(decoded).toContain("Run which checks? → test · test, build · build");
   // The wire carries the delivery row's reason: without it the daemon reads the answer as an
@@ -226,7 +228,7 @@ test("a question may go unanswered: it is recorded skipped and the Agent hears w
     agentId,
   );
   const replay = String(pending.find((row) => row.messageId === messageId)?.body);
-  expect(replay).toStartWith(`@quest-${suffix} answered your questions in `);
+  expect(replay).toStartWith(`@quest-${suffix} answered your questions "Settle the deploy" in `);
   expect(replay).toContain("Deploy where? → staging · Staging (recommended)");
   expect(replay).toContain("Run which checks? → (skipped)");
 });

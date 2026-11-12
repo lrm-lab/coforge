@@ -138,7 +138,8 @@ model ActionCard {
   state             String       @default("pending")
   committedByUserId String?      @db.Uuid
   committedAt       DateTime?
-  /// When a still-pending card expires; the sweep writes `expired` and wakes the Agent.
+  /// When a still-pending card expires; the sweep writes `expired` and wakes the Agent;
+  /// a choice/questions card the asked person declines (`cancelled`) wakes it too.
   expiresAt         DateTime?
   result            Json?
   createdAt         DateTime     @default(now())

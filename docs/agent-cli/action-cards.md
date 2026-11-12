@@ -104,7 +104,7 @@ Only `executed` means the resource now exists.
 
 Who may dismiss a waiting card: the Agent that prepared it (its owner), a Workspace owner or
 admin, and — on a `choice` or `questions` card — the person the card asks. A dismissed card is a
-decision, not a lost message: do not post the same question again; open a new card worded
+decision, not a lost message (the Agent is woken when the asked person dismisses it): do not post the same question again; open a new card worded
 differently if a follow-up is truly needed. An `app:grant_agent` card has no dismiss here: it is
 denied through the app approval flow instead.
 

@@ -5,7 +5,9 @@ import {
   deliveryTarget,
 } from "#src/server/db/repositories/direct-conversation-agent-message.server";
 import { directTargets } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { AgentDeliveryPublisher, agentDeliveryPush } from "./agent-delivery.server";
+import { cardDeclinedBody, cardPerson } from "./action-card-outcome-body.server";
 
 /**
  * Wakes the Agent that prepared a card with a system notice about its outcome. The delivery row
@@ -77,4 +79,52 @@ export async function wakeCardAuthor(
       latestSenderDescription: "",
     }),
   ]);
+}
+
+/**
+ * The asked person declined the card: its Agent is told, so it can ask again or go on (Frank,
+ * 11-12). Best-effort: a failed wake is logged and never fails the cancel that already settled the
+ * card, and where no realtime publisher can be made the delivery row is still written for the
+ * Agent's next replay.
+ */
+export async function wakeAgentOfDecline(
+  db: PrismaClient,
+  publisher: AgentDeliveryPublisher | undefined,
+  card: {
+    workspaceId: string;
+    conversationId: string;
+    messageId: string;
+    kind: string;
+    payload: unknown;
+    preparedByAgentId: string;
+    askedUserId: string;
+  },
+) {
+  try {
+    const decliner = await db.user.findUnique({
+      where: { id: card.askedUserId },
+      select: { username: true },
+    });
+    const prompt = (card.payload as { prompt?: string }).prompt;
+    await wakeCardAuthor(db, publisher ?? defaultPublisher(), card, "choice", (target) =>
+      cardDeclinedBody(cardPerson(decliner?.username), { kind: card.kind, prompt, target }),
+    );
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "action_card_decline_delivery_failed",
+        messageId: card.messageId,
+        error: error instanceof Error ? error.name : typeof error,
+      }),
+    );
+  }
+}
+
+/** The process's realtime publisher, or none where it cannot be made (no Centrifugo configured). */
+function defaultPublisher() {
+  try {
+    return new AgentDeliveryPublisher(createCentrifugoServerApi());
+  } catch {
+    return undefined;
+  }
 }

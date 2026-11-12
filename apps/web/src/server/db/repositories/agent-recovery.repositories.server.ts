@@ -13,10 +13,12 @@ import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.ser
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import {
   agentDeliveryView,
+  cardDeclinedNotice,
   choiceResultBody,
   questionsResultBody,
   type AgentReadableBody,
 } from "#src/server/conversations/agent-message-view.server";
+import { cardPerson } from "#src/server/conversations/action-card-outcome-body.server";
 import { taskReferenceView } from "#src/server/conversations/task-reference-view.server";
 import {
   agentMessageSender,
@@ -47,10 +49,12 @@ const chooserOf = (choosers: ReadonlyMap<string, string>, userId: string) => {
   return handle ? { handle } : null;
 };
 
-/** A replayed answer: a questions card's every answer, or the one option of a choice. */
+/** A replayed outcome: the asked person's decline, a questions card's every answer, or the one
+ * option of a choice. */
 function answerBody(
   card: {
     kind: string;
+    state: string;
     payload: unknown;
     result: unknown;
     committedByUserId: string | null;
@@ -59,9 +63,11 @@ function answerBody(
   choosers: ReadonlyMap<string, string>,
 ) {
   const chooser = card?.committedByUserId ? chooserOf(choosers, card.committedByUserId) : null;
+  if (card?.state === "cancelled") return cardDeclinedNotice(card, target, chooser);
   if (card?.kind !== "questions") return choiceResultBody(card, target, chooser);
   const answers = (card.result as { answers?: QuestionsAnswer[] } | null)?.answers ?? [];
-  return questionsResultBody(answers, chooser ? `@${chooser.handle}` : "Someone", target);
+  const prompt = (card.payload as { prompt?: string } | null)?.prompt;
+  return questionsResultBody(answers, cardPerson(chooser?.handle), target, prompt);
 }
 
 export async function readPendingAgentDeliveries(
@@ -107,13 +113,19 @@ export async function readPendingAgentDeliveries(
           pendingMentionActions: { where: NOTIFIED_AGENT_WHERE(agentId), select: { id: true } },
           memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
           actionCard: {
-            select: { kind: true, payload: true, result: true, committedByUserId: true },
+            select: {
+              kind: true,
+              state: true,
+              payload: true,
+              result: true,
+              committedByUserId: true,
+            },
           },
         },
       },
     },
   });
-  // Who answered each replayed choice, so the answer reads the same as the live push.
+  // Who answered or declined each replayed choice, so the answer reads the same as the live push.
   const chooserIds = [
     ...new Set(
       deliveries.flatMap((delivery) =>

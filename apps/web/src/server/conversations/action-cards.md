@@ -19,6 +19,14 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   it refuses `app:grant_agent`, which `AppGrantActionCards.deny` cancels after `AppAgentAccess.deny`.
   A re-cancel by the person who already cancelled it is a no-op (a keepalive and a retry can both
   send it); a settle by anyone else, or on an executed card, is `CONFLICT`.
+- A `choice`/`questions` card's three outcomes — answered, declined (the asked person's cancel
+  only; anyone else's cancel, the Agent's owner's or an admin's withdrawal, wakes nobody), expired — each wake the preparing Agent with
+  a system notice in one shape naming the asked person (`action-card-outcome-body.server.ts`
+  words them, `wakeCardAuthor` writes the delivery row and pushes). Answered and declined carry
+  delivery reason `choice` (an installed daemon already treats it as a card event, so a `choice`
+  delivery does not always hold an answer: the offline replay reads the card's state); expiry
+  carries `expired`. The decline wakes only when the conditional `pending → cancelled` update
+  changed the row, and a failed wake is logged, never fails the cancel.
 - Card state changes publish the existing `ConversationRealtime.messageAvailable`; do not add a card-specific realtime channel.
 - A `page:fill` card stores field labels, optional selectors, and the Agent's computer id only.
   Commit types the submitted values into that Agent's browser through the desktop proxy (which

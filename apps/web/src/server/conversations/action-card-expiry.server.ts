@@ -3,6 +3,7 @@ import { getDatabaseClient } from "#src/server/db/client.server";
 import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
+import { cardExpiredBody, cardPerson } from "./action-card-outcome-body.server";
 import { wakeCardAuthor } from "./action-card-outcome-wake.server";
 import { publishActionCardUpdate } from "./action-card-message.server";
 import { CentrifugoConversationRealtime } from "./conversation-realtime.server";
@@ -11,6 +12,7 @@ type ExpiredCard = {
   messageId: string;
   conversationId: string;
   workspaceId: string;
+  kind: string;
   preparedByAgentId: string;
   payload: unknown;
 };
@@ -31,7 +33,7 @@ export async function expireActionCards(
     UPDATE "action_cards"
     SET "state" = 'expired', "updatedAt" = now()
     WHERE "state" = 'pending' AND "expiresAt" IS NOT NULL AND "expiresAt" <= ${now}
-    RETURNING "messageId", "conversationId", "workspaceId", "preparedByAgentId", "payload"
+    RETURNING "messageId", "conversationId", "workspaceId", "kind", "preparedByAgentId", "payload"
   `;
   if (!expired.length) return 0;
   // A process without Centrifugo (a test, a maintenance run) still expires the rows.
@@ -68,14 +70,16 @@ async function deliverExpired(
   publisher: AgentDeliveryPublisher | undefined,
   card: ExpiredCard,
 ) {
-  const payload = card.payload as { prompt?: string } | null;
-  await wakeCardAuthor(
-    db,
-    publisher,
-    card,
-    "expired",
-    (target) =>
-      `Your action card "${payload?.prompt ?? "a card"}" expired in ${target}: nobody answered it.`,
+  const payload = card.payload as { prompt?: string; to?: string } | null;
+  const asked = payload?.to
+    ? await db.user.findUnique({ where: { id: payload.to }, select: { username: true } })
+    : undefined;
+  await wakeCardAuthor(db, publisher, card, "expired", (target) =>
+    cardExpiredBody(asked ? cardPerson(asked.username) : undefined, {
+      kind: card.kind,
+      prompt: payload?.prompt,
+      target,
+    }),
   );
 }
 

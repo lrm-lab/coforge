@@ -13,18 +13,14 @@ import type {
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { questionsResultBody } from "./agent-message-view.server";
+import { cardPerson } from "./action-card-outcome-body.server";
 import { publishActionCardUpdate } from "./action-card-message.server";
-import { AgentDeliveryPublisher, agentDeliveryPush } from "./agent-delivery.server";
+import { AgentDeliveryPublisher } from "./agent-delivery.server";
+import { wakeCardAuthor } from "./action-card-outcome-wake.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
-import {
-  conversationTarget,
-  deliveryTarget,
-  TARGET_CONVERSATION_SELECT,
-} from "#src/server/db/repositories/direct-conversation-agent-message.server";
-import { directTargets } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 
 const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -179,6 +175,7 @@ export async function commitQuestionsCard(
     conversationId: card.conversationId,
     agentId: card.preparedByAgentId,
     actorUserId: principal.actorUserId,
+    prompt: payload.prompt,
     answers,
   });
   return answers;
@@ -242,71 +239,21 @@ async function wakeAskingAgent(
     conversationId: string;
     agentId: string;
     actorUserId: string;
+    prompt?: string;
     answers: QuestionsAnswer[];
   },
 ) {
-  const [message, agent, actor] = await Promise.all([
-    db.message.findUnique({
-      where: { id: input.messageId },
-      select: {
-        id: true,
-        sequence: true,
-        threadRootId: true,
-        conversation: { select: TARGET_CONVERSATION_SELECT },
-      },
-    }),
-    db.agent.findUnique({
-      where: { id: input.agentId },
-      select: { computerId: true },
-    }),
-    db.user.findUnique({
-      where: { id: input.actorUserId },
-      select: { username: true },
-    }),
-  ]);
-  if (!message) return;
-  // A user row that is gone leaves the answer anonymous rather than unnamed.
-  const who = actor ? `@${actor.username}` : "Someone";
-  // The Agent's own card message has no delivery; an existing one means another path wrote it,
-  // which must fail loudly rather than have its reason overwritten.
-  const delivery = await db.agentMessageDelivery.create({
-    data: {
-      workspaceId: input.workspaceId,
-      conversationId: input.conversationId,
-      agentId: input.agentId,
-      messageId: input.messageId,
-      sequence: message.sequence,
-      reason: "choice",
-    },
-    select: { deliveryId: true, createdAt: true, reason: true },
+  const actor = await db.user.findUnique({
+    where: { id: input.actorUserId },
+    select: { username: true },
   });
-  const targetOf = await directTargets(db, input.workspaceId, input.agentId, [
-    message.conversation,
-  ]);
-  const target = deliveryTarget(
-    conversationTarget(message.conversation, targetOf),
-    message.threadRootId,
-  );
-  await new AgentDeliveryPublisher(publisher ?? createCentrifugoServerApi()).publish(
-    input.workspaceId,
-    [
-      agentDeliveryPush({
-        computerId: agent?.computerId ?? null,
-        requestId: input.messageId,
-        conversationId: input.conversationId,
-        agentId: input.agentId,
-        messageId: input.messageId,
-        deliveryId: delivery.deliveryId,
-        sequence: message.sequence,
-        reason: delivery.reason,
-        createdAtMs: delivery.createdAt.getTime(),
-        body: questionsResultBody(input.answers, who, target),
-        mentions: [],
-        target,
-        latestSenderKind: "system",
-        latestSenderHandle: "",
-        latestSenderDescription: "",
-      }),
-    ],
+  // A user row that is gone leaves the answer anonymous rather than unnamed.
+  const who = cardPerson(actor?.username);
+  await wakeCardAuthor(
+    db,
+    new AgentDeliveryPublisher(publisher ?? createCentrifugoServerApi()),
+    { ...input, preparedByAgentId: input.agentId },
+    "choice",
+    (target) => questionsResultBody(input.answers, who, target, input.prompt),
   );
 }

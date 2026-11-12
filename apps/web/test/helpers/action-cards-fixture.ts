@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { ActionCards, ActionCardError } from "#src/server/conversations/action-cards.server";
 import type { ActionCardErrorCode } from "#src/server/conversations/action-card-error.server";
+import { AgentDeliveryPublisher } from "#src/server/conversations/agent-delivery.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { AppError, isAppError, type AppErrorCode } from "#src/lib/app-error";
 
@@ -98,12 +99,25 @@ export async function setupActionCards() {
   });
 
   const realtimeEvents: Array<{ conversationId: string; messageId: string; sequence: number }> = [];
-  const actionCards = new ActionCards(db, new PrismaDirectConversationRepository(db), {
-    async memberChanged() {},
-    async messageAvailable(event) {
-      realtimeEvents.push(event);
+  // Every Agent wake the cards send, as the wire bytes the daemon would receive.
+  const pushes: Uint8Array[] = [];
+  const publisher = new AgentDeliveryPublisher({
+    publishBatch: async (publications) => {
+      pushes.push(...publications.map((publication) => publication.data as Uint8Array));
+      return publications.map(() => ({ status: "fulfilled" as const, value: undefined }));
     },
   });
+  const actionCards = new ActionCards(
+    db,
+    new PrismaDirectConversationRepository(db),
+    {
+      async memberChanged() {},
+      async messageAvailable(event) {
+        realtimeEvents.push(event);
+      },
+    },
+    publisher,
+  );
   const principal = { workspaceId: workspace.id, agentId: agent.id };
 
   async function cleanup() {
@@ -129,6 +143,8 @@ export async function setupActionCards() {
     actionCards,
     principal,
     realtimeEvents,
+    pushes,
+    publisher,
     cleanup,
   };
 }

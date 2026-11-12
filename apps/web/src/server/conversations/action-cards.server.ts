@@ -9,6 +9,8 @@ import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ActionCardError } from "./action-card-error.server";
+import { wakeAgentOfDecline } from "./action-card-outcome-wake.server";
+import type { AgentDeliveryPublisher } from "./agent-delivery.server";
 import { ActionCardHandles } from "./action-card-handles.server";
 import { actionCardSummary, addMemberHandles } from "./action-card-summary.server";
 import { resolveAppRecoverOwnerPayload } from "./app-recover-owner-action-cards.server";
@@ -82,6 +84,8 @@ export class ActionCards {
     /** Only required by `prepare`; `viewsFor`/`commit*`/`cancel` do not need a target repository. */
     private readonly conversations?: ActionCardTargetRepository,
     private readonly realtime?: ConversationRealtime,
+    /** Pushes the Agent wake of a declined card; built from the environment when absent. */
+    private readonly publisher?: AgentDeliveryPublisher,
   ) {
     this.handles = new ActionCardHandles(db);
   }
@@ -308,6 +312,7 @@ export class ActionCards {
         state: true,
         committedByUserId: true,
         payload: true,
+        preparedByAgentId: true,
         preparedByAgent: { select: { ownerId: true } },
       },
     });
@@ -333,6 +338,15 @@ export class ActionCards {
     if (!canCancel) throw new AppError("ACCESS_DENIED");
     if (card.kind === APP_GRANT_AGENT_CARD_KIND) throw new AppError("INVALID_INPUT");
     await this.markCancelled(card.conversationId, messageId, principal.actorUserId);
+    // Only the asked person's decline is news to the Agent; its owner or an admin cancelling is
+    // the Agent's side withdrawing the card.
+    if (asked !== undefined && asked === principal.actorUserId)
+      await wakeAgentOfDecline(this.db, this.publisher, {
+        ...card,
+        workspaceId: principal.workspaceId,
+        messageId,
+        askedUserId: asked,
+      });
   }
 
   private async markCancelled(conversationId: string, messageId: string, actorUserId: string) {

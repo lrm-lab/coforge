@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { APP_GRANT_AGENT_CARD_KIND } from "@lrm/coforge-sdk/agent";
+import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { setupActionCards } from "./helpers/action-cards-fixture";
 import { actionCardViews } from "#src/server/conversations/action-card-views.server";
 import { waitingChoiceCards } from "#src/server/conversations/waiting-choice-cards.server";
@@ -272,6 +273,144 @@ test("a second cancel by the same person is a no-op, and two racers settle it on
       select: { state: true },
     });
     expect(card.state).toBe("cancelled");
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+/** The Agent's wake-ups as `{ reason, body }`, decoded from the wire bytes. */
+const wakes = (ctx: Awaited<ReturnType<typeof setupActionCards>>) =>
+  ctx.pushes.map((bytes) => {
+    const delivery = decodeAgentMessageDelivery(bytes);
+    return { reason: delivery.reason, body: delivery.body };
+  });
+
+/** The wake only pushes to a Computer the preparing Agent is on. */
+const placeAgent = (ctx: Awaited<ReturnType<typeof setupActionCards>>) =>
+  ctx.db.agent.update({ where: { id: ctx.agent.id }, data: { computerId: ctx.computer.id } });
+
+test("declining a choice card wakes the asking Agent once, naming who declined", async () => {
+  const ctx = await setupActionCards();
+  try {
+    await seat(ctx, ctx.bob.id);
+    await placeAgent(ctx);
+    const prepared = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: choice(ctx.bob.username),
+    });
+    const cancel = () =>
+      ctx.actionCards.cancel(
+        { workspaceId: ctx.workspace.id, actorUserId: ctx.bob.id },
+        prepared.messageId,
+      );
+    await cancel();
+    // A keepalive and a retry send it again: the no-op must not wake the Agent twice.
+    await cancel();
+    expect(wakes(ctx)).toEqual([
+      {
+        reason: "choice",
+        body: `@${ctx.bob.username} declined your choice "Which color?" in #${ctx.hub.channelName}.`,
+      },
+    ]);
+    const deliveries = await ctx.db.agentMessageDelivery.count({
+      where: { messageId: prepared.messageId, agentId: ctx.agent.id, reason: "choice" },
+    });
+    expect(deliveries).toBe(1);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("declining a questions card wakes the asking Agent as a questions card", async () => {
+  const ctx = await setupActionCards();
+  try {
+    await seat(ctx, ctx.bob.id);
+    await placeAgent(ctx);
+    const prepared = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: questions(ctx.bob.username),
+    });
+    await ctx.actionCards.cancel(
+      { workspaceId: ctx.workspace.id, actorUserId: ctx.bob.id },
+      prepared.messageId,
+    );
+    expect(wakes(ctx)).toEqual([
+      {
+        reason: "choice",
+        body: `@${ctx.bob.username} declined your questions "A few things" in #${ctx.hub.channelName}.`,
+      },
+    ]);
+    // Offline Agent: the replay says the same, not "answered".
+    const { PrismaDirectConversationRepository } =
+      await import("#src/server/db/repositories/direct-conversation.repositories.server");
+    const pending = await new PrismaDirectConversationRepository(ctx.db).readPendingAgentDeliveries(
+      ctx.workspace.id,
+      ctx.agent.id,
+    );
+    expect(String(pending.find((row) => row.messageId === prepared.messageId)?.body)).toBe(
+      `@${ctx.bob.username} declined your questions "A few things" in #${ctx.hub.channelName}.`,
+    );
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("a cancel by the Agent's owner or a Workspace admin wakes nobody", async () => {
+  const ctx = await setupActionCards();
+  try {
+    await seat(ctx, ctx.bob.id);
+    await placeAgent(ctx);
+    const asked = async () =>
+      (
+        await ctx.actionCards.prepare(ctx.principal, {
+          target: `#${ctx.hub.channelName}`,
+          action: choice(ctx.bob.username),
+        })
+      ).messageId;
+    await ctx.actionCards.cancel(
+      { workspaceId: ctx.workspace.id, actorUserId: ctx.alice.id },
+      await asked(),
+    );
+    await ctx.actionCards.cancel(
+      { workspaceId: ctx.workspace.id, actorUserId: ctx.dave.id },
+      await asked(),
+    );
+    expect(ctx.pushes).toEqual([]);
+    expect(await ctx.db.agentMessageDelivery.count({ where: { agentId: ctx.agent.id } })).toBe(0);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("a failed wake does not fail the cancel", async () => {
+  const ctx = await setupActionCards();
+  try {
+    await seat(ctx, ctx.bob.id);
+    await placeAgent(ctx);
+    const prepared = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: choice(ctx.bob.username),
+    });
+    // The Agent's delivery for its own card already exists: the wake's insert fails loudly.
+    await ctx.db.agentMessageDelivery.create({
+      data: {
+        workspaceId: ctx.workspace.id,
+        conversationId: ctx.hub.id,
+        agentId: ctx.agent.id,
+        messageId: prepared.messageId,
+        sequence: 1,
+      },
+    });
+    await ctx.actionCards.cancel(
+      { workspaceId: ctx.workspace.id, actorUserId: ctx.bob.id },
+      prepared.messageId,
+    );
+    const card = await ctx.db.actionCard.findUniqueOrThrow({
+      where: { messageId: prepared.messageId },
+      select: { state: true },
+    });
+    expect(card.state).toBe("cancelled");
+    expect(ctx.pushes).toEqual([]);
   } finally {
     await ctx.cleanup();
   }

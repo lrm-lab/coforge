@@ -12,6 +12,7 @@ import {
   type MessageMentionRef,
 } from "./mentions.server";
 import type { QuestionsAnswer } from "./action-card-questions.server";
+import { cardAnsweredHead, cardDeclinedBody, cardPerson } from "./action-card-outcome-body.server";
 
 declare const readable: unique symbol;
 
@@ -146,15 +147,18 @@ export function choiceResultBody(
     | null
     | undefined;
   const payload = card?.payload as { prompt?: string } | null | undefined;
-  const prompt = payload?.prompt ? `"${payload.prompt}" ` : "";
   const chosen =
     result?.optionId === CHOICE_OTHER_OPTION_ID
       ? `${result.label ?? CHOICE_OTHER_DEFAULT_LABEL} (their own words)\n  │ ${fenceUserText(result.text ?? "")}`
       : result?.label
         ? `${result.optionId ?? ""} · ${result.label}`.trim()
         : "an option";
-  const who = chooser?.handle ? `@${chooser.handle}` : "Someone";
-  return `${who} answered your choice ${prompt}in ${target}: ${chosen}` as AgentReadableBody;
+  const head = cardAnsweredHead(cardPerson(chooser?.handle), {
+    kind: "choice",
+    prompt: payload?.prompt,
+    target,
+  });
+  return `${head}: ${chosen}` as AgentReadableBody;
 }
 
 /** The questions card's answers as the asking Agent reads them, woken or replaying it later: who
@@ -163,6 +167,7 @@ export function questionsResultBody(
   answers: readonly QuestionsAnswer[],
   who: string,
   target: string,
+  prompt?: string,
 ): AgentReadableBody {
   const lines = answers.map((answer) => {
     if (answer.skipped) return `${answer.prompt} → (skipped)`;
@@ -181,7 +186,22 @@ export function questionsResultBody(
       (otherText !== undefined ? `\n  │ ${fenceUserText(otherText)}` : "")
     );
   });
-  return `${who} answered your questions in ${target}:\n${lines.join("\n")}` as AgentReadableBody;
+  const head = cardAnsweredHead(who, { kind: "questions", prompt, target });
+  return `${head}:\n${lines.join("\n")}` as AgentReadableBody;
+}
+
+/** The notice an Agent missed when the person a `choice` or `questions` card asked declined it. */
+export function cardDeclinedNotice(
+  card: { kind: string; payload: unknown },
+  target: string,
+  decliner?: { handle: string } | null,
+): AgentReadableBody {
+  const payload = card.payload as { prompt?: string } | null;
+  return cardDeclinedBody(cardPerson(decliner?.handle), {
+    kind: card.kind,
+    prompt: payload?.prompt,
+    target,
+  }) as AgentReadableBody;
 }
 
 /** A forward's originals as an Agent reads them, oldest first, each with its own attachments. */
