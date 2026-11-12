@@ -15,7 +15,8 @@ type PaneProps = ComponentProps<typeof ConversationPane>;
 
 /**
  * A Task's own conversation under the Task in its popup, where a Task made from a message shows
- * that message's thread (`useTaskConversation` reads it). It draws no unread divider.
+ * that message's thread (`useTaskConversation` reads it). A reader with a seat opens on their first
+ * unread under the "New messages" divider; one without has no read position, so no divider.
  *
  * Opening it makes nothing: a Task nobody has spoken about has no conversation, and a reader has
  * no seat in one until they write. A reply makes both on the server; a file, which is uploaded to
@@ -40,7 +41,7 @@ export function TaskDiscussionPane({
 }) {
   const reply = useServerFn(replyToTask);
   const queryClient = useQueryClient();
-  const { conversationId, made, pages, newest, seated, messages, catchUp, ensure } =
+  const { conversationId, made, pages, newest, seated, messages, catchUp, ensure, loadBackTo } =
     useTaskConversation({ known, board });
   // A context, not composer props: the composer sits under `ConversationPane`, which is kept from
   // growing; the scope reaches it and its outbox without threading two props through the pane.
@@ -77,7 +78,10 @@ export function TaskDiscussionPane({
       <ConversationPane
         {...pane}
         inTaskPopup
-        keepsReadCursor={false}
+        // A seated reader's position is kept (\`useTaskConversation\`), so the popup opens on their
+        // first unread under a "New messages" divider, as a channel does (task #99).
+        keepsReadCursor={Boolean(conversationId && seated)}
+        onLoadMessageAround={loadBackTo}
         conversation={{
           mentionables,
           ...newest,

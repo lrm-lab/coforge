@@ -103,6 +103,7 @@ e2e-computer-roster-error-status.e2e.ts 6
 e2e-direct-agent-read-live.e2e.ts 6
 e2e-archived-member-notice-avatar.e2e.ts 5
 e2e-task-discussion-references.e2e.ts 5
+e2e-task-popup-unread.e2e.ts 5
 e2e-members-page-no-vertical-overflow.e2e.ts 5
 e2e-sidebar-shortcut.e2e.ts 5
 e2e-collapse-long-messages.e2e.ts 5

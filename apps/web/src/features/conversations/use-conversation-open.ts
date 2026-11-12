@@ -8,7 +8,7 @@ import type { FirstUnread } from "#src/server/conversations/conversation-open.se
  * This open's read of where the viewer's unread starts in a conversation, or in one thread of it
  * (`conversationOpenQuery`). Every observer of one open shares it: the pane's divider and landing,
  * and the read cursor's writes, which wait for it. `enabled` false reads nothing (a pane that
- * keeps no cursor, such as a Task popup's discussion).
+ * keeps no cursor, such as a Task popup's discussion the viewer has no seat in).
  *
  * The open ends when the last observer that reads it is gone (the conversation or thread was
  * left), and the read is dropped then, so the next open reads again. One that stays (the page
