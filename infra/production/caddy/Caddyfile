@@ -74,9 +74,10 @@ coforge.cn {
 
 # Web-page artifacts' sandbox (task #544): the web app tells sandbox requests
 # apart by Host alone, so this site needs only the app's proxy — no realtime or
-# desktop routes. Until coforgeusercontent.com's filing clears this is a
-# coforge.cn subdomain; host-only cookies keep it off the app's session.
-usercontent.coforge.cn {
+# desktop routes. The dedicated domain's filing cleared (task #coforge-backend:#9),
+# so production serves on coforgeusercontent.com; the interim coforge.cn
+# subdomain only redirects already-shared links to the same path on it.
+coforgeusercontent.com {
 	log {
 		output file /data/access.log {
 			roll_size 50mb
@@ -96,4 +97,8 @@ usercontent.coforge.cn {
 			header_up X-Request-Id {http.request.uuid}
 		}
 	}
+}
+
+usercontent.coforge.cn {
+	redir https://coforgeusercontent.com{uri} permanent
 }

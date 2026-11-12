@@ -17,7 +17,7 @@ import {
  *
  * It must not be the application's own host: the sandbox host is matched by name alone, so the
  * same name would hand the whole site to the sandbox. A subdomain of the application is allowed
- * (task #544: `usercontent.coforge.cn` until the dedicated domain's filing clears): every cookie
+ * (task #544 served `usercontent.coforge.cn` until the dedicated domain's filing cleared): every cookie
  * the application sets is host-only, so none reaches a subdomain, and the sandboxed page is an
  * opaque origin besides. `test/artifact-sandbox.test.ts` fails if a cookie ever gains a
  * `Domain` attribute. The application's host is read from the settings that name it
