@@ -255,10 +255,53 @@ test("a turn's first clock says when counting began, against which window", asyn
       threshold_ms: 600_000,
       silence_started_at: 61_000,
       previous_started_at: 1_000,
+      previous_window: "model",
+      window_changed: true,
+      rearms: 1,
     }),
   ]);
   expect(clockLines(records, "agent_runtime:turn_stalled_finished")).toEqual([
-    expect.objectContaining({ agent_id: "agent-a", fired: false, reason: "test_over" }),
+    expect.objectContaining({
+      agent_id: "agent-a",
+      fired: false,
+      rearms: 1,
+      last_rearm_at: 61_000,
+      reason: "test_over",
+    }),
+  ]);
+});
+
+test("the same clock reported again only counts, and the count is what a finished turn shows", async () => {
+  const { records } = await captureDaemonLogs(async () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(1_000);
+      const tracker = new StalledTurnTracker(() => undefined, 600_000, Date.now, 1_200_000);
+      const observation = {
+        turnBusy: true,
+        lastEventAtMs: 1_000,
+        hasOpenToolCall: false,
+      } as const;
+      tracker.start("agent-a", observation);
+      // The provider repeats the frame that armed the clock: nothing moved, so nothing is written.
+      for (let repeat = 0; repeat < 5; repeat += 1) tracker.observe("agent-a", observation);
+      jest.setSystemTime(61_000);
+      tracker.observe("agent-a", { ...observation, lastEventAtMs: 61_000 });
+      tracker.finish("agent-a", "test_over");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+  expect(clockLines(records, "agent_runtime:turn_stalled_armed")).toEqual([
+    expect.objectContaining({ silence_started_at: 1_000 }),
+  ]);
+  // Five repeats of an unchanged clock and one real move: exactly one line for the move.
+  expect(clockLines(records, "agent_runtime:turn_stalled_rearmed")).toHaveLength(1);
+  expect(clockLines(records, "agent_runtime:turn_stalled_rearmed")).toEqual([
+    expect.objectContaining({ silence_started_at: 61_000, rearms: 6 }),
+  ]);
+  expect(clockLines(records, "agent_runtime:turn_stalled_finished")).toEqual([
+    expect.objectContaining({ rearms: 6, last_rearm_at: 61_000, fired: false }),
   ]);
 });
 
