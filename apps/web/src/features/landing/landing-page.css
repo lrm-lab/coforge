@@ -153,6 +153,13 @@
   padding-top: calc(98 * var(--u));
 }
 
+.home-lettering {
+  display: block;
+  width: calc(465 * var(--u));
+  max-width: 100%;
+  height: auto;
+}
+
 .home-eyebrow {
   display: inline-flex;
   height: calc(40 * var(--u));
