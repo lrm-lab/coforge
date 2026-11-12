@@ -134,10 +134,24 @@ export class LaunchFailureBackoff {
    * consecutive ones that were not waits on a named recovery time, or a streak that has been
    * running longer than `deadlineMs` allows. */
   exhausted(agentId: string, cap: number, now: number = Date.now(), deadlineMs?: number): boolean {
+    return this.exhaustedBy(agentId, cap, now, deadlineMs) !== undefined;
+  }
+
+  /** Which of `exhausted`'s causes ended the Agent's wakes, so the caller reports the honest one:
+   * a failure no retry can fix, the streak cap, or the total deadline (task #33). */
+  exhaustedBy(
+    agentId: string,
+    cap: number,
+    now: number = Date.now(),
+    deadlineMs?: number,
+  ): "terminal" | "streak" | "deadline" | undefined {
     const failure = this.#failures.get(agentId);
-    if (!failure) return false;
-    if (failure.terminal || failure.streak >= cap) return true;
-    return deadlineMs !== undefined && now - failure.startedAtMs >= deadlineMs;
+    if (!failure) return undefined;
+    if (failure.terminal) return "terminal";
+    if (failure.streak >= cap) return "streak";
+    return deadlineMs !== undefined && now - failure.startedAtMs >= deadlineMs
+      ? "deadline"
+      : undefined;
   }
 
   /** When this streak began, for the log line that narrates giving up. */

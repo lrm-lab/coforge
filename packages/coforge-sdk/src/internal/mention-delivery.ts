@@ -55,6 +55,9 @@ export const MENTION_DELIVERY_TERMINAL_CODES = {
   UNSUPPORTED_DELIVERY_PATH: "UNSUPPORTED_DELIVERY_PATH",
   /** The runtime is backing off from a rate or quota limit. */
   QUOTA_LIMITED: "QUOTA_LIMITED",
+  /** Every attempt to start the Agent used up the wake deadline: it never came up, and nothing
+   * will start it for this notice (task #33). */
+  STARTUP_DEADLINE_EXCEEDED: "STARTUP_DEADLINE_EXCEEDED",
 } as const;
 export type MentionDeliveryTerminalCode =
   (typeof MENTION_DELIVERY_TERMINAL_CODES)[keyof typeof MENTION_DELIVERY_TERMINAL_CODES];

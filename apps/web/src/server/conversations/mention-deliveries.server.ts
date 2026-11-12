@@ -127,6 +127,11 @@ type DeliveryConversations = {
 
 /** How each terminal code a daemon reports settles a mention. The two identity codes are handled
  * apart: they may re-send before settling. */
+const UNCLASSIFIED = { outcome: "lost", reason: "unclassified" } as const;
+/** A person's Stop settles this way with no terminal code, which lets the daemon's own later ACK
+ * win (`settleableByAck`); a code that carries it keeps the settlement final — the daemon ran the
+ * wakes out and nothing else will start the Agent (`STARTUP_DEADLINE_EXCEEDED`, task #33). */
+const NOT_LAUNCHED = { outcome: "lost", reason: "not_launched" } as const;
 const SETTLED_BY_CODE: Record<
   string,
   { outcome: Extract<MentionOutcome, "lost" | "unknown">; reason: MentionReasonCategory | null }
@@ -138,9 +143,8 @@ const SETTLED_BY_CODE: Record<
     reason: "runtime_error",
   },
   [MENTION_DELIVERY_TERMINAL_CODES.QUOTA_LIMITED]: { outcome: "lost", reason: "quota" },
+  [MENTION_DELIVERY_TERMINAL_CODES.STARTUP_DEADLINE_EXCEEDED]: NOT_LAUNCHED,
 };
-const UNCLASSIFIED = { outcome: "lost", reason: "unclassified" } as const;
-const NOT_LAUNCHED = { outcome: "lost", reason: "not_launched" } as const;
 
 /** Whether an ACK can still settle this tracked mention: sent with an envelope, and open or
  * settled only by a person's Stop. */
