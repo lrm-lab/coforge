@@ -41,17 +41,17 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-pinned-${process.pid}`;
   const { browser, evaluate } = browserSession(browserPath, session);
-  const channelId = seededUuid("e2e-activity-inbox:pinned-channel");
   /** The text of every row under `selector` that previews this test's messages. */
   const rowsIn = (selector: string) =>
     `[...document.querySelectorAll(${selector})].map((row) => row.textContent + " " + [...row.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" ")).filter((text) => text.includes("E2E pinned"))`;
+  /** The seeded channel, once seeded: the cleanup unpins it. */
+  let channelId = "";
   try {
     const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const workspacePath = `/en/w/${workspace.slug}`;
-    // Every run starts unpinned.
-    await db.conversationPin.deleteMany({ where: { conversationId: channelId } });
     // A followed thread in the channel, and a newer top-level message that mentions the viewer.
-    const { viewer, newestId: helloId } = await seedChannel(db, {
+    // The channel's id is the helper's: it keys the channel by the workspace it is seeded in.
+    const seeded = await seedChannel(db, {
       workspaceId,
       key: "e2e-activity-inbox:pinned-",
       channelName: "e2e-activity-pinned",
@@ -60,6 +60,10 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       newest: { key: "hello", body: `<@human:${DEV_BROWSER_USER.id}> E2E pinned hello` },
       mention: "newest",
     });
+    channelId = seeded.channelId;
+    const { viewer, newestId: helloId } = seeded;
+    // Every run starts unpinned, then pins the channel.
+    await db.conversationPin.deleteMany({ where: { conversationId: channelId } });
     await db.conversationPin.create({
       data: { conversationId: channelId, memberId: viewer.id, workspaceId, sortOrder: 0 },
     });
@@ -149,7 +153,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     });
     await db.message.create({
       data: {
-        id: seededUuid("e2e-activity-inbox:pinned-again"),
+        id: seededUuid(`${channelId}:pinned-again`),
         body: "E2E pinned again",
         senderMemberId: peerMember.id,
         conversationId: channelId,
@@ -218,9 +222,10 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
   } finally {
     await browser("close").catch(() => undefined);
     // Leave the dev user's sidebar without this test's pin.
-    await db.conversationPin
-      .deleteMany({ where: { conversationId: channelId } })
-      .catch(() => undefined);
+    if (channelId)
+      await db.conversationPin
+        .deleteMany({ where: { conversationId: channelId } })
+        .catch(() => undefined);
     await db.$disconnect();
   }
 }, 90_000);
