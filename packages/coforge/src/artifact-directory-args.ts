@@ -1,5 +1,6 @@
 import type { AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import { invalidArgument } from "#src/command-help/index";
+import { optional, parseFlags, type FlagSpec } from "#src/artifact-flags";
 
 /**
  * `coforge artifact pull|push|download`: an artifact as a directory of files. A pull writes every
@@ -39,52 +40,27 @@ export type ArtifactDirectoryTransport = {
   }): Promise<Uint8Array>;
 };
 
-type FlagSpec = { text: string[]; count: string[]; bool: string[]; repeat: string[] };
+const DIRECTORY_FLAGS: Record<"pull" | "push" | "download", FlagSpec> = {
+  pull: { text: ["--dir"], count: ["--rev"], positionals: 1 },
+  download: { text: ["--output"], count: ["--rev"], positionals: 2 },
+  push: {
+    text: ["--target", "--title", "--description", "--entry", "--note", "--label"],
+    bool: ["--include-hidden"],
+    repeat: ["--delete"],
+    positionals: 1,
+  },
+};
 
 export function parseDirectoryArgs(args: readonly string[]): ArtifactDirectoryInvocation {
   const operation = args[0] as "pull" | "push" | "download";
   const command = `artifact ${operation}`;
-  const spec: FlagSpec =
-    operation === "pull"
-      ? { text: ["--dir"], count: ["--rev"], bool: [], repeat: [] }
-      : operation === "download"
-        ? { text: ["--output"], count: ["--rev"], bool: [], repeat: [] }
-        : {
-            text: ["--target", "--title", "--description", "--entry", "--note", "--label"],
-            count: [],
-            bool: ["--include-hidden"],
-            repeat: ["--delete"],
-          };
-  const positionals: string[] = [];
-  const text: Record<string, string> = {};
-  const count: Record<string, number> = {};
-  const repeated: string[] = [];
-  const switches = new Set<string>();
-  let json = false;
-  for (let index = 1; index < args.length; index += 1) {
-    const arg = args[index]!;
-    if (arg === "--json") json = true;
-    else if (spec.bool.includes(arg)) switches.add(arg);
-    else if (!arg.startsWith("--")) positionals.push(arg);
-    else {
-      const known = [...spec.text, ...spec.count, ...spec.repeat].includes(arg);
-      if (!known) throw invalidArgument(command, `Unexpected argument ${arg}`);
-      const value = args[index + 1];
-      if (value === undefined) throw invalidArgument(command, `${arg} needs a value`);
-      index += 1;
-      if (spec.repeat.includes(arg)) repeated.push(value);
-      else if (arg in text || arg in count) throw invalidArgument(command, `${arg} is given twice`);
-      else if (spec.count.includes(arg)) {
-        if (!/^(0|[1-9]\d*)$/.test(value) || !Number.isSafeInteger(Number(value)))
-          throw invalidArgument(command, `${arg} takes a version number, not "${value}"`);
-        count[arg] = Number(value);
-      } else text[arg] = value;
-    }
-  }
-  const optional = <T>(key: string, value: T | undefined) =>
-    value === undefined ? {} : { [key]: value };
+  const { positionals, text, count, repeated, switches, json } = parseFlags(
+    command,
+    args.slice(1),
+    DIRECTORY_FLAGS[operation],
+  );
   const want = operation === "download" ? 2 : 1;
-  if (positionals.length > want || (operation !== "push" && positionals.length < want))
+  if (operation !== "push" && positionals.length < want)
     throw invalidArgument(
       command,
       operation === "download"
