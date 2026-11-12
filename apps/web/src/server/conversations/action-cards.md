@@ -17,8 +17,8 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
 - `ActionCards.cancel` (the preparing Agent's owner, a Workspace owner/admin, or the person a
   `choice`/`questions` card asks — the asked person's dismissal) only moves `pending → cancelled`;
   it refuses `app:grant_agent`, which `AppGrantActionCards.deny` cancels after `AppAgentAccess.deny`.
-  A re-cancel by the person who already cancelled it is a no-op (a keepalive and a retry can both
-  send it); a settle by anyone else, or on an executed card, is `CONFLICT`.
+  A re-cancel by the person who already cancelled it is a no-op (a retry can send it
+  twice); a settle by anyone else, or on an executed card, is `CONFLICT`.
 - A `choice`/`questions` card's three outcomes — answered, declined (the asked person's cancel
   only; anyone else's cancel, the Agent's owner's or an admin's withdrawal, wakes nobody), expired — each wake the preparing Agent with
   a system notice in one shape naming the asked person (`action-card-outcome-body.server.ts`

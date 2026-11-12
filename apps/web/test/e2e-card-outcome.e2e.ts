@@ -13,10 +13,12 @@ import {
 
 /**
  * Looking at someone else's card, its state reads at a glance (Frank, task #94: "我看别人的 option
- * card，看不出来已提交和未提交"): still waiting on them, answered by them behind a green check,
- * ignored by them, or withdrawn, each said in words on the card's last line, on a questions card
- * as on a choice card. Seeds an Agent asking a second person five cards; screenshots in light,
- * dark and on a phone go to `.amp/e2e/card-outcome/`.
+ * card，看不出来已提交和未提交"): still waiting on them ("Waiting on <name>"), answered by them
+ * (their answers beside the questions, their name by face), declined by them ("<name> didn't
+ * answer"), or withdrawn by someone else, each on the stream card's last line and in
+ * `data-question-card`, on a questions card as on a choice card; a card nobody will answer is
+ * gray. Seeds an Agent asking a second person five cards; screenshots in light, dark and on a
+ * phone go to `.amp/e2e/card-outcome/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/card-outcome");
@@ -153,8 +155,18 @@ test("someone else's card says whether it waits, was answered, ignored or withdr
 
   const card = (id: string) => `document.querySelector('[data-message-id="${id}"]')`;
   const outcome = (id: string) =>
-    evaluate<{ kind: string | null; text: string } | null>(
-      `(() => { const line = ${card(id)}?.querySelector("[data-card-outcome]"); return line && { kind: line.getAttribute("data-card-outcome"), text: line.textContent.replace(/\\s+/g, " ").trim() }; })()`,
+    evaluate<{ state: string | null; status: string; answers: string[] } | null>(
+      `(() => {
+        const el = ${card(id)}?.querySelector("[data-question-card]");
+        if (!el) return null;
+        const last = el.lastElementChild;
+        const rows = [...el.querySelectorAll("[data-question-row]")];
+        return {
+          state: el.getAttribute("data-question-card"),
+          status: last && !last.hasAttribute("data-question-row") ? last.textContent.replace(/\\s+/g, " ").trim() : "",
+          answers: rows.map((row) => row.children[1]?.textContent.trim() ?? ""),
+        };
+      })()`,
     );
   const open = async (locale: string) => {
     await browser("open", `${origin}/${locale}/w/${workspace.slug}/channel/${channel.id}`);
@@ -166,13 +178,34 @@ test("someone else's card says whether it waits, was answered, ignored or withdr
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
     await open("en");
-    // Waiting: no outcome yet, only whom it waits on.
-    expect(await outcome(waiting)).toBeNull();
-    expect(await evaluate<string>(`${card(waiting)}.textContent`)).toContain("Waiting for");
-    expect(await outcome(answered)).toEqual({ kind: "answered", text: "Jing Peer answered" });
-    expect(await outcome(ignored)).toEqual({ kind: "ignored", text: "Jing Peer ignored it" });
-    expect(await outcome(withdrawn)).toEqual({ kind: "cancelled", text: "Cancelled" });
-    expect(await outcome(choiceIgnored)).toEqual({ kind: "ignored", text: "Jing Peer ignored it" });
+    // Waiting: no answers yet, only whom it waits on.
+    expect(await outcome(waiting)).toEqual({
+      state: "pending",
+      status: "Waiting on Jing Peer",
+      answers: ["", ""],
+    });
+    // Answered: their answers beside the questions, their name alone on the last line.
+    expect(await outcome(answered)).toEqual({
+      state: "executed",
+      status: "Jing Peer",
+      answers: ["You translate, I review", "Drop it"],
+    });
+    // Closed without an answer: gray, nothing beside the questions, and why.
+    expect(await outcome(ignored)).toEqual({
+      state: "cancelled",
+      status: "Jing Peer didn't answer",
+      answers: ["", ""],
+    });
+    expect(await outcome(withdrawn)).toEqual({
+      state: "cancelled",
+      status: "Withdrawn",
+      answers: ["", ""],
+    });
+    expect(await outcome(choiceIgnored)).toEqual({
+      state: "cancelled",
+      status: "Jing Peer didn't answer",
+      answers: [""],
+    });
 
     const shoot = async (name: string) => {
       await evaluate(`(${card(answered)}.scrollIntoView({ block: "center" }), true)`);
@@ -181,8 +214,9 @@ test("someone else's card says whether it waits, was answered, ignored or withdr
     };
     await shoot("en-1440");
     await open("zh-CN");
-    expect((await outcome(answered))?.text).toBe("Jing Peer 已回答");
-    expect((await outcome(ignored))?.text).toBe("Jing Peer 已忽略");
+    expect((await outcome(answered))?.status).toBe("Jing Peer");
+    expect((await outcome(ignored))?.status).toBe("Jing Peer 没回答");
+    expect((await outcome(withdrawn))?.status).toBe("已撤回");
     await shoot("zh-CN-1440");
     await evaluate(`(document.documentElement.classList.add("dark-mode"), true)`);
     await shoot("zh-CN-1440-dark");

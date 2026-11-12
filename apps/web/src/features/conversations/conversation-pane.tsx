@@ -36,6 +36,7 @@ import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { ConversationStreamPlaceholder } from "./conversation-stream-placeholder";
 import { ThreadRepliesMarker } from "./thread-replies-marker";
 import { ThreadRootMessage } from "./thread-root-message";
+import { QuestionDockHost } from "./question-dock-host";
 
 export function ConversationPane({
   conversation,
@@ -132,6 +133,7 @@ export function ConversationPane({
     scrollToLatest,
   } = reading;
   const messageListRef = useRef<HTMLOListElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
   const { olderLoad, loadOlder } = useLoadOlder({
     historyRef,
     anchorRef: historyScrollAnchorRef,
@@ -257,157 +259,165 @@ export function ConversationPane({
       onReadLatest,
     });
 
-  return (
-    <div data-conversation-pane className="flex min-h-0 flex-1 flex-col">
-      {inTaskPopup ? null : root ? (
-        <ThreadPaneHeader
-          context={threadContext}
-          onScrollToTop={() => historyRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-          onClose={onClose}
-          onViewInConversation={onViewInConversation}
-          follow={threadFollow}
-          action={threadHeaderAction}
-        />
-      ) : (
-        header
-      )}
+  // The cards a thread asks include its root's, shown above the replies.
+  const dockMessages = useMemo(
+    () => (root ? [root, ...visibleMessages] : visibleMessages),
+    [root, visibleMessages],
+  );
 
-      <div className="group/history relative min-h-0 flex-1">
-        <div
-          ref={historyRef}
-          // The router matches restored scroll targets by a structural selector unless the
-          // element names itself, and every conversation renders the same structure — so
-          // without this the previous conversation's offset is applied to this one.
-          data-scroll-restoration-id={`conversation-${conversation.conversationId}${root ? `-thread-${root.id}` : ""}`}
-          aria-label={root ? m.conversation_thread() : m.conversation_history()}
-          onScroll={trackReadingPosition}
-          onWheel={bottomPin.read}
-          onTouchMove={bottomPin.read}
-          onPointerDown={bottomPin.read}
-          onKeyDown={bottomPin.read}
-          className="h-full overflow-y-auto pb-9 [scrollbar-width:thin]"
-        >
-          {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. */}
-          <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
-            {root && !inTaskPopup && root.weeklyReportHidden !== true && (
-              <ThreadRootMessage
-                conversationId={conversation.conversationId}
-                message={root}
-                own={isOwn(root)}
-                expanded={expandedMessages.has(root.id)}
-                onToggleExpanded={toggleExpandedMessage}
-                collapsible={collapsible}
-                dateLocale={dateLocale}
-                onToggleReaction={toggleReaction}
-                onToggleSave={onToggleSave}
-                onOpenAgentProfile={openAgentProfile}
-                onOpenPersonProfile={openPersonProfile}
-                viewerId={conversation.viewerId}
-                plainMentions={plainMentions}
-                onOpenTask={openTaskReference}
-                channelNames={channelNames}
-                onQuoteSelection={canCompose ? quoteSelection : undefined}
-              />
-            )}
-            {threadMarker && (
-              <ThreadRepliesMarker count={visibleMessages.length + shownOutbox.length} />
-            )}
-            {!root && conversation.hasOlder && onLoadOlder && (
-              <OlderMessagesRow
-                rootRef={historyRef}
-                loadedCount={conversation.messages.length}
-                load={olderLoad}
-                onLoad={() => void loadOlder()}
-              />
-            )}
-            {streamLoading || (visibleMessages.length === 0 && shownOutbox.length === 0) ? (
-              <ConversationStreamPlaceholder
-                loading={streamLoading}
-                narrow={narrow}
-                emptyState={emptyState}
-              />
-            ) : (
-              // Every loaded row is rendered, in normal flow. Nothing here computes a row's position
-              // or its height, so no measurement can shift a row under the reader and no scroll
-              // correction is needed while you read; the scrollbar is the real content height.
-              <ConversationMessageList
-                conversation={conversation}
-                root={root}
-                messageListRef={messageListRef}
-                threadMarker={threadMarker}
-                streamItems={streamItems}
-                openedSystemMessages={openedSystemMessages}
-                toggleSystemGroup={toggleSystemGroup}
-                openBoundary={openBoundary}
-                jumpHighlightId={jumpHighlightId}
-                expandedMessages={expandedMessages}
-                toggleExpandedMessage={toggleExpandedMessage}
-                collapsible={collapsible}
-                dateLocale={dateLocale}
-                timeZone={timeZone}
-                isOwn={isOwn}
-                openThread={openThread}
-                toggleReaction={toggleReaction}
-                onToggleSave={onToggleSave}
-                openAgentProfile={openAgentProfile}
-                openPersonProfile={openPersonProfile}
-                plainMentions={plainMentions}
-                openTaskReference={openTaskReference}
-                channelNames={channelNames}
-                canCompose={canCompose}
-                quoteSelection={quoteSelection}
-                readTicks={readTicks}
-                threadSeenBy={Boolean(root && conversation.readTicks)}
-                shownOutbox={shownOutbox}
-                outbox={outbox}
-                outboxContinues={outboxContinues}
-              />
-            )}
-            {!root && canCompose && (
-              <WorkspaceAssistantWelcome
-                conversation={conversation}
-                entries={outboxEntries}
-                outbox={outbox}
-                draftKey={outboxDraftKey}
-              />
-            )}
-            {!root && conversation.hasNewer && onLoadNewer && (
-              <NewerSentinel sentinelRef={newerSentinelRef} />
-            )}
+  return (
+    <QuestionDockHost messages={dockMessages} paneRef={paneRef} historyRef={historyRef}>
+      <div ref={paneRef} data-conversation-pane className="flex min-h-0 flex-1 flex-col">
+        {inTaskPopup ? null : root ? (
+          <ThreadPaneHeader
+            context={threadContext}
+            onScrollToTop={() => historyRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+            onClose={onClose}
+            onViewInConversation={onViewInConversation}
+            follow={threadFollow}
+            action={threadHeaderAction}
+          />
+        ) : (
+          header
+        )}
+
+        <div className="group/history relative min-h-0 flex-1">
+          <div
+            ref={historyRef}
+            // The router matches restored scroll targets by a structural selector unless the
+            // element names itself, and every conversation renders the same structure — so
+            // without this the previous conversation's offset is applied to this one.
+            data-scroll-restoration-id={`conversation-${conversation.conversationId}${root ? `-thread-${root.id}` : ""}`}
+            aria-label={root ? m.conversation_thread() : m.conversation_history()}
+            onScroll={trackReadingPosition}
+            onWheel={bottomPin.read}
+            onTouchMove={bottomPin.read}
+            onPointerDown={bottomPin.read}
+            onKeyDown={bottomPin.read}
+            className="h-full overflow-y-auto pb-9 [scrollbar-width:thin]"
+          >
+            {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. */}
+            <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
+              {root && !inTaskPopup && root.weeklyReportHidden !== true && (
+                <ThreadRootMessage
+                  conversationId={conversation.conversationId}
+                  message={root}
+                  own={isOwn(root)}
+                  expanded={expandedMessages.has(root.id)}
+                  onToggleExpanded={toggleExpandedMessage}
+                  collapsible={collapsible}
+                  dateLocale={dateLocale}
+                  onToggleReaction={toggleReaction}
+                  onToggleSave={onToggleSave}
+                  onOpenAgentProfile={openAgentProfile}
+                  onOpenPersonProfile={openPersonProfile}
+                  viewerId={conversation.viewerId}
+                  plainMentions={plainMentions}
+                  onOpenTask={openTaskReference}
+                  channelNames={channelNames}
+                  onQuoteSelection={canCompose ? quoteSelection : undefined}
+                />
+              )}
+              {threadMarker && (
+                <ThreadRepliesMarker count={visibleMessages.length + shownOutbox.length} />
+              )}
+              {!root && conversation.hasOlder && onLoadOlder && (
+                <OlderMessagesRow
+                  rootRef={historyRef}
+                  loadedCount={conversation.messages.length}
+                  load={olderLoad}
+                  onLoad={() => void loadOlder()}
+                />
+              )}
+              {streamLoading || (visibleMessages.length === 0 && shownOutbox.length === 0) ? (
+                <ConversationStreamPlaceholder
+                  loading={streamLoading}
+                  narrow={narrow}
+                  emptyState={emptyState}
+                />
+              ) : (
+                // Every loaded row is rendered, in normal flow. Nothing here computes a row's position
+                // or its height, so no measurement can shift a row under the reader and no scroll
+                // correction is needed while you read; the scrollbar is the real content height.
+                <ConversationMessageList
+                  conversation={conversation}
+                  root={root}
+                  messageListRef={messageListRef}
+                  threadMarker={threadMarker}
+                  streamItems={streamItems}
+                  openedSystemMessages={openedSystemMessages}
+                  toggleSystemGroup={toggleSystemGroup}
+                  openBoundary={openBoundary}
+                  jumpHighlightId={jumpHighlightId}
+                  expandedMessages={expandedMessages}
+                  toggleExpandedMessage={toggleExpandedMessage}
+                  collapsible={collapsible}
+                  dateLocale={dateLocale}
+                  timeZone={timeZone}
+                  isOwn={isOwn}
+                  openThread={openThread}
+                  toggleReaction={toggleReaction}
+                  onToggleSave={onToggleSave}
+                  openAgentProfile={openAgentProfile}
+                  openPersonProfile={openPersonProfile}
+                  plainMentions={plainMentions}
+                  openTaskReference={openTaskReference}
+                  channelNames={channelNames}
+                  canCompose={canCompose}
+                  quoteSelection={quoteSelection}
+                  readTicks={readTicks}
+                  threadSeenBy={Boolean(root && conversation.readTicks)}
+                  shownOutbox={shownOutbox}
+                  outbox={outbox}
+                  outboxContinues={outboxContinues}
+                />
+              )}
+              {!root && canCompose && (
+                <WorkspaceAssistantWelcome
+                  conversation={conversation}
+                  entries={outboxEntries}
+                  outbox={outbox}
+                  draftKey={outboxDraftKey}
+                />
+              )}
+              {!root && conversation.hasNewer && onLoadNewer && (
+                <NewerSentinel sentinelRef={newerSentinelRef} />
+              )}
+            </div>
           </div>
+          <ComposerEdgeOverlay
+            column={column}
+            conversationId={conversation.conversationId}
+            threadRootId={root?.id ?? null}
+            overhead={composerHost.overhead}
+            navigation={{
+              index: ownIndex,
+              followingLatest,
+              newMessageCount,
+              onShowMessage: (messageId) => void showMessage(messageId),
+              onShowLatest: () => void showLatestMessages(),
+              formatBody: formatIndexBody,
+            }}
+          />
         </div>
-        <ComposerEdgeOverlay
+
+        <ConversationComposerFooter
+          conversation={conversation}
+          root={root}
+          narrow={narrow}
           column={column}
-          conversationId={conversation.conversationId}
-          threadRootId={root?.id ?? null}
-          overhead={composerHost.overhead}
-          navigation={{
-            index: ownIndex,
-            followingLatest,
-            newMessageCount,
-            onShowMessage: (messageId) => void showMessage(messageId),
-            onShowLatest: () => void showLatestMessages(),
-            formatBody: formatIndexBody,
-          }}
+          readOnlyNotice={readOnlyNotice}
+          mentionCompletion={mentionCompletion}
+          composerTarget={composerTarget}
+          channels={channels}
+          onSend={onSend}
+          canSendAsTask={canSendAsTask}
+          onSent={ownIndex.add}
+          quotedDraft={quotedDraft}
+          autoFocus={composerHost.autoFocus}
+          hostRef={composerHost.composerRef}
         />
       </div>
-
-      <ConversationComposerFooter
-        conversation={conversation}
-        root={root}
-        narrow={narrow}
-        column={column}
-        readOnlyNotice={readOnlyNotice}
-        mentionCompletion={mentionCompletion}
-        composerTarget={composerTarget}
-        channels={channels}
-        onSend={onSend}
-        canSendAsTask={canSendAsTask}
-        onSent={ownIndex.add}
-        quotedDraft={quotedDraft}
-        autoFocus={composerHost.autoFocus}
-        hostRef={composerHost.composerRef}
-      />
-    </div>
+    </QuestionDockHost>
   );
 }

@@ -18,19 +18,22 @@ async function shot(
 import { devBrowserWorkspace } from "./helpers/browser-e2e";
 
 /**
- * Task #560 (Frank, 11-05, on his phone): a questions card waiting on someone else. Its "Waiting
- * for" line names them as an @mention chip (task #563); the ← → that turn its questions are
- * pressable 44px squares under a finger; a swipe turns to the next question (none of it shows at
- * rest, task #81), and the card is as tall on every question (task #535).
+ * Task #560 (Frank, 11-05, on his phone): a questions card on a phone. Someone else's card names
+ * whom it waits on in its last line, and its row opens the dock as a bottom sheet to look through,
+ * where a long recommended option wraps in the row's width; the viewer's own card is answered in
+ * the sheet by touch (an option, Next, the review, Send) and ends as the receipt and an answered
+ * card. Neither the page nor the sheet scrolls sideways, at 390 and at the narrowest phone, 320.
  *
  * Opt-in like the other browser E2Es: the real local Web and a headless Chrome as a touch phone.
- * The people, Agent, channel and card are seeded per run and removed after it.
+ * The people, Agent, channel and cards are seeded per run and removed after it. Frames are written
+ * under `.amp/e2e/questions-card-phone/`.
  */
+const LONG_OPTION = "Add a search icon to the header of all three pages";
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 const databaseUrl = Bun.env.DATABASE_URL;
 const chrome = chromePath();
 
-test("a questions card on a phone: an @mention to wait on, keys to press, the card fits its width", async () => {
+test("a questions card on a phone: looked through or answered in a sheet, nothing scrolls sideways", async () => {
   if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
     throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
   if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
@@ -78,185 +81,237 @@ test("a questions card on a phone: an @mention to wait on, keys to press, the ca
       body: `Two questions ${tail}`,
     },
   });
-  await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 1 } });
-  const labels = (names: string[], prefix: string) =>
-    names.map((label, index) => ({ id: `${prefix}${index}`, label }));
-  await db.actionCard.create({
+  const mine = await db.message.create({
     data: {
-      messageId: asking.id,
-      conversationId: channel.id,
       workspaceId,
-      kind: "questions",
-      payload: {
-        type: "questions",
-        prompt: `Before launch ${tail}`,
-        questions: [
-          {
-            id: "region",
-            prompt: "Which deploy region should we target?",
-            select: "one",
-            options: [
-              // Frank's card (11-11): a long recommended option with a description.
-              {
-                id: "r0",
-                label: "Add a search icon to the header of all three pages",
-                description: "Next to the bell; it opens the same search",
-                recommended: true,
-              },
-              { id: "r1", label: "US West" },
-              { id: "r2", label: "EU Central" },
-              { id: "r3", label: "Asia Pacific" },
-              { id: "r4", label: "Middle East" },
-            ],
-          },
-          {
-            id: "checks",
-            prompt: "Which pre-release checks should run?",
-            select: "many",
-            options: labels(["Unit tests", "End-to-end tests"], "c"),
-          },
-        ],
-        to: asked.id,
-      },
-      preparedByAgentId: agent.id,
+      conversationId: channel.id,
+      sequence: 2,
+      senderMemberId: agentMember.id,
+      body: `Two questions for you ${tail}`,
     },
   });
+  await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 2 } });
+  const labels = (names: string[], prefix: string) =>
+    names.map((label, index) => ({ id: `${prefix}${index}`, label }));
+  const payload = (to: string) => ({
+    type: "questions",
+    prompt: `Before launch ${tail}`,
+    questions: [
+      {
+        id: "region",
+        prompt: "Which deploy region should we target?",
+        select: "one",
+        options: [
+          // Frank's card (11-11): a long recommended option with a description.
+          {
+            id: "r0",
+            label: LONG_OPTION,
+            description: "Next to the bell; it opens the same search",
+            recommended: true,
+          },
+          { id: "r1", label: "US West" },
+          { id: "r2", label: "EU Central" },
+          { id: "r3", label: "Asia Pacific" },
+          { id: "r4", label: "Middle East" },
+        ],
+      },
+      {
+        id: "checks",
+        prompt: "Which pre-release checks should run?",
+        select: "many",
+        options: labels(["Unit tests", "End-to-end tests"], "c"),
+      },
+    ],
+    to,
+  });
+  for (const [message, to] of [
+    [asking, asked.id],
+    [mine, DEV_BROWSER_USER.id],
+  ] as const)
+    await db.actionCard.create({
+      data: {
+        messageId: message.id,
+        conversationId: channel.id,
+        workspaceId,
+        kind: "questions",
+        payload: payload(to),
+        preparedByAgentId: agent.id,
+      },
+    });
 
   const browser = await launchHeadlessChrome(chrome);
   let page!: Awaited<ReturnType<typeof browser.open>>;
-  const card = `document.querySelector('[data-message-id="${asking.id}"] [data-questions-card]')`;
-  /** At rest, nothing of the next question shows (Frank, 11-11: its cut-off edge read as text
-   * spilling out); the recommended option's title keeps the row's width, "Recommended" under it;
-   * the header names the channel without a `#`. */
-  const expectCardFits = async (width: string) => {
+  const card = (id: string) =>
+    `document.querySelector('[data-message-id="${id}"] [data-question-card]')`;
+  const sheet = `document.querySelector('[data-question-dock]')`;
+  const url = `${origin}/en/w/${workspace.slug}/channel/${channel.id}`;
+  /** A tap as a finger makes it, at the middle of the element `selector` finds. */
+  const tap = async (selector: string) => {
+    await page.evaluate(
+      `document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: "center" })`,
+    );
+    await Bun.sleep(150);
+    const at = await page.evaluate<{ x: number; y: number }>(`(() => {
+      const box = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    })()`);
+    await page.command("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [at] });
+    await page.command("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  };
+  /** A tap on the sheet's button whose text or name is `text`. */
+  const tapButton = async (text: string) => {
+    await page.evaluate(
+      `([...${sheet}.querySelectorAll("button")].find((button) => button.textContent.trim() === ${JSON.stringify(text)} || button.getAttribute("aria-label") === ${JSON.stringify(text)}).setAttribute("data-e2e-tap", ""), true)`,
+    );
+    await tap("[data-e2e-tap]");
+    await page.evaluate(
+      `document.querySelector("[data-e2e-tap]")?.removeAttribute("data-e2e-tap")`,
+    );
+  };
+  const inSheet = (expression: string) =>
+    until(() => page.evaluate<boolean>(`${sheet} != null && (${expression})`));
+  const option = (index: number) =>
+    `[data-question-dock] [data-dock-page-current] [role="option"]:nth-child(${index})`;
+  /** The page and the sheet stay inside the phone's width, the long recommended option wraps in
+   * its row (all of it on screen, its tag after it), and the header names the channel without a
+   * `#`. */
+  const expectSheetFits = async (width: string) => {
+    // The sheet has come up from the bottom edge.
+    await until(() =>
+      page.evaluate<boolean>(`Math.abs(${sheet}.getBoundingClientRect().bottom - innerHeight) < 2`),
+    );
     const fit = await page.evaluate<{
-      peek: string;
-      title: number;
-      row: number;
-      below: boolean;
+      pageFits: boolean;
+      sheetInside: boolean;
+      bottomAligned: boolean;
+      sideways: boolean;
+      wrapped: boolean;
+      tag: boolean;
       header: string;
     }>(`(() => {
-      const next = ${card}.querySelector('[data-question-peek]');
-      const row = ${card}.querySelector('[data-question="region"] [data-question-option="r0"]');
-      const title = [...row.querySelectorAll("span")].find((el) => el.textContent === "Add a search icon to the header of all three pages");
-      const mark = [...row.querySelectorAll("span")].find((el) => el.textContent === "Recommended" && el.getClientRects().length > 0);
-      return { peek: getComputedStyle(next).visibility,
-        title: title.getBoundingClientRect().width, row: row.getBoundingClientRect().width,
-        below: mark.getBoundingClientRect().top >= title.getBoundingClientRect().bottom - 1,
-        header: document.querySelector("[data-channel-name]").textContent };
+      const sheet = ${sheet};
+      const box = sheet.getBoundingClientRect();
+      const row = sheet.querySelector('[data-dock-page-current] [role="option"]');
+      const title = [...row.querySelectorAll("span")].find((el) => el.textContent.startsWith(${JSON.stringify(LONG_OPTION)}));
+      const body = sheet.querySelector("[data-dock-page-current]").parentElement.parentElement;
+      return {
+        pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        sheetInside: box.left >= 0 && box.right <= innerWidth + 0.5,
+        bottomAligned: Math.abs(box.bottom - innerHeight) < 2,
+        sideways: body.scrollWidth > body.clientWidth + 1,
+        wrapped: title.scrollWidth <= title.clientWidth + 1 && title.getBoundingClientRect().right <= row.getBoundingClientRect().right,
+        tag: title.textContent.includes("Recommended"),
+        header: document.querySelector("[data-channel-name]").textContent,
+      };
     })()`);
-    expect(fit.peek, width).toBe("hidden");
-    // Only the key (24px), its gap and the row's padding stand beside the title.
-    expect(fit.title, width).toBeGreaterThan(fit.row - 60);
-    expect(fit.below, width).toBe(true);
+    expect(fit.pageFits, width).toBe(true);
+    expect(fit.sheetInside, width).toBe(true);
+    expect(fit.bottomAligned, width).toBe(true);
+    expect(fit.sideways, width).toBe(false);
+    expect(fit.wrapped, width).toBe(true);
+    expect(fit.tag, width).toBe(true);
     expect(fit.header.startsWith("#"), width).toBe(false);
   };
-  try {
-    page = await browser.open(`${origin}/en/w/${workspace.slug}/channel/${channel.id}`, {
-      phone: { width: 390, height: 844 },
-    });
-    const shown = (id: string) =>
-      `${card}?.querySelector('[data-question="${id}"]:not([inert])') != null`;
-    await until(() => page.evaluate<boolean>(`${shown("region")}`), 60_000);
-    await page.evaluate(`${card}.scrollIntoView({ block: "center" })`);
+  /** Someone else's card: it names whom it waits on, and its row opens a sheet to look through. */
+  const lookThrough = async (width: string) => {
+    await until(
+      () => page.evaluate<boolean>(`${card(asking.id)}?.dataset.questionCard === "pending"`),
+      60_000,
+    );
     expect(await page.evaluate<boolean>(`matchMedia("(pointer: coarse)").matches`)).toBe(true);
-
-    // Whom it waits on reads as a message's @mention would (task #563): the chip, no face.
-    const waiting = await page.evaluate<{ chip: string | null; faces: number }>(`(() => {
-      const p = [...${card}.querySelectorAll("p")].find((el) => el.textContent.startsWith("Waiting for"));
-      return { chip: p.querySelector(".message-markdown-mention")?.textContent ?? null,
-        faces: p.querySelectorAll("[data-avatar]").length };
+    const waiting = await page.evaluate<{ text: string; width: number; answer: boolean }>(`(() => {
+      const el = ${card(asking.id)};
+      return { text: el.textContent, width: el.getBoundingClientRect().right, answer: el.querySelector("[data-question-card-answer]") !== null };
     })()`);
-    expect(waiting).toEqual({ chip: "@Raft QA", faces: 0 });
-
-    // Each arrow takes a press anywhere in a 44px square around its middle.
-    const arrows = await page.evaluate<{ label: string; corners: boolean[] }[]>(`(() =>
-      [...${card}.querySelectorAll('button[aria-label="Back"], button[aria-label="Next"]')].map((button) => {
-        const box = button.getBoundingClientRect();
-        const x = (box.left + box.right) / 2, y = (box.top + box.bottom) / 2;
-        return { label: button.getAttribute("aria-label"), corners: [[-21, -21], [21, -21], [-21, 21], [21, 21]]
-          .map(([dx, dy]) => button.contains(document.elementFromPoint(x + dx, y + dy))) };
-      }))()`);
-    expect(arrows.map((arrow) => arrow.label)).toEqual(["Back", "Next"]);
-    for (const arrow of arrows) expect(arrow.corners).toEqual([true, true, true, true]);
-
-    await expectCardFits("390");
-
-    // A swipe to the left turns to it, and the card keeps its height.
-    const height = () => page.evaluate<number>(`${card}.getBoundingClientRect().height`);
-    const before = await height();
-    const at = await page.evaluate<{ x: number; y: number }>(`(() => {
-      const box = ${card}.querySelector('[data-question="region"]').getBoundingClientRect();
-      return { x: box.left + box.width * 0.75, y: box.top + 40 };
-    })()`);
-    const touch = (type: string, x: number) =>
-      page.command("Input.dispatchTouchEvent", {
-        type,
-        touchPoints: type === "touchEnd" ? [] : [{ x, y: at.y }],
-      });
-    await touch("touchStart", at.x);
-    for (const step of [10, 30, 60, 90, 120]) await touch("touchMove", at.x - step);
-    // Under the finger, the next question comes in.
+    expect(waiting.text, width).toContain("Waiting on Raft QA");
+    expect(waiting.answer, width).toBe(false);
+    expect(waiting.width, width).toBeLessThanOrEqual(Number(width));
+    await tap(`[data-message-id="${asking.id}"] [data-question-row="region"]`);
+    await inSheet(
+      `${sheet}.getAttribute("role") === "dialog" && ${sheet}.querySelector('[data-dock="viewing"]') != null`,
+    );
+    await expectSheetFits(width);
+    // Nothing to pick, send or decline in a card that is not the viewer's.
     expect(
-      await page.evaluate<string>(
-        `getComputedStyle(${card}.querySelector('[data-question-peek]')).visibility`,
+      await page.evaluate<boolean>(
+        `["[data-dock-submit]", "[data-dock-other]", "[data-dock-decline]"].every((selector) => ${sheet}.querySelector(selector) === null)`,
       ),
-    ).toBe("visible");
-    // The question is the finger, one to one (task #91).
-    const offset = () =>
-      page.evaluate<number>(
-        `new DOMMatrixReadOnly(getComputedStyle(${card}.querySelector('[data-question="region"]')).transform).m41`,
-      );
-    await until(async () => Math.round(await offset()) === -120);
-    // Held still a moment, so the frame shows what the finger sees once painted.
-    await new Promise((r) => setTimeout(r, 400));
-    await shot(page, "swipe-120");
-    await touch("touchEnd", at.x - 120);
-    await until(() => page.evaluate<boolean>(shown("checks")));
-    // A short, slow drag snaps back: the question stays, and comes to rest where it was.
-    const back = await page.evaluate<{ x: number; y: number }>(`(() => {
-      const box = ${card}.querySelector('[data-question="checks"]').getBoundingClientRect();
-      return { x: box.left + box.width * 0.5, y: box.top + 40 };
-    })()`);
-    const slow = (type: string, x: number) =>
-      page.command("Input.dispatchTouchEvent", {
-        type,
-        touchPoints: type === "touchEnd" ? [] : [{ x, y: back.y }],
-      });
-    await slow("touchStart", back.x);
-    for (const step of [10, 20, 30, 40]) {
-      await slow("touchMove", back.x - step);
-      await new Promise((r) => setTimeout(r, 60));
-    }
-    await new Promise((r) => setTimeout(r, 150));
-    await slow("touchEnd", back.x - 40);
-    await new Promise((r) => setTimeout(r, 450));
-    expect(await page.evaluate<boolean>(shown("checks"))).toBe(true);
-    expect(
-      await page.evaluate<string>(
-        `${card}.querySelector('[data-question="checks"]').style.transform`,
-      ),
-    ).toBe("");
-    expect(await height()).toBe(before);
+    ).toBe(true);
+    await shot(page, `look-through-${width}`);
+    await tapButton("Close");
+    await until(() =>
+      page.evaluate<boolean>(`document.querySelector('[data-question-dock]') == null`),
+    );
+  };
+  try {
+    page = await browser.open(url, { phone: { width: 390, height: 844 } });
+    await lookThrough("390");
 
-    // The @mention opens whom it names, as one in a message does (task #563).
-    await page.evaluate(
-      `[...${card}.querySelectorAll(".message-markdown-mention")].find((chip) => chip.textContent === "@Raft QA").click()`,
+    // The viewer's own card, answered by touch: Answer opens the sheet, an option is ticked, and
+    // Next turns on; the review lists each question's answer, and Send ends in the receipt.
+    await tap(`[data-message-id="${mine.id}"] [data-question-card-answer]`);
+    await inSheet(`${sheet}.querySelector('[data-dock="answering"]') != null`);
+    expect(
+      await page.evaluate<boolean>(
+        `${sheet}.getAttribute("role") === "dialog" && ${sheet}.querySelectorAll("[data-dock-decline]").length === 2`,
+      ),
+    ).toBe(true);
+    await tap(option(2));
+    await inSheet(
+      `document.querySelector('${option(2)}').getAttribute("aria-selected") === "true"`,
+    );
+    await tapButton("Next");
+    await inSheet(
+      `${sheet}.querySelector('[data-dock-tab="1"]').getAttribute("aria-current") === "step"`,
+    );
+    await tap(option(1));
+    await tap(option(2));
+    await inSheet(
+      `document.querySelector('${option(1)}').getAttribute("aria-selected") === "true" && document.querySelector('${option(2)}').getAttribute("aria-selected") === "true"`,
+    );
+    await shot(page, "answering-many");
+    await tapButton("Next");
+    await inSheet(
+      `${sheet}.querySelector('[data-dock-tab="2"]').getAttribute("aria-current") === "step"`,
+    );
+    expect(
+      await page.evaluate<string[][]>(
+        `[...${sheet}.querySelectorAll('[data-dock-page-current] [role="option"]')].map((row) => [...row.children].map((el) => el.textContent.trim()))`,
+      ),
+    ).toEqual([
+      ["Which deploy region should we target?", "US West"],
+      ["Which pre-release checks should run?", "Unit tests, End-to-end tests"],
+    ]);
+    await shot(page, "review");
+    await tap("[data-question-dock] [data-dock-submit]");
+    await inSheet(`${sheet}.querySelector("[data-dock-receipt]") != null`);
+    await shot(page, "receipt");
+    await tapButton("Done");
+    await until(() =>
+      page.evaluate<boolean>(`document.querySelector('[data-question-dock]') == null`),
     );
     await until(() =>
-      page.evaluate<boolean>(
-        `new URLSearchParams(location.search).get("profile") === "user:${asked.id}"`,
-      ),
+      page.evaluate<boolean>(`${card(mine.id)}?.dataset.questionCard === "executed"`),
+    );
+    const sent = await db.actionCard.findUniqueOrThrow({ where: { messageId: mine.id } });
+    expect(sent.state).toBe("executed");
+    const answers = (
+      sent.result as { answers: { questionId: string; selection: { optionId: string }[] }[] }
+    ).answers;
+    expect(
+      answers.map((answer) => [answer.questionId, answer.selection.map((pick) => pick.optionId)]),
+    ).toEqual([
+      ["region", ["r1"]],
+      ["checks", ["c0", "c1"]],
+    ]);
+    expect(await page.evaluate<string>(`${card(mine.id)}.textContent`)).toContain(
+      "Unit tests, End-to-end tests",
     );
 
     // The narrowest phone: the same, at 320.
     await page.close();
-    page = await browser.open(`${origin}/en/w/${workspace.slug}/channel/${channel.id}`, {
-      phone: { width: 320, height: 640 },
-    });
-    await until(() => page.evaluate<boolean>(`${shown("region")}`), 60_000);
-    await page.evaluate(`${card}.scrollIntoView({ block: "center" })`);
-    await expectCardFits("320");
+    page = await browser.open(url, { phone: { width: 320, height: 640 } });
+    await lookThrough("320");
   } finally {
     await browser.close();
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);

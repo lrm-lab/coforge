@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import type { OpenPersonProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { m } from "#src/paraglide/messages";
@@ -13,18 +12,17 @@ import {
   commitAppRecoverOwnerActionCard,
   commitAppRegisterActionCard,
   commitChannelCreateActionCard,
-  commitChoiceActionCard,
   commitDesktopTakeoverActionCard,
   commitPageFillActionCard,
-  commitQuestionsActionCard,
   denyAppGrantActionCard,
   loadActionCardStates,
 } from "./action-cards.functions";
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
-import { ChoiceActionCard } from "./action-card-choice";
-import { QuestionsActionCard, type QuestionsAnswer } from "./action-card-questions";
 import { HandledActionCard } from "./action-card-handled";
+import type { ToolActionCardView } from "./action-card-labels";
+import { isAskingView } from "./question-dock-model";
+import { QuestionCard } from "./question-card";
 import { PendingActionCard, type ActionCardFailure } from "./action-card-pending";
 import { channelMembersQueryKey } from "./conversation-query-keys";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
@@ -35,7 +33,6 @@ import {
 } from "#src/features/computers/computers.functions";
 import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-origin.functions";
 import { cloudDesktopUrl, openCloudDesktopWindow } from "#src/features/computers/cloud-desktop-url";
-import { WAITING_CHOICE_CARDS_KEY } from "#src/features/inbox/activity-inbox-queries";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 
 /** Renders an Agent-prepared action card below its message body.
@@ -64,14 +61,7 @@ const KNOWN_KINDS: Record<ActionCardView["kind"], true> = {
  * A card of a kind this page does not know (one a newer server sends to an older page): said so,
  * in gray, with nothing to press, never drawn as another kind's card (task #515).
  */
-export function ActionCard({
-  card,
-  onOpenPersonProfile,
-}: {
-  card: ActionCardView;
-  /** Opens a person's profile from a card that names them, where the conversation can. */
-  onOpenPersonProfile?: OpenPersonProfile;
-}) {
+export function ActionCard({ card }: { card: ActionCardView }) {
   if (!Object.hasOwn(KNOWN_KINDS, card.kind))
     return (
       <p
@@ -81,16 +71,12 @@ export function ActionCard({
         {m.action_card_unknown()}
       </p>
     );
-  return <KnownActionCard card={card} onOpenPersonProfile={onOpenPersonProfile} />;
+  // An Agent's questions are a summary here, answered in the pane's dock.
+  if (card.kind === "choice" || card.kind === "questions") return <QuestionCard card={card} />;
+  return <KnownActionCard card={card} />;
 }
 
-function KnownActionCard({
-  card,
-  onOpenPersonProfile,
-}: {
-  card: ActionCardView;
-  onOpenPersonProfile?: OpenPersonProfile;
-}) {
+function KnownActionCard({ card }: { card: ToolActionCardView }) {
   const [view, setView] = useState(card);
   useEffect(() => setView(card), [card]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -106,8 +92,6 @@ function KnownActionCard({
   const recoverOwner = useServerFn(commitAppRecoverOwnerActionCard);
   const commitFill = useServerFn(commitPageFillActionCard);
   const commitDesktop = useServerFn(commitDesktopTakeoverActionCard);
-  const commitChoice = useServerFn(commitChoiceActionCard);
-  const commitQuestions = useServerFn(commitQuestionsActionCard);
   const queryClient = useQueryClient();
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
   // Known only to someone in the channel, who alone may commit (task #302).
@@ -144,8 +128,8 @@ function KnownActionCard({
 
   async function refetch() {
     const states = await refresh({ data: { messageIds: [view.messageId] } });
-    const next = states[view.messageId] as ActionCardView | undefined;
-    if (next) setView(next);
+    const next = states[view.messageId];
+    if (next && !isAskingView(next)) setView(next);
   }
 
   /** Runs a commit and shows the card as the server now has it. A failure says why, and the primary
@@ -195,48 +179,6 @@ function KnownActionCard({
       setFailure({ message: m.action_card_error(), retry: false, from: "cancel" });
     } finally {
       setCancelling(false);
-    }
-  }
-
-  /** The asked person's ignore, once its undo window has run out. Sent as the page goes away
-   * (`keepalive`), there is no card left to show the result on, so it only refreshes Activity. */
-  async function doIgnore({ keepalive }: { keepalive: boolean }) {
-    setFailure(null);
-    try {
-      await cancel({
-        data: { messageId: view.messageId },
-        fetch: keepalive ? (input, init) => fetch(input, { ...init, keepalive: true }) : undefined,
-      });
-      void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
-      if (!keepalive) await refetch();
-    } catch (cause) {
-      if (!keepalive) setFailure({ message: m.action_card_error(), retry: false, from: "cancel" });
-      throw cause;
-    }
-  }
-
-  async function pickChoice(optionId: string, text?: string) {
-    setFailure(null);
-    try {
-      await commitChoice({ data: { messageId: view.messageId, optionId, text } });
-      // Answered, it no longer waits on the viewer in Activity.
-      void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
-      await refetch();
-    } catch {
-      setFailure({ message: m.action_card_error(), retry: true, from: "commit" });
-    }
-  }
-
-  async function submitQuestions(answers: QuestionsAnswer[]) {
-    setFailure(null);
-    try {
-      await commitQuestions({ data: { messageId: view.messageId, answers } });
-      // Answered, it no longer waits on the viewer in Activity.
-      void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
-      await refetch();
-    } catch (cause) {
-      if (isAppErrorCode(cause, "CONFLICT")) await refetch().catch(() => {});
-      setFailure({ message: m.action_card_error(), retry: true, from: "commit" });
     }
   }
 
@@ -349,30 +291,6 @@ function KnownActionCard({
     }
   }
 
-  if (view.kind === "questions")
-    return (
-      <QuestionsActionCard
-        view={view}
-        error={failure?.message ?? ""}
-        cancelling={cancelling}
-        onSubmit={submitQuestions}
-        onCancel={() => void doCancel()}
-        onIgnore={doIgnore}
-        onOpenPersonProfile={onOpenPersonProfile}
-      />
-    );
-  if (view.kind === "choice")
-    return (
-      <ChoiceActionCard
-        view={view}
-        error={failure?.message ?? ""}
-        cancelling={cancelling}
-        onPick={pickChoice}
-        onCancel={() => void doCancel()}
-        onIgnore={doIgnore}
-        onOpenPersonProfile={onOpenPersonProfile}
-      />
-    );
   return (
     <>
       {view.state === "pending" ? (

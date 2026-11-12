@@ -4,21 +4,16 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import {
-  browserSession,
-  cpuThrottle,
-  devBrowserWorkspace,
-  localBrowserE2e,
-  pageHydrated,
-} from "./helpers/browser-e2e";
+import { browserSession, cpuThrottle, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
  * Activity's "Waiting on you" section (task #413): a choice card that asks the viewer heads the
- * All view, one that asks someone else does not appear, and answering it from the conversation the
- * row opens takes it off the list.
+ * All view, one that asks someone else does not appear, a row's "Don't answer" declines its card
+ * after a confirm and takes it off the list, and answering another from the conversation the row
+ * opens (the card's Answer opens the dock, an option and Send answer it) takes it off the list.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent and
- * peer and both cards are seeded per run and removed after it. Screenshots are written under
+ * peer and all the cards are seeded per run and removed after it. Screenshots are written under
  * `.amp/e2e/activity-waiting/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
@@ -26,13 +21,29 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-waiting");
 
 test("a choice card asking the viewer waits in Activity until they answer it", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser, evaluate } = browserSession(browserPath, `activity-waiting-${process.pid}`);
+  const { browser, evaluate, clickText } = browserSession(
+    browserPath,
+    `activity-waiting-${process.pid}`,
+  );
   const suffix = `${process.pid}-${Date.now()}`;
-  const { workspaceId, workspace } = await devBrowserWorkspace(db);
+  // A Workspace of its own: the dev user's usual one may hold other cards waiting on them, which
+  // would change the section's count.
   const peer = await db.user.create({
     data: { username: `e2e-waiting-peer-${suffix}`, displayName: "Waiting Peer" },
   });
-  await db.workspaceMembership.create({ data: { workspaceId, userId: peer.id } });
+  const workspace = await db.workspace.create({
+    data: {
+      slug: `e2e-waiting-${suffix}`,
+      name: "E2E Waiting",
+      members: {
+        create: [
+          { userId: DEV_BROWSER_USER.id, role: "member" },
+          { userId: peer.id, role: "member" },
+        ],
+      },
+    },
+  });
+  const workspaceId = workspace.id;
   const agent = await db.agent.create({
     data: {
       workspaceId,
@@ -94,14 +105,17 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
   const theirs = `E2E waiting theirs ${suffix}`;
   // Three older cards for the viewer too: four in all, past the three the section shows.
   const older = [1, 2, 3].map((index) => `E2E waiting older ${index} ${suffix}`);
-  for (const [index, prompt] of older.entries()) await card(index + 1, prompt, DEV_BROWSER_USER.id);
+  const olderIds: string[] = [];
+  for (const [index, prompt] of older.entries())
+    olderIds.push(await card(index + 1, prompt, DEV_BROWSER_USER.id));
   await card(4, theirs, peer.id);
   const mineId = await card(5, mine, DEV_BROWSER_USER.id);
   const section = `document.querySelector('ol[aria-label="Waiting on you"]')`;
   const listed = (prompt: string) =>
     `(${section}?.textContent ?? "").includes(${JSON.stringify(prompt)})`;
-  // The first option, Red.
-  const pick = `[data-message-id="${mineId}"] li:first-child > button[data-choice-row]`;
+  // The card's Answer, the button a press lands on.
+  const pick = `[data-message-id="${mineId}"] [data-question-card-answer]`;
+  const dock = "[data-question-dock]";
   let throttle: Awaited<ReturnType<typeof cpuThrottle>> | undefined;
   try {
     await mkdir(artifacts, { recursive: true });
@@ -148,10 +162,49 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     await browser("wait", "--fn", listed(older[0]!));
     expect(await evaluate<number>(shownRows)).toBe(4);
 
+    // A row's "Don't answer" asks once, then tells the Agent and takes the card off the list. Its
+    // button shows on hover, and not at all where there is no hover, so the press is a click sent
+    // to the button itself.
+    const declining = `[...${section}.querySelectorAll(":scope > li")].find((row) => row.textContent.includes(${JSON.stringify(older[0])}))`;
+    await evaluate(`(${declining}.querySelector("[data-decline]").click(), true)`);
+    await browser(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll("h2")].some((heading) => heading.textContent === "Don't answer?")`,
+    );
+    await browser("screenshot", join(artifacts, "decline-confirm.png"));
+    // Cancel goes back with nothing sent.
+    await clickText('[role="dialog"] button', "Cancel");
+    await browser(
+      "wait",
+      "--fn",
+      `![...document.querySelectorAll("h2")].some((heading) => heading.textContent === "Don't answer?")`,
+    );
+    expect(await evaluate<boolean>(listed(older[0]!))).toBe(true);
+    expect(
+      (await db.actionCard.findUniqueOrThrow({ where: { messageId: olderIds[0]! } })).state,
+    ).toBe("pending");
+    await evaluate(`(${declining}.querySelector("[data-decline]").click(), true)`);
+    await browser(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll("h2")].some((heading) => heading.textContent === "Don't answer?")`,
+    );
+    await clickText('[role="dialog"] button', "Don't answer");
+    await browser("wait", "--fn", `!${listed(older[0]!)}`);
+    expect(await evaluate<number>(shownRows)).toBe(3);
+    expect(await evaluate<string>(`${section}.previousElementSibling.textContent`)).toContain(
+      "· 3",
+    );
+    const declined = await db.actionCard.findUniqueOrThrow({ where: { messageId: olderIds[0]! } });
+    expect(declined.state).toBe("cancelled");
+    expect(declined.committedByUserId).toBe(DEV_BROWSER_USER.id);
+    await browser("screenshot", join(artifacts, "declined.png"));
+
     // The row opens the conversation at the card, which the viewer answers there. Nothing may move
-    // the card once its options show (task #72): the notification banner over the composer used to
+    // the card once its Answer shows (task #72): the notification banner over the composer used to
     // arrive a beat later, shrink the pane and, the pane following its latest message, carry the
-    // card up by the banner's height under the press, which then landed on the next option. On a
+    // card up by the banner's height under the press, which then landed on another row. On a
     // slowed CPU, as on a busy phone, that beat is long enough to press into.
     throttle = await cpuThrottle(browser, "/activity");
     await throttle.set(6);
@@ -164,7 +217,15 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     expect(new Set(tops).size).toBe(1);
     await browser("click", pick);
     await throttle.set(1);
-    await browser("wait", "--fn", `document.querySelector('${pick}') === null`);
+    // The dock opens in the composer's place; the first option, Red, then Send answer it.
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('${dock} [data-dock="answering"]') !== null`,
+    );
+    await browser("click", `${dock} [data-dock-page-current] [role="option"]:first-child`);
+    await browser("click", `${dock} [data-dock-submit]`);
+    await browser("wait", "--fn", `document.querySelector('${dock} [data-dock-receipt]') !== null`);
     await browser("wait", "--fn", `!${listed(mine)}`);
     await browser("screenshot", join(artifacts, "answered.png"));
     const answered = await db.actionCard.findUniqueOrThrow({ where: { messageId: mineId } });
@@ -178,9 +239,8 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
       .deleteMany({ where: { agentId: agent.id } })
       .catch(() => undefined);
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);
-    await db.workspaceMembership
-      .deleteMany({ where: { workspaceId, userId: peer.id } })
-      .catch(() => undefined);
+    await db.workspaceMembership.deleteMany({ where: { workspaceId } }).catch(() => undefined);
+    await db.workspace.deleteMany({ where: { id: workspaceId } }).catch(() => undefined);
     await db.user.deleteMany({ where: { id: peer.id } }).catch(() => undefined);
     await db.$disconnect();
   }

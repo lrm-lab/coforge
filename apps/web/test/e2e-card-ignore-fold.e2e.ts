@@ -4,64 +4,43 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { devBrowserWorkspace } from "./helpers/browser-e2e";
-import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
- * Task #85 (Frank, 11-11): Ignore on a choice or questions card folds the card away as a dismissed
- * notification does, its height closing over a transition instead of in one frame, and Undo opens
- * it again the same way. With reduced motion it changes at once.
+ * Task #85 (Frank, 11-12): not answering a choice or questions card is a decline, asked once. The
+ * dock's "Don't answer" opens a confirm popover over the dock; Escape and Cancel go back with
+ * nothing sent; the confirm tells the Agent, turns the dock to its receipt, and the card in the
+ * stream goes gray (`cancelled`, "You didn't answer") at the height it had, with no way to take it
+ * back. On a desktop the button is in the dock's top bar, on a phone at the sheet's foot.
  *
- * Opt-in like the other browser E2Es: the real local Web and a headless Chrome over DevTools. The
- * Agent, channel and cards are seeded per run and removed after it. Light, dark and phone frames,
- * before, during and after, are written under `.amp/e2e/card-ignore-fold/`.
+ * The file keeps the name of the old ignore-and-undo fold; that fold (a card closing over a
+ * transition and a 5-second Undo) no longer exists.
+ *
+ * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The Agent, channel and
+ * cards are seeded per run and removed after it. Confirm and receipt frames, desktop and phone,
+ * are written under `.amp/e2e/card-ignore-fold/`.
  */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-const databaseUrl = Bun.env.DATABASE_URL;
-const chrome = chromePath();
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/card-ignore-fold");
 
-/** The card's height on the frame before a press of `button` in it, then on every frame for
- * `ms` after, and whether a fold (a `grid-template-rows` transition) was running a frame after. */
-const heightsAfterPress = (card: string, button: string, ms: number) => `(async () => {
-  const card = ${card};
-  const heights = [card.getBoundingClientRect().height];
-  card.querySelector(${JSON.stringify(button)}).click();
-  await new Promise((done) => requestAnimationFrame(done));
-  const folding = card
-    .getAnimations({ subtree: true })
-    .some((a) => a.transitionProperty === "grid-template-rows" && a.playState === "running");
-  heights.push(card.getBoundingClientRect().height);
-  const start = performance.now();
-  while (performance.now() - start < ${ms}) {
-    await new Promise((done) => requestAnimationFrame(done));
-    heights.push(card.getBoundingClientRect().height);
-  }
-  return { heights, folding };
-})()`;
-type Press = { heights: number[]; folding: boolean };
-
-/** It got to `to` by a running fold, not in one frame (frames are not counted: a loaded runner
- * may draw a 150ms transition in one long frame). */
-function expectFolded({ heights, folding }: Press, to: number) {
-  expect(Math.abs(heights.at(-1)! - to), JSON.stringify(heights)).toBeLessThan(1);
-  expect(folding, JSON.stringify(heights)).toBe(true);
-}
-
-test("Ignore folds a choice or questions card away and Undo opens it, at once with reduced motion", async () => {
-  if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
-    throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-  if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-    throw new Error("DATABASE_URL must target local PostgreSQL");
-  if (!chrome) throw new Error("Chrome is required (COFORGE_E2E_CHROME)");
+test("Don't answer asks once, then sends the decline and grays the card", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const { browser, evaluate, waitFor, clickText } = browserSession(
+    browserPath,
+    `card-decline-${process.pid}`,
+  );
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({
     data: {
       workspaceId,
-      name: `e2e-ignore-fold-${tail}`,
-      displayName: `Fold Agent ${tail}`,
+      name: `e2e-decline-${tail}`,
+      displayName: `Decline Agent ${tail}`,
       ownerId: DEV_BROWSER_USER.id,
       runtimeConfig: {
         runtime: "pi",
@@ -75,7 +54,7 @@ test("Ignore folds a choice or questions card away and Undo opens it, at once wi
   const channel = await db.conversation.create({
     data: {
       workspaceId,
-      channelName: `e2e-ignore-fold-${tail}`,
+      channelName: `e2e-decline-${tail}`,
       description: "",
       members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
     },
@@ -94,9 +73,16 @@ test("Ignore folds a choice or questions card away and Undo opens it, at once wi
     });
   const choice = await message(1, `Which plan ${tail}`);
   const questions = await message(2, `Two questions ${tail}`);
-  await message(3, "A message under the cards.");
-  await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 3 } });
+  const phoneChoice = await message(3, `Which plan on a phone ${tail}`);
+  await message(4, "A message under the cards.");
+  await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 4 } });
   const options = (names: string[]) => names.map((label, index) => ({ id: `o${index}`, label }));
+  const choicePayload = (prompt: string) => ({
+    type: "choice",
+    prompt,
+    options: options(["Search in the header", "Saved filters", "Bulk actions"]),
+    to: DEV_BROWSER_USER.id,
+  });
   await db.actionCard.createMany({
     data: [
       {
@@ -104,12 +90,7 @@ test("Ignore folds a choice or questions card away and Undo opens it, at once wi
         conversationId: channel.id,
         workspaceId,
         kind: "choice",
-        payload: {
-          type: "choice",
-          prompt: "Which plan should we ship first?",
-          options: options(["Search in the header", "Saved filters", "Bulk actions"]),
-          to: DEV_BROWSER_USER.id,
-        },
+        payload: choicePayload("Which plan should we ship first?"),
         preparedByAgentId: agent.id,
       },
       {
@@ -138,150 +119,148 @@ test("Ignore folds a choice or questions card away and Undo opens it, at once wi
         },
         preparedByAgentId: agent.id,
       },
+      {
+        messageId: phoneChoice.id,
+        conversationId: channel.id,
+        workspaceId,
+        kind: "choice",
+        payload: choicePayload("Which plan should a phone ship first?"),
+        preparedByAgentId: agent.id,
+      },
     ],
   });
 
-  const choiceCard = `document.querySelector('[data-message-id="${choice.id}"] [role="group"]')`;
-  const questionsCard = `document.querySelector('[data-message-id="${questions.id}"] [data-questions-card]')`;
-  const browser = await launchHeadlessChrome(chrome);
-  let page!: Awaited<ReturnType<typeof browser.open>>;
-  const shot = async (name: string) => {
-    const { data } = await page.command<{ data: string }>("Page.captureScreenshot", {
-      format: "png",
-    });
-    await Bun.write(join(artifacts, `${name}.png`), Buffer.from(data, "base64"));
+  const card = (id: string) =>
+    `document.querySelector('[data-message-id="${id}"] [data-question-card]')`;
+  const dock = "[data-question-dock]";
+  const state = (id: string) => `${card(id)}?.dataset.questionCard`;
+  /** The decline button the viewport shows: the top bar's on a desktop, the foot's on a phone. */
+  const visibleDecline = `[...document.querySelectorAll("${dock} [data-dock-decline]")].find((button) => button.getClientRects().length > 0)`;
+  const popover = `[...document.querySelectorAll("h2")].some((heading) => heading.textContent === "Don't answer?")`;
+  const stored = (id: string) => db.actionCard.findUniqueOrThrow({ where: { messageId: id } });
+  const press = async (expression: string) => {
+    await evaluate(`(${expression}.setAttribute("data-e2e-press", ""), true)`);
+    await browser("click", "[data-e2e-press]");
+    await evaluate(
+      `(document.querySelector("[data-e2e-press]")?.removeAttribute("data-e2e-press"), true)`,
+    );
   };
-  const reducedMotion = (on: boolean) =>
-    page.command("Emulation.setEmulatedMedia", {
-      features: [{ name: "prefers-reduced-motion", value: on ? "reduce" : "no-preference" }],
-    });
-  /** Switches the theme and waits out the colour transitions, so a frame shows one theme. */
-  const theme = async (dark: boolean) => {
-    await page.evaluate(`document.documentElement.classList.toggle("dark-mode", ${dark})`);
-    await Bun.sleep(600);
+  const open = async (waiting: string) => {
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
+    await waitFor(`${state(waiting)} === "pending" && ${pageHydrated}`, 60_000);
   };
-  const height = (card: string) => page.evaluate<number>(`${card}.getBoundingClientRect().height`);
-  /** Ignores the choice card and holds the fold a little way in, for a frame of it moving. */
-  const shotMidFold = async (name: string) => {
-    await page.evaluate(`(async () => {
-      ${choiceCard}.querySelector("[data-ignore]").click();
-      await new Promise((done) => requestAnimationFrame(done));
-      for (const animation of ${choiceCard}.getAnimations({ subtree: true })) {
-        animation.pause();
-        animation.currentTime = 12;
-      }
+  const openDock = async (id: string) => {
+    await press(`document.querySelector('[data-message-id="${id}"] [data-question-card-answer]')`);
+    await waitFor(`document.querySelector('${dock} [data-dock="answering"]') !== null`);
+  };
+  /** Asks to decline, backs out two ways (Escape, Cancel), asks again and confirms. */
+  const decline = async (id: string, shot: string) => {
+    await press(visibleDecline);
+    await waitFor(popover);
+    await browser("press", "Escape");
+    await waitFor(
+      `!(${popover}) && document.querySelector('${dock} [data-dock="answering"]') !== null`,
+    );
+    expect((await stored(id)).state).toBe("pending");
+
+    await press(visibleDecline);
+    await waitFor(popover);
+    await clickText('[role="dialog"] button', "Cancel");
+    await waitFor(`!(${popover})`);
+    expect((await stored(id)).state).toBe("pending");
+    expect(await evaluate<string>(state(id))).toBe("pending");
+
+    await press(visibleDecline);
+    await waitFor(popover);
+    await browser("screenshot", join(artifacts, `${shot}-confirm.png`));
+    await clickText('[role="dialog"] button', "Don't answer");
+    await waitFor(
+      `${state(id)} === "cancelled" && document.querySelector('${dock} [data-dock-receipt]') !== null`,
+    );
+    const declined = await stored(id);
+    expect(declined.state).toBe("cancelled");
+    expect(declined.committedByUserId).toBe(DEV_BROWSER_USER.id);
+    await browser("screenshot", join(artifacts, `${shot}-declined.png`));
+  };
+  /** The card's height, its first line's colour and its words. */
+  const look = (id: string) =>
+    evaluate<{ height: number; color: string; text: string; answerable: boolean }>(`(() => {
+      const el = ${card(id)};
+      const prompt = el.querySelector("[data-question-row] span");
+      return {
+        height: el.getBoundingClientRect().height,
+        color: getComputedStyle(prompt).color,
+        text: el.textContent,
+        answerable: el.querySelector("[data-question-card-answer]") !== null,
+      };
     })()`);
-    await shot(name);
-    await page.evaluate(
-      `${choiceCard}.getAnimations({ subtree: true }).forEach((animation) => animation.finish())`,
-    );
-  };
-  const undo = (card: string) =>
-    page.evaluate(`${card}.querySelector("[data-ignore-undo]").click()`);
-  /** Undone: the choice card's options take focus again, and the fold has had time to open. */
-  const reopened = async (card: string) => {
-    await until(() =>
-      page.evaluate<boolean>(
-        `[...${card}.querySelectorAll("[data-choice-row]")].every((row) => !row.closest("[inert]"))`,
-      ),
-    );
-    await Bun.sleep(400);
-  };
-  const ready = (card: string) => `${card}?.querySelector("[data-ignore]") != null`;
 
   try {
     await mkdir(artifacts, { recursive: true });
-    page = await browser.open(`${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
-    await page.command("Emulation.setDeviceMetricsOverride", {
-      width: 1280,
-      height: 800,
-      deviceScaleFactor: 2,
-      mobile: false,
-    });
-    await reducedMotion(false);
-    await until(
-      () => page.evaluate<boolean>(`${ready(choiceCard)} && ${ready(questionsCard)}`),
-      60_000,
-    );
-    await page.evaluate(`${choiceCard}.scrollIntoView({ block: "start" })`);
+    await browser("set", "viewport", "1280", "800");
+    await open(choice.id);
+    await evaluate(`(${card(choice.id)}.scrollIntoView({ block: "start" }), true)`);
 
-    // The frames first, so a run that fails below still shows what the fold looks like.
-    for (const dark of [false, true]) {
-      const name = dark ? "dark" : "light";
-      await theme(dark);
-      await shot(`desktop-${name}-1-before`);
-      await shotMidFold(`desktop-${name}-2-folding`);
-      await shot(`desktop-${name}-3-ignored`);
-      await undo(choiceCard);
-      await reopened(choiceCard);
-    }
-    await theme(false);
-
-    // The choice card folds over a transition.
-    const open = await height(choiceCard);
-    const ignored = await page.evaluate<Press>(heightsAfterPress(choiceCard, "[data-ignore]", 400));
-    const shut = ignored.heights.at(-1)!;
-    expect(shut).toBeLessThan(open - 40);
-    expectFolded(ignored, shut);
-    // Folded, nothing in it takes focus; Undo is the way back.
+    // A choice card on a desktop: the decline is in the dock's top bar, the only one in sight.
+    const choiceBefore = await look(choice.id);
+    expect(choiceBefore.answerable).toBe(true);
+    await openDock(choice.id);
     expect(
-      await page.evaluate<boolean>(
-        `[...${choiceCard}.querySelectorAll("[data-choice-row]")].every((row) => row.closest("[inert]"))`,
+      await evaluate<boolean>(
+        `[...document.querySelectorAll("${dock} [data-dock-decline]")].filter((button) => button.getClientRects().length > 0).length === 1`,
       ),
     ).toBe(true);
-    // Undo opens it the same way, back to its height.
-    expectFolded(
-      await page.evaluate<Press>(heightsAfterPress(choiceCard, "[data-ignore-undo]", 400)),
-      open,
+    await decline(choice.id, "desktop-choice");
+    // Gray in the stream at the height it had, saying it was the viewer's own decline, with
+    // nothing left to press and nothing to undo.
+    const choiceAfter = await look(choice.id);
+    expect(choiceAfter.height).toBe(choiceBefore.height);
+    expect(choiceAfter.color).not.toBe(choiceBefore.color);
+    expect(choiceAfter.text).toContain("You didn't answer");
+    expect(choiceAfter.answerable).toBe(false);
+    expect(await evaluate<boolean>(`document.querySelector("[data-ignore-undo]") === null`)).toBe(
+      true,
     );
+    expect(
+      await evaluate<boolean>(
+        `document.querySelector('${dock} [data-dock-receipt]').textContent.includes("You didn't answer")`,
+      ),
+    ).toBe(true);
+    await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+    await browser("screenshot", join(artifacts, "desktop-choice-declined-dark.png"));
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
 
-    // The questions card the same.
-    const questionsOpen = await height(questionsCard);
-    const questionsIgnored = await page.evaluate<Press>(
-      heightsAfterPress(questionsCard, "[data-ignore]", 400),
+    // The receipt's next card is the questions card waiting below; it is declined the same way.
+    await clickText(`${dock} button`, "Next");
+    await waitFor(
+      `document.querySelector('${dock} [data-dock="answering"] [data-dock-tab]') !== null`,
     );
-    const questionsShut = questionsIgnored.heights.at(-1)!;
-    expect(questionsShut).toBeLessThan(questionsOpen - 40);
-    expectFolded(questionsIgnored, questionsShut);
-    await undo(questionsCard);
-    await until(async () => Math.abs((await height(questionsCard)) - questionsOpen) < 1);
+    const questionsBefore = await look(questions.id);
+    await decline(questions.id, "desktop-questions");
+    const questionsAfter = await look(questions.id);
+    expect(questionsAfter.height).toBe(questionsBefore.height);
+    expect(questionsAfter.color).not.toBe(questionsBefore.color);
+    expect(questionsAfter.text).toContain("You didn't answer");
+    await browser("press", "Escape");
+    await waitFor(`document.querySelector('${dock}') === null`);
 
-    // With reduced motion it is shut on the first frame, and open again on the first.
-    await reducedMotion(true);
-    const instant = await page.evaluate<Press>(heightsAfterPress(choiceCard, "[data-ignore]", 100));
-    expect(instant.folding).toBe(false);
-    expect(Math.abs(instant.heights[1]! - shut)).toBeLessThan(1);
-    const back = await page.evaluate<Press>(
-      heightsAfterPress(choiceCard, "[data-ignore-undo]", 100),
-    );
-    expect(Math.abs(back.heights[1]! - open)).toBeLessThan(1);
-    await reducedMotion(false);
-
-    // A phone, light and dark.
-    await page.close();
-    page = await browser.open(`${origin}/en/w/${workspace.slug}/channel/${channel.id}`, {
-      phone: { width: 390, height: 844 },
-    });
-    await until(() => page.evaluate<boolean>(ready(choiceCard)), 60_000);
-    await page.evaluate(`${choiceCard}.scrollIntoView({ block: "start" })`);
-    for (const dark of [false, true]) {
-      const name = dark ? "dark" : "light";
-      await theme(dark);
-      await shot(`phone-${name}-1-before`);
-      await shotMidFold(`phone-${name}-2-folding`);
-      await shot(`phone-${name}-3-ignored`);
-      await undo(choiceCard);
-      await reopened(choiceCard);
-    }
-    const phoneOpen = await height(choiceCard);
-    const phoneIgnored = await page.evaluate<Press>(
-      heightsAfterPress(choiceCard, "[data-ignore]", 400),
-    );
-    expect(phoneIgnored.heights.at(-1)!).toBeLessThan(phoneOpen - 40);
-    expectFolded(phoneIgnored, phoneIgnored.heights.at(-1)!);
-    await undo(choiceCard);
+    // A phone: the decline sits at the sheet's foot, the top bar's is hidden.
+    await browser("set", "viewport", "390", "844");
+    await open(phoneChoice.id);
+    await openDock(phoneChoice.id);
+    expect(
+      await evaluate<boolean>(`(() => {
+        const [top, foot] = [...document.querySelectorAll("${dock} [data-dock-decline]")];
+        return document.querySelector("${dock}").getAttribute("role") === "dialog"
+          && top.getClientRects().length === 0 && foot.getClientRects().length > 0;
+      })()`),
+    ).toBe(true);
+    await decline(phoneChoice.id, "phone-choice");
+    expect(
+      await evaluate<boolean>(`${card(phoneChoice.id)}.textContent.includes("You didn't answer")`),
+    ).toBe(true);
   } finally {
-    await browser.close();
+    await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.agentMessageDelivery
       .deleteMany({ where: { agentId: agent.id } })
