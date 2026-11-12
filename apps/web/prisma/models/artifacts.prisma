@@ -36,6 +36,7 @@ model Artifact {
   versions        ArtifactVersion[]
   accessEvents    ArtifactAccessEvent[]
   publicLinks     ArtifactPublicLink[]
+  readPositions   ArtifactReadPosition[]
 
   @@index([workspaceId, homeKey])
   /// The live name is unique per home (`deletedAt IS NULL`), so a soft delete releases it at once.
@@ -178,4 +179,18 @@ model ArtifactBlobGrant {
 
   @@id([workspaceId, sha256, actorKey])
   @@map("artifact_blob_grants")
+}
+
+/// The newest version of an artifact an Agent has seen, by reading its current version or by
+/// publishing one. It only moves forward (`advanceReadPosition` writes only a greater value), so a
+/// read that raced a newer one cannot rewind it. `agentId` has no foreign key: this module adds
+/// none to a table outside it. Goes with the artifact.
+model ArtifactReadPosition {
+  artifactId String   @db.Uuid
+  agentId    String   @db.Uuid
+  version    Int
+  artifact   Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@id([artifactId, agentId])
+  @@map("artifact_read_positions")
 }

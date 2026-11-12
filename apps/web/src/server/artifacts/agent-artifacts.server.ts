@@ -14,6 +14,7 @@ import {
 } from "#src/server/conversations/channel-read-access.server";
 import { artifactsDisabled } from "./artifact-access.server";
 import { ARTIFACT_FILE_LIMIT } from "./artifact-files.server";
+import { noteReadPosition, readWithPosition } from "./artifact-read-positions.server";
 import type { FileManifest } from "./artifact-manifest.server";
 import type { ArtifactShares } from "./artifact-shares.server";
 import type { ArtifactDocuments } from "./artifact-documents.server";
@@ -150,7 +151,7 @@ export async function runAgentArtifactOperation(
         });
         if (missing.length) return { status: "missing" as const, missing };
       }
-      return services.documents.create(scope, {
+      const created = await services.documents.create(scope, {
         conversationId,
         title: input.title,
         ...(input.kind !== undefined ? { kind: input.kind } : {}),
@@ -159,6 +160,10 @@ export async function runAgentArtifactOperation(
         ...(files ? { manifest: files } : {}),
         ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
       });
+      // The Agent has seen what it made: version 1, which a replayed create is also.
+      if (created.currentVersion > 0)
+        await noteReadPosition(services.db, { artifactId: created.id, agentId, version: 1 });
+      return created;
     }
     case "list": {
       const { target, after, ...page } = parsed.data as z.infer<typeof RULES.list>;
@@ -182,8 +187,16 @@ export async function runAgentArtifactOperation(
         artifactId: input.artifact,
         version: input.version,
       });
+      // What others published since this Agent last looked, when the current version is read.
+      const unseen = await readWithPosition(services.db, {
+        artifactId: read.artifact.id,
+        agentId,
+        workspaceId,
+        shown: read.version?.number ?? 0,
+        current: read.artifact.currentVersion,
+      });
       // The shown version's entry file, beside its files (`files` of `read`).
-      return { ...read, entryPath: read.version?.entryPath ?? read.artifact.entryPath };
+      return { ...read, entryPath: read.version?.entryPath ?? read.artifact.entryPath, unseen };
     }
     case "push": {
       const {
@@ -194,11 +207,19 @@ export async function runAgentArtifactOperation(
         ...input
       } = parsed.data as z.infer<typeof RULES.push>;
       const fileManifest = manifestOf({ files, delete: deleted, entry });
-      return services.documents.save(scope, {
+      const saved = await services.documents.save(scope, {
         artifactId: artifact,
         ...input,
         ...(fileManifest ? { manifest: fileManifest } : {}),
       });
+      // The Agent has seen what it published; a merged push's answer says what was merged.
+      if (saved.status === "created" || saved.status === "replayed")
+        await noteReadPosition(services.db, {
+          artifactId: artifact,
+          agentId,
+          version: saved.number,
+        });
+      return saved;
     }
     case "history": {
       const { artifact, ...input } = parsed.data as z.infer<typeof RULES.history>;
