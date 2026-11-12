@@ -78,5 +78,8 @@
   "action_card_ignore_row": "忽略：{prompt}",
   "action_card_ignored_short": "已忽略",
   "action_card_ignore_failed": "没能忽略，请重试。",
-  "action_card_unknown": "这张卡片需要更新 CoForge 后才能显示。"
+  "action_card_unknown": "这张卡片需要更新 CoForge 后才能显示。",
+  "action_card_answered": "已回答",
+  "action_card_answered_by": "{name} 已回答",
+  "action_card_ignored_by": "{name} 已忽略"
 }
