@@ -220,21 +220,38 @@ test("a questions card takes an answer for every question, then sends them at on
     ).toBe(true);
     expect(await evaluate<number>(`${card}.querySelectorAll("[data-step-done]").length`)).toBe(3);
     await shoot("phone-step");
-    const swipe = (dx: number) =>
-      evaluate(`(() => {
-        const el = ${card}.querySelector("[data-question]");
-        const r = el.getBoundingClientRect();
-        const at = (x) => new Touch({ identifier: 1, target: el, clientX: x, clientY: r.top + 20 });
-        const x = r.left + r.width / 2;
-        el.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [at(x)], changedTouches: [at(x)] }));
-        el.dispatchEvent(new TouchEvent("touchend", { bubbles: true, touches: [], changedTouches: [at(x + ${dx})] }));
-        return true;
-      })()`);
-    await swipe(-90);
+    // A flick, as a finger makes one: a press, moves a frame apart (each its own evaluate, so
+    // their times rise as a device's would), and a release right after the last move. 90px in
+    // about six frames is far faster than the flick speed, and well short of a third of the card,
+    // so this checks the flick rule, not the distance one (task #91).
+    // A drag past a third of the card, held still before the release so it leaves no speed:
+    // this checks the distance rule.
+    const drag = (dx: number) => flick(dx, 150);
+    const flick = async (dx: number, holdMs = 0) => {
+      const touch = (type: string, step: number) =>
+        evaluate(`(() => {
+          const el = ${card}.querySelector("[data-question]");
+          const r = el.getBoundingClientRect();
+          const x = (window.__flickX ??= r.left + r.width / 2) + ${dx} * ${step} / 6;
+          const at = new Touch({ identifier: 1, target: el, clientX: x, clientY: r.top + 20 });
+          const live = ${JSON.stringify(type)} === "touchend" ? [] : [at];
+          el.dispatchEvent(new TouchEvent(${JSON.stringify(type)}, { bubbles: true, touches: live, changedTouches: [at] }));
+          if (${JSON.stringify(type)} === "touchend") delete window.__flickX;
+          return true;
+        })()`);
+      await touch("touchstart", 0);
+      for (let step = 1; step <= 6; step++) {
+        await new Promise((r) => setTimeout(r, 16));
+        await touch("touchmove", step);
+      }
+      if (holdMs) await new Promise((r) => setTimeout(r, holdMs));
+      await touch("touchend", 6);
+    };
+    await flick(-90);
     await browser("wait", "--fn", shown("agent"));
-    await swipe(90);
+    await flick(90);
     await browser("wait", "--fn", shown("webhook"));
-    await swipe(-90);
+    await flick(-90);
     await browser("wait", "--fn", shown("agent"));
     expect(
       await evaluate<string>(`${current}.querySelector("[data-question-other]")?.value ?? ""`),
@@ -304,10 +321,10 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("wait", "--fn", `${shown("agent")} && ${cardText}.includes("Not answered")`);
     expect(await evaluate<number>(`${card}.getBoundingClientRect().height`)).toBe(phoneHeight);
     await shoot("phone-answered-skipped");
-    // Answered, a sideways swipe still turns the questions (task #531).
-    await swipe(-90);
+    // Answered, a sideways swipe still turns the questions (task #531), by distance this time.
+    await drag(-220);
     await browser("wait", "--fn", shown("notify"));
-    await swipe(90);
+    await drag(220);
     await browser("wait", "--fn", shown("agent"));
 
     // Read again on a desktop: the stored answers, as anyone opening the channel later sees them.
