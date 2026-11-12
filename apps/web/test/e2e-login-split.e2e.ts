@@ -242,19 +242,26 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
 
     // The agent floats and the shadow breathes on one beat, unless motion is reduced.
     await setViewport(1440);
-    await browser("hover", ".login-art");
-    await browser("wait", "500");
-    // Only the white door swings, not the frame around it, hinged on its body's right edge (the
-    // layer's glow reaches past it).
-    expect(await style(".login-art__door", "transform")).not.toBe("none");
-    expect(await style(".login-art__door", "transformOrigin")).toMatch(/^[\d.]+px /);
-    expect(
-      await evaluate<boolean>(
-        `(() => { const d = document.querySelector(".login-art__door"); const x = parseFloat(getComputedStyle(d).transformOrigin) / d.offsetWidth; return x > 0.89 && x < 0.92; })()`,
-      ),
-    ).toBe(true);
+    // The arch and its door are one still picture: hovering it moves nothing (jing, 11-12).
+    const archTop = await evaluate<number[]>(
+      `(() => { const r = document.querySelector(".login-art__frame").getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height * 0.05)]; })()`,
+    );
+    await browser("mouse", "move", String(archTop[0]), String(archTop[1]));
+    await browser("wait", "300");
+    expect(await evaluate<number>(`document.querySelectorAll(".login-art img").length`)).toBe(5);
     expect(await style(".login-art__frame", "transform")).toBe("none");
-    await browser("screenshot", join(artifacts, "arch-open-1440.png"));
+    expect(
+      await evaluate<number>(`document.querySelector(".login-art__frame").getAnimations().length`),
+    ).toBe(0);
+    // The pointer coming onto the agent makes it hop side to side, once.
+    const hops = `document.querySelector(".login-art__agent > div").getAnimations().length`;
+    expect(await evaluate<number>(hops)).toBe(0);
+    await browser("hover", ".login-art__agent");
+    await browser("wait", "120");
+    expect(await evaluate<number>(hops)).toBe(1);
+    await browser("screenshot", join(artifacts, "agent-hop-1440.png"));
+    await browser("wait", "600");
+    expect(await evaluate<number>(hops)).toBe(0);
     await browser("mouse", "move", "1200", "100");
     const animations = await evaluate<{ agent: string; shadow: string }>(
       `({ agent: getComputedStyle(document.querySelector(".login-art__float")).animationDuration, shadow: getComputedStyle(document.querySelector(".login-art__shadow")).animationDuration })`,
