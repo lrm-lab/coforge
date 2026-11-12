@@ -6,7 +6,11 @@ import type {
   AgentServiceTier,
   AgentStatus,
 } from "@lrm/coforge-sdk/internal";
-import { parseAgentDisplaySnapshot, type AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
+import {
+  credentialHoldReason,
+  parseAgentDisplaySnapshot,
+  type AgentDisplaySnapshot,
+} from "@lrm/coforge-sdk/internal";
 import { AGENT_STATUS_LEASE_MS } from "./agent-status.server";
 import {
   OBSERVE_ACTIVITY,
@@ -135,6 +139,7 @@ export class RedisAgentDisplay implements AgentDisplay {
       isFiller ? "1" : "0",
       activity.runtimeError?.errorReason ?? "",
       activity.runtimeError?.providerMessage ?? "",
+      credentialHoldReason(activity.runtimeError) ? "1" : "0",
     ]);
   }
 

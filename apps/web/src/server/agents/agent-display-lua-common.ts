@@ -115,8 +115,9 @@ local function snapshot(state, workspace_id, computer_id, agent_id, now)
     end
   end
   -- The reason the last runtime failure stopped the Agent survives the Activity reset the
-  -- "inactive" status performs; it is only meaningful while the Agent is offline.
-  if kind == "offline" and state.stopReason then
+  -- "inactive" status performs; it is only meaningful while the Agent is offline, or while a
+  -- credential hold keeps the live process waiting for a person (stopHeld).
+  if state.stopReason and (kind == "offline" or state.stopHeld) then
     stop_reason = state.stopReason
     stop_detail = state.stopDetail or cjson.null
     stop_message = state.stopMessage or cjson.null

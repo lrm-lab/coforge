@@ -23,10 +23,17 @@ if not accepted then return reject_projection(projected, state) end
 -- A fresh active process means the Agent runs again: the stop reason the last failure left
 -- no longer describes it, and neither does a failure reason still parked for a lease that
 -- never lapsed. "inactive" keeps both — that is the transition the reason explains.
+-- The one reason a live process keeps is a credential failure the Daemon holds it on
+-- (stopHeld): the process stays up waiting for a person, so its own lease renewals are no
+-- news; only a process that was not already live here ends it.
 if ARGV[5] == "active" then
-  state.stopReason = nil
-  state.stopDetail = nil
-  state.stopMessage = nil
+  local renewal = same_instance and current.status == "active" and not state.processExpired
+  if not (renewal and state.stopHeld) then
+    state.stopReason = nil
+    state.stopDetail = nil
+    state.stopMessage = nil
+    state.stopHeld = nil
+  end
   state.pendingStopReason = nil
   state.pendingStopDetail = nil
 end
@@ -65,7 +72,8 @@ return snapshot(state, ARGV[2], ARGV[3], ARGV[4], now)
 // [6] detailKind, [7] launchId, [8] daemonInstanceId (the reporting fence),
 // [9] launchId (the reporting fence), [10] clientSeq, [11] observedAtMs, [12] detail,
 // [13] entries JSON, [14] working lease ms, [15] filler ("1"/"0"),
-// [16] runtime error reason ("" when absent), [17] provider message ("" when absent).
+// [16] runtime error reason ("" when absent), [17] provider message ("" when absent),
+// [18] the failure is a credential hold that keeps the process ("1"/"0").
 export const OBSERVE_ACTIVITY = `${LUA_COMMON}
 local state = decode_state(redis.call("GET", KEYS[1]))
 local now = tonumber(ARGV[1])
@@ -97,6 +105,7 @@ if record_reason then
   state.stopReason = ARGV[16]
   state.stopDetail = ARGV[17] ~= "" and ARGV[17] or nil
   state.stopMessage = ARGV[12] ~= "" and ARGV[12] or nil
+  state.stopHeld = ARGV[18] == "1" or nil
   state.pendingStopReason = nil
   state.pendingStopDetail = nil
   state.stopLaunch = { launchId = ARGV[7], observedAt = tonumber(ARGV[11]) }
@@ -148,16 +157,25 @@ state.activityVisible = true
 -- no longer describes a stop; an error-kind frame without a reason keeps the last one.
 -- The Daemon's own sentence for the failure (the error Activity's detail) goes with it, so
 -- every surface names the stop in the words the Activity log shows.
+-- A credential failure the Daemon holds the Agent on (ARGV[18]) keeps the process, so the
+-- snapshot shows its reason while the Agent is live too (stopHeld). Only what ends the hold ends
+-- it: a fresh process, or the model's output in a later turn (working/thinking). The idle or
+-- background-task row that may close the failed turn, and a content-free progress frame, are
+-- not output, so they keep it.
+local held_survives = state.stopHeld and
+  (ARGV[5] == "online" or ARGV[15] == "1" or ARGV[6] == "subagent_activity")
 if ARGV[16] ~= "" then
   state.stopReason = ARGV[16]
   state.stopDetail = ARGV[17] ~= "" and ARGV[17] or nil
   state.stopMessage = ARGV[12] ~= "" and ARGV[12] or nil
+  state.stopHeld = ARGV[18] == "1" or nil
   state.pendingStopReason = nil
   state.pendingStopDetail = nil
-elseif ARGV[5] ~= "error" then
+elseif ARGV[5] ~= "error" and not held_survives then
   state.stopReason = nil
   state.stopDetail = nil
   state.stopMessage = nil
+  state.stopHeld = nil
   state.pendingStopReason = nil
   state.pendingStopDetail = nil
 end
@@ -217,7 +235,10 @@ if state.stopReason == reason and detail == nil then stop_detail = state.stopDet
 if state.stopReason == reason and state.stopDetail == stop_detail then
   return reject_projection(projected, state)
 end
-if state.stopReason ~= reason then state.stopMessage = nil end
+if state.stopReason ~= reason then
+  state.stopMessage = nil
+  state.stopHeld = nil
+end
 state.stopReason = reason
 state.stopDetail = stop_detail
 state.pendingStopReason = nil
