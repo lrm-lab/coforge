@@ -10,8 +10,8 @@ switched on (Settings > Experiments); until then every command fails with `ARTIF
   a plan, a report, notes, a spec. People and Agents both save it.
 - **A web page** (`coforge artifact create --kind html`) is something to look at: a dashboard,
   several options side by side, an annotated diff, a timeline, a small interactive explainer.
-  Only Agents save it, and each save replaces it whole. People view it, read its source and
-  history, and go back to an older version; to change it they ask an Agent.
+  Only Agents save it. People view it, read its source and history, and go back to an older
+  version; to change it they ask an Agent.
 
 When in doubt, make an artifact: anything people will want to edit, or that is mostly prose, is an
 artifact.
@@ -35,16 +35,45 @@ coforge artifact create --kind html --title 'Signup funnel, week 44' \
   --target '#growth' --file index.html
 ```
 
-## Reading and saving
+## Working on files
 
-- `coforge artifact read <id> [--output index.html]` prints the version line, then the text (a
-  artifact's Markdown, a page's HTML).
-- `coforge artifact push <id> --base <n> --file <path>` saves over version `n`, the one your latest
-  `read` showed. When someone saved since `n`, the files they changed that you did not touch are
-  kept. When you both changed the same file, or the same title or description, the push is
-  refused (`artifact-agent-base-moved`) and names it: read the newest version, redo your change
-  on it, and push over that. Nothing is merged inside a file, and a web page's push must always be
-  on the newest version.
+Work on an artifact as a directory, and send only what you changed:
+
+```sh
+coforge artifact pull <id> --dir work     # every file of the newest version, plus a hidden state file
+# edit files in work/
+coforge artifact push work --note 'moved the date'
+```
+
+- `pull <id> [--dir <dir>] [--rev <n>]` needs a new, empty, or earlier-pulled directory (by default
+  a folder named after the title). It writes `.coforge-artifact.json` there: leave it in place, it
+  remembers the version you started from and each file's hash.
+- `push [<dir>]` sends the files whose content differs from what was pulled, as a new version, and
+  prints it. A file you removed is kept on the server; to delete one, remove it and add
+  `--delete <path>`. Files starting with `.` stay out unless `--include-hidden`.
+- Push in a directory with no state file makes a new artifact from it: `coforge artifact push dir
+--target '#channel' --title <t>` (add `--description <line>` when the entry is an `.html` file,
+  `--entry <file>` to pick the file it opens at; without `--target` it goes to the Workspace).
+- `download <id> <path> [--output <file>] [--rev <n>]` saves one file's exact bytes.
+- `read <id>` lists the version's files and entry (`--files` for all of them); `list` takes
+  `--query <words>`, and its last line names the next page when there is one.
+- For now a web page is exactly one `index.html`.
+
+If someone saved since your pull, the push keeps what they changed in files you did not touch.
+When you both changed the same file (or the title or description), it is refused
+(`artifact-agent-base-moved`) and names the files: pull the newest version into a fresh
+directory, redo the change on it, and push from there.
+
+## Reading and saving a single text
+
+- `coforge artifact read <id> [--output index.html]` prints the version line, the files and the
+  entry's text (an artifact's Markdown, a page's HTML).
+- `coforge artifact push <id> --base <n> --file <path>` saves one text over version `n`, the one
+  your latest `read` showed. When someone saved since, the same rule as a directory push applies:
+  what they changed elsewhere is kept, and when you both changed the entry file or the same
+  setting it is refused (`artifact-agent-base-moved`): read the newest version, redo your change
+  on it, and push over that. Nothing is merged inside a file. A web page's push must always be on
+  the newest version.
 - `coforge artifact history <id>` and `coforge artifact revert <id> --to <n> --base <current>` work
   the same for both.
 
