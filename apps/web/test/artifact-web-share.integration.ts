@@ -31,7 +31,7 @@ const store: ArtifactBlobStore = {
 };
 
 let workspaceId: string;
-const people = { alice: "", bob: "", carol: "" };
+const people = { alice: "", bob: "", carol: "", dave: "" };
 const rooms = {
   closed: "", // private, Alice's: the artifact's home
   open: "", // public, Alice is in it
@@ -155,10 +155,20 @@ test("a reader shares into a channel and a DM they may post in: one message each
 
 test("someone who cannot read the artifact sends nothing anywhere", async () => {
   const before = (await linkMessages()).length;
-  // Bob is not in the private channel the artifact lives in; he may post in #open all the same.
-  const refused = await share(people.bob, [rooms.open]).catch((error: unknown) => error);
+  // Dave is in no Workspace at all; every member reads every artifact (task #20), so only
+  // someone outside reads nothing.
+  const refused = await share(people.dave, [rooms.open]).catch((error: unknown) => error);
   expect(isAppError(refused) && refused.code).toBe("NOT_FOUND");
   expect((await linkMessages()).length).toBe(before);
+});
+
+test("a member who is not in the artifact's home channel can still share it", async () => {
+  // Bob reads the artifact workspace-wide though he is not in its private channel (task #20);
+  // sharing posts links and grants nothing, so his send into #open goes through.
+  const result = await share(people.bob, [rooms.open]);
+  expect(result.outcome).toBe("success");
+  const sent = await linkMessages();
+  expect(sent.some((message) => message.conversationId === rooms.open)).toBe(true);
 });
 
 test("each destination the person may not post in fails with its reason; the rest go through", async () => {
