@@ -22,22 +22,23 @@ const LEAN: Keyframe[] = [
   { transform: "rotate(-4deg) translateX(-2%)" },
 ];
 
-/** A hop to each side and back when the pointer comes onto the agent (jing, 11-12). */
+/** A sway to each side and back, tilting from its foot, when the pointer comes onto the agent
+ * (jing, 11-12: a tilt, not a shake of the head). */
 const HOP: Keyframe[] = [
-  { transform: "translateX(0)" },
-  { transform: "translateX(-5%)", offset: 0.25 },
-  { transform: "translateX(4%)", offset: 0.55 },
-  { transform: "translateX(-1.5%)", offset: 0.8 },
-  { transform: "translateX(0)" },
+  { transform: "rotate(0deg)" },
+  { transform: "rotate(-7deg)", offset: 0.25 },
+  { transform: "rotate(6deg)", offset: 0.55 },
+  { transform: "rotate(-2.5deg)", offset: 0.8 },
+  { transform: "rotate(0deg)" },
 ];
-const HOP_MS = 520;
+const HOP_MS = 650;
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * The brand panel's picture, in the designer's own layers (`public/login/`): the arch with its white
  * door ajar (one still picture), the agent in front and its shadow on the ground. The float and the
- * shadow's breath are `login-art.css`; the pointer coming onto the agent makes it hop side to side
+ * shadow's breath are `login-art.css`; the pointer coming onto the agent makes it sway side to side
  * once.
  *
  * The agent answers the forms beside it (jing, 11-10; `login-art-state.tsx`): while a password is
@@ -105,7 +106,7 @@ export function LoginArt() {
       <img src="/login/frame.webp" alt="" className="login-art__frame" />
       <img src="/login/shadow.webp" alt="" className="login-art__shadow" />
       <div ref={agent} className="login-art__agent" onPointerEnter={onHop}>
-        <div ref={hop}>
+        <div ref={hop} className="login-art__hop">
           <div className="login-art__float">
             <img src="/login/agent.webp" alt="" className="login-art__face" />
             <img
