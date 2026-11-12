@@ -71,11 +71,18 @@ test("the judgment reports which fuse fired and the threshold it used", () => {
     thresholdMs: STALLED_RECOVERY_SILENCE_MS,
   });
   expect(
+    stalledRecoveryBasis(facts({ turnBusy: false, liveTurn: true, noticeAcceptedForMs: 900_000 }), {
+      lastEventAtMs: LAST_EVENT_AT,
+    }),
+  ).toMatchObject({ reason: "noticed_but_frozen" });
+  // No turn in progress is Raft's committed-idle Agent: taking a notice and being idle is its own
+  // choice, never a frozen turn (task #14 — this is what restarted grace while she sat idle).
+  expect(
     stalledRecoveryBasis(
       facts({ turnBusy: false, liveTurn: false, noticeAcceptedForMs: 900_000 }),
       { lastEventAtMs: LAST_EVENT_AT },
     ),
-  ).toMatchObject({ reason: "noticed_but_frozen" });
+  ).toBeUndefined();
   // Nothing is judged over a tool still running.
   expect(
     stalledRecoveryBasis(facts({ hasOpenToolCall: true }), { lastEventAtMs: LAST_EVENT_AT }),
