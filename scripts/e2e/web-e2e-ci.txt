@@ -20,6 +20,7 @@ e2e-questions-card.e2e.ts 26
 e2e-first-sign-in-invite.e2e.ts 26
 e2e-task-add-existing-subtask.e2e.ts 23
 e2e-conversation-entry-position.e2e.ts 24
+e2e-landing-page.e2e.ts 21
 e2e-agent-replying-group.e2e.ts 21
 e2e-channel-members-page.e2e.ts 21
 e2e-github-sign-in.e2e.ts 21
