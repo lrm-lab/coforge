@@ -9,3 +9,5 @@ These rules apply to `src/features/artifacts/`. They extend
   the artifact module's public entries (see
   [`../../server/artifacts/AGENTS.md`](../../server/artifacts/AGENTS.md)),
   never its internal files.
+- People view and comment on artifacts; they never create, edit or save one. Do not add an editor,
+  a draft or a save path here: an Agent writes an artifact through the Agent API.

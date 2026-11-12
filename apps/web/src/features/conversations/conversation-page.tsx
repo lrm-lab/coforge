@@ -308,9 +308,9 @@ type ConversationPageBodyProps = {
  * conversation and read cursor.
  */
 function ConversationPageBody(props: ConversationPageProps & ConversationPageBodyProps) {
-  const { doc, docFull, docDraft } = props.search;
+  const { doc, docFull } = props.search;
   const documents = useArtifactsOn() === true;
-  const open = documents && (doc !== undefined || docDraft === true);
+  const open = documents && doc !== undefined;
   // The chat keeps one place in the tree whether an artifact is open or not, so opening one or
   // going full screen only hides the chat: its scroll, open thread and draft stay.
   return (
@@ -319,12 +319,7 @@ function ConversationPageBody(props: ConversationPageProps & ConversationPageBod
         <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", open && docFull && "hidden")}>
           <ConversationPageMain {...props} documents={documents} />
         </div>
-        {open && (
-          <ConversationArtifactPane
-            conversationId={props.page.conversation.conversationId}
-            search={{ doc, docFull, docDraft }}
-          />
-        )}
+        {open && <ConversationArtifactPane search={{ doc, docFull }} />}
       </div>
     </ArtifactsBesideChat>
   );
@@ -353,7 +348,6 @@ function ConversationPageMain({
     agentTab,
     doc: _doc,
     docFull: _docFull,
-    docDraft: _docDraft,
     ...search
   } = pageSearch;
   const view = useShownConversationTab(requestedView);
@@ -438,7 +432,6 @@ function ConversationPageMain({
         {documents ? (
           <ConversationFilesWithDocuments
             conversationId={conversation.conversationId}
-            canCreate={isMember}
             onOpenMessage={openMessage}
           />
         ) : (

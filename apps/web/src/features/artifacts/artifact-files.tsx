@@ -2,9 +2,7 @@ import { ToggleButton } from "react-aria-components";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "@untitledui/icons";
 
-import { Button } from "#src/components/base/buttons/button";
 import {
   ConversationFilesPanel,
   conversationFilesQuery,
@@ -14,22 +12,19 @@ import { m } from "#src/paraglide/messages";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import { artifactListQuery, useArtifactActor, type ArtifactCard } from "./artifact-queries";
 import { useArtifactLink } from "./artifact-beside-chat";
-import { draftArtifactSearch, useArtifactNavigation } from "./artifact-search";
 
 type Filter = "all" | "files" | "artifacts";
 
 /**
  * A conversation's Files tab with its artifacts (task #385; #514, Frank: All / Files / Artifacts,
- * documents and web pages together under Artifacts): a new document for a member, and on All the
- * artifacts (most recently changed first) above the files, each under its heading.
+ * documents and web pages together under Artifacts): on All the artifacts (most recently changed
+ * first) above the files, each under its heading.
  */
 export function ConversationFilesWithDocuments({
   conversationId,
-  canCreate,
   onOpenMessage,
 }: {
   conversationId: string;
-  canCreate: boolean;
   onOpenMessage?: (messageId: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
@@ -52,8 +47,6 @@ export function ConversationFilesWithDocuments({
             <Count of={artifacts.data?.length} />
           </FilterChip>
         </div>
-        <span className="flex-1" />
-        {canCreate && <NewDocumentButton />}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-4">
         {filter !== "files" && <ArtifactList artifacts={artifacts} heading={all} />}
@@ -99,21 +92,6 @@ function FilterChip({
     >
       {children}
     </ToggleButton>
-  );
-}
-
-/** Opens a new document as a draft: it is created on its first save (`ArtifactDraftPane`). */
-function NewDocumentButton() {
-  const navigate = useArtifactNavigation();
-  return (
-    <Button
-      size="sm"
-      color="primary"
-      iconLeading={Plus}
-      onClick={() => navigate(draftArtifactSearch)}
-    >
-      {m.doc_new()}
-    </Button>
   );
 }
 
