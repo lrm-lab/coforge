@@ -317,7 +317,7 @@ test("a ticket's files stop opening 30 minutes after the link, as access ends, a
   }
 });
 
-test("a file stops opening for a reader who can no longer read the page's home", async () => {
+test("a file stops opening when the page's home is hidden from the Workspace", async () => {
   const author = (
     await db.user.create({ data: { username: `sb-files-${handle}`, displayName: "F" } })
   ).id;
@@ -349,10 +349,13 @@ test("a file stops opening for a reader who can no longer read the page's home",
       { path: "a.css", sha256: put("a{}") },
     ],
   });
-  await db.artifact.update({ where: { id: page.id }, data: { access: "workspace" } });
   const link = await linkTo(page.id);
   expect((await sandbox.serve(asset(link.url, "a.css", "style"))).status).toBe(200);
-  await db.artifact.update({ where: { id: page.id }, data: { access: "conversation" } });
+  // Reads are workspace-wide now (task #20); what ends a public page is its home going away.
+  await db.conversation.update({
+    where: { id: channel },
+    data: { hiddenFromWorkspaceAt: new Date() },
+  });
   expect((await sandbox.serve(asset(link.url, "a.css", "style"))).status).toBe(404);
   expect((await sandbox.serve(frame(link.url, "home.html"))).status).toBe(404);
   await db.conversation.delete({ where: { id: channel } });

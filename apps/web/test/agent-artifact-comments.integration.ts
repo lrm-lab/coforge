@@ -159,19 +159,35 @@ test("an artifact the Agent cannot read has no comments to write or read", async
   const hidden = await f.make("Hidden", { "plan.md": "x\n" }, { target: `#${f.privateChannel}` });
   const inside = await comment(f.agents.writer, hidden, "Inside.");
   expect(inside.status).toBe(200);
-  for (const body of [
-    { operation: "comments", artifact: hidden },
-    { operation: "comment", artifact: hidden, body: "Hi", idempotencyKey: f.key() },
-    {
-      operation: "review",
-      artifact: hidden,
-      comments: [{ body: "Hi" }],
-      idempotencyKey: f.key(),
-    },
-    { operation: "resolve", artifact: hidden, comment: inside.body.id },
-    { operation: "reopen", artifact: hidden, comment: inside.body.id },
-  ])
-    expect((await f.post(f.agents.reader, body)).status).toBe(404);
+  // Reads are workspace-wide now (task #20); what an Agent cannot read is a hidden home.
+  const channel = await f.db.conversation.findFirstOrThrow({
+    where: { workspaceId: f.workspaceId, channelName: f.privateChannel },
+    select: { id: true },
+  });
+  await f.db.conversation.update({
+    where: { id: channel.id },
+    data: { hiddenFromWorkspaceAt: new Date() },
+  });
+  try {
+    for (const body of [
+      { operation: "comments", artifact: hidden },
+      { operation: "comment", artifact: hidden, body: "Hi", idempotencyKey: f.key() },
+      {
+        operation: "review",
+        artifact: hidden,
+        comments: [{ body: "Hi" }],
+        idempotencyKey: f.key(),
+      },
+      { operation: "resolve", artifact: hidden, comment: inside.body.id },
+      { operation: "reopen", artifact: hidden, comment: inside.body.id },
+    ])
+      expect((await f.post(f.agents.reader, body)).status).toBe(404);
+  } finally {
+    await f.db.conversation.update({
+      where: { id: channel.id },
+      data: { hiddenFromWorkspaceAt: null },
+    });
+  }
   // A deleted artifact is as missing.
   const live = await f.make("Soon deleted");
   await f.db.artifact.update({ where: { id: live }, data: { deletedAt: new Date() } });

@@ -263,19 +263,33 @@ test("a request for an artifact the Agent cannot read is answered as missing, no
     { target: `#${f.privateChannel}` },
   );
   await f.personComments(hidden, f.alice, { body: "Private." });
-  const answer = await f.pushText(hidden, f.agents.reader, "z\n");
-  expect(answer.status).toBe(404);
-  expect(JSON.stringify(answer.body)).not.toContain("artifact-unseen-comments");
+  // Reads are workspace-wide now (task #20); what an Agent cannot read is a hidden home.
+  const channel = await f.db.conversation.findFirstOrThrow({
+    where: { workspaceId: f.workspaceId, channelName: f.privateChannel },
+    select: { id: true },
+  });
+  await f.db.conversation.update({
+    where: { id: channel.id },
+    data: { hiddenFromWorkspaceAt: new Date() },
+  });
+  try {
+    const answer = await f.pushText(hidden, f.agents.reader, "z\n");
+    expect(answer.status).toBe(404);
+    expect(JSON.stringify(answer.body)).not.toContain("artifact-unseen-comments");
+  } finally {
+    await f.db.conversation.update({
+      where: { id: channel.id },
+      data: { hiddenFromWorkspaceAt: null },
+    });
+  }
 });
 
-test("commenting needs the right to read, not to write: the Workspace tier lets a reader comment", async () => {
+test("commenting needs the right to read, not to write: a member who cannot write the home comments", async () => {
   const shared = await f.make("Tier", { "plan.md": "x\n" }, { target: `#${f.privateChannel}` });
-  // The Reader Bot is not in the private channel: missing until the artifact's tier widens.
-  expect((await comment(f.agents.reader, shared, "Hello.")).status).toBe(404);
-  await f.db.artifact.update({ where: { id: shared }, data: { access: "workspace" } });
+  // The Reader Bot is not in the private channel: it reads workspace-wide and may comment,
+  // but the home's write rule still keeps it out of pushes (task #20).
   const widened = await comment(f.agents.reader, shared, "Hello.", { path: "plan.md" });
   expect(widened.status).toBe(200);
-  // It still may not write there: the tier widens reading only.
   expect((await f.pushText(shared, f.agents.reader, "z\n")).status).toBe(403);
 });
 

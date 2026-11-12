@@ -204,12 +204,17 @@ test("going back over a version someone saved meanwhile is refused, and so is a 
   await expect(revert(9, 2)).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
 
-test("history and going back follow the home: unknown to a non-member of a private channel", async () => {
+test("history follows the Workspace; going back follows the home", async () => {
   const id = await document("channel");
   await save(id, 0, "one\n");
-  await expect(
-    artifacts.history({ workspaceId, artifactId: id, reader: { userId: outsiderId } }),
-  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  // A member who is not in the private channel still reads every artifact (task #20).
+  const history = await artifacts.history({
+    workspaceId,
+    artifactId: id,
+    reader: { userId: outsiderId },
+  });
+  expect(history.versions.length).toBeGreaterThan(0);
+  // But the home still governs writes: reading is not writing.
   await expect(
     artifacts.revert({
       workspaceId,
@@ -219,7 +224,7 @@ test("history and going back follow the home: unknown to a non-member of a priva
       baseVersion: 1,
       idempotencyKey: crypto.randomUUID(),
     }),
-  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
 });
 
 test("each new version is announced to its home's pages; nothing is announced for no version", async () => {
