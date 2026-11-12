@@ -10,6 +10,7 @@ import {
 } from "#src/server/artifacts/artifact-composition.server";
 import { postUserMessage } from "#src/server/conversations/user-message-post.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
+import { agentWrites } from "./helpers/artifact-agent-writes";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
@@ -33,7 +34,7 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     `artifact-send-${process.pid}`,
   );
   const experiments = new PrismaExperimentsRepository(db);
-  const { documents } = productionArtifacts(db);
+  const services = productionArtifacts(db);
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
     // Other e2es leave the dev user in Workspaces of their own; the seed made the first one.
@@ -143,11 +144,13 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
   try {
     await experiments.write(workspaceId, "artifacts", true);
     await mkdir(artifacts, { recursive: true });
-    const bot = { workspaceId, actor: { agentId: agent.id } };
-    const plan = await documents.create(bot, {
+    const bot = agentWrites(services, workspaceId, agent.id);
+    const plan = await bot.create({
       conversationId: home.id,
       title: "Launch plan",
-      text: `Ship the beta to the first ten teams, then widen it.\nOwners and dates below (run ${tail}).`,
+      files: {
+        "plan.md": `Ship the beta to the first ten teams, then widen it.\nOwners and dates below (run ${tail}).`,
+      },
     });
 
     // From Share, Send to… opens the picker with the card; the note goes above the link.
@@ -171,15 +174,15 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     expect(sent.sender?.userId).toBe(DEV_BROWSER_USER.id);
 
     // Noor shares one the viewer may not open, and one the viewer may, which is then deleted.
-    const secret = await documents.create(bot, {
+    const secret = await bot.create({
       conversationId: closed.id,
       title: "Salary bands",
-      text: `Private (run ${tail}).`,
+      files: { "bands.md": `Private (run ${tail}).` },
     });
-    const gone = await documents.create(bot, {
+    const gone = await bot.create({
       conversationId: target.id,
       title: "Old draft",
-      text: `Draft (run ${tail}).`,
+      files: { "draft.md": `Draft (run ${tail}).` },
     });
     expect((await shareAsNoor(secret.id)).outcome).toBe("success");
     expect((await shareAsNoor(gone.id)).outcome).toBe("success");

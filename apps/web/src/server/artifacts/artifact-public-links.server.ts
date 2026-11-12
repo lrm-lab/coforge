@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { artifactKindOfPath } from "./artifact-files.server";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import {
   artifactHomeHidden,
@@ -17,7 +18,9 @@ function mintToken(): string {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-const LINKABLE_KINDS = ["html", "markdown"];
+/** The types a public link serves: an artifact whose entry file is a web page or Markdown. */
+const linkable = (entryPath: string) =>
+  ["html", "markdown"].includes(artifactKindOfPath(entryPath));
 
 export class ArtifactPublicLinks {
   constructor(
@@ -28,7 +31,8 @@ export class ArtifactPublicLinks {
 
   /**
    * Whether an artifact can have a public link, and the one it has, for anyone who can read it.
-   * None can be made while the sandbox origin is unset, nor for other kinds. One the viewer
+   * None can be made while the sandbox origin is unset, nor for an entry that is neither a web
+   * page nor Markdown. One the viewer
    * cannot read is refused just as one that does not exist is.
    */
   async read(input: { workspaceId: string; artifactId: string; userId: string }) {
@@ -36,8 +40,8 @@ export class ArtifactPublicLinks {
     const artifact = await this.db.artifact.findFirst({
       where: { id: input.artifactId, workspaceId: input.workspaceId, deletedAt: null },
       select: {
-        kind: true,
         homeKey: true,
+        entryPath: true,
         publicLinks: { where: { revokedAt: null }, select: { token: true } },
       },
     });
@@ -49,7 +53,7 @@ export class ArtifactPublicLinks {
     const origin = artifactSandboxOrigin();
     const live = artifact.publicLinks.at(0);
     return {
-      available: origin !== null && LINKABLE_KINDS.includes(artifact.kind),
+      available: origin !== null && linkable(artifact.entryPath),
       url: origin && live ? `${origin}/p/${live.token}` : null,
     };
   }
@@ -62,15 +66,14 @@ export class ArtifactPublicLinks {
         {
           id: string;
           homeKey: string;
-          authorUserId: string | null;
           authorAgentId: string | null;
-          kind: string;
+          entryPath: string;
         }[]
-      >`SELECT "id", "homeKey", "authorUserId", "authorAgentId", "kind" FROM "artifacts"
+      >`SELECT "id", "homeKey", "authorAgentId", "entryPath" FROM "artifacts"
         WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid
           AND "deletedAt" IS NULL FOR UPDATE`;
       if (!artifact) throw new AppError("NOT_FOUND");
-      if (input.enabled && !LINKABLE_KINDS.includes(artifact.kind))
+      if (input.enabled && !linkable(artifact.entryPath))
         throw new AppError("INVALID_INPUT", {
           errorId: "artifact-public-kind",
           hint: "public links support HTML and Markdown artifacts",
@@ -93,11 +96,7 @@ export class ArtifactPublicLinks {
           tx,
           input.workspaceId,
           { userId: input.userId },
-          {
-            authorUserId: artifact.authorUserId,
-            authorAgentId: artifact.authorAgentId,
-            authorAgentOwnerId: ownerId ?? null,
-          },
+          { authorAgentOwnerId: ownerId ?? null },
         ))
       )
         throw new AppError("ACCESS_DENIED");

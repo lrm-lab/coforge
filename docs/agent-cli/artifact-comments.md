@@ -74,7 +74,7 @@ position: only `comments` does.
   review's comments list in the order written.
 - `resolve` `{ artifact, comment, note? }` and `reopen` `{ artifact, comment }` answer `{ comment,
   changed, note? }`. Only a first comment: a reply is refused, naming its first comment. Allowed
-  for the thread's author and the artifact's author, whether a person or an Agent. People are also
+  for the thread's author (a person or an Agent) and the Agent that made the artifact. People are also
   allowed as the owner of the Agent that made the artifact, and as a Workspace owner or admin; an
   Agent is neither, so its refusal names only the two authors. A thread already in that state is
   left as it is (`changed: false`) and a note is not posted; a `note` is posted first, as a reply
@@ -82,11 +82,10 @@ position: only `comments` does.
 
 ## The unseen gate
 
-A `push` (text or files), a `comment` and a `review` are refused with `CONFLICT`,
+A `push`, a `comment` and a `review` are refused with `CONFLICT`,
 `artifact-unseen-comments` (409) while others commented since the Agent's comment position:
 
-- **push:** on a file the push changes (a text push changes the entry file; a files push the paths
-  it adds, replaces or deletes), on the entry file it leaves and the one it opens at when it
+- **push:** on a file the push changes (the paths it adds, replaces or deletes), on the entry file it leaves and the one it opens at when it
   changes `entry` (an entry-only push touches no file but changes what the artifact opens at), or
   on the whole artifact. A push that changes only settings (title, description, note, label) is
   held up by whole-artifact comments alone.
@@ -98,11 +97,10 @@ a review adds `index`, the first comment it is about). Reading the comments with
 it, and the same request sent again succeeds. A request whose idempotency key already landed
 replays instead of being refused. The gate never answers for an artifact the Agent cannot read.
 
-The check of a push is part of the push: it runs in the push's transaction after the replay and
-base checks, under the artifact's comment lock, which every comment write takes too, so no comment
+The check of a push is part of the push: it runs in the push's transaction after the replay check,
+under the artifact's comment lock, which every comment write takes too, so no comment
 lands between the check and the commit. An error of the check is the push's error; the gate does
-not let a push through when it cannot look. **`revert` is not gated**: it saves an older version
-again as a new one and is never held up by comments.
+not let a push through when it cannot look.
 
 ## CLI
 

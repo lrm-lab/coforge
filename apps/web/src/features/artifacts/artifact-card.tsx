@@ -121,13 +121,13 @@ export function ArtifactCardFace({
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
   const title = card.title || m.doc_untitled();
-  const kind = kindLabel(card.kind);
+  const kind = kindLabel(card.entryPath);
   return (
     <article
       aria-label={m.doc_card_label({ kind, title })}
       className="relative flex w-full max-w-[34rem] items-start gap-3 rounded-xl border border-secondary bg-primary p-3 transition has-[a:hover]:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring"
     >
-      <ArtifactIcon kind={card.kind} />
+      <ArtifactIcon entryPath={card.entryPath} />
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-baseline gap-2">
           {/* The title is the card's one way in; its hit area covers the whole card. */}

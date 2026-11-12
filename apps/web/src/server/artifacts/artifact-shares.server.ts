@@ -9,7 +9,6 @@ import { AppError, isAppError } from "#src/lib/app-error";
 import { hiddenFromWorkspaceConversationIds } from "#src/server/conversations/channel-read-access.server";
 import {
   artifactHomeConversationId,
-  type ArtifactActor,
   artifactsDisabled,
   inWorkspace,
 } from "./artifact-access.server";
@@ -47,18 +46,10 @@ type ArtifactShareSender = (input: {
   body: string;
 }) => Promise<{ id: string; sequence: number }>;
 
-export type ArtifactShareTargetResolution = { kind: "agent"; agentId: string } | { kind: "other" };
-
-export type ArtifactShareTargetResolver = (
-  workspaceId: string,
-  agentId: string,
-  target: string,
-) => Promise<ArtifactShareTargetResolution>;
-
 /**
- * Shares live artifact links by posting ordinary messages. The artifact rows are checked once
- * before any destination is attempted; every destination then uses the caller's normal message
- * authorization and its own derived idempotency key.
+ * Sends live artifact links, as a person, by posting ordinary messages. The artifact rows are
+ * checked once before any destination is attempted; every destination then uses the person's
+ * normal message authorization and its own derived idempotency key.
  */
 export class ArtifactShares {
   constructor(
@@ -67,12 +58,11 @@ export class ArtifactShares {
       "artifact" | "workspace" | "workspaceMembership" | "agent" | "conversation"
     >,
     private readonly enabled: (workspaceId: string) => Promise<boolean>,
-    private readonly resolveTarget?: ArtifactShareTargetResolver,
   ) {}
 
   async share(input: {
     workspaceId: string;
-    actor: ArtifactActor;
+    actor: { userId: string };
     artifactIds: readonly string[];
     targets: readonly string[];
     note?: string;
@@ -105,14 +95,11 @@ export class ArtifactShares {
           id: { in: artifactIds },
           deletedAt: null,
         },
-        select: { id: true, title: true, homeKey: true },
+        select: { id: true, homeKey: true },
       }),
     ]);
     if (!workspace) throw new AppError("NOT_FOUND");
     if (rows.length !== artifactIds.length) throw new AppError("NOT_FOUND");
-    // `findMany` answers unordered; the links and titles below pair by `artifactIds` order.
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const ordered = artifactIds.map((id) => byId.get(id)!);
     // Every member reads every artifact (task #20), so one membership check covers them all.
     if (!(await inWorkspace(this.db, input.workspaceId, input.actor)))
       throw new AppError("NOT_FOUND");
@@ -142,15 +129,7 @@ export class ArtifactShares {
         const message = await input.send({
           target,
           idempotencyKey: artifactShareIdempotencyKey(input.requestId, target),
-          body: await this.bodyForTarget(
-            target,
-            body,
-            input.note,
-            links,
-            ordered,
-            input.workspaceId,
-            input.actor,
-          ),
+          body,
         });
         results.push({
           target,
@@ -171,36 +150,6 @@ export class ArtifactShares {
         succeeded === 0 ? "all_failed" : succeeded < results.length ? "partial_failure" : "success",
       results,
     };
-  }
-
-  private async bodyForTarget(
-    target: string,
-    fallback: string,
-    note: string | undefined,
-    links: readonly string[],
-    rows: readonly { id: string; title: string }[],
-    workspaceId: string,
-    actor: ArtifactActor,
-  ) {
-    if (!actor.agentId || !this.resolveTarget) return fallback;
-    let resolved: ArtifactShareTargetResolution;
-    try {
-      resolved = await this.resolveTarget(workspaceId, actor.agentId, target);
-    } catch {
-      return fallback;
-    }
-    if (resolved.kind !== "agent") return fallback;
-    // Every member reads every artifact (task #20), so one membership check covers them all.
-    if (!(await inWorkspace(this.db, workspaceId, { agentId: resolved.agentId })))
-      return [note?.trim(), `One artifact was shared:\n${links.join("\n")}`]
-        .filter(Boolean)
-        .join("\n\n");
-    return [
-      note?.trim(),
-      rows.map((row, index) => `${row.title || "Untitled artifact"}\n${links[index]}`).join("\n\n"),
-    ]
-      .filter(Boolean)
-      .join("\n\n");
   }
 }
 

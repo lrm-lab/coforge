@@ -1,5 +1,5 @@
 import { artifactContentType } from "./artifact-content-types.server";
-import { ARTIFACT_DOCUMENT_LIMIT, artifactKindOfPath } from "./artifact-files.server";
+import { ARTIFACT_ENTRY_READ_LIMIT, artifactKindOfPath } from "./artifact-files.server";
 import { SANDBOX_FILE_TTL_SECONDS } from "./artifact-sandbox-ticket.server";
 import {
   sandboxFileHeaders,
@@ -7,9 +7,9 @@ import {
   withWebRtcOff,
 } from "./artifact-sandbox-response.server";
 
-/** A web page file (`.html`, `.htm`) at most, as a document (2 MiB): it is read whole and a script
- * put in front of it, which is not asked of the other files. */
-export const ARTIFACT_HTML_LIMIT = ARTIFACT_DOCUMENT_LIMIT;
+/** A web page file (`.html`, `.htm`) at most, as an entry file the server reads (2 MiB): it is read
+ * whole and a script put in front of it, which is not asked of the other files. */
+export const ARTIFACT_HTML_LIMIT = ARTIFACT_ENTRY_READ_LIMIT;
 
 /** Whether a path is a page of the artifact: a document the frame shows, not a subresource. */
 export const isPageFile = (path: string) => artifactKindOfPath(path) === "html";

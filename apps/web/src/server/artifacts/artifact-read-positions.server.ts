@@ -36,9 +36,6 @@ export type UnseenSummary = {
  * Moves an Agent's position on an artifact to `version`, never backwards: a stored value that is
  * already as far is left alone (a re-read writes nothing), and reads that race each other cannot
  * rewind it.
- *
- * An Agent's own revert does not move its position: a revert is a version it published, which
- * its unseen list leaves out anyway, so only the versions of others after it count.
  */
 export async function advanceReadPosition(
   db: Pick<PositionDb, "$executeRaw">,
@@ -152,7 +149,6 @@ async function unseenVersions(
       take: UNSEEN_VERSIONS_SHOWN,
       select: {
         number: true,
-        publisherUserId: true,
         publisherAgentId: true,
         note: true,
         label: true,
@@ -162,20 +158,18 @@ async function unseenVersions(
     }),
   ]);
   const names = await actorNames(db, input.workspaceId, {
-    userIds: rows.flatMap((row) => row.publisherUserId ?? []),
+    userIds: [],
     agentIds: rows.flatMap((row) => row.publisherAgentId ?? []),
   });
-  const versions = rows.map(
-    ({ publisherUserId, publisherAgentId, changedPaths, ...version }): UnseenVersion => {
-      const paths = pathsOf(changedPaths);
-      return {
-        ...version,
-        changedPaths: paths.slice(0, CHANGED_PATHS_SHOWN),
-        changedCount: paths.length,
-        publisher: actorOf(names, { userId: publisherUserId, agentId: publisherAgentId }),
-      };
-    },
-  );
+  const versions = rows.map(({ publisherAgentId, changedPaths, ...version }): UnseenVersion => {
+    const paths = pathsOf(changedPaths);
+    return {
+      ...version,
+      changedPaths: paths.slice(0, CHANGED_PATHS_SHOWN),
+      changedCount: paths.length,
+      publisher: actorOf(names, { userId: null, agentId: publisherAgentId }),
+    };
+  });
   return { versionCount, versions };
 }
 

@@ -33,8 +33,9 @@ type SaveAnswer = {
   missing?: string[];
 };
 
-type CreateRequest = Extract<AgentArtifactRequest, { operation: "create" }>;
-type PushRequest = Extract<AgentArtifactRequest, { operation: "push" }>;
+/** A push over a version of an artifact, and a push that makes one. */
+type PushRequest = Extract<AgentArtifactRequest, { operation: "push"; artifact: string }>;
+type CreateRequest = Extract<AgentArtifactRequest, { operation: "push"; artifact?: undefined }>;
 
 const toManifest = (files: LocalFile[]): AgentArtifactFile[] =>
   files.map(({ path, sha256 }) => ({ path, sha256 }));
@@ -49,11 +50,7 @@ export async function runPush(
 ): Promise<unknown> {
   const dir = resolve(cwd, draft.dir);
   const info = await lstat(dir).catch(() => undefined);
-  if (!info?.isDirectory())
-    throw invalidArg(
-      `${draft.dir} is not a directory`,
-      "To save one text file over an artifact, use `coforge artifact push <id> --base <n> --file <path>`.",
-    );
+  if (!info?.isDirectory()) throw invalidArg(`${draft.dir} is not a directory`);
   const state = await readState(dir);
   if (state && draft.target !== undefined)
     throw invalidArg(
@@ -192,15 +189,9 @@ async function createFromDirectory(
       `--entry is required: name the file the artifact opens at (${[...local.keys()].slice(0, 5).join(", ")})`,
     );
   if (!local.has(entry)) throw invalidArg(`--entry ${entry} is not a file in ${draft.dir}`);
-  // A web page says what it is on its card: the line people read before opening it.
-  if (/\.html?$/i.test(entry) && !settings.description?.trim())
-    throw invalidArgument(
-      command,
-      "An html entry needs --description: one line saying what the page shows",
-    );
   const files = [...local.values()];
   const request: CreateRequest = {
-    operation: "create",
+    operation: "push",
     title,
     ...(draft.target === undefined ? {} : { target: draft.target }),
     ...(settings.description === undefined ? {} : { description: settings.description.trim() }),
@@ -256,8 +247,7 @@ const pullAdvice = (artifact: string, dir: string) =>
 
 /** A refusal because the artifact moved on: which files and settings clashed, and what to do. */
 function baseMoved(error: unknown, state: ArtifactState, dir: string): unknown {
-  if (!(error instanceof CliError) || !error.message.includes("artifact-agent-base-moved"))
-    return error;
+  if (!(error instanceof CliError) || !error.message.includes("artifact-base-moved")) return error;
   const { files, settings } = clashes(error.details);
   return withOutputMode(error, error.outputMode, {
     message: [

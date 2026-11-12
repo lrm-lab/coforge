@@ -1,16 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import type { AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import { parseArgs, run, type MessageTransport } from "../index";
-import {
-  artifactRequest,
-  runArtifact,
-  type ArtifactInvocation,
-  type ArtifactRequestInvocation,
-} from "../src/artifact-commands";
+import { artifactRequest, runArtifact, type ArtifactInvocation } from "../src/artifact-commands";
 import { ARTIFACTS_DISABLED_MESSAGE } from "../src/artifact-failure";
 import { CliError } from "../src/cli-error";
 
-/** `coforge artifact create|list|read|push|history|revert` (task #385). */
+/** `coforge artifact list|read` and the failures of every artifact call (task #385). */
 
 const ID = "0f8c3b52-6d0e-4f3a-9a51-3c1d2e4f5a6b";
 const servers: { stop(): void }[] = [];
@@ -18,31 +13,11 @@ afterEach(() => {
   for (const server of servers.splice(0)) server.stop();
 });
 
-test("each artifact command parses into its own request", () => {
-  expect(
-    parseArgs(["artifact", "create", "--title", "Plan", "--target", "#launch", "--file", "-"]),
-  ).toEqual({
-    command: "artifact",
-    request: { operation: "create", title: "Plan", target: "#launch" },
-    file: "-",
-  });
+test("each request command parses into its own request", () => {
   expect(parseArgs(["artifact", "read", ID, "--version", "2", "--json"])).toEqual({
     command: "artifact",
     request: { operation: "read", artifact: ID, version: 2 },
     json: true,
-  });
-  expect(
-    parseArgs(["artifact", "push", ID, "--base", "3", "--file", "plan.md", "--note", "date"]),
-  ).toEqual({
-    command: "artifact",
-    request: { operation: "push", artifact: ID, baseVersion: 3, note: "date" },
-    file: "plan.md",
-  });
-  expect(parseArgs(["artifact", "revert", ID, "--to", "1", "--base", "4"])).toMatchObject({
-    request: { operation: "revert", artifact: ID, to: 1, baseVersion: 4 },
-  });
-  expect(parseArgs(["artifact", "history", ID, "--before", "9"])).toMatchObject({
-    request: { operation: "history", artifact: ID, before: 9 },
   });
   expect(parseArgs(["artifact", "list", "--target", "#launch"])).toEqual({
     command: "artifact",
@@ -52,78 +27,29 @@ test("each artifact command parses into its own request", () => {
     command: "artifact",
     request: { operation: "list", limit: 20 },
   });
-  const shared = parseArgs([
-    "artifact",
-    "share",
-    ID,
-    "a1",
-    "--to",
-    "#launch",
-    "--target",
-    "@ada",
-    "--note",
-    "Read this",
-  ]) as ArtifactRequestInvocation;
-  expect(shared.request).toMatchObject({
-    operation: "share",
-    artifactIds: [ID, "a1"],
-    targets: ["#launch", "@ada"],
-    note: "Read this",
-  });
-  expect(
-    (shared.request as Extract<AgentArtifactRequest, { operation: "share" }>).requestId,
-  ).toBeString();
 });
 
-test("create --kind html makes a web page, which needs its one-line description", () => {
-  expect(
-    parseArgs([
-      "artifact",
-      "create",
-      "--kind",
-      "html",
-      "--title",
-      "Funnel",
-      "--description",
-      " Signups by day ",
-      "--file",
-      "index.html",
-    ]),
-  ).toEqual({
-    command: "artifact",
-    request: { operation: "create", title: "Funnel", kind: "html", description: "Signups by day" },
-    file: "index.html",
-  });
-  expect(() => parseArgs(["artifact", "create", "--kind", "html", "--title", "Funnel"])).toThrow(
-    "--kind html needs --description",
-  );
-  expect(() => parseArgs(["artifact", "create", "--kind", "pdf", "--title", "Funnel"])).toThrow(
-    "--kind is markdown (Markdown text) or html (a web page)",
-  );
-});
-
-test("an artifact command missing what it needs names its help", () => {
+test("an artifact command missing what it needs, or removed, names its help", () => {
   for (const args of [
     ["artifact", "delete", ID],
-    ["artifact", "create"],
     ["artifact", "read"],
-    ["artifact", "push", ID, "--file", "a.md"],
-    ["artifact", "push", ID, "--base", "2"],
-    ["artifact", "push", ID, "--base", "-1", "--file", "a.md"],
-    ["artifact", "revert", ID, "--to", "1"],
     ["artifact", "read", ID, "--exact-base"],
+    // The single-text artifact, its history and revert, and the Agent's share are gone.
+    ["artifact", "create", "--title", "Plan"],
+    ["artifact", "history", ID],
+    ["artifact", "revert", ID, "--to", "1", "--base", "2"],
+    ["artifact", "share", ID, "--to", "#launch"],
   ])
     expect(() => parseArgs(args)).toThrow(CliError);
 });
 
 test("artifact --help describes the family and each command", async () => {
   const transport = {} as MessageTransport;
-  expect(await run(["artifact", "--help"], transport)).toContain(
-    "coforge artifact create|list|read|push|history|revert",
-  );
-  expect(await run(["artifact", "push", "--help"], transport)).toContain(
-    "artifact-agent-base-moved",
-  );
+  const family = await run(["artifact", "--help"], transport);
+  expect(family).toContain("coforge artifact list|read|pull|push|download");
+  for (const removed of ["create", "history", "revert", "share"])
+    expect(family).not.toContain(`artifact ${removed}`);
+  expect(await run(["artifact", "push", "--help"], transport)).toContain("artifact-base-moved");
   expect(await run(["artifact", "list", "--help"], transport)).toContain("coforge artifact list");
 });
 
@@ -141,24 +67,6 @@ function transportAnswering(answer: unknown) {
 }
 
 const invocation = (args: string[]) => parseArgs(["artifact", ...args]) as ArtifactInvocation;
-
-test("a save sends the file's text with a fresh idempotency key and says what it made", async () => {
-  const { sent, transport } = transportAnswering({
-    status: "created",
-    number: 4,
-    merged: ["artifact.md"],
-    mergedSettings: [],
-  });
-  const said = await runArtifact(
-    invocation(["push", ID, "--base", "3", "--file", "plan.md"]),
-    transport,
-    async (file) => `text of ${file}`,
-  );
-  expect(sent[0]).toMatchObject({ operation: "push", baseVersion: 3, text: "text of plan.md" });
-  expect(sent[0]).toHaveProperty("idempotencyKey");
-  expect(said).toContain("Saved version 4.");
-  expect(said).toContain("Merged with what others saved since version 3: artifact.md");
-});
 
 test("list prints a line per artifact, newest first, and how to read one", async () => {
   const { sent, transport } = transportAnswering([
@@ -193,7 +101,7 @@ test("list says plainly when a home has no artifacts", async () => {
   expect(said).toBe("No artifacts here yet.");
 });
 
-test("read prints the version to save over, then the text", async () => {
+test("read prints the version line, then the text", async () => {
   const { transport } = transportAnswering({
     artifact: { id: ID, title: "Plan", currentVersion: 3 },
     version: { number: 3, label: null },
@@ -201,9 +109,7 @@ test("read prints the version to save over, then the text", async () => {
     text: "# Plan\n",
   });
   const said = await runArtifact(invocation(["read", ID]), transport);
-  expect(said).toBe(
-    `Artifact "Plan" (id ${ID}), version 3 of 3.\nSave over it: coforge artifact push ${ID} --base 3 --file <path>\n---\n# Plan\n`,
-  );
+  expect(said).toBe(`Artifact "Plan" (id ${ID}), version 3 of 3.\n---\n# Plan\n`);
 });
 
 const readAnswer = (unseen: unknown) => ({
@@ -408,7 +314,12 @@ test("a write that may have landed is not called retryable, and says what to che
       () => new CliError({ code: "UNEXPECTED", message: "the request succeeded" }),
       (caught: unknown) => caught as CliError,
     );
-  const create = await unreachable({ operation: "create", title: "Plan" });
+  const create = await unreachable({
+    operation: "push",
+    title: "Plan",
+    idempotencyKey: ID,
+    files: [{ path: "plan.md", sha256: "a".repeat(64) }],
+  });
   expect(create.retryable).toBe(false);
   expect(create.suggestedNextAction).toContain("second one");
   const read = await unreachable({ operation: "read", artifact: ID });
@@ -416,7 +327,7 @@ test("a write that may have landed is not called retryable, and says what to che
 
   const proxy = serveProxy({ error: "upstream failed", code: "UPSTREAM_FAILED" }, 502);
   const push = (await proxy
-    .call({ operation: "push", artifact: ID, baseVersion: 1, idempotencyKey: ID, text: "x" })
+    .call({ operation: "push", artifact: ID, baseVersion: 1, idempotencyKey: ID, title: "x" })
     .catch((caught: unknown) => caught)) as CliError;
   expect(push.suggestedNextAction).toContain(`coforge artifact read ${ID}`);
   expect(push.retryable).toBe(false);
@@ -427,15 +338,15 @@ test("a write that may have landed is not called retryable, and says what to che
   expect(failedRead.retryable).toBe(true);
 });
 
-test("a save over a version that is no longer current says to read again", async () => {
+test("a push over a version the artifact moved past keeps the server's code and correlation id", async () => {
   const proxy = serveProxy(
     { error: "conflict (artifact-base-moved)", code: "CONFLICT", proxy: { correlation_id: "c1" } },
     409,
   );
   const error = (await proxy
-    .call({ operation: "revert", artifact: ID, to: 1, baseVersion: 2, idempotencyKey: ID })
+    .call({ operation: "push", artifact: ID, baseVersion: 1, idempotencyKey: ID, title: "x" })
     .catch((caught: unknown) => caught)) as CliError;
   expect(error.code).toBe("CONFLICT");
-  expect(error.suggestedNextAction).toContain(`coforge artifact read ${ID}`);
+  expect(error.retryable).toBe(false);
   expect(error.correlationId).toBe("c1");
 });

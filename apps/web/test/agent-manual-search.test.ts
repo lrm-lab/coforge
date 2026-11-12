@@ -171,7 +171,7 @@ test("P3 topics hold the how-to moved out of the standing prompt", () => {
   );
   expect(findManualTopic("action-cards")?.body).toContain("coforge action prepare");
   expect(findManualTopic("attachments")?.body).toContain("--attachment-id");
-  expect(findManualTopic("artifacts")?.body).toContain("coforge artifact create --kind html");
+  expect(findManualTopic("artifacts")?.body).toContain("coforge artifact push funnel --title");
   expect(findManualTopic("etiquette")?.body).toContain("## Live constraints");
   expect(findManualTopic("memory")?.body).toContain("# <Your Name>");
   expect(MANUAL_TOPICS.map((topic) => topic.slug)).toEqual([

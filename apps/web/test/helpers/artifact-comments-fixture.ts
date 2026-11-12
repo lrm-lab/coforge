@@ -96,7 +96,7 @@ export async function commentsFixture(prefix: string) {
         body: JSON.stringify(body),
       }),
       { workspaceId, agentId },
-      { db, artifacts, documents, enabled: async () => true },
+      { db, documents, enabled: async () => true },
     );
     return { status: response.status, body: (await response.json()) as Record<string, any> };
   }
@@ -126,7 +126,8 @@ export async function commentsFixture(prefix: string) {
   ) {
     const by = options.by ?? agents.writer;
     const created = await post(by, {
-      operation: "create",
+      operation: "push",
+      idempotencyKey: key(),
       title,
       target: options.target ?? `#${docsChannel}`,
       files: await manifestOf(by, files),
@@ -162,17 +163,9 @@ export async function commentsFixture(prefix: string) {
     });
   }
 
-  /** A push of one text over the newest version, by an Agent. */
-  async function pushText(artifactId: string, agentId: string, text: string) {
-    const current = (await db.artifact.findUniqueOrThrow({ where: { id: artifactId } }))
-      .currentVersion;
-    return post(agentId, {
-      operation: "push",
-      artifact: artifactId,
-      baseVersion: current,
-      idempotencyKey: key(),
-      text,
-    });
+  /** A push of `plan.md` alone over the newest version, by an Agent. */
+  function pushText(artifactId: string, agentId: string, text: string) {
+    return pushFiles(artifactId, agentId, { "plan.md": text });
   }
 
   /** A push of some files over the newest version, by an Agent. */
@@ -225,6 +218,7 @@ export async function commentsFixture(prefix: string) {
     post,
     key,
     make,
+    manifestOf,
     personComments,
     pushText,
     pushFiles,

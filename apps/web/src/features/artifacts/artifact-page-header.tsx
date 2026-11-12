@@ -35,12 +35,12 @@ export type ArtifactPaneControls = { full: boolean; onToggleFull: () => void; on
 export type ArtifactHome = { kind: "channel" | "dm" | "workspace"; conversationId: string | null };
 
 /**
- * An artifact's page's header (task #514): the way back to its conversation, its kind, title and
+ * An artifact's page's header (task #514): the way back to its conversation, its type, title and
  * version, then Share and more (copy link, open a web page in a tab of its own, delete).
  * Beside the chat it has no way back, and ends with full screen and close (`pane`).
  */
 export function ArtifactPageHeader({
-  kind,
+  entryPath,
   title,
   version,
   home,
@@ -53,7 +53,7 @@ export function ArtifactPageHeader({
   pane,
 }: {
   /** Undefined until the artifact is read: the header holds its place. */
-  kind: string | undefined;
+  entryPath: string | undefined;
   title: string;
   /** Absent until the artifact is read. */
   version?: number;
@@ -85,11 +85,11 @@ export function ArtifactPageHeader({
           />
         </>
       )}
-      {kind === undefined ? (
+      {entryPath === undefined ? (
         <Skeleton className="h-4 w-40" />
       ) : (
         <>
-          <ArtifactIcon kind={kind} size="sm" />
+          <ArtifactIcon entryPath={entryPath} size="sm" />
           {/* Beside the chat, the conversation's page holds the page's own heading. */}
           <Title
             id={ARTIFACT_TITLE_ID}
