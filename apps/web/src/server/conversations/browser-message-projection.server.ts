@@ -22,6 +22,11 @@ import {
   parseWeeklyReportAssistantSuggestion,
   weeklyReportAssistantSuggestionDisplayBody,
 } from "#src/server/records/weekly-report-assistant-suggestion.server";
+import {
+  noticeFacesOf,
+  systemNoticeFaces,
+  type SystemPersonFace,
+} from "./system-notice-people.server";
 
 /** The row shape the Saved list (#120/#124) shares, so it renders exactly like the stream. */
 export const browserMessageFields = {
@@ -91,12 +96,17 @@ export async function attachmentCommentCounts(
 
 /** A page of messages for the stream, with their attachments' comment counts. */
 export async function mapBrowserMessages(
-  db: Pick<PrismaClient, "attachmentComment">,
+  db: Pick<PrismaClient, "attachmentComment" | "conversationMember">,
   messages: readonly BrowserMessageRow[],
   workspaceId: string,
 ) {
-  const commentCounts = await attachmentCommentCounts(db, messages);
-  return messages.map((message) => mapBrowserMessage(message, workspaceId, commentCounts));
+  const [commentCounts, noticeFaces] = await Promise.all([
+    attachmentCommentCounts(db, messages),
+    systemNoticeFaces(db, messages, workspaceId),
+  ]);
+  return messages.map((message) =>
+    mapBrowserMessage(message, workspaceId, commentCounts, noticeFaces),
+  );
 }
 
 /** Exported for a pure unit test of this projection (no database needed). Channels and direct
@@ -107,6 +117,9 @@ export function mapBrowserMessage(
   /** The attachments' comment counts, from `attachmentCommentCounts`; a surface that shows no
    * file cards leaves them out. */
   commentCounts?: ReadonlyMap<string, number>,
+  /** The faces of the people a notice names (`systemNoticeFaces`); a surface that shows no
+   * notices leaves them out. */
+  noticeFaces?: ReadonlyMap<string, SystemPersonFace>,
 ) {
   const suggestion = message.sender?.agentId
     ? parseWeeklyReportAssistantSuggestion(message.body)
@@ -159,6 +172,14 @@ export function mapBrowserMessage(
           system: { kind: message.systemMessage.kind, params: message.systemMessage.params },
         }
       : {}),
+    /** The people that notice names, by member id, read from their member rows even when they
+     * have left: the conversation's current members cannot draw them. Typed optional so a
+     * message the browser cached before it existed still reads (`persisted-queries.ts`). */
+    ...(message.systemMessage
+      ? {
+          systemPeople: noticeFacesOf(message.systemMessage.params, noticeFaces),
+        }
+      : ({} as { systemPeople?: Record<string, SystemPersonFace> })),
     // An ISO string, not a `Date`: TanStack Query's structural sharing keeps an unchanged
     // message's cached object across a re-read only for JSON-compatible values, and a new object
     // re-renders its memoized row.

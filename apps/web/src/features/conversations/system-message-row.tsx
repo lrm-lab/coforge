@@ -66,7 +66,7 @@ export function SystemMessageRow({
     ) : (
       <ActorName
         key={index}
-        actor={noticeActor(part, members)}
+        actor={noticeActor(part, members, message.systemPeople)}
         inline
         // The people are what the notice is about: their names a step darker and heavier than
         // its words; no pill or @ (the pill read heavy, #591).
@@ -117,12 +117,16 @@ export function SystemMessageRow({
   );
 }
 
-/** A person a notice names, by the face the conversation's members give them; one who has since
- * left keeps a face drawn from their name. The name is the notice's own words for them. */
+/** A person a notice names, by the face the server read from their member row (`systemPeople`),
+ * which holds for one who has since left or been archived; otherwise by the conversation's
+ * members, for a notice that names no member row. The name is the notice's own words for them. */
 function noticeActor(
   { person, text }: NoticePerson,
   members: readonly Mentionable[] | undefined,
+  systemPeople: MessageView["systemPeople"],
 ): NamedActor {
+  const resolved = person.memberId ? systemPeople?.[person.memberId] : undefined;
+  if (resolved) return { ...resolved, name: text };
   // By the member row first: a handle renamed since the notice was posted no longer matches.
   const member =
     (person.memberId && members?.find((candidate) => candidate.memberId === person.memberId)) ||
