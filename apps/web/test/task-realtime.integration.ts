@@ -339,13 +339,15 @@ test("a sub-task made in a Task popup pushes its parent's new copy to the channe
   // open popup listens to. The parent's own row does not change; its progress does.
   const relations = await relationsWorkspace();
   const pushed: Array<{ channel: string; data: unknown }> = [];
-  const centrifugo = withPublishBatch({
-    async publish() {},
-    async broadcast() {},
-    async publishJson(channel: string, data: unknown) {
-      pushed.push({ channel, data });
-    },
-  });
+  const centrifugo = withPublishJsonBatch(
+    withPublishBatch({
+      async publish() {},
+      async broadcast() {},
+      async publishJson(channel: string, data: unknown) {
+        pushed.push({ channel, data });
+      },
+    }),
+  );
   const conversation = await db.conversation.create({
     data: {
       workspaceId: relations.id,
