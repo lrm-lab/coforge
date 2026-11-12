@@ -388,7 +388,8 @@
     width: 100%;
     max-width: 760px;
     height: auto;
-    margin: 8px auto -40px;
+    /* Clear of the picture's foot, so the card does not crowd it (jing, 11-12). */
+    margin: 8px auto 0;
     overflow: hidden;
     aspect-ratio: 1148 / 540;
     mask-image:
@@ -462,7 +463,7 @@
   .home-art-frame {
     width: calc(100% + 40px);
     max-width: none;
-    margin: 0 -20px -24px;
+    margin: 0 -20px 12px;
   }
 
   .home-features {
