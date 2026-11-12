@@ -72,7 +72,6 @@
   "action_card_questions_go_to": "Question {number}",
   "action_card_questions_steps": "Questions",
   "action_card_ignore": "Ignore",
-  "action_card_ignored": "Ignored. Closes in 5 seconds.",
   "action_card_ignored_status": "Ignored. Undo within 5 seconds.",
   "action_card_undo": "Undo",
   "action_card_ignore_row": "Ignore: {prompt}",

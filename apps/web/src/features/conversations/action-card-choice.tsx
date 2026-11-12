@@ -17,6 +17,8 @@ import { HandledChoice, chosenAnswer } from "./action-card-choice-handled";
 import { WaitingOn } from "./action-card-waiting-on";
 import { FAILED_RING, KEY_HINT, OtherRow } from "./action-card-choice-other";
 import { focusIgnore, IgnoredLine } from "./action-card-ignored";
+import { ownIgnoreFinal } from "./action-card-outcome";
+import { IGNORE_AT } from "./ignore-placement";
 import { useUndoableIgnore } from "./use-undoable-ignore";
 
 type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
@@ -67,6 +69,8 @@ export function ChoiceActionCard({
   const isAsked = view.asked?.isViewer === true;
   const canIgnore = pending && view.canCommit && view.canCancel;
   const { ignored, ignore, undo } = useUndoableIgnore(onIgnore, canIgnore);
+  // Once the ignore is final the card stays the row its ignore folded it to (`IgnoredLine`).
+  const closing = ownIgnoreFinal(view);
   const wasIgnored = useRef(false);
   // The collapsed line takes focus on Undo; coming back (undone, or the cancel failed), on Ignore.
   useEffect(() => {
@@ -149,13 +153,14 @@ export function ChoiceActionCard({
       onKeyDown={onCardKeyDown}
       data-no-row-tap
       data-choice-waiting={pending && view.canCommit && !ignored ? "" : undefined}
+      data-ignored={ignored || closing ? "" : undefined}
       className={cn(
-        "outline-focus-ring focus-visible:outline-2",
-        "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary",
-        pending && "group/card px-1.5 pt-3 pb-1.5",
+        "mt-1 flex max-w-md flex-col rounded-xl outline-focus-ring focus-visible:outline-2",
+        // Waiting, the box is the part that slides away when ignored (`PendingChoice`).
+        pending || closing ? "group/card" : "border border-secondary bg-primary",
       )}
     >
-      {pending ? (
+      {pending || closing ? (
         // The scope gives the rows' arrow keys React Aria's focus manager.
         <FocusScope>
           <PendingChoice
@@ -168,7 +173,8 @@ export function ChoiceActionCard({
             onRetry={retry}
             onCancel={onCancel}
             onIgnore={canIgnore ? ignore : undefined}
-            ignored={ignored}
+            ignored={ignored || closing}
+            final={closing}
             onUndo={undo}
             onOpenPersonProfile={onOpenPersonProfile}
           />
@@ -194,6 +200,7 @@ function PendingChoice({
   onCancel,
   onIgnore,
   ignored,
+  final,
   onUndo,
   error,
   onOpenPersonProfile,
@@ -212,6 +219,8 @@ function PendingChoice({
   onIgnore?: () => void;
   /** Ignored and not yet sent: the question stays, the rest folds under an Undo. */
   ignored: boolean;
+  /** The ignore is final: the row keeps its place without an Undo. */
+  final: boolean;
   onUndo: () => void;
   onOpenPersonProfile?: OpenPersonProfile;
 }) {
@@ -253,137 +262,164 @@ function PendingChoice({
   return (
     // The card's keys work from any row in it.
     <div className="flex flex-col" onKeyDown={onKeyDown}>
-      <ChoicePrompt prompt={view.prompt} />
-      {/* Only on a card the viewer may ignore: anyone else's has no Undo to hide. */}
+      {/* Ignoring folds the card into its one row as the stream closes up under it, once
+          (Frank, task #91); the two folds turn together, softly. Only on a card the viewer may
+          ignore: anyone else's has no Undo to hide. */}
       {(onIgnore || ignored) && (
-        <Fold open={ignored}>
-          <IgnoredLine onUndo={onUndo} />
+        <Fold open={ignored} soft>
+          <IgnoredLine title={view.prompt} onUndo={onUndo} final={final} />
         </Fold>
       )}
-      <Fold open={!ignored}>
-        {canAnswer ? (
-          <ul className="flex flex-col gap-1.5">
-            {view.options.map((option, index) => {
-              const sending = picking === option.id;
-              return (
-                <li key={option.id}>
-                  <AriaButton
-                    data-choice-row=""
-                    data-choice-option={option.id}
-                    aria-keyshortcuts={index < 9 ? String(index + 1) : undefined}
-                    // Stays focusable while the pick is sent, so a failed pick leaves focus here.
-                    aria-disabled={picking ? true : undefined}
-                    onPress={() => void onPick({ optionId: option.id })}
-                    className={cn(
-                      "group/row flex min-h-10 w-full cursor-pointer items-center gap-2.5 rounded-lg border border-secondary px-2.5 py-2 text-left text-sm text-primary outline-focus-ring max-sm:min-h-11",
-                      "hover:bg-primary_hover focus-visible:border-transparent focus-visible:outline-2 focus-visible:-outline-offset-1",
-                      "aria-disabled:cursor-default aria-disabled:hover:bg-transparent",
-                      failed?.optionId === option.id && cn("border-transparent", FAILED_RING),
-                      picking && !sending && "opacity-50",
-                    )}
-                  >
-                    {sending && <Spinner className="size-4 shrink-0 text-fg-brand-primary" />}
-                    <span className="min-w-0 flex-1 wrap-anywhere">{option.label}</span>
-                    {index < 9 && (
-                      // The number that picks the row, always shown (task #457).
-                      <kbd aria-hidden="true" className={cn(KEY_HINT, "min-w-5 px-1 tabular-nums")}>
-                        {index + 1}
-                      </kbd>
-                    )}
-                  </AriaButton>
-                </li>
-              );
-            })}
-            {view.other && (
-              <OtherRow
-                placeholder={view.other.label || m.action_card_choice_other()}
-                picking={picking}
-                failed={failed?.optionId === CHOICE_OTHER_OPTION_ID}
-                onSend={(text) => onPick({ optionId: CHOICE_OTHER_OPTION_ID, text })}
-              />
-            )}
-          </ul>
-        ) : (
-          <ul className="flex flex-col">
-            {view.options.map((option) => (
-              <li
-                key={option.id}
-                className="flex items-baseline gap-2.5 px-2.5 py-1 text-sm wrap-anywhere text-secondary"
-              >
-                <span
-                  aria-hidden="true"
-                  className="size-1 shrink-0 -translate-y-[0.3em] rounded-full bg-current text-fg-quaternary"
-                />
-                {option.label}
-              </li>
-            ))}
-          </ul>
-        )}
-        {/* With no row of their own (the Agent turned it off), the asked person is pointed at the
-          chat: the hint puts the caret in this conversation's composer, and the card waits on.
-          Ignore sits at the right end of the same row, or alone on it. */}
-        {((!view.other && canAnswer) || onIgnore) && (
-          <div className="flex items-center gap-3 px-2.5 pt-2 pb-1">
-            {!view.other && canAnswer && (
-              <AriaButton
-                data-chat-hint=""
-                onPress={(event) => focusComposerOf(event.target)}
-                className="rounded-sm text-left text-xs text-quaternary outline-focus-ring hover:text-tertiary focus-visible:outline-2"
-              >
-                {m.action_card_choice_chat_hint()}
-              </AriaButton>
-            )}
-            {onIgnore && (
+      <Fold open={!ignored} soft>
+        <div className="flex flex-col rounded-xl border border-secondary bg-primary px-1.5 pt-3 pb-1.5">
+          {/* Where Ignore sits is Frank's to choose (task #91): on the title line, or at the foot. */}
+          {onIgnore && IGNORE_AT === "top" ? (
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <ChoicePrompt prompt={view.prompt} />
+              </div>
               <Button
                 data-ignore=""
                 size="sm"
                 color="link-gray"
                 onPress={onIgnore}
-                className="ml-auto"
+                className="mr-2 shrink-0"
               >
                 {m.action_card_ignore()}
               </Button>
-            )}
-          </div>
-        )}
-        {error && !failed && (
-          <p role="alert" className="px-2.5 pt-2 pb-1 text-sm text-error-primary">
-            {error}
-          </p>
-        )}
-        {failed && (
-          <div
-            role="alert"
-            className="flex items-center gap-1.5 px-2.5 pt-2 pb-1 text-sm text-error-primary"
-          >
-            <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1">{m.action_card_choice_failed()}</span>
-            <Button
-              size="sm"
-              color="link-destructive"
-              isDisabled={Boolean(picking)}
-              onPress={onRetry}
+            </div>
+          ) : (
+            <ChoicePrompt prompt={view.prompt} />
+          )}
+          {canAnswer ? (
+            <ul className="flex flex-col gap-1.5">
+              {view.options.map((option, index) => {
+                const sending = picking === option.id;
+                return (
+                  <li key={option.id}>
+                    <AriaButton
+                      data-choice-row=""
+                      data-choice-option={option.id}
+                      aria-keyshortcuts={index < 9 ? String(index + 1) : undefined}
+                      // Stays focusable while the pick is sent, so a failed pick leaves focus here.
+                      aria-disabled={picking ? true : undefined}
+                      onPress={() => void onPick({ optionId: option.id })}
+                      className={cn(
+                        "group/row flex min-h-10 w-full cursor-pointer items-center gap-2.5 rounded-lg border border-secondary px-2.5 py-2 text-left text-sm text-primary outline-focus-ring max-sm:min-h-11",
+                        "hover:bg-primary_hover focus-visible:border-transparent focus-visible:outline-2 focus-visible:-outline-offset-1",
+                        "aria-disabled:cursor-default aria-disabled:hover:bg-transparent",
+                        failed?.optionId === option.id && cn("border-transparent", FAILED_RING),
+                        picking && !sending && "opacity-50",
+                      )}
+                    >
+                      {sending && <Spinner className="size-4 shrink-0 text-fg-brand-primary" />}
+                      <span className="min-w-0 flex-1 wrap-anywhere">{option.label}</span>
+                      {index < 9 && (
+                        // The number that picks the row, always shown (task #457).
+                        <kbd
+                          aria-hidden="true"
+                          className={cn(KEY_HINT, "min-w-5 px-1 tabular-nums")}
+                        >
+                          {index + 1}
+                        </kbd>
+                      )}
+                    </AriaButton>
+                  </li>
+                );
+              })}
+              {view.other && (
+                <OtherRow
+                  placeholder={view.other.label || m.action_card_choice_other()}
+                  picking={picking}
+                  failed={failed?.optionId === CHOICE_OTHER_OPTION_ID}
+                  onSend={(text) => onPick({ optionId: CHOICE_OTHER_OPTION_ID, text })}
+                />
+              )}
+            </ul>
+          ) : (
+            <ul className="flex flex-col">
+              {view.options.map((option) => (
+                <li
+                  key={option.id}
+                  className="flex items-baseline gap-2.5 px-2.5 py-1 text-sm wrap-anywhere text-secondary"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-1 shrink-0 -translate-y-[0.3em] rounded-full bg-current text-fg-quaternary"
+                  />
+                  {option.label}
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* With no row of their own (the Agent turned it off), the asked person is pointed at the
+          chat: the hint puts the caret in this conversation's composer, and the card waits on.
+          Ignore sits at the right end of the same row, or alone on it. */}
+          {((!view.other && canAnswer) || (onIgnore && IGNORE_AT === "bottom")) && (
+            <div className="flex items-center gap-3 px-2.5 pt-2 pb-1">
+              {!view.other && canAnswer && (
+                <AriaButton
+                  data-chat-hint=""
+                  onPress={(event) => focusComposerOf(event.target)}
+                  className="rounded-sm text-left text-xs text-quaternary outline-focus-ring hover:text-tertiary focus-visible:outline-2"
+                >
+                  {m.action_card_choice_chat_hint()}
+                </AriaButton>
+              )}
+              {onIgnore && IGNORE_AT === "bottom" && (
+                <Button
+                  data-ignore=""
+                  size="sm"
+                  color="link-gray"
+                  onPress={onIgnore}
+                  className="ml-auto"
+                >
+                  {m.action_card_ignore()}
+                </Button>
+              )}
+            </div>
+          )}
+          {error && !failed && (
+            <p role="alert" className="px-2.5 pt-2 pb-1 text-sm text-error-primary">
+              {error}
+            </p>
+          )}
+          {failed && (
+            <div
+              role="alert"
+              className="flex items-center gap-1.5 px-2.5 pt-2 pb-1 text-sm text-error-primary"
             >
-              {m.action_card_retry()}
-            </Button>
-          </div>
-        )}
-        {(waitingOn || withdrawable) && (
-          <div className="flex items-center gap-3 px-2.5 pt-2 pb-1">
-            {waitingOn && <WaitingOn asked={waitingOn} onOpenPersonProfile={onOpenPersonProfile} />}
-            {withdrawable && (
+              <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1">{m.action_card_choice_failed()}</span>
               <Button
                 size="sm"
-                color="link-gray"
-                isDisabled={cancelling}
-                onPress={onCancel}
-                className="ml-auto"
+                color="link-destructive"
+                isDisabled={Boolean(picking)}
+                onPress={onRetry}
               >
-                {cancelling ? m.action_card_cancelling() : m.action_card_dismiss()}
+                {m.action_card_retry()}
               </Button>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+          {(waitingOn || withdrawable) && (
+            <div className="flex items-center gap-3 px-2.5 pt-2 pb-1">
+              {waitingOn && (
+                <WaitingOn asked={waitingOn} onOpenPersonProfile={onOpenPersonProfile} />
+              )}
+              {withdrawable && (
+                <Button
+                  size="sm"
+                  color="link-gray"
+                  isDisabled={cancelling}
+                  onPress={onCancel}
+                  className="ml-auto"
+                >
+                  {cancelling ? m.action_card_cancelling() : m.action_card_dismiss()}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       </Fold>
     </div>
   );

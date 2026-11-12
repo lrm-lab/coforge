@@ -19,6 +19,12 @@ export function ignoredByAsked(view: ClosedCard) {
   return view.state === "cancelled" && !!view.asked && view.committedBy?.id === view.asked.id;
 }
 
+/** Whether the viewer is the one who ignored this card, now that the ignore is final: the card
+ * stays the row its ignore folded it to (`IgnoredLine`), drawn again as that row. */
+export function ownIgnoreFinal(view: ClosedCard) {
+  return ignoredByAsked(view) && view.asked?.isViewer === true;
+}
+
 /**
  * How a closed card ended, said in words on one line, so anyone looking at someone else's card
  * tells at a glance whether it was answered, ignored, withdrawn or ran out (Frank, task #94: "看不出

@@ -33,6 +33,7 @@ export function QuestionsStepper({
   onChange,
   onSubmit,
   notice,
+  action,
   readOnly,
 }: {
   questions: Question[];
@@ -44,6 +45,8 @@ export function QuestionsStepper({
   onSubmit: () => void;
   /** What the card has to say over its buttons: why the last send failed. */
   notice?: ReactNode;
+  /** A quieter control of the card's own, first in the buttons' row: its Ignore (task #91). */
+  action?: ReactNode;
   /** Answered (Frank, 11-04): the same pages, each pick marked; the dots and ‹ › turn them, as
    * ← → and a swipe do (task #531: with the dots alone, nothing showed the way). */
   readOnly?: boolean;
@@ -321,6 +324,7 @@ export function QuestionsStepper({
           )}
           {!readOnly && (
             <span className="ml-auto flex items-center gap-2">
+              {action}
               {step > 0 && (
                 <Button size="sm" color="secondary" onPress={() => goTo(step - 1)}>
                   {m.action_card_questions_previous_step()}

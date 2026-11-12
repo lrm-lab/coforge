@@ -17,8 +17,9 @@ import {
 import { dropDrafts, keepDrafts, keptDrafts } from "./action-card-questions-drafts";
 import { QuestionsStepper } from "./action-card-questions-stepper";
 import { WaitingOn } from "./action-card-waiting-on";
-import { CardOutcome } from "./action-card-outcome";
+import { CardOutcome, ownIgnoreFinal } from "./action-card-outcome";
 import { focusIgnore, IgnoredLine } from "./action-card-ignored";
+import { IGNORE_AT } from "./ignore-placement";
 import { useUndoableIgnore } from "./use-undoable-ignore";
 
 /** One question's answer, as `commitQuestionsActionCard` takes it. */
@@ -81,6 +82,8 @@ export function QuestionsActionCard({
   const withdrawable = pending && view.canCancel && !canAnswer;
   const canIgnore = canAnswer && view.canCancel;
   const { ignored, ignore, undo } = useUndoableIgnore(onIgnore, canIgnore);
+  // Ignored, and still once the ignore is final, the card is its one row (`IgnoredLine`).
+  const folded = ignored || ownIgnoreFinal(view);
   const cardRef = useRef<HTMLDivElement>(null);
   const wasIgnored = useRef(false);
   const [announcement, setAnnouncement] = useState("");
@@ -142,6 +145,20 @@ export function QuestionsActionCard({
     </div>
   );
 
+  // Where Ignore sits is Frank's to choose (task #91): on the title line, or with the buttons.
+  const ignoreAtTop = canIgnore && IGNORE_AT === "top";
+  const ignoreButton = canIgnore && (
+    <Button
+      data-ignore=""
+      size="sm"
+      color="link-gray"
+      onPress={ignore}
+      className={ignoreAtTop ? "-mt-0.5 mr-1 shrink-0" : "mr-1"}
+    >
+      {m.action_card_ignore()}
+    </Button>
+  );
+
   return (
     <div
       ref={cardRef}
@@ -149,38 +166,43 @@ export function QuestionsActionCard({
       aria-label={view.prompt || view.questions[0]?.prompt}
       tabIndex={-1}
       data-questions-card=""
+      data-ignored={folded ? "" : undefined}
       data-no-row-tap
-      className={cn(
-        "outline-focus-ring focus-visible:outline-2",
-        "mt-1 flex max-w-md flex-col gap-2 rounded-xl border border-secondary bg-primary px-1.5 pt-3 pb-1.5",
-      )}
+      className="mt-1 flex max-w-md flex-col rounded-xl outline-focus-ring focus-visible:outline-2"
     >
-      {/* Ignoring folds the card down to its question and an Undo; each fold, shut, gives back
-          the gap beside it. */}
-      {(canIgnore || ignored) && (
-        <Fold open={ignored} className={cn(!ignored && "-mb-2")}>
-          <div className="flex flex-col gap-2">
-            <p className="px-2.5 text-sm font-semibold wrap-anywhere text-primary">
-              {view.prompt || view.questions[0]?.prompt}
-            </p>
-            <IgnoredLine onUndo={undo} />
-          </div>
+      {/* Ignoring folds the card into its one row as the stream closes up under it, once
+          (Frank, task #91); the two folds turn together, softly. */}
+      {(canIgnore || folded) && (
+        <Fold open={folded} soft>
+          <IgnoredLine
+            title={view.prompt || view.questions[0]?.prompt || ""}
+            onUndo={undo}
+            final={!ignored}
+          />
         </Fold>
       )}
-      <Fold open={!ignored} className={cn(ignored && "-mt-2")}>
-        <div className={cn("flex flex-col", canAnswer || pagesOnly ? "gap-2" : "gap-4")}>
-          {view.prompt && (
-            // While it is being answered the question leads; the card's own title stays small.
-            <p
-              className={cn(
-                "wrap-anywhere",
-                canAnswer || pagesOnly
-                  ? "px-2 text-xs text-tertiary"
-                  : "px-2.5 text-sm font-semibold text-primary",
-              )}
-            >
-              {view.prompt}
-            </p>
+      <Fold open={!folded} soft>
+        <div
+          className={cn(
+            "flex flex-col rounded-xl border border-secondary bg-primary px-1.5 pt-3 pb-1.5",
+            canAnswer || pagesOnly ? "gap-2" : "gap-4",
+          )}
+        >
+          {(view.prompt || ignoreAtTop) && (
+            <div className="flex items-start gap-2">
+              {/* While it is being answered the question leads; the card's own title stays small. */}
+              <p
+                className={cn(
+                  "min-w-0 flex-1 wrap-anywhere",
+                  canAnswer || pagesOnly
+                    ? "px-2 text-xs text-tertiary"
+                    : "px-2.5 text-sm font-semibold text-primary",
+                )}
+              >
+                {view.prompt}
+              </p>
+              {ignoreAtTop && ignoreButton}
+            </div>
           )}
           {pagesOnly && (
             <QuestionsStepper
@@ -240,22 +262,10 @@ export function QuestionsActionCard({
               }
               onSubmit={() => void submit()}
               notice={errorLine}
+              action={ignoreAtTop ? undefined : ignoreButton}
             />
           ) : (
             footer
-          )}
-          {canIgnore && (
-            <div className="flex px-2.5 pb-1">
-              <Button
-                data-ignore=""
-                size="sm"
-                color="link-gray"
-                onPress={ignore}
-                className="ml-auto"
-              >
-                {m.action_card_ignore()}
-              </Button>
-            </div>
           )}
           {!pending && <CardOutcome view={view} />}
         </div>
