@@ -51,7 +51,7 @@ function AgentModelText({
  * An Agent's description after its model in chat, as Raft's message header has it: its first
  * line, in the model's quiet type. It takes only the room the line has to spare (no basis, growing
  * to its own width at most), so it is cut first and to nothing before the model or the name
- * gives way; the line is in the tooltip, and the Agent's profile has the rest. Shown
+ * gives way; the Agent's profile has the rest. Shown
  * whatever the model setting, and only once the browser has read it (see `AgentModelLabel`).
  */
 export function AgentDescriptionLabel({
@@ -85,16 +85,11 @@ function AgentDescriptionText({
 }) {
   const description = useAgentDescription(workspaceId, agentId, seenAt);
   if (!description) return null;
+  // Plain text, no tooltip on hover (Frank, task #27): the line is cut to the room it has, and the
+  // Agent's profile has it whole.
   return (
-    <Tooltip title={description}>
-      {/* Out of the tab order: on by default in every Agent header, it would be a stop per message,
-          and the line is its text, read whole whatever the width cuts. */}
-      <TooltipTrigger
-        excludeFromTabOrder
-        className="max-w-max min-w-0 flex-[1_1_0%] cursor-default truncate rounded-sm text-left text-xs text-tertiary outline-focus-ring focus-visible:outline-2"
-      >
-        {description}
-      </TooltipTrigger>
-    </Tooltip>
+    <span className="max-w-max min-w-0 flex-[1_1_0%] truncate text-xs text-tertiary">
+      {description}
+    </span>
   );
 }
