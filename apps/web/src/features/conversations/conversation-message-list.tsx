@@ -148,7 +148,9 @@ export function ConversationMessageList({
             message={message}
             own={own}
             dayChanged={dayChanged && !opensThread}
-            grouped={grouped}
+            // The row under the divider starts a sender run, so the first unread names its
+            // sender even when the same sender wrote the message above (task #99).
+            grouped={grouped && !unreadStartsHere}
             unreadStartsHere={unreadStartsHere}
             highlighted={message.id === jumpHighlightId}
             expanded={expandedMessages.has(message.id)}
