@@ -109,6 +109,14 @@ test("a member creates a Task with themselves as owner and a label", async () =>
     await browser("wait", "--fn", settled);
     await browser("screenshot", join(artifacts, "member-draft-dark.png"));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+    // A new Task names its priority (task #12).
+    await browser("click", '[role="dialog"] button[aria-label="Change priority: No priority"]');
+    await browser("find", "role", "menuitemradio", "click", "--name", "High");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"] button[aria-label="Change priority: High"]') != null`,
+    );
     // Enter in the title sends it, as the button does.
     await browser("click", '[role="dialog"] [aria-label="Task title"]');
     await browser("press", "Enter");
@@ -127,6 +135,7 @@ test("a member creates a Task with themselves as owner and a label", async () =>
       );
     }
     expect(row.status).toBe("in_progress");
+    expect(row.priority).toBe("high");
     expect(row.owner?.userId).toBe(DEV_BROWSER_USER.id);
     expect(row.labels.map((each) => each.labelId)).toEqual([label.id]);
 

@@ -176,6 +176,30 @@ export const menuItemNamed = (label: string) =>
 export const escapeOpenMenu = `document.querySelector('[role="menu"]')?.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',keyCode:27,which:27,bubbles:true,cancelable:true}))`;
 
 /**
+ * Picks `label` in the priority menu inside `scope` (a dialog selector) and waits for the button
+ * to name it — the pick every new-Task flow shares now that a Task names its priority (task #12).
+ * `run` is the session's command runner (`browserSession().browser`).
+ */
+export async function pickTaskPriority(
+  run: (command: string, ...args: string[]) => Promise<string>,
+  scope: string,
+  label: string,
+) {
+  await run("click", `${scope} button[aria-label^="Change priority:"]`);
+  await run(
+    "wait",
+    "--fn",
+    `[...document.querySelectorAll('[role="menuitemradio"]')].some((el) => el.textContent.includes(${JSON.stringify(label)}))`,
+  );
+  await run("find", "role", "menuitemradio", "click", "--name", label);
+  await run(
+    "wait",
+    "--fn",
+    `document.querySelector(${JSON.stringify(`${scope} button[aria-label="Change priority: ${label}"]`)}) !== null`,
+  );
+}
+
+/**
  * Saves `messageId` in `channelId` through a second browser session — the "another tab" whose
  * save announces `saved.added.v1` to the first session's page. A raw row write would bypass
  * realtime and leave the first page's Saved list stale until its next full load.

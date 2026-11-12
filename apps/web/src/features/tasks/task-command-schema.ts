@@ -1,4 +1,9 @@
-import { isTaskRef, TASK_PRIORITIES, TASK_STATUSES, type TaskRef } from "@lrm/coforge-sdk/internal";
+import {
+  isTaskRef,
+  TASK_PRIORITY_LEVELS,
+  TASK_STATUSES,
+  type TaskRef,
+} from "@lrm/coforge-sdk/internal";
 import { z } from "zod";
 
 import { PROJECT_SLUG_MAX_LENGTH } from "#src/features/projects/projects.schemas";
@@ -57,7 +62,7 @@ export const taskCommand = z
       .optional(),
     attachmentId: z.uuid().optional(),
     status: z.enum(TASK_STATUSES).optional(),
-    priority: z.enum(TASK_PRIORITIES).optional(),
+    priority: z.enum(TASK_PRIORITY_LEVELS).optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
   .strict();

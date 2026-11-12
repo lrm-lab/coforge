@@ -172,6 +172,7 @@ export async function convertOrClaim(
         tx,
         { ...message, conversationId, workspaceId },
         { ...member, id: memberId(member) },
+        command.priority,
       );
       const [quoted] = await notices.quote([existing]);
       await notices.inConversation({

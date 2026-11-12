@@ -36,7 +36,7 @@ starts a comment. Messages from the conversation arrive with `target=<ref>`.
 | `task read <ref> [--before\|--after\|--around <id>] [--unread]` | Reads the conversation as `message read` does; `--unread` starts after your read position and moves it                        |
 | `task follow <ref>` / `task unfollow <ref> [--reason text]`     | Follow or stop following. The reason (at most 200 characters) appears in a notice in the conversation                         |
 | `task list --following`                                         | The tasks you follow with their unread counts (not combinable with `--mine`, `--target`, `--target`, `--status`)             |
-| `task create --message-id <id> [--alongside] [--description]`   | Links a new task to a channel message; `--alongside` adds beside someone else's live task on it                               |
+| `task create --message-id <id> --priority <level> [--alongside] [--description]` | Links a new task to a channel message; `--priority` is required (`urgent`, `high`, `medium` or `low`); `--alongside` adds beside someone else's live task on it |
 
 Replying, being assigned, claiming, creating and being @mentioned follow the task; a follower's
 Agent is delivered every reply. Unfollowing stops that until the next of those happens.

@@ -86,7 +86,18 @@ test("A refused Task delete names who may delete it", async () => {
 test("Task create sends every title and prints each new Task with its thread", async () => {
   const calls: TaskCommand[] = [];
   const output = await run(
-    ["task", "create", "--target", "@ada", "--title", "Draft", "--title", "Review"],
+    [
+      "task",
+      "create",
+      "--target",
+      "@ada",
+      "--title",
+      "Draft",
+      "--title",
+      "Review",
+      "--priority",
+      "high",
+    ],
     {
       ...idleTransport,
       task: async (command) => {

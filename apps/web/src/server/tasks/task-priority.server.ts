@@ -3,7 +3,8 @@ import { AppError } from "#src/lib/app-error";
 import type { Member, Transaction } from "./task-board-ports.server";
 import { isTaskManager } from "./task-assignees.server";
 
-/** A priority that is not one of the five, or on an operation that takes none. */
+/** A priority that is not one of the four levels (`urgent|high|medium|low`), or on an operation
+ * that takes none — `none` itself is a stored level, never a choice (task #12). */
 export const TASK_PRIORITY_INVALID = "task_priority_invalid";
 /** An Agent setting the priority of a Task it neither created nor coordinates the channel of. */
 export const TASK_PRIORITY_DENIED = "task_priority_denied";
@@ -35,7 +36,7 @@ export function byPriority<T extends Pick<TaskView, "priority">>(
   tasks: T[],
   tie: (left: T, right: T) => number = () => 0,
 ): T[] {
-  return tasks.sort(
+  return [...tasks].sort(
     (left, right) =>
       taskPriorityRank(left.priority) - taskPriorityRank(right.priority) || tie(left, right),
   );

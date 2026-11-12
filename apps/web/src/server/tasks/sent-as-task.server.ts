@@ -1,6 +1,10 @@
+import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
 import type { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
+import type {
+  SentMessage,
+  SentMessageHook,
+} from "#src/server/conversations/sent-message-hook.server";
 import { sentMessageSpawnsTask } from "./sent-as-conversation-task.server";
 import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { creationChanges, historyRows } from "./task-history.server";
@@ -20,6 +24,7 @@ export async function createMessageTask(
     user?: { username: string } | null;
     agent?: { name: string } | null;
   },
+  priority?: TaskPriorityLevel,
 ) {
   const allocated = await tx.$queryRaw<Array<{ number: number }>>`
     UPDATE "conversations"
@@ -40,6 +45,7 @@ export async function createMessageTask(
       number: allocated[0].number,
       title: message.body.slice(0, 8_000),
       creatorMemberId: creator.id,
+      priority: priority ?? "none",
     },
     select: taskSelection,
   });
@@ -55,7 +61,11 @@ export async function createMessageTask(
  * top-level message can be a Task, as `convert` holds. The caller announces it once the send has
  * committed (`TaskBoard.announceSentTask`).
  */
-export const sentMessageBecomesTask: SentMessageHook = async (tx, message) => {
+export async function sentMessageBecomesTask(
+  tx: Prisma.TransactionClient,
+  message: SentMessage,
+  priority?: TaskPriorityLevel,
+) {
   if (message.threadRootId) throw new AppError("INVALID_INPUT");
   const creator = await tx.conversationMember.findUniqueOrThrow({
     where: { id: message.senderMemberId },
@@ -66,16 +76,18 @@ export const sentMessageBecomesTask: SentMessageHook = async (tx, message) => {
       agent: { select: { name: true } },
     },
   });
-  await createMessageTask(tx, message, creator);
-};
+  await createMessageTask(tx, message, creator, priority);
+}
 
 /** The hook a person's "send as task" runs: the message becomes the task, or, where the Workspace
  * has task conversations, is the source of a task made beside it. */
 export async function sentAsTaskHook(
   db: Parameters<typeof taskConversationsEnabled>[0],
   workspaceId: string,
+  priority?: TaskPriorityLevel,
 ): Promise<SentMessageHook> {
-  return (await taskConversationsEnabled(db, { workspaceId }))
+  const hook = (await taskConversationsEnabled(db, { workspaceId }))
     ? sentMessageSpawnsTask
     : sentMessageBecomesTask;
+  return (tx, message) => hook(tx, message, priority);
 }

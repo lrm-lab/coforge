@@ -28,11 +28,14 @@ export function ComposerSendButton({
 }: {
   /** What the send says it does, when not a plain send (the forward dialog's "Forward to 2"). */
   label?: string;
-  /** Whether a plain send (the button, Enter) goes out as a Task: an edited-back Task. */
+  /** Whether the send goes out as a Task: armed by the send menu or Cmd/Ctrl+Shift+Enter, or an
+   * edited-back unsent Task. */
   asTask: boolean;
   taskMode: boolean;
   isDisabled: boolean;
-  /** The menu's send: now, as a Task or not, whichever the button itself does not. */
+  /** The menu's choice of the other send: as a Task or not, whichever the button itself does
+   * not — sent now, or armed for the next submit when the owner needs a choice first (the Task's
+   * priority, task #12). */
   onChoose: (asTask: boolean) => void;
   className?: string;
 }) {
@@ -85,9 +88,10 @@ export function ComposerSendButton({
               aria-label={m.conversation_send_options()}
               onAction={() => onChoose(!asTask)}
             >
-              {/* Only the other send, as a split button's menu offers: it runs once and leaves the
-                  button's own send as it was. An edited-back Task's other send has no shortcut. The
-                  popover renders only in the browser, where the platform is known. */}
+              {/* Only the other send, as a split button's menu offers; what choosing it does —
+                  send now or arm the mode — is the owner's. An edited-back Task's other send has
+                  no shortcut. The popover renders only in the browser, where the platform is
+                  known. */}
               <Dropdown.Item id={asTask ? "send" : "task"} textValue={other.label}>
                 <span className="flex items-baseline justify-between gap-3">
                   {other.label}

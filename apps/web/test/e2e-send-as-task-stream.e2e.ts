@@ -133,13 +133,24 @@ test("a message sent as a Task shows its Task in the stream, with task conversat
       // subscribed would only see the Task on its next read.
       await workspaceChannelSubscribed();
       await browser("fill", composer, body);
+      // "Send as task" arms the send and offers the Task's priority first (task #12): the chip
+      // shows the device's remembered pick; choosing one here names the Task's priority.
       await browser("press", "Meta+Shift+Enter");
+      await waitFor(`document.querySelector('button[aria-label^="Change priority:"]') !== null`);
+      await browser("click", 'button[aria-label^="Change priority:"]');
+      await browser("find", "role", "menuitemradio", "click", "--name", "High");
+      await waitFor(
+        `document.querySelector('button[aria-label="Change priority: High"]') !== null`,
+      );
+      // Picking from the menu leaves focus on its trigger; the composer takes it back for Enter.
+      await browser("click", composer);
+      await browser("press", "Enter");
 
       const task = await (async () => {
         for (let attempt = 0; attempt < 100; attempt += 1) {
           const found = await db.task.findFirst({
             where: { conversationId: channel.id, title: { contains: `(${mode})` } },
-            select: { number: true, messageId: true, sourceMessageId: true },
+            select: { number: true, messageId: true, sourceMessageId: true, priority: true },
           });
           if (found) return found;
           await Bun.sleep(200);
@@ -152,6 +163,8 @@ test("a message sent as a Task shows its Task in the stream, with task conversat
         expect(task.messageId).toBeNull();
         expect(task.sourceMessageId).not.toBeNull();
       } else expect(task.messageId).not.toBeNull();
+      // The send named its priority through the armed send's chip.
+      expect(task.priority).toBe("high");
 
       // The chip under the message shows its Task's number (task #13 moved the title to the
       // peek): still proof the badge is this Task's.
