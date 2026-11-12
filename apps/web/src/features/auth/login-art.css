@@ -142,6 +142,16 @@
   --login-focus-halo: color-mix(in srgb, var(--color-brand-400) 25%, transparent);
 }
 
+/* The tabs are their words alone, no underline (jing, 11-12). */
+.login-form [role="tablist"]::before {
+  display: none;
+}
+
+.login-form [role="tab"] {
+  border-bottom-width: 0;
+  padding-bottom: 0;
+}
+
 .login-form [role="tab"]:not([data-hovered], [aria-selected="true"]) {
   color: var(--login-muted);
 }
@@ -149,7 +159,6 @@
 .login-form [role="tab"][data-hovered],
 .login-form [role="tab"][aria-selected="true"] {
   color: var(--login-brand);
-  border-bottom-color: var(--login-brand);
 }
 
 .login-form [class~="group/input"] {

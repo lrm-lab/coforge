@@ -27,10 +27,11 @@ import {
 /**
  * Setting a new password with a code sent to the account's phone number or email, end to end. The
  * password tab's "Forgot password?" opens the reset page (`returnTo` kept, and `prompt=login`, which keeps a signed-in person there and brings them back to a
- * sign-in that still asks); a code for an email
+ * sign-in that still asks), a tab for a phone and one for an email, every field shown at once
+ * (jing, 11-12); a code for an email
  * sets the password, which then signs in where the old one no longer does, and the page returns
  * to the sign-in with the email filled in and signs nobody in; a wrong code, a password that is
- * too short and a password Authing refuses each say so under the form; a destination no account
+ * too short, one typed differently the second time and a password Authing refuses each say so under the form; a destination no account
  * has gets the very answer a known one does (the code fields and the countdown), and Authing's
  * refusal of it shows nowhere; sending is limited like the code sign-in's, and the reset token
  * never reaches the browser.
@@ -81,7 +82,6 @@ test("setting a new password with a code sent by SMS or email", async () => {
     const { origin, fake } = stack;
     const onSignInHere = onSignInPage(origin);
     const onNameStepHere = onNameStep(origin);
-    const resetCodeField = `document.querySelector('main input[name="code"]')`;
     const onResetPage = `location.origin === ${JSON.stringify(origin)} && location.pathname.endsWith("/login/reset-password") && ${hydrated(destinationField)}`;
     /** The form's inline error, or null. */
     const formError = `(document.querySelector("main form [role=alert]")?.textContent ?? null)`;
@@ -98,16 +98,18 @@ test("setting a new password with a code sent by SMS or email", async () => {
     }
     async function openResetPage() {
       const url = `${origin}/login/reset-password?returnTo=${encodeURIComponent(returnTo)}`;
-      // A fresh page asks for a destination only. Opening the page it is already on, the old one
-      // (its code fields showing) would otherwise pass for it until the new one replaces it.
-      const fresh = `${onResetPage} && !${resetCodeField}`;
+      // A fresh page has nothing typed. Opening the page it is already on, the old one (its fields
+      // filled in) would otherwise pass for it until the new one replaces it.
+      const fresh = `${onResetPage} && ${destinationField}.value === ""`;
       await browser("open", url);
       await waitFor(fresh);
     }
-    /** Types the code and the new password, and presses the page's submit button. */
-    async function submitReset(code: string, password: string) {
+    /** Types the code and the new password twice (or `again` the second time), and presses the
+     * page's submit button. */
+    async function submitReset(code: string, password: string, again = password) {
       await setInput('main input[name="code"]', code);
       await setInput(passwordFieldSelector, password);
+      await setInput('main input[name="password-again"]', again);
       await browser("eval", `${button("Reset password")}.click()`);
     }
 
@@ -116,8 +118,8 @@ test("setting a new password with a code sent by SMS or email", async () => {
     await browser("set", "headers", JSON.stringify({ "X-Forwarded-For": "198.51.100.40" }));
     await mkdir(artifacts, { recursive: true });
 
-    // The password tab's "Sign in with an email code" opens the code tab, worded for an email;
-    // the code tab itself (the phone one) is where a first sign-in creates the account.
+    // The password tab's "Sign in with an email code" opens the email code sign-in, under its own
+    // heading in place of the tabs; the phone tab is where a first sign-in creates the account.
     await browser("open", `${origin}/login?returnTo=${encodeURIComponent(returnTo)}`);
     await waitFor(onSignInHere);
     await browser("eval", `${passwordTab}.click()`);
@@ -125,17 +127,24 @@ test("setting a new password with a code sent by SMS or email", async () => {
     await browser("screenshot", join(artifacts, "0-password-tab.png"));
     await browser("eval", `${button("Sign in with an email code")}.click()`);
     await waitFor(`!!${destinationField}`);
-    expect(await evaluate<string>(`${signInTab("Email code")}.getAttribute("aria-selected")`)).toBe(
-      "true",
-    );
+    expect(
+      await evaluate<string | null>(`document.querySelector("main h2")?.textContent ?? null`),
+    ).toBe("Email code");
 
-    // The password tab's "Forgot password?" opens the reset page, which asks for the destination
-    // first: no code or password field yet.
-    await browser("eval", `${passwordTab}.click()`);
+    // Its "Password" link goes back to the password tab, whose "Forgot password?" opens the reset
+    // page: the phone tab up, every field there from the start.
+    await browser("eval", `${button("Password")}.click()`);
     await waitFor(hydrated(accountField));
     await browser("eval", `${button("Forgot password?")}.click()`);
     await waitFor(onResetPage);
-    expect(await evaluate<boolean>(`!!${resetCodeField}`)).toBe(false);
+    expect(
+      await evaluate<string>(`${signInTab("Reset by phone")}.getAttribute("aria-selected")`),
+    ).toBe("true");
+    expect(
+      await evaluate<string[]>(
+        `[...document.querySelectorAll("main form input")].map((i) => i.name)`,
+      ),
+    ).toEqual(["destination", "code", "password", "password-again"]);
     expect(await evaluate<string>(`location.search`)).toContain(encodeURIComponent(returnTo));
     await browser("screenshot", join(artifacts, "1-reset-page.png"));
 
@@ -144,19 +153,21 @@ test("setting a new password with a code sent by SMS or email", async () => {
     await waitFor(`${formError} === "Enter a mainland China phone number or an email address."`);
     expect(fake.sentCodes).toEqual([]);
 
-    // A reset code for an existing email; the code and password fields appear and the button counts
-    // down.
+    // A reset code for an existing email, on the email tab; the button counts down.
+    await browser("eval", `${signInTab("Reset by email")}.click()`);
+    await waitFor(`${destinationField}?.placeholder === "Email address"`);
     await requestCode(` ${people.alice.email.toUpperCase()} `);
     await waitForResetCodes(1);
     expect(resetCodes()[0]).toMatchObject({ channel: "email", destination: people.alice.email });
-    await waitFor(
-      `!!${resetCodeField} && /^Resend in \\d+s$/.test(${sendButton}.textContent.trim())`,
-    );
+    await waitFor(`/^Resend in \\d+s$/.test(${sendButton}.textContent.trim())`);
     await browser("screenshot", join(artifacts, "2-code-sent.png"));
 
-    // A password too short, a wrong code: each says so and changes nothing; the code still works.
+    // A password too short, one typed differently twice, a wrong code: each says so and changes
+    // nothing; the code still works.
     await submitReset(resetCodes()[0]!.code, "short");
     await waitFor(`${formError} === "Use 8 to 128 characters."`);
+    await submitReset(resetCodes()[0]!.code, newPassword, `${newPassword}x`);
+    await waitFor(`${formError} === "The passwords don't match."`);
     await submitReset("000000", newPassword);
     await waitFor(`${formError} === "The verification code is incorrect or expired."`);
     expect(fake.resets).toEqual([]);
@@ -203,7 +214,6 @@ test("setting a new password with a code sent by SMS or email", async () => {
     stillAsking(await evaluate<string>(`location.search`));
     await requestCode(people.alice.email);
     await waitForResetCodes(2);
-    await waitFor(`!!${resetCodeField}`);
     await submitReset(resetCodes()[1]!.code, newPassword);
     await waitFor(`${onSignInHere} && ${notice} === "Password updated."`);
     stillAsking(await evaluate<string>(`location.search`));
@@ -219,7 +229,6 @@ test("setting a new password with a code sent by SMS or email", async () => {
       channel: "sms",
       destination: `+86${people.phoned.phone}`,
     });
-    await waitFor(`!!${resetCodeField}`);
     await submitReset(resetCodes()[2]!.code, refusedPassword);
     await waitFor(`${formError} === "This password can't be used. Choose another."`);
     expect(fake.resets).toHaveLength(2);
@@ -228,7 +237,6 @@ test("setting a new password with a code sent by SMS or email", async () => {
     await openResetPage();
     await requestCode("+86 138-0013-8011");
     await waitForResetCodes(4);
-    await waitFor(`!!${resetCodeField}`);
     await submitReset(resetCodes()[3]!.code, newPassword);
     await waitFor(
       `${onSignInHere} && ${notice} === "Password updated. Phone numbers sign in with a code."`,
@@ -238,13 +246,11 @@ test("setting a new password with a code sent by SMS or email", async () => {
     expect(await evaluate<string>(`${destinationField}.value`)).toBe(people.phoned.phone);
     await browser("screenshot", join(artifacts, "5-phone-updated.png"));
 
-    // An email no account has gets the same answer: the code fields, the countdown, no message.
+    // An email no account has gets the same answer: the countdown, no message.
     // Authing refused it and sent nothing, and a code typed anyway is simply wrong.
     await openResetPage();
     await requestCode(unknownEmail);
-    await waitFor(
-      `!!${resetCodeField} && /^Resend in \\d+s$/.test(${sendButton}.textContent.trim())`,
-    );
+    await waitFor(`/^Resend in \\d+s$/.test(${sendButton}.textContent.trim())`);
     expect(await evaluate<string | null>(formError)).toBeNull();
     expect(fake.refusedResetSends).toEqual([{ channel: "email", destination: unknownEmail }]);
     expect(resetCodes()).toHaveLength(4);
@@ -259,7 +265,6 @@ test("setting a new password with a code sent by SMS or email", async () => {
     for (let ask = 0; ask < CODE_SEND_DESTINATION_LIMIT; ask++) {
       await openResetPage();
       await requestCode(limitedEmail);
-      await waitFor(`!!${resetCodeField}`);
       // Counted only once the send has reached Authing, before the next one leaves the page.
       while (
         fake.refusedResetSends.filter((sent) => sent.destination === limitedEmail).length <= ask
@@ -276,7 +281,6 @@ test("setting a new password with a code sent by SMS or email", async () => {
       CODE_SEND_DESTINATION_LIMIT,
     );
     expect(await evaluate<string>(`${sendButton}.textContent.trim()`)).toBe("Send code");
-    expect(await evaluate<boolean>(`!!${resetCodeField}`)).toBe(false);
     await browser("screenshot", join(artifacts, "7-send-limit.png"));
   } finally {
     await browser("close").catch(() => undefined);

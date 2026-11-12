@@ -102,6 +102,18 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     ).toEqual([79, 16, 170]);
     expect(await tabColor(codeTab)).toBe("rgb(93, 54, 220)");
     expect(await tabColor(passwordTab)).toBe("rgb(119, 125, 141)");
+    // No underline under the tabs or the list (jing, 11-12); the title 40 px above the tabs, the
+    // tabs 32 px above the first field.
+    expect(
+      await evaluate<string[]>(
+        `[getComputedStyle(${codeTab}).borderBottomWidth, getComputedStyle(document.querySelector('main [role="tablist"]'), "::before").display]`,
+      ),
+    ).toEqual(["0px", "none"]);
+    expect(
+      await evaluate<number[]>(
+        `(() => { const title = document.querySelector("main h1").getBoundingClientRect(); const tab = ${codeTab}.getBoundingClientRect(); const field = ${fieldGroup(destinationFieldSelector)}.getBoundingClientRect(); return [Math.round(tab.top - title.bottom), Math.round(field.top - tab.bottom)]; })()`,
+      ),
+    ).toEqual([40, 32]);
     expect(await evaluate<boolean>(`!!${button("Continue with GitHub")}`)).toBe(true);
     const phoneTitleTop = await titleTop();
     const fieldLook = () =>
@@ -145,18 +157,25 @@ test("the split sign-in page: tabs, fields, email-code link and screenshots", as
     expect(await evaluate<boolean>(`!!${button("Forgot password?")}`)).toBe(true);
     expect(await evaluate<boolean>(`!!${button("Sign in with an email code")}`)).toBe(true);
 
-    // "Sign in with an email code" opens the code tab worded for an email, with a way back.
+    // "Sign in with an email code" opens the email code sign-in under its own heading in place of
+    // the tabs, no GitHub, with a way back to the password tab.
     await browser("eval", `${button("Sign in with an email code")}.click()`);
     await waitFor(`!!document.querySelector(${JSON.stringify(destinationFieldSelector)})`);
-    expect(await selected(signInTab("Email code"))).toBe("true");
+    expect(
+      await evaluate<string | null>(`document.querySelector("main h2")?.textContent ?? null`),
+    ).toBe("Email code");
+    expect(await evaluate<number>(`document.querySelectorAll('main [role="tab"]').length`)).toBe(0);
+    expect(await evaluate<boolean>(`!!${button("Continue with GitHub")}`)).toBe(false);
+    expect(await titleTop()).toBe(phoneTitleTop);
     expect(
       await evaluate<string>(
         `document.querySelector(${JSON.stringify(destinationFieldSelector)}).placeholder`,
       ),
     ).toBe("Email address");
-    await browser("eval", `${button("Phone")}.click()`);
-    await waitFor(`!!${codeTab}`);
-    expect(await selected(codeTab)).toBe("true");
+    await browser("screenshot", join(artifacts, "email-code-1440-light.png"));
+    await browser("eval", `${button("Password")}.click()`);
+    await waitFor(`!!${passwordTab}`);
+    expect(await selected(passwordTab)).toBe("true");
 
     // The screens, in each width and theme.
     for (const width of [1440, 768, 390]) {
