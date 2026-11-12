@@ -113,7 +113,7 @@ test("authorizeLaunch refuses a wake for a user-stopped Agent even under its exa
   const agent = completedManagedAgent();
   agent.stoppedAt = new Date("2026-09-17T00:00:00Z");
   await expect(controlFor(agent).authorizeLaunch(reusedWakeInput)).rejects.toThrow(
-    "Stale Agent launch",
+    "Agent launch was stopped",
   );
 });
 
@@ -170,6 +170,6 @@ test("authorizeLaunch refuses a wake against a completed stop chain even if it s
   // own, not only because a stop operation normally has no launchId.
   const agent = completedManagedAgent({ action: "stop" });
   await expect(controlFor(agent).authorizeLaunch(reusedWakeInput)).rejects.toThrow(
-    "Stale Agent launch",
+    "Agent launch was stopped",
   );
 });
