@@ -74,69 +74,78 @@ export function AgentDeleteDialog({
         <Dialog className="flex flex-col text-left" data-agent-delete-dialog>
           {({ close }) => (
             <>
-              <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
-                <Heading
-                  slot="title"
-                  className="min-w-0 text-xl font-semibold text-primary wrap-anywhere sm:text-display-xs"
-                >
-                  {m.agent_delete_dialog_title()}
-                </Heading>
-                <ButtonUtility
-                  aria-label={m.controls_close()}
-                  icon={X}
-                  size="sm"
-                  color="tertiary"
-                  isDisabled={deleting}
-                  onClick={close}
-                />
-              </div>
-              {/* Only the middle scrolls: with the keyboard up the title and the buttons stay in
+              {/* A form, so Enter in the name field confirms once the name matches (task #101). */}
+              <form
+                className="contents"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submit();
+                }}
+              >
+                <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
+                  <Heading
+                    slot="title"
+                    className="min-w-0 text-xl font-semibold text-primary wrap-anywhere sm:text-display-xs"
+                  >
+                    {m.agent_delete_dialog_title()}
+                  </Heading>
+                  <ButtonUtility
+                    aria-label={m.controls_close()}
+                    icon={X}
+                    size="sm"
+                    color="tertiary"
+                    isDisabled={deleting}
+                    onClick={close}
+                  />
+                </div>
+                {/* Only the middle scrolls: with the keyboard up the title and the buttons stay in
                   view, so the confirmation can be typed and confirmed. Once it has scrolled, a rule
                   under the title shows the text above continues rather than starting mid-sentence. */}
-              <div
-                className={`mt-4 min-h-0 flex-1 overflow-y-auto border-t pb-2 ${bodyScrolled ? "border-secondary" : "border-transparent"}`}
-                onScroll={(event) => setBodyScrolled(event.currentTarget.scrollTop > 0)}
-                data-dialog-body
-              >
-                <Text slot="description" className="block px-6 text-sm text-secondary">
-                  {m.agent_delete_dialog_description()}
-                </Text>
-                <label className="grid gap-1 px-6 pt-5 text-sm font-medium text-secondary wrap-anywhere">
-                  <EmphasizedName
-                    text={m.agent_delete_confirm({ name: agentName })}
-                    name={agentName}
-                  />
-                  <Input
-                    size={controlSize}
-                    autoFocus
-                    value={confirmation}
-                    onChange={setConfirmation}
-                    placeholder={m.agent_delete_placeholder()}
-                    isDisabled={deleting}
-                    aria-label={m.agent_delete_confirm({ name: agentName })}
-                  />
-                </label>
-                {error && (
-                  <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                    {error}
-                  </p>
-                )}
-              </div>
-              <DialogActions className="shrink-0 px-6 pt-4 pb-6">
-                <DialogCancel isDisabled={deleting} onPress={close}>
-                  {m.controls_cancel()}
-                </DialogCancel>
-                <DialogAction
-                  color="primary-destructive"
-                  data-agent-delete-confirm
-                  isDisabled={!confirmed || deleting}
-                  isLoading={deleting}
-                  showTextWhileLoading
-                  onPress={submit}
+                <div
+                  className={`mt-4 min-h-0 flex-1 overflow-y-auto border-t pb-2 ${bodyScrolled ? "border-secondary" : "border-transparent"}`}
+                  onScroll={(event) => setBodyScrolled(event.currentTarget.scrollTop > 0)}
+                  data-dialog-body
                 >
-                  {deleting ? m.agent_delete_pending() : m.agent_delete_submit()}
-                </DialogAction>
-              </DialogActions>
+                  <Text slot="description" className="block px-6 text-sm text-secondary">
+                    {m.agent_delete_dialog_description()}
+                  </Text>
+                  <label className="grid gap-1 px-6 pt-5 text-sm font-medium text-secondary wrap-anywhere">
+                    <EmphasizedName
+                      text={m.agent_delete_confirm({ name: agentName })}
+                      name={agentName}
+                    />
+                    <Input
+                      size={controlSize}
+                      autoFocus
+                      value={confirmation}
+                      onChange={setConfirmation}
+                      placeholder={m.agent_delete_placeholder()}
+                      isDisabled={deleting}
+                      aria-label={m.agent_delete_confirm({ name: agentName })}
+                    />
+                  </label>
+                  {error && (
+                    <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
+                      {error}
+                    </p>
+                  )}
+                </div>
+                <DialogActions className="shrink-0 px-6 pt-4 pb-6">
+                  <DialogCancel isDisabled={deleting} onPress={close}>
+                    {m.controls_cancel()}
+                  </DialogCancel>
+                  <DialogAction
+                    color="primary-destructive"
+                    data-agent-delete-confirm
+                    isDisabled={!confirmed || deleting}
+                    isLoading={deleting}
+                    showTextWhileLoading
+                    type="submit"
+                  >
+                    {deleting ? m.agent_delete_pending() : m.agent_delete_submit()}
+                  </DialogAction>
+                </DialogActions>
+              </form>
             </>
           )}
         </Dialog>

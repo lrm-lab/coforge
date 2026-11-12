@@ -75,6 +75,7 @@ export function AgentRestartDialog({
                   {m.controls_cancel()}
                 </DialogCancel>
                 <DialogAction
+                  autoFocus
                   className="min-w-28"
                   color={control.destructive ? "primary-destructive" : "primary"}
                   data-control-submit

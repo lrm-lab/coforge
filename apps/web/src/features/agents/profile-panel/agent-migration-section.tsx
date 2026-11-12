@@ -401,6 +401,7 @@ export function AgentMigrationSection({
                     {m.agent_migration_cancel_keep()}
                   </DialogCancel>
                   <DialogAction
+                    autoFocus
                     isDisabled={canceling}
                     isLoading={canceling}
                     showTextWhileLoading

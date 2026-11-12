@@ -280,6 +280,7 @@ function UpgradeConfirmFrame({
                   {m.controls_cancel()}
                 </DialogCancel>
                 <DialogAction
+                  autoFocus
                   type="button"
                   isDisabled={confirming}
                   isLoading={confirming}

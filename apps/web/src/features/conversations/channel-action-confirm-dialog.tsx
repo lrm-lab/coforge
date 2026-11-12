@@ -177,6 +177,7 @@ export function ChannelActionConfirmDialog({
                   {m.channel_settings_cancel()}
                 </DialogCancel>
                 <DialogAction
+                  autoFocus
                   color={copy.permanent ? "primary-destructive" : "primary"}
                   isDisabled={busy}
                   isLoading={busy}

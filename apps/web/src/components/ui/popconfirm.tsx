@@ -105,7 +105,9 @@ export function Popconfirm({
                 <DialogCancel isDisabled={pending} onPress={close}>
                   {m.controls_cancel()}
                 </DialogCancel>
+                {/* Enter confirms, as in every dialog (task #101). */}
                 <DialogAction
+                  autoFocus
                   color="primary-destructive"
                   isLoading={pending}
                   showTextWhileLoading

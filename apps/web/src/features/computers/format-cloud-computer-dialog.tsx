@@ -66,60 +66,69 @@ export function FormatCloudComputerDialog({
         <Dialog className="text-left">
           {({ close }) => (
             <>
-              <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
-                <Heading
-                  slot="title"
-                  className="min-w-0 text-xl font-semibold text-primary wrap-anywhere sm:text-display-xs"
-                >
-                  {m.computer_format_dialog_title({ name })}
-                </Heading>
-                <ButtonUtility
-                  aria-label={m.controls_close()}
-                  icon={X}
-                  size="sm"
-                  color="tertiary"
-                  isDisabled={formatting}
-                  onClick={close}
-                />
-              </div>
-              <div className="mx-6 mt-4 flex items-start gap-3">
-                <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
-                <Text slot="description" className="text-sm text-secondary">
-                  {m.computer_format_description()}
-                </Text>
-              </div>
-              <label className="grid gap-1 px-6 pt-5 text-sm font-medium">
-                {m.computer_format_confirm({ name })}
-                <Input
-                  size={controlSize}
-                  autoFocus
-                  value={typed}
-                  onChange={setTyped}
-                  placeholder={m.computer_format_placeholder()}
-                  isDisabled={formatting}
-                  autoComplete="off"
-                  aria-label={m.computer_format_confirm({ name })}
-                />
-              </label>
-              {error && (
-                <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                  {error}
-                </p>
-              )}
-              <DialogActions className="mt-6 shrink-0 px-6 pb-6">
-                <DialogCancel isDisabled={formatting} onPress={close}>
-                  {m.controls_cancel()}
-                </DialogCancel>
-                <DialogAction
-                  color="primary-destructive"
-                  isDisabled={!confirmed || formatting}
-                  isLoading={formatting}
-                  showTextWhileLoading
-                  onPress={submit}
-                >
-                  {formatting ? m.computer_format_pending() : m.computer_format_submit()}
-                </DialogAction>
-              </DialogActions>
+              {/* A form, so Enter in the name field confirms once the name matches (task #101). */}
+              <form
+                className="contents"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submit();
+                }}
+              >
+                <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
+                  <Heading
+                    slot="title"
+                    className="min-w-0 text-xl font-semibold text-primary wrap-anywhere sm:text-display-xs"
+                  >
+                    {m.computer_format_dialog_title({ name })}
+                  </Heading>
+                  <ButtonUtility
+                    aria-label={m.controls_close()}
+                    icon={X}
+                    size="sm"
+                    color="tertiary"
+                    isDisabled={formatting}
+                    onClick={close}
+                  />
+                </div>
+                <div className="mx-6 mt-4 flex items-start gap-3">
+                  <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
+                  <Text slot="description" className="text-sm text-secondary">
+                    {m.computer_format_description()}
+                  </Text>
+                </div>
+                <label className="grid gap-1 px-6 pt-5 text-sm font-medium">
+                  {m.computer_format_confirm({ name })}
+                  <Input
+                    size={controlSize}
+                    autoFocus
+                    value={typed}
+                    onChange={setTyped}
+                    placeholder={m.computer_format_placeholder()}
+                    isDisabled={formatting}
+                    autoComplete="off"
+                    aria-label={m.computer_format_confirm({ name })}
+                  />
+                </label>
+                {error && (
+                  <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
+                    {error}
+                  </p>
+                )}
+                <DialogActions className="mt-6 shrink-0 px-6 pb-6">
+                  <DialogCancel isDisabled={formatting} onPress={close}>
+                    {m.controls_cancel()}
+                  </DialogCancel>
+                  <DialogAction
+                    color="primary-destructive"
+                    isDisabled={!confirmed || formatting}
+                    isLoading={formatting}
+                    showTextWhileLoading
+                    type="submit"
+                  >
+                    {formatting ? m.computer_format_pending() : m.computer_format_submit()}
+                  </DialogAction>
+                </DialogActions>
+              </form>
             </>
           )}
         </Dialog>

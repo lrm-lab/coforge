@@ -103,7 +103,10 @@ export function ConfirmDialog({
                 <DialogCancel isDisabled={pending} onPress={close}>
                   {m.controls_cancel()}
                 </DialogCancel>
+                {/* The confirm takes the caret as the dialog opens: Enter confirms (Frank, task
+                    #101, a delete's included); Tab reaches Cancel. */}
                 <DialogAction
+                  autoFocus
                   color={tone === "destructive" ? "primary-destructive" : "primary"}
                   isLoading={pending}
                   isDisabled={confirmDisabled}

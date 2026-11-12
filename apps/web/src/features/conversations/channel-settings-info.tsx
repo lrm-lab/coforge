@@ -6,6 +6,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
+import { submitOnModEnter } from "#src/components/ui/dialog-form-keys";
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
@@ -121,7 +122,9 @@ export function InfoForm({
   const locked = archived || form.saving;
   const controlSize = useDialogControlSize();
   return (
+    // ⌘/Ctrl+Enter saves from the description, where Enter starts a new line (task #101).
     <form
+      onKeyDown={submitOnModEnter}
       className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault();

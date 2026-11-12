@@ -173,6 +173,7 @@ export function AgentVisibilityConfirmDialog({
                   {m.controls_cancel()}
                 </DialogCancel>
                 <DialogAction
+                  autoFocus
                   color={goingPrivate ? "primary-destructive" : "primary"}
                   isDisabled={submitting}
                   isLoading={submitting}

@@ -9,6 +9,7 @@ import {
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 import { TextArea } from "#src/components/base/textarea/textarea";
+import { submitOnModEnter } from "#src/components/ui/dialog-form-keys";
 import { Alert } from "#src/components/ui/alert";
 import {
   UnsavedChangesDialog,
@@ -57,43 +58,50 @@ export function RejectReviewDialog({
         }}
       >
         <Modal className="w-[calc(100vw-2rem)] max-w-md">
-          <Dialog className="grid gap-4 p-6 text-left">
-            <Heading slot="title" className="text-lg font-semibold text-primary">
-              {m.apps_review_reject_title({ name: appName })}
-            </Heading>
-            <TextArea
-              size={controlSize}
-              label={m.apps_review_reject_reason()}
-              value={reason}
-              onChange={setReason}
-              rows={4}
-              maxLength={REVIEW_REASON_MAX_LENGTH}
-              isDisabled={pending}
-            />
-            {error && <Alert color="error" title={m.apps_review_reject_error()} />}
-            <DialogActions>
-              <DialogCancel type="button" isDisabled={pending} onPress={unsaved.requestClose}>
-                {m.apps_review_cancel()}
-              </DialogCancel>
-              <DialogAction
-                type="button"
-                color="primary-destructive"
-                isLoading={pending}
-                showTextWhileLoading
-                onPress={() =>
-                  void guard(async () => {
-                    setError(false);
-                    try {
-                      await onReject(reason);
-                    } catch {
-                      setError(true);
-                    }
-                  })
-                }
-              >
-                {pending ? m.apps_review_rejecting() : m.apps_review_reject_confirm()}
-              </DialogAction>
-            </DialogActions>
+          <Dialog className="text-left">
+            {/* ⌘/Ctrl+Enter rejects from the reason; Enter there starts a new line (task #101). */}
+            <form
+              className="grid gap-4 p-6"
+              onKeyDown={submitOnModEnter}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void guard(async () => {
+                  setError(false);
+                  try {
+                    await onReject(reason);
+                  } catch {
+                    setError(true);
+                  }
+                });
+              }}
+            >
+              <Heading slot="title" className="text-lg font-semibold text-primary">
+                {m.apps_review_reject_title({ name: appName })}
+              </Heading>
+              <TextArea
+                size={controlSize}
+                label={m.apps_review_reject_reason()}
+                value={reason}
+                onChange={setReason}
+                rows={4}
+                maxLength={REVIEW_REASON_MAX_LENGTH}
+                isDisabled={pending}
+              />
+              {error && <Alert color="error" title={m.apps_review_reject_error()} />}
+              <DialogActions>
+                <DialogCancel type="button" isDisabled={pending} onPress={unsaved.requestClose}>
+                  {m.apps_review_cancel()}
+                </DialogCancel>
+                <DialogAction
+                  type="submit"
+                  color="primary-destructive"
+                  isLoading={pending}
+                  showTextWhileLoading
+                >
+                  {pending ? m.apps_review_rejecting() : m.apps_review_reject_confirm()}
+                </DialogAction>
+              </DialogActions>
+            </form>
           </Dialog>
         </Modal>
       </ModalOverlay>

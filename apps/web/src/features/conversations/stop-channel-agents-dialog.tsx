@@ -11,6 +11,7 @@ import {
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 import { TextArea } from "#src/components/base/textarea/textarea";
+import { submitOnModEnter } from "#src/components/ui/dialog-form-keys";
 import { isAppError } from "#src/lib/app-error";
 import { CHANNEL_AGENT_GUIDANCE_MAX_LENGTH } from "#src/lib/channel-agent-guidance";
 import { m } from "#src/paraglide/messages";
@@ -131,7 +132,18 @@ export function StopChannelAgentsDialog({
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
         <Dialog className="text-left">
           {({ close }) => (
-            <>
+            // Enter runs the step's action, and ⌘/Ctrl+Enter from the guidance, where Enter starts
+            // a new line (task #101).
+            <form
+              className="contents"
+              onKeyDown={submitOnModEnter}
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (step.kind === "confirm") void stopAll();
+                else if (allStopped) void resumeAll();
+                else if (step.kind === "stopped") void stopAll();
+              }}
+            >
               <DialogHeader title={title} onClose={busy ? undefined : close} />
               <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
                 {description}
@@ -166,10 +178,11 @@ export function StopChannelAgentsDialog({
                       {m.channel_settings_cancel()}
                     </DialogCancel>
                     <DialogAction
+                      type="submit"
+                      autoFocus
                       isDisabled={busy}
                       isLoading={busy}
                       showTextWhileLoading
-                      onPress={() => void stopAll()}
                     >
                       {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_action()}
                     </DialogAction>
@@ -180,10 +193,10 @@ export function StopChannelAgentsDialog({
                       {m.channel_stop_agents_keep_stopped()}
                     </DialogCancel>
                     <DialogAction
+                      type="submit"
                       isDisabled={busy || !guidance.trim()}
                       isLoading={busy}
                       showTextWhileLoading
-                      onPress={() => void resumeAll()}
                     >
                       {busy ? m.channel_resume_agents_resuming() : m.channel_resume_agents_action()}
                     </DialogAction>
@@ -194,10 +207,11 @@ export function StopChannelAgentsDialog({
                       {m.controls_close()}
                     </DialogCancel>
                     <DialogAction
+                      type="submit"
+                      autoFocus
                       isDisabled={busy}
                       isLoading={busy}
                       showTextWhileLoading
-                      onPress={() => void stopAll()}
                     >
                       {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_retry()}
                     </DialogAction>
@@ -206,7 +220,7 @@ export function StopChannelAgentsDialog({
                   <DialogCancel onPress={close}>{m.controls_close()}</DialogCancel>
                 )}
               </DialogActions>
-            </>
+            </form>
           )}
         </Dialog>
       </Modal>

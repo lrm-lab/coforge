@@ -296,12 +296,13 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
       `(document.querySelector('[role="dialog"], [role="alertdialog"]')?.textContent ?? "").includes("It comes off 2 tasks")`,
     );
     await shoot("desktop-6-delete");
-    await click(
-      button(
-        "Delete permanently",
-        `document.querySelector('[role="dialog"], [role="alertdialog"]')`,
-      ),
+    // The confirm has the caret as the dialog opens, so Enter deletes (task #101, Frank).
+    await browser(
+      "wait",
+      "--fn",
+      `document.activeElement?.textContent?.trim() === "Delete permanently"`,
     );
+    await browser("press", "Enter");
     await until(async () => (await labelRow(bug.id)) === null);
     expect(await db.taskLabel.count({ where: { labelId: bug.id } })).toBe(0);
 

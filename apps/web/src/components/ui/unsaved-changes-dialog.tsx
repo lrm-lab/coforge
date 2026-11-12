@@ -48,7 +48,10 @@ export function UnsavedChangesDialog({
               {m.unsaved_changes_keep_editing()}
             </DialogCancel>
             {/* Beside Save, Discard stays outlined: one filled button per row. */}
+            {/* Enter presses the row's filled button (task #101): Save when there is one, else
+                Discard. */}
             <DialogAction
+              autoFocus={!onSave}
               color={onSave ? "secondary-destructive" : "primary-destructive"}
               isDisabled={saving}
               onPress={onDiscard}
@@ -57,6 +60,7 @@ export function UnsavedChangesDialog({
             </DialogAction>
             {onSave && (
               <DialogAction
+                autoFocus
                 isDisabled={saving}
                 isLoading={saving}
                 showTextWhileLoading

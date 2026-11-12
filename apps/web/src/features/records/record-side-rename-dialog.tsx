@@ -33,31 +33,34 @@ export function RecordSideRenameDialog({
           <h2 className="text-md font-semibold text-primary">
             {m.records_side_chat_rename_title()}
           </h2>
-          <div className="mt-3">
-            <Input
-              size={controlSize}
-              value={draft}
-              onChange={onDraftChange}
-              placeholder={m.records_side_chat_rename_placeholder()}
-              autoFocus
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  onSubmit();
-                }
-              }}
-            />
-          </div>
-          <DialogActions className="mt-4">
-            <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
-            <DialogAction
-              className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-              isDisabled={!draft.trim() || busy}
-              onPress={onSubmit}
-            >
-              {m.records_side_chat_rename_save()}
-            </DialogAction>
-          </DialogActions>
+          {/* A form: Enter saves through the browser's own submit, which waits out an input
+              method's candidates and holds while Save is disabled (task #101). */}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSubmit();
+            }}
+          >
+            <div className="mt-3">
+              <Input
+                size={controlSize}
+                value={draft}
+                onChange={onDraftChange}
+                placeholder={m.records_side_chat_rename_placeholder()}
+                autoFocus
+              />
+            </div>
+            <DialogActions className="mt-4">
+              <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
+              <DialogAction
+                className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
+                isDisabled={!draft.trim() || busy}
+                type="submit"
+              >
+                {m.records_side_chat_rename_save()}
+              </DialogAction>
+            </DialogActions>
+          </form>
         </Dialog>
       </Modal>
     </ModalOverlay>

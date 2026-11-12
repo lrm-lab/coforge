@@ -49,7 +49,7 @@ export function ServerAdminRoleDialog({
                 })}
               </Text>
               <DialogActions className="mt-6 px-6 pb-6">
-                <DialogAction color="secondary" onPress={close}>
+                <DialogAction autoFocus color="secondary" onPress={close}>
                   {m.channel_members_ok()}
                 </DialogAction>
               </DialogActions>
@@ -128,6 +128,7 @@ export function RemoveMemberDialog({
                   {m.channel_members_cancel()}
                 </DialogCancel>
                 <DialogAction
+                  autoFocus
                   color="primary-destructive"
                   isDisabled={busy}
                   isLoading={busy}

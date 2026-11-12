@@ -266,7 +266,10 @@ export function ChannelAddMembersActions({
           {m.channel_members_cancel()}
         </DialogCancel>
         {canAdd && (
+          // Add takes the caret as the dialog opens, so Enter adds the proposal (task #101); Enter
+          // in the search is left to the search.
           <DialogAction
+            autoFocus
             iconLeading={Plus}
             isDisabled={submitting || count === 0}
             isLoading={submitting}

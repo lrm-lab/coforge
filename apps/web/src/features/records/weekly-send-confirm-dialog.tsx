@@ -59,6 +59,7 @@ export function WeeklySendConfirmDialog({
                   {m.records_template_cancel()}
                 </DialogCancel>
                 <DialogAction
+                  autoFocus
                   type="button"
                   className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                   isDisabled={busy}
