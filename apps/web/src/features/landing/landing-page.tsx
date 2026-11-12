@@ -133,6 +133,7 @@ export function LandingPage() {
   const glow = useRef<HTMLDivElement>(null);
   const sparks = useRef<HTMLCanvasElement>(null);
   useLandingPointerEffects(glow, sparks);
+  const lettered = getLocale() === "zh-CN";
 
   return (
     <div className="home-page font-display">
@@ -203,19 +204,33 @@ export function LandingPage() {
 
             <div className="home-wrap home-hero-inner">
               <div className="home-hero-copy">
-                <p className="home-eyebrow">
-                  <Sparkle />
-                  {m.landing_hero_eyebrow()}
-                </p>
-                <h1 className="home-title">
-                  {m.landing_hero_title_line_1()}
-                  <br />
-                  {m.landing_hero_title_line_2()}
-                  <span className="home-title-highlight">{m.landing_hero_title_highlight()}</span>
-                </h1>
-                <p className="home-body">
-                  <Lines text={m.landing_hero_body()} />
-                </p>
+                {/* In Chinese the words are the designer's own lettering, a picture, with the
+                    same words underneath for search and screen readers (jing, 11-12); other
+                    languages set them as text in the same box. */}
+                {lettered && (
+                  <img
+                    className="home-lettering"
+                    src="/landing/hero-lettering-zh.webp"
+                    alt=""
+                    width={465}
+                    height={320}
+                  />
+                )}
+                <div className={lettered ? "sr-only" : undefined}>
+                  <p className="home-eyebrow">
+                    <Sparkle />
+                    {m.landing_hero_eyebrow()}
+                  </p>
+                  <h1 className="home-title">
+                    {m.landing_hero_title_line_1()}
+                    <br />
+                    {m.landing_hero_title_line_2()}
+                    <span className="home-title-highlight">{m.landing_hero_title_highlight()}</span>
+                  </h1>
+                  <p className="home-body">
+                    <Lines text={m.landing_hero_body()} />
+                  </p>
+                </div>
               </div>
             </div>
 

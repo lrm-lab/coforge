@@ -12,7 +12,7 @@ import {
  * The public homepage, jing's v8 (#designers:#4). On a desktop it is one 1440 x 900 screen scaled
  * to the window, so at every common window size nothing scrolls and the feature card is whole on
  * screen; on a phone it is a column that scrolls. It stays light in the dark theme, reads in
- * English too, and its agents keep still for someone who asked for less motion. Shoots 1440, 1920,
+ * English too (as text; Chinese is the designer's lettering), and its agents keep still for someone who asked for less motion. Shoots 1440, 1920,
  * 768 and 390, Chinese and English, light and dark, under `.amp/e2e/landing-page/`.
  *
  * Opt-in like the other browser E2Es, and brings its own servers (`e2e-sign-in-harness.ts`), so
@@ -79,6 +79,12 @@ test("the homepage: one screen on a desktop, a column on a phone, always light",
       ),
     ).toEqual(expect.arrayContaining(["/zh-CN/login"]));
     expect(await evaluate<boolean>(`!!document.querySelector('[role="region"] pre')`)).toBe(false);
+    // In Chinese the headline is the designer's lettering, its words still there to read.
+    expect(
+      await evaluate<boolean>(
+        `document.querySelector(".home-lettering").getBoundingClientRect().width > 400`,
+      ),
+    ).toBe(true);
 
     // One screen at every common desktop size: no scroll either way, the card whole on screen.
     const failures: string[] = [];
@@ -129,6 +135,7 @@ test("the homepage: one screen on a desktop, a column on a phone, always light",
     expect(await evaluate<string>(`document.querySelector("h1").textContent`)).toContain(
       "together",
     );
+    expect(await evaluate<boolean>(`!document.querySelector(".home-lettering")`)).toBe(true);
     expect(await evaluate<boolean>(`document.documentElement.scrollHeight <= innerHeight`)).toBe(
       true,
     );
