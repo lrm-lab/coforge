@@ -268,7 +268,7 @@ await created.dispose();
     expect(catalogRequests).toBe(1);
     await Bun.write(
       join(workspace, "discover.ts"),
-      `import { discoverPiModels } from ${JSON.stringify(new URL("../src/runner.ts", import.meta.url).pathname)};
+      `import { discoverPiModels } from ${JSON.stringify(new URL("../src/pi-model-catalog.ts", import.meta.url).pathname)};
 const models = await discoverPiModels(${JSON.stringify(workspace)}, {
   agentDir: ${JSON.stringify(join(workspace, ".pi", "agent"))},
   force: true,
@@ -288,7 +288,7 @@ if (!models.some(model => model.id === "remote-throttle-model")) throw new Error
     expect(catalogRequests).toBe(2);
     await Bun.write(
       join(workspace, "discover-offline.ts"),
-      `import { discoverPiModels } from ${JSON.stringify(new URL("../src/runner.ts", import.meta.url).pathname)};
+      `import { discoverPiModels } from ${JSON.stringify(new URL("../src/pi-model-catalog.ts", import.meta.url).pathname)};
 let rejected = false;
 try {
   await discoverPiModels(${JSON.stringify(workspace)}, {

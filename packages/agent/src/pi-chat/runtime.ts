@@ -8,7 +8,8 @@ import type {
   PiChatModel,
   PiChatProgress,
 } from "@lrm/coforge-sdk/internal/pi-chat";
-import { createSession, discoverPiModels } from "#src/runner";
+import { discoverPiModels } from "#src/pi-model-catalog";
+import { createSession } from "#src/runner";
 import { PI_SESSION_DIR } from "#src/paths";
 import type { PiChatRuntime } from "./sessions";
 import { recoverPiChatTurn } from "./recovery";
