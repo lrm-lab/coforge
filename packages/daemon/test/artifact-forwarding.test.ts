@@ -71,6 +71,53 @@ test("the proxy refuses an operation outside the contract", async () => {
   expect((await fetch(url, { method: "POST" })).status).toBe(401);
 });
 
+test("the proxy passes the comment operations, nested fields included, and refuses a stray one", async () => {
+  const calls: AgentArtifactRequest[] = [];
+  const { token, url } = proxyWith(async (request) => {
+    calls.push(request);
+    return Response.json({ ok: true });
+  });
+  const bodies = [
+    { operation: "comments", artifact: "a1", all: true, path: "plan.md" },
+    {
+      operation: "comment",
+      artifact: "a1",
+      body: "Why?",
+      anchor: { type: "lines", data: { start: 2, end: 3 } },
+      idempotencyKey: "k",
+    },
+    {
+      operation: "review",
+      artifact: "a1",
+      comments: [{ body: "One", path: "a.md", anchor: { type: "file", data: {} } }],
+      idempotencyKey: "k",
+    },
+    { operation: "resolve", artifact: "a1", comment: "c1", note: "Fixed" },
+    { operation: "reopen", artifact: "a1", comment: "c1" },
+  ];
+  for (const body of bodies) expect((await fetch(url, post(token, body))).status).toBe(200);
+  expect(calls).toEqual(bodies as AgentArtifactRequest[]);
+  // A stray field in a nested object is refused as a stray top-level field is.
+  for (const body of [
+    {
+      operation: "review",
+      artifact: "a1",
+      comments: [{ body: "One", authorUserId: "u" }],
+      idempotencyKey: "k",
+    },
+    {
+      operation: "comment",
+      artifact: "a1",
+      body: "x",
+      anchor: { type: "lines", data: {}, extra: 1 },
+      idempotencyKey: "k",
+    },
+    { operation: "comments", artifact: "a1", all: "yes" },
+  ])
+    expect((await fetch(url, post(token, body))).status).toBe(400);
+  expect(calls).toHaveLength(bodies.length);
+});
+
 function fakeClient(): CentrifugeWorkspaceClient {
   let connected = () => {};
   return {

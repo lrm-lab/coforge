@@ -174,7 +174,7 @@ export function agentTaskConversation(
   );
 }
 
-/** `coforge artifact create|read|push|history|revert`: forwarded as it is (task #385). */
+/** `coforge artifact` document and comment operations: forwarded as it is (task #385). */
 /** `coforge label create|rename|update|delete|restore` (task #508), the cloud's answer as it came. */
 export function agentLabel(
   ports: ForwardPorts,
