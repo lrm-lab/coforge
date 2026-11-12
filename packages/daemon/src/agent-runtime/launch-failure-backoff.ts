@@ -130,15 +130,9 @@ export class LaunchFailureBackoff {
     return attempts;
   }
 
-  /** Whether the Agent's failures leave nothing to retry: one no retry can fix, `cap`
-   * consecutive ones that were not waits on a named recovery time, or a streak that has been
-   * running longer than `deadlineMs` allows. */
-  exhausted(agentId: string, cap: number, now: number = Date.now(), deadlineMs?: number): boolean {
-    return this.exhaustedBy(agentId, cap, now, deadlineMs) !== undefined;
-  }
-
-  /** Which of `exhausted`'s causes ended the Agent's wakes, so the caller reports the honest one:
-   * a failure no retry can fix, the streak cap, or the total deadline (task #33). */
+  /** Why the Agent's failures leave nothing to retry, so the caller reports the honest one: a
+   * failure no retry can fix, `cap` consecutive ones that were not waits on a named recovery
+   * time, or a streak running longer than `deadlineMs` allows (task #33). */
   exhaustedBy(
     agentId: string,
     cap: number,
