@@ -76,14 +76,11 @@ export class ArtifactDocuments {
     if (!title || title.length > 200)
       throw new AppError("INVALID_INPUT", { errorId: "artifact-title" });
     const description = input.description?.trim() ?? "";
-    if (kind === "html") {
-      requireAgent(scope);
-      if (!description)
-        throw new AppError("INVALID_INPUT", {
-          errorId: "artifact-description-required",
-          hint: "a web page says what it is in one line (--description), shown on its card",
-        });
-    }
+    if (kind === "html" && !description)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "artifact-description-required",
+        hint: "a web page says what it is in one line (--description), shown on its card",
+      });
     // Checked before anything is made, so a refused text leaves no empty document behind.
     if (input.text !== undefined) documentBytes(input.text);
     const home = input.conversationId
@@ -231,9 +228,6 @@ export class ArtifactDocuments {
     if (!artifact.canWrite) throw new AppError("ACCESS_DENIED");
     if (!isPageKind(artifact.kind))
       throw new AppError("INVALID_INPUT", { errorId: "artifact-kind" });
-    // A web page is an Agent's to write (task #490): a person reads it, its source and history,
-    // and goes back to a version, and asks an Agent for a change. Settings included.
-    if (artifact.kind === "html") requireAgent(scope);
     if (manifest) {
       if (manifest.entryPath !== undefined && manifestKind(manifest.entryPath) !== artifact.kind)
         throw new AppError("INVALID_INPUT", {
@@ -346,15 +340,6 @@ function documentBytes(text: string) {
 }
 
 const reader = (scope: DocumentScope) => ({ workspaceId: scope.workspaceId, reader: scope.actor });
-
-/** A web page is made and saved by Agents only; a person is refused, and told why. */
-function requireAgent(scope: DocumentScope) {
-  if (scope.actor.agentId === undefined)
-    throw new AppError("ACCESS_DENIED", {
-      errorId: "artifact-page-agent-only",
-      hint: "a web page is written by an Agent: ask one for the change, or go back to a version",
-    });
-}
 
 /**
  * A document's card line: its first two lines with text, without the Markdown marks that open

@@ -189,7 +189,7 @@ test("an Agent makes a web page, reads its source, and saves it whole", async ()
   expect(await page.text()).toEndWith(PAGE_2.slice("<!doctype html>".length));
 });
 
-test("a person reads a web page and goes back to a version, but cannot make or save one", async () => {
+test("a person reads a web page and goes back to a version", async () => {
   const me = { workspaceId, actor: { userId: alice } };
   const { body } = await post({
     operation: "create",
@@ -203,21 +203,7 @@ test("a person reads a web page and goes back to a version, but cannot make or s
   await post({ operation: "push", artifact, baseVersion: 1, idempotencyKey: key(), text: PAGE_2 });
 
   expect((await documents.load(me, { artifactId: artifact })).text).toBe(PAGE_2);
-  for (const save of [{ text: "<p>mine</p>" }, { title: "Renamed" }, { label: "final" }])
-    await expect(
-      documents.save(me, { artifactId: artifact, baseVersion: 2, idempotencyKey: key(), ...save }),
-    ).rejects.toMatchObject({ code: "ACCESS_DENIED", errorId: "artifact-page-agent-only" });
-  await expect(
-    documents.create(me, {
-      conversationId: channelId,
-      kind: "html",
-      title: "Mine",
-      description: "x",
-      text: PAGE_1,
-    }),
-  ).rejects.toMatchObject({ errorId: "artifact-page-agent-only" });
 
-  // Going back is a person's to do.
   const reverted = await documents.revert({
     ...me,
     artifactId: artifact,

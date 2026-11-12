@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { AlertCircle, RefreshCw01 } from "@untitledui/icons";
+import { RefreshCw01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -20,10 +20,9 @@ import { isAppError } from "#src/lib/app-error";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { deleteArtifact } from "./artifacts.functions";
-import { LatestVersion } from "./artifact-document-body";
-import { ArtifactBanner } from "./artifact-pane-header";
+import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
+import { ArtifactMarkdown } from "./artifact-markdown";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
-import { useArtifactLeaveGuard } from "./artifact-leave-guard";
 import { useArtifactAccess } from "./artifact-access";
 import {
   ARTIFACT_TITLE_ID,
@@ -35,13 +34,15 @@ import {
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
 import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactShareDialog, shareIcon } from "./artifact-share-dialog";
-import { ArtifactPaneConfirms, type ArtifactConfirming } from "./artifact-pane-confirms";
 import { isWebPage, PaneFrame } from "./artifact-parts";
-import { artifactHomeConversation, refreshArtifact } from "./artifact-queries";
+import {
+  artifactDocumentQuery,
+  artifactHomeConversation,
+  refreshArtifact,
+} from "./artifact-queries";
 import { decodeArtifactVersionPublishedEvent } from "./artifact-realtime";
 import { artifactPageRoute } from "./artifact-search";
 import { ArtifactWebPage } from "./artifact-web-page";
-import { useArtifactEditor } from "./use-artifact-editor";
 
 /** Where an artifact shows: on its own page, or beside its conversation's chat (Frank, 11-05),
  * which closes rather than goes back. */
@@ -49,9 +50,8 @@ type ArtifactPlace = { pane?: ArtifactPaneControls };
 
 /**
  * An artifact's own page (task #514), or the pane beside its conversation's chat (Frank, 11-05,
- * as Claude opens an artifact beside the conversation): its header, a document to edit, saved as
- * typing rests, or a web page to look at, and a save's conflicts. No versions show (Frank, 11-05):
- * they stay behind it, so that edits made at once merge.
+ * as Claude opens an artifact beside the conversation): its header, and its document or web page
+ * to read. People view and comment; an Agent writes it. A version published meanwhile is read in.
  */
 export function ArtifactPage({ artifactId, pane }: { artifactId: string } & ArtifactPlace) {
   // An address that names no artifact at all is not there: no read could find one.
@@ -63,7 +63,6 @@ export function ArtifactPage({ artifactId, pane }: { artifactId: string } & Arti
     ) : (
       <ArtifactUnavailable gone />
     );
-  // Another artifact's page starts its editing anew.
   return <ArtifactPageFor key={artifactId} artifactId={artifactId} pane={pane} />;
 }
 
@@ -73,20 +72,11 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   const router = useRouter();
   const workspaceId = useCurrentWorkspaceId();
   const workspaceSlug = useWorkspaceSlug();
-  const editor = useArtifactEditor(artifactId);
-  const [confirming, setConfirming] = useState<ArtifactConfirming>(null);
+  const read = useQuery(artifactDocumentQuery(artifactId));
+  const [deleting, setDeleting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [sendingTo, setSendingTo] = useState(false);
-  /** Set once the artifact is gone, so leaving its page asks nothing. */
-  const deleted = useRef(false);
-  const leavePrompt = useArtifactLeaveGuard({
-    dirty: () => editor.dirty && !deleted.current,
-    save: editor.save,
-    // Beside the chat, the edits stay while this artifact stays open, wherever the chat goes.
-    stays: (next) =>
-      pane ? next.search.doc === artifactId : next.pathname === router.state.location.pathname,
-  });
-  const current = editor.document.data;
+  const current = read.data;
   const latest = current?.artifact.currentVersion ?? 0;
 
   const homeKey = current?.artifact.homeKey;
@@ -98,7 +88,6 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   const homeName = useHomeName(home);
   // Narrowed past the viewer: their page is not theirs any more; back to the Workspace, saying so.
   const access = useArtifactAccess(artifactId, current?.artifact, async () => {
-    deleted.current = true;
     if (pane) pane.onClose();
     else await router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } });
     toast.success(m.doc_share_locked_out({ title }));
@@ -117,32 +106,27 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
       const event = decodeArtifactVersionPublishedEvent(data);
       if (event?.artifactId !== artifactId) return;
       // Taken in quietly: nothing says who changed it (Frank, 11-05).
-      editor.onPublished({ number: event.number, publisher: event.publisher });
+      void refreshArtifact(queryClient, artifactId);
     },
   });
 
   // Gone or not the viewer's (the server says so), or never read: the page is not there. A read
-  // that failed once the artifact showed keeps it, and its unsaved edits, with a way to try again.
-  const failure = editor.document.error;
+  // that failed once the artifact showed keeps it.
+  const failure = read.error;
   if (isGone(failure) || (failure && !current)) {
     const unavailable = (
       <ArtifactUnavailable
         gone={isGone(failure)}
-        retrying={editor.document.isFetching}
-        onRetry={() => void editor.document.refetch()}
+        retrying={read.isFetching}
+        onRetry={() => void read.refetch()}
         onClose={pane?.onClose}
       />
     );
-    return (
-      <>
-        {pane ? <PaneFrame full={pane.full}>{unavailable}</PaneFrame> : unavailable}
-        {leavePrompt}
-      </>
-    );
+    return pane ? <PaneFrame full={pane.full}>{unavailable}</PaneFrame> : unavailable;
   }
   const kind = current?.artifact.kind;
   const webPage = kind !== undefined && isWebPage(kind);
-  const title = editor.title || current?.artifact.title || m.doc_untitled();
+  const title = current?.artifact.title || m.doc_untitled();
   const copy = async (text: string, done: string) => {
     if (await copyText(text)) toast.success(done);
     else toast.error(m.conversation_copy_failed());
@@ -167,7 +151,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
       <ArtifactPageHeader
         kind={kind}
         title={title}
-        status={webPage ? "page" : editor.status}
+        version={current?.artifact.currentVersion}
         home={home}
         canDelete={current?.canDelete === true}
         shareIcon={shareIcon(access.access, link)}
@@ -187,61 +171,20 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
                 )
             : undefined
         }
-        onDelete={() => setConfirming("delete")}
+        onDelete={() => setDeleting(true)}
         pane={pane}
       />
-      {/* A failed save says so below, with one Try Again that reads the artifact again too. */}
-      {failure && !editor.error && (
-        <ArtifactBanner
-          tone="warning"
-          icon={AlertCircle}
-          actions={
-            <Button
-              size="xs"
-              color="secondary"
-              iconLeading={RefreshCw01}
-              isLoading={editor.document.isFetching}
-              onClick={() => void editor.document.refetch()}
-            >
-              {m.doc_retry()}
-            </Button>
-          }
-        >
-          {m.doc_refresh_failed()}
-        </ArtifactBanner>
-      )}
       <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           {!current ? (
             <LoadingBody />
           ) : webPage ? (
-            <>
-              <ArtifactWebPage
-                key={latest}
-                artifactId={artifactId}
-                version={latest}
-                title={title}
-              />
-            </>
+            <ArtifactWebPage key={latest} artifactId={artifactId} version={latest} title={title} />
           ) : (
-            <LatestVersion
-              editor={editor}
-              onDiscard={() => setConfirming("discard")}
-              onRetry={() => {
-                if (failure) void editor.document.refetch();
-                void editor.save();
-              }}
-              onCopyMine={() =>
-                void copy(
-                  editor.editorRef.current?.getMarkdown() ?? editor.text,
-                  m.doc_mine_copied(),
-                )
-              }
-            />
+            <ArtifactMarkdown text={current.text} />
           )}
         </div>
       </div>
-      {leavePrompt}
       <ArtifactShareDialog
         open={sharing}
         onOpenChange={(open) => {
@@ -272,15 +215,13 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
           onClose={() => setSendingTo(false)}
         />
       )}
-      <ArtifactPaneConfirms
-        confirming={confirming}
-        onDone={() => setConfirming(null)}
+      <ArtifactDeleteConfirm
+        open={deleting}
+        onClose={() => setDeleting(false)}
         title={title}
-        onDiscard={editor.discard}
         onDelete={async () => {
           await deleteArtifact({ data: { artifactId } });
           void refreshArtifact(queryClient, artifactId);
-          deleted.current = true;
           backHome();
         }}
       />

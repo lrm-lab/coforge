@@ -17,13 +17,13 @@ import {
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
- * An artifact's own page beyond editing a document (task #514; editing is
- * `e2e-artifact-documents`): a web page's preview from the sandbox origin, with no versions shown
+ * An artifact's own page (task #514), which people only view: a web page's preview from the sandbox origin, with no versions shown
  * (Frank, 11-05), Open in new tab on the sandbox's link (and a link that cannot be had, said so),
  * a new version an Agent saves while the page shows taken in quietly (Share is
  * `e2e-artifact-share`); one page for an artifact that is not there and one that is not the
- * reader's; a `?doc=` link opening it beside the chat (Frank, 11-05); and a read and a save that
- * fail keeping the editor and the edits, with Try again.
+ * reader's; a `?doc=` link opening it beside the chat (Frank, 11-05); a document's text, kept
+ * when a refresh fails and gone when the artifact is deleted; and a first read that fails, with
+ * Try again.
  *
  * Opt-in like the other browser E2Es: real local Web started with the flag file that offers
  * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too), with
@@ -250,10 +250,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
 
     // Where artifacts are off, a link from before opens the conversation, without the document.
     await experiments.write(workspaceId, "artifacts", false);
-    await browser(
-      "open",
-      `${origin}/en/w/${workspace.slug}/channel/${channel.id}?doc=${web.id}&docVersion=1`,
-    );
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?doc=${web.id}`);
     await browser(
       "wait",
       "--fn",
@@ -291,7 +288,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await shoot("7-web-beside-chat-phone");
     await browser("set", "viewport", "1280", "860");
 
-    // A link from when versions showed: beside the chat, at the latest.
+    // A document beside the chat: its text, read at the latest version.
     const doc = await documents.create(bot, {
       conversationId: channel.id,
       title: "Launch plan",
@@ -303,10 +300,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       idempotencyKey: crypto.randomUUID(),
       text: `# Goal\n\nShip it on Friday (run ${tail}).\n`,
     });
-    await browser(
-      "open",
-      `${origin}/en/w/${workspace.slug}/channel/${channel.id}?doc=${doc.id}&docVersion=1&docHistory=true`,
-    );
+    await browser("open", `${chat}?doc=${doc.id}`);
     await browser(
       "wait",
       "--fn",
@@ -314,67 +308,30 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     );
     expect(await evaluate<string>("location.pathname")).toEndWith(`/channel/${channel.id}`);
 
-    // A read and then a save that fail: the editor and the edits stay, with one notice and one
-    // Try again, which saves and reads again.
+    // Its own page reads the text, with no editor; a refresh that fails keeps it on show.
     await browser("open", pageOf(doc.id));
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector("main .ProseMirror") != null`,
+      `${pageHydrated} && document.querySelector("main .ProseMirror")?.textContent.includes("Friday")`,
     );
-    const toEnd = () =>
-      evaluate(`(() => {
-        const editor = document.querySelector("main .ProseMirror");
-        editor.focus();
-        const range = document.createRange();
-        range.selectNodeContents(editor.lastElementChild);
-        range.collapse(false);
-        getSelection().removeAllRanges();
-        getSelection().addRange(range);
-        return true;
-      })()`);
-    await toEnd();
+    expect(
+      await evaluate<boolean>(`document.querySelector("main [contenteditable="true"]") == null`),
+    ).toBe(true);
+    expect(
+      await evaluate<string>(`document.querySelector("main header h1").nextSibling.textContent`),
+    ).toBe("v2");
     refusing = true;
     // The page reads the document again when its tab comes back (TanStack Query hears
     // `visibilitychange` on window: https://tanstack.com/query/v5/docs/reference/focusManager).
     await evaluate(`(window.dispatchEvent(new Event("visibilitychange")), true)`);
-    await browser("wait", "--fn", text("Couldn't check for changes"));
-    await browser("keyboard", "type", " Unsaved line.");
-    await browser(
-      "wait",
-      "--fn",
-      `${text("Couldn't save")} && !${text("Couldn't check for changes")}`,
-    );
-    expect(
-      await evaluate<number>(
-        `[...document.querySelectorAll("main button")].filter((b) => b.textContent.trim() === "Try again").length`,
-      ),
-    ).toBe(1);
-    expect(
-      await evaluate<string>(`document.querySelector("main .ProseMirror").textContent`),
-    ).toContain("Unsaved line.");
+    await new Promise((r) => setTimeout(r, 1000));
     expect(await evaluate<boolean>(text("Can't open this"))).toBe(false);
-    await shoot("4-read-failed-unsaved");
+    expect(await evaluate<boolean>(text("Friday"))).toBe(true);
+    await shoot("4-read-failed-kept");
     refusing = false;
-    await click(button("Try again"));
-    await browser(
-      "wait",
-      "--fn",
-      `!${text("Couldn't save")} && !${text("Couldn't check for changes")}`,
-    );
-    for (let i = 0; i < 50; i++) {
-      if ((await documents.load(bot, { artifactId: doc.id })).text.includes("Unsaved line.")) break;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    expect((await documents.load(bot, { artifactId: doc.id })).text).toContain("Unsaved line.");
 
-    // Deleted while edits are unsaved: the page that is not there, and leaving it asks first,
-    // as the edits cannot be saved on the way out.
-    refusing = true;
-    await toEnd();
-    await browser("keyboard", "type", " Unsaved two.");
-    await browser("wait", "--fn", text("Couldn't save"));
-    refusing = false;
+    // Deleted while shown: the page that is not there, and leaving it asks nothing.
     await productionArtifacts(db).artifacts.delete({
       workspaceId,
       artifactId: doc.id,
@@ -383,13 +340,8 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await evaluate(`(window.dispatchEvent(new Event("visibilitychange")), true)`);
     await browser("wait", "--fn", text("Can't open this"));
     await press(button("Back to the Workspace"));
-    const keep = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Keep editing")`;
-    await browser("wait", "--fn", `${keep} != null`);
-    await shoot("5-deleted-unsaved-leave");
-    // The edits have nowhere to go: discarding them leaves.
-    const discard = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Discard changes")`;
-    await click(discard);
     await browser("wait", "--fn", `!location.pathname.includes("/artifacts/")`);
+    expect(await evaluate<boolean>(`document.querySelector('[role="dialog"]') == null`)).toBe(true);
 
     // A first read that fails for a moment: said so, and Try again reads it.
     const later = await documents.create(bot, {

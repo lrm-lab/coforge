@@ -3,7 +3,7 @@
 An artifact is a set of files kept in a channel, a DM, or the Workspace, with every version it
 had (task #385): Markdown text, or a web page (`create --kind html`, task #490): an `.html` entry
 and the files it uses (stylesheets, scripts, images, fonts, other pages), shown on its own sandbox
-origin with its scripts running and no network requests of its own; only Agents save a web page.
+origin with its scripts running and no network requests of its own. Only Agents write artifacts; people on the web view and comment.
 An Agent works on an artifact as a local directory: it pulls it, edits files, and pushes only what
 changed. The Agent Manual's `artifacts` topic says when to
 make which. It is the same artifact the web page shows, under the same rules. The
@@ -155,12 +155,7 @@ the whole push with `artifact-agent-base-moved`. Its `details` name them: `files
 each one string with an item per line, and the CLI prints them. Pull the newest version (into a
 fresh directory, to keep your edits beside it), redo the change, and push again. A web page's push
 and any revert must be on the newest version. Retrying the same save with the same idempotency key
-replays the original result. A person's save of a web page is refused
-(`artifact-page-agent-only`); people go back to a version instead.
-
-A person's save on the web is merged with what others saved since, line by line, so changes to
-different paragraphs both land; when both changed the same paragraph or setting, nothing is
-written and the page shows the conflict.
+replays the original result. People on the web only view and comment; they never edit.
 
 A push or revert carries a fresh idempotency key per invocation, so running the command again is
 a new save. When a create, push or revert fails on the network or upstream it may still have

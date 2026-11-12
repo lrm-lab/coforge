@@ -18,7 +18,7 @@ import {
  * conversation, its two levels, a change of them stored, and one that finds it deleted; for an
  * artifact of the Workspace, one level, and the way back is the Workspace; and one of a
  * conversation the viewer is not in, read only through the Workspace level: the way back is the
- * Workspace, the editor read only, and the narrower level confirmed before it
+ * Workspace, and the narrower level confirmed before it
  * shuts the viewer out; and in a Workspace where the viewer is a member only, an artifact they
  * did not make: Share greyed, saying who can change it.
  *
@@ -101,7 +101,7 @@ test("an artifact's Share: who can see it", async () => {
   };
   const share = `[...document.querySelectorAll("main header button")].find((b) => b.textContent.trim() === "Share")`;
   const radios = `[...document.querySelectorAll('[role="dialog"] input[type="radio"]')]`;
-  const editor = `${pageHydrated} && document.querySelector("main .ProseMirror") != null`;
+  const viewer = `${pageHydrated} && document.querySelector("main .ProseMirror") != null`;
   const text = (needle: string) => `document.body.textContent.includes(${JSON.stringify(needle)})`;
   const button = (label: string) =>
     `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
@@ -119,7 +119,7 @@ test("an artifact's Share: who can see it", async () => {
 
     // The viewer may change who can see it: the change is stored, and shown.
     await browser("open", pageOf(plan.id));
-    await browser("wait", "--fn", editor);
+    await browser("wait", "--fn", viewer);
     await press(share);
     await browser("wait", "--fn", `${radios}.length === 2`);
     expect(await evaluate<boolean>(`${radios}.some((radio) => radio.disabled)`)).toBe(false);
@@ -146,7 +146,7 @@ test("an artifact's Share: who can see it", async () => {
       { title: "Workspace notes", text: `Notes (run ${tail}).` },
     );
     await browser("open", pageOf(notes.id));
-    await browser("wait", "--fn", editor);
+    await browser("wait", "--fn", viewer);
     expect(
       await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
     ).toEndWith(`/w/${workspace.slug}`);
@@ -160,7 +160,7 @@ test("an artifact's Share: who can see it", async () => {
     await browser("press", "Escape");
 
     // Shared with the Workspace from a channel the viewer is not in: read through that level
-    // alone, with no conversation to go back to, and only read from the first.
+    // alone, with no conversation to go back to.
     const leads = await documents.create(bot, {
       conversationId: closed.id,
       title: "Leads",
@@ -168,23 +168,18 @@ test("an artifact's Share: who can see it", async () => {
     });
     await db.artifact.update({ where: { id: leads.id }, data: { access: "workspace" } });
     await browser("open", pageOf(leads.id));
-    await browser("wait", "--fn", editor);
+    await browser("wait", "--fn", viewer);
     expect(
       await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
     ).toEndWith(`/w/${workspace.slug}`);
     expect(await evaluate<string>(`document.querySelector("main header a").textContent`)).toBe(
       "Back to the Workspace",
     );
-    expect(
-      await evaluate<string>(
-        `document.querySelector("main .ProseMirror").getAttribute("contenteditable")`,
-      ),
-    ).toBe("false");
     await shoot("2-workspace-read");
 
     // The narrower level would shut the viewer out: asked first, then back to the Workspace.
     await browser("open", pageOf(leads.id));
-    await browser("wait", "--fn", editor);
+    await browser("wait", "--fn", viewer);
     await press(share);
     await browser("wait", "--fn", `${radios}.length === 2`);
     await press(level("People in this conversation"));
@@ -222,7 +217,7 @@ test("an artifact's Share: who can see it", async () => {
       { conversationId: noorChannel.id, title: "Brief", text: `Brief (run ${tail}).` },
     );
     await browser("open", `${origin}/en/w/${other.slug}/artifacts/${brief.id}`);
-    await browser("wait", "--fn", editor);
+    await browser("wait", "--fn", viewer);
     await press(share);
     await browser("wait", "--fn", `${radios}.length === 2`);
     expect(await evaluate<boolean>(`${radios}.every((radio) => radio.disabled)`)).toBe(true);

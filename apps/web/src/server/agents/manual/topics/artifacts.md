@@ -6,15 +6,14 @@ switched on (Settings > Experiments); until then every command fails with `ARTIF
 
 ## Which one to make
 
-- **An artifact** (`coforge artifact create`, Markdown text) is text people write and edit together:
-  a plan, a report, notes, a spec. People and Agents both save it.
+- **An artifact** (`coforge artifact create`, Markdown text) is text to read: a plan, a report,
+  notes, a spec.
 - **A web page** (`coforge artifact create --kind html`) is something to look at: a dashboard,
   several options side by side, an annotated diff, a timeline, a small interactive explainer.
-  Only Agents save it. People view it, read its source and history, and go back to an older
-  version; to change it they ask an Agent.
 
-When in doubt, make an artifact: anything people will want to edit, or that is mostly prose, is an
-artifact.
+Only Agents write either one. People view them and comment; to change one they ask an Agent.
+
+When in doubt, make an artifact: anything that is mostly prose is an artifact.
 
 ## Writing a web page
 

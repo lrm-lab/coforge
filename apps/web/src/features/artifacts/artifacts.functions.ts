@@ -18,12 +18,12 @@ import { artifactInputs } from "./artifact-inputs";
 import { shareArtifactInputSchema } from "./artifact-share-input";
 
 /**
- * The web page's documents (task #385, the `artifacts` experiment): a document is sent and read
- * as its text. Every call is the signed-in person's, checked by the artifact service against the
+ * The web page's artifacts (task #385, the `artifacts` experiment): read as their text, and
+ * shared, sent and deleted; an Agent writes them. Every call is the signed-in person's, checked by the artifact service against the
  * experiment and the document's home (a conversation, or the Workspace).
  */
 
-const { id, version, text, title, description, note, label, baseVersion } = artifactInputs;
+const { id } = artifactInputs;
 
 const scopeOf = (context: { workspaceId: string; user: { id: string } }) => ({
   workspaceId: context.workspaceId,
@@ -46,53 +46,12 @@ export const loadArtifactCards = createServerFn({ method: "GET" })
     productionArtifacts(context.db).documents.cards(scopeOf(context), data.artifactIds),
   );
 
-/** A document at a version (the current one by default), with its text. */
+/** A document at its current version, with its text. */
 export const loadArtifactDocument = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
-  .validator(z.object({ artifactId: id, version: version.optional() }).strict())
+  .validator(z.object({ artifactId: id }).strict())
   .handler(({ context, data }) =>
     productionArtifacts(context.db).documents.load(scopeOf(context), data),
-  );
-
-/** A new document in a conversation (or the Workspace), named from its title. */
-export const createArtifactDocument = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(
-    z
-      .object({
-        conversationId: id.optional(),
-        title,
-        text: text.optional(),
-        idempotencyKey: id.optional(),
-      })
-      .strict(),
-  )
-  .handler(({ context, data }) =>
-    productionArtifacts(context.db).documents.create(scopeOf(context), data),
-  );
-
-/**
- * Saves a document over the version the page shows (`baseVersion`). The answer is `created`,
- * `nothing`, or `conflict` (nothing written: the page saves again over `currentVersion`).
- */
-export const saveArtifactDocument = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(
-    z
-      .object({
-        artifactId: id,
-        baseVersion,
-        idempotencyKey: id,
-        text: text.optional(),
-        title: title.optional(),
-        description: description.optional(),
-        note: note.optional(),
-        label: label.optional(),
-      })
-      .strict(),
-  )
-  .handler(({ context, data }) =>
-    productionArtifacts(context.db).documents.save(scopeOf(context), data),
   );
 
 /** Moves an artifact between read tiers (task #529): `conversation` keeps it to its home

@@ -22,7 +22,6 @@ import { conversationRoute } from "#src/features/conversations/last-conversation
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { type ArtifactStatus, StatusLine } from "./artifact-pane-header";
 import { ArtifactIcon } from "./artifact-parts";
 
 /** The page's title, which names its `main`. */
@@ -37,13 +36,13 @@ export type ArtifactHome = { kind: "channel" | "dm" | "workspace"; conversationI
 
 /**
  * An artifact's page's header (task #514): the way back to its conversation, its kind, title and
- * state, then Share and more (copy link, open a web page in a tab of its own, delete).
+ * version, then Share and more (copy link, open a web page in a tab of its own, delete).
  * Beside the chat it has no way back, and ends with full screen and close (`pane`).
  */
 export function ArtifactPageHeader({
   kind,
   title,
-  status,
+  version,
   home,
   canDelete,
   shareIcon,
@@ -56,7 +55,8 @@ export function ArtifactPageHeader({
   /** Undefined until the artifact is read: the header holds its place. */
   kind: string | undefined;
   title: string;
-  status: ArtifactStatus;
+  /** Absent until the artifact is read. */
+  version?: number;
   home: ArtifactHome | undefined;
   canDelete: boolean;
   /** The artifact's access level's icon on the Share button. */
@@ -97,9 +97,11 @@ export function ArtifactPageHeader({
           >
             {title}
           </Title>
-          <span className="max-sm:hidden">
-            <StatusLine status={status} />
-          </span>
+          {version !== undefined && (
+            <span className="shrink-0 text-xs text-tertiary tabular-nums max-sm:hidden">
+              v{version}
+            </span>
+          )}
         </>
       )}
       <span className="flex-1" />
