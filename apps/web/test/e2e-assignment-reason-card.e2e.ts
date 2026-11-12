@@ -5,9 +5,11 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import { setupAgentReplying } from "./helpers/agent-replying-fixture";
 
 /**
- * Task #83: an assignment that gives a reason (`task assign --reason`) reads as a card of two
- * lines in the stream, the notice and then the reason, which wraps to three lines at most; an
- * assignment without one keeps its single line, word for word. Worst cases: a long Chinese reason
+ * Task #83: an assignment that gives a reason (`task assign --reason`) reads as two lines in the
+ * stream, the notice and then the reason, which wraps to three lines at most; an assignment without
+ * one keeps its single line, word for word. Task #92: both are the same plain notice row, no card,
+ * and a Task's creation notice to its assignee names who it went to (an older one, which stored no
+ * assignee, keeps its "you"). Worst cases: a long Chinese reason
  * with an unbroken URL and a line break. Screenshots at 1440 and 390, light and dark, are written
  * under `.amp/e2e/assignment-reason-card/`.
  */
@@ -43,7 +45,7 @@ const LONG =
     .repeat(2)
     .slice(0, 200);
 
-test("an assignment with a reason is a two-line card; one without keeps its line", async () => {
+test("an assignment with a reason is two plain lines; one without keeps its line", async () => {
   const channelId = await fx.createChannel(`e2e-assign-reason-${suffix}`);
   const login = task(4, "修复登录");
   const page = task(5, "Make the task popup's phone layout work at 320 wide and keep the bar");
@@ -69,9 +71,19 @@ test("an assignment with a reason is a two-line card; one without keeps its line
     kind: "task.assigned",
     params: { actor: frank, task: login, assignee: coder, reason: "   " },
   });
+  await fx.send(channelId, DEV_BROWSER_USER.id, `Fifth ${suffix}`);
+  await notice(channelId, `@frank-an assigned you task #4: 修复登录`, {
+    kind: "task.assigned_you",
+    params: { actor: frank, task: login, assignee: coder },
+  });
+  await fx.send(channelId, DEV_BROWSER_USER.id, `Sixth ${suffix}`);
+  await notice(channelId, `@frank-an assigned you task #4: 修复登录`, {
+    kind: "task.assigned_you",
+    params: { actor: frank, task: login },
+  });
   await fx.send(channelId, DEV_BROWSER_USER.id, `Last ${suffix}`);
 
-  const cards = `[...document.querySelectorAll("[data-assignment-reason-card]")]`;
+  const cards = `[...document.querySelectorAll("[data-assignment-with-reason]")]`;
   const notices = `[...document.querySelectorAll('[data-message="system"]')]`;
   const zh = fx.workspacePath.replace(/^\/en\//, "/zh-CN/");
   for (const [width, height] of [
@@ -80,7 +92,7 @@ test("an assignment with a reason is a two-line card; one without keeps its line
   ] as const) {
     await fx.browser("set", "viewport", width, height);
     await fx.browser("open", `${fx.proxy.origin}${zh}/channel/${channelId}`);
-    await until(`${cards}.length === 2 && ${notices}.length === 4`, 60_000);
+    await until(`${cards}.length === 2 && ${notices}.length === 6`, 60_000);
 
     await evaluate(`${cards}[0].scrollIntoView({ block: "center" }) ?? true`);
     await fx.browser("wait", "300");
@@ -106,13 +118,28 @@ test("an assignment with a reason is a two-line card; one without keeps its line
     // The ones without a reason, or with a blank one, keep their single line and no card.
     for (const index of [1, 3]) {
       const plain = await evaluate<{ card: boolean; text: string }>(
-        `(() => { const row = ${notices}[${index}]; return { card: row.querySelector("[data-assignment-reason-card]") !== null, text: row.textContent.replace(/\\s+/g, " ").trim() }; })()`,
+        `(() => { const row = ${notices}[${index}]; return { card: row.querySelector("[data-assignment-with-reason]") !== null, text: row.textContent.replace(/\\s+/g, " ").trim() }; })()`,
       );
       expect(plain.card).toBe(false);
       expect(plain.text).toEndWith("coder");
       expect(plain.text).not.toContain("：");
     }
-    // The long reason stops at three lines, and no card runs past the page.
+    // No card: neither line, nor what holds them, draws a frame or a fill (task #92).
+    expect(
+      await evaluate<boolean>(
+        `${cards}.every((row) => { const reason = row.querySelector("[data-assignment-reason]"); return [row, row.firstElementChild, row.querySelector("[data-assignment-notice]"), reason, reason.parentElement].every((e) => { const s = getComputedStyle(e); return parseFloat(s.borderTopWidth) === 0 && s.backgroundColor === "rgba(0, 0, 0, 0)"; }); })`,
+      ),
+    ).toBe(true);
+    // A creation notice that names its assignee reads as any assignment; an older one keeps "you".
+    const textOf = (index: number) =>
+      evaluate<string>(`${notices}[${index}].textContent.replace(/\\s+/g, " ").trim()`);
+    const named = await textOf(4);
+    expect(named).toContain("📌");
+    expect(named).toContain("指派给了");
+    expect(named).toEndWith("coder");
+    expect(named).not.toContain("你");
+    expect(await textOf(5)).toContain("给你指派了");
+    // The long reason stops at three lines, and no row runs past the page.
     const fit = await evaluate<{ lines: number; overflow: boolean }>(
       `(() => { const reason = ${cards}[1].querySelector("[data-assignment-reason]"); const lineHeight = parseFloat(getComputedStyle(reason).lineHeight); return { lines: Math.round(reason.getBoundingClientRect().height / lineHeight), overflow: ${cards}.some((card) => card.getBoundingClientRect().right > innerWidth) || document.documentElement.scrollWidth > innerWidth }; })()`,
     );
