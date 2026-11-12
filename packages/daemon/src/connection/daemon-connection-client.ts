@@ -1,4 +1,5 @@
 import type { AgentApiConnectionClient } from "./agent-api-connection-client";
+import type { AgentArtifactCall } from "./agent-forwarded-routes";
 import type { AgentContextViewUploadMetadata } from "./agent-context-view-upload";
 import type {
   RuntimeAuthIntent,
@@ -12,7 +13,6 @@ import type {
   AgentActionPrepareResponse,
   AgentAppRequest,
   AgentTaskConversationRequest,
-  AgentArtifactRequest,
   AgentTaskIdleNudgeRequest,
   AgentTaskIdleNudgeResponse,
   AgentSendReconciliationResponse,
@@ -309,7 +309,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   agentAttachmentUploadSessionCancel?(uploadId: string, agentApiKey: string): Promise<Response>;
   agentAttachmentUploadSessionGet?(uploadId: string, agentApiKey: string): Promise<Response>;
   agentApp?(request: AgentAppRequest, agentApiKey: string): Promise<Response>;
-  agentArtifact?(request: AgentArtifactRequest, agentApiKey: string): Promise<Response>;
+  agentArtifact?(request: AgentArtifactCall, agentApiKey: string): Promise<Response>;
   agentTaskConversation?(
     request: AgentTaskConversationRequest,
     agentApiKey: string,

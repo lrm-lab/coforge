@@ -37,6 +37,7 @@ import { admitOpenVikingControl, admitOpenVikingRead } from "./openviking-read-p
 import { parseMessageRequest } from "./agent-proxy-message-request";
 import { TASK_CONVERSATION_PROXY_ROUTES } from "./agent-proxy-task-routes";
 import { APP_PROXY_ROUTES } from "./agent-proxy-app-routes";
+import { ARTIFACT_FILE_PROXY_ROUTES } from "./agent-proxy-artifact-routes";
 import { ATTACHMENT_PROXY_ROUTES } from "./agent-proxy-attachment-routes";
 import { LABEL_PROXY_ROUTES } from "./agent-proxy-label-routes";
 import { LOCAL_QUERY_PROXY_ROUTES } from "./agent-proxy-local-query-routes";
@@ -154,6 +155,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     parse: ({ fields }) => decodeAgentArtifactRequest(fields) ?? badRequest(),
     respond: forwardResponse,
   }),
+  ...ARTIFACT_FILE_PROXY_ROUTES,
   defineRoute({
     family: "agent-api/inbox-list",
     method: LOCAL_PROXY_ROUTES.inboxList.method,

@@ -42,6 +42,10 @@ export function daemonAgentProxyRuntime(
     ...workspaceRuntime(agentApi),
     ...appRuntime(agentApi),
     agentArtifact: async (...args) => agentApi().agentArtifact(...args),
+    agentArtifactUpload: async (context, request, key) =>
+      agentApi().agentArtifact(context, { file: "upload", ...request }, key),
+    agentArtifactDownload: async (context, request, key) =>
+      agentApi().agentArtifact(context, { file: "download", ...request }, key),
     issueAgentContext: (agentId) => requireRuntime().issueAgentContext(agentId),
     // Every proxy route must reach the runtime here: an unwired handler is a 404 for the
     // Agent's CLI, so a new `AgentProxyRuntime` member fails to compile until it is added.

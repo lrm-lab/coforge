@@ -6,7 +6,6 @@ import type {
   AgentAppConfigUpdateRequest,
   AgentAppRequest,
   AgentTaskConversationRequest,
-  AgentArtifactRequest,
   AgentManualGetRequest,
   AgentManualGetResponse,
   AgentManualSearchRequest,
@@ -35,6 +34,7 @@ import type {
   GitHubCredentialRequest,
   GitHubCredentialResponse,
 } from "@lrm/coforge-sdk/agent";
+import type { AgentArtifactCall } from "#src/connection/agent-forwarded-routes";
 import type {
   ChannelCommand,
   WeeklyReportCommand,
@@ -312,7 +312,7 @@ export class AgentRequestForwarder {
 
   async agentArtifact(
     context: string,
-    request: AgentArtifactRequest,
+    request: AgentArtifactCall,
     agentApiKey: string,
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);

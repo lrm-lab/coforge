@@ -53,7 +53,6 @@ import type {
   AgentAppConfigGetRequest,
   AgentAppRequest,
   AgentTaskConversationRequest,
-  AgentArtifactRequest,
   AgentAppConfigUpdateRequest,
   AgentMentionExecuteRequest,
   AgentMentionPendingRequest,
@@ -222,6 +221,7 @@ import {
 import {
   agentApp,
   agentArtifact,
+  type AgentArtifactCall,
   agentLabel,
   agentAttachment,
   agentAttachmentUpload,
@@ -1176,7 +1176,7 @@ export class DaemonConnection
     return agentAttachmentUploadSessionGet(this.#forwardPorts(), uploadId, agentApiKey);
   }
 
-  agentArtifact(request: AgentArtifactRequest, agentApiKey: string): Promise<Response> {
+  agentArtifact(request: AgentArtifactCall, agentApiKey: string): Promise<Response> {
     return agentArtifact(this.#forwardPorts(), request, agentApiKey);
   }
 

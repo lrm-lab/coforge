@@ -62,6 +62,10 @@ import type {
   WeeklyReportMemoryCommand,
   WeeklyReportMemoryResult,
 } from "#src/connection/weekly-report-memory";
+import type {
+  AgentArtifactDownloadRequest,
+  AgentArtifactUploadRequest,
+} from "#src/connection/agent-forwarded-routes";
 import type { OpenVikingAgentProxyCommand } from "./openviking-read-proxy";
 
 /** The runtime handlers a local Agent proxy dispatches to; every member but `agentMessage` is
@@ -175,6 +179,19 @@ export type AgentProxyRuntime = {
   agentArtifact?(
     context: string,
     request: AgentArtifactRequest,
+    agentApiKey: string,
+  ): Promise<Response>;
+  /** An artifact file's bytes, uploaded by sha256 (`missing` from a push) or downloaded by path
+   * (`coforge artifact pull|download`): forwarded as they are, the cloud's response answered as
+   * it came. */
+  agentArtifactUpload?(
+    context: string,
+    request: AgentArtifactUploadRequest,
+    agentApiKey: string,
+  ): Promise<Response>;
+  agentArtifactDownload?(
+    context: string,
+    request: AgentArtifactDownloadRequest,
     agentApiKey: string,
   ): Promise<Response>;
   /** `coforge task view|read|reply|follow|unfollow|list --following`: forwarded as it is, the

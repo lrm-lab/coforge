@@ -32,6 +32,19 @@ export function forwardAgentRequest(
   });
 }
 
+/** One artifact file upload: the sha256 its bytes are named by, and the Agent's own request
+ * carrying them. */
+export type AgentArtifactUploadRequest = { sha256: string; request: Request };
+
+/** One artifact file download: the file's path in the artifact, at `version` or the current one. */
+export type AgentArtifactDownloadRequest = { artifact: string; path: string; version?: number };
+
+/** An artifact call forwarded as it is: a JSON operation, or the bytes of one file either way. */
+export type AgentArtifactCall =
+  | AgentArtifactRequest
+  | ({ file: "upload" } & AgentArtifactUploadRequest)
+  | ({ file: "download" } & AgentArtifactDownloadRequest);
+
 /** `coforge attachment view`: the bytes and their encoding/length headers, unchanged. */
 export function agentAttachment(
   ports: ForwardPorts,
@@ -179,14 +192,59 @@ export function agentLabel(
 
 export function agentArtifact(
   ports: ForwardPorts,
-  request: AgentArtifactRequest,
+  call: AgentArtifactCall,
   agentApiKey: string,
 ): Promise<Response> {
+  if ("file" in call)
+    return call.file === "upload"
+      ? artifactUpload(ports, call, agentApiKey)
+      : artifactDownload(ports, call, agentApiKey);
   const route = agentApiRoutes.cloud.artifacts;
   return forwardAgentRequest(
     ports,
-    `Agent artifact ${request.operation}`,
-    { method: route.method, path: route.path, body: JSON.stringify(request) },
+    `Agent artifact ${call.operation}`,
+    { method: route.method, path: route.path, body: JSON.stringify(call) },
+    agentApiKey,
+  );
+}
+
+/**
+ * `coforge artifact push|create` uploading a file the cloud asked for (`missing`): the bytes go
+ * to the cloud as they came, buffered because the local proxy already caps them at the artifact
+ * upload limit.
+ */
+async function artifactUpload(
+  ports: ForwardPorts,
+  { sha256, request }: AgentArtifactUploadRequest,
+  agentApiKey: string,
+): Promise<Response> {
+  ports.assertConnected();
+  const route = agentApiRoutes.cloud.artifactFiles.upload;
+  const body = await request.blob();
+  return agentHttpFetch(ports.endpoint("Agent artifact upload", route.path(sha256)), {
+    decompress: false,
+    method: route.method,
+    headers: {
+      ...agentHeaders(ports.keys(agentApiKey)),
+      "content-type": request.headers.get("content-type") ?? "application/octet-stream",
+    },
+    body,
+  });
+}
+
+/** `coforge artifact pull|download`: one file's bytes and content type, answered as they came. */
+function artifactDownload(
+  ports: ForwardPorts,
+  { artifact, path, version }: AgentArtifactDownloadRequest,
+  agentApiKey: string,
+): Promise<Response> {
+  const route = agentApiRoutes.cloud.artifactFiles.download;
+  return forwardAgentRequest(
+    ports,
+    "Agent artifact download",
+    {
+      path: `${route.path(artifact, path)}${version === undefined ? "" : `?version=${version}`}`,
+    },
     agentApiKey,
   );
 }
