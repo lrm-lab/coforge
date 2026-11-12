@@ -29,6 +29,10 @@ export type MessageView = {
   senderDeleted?: boolean;
   senderAvatarUrl?: string | null;
   body: string;
+  /** The people a system notice names, by member id, with the face each has: resolved from their
+   * member rows, so one who has left or been archived is still drawn. Absent for any other
+   * message and for one cached before it existed. */
+  systemPeople?: Record<string, { kind: "user" | "agent"; id: string; avatarUrl: string | null }>;
   createdAt: Date | string;
   /** Always present, possibly empty; order matches send/upload order. */
   attachments: AttachmentView[];
