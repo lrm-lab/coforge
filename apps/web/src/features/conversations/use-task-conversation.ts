@@ -1,3 +1,4 @@
+import { UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -6,12 +7,17 @@ import {
   openTaskConversation,
 } from "#src/features/tasks/task-conversation.functions";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
+import { useConversationOpened } from "./use-conversation-open";
 import { mergeMessages } from "./conversation-messages";
 import { taskConversationQueryKey } from "./conversation-query-keys";
 import { conversationRealtimeChannel, decodeMessageAvailableEvent } from "./conversation-realtime";
 import { loadTaskConversation, loadTaskConversationUpdates } from "./conversations.functions";
 
 type Page = Awaited<ReturnType<typeof loadTaskConversation>>;
+
+/** How many older pages (50 messages each) a read back to one message may take. */
+const BACK_PAGES = 5;
+const WHOLE_ID = new RegExp(`^${UUID_LIKE_SOURCE}$`, "i");
 
 /** One page in place of the newest, the rest kept. */
 function withNewest(data: InfiniteData<Page> | undefined, newest: (page: Page) => Page) {
@@ -106,18 +112,25 @@ export function useTaskConversation({
     if (loaded && conversationId) void catchUp(conversationId);
   }, [loaded, conversationId, catchUp]);
 
-  // The reader has seen up to the newest message: their read position follows it.
+  // The reader has seen up to the newest message: their read position follows it, but only once
+  // this open has read where their unread starts, or the pane's divider would find nothing unread
+  // (task #99), as a channel's cursor waits for its open.
+  const opened = useConversationOpened(
+    conversationId ?? "",
+    undefined,
+    Boolean(conversationId && seated),
+  );
   const last = newest?.messages.at(-1)?.sequence;
   const readBefore = newest?.readThroughSequence ?? 0;
   const readThrough = useRef(0);
   const { conversationId: boardId, number } = board;
   useEffect(() => {
-    if (!last || !seated || last <= Math.max(readThrough.current, readBefore)) return;
+    if (!last || !seated || !opened || last <= Math.max(readThrough.current, readBefore)) return;
     void markRead({ data: { conversationId: boardId, number, throughSequence: last } }).then(
       () => (readThrough.current = Math.max(readThrough.current, last)),
       () => {},
     );
-  }, [last, seated, readBefore, markRead, boardId, number]);
+  }, [last, seated, opened, readBefore, markRead, boardId, number]);
 
   // One opening serves every caller at once; a failed one does not stand in for the next try.
   const opening = useRef<Promise<string>>(undefined);
@@ -146,5 +159,30 @@ export function useTaskConversation({
     () => [...(pages.data?.pages ?? [])].reverse().flatMap((page) => page.messages),
     [pages.data],
   );
-  return { conversationId, made, pages, newest, seated, messages, catchUp, ensure };
+  // A message older than the pages held (the first unread an open lands on, a jump's target): read
+  // further back, a page at a time, until it is in (task #99). Not a channel's read around the
+  // message (`loadConversationAround`): that replaces the window with one that may stand apart
+  // from the newest, and this list only grows back from its newest page, with no reading forward.
+  // At most `BACK_PAGES` pages: past them it is not found, and an open stays at the latest with no
+  // divider, as before. Only a whole id is looked for (the open's first unread is one); a link's
+  // short id needs the server to resolve it, which this read cannot, so it is not found at once.
+  const { fetchNextPage } = pages;
+  const loadBackTo = useCallback(
+    async (messageId: string) => {
+      const held = (data: InfiniteData<Page> | undefined) =>
+        data?.pages.some((page) => page.messages.some((message) => message.id === messageId));
+      if (!WHOLE_ID.test(messageId)) throw new Error("message not found");
+      if (held(queryClient.getQueryData(taskConversationQueryKey(conversationId))))
+        return messageId;
+      for (let page = 0; page < BACK_PAGES; page++) {
+        const read = await fetchNextPage();
+        if (held(read.data)) return messageId;
+        if (!read.hasNextPage || read.isError) break;
+      }
+      throw new Error("message not found");
+    },
+    [fetchNextPage, queryClient, conversationId],
+  );
+
+  return { conversationId, made, pages, newest, seated, messages, catchUp, ensure, loadBackTo };
 }
