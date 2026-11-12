@@ -1,10 +1,9 @@
 # Raft 1.0.69 Artifacts 对齐审计
 
 对照对象：Raft Computer 发布包中 Agent 侧 CLI（`sea/assets/cli.cjs`）的 `artifact` 命令组和
-Agent API 路由表。CoForge 一侧读的是 `origin/main` `85f1af1f1`。Raft 的 Web 界面、服务端实现，以及
-Manual 里 artifact 那一页的正文都不在二进制里：Manual 由服务端下发，CLI 只放了一个指向它的
-提示。所以凡是涉及页面桥接能力（页面能调用哪些 Raft 功能、沙箱拦什么）的结论，标为
-**无法从二进制恢复**。
+Agent API 路由表。CoForge 一侧读的是 `origin/main` `85f1af1f1`。Raft 的服务端实现和
+Manual 里 artifact 那一页的正文不在二进制里（Manual 由服务端下发）。Web 端另用浏览器观察，见文末
+"Raft 的 Web 端"一节。
 
 ## 版本与来源
 
@@ -66,21 +65,24 @@ Manual 里 artifact 那一页的正文都不在二进制里：Manual 由服务�
 | # | 能力 | CoForge 现状 | 触及 |
 | --- | --- | --- | --- |
 | H | 人只评论、不编辑 | 人可在 Web 上编辑 Markdown 文档（编辑器、自动保存、冲突界面，服务端逐行合并）并回到旧版本 | 删除整套人工保存机制；Web 界面；与 #3 衔接 |
-| 2 | `read` 显示上次查看以来的变化并推进已读位置 | 没有已读位置 | schema（每个读者一行的已读位置表）、协议 |
-| 3 | 评论、回复、图片、@通知、`comments` | 没有 | schema、协议、Web 界面 |
-| 4 | `review`（一次提交多条评论，全部成功或全部不发） | 没有 | 依赖 #3 |
-| 5 | resolve / reopen 线程 | 没有 | 依赖 #3，Web 界面 |
-| 6 | 读到新评论之前不能写（`UNSEEN_CHANGES`） | 没有 | 依赖 #2、#3 |
+| 3 | 评论的 Web 界面、图片、@通知 | Agent 侧已有评论、回复、锚定到文件和行（第 3 步第 1 片）；人还不能评论，评论不带图片，不通知任何人 | Web 界面、投递链路 |
+| 5 | 人在 Web 上 resolve / reopen | Agent 侧已有 | Web 界面 |
 | 7 | follow / unfollow 与通知 | 没有；只有分享卡片 | schema、投递链路、Web 界面 |
 | 8 | 发布检查（无头浏览器 + 双尺寸截图 + 问题列表） | 没有 | 新的服务端任务和浏览器运行环境；协议 |
 | 11 | Agent `delete`（只能删自己创建的） | 领域层已允许 Agent 删除自己的（`Artifacts.delete`），但 Agent API 和 CLI 没开放（`docs/agent-cli/artifacts.md`） | 协议、CLI |
 | 12 | Agent `move --to server` | 分级已有，但 Agent 不能改（`changeAccess`，task #529）；Agent 的 `share` 只是把卡片发到会话 | 权限规则、协议 |
 | 13 | `save`：把附件存成 artifact | 没有 | 协议、Web 界面（附件上的"存为 artifact"） |
-| 14 | 页面桥接（页面里的评论按钮、复制、打开链接） | 沙箱完全断网，没有桥接 | **无法从二进制恢复**，需要另找证据 |
+| 14 | 页面运行能力：内置图表库、共享文档数据库、页面里的评论按钮、复制、打开链接 | 网页可以从公共 CDN 白名单加载脚本和样式（1b），没有桥接和数据库 | 协议、安全边界（见 Web 端一节） |
+| 15 | 每个 artifact 一个独立的源 | 所有网页共用一个沙箱源，`sandbox` 不带 `allow-same-origin` | 通配 DNS/TLS（运维）、安全边界 |
 
 已完成第 1 步（`main` `95f39affd`）：原 #0（Agent 推送按文件合并、同文件拒绝）、#1（多文件
 pull/push，网页仍限一个 `index.html`）、#9（`download`）、#10（`list --query`/分页）已从上表删除。
 操作说明见 [`docs/agent-cli/artifacts.md`](../agent-cli/artifacts.md)。
+
+之后完成的（都在 `main`）：1b 多文件网页与 CDN 白名单（`527cef127`）；第 2 步已读位置与 `read`
+的"新变化"摘要，原 #2（`4c8456cd3`）；第 3 步第 1 片 Agent 侧评论、`review`、resolve/reopen、
+读到新评论之前不能写，原 #4、#6（`fb071560d`，见
+[`docs/agent-cli/artifact-comments.md`](../agent-cli/artifact-comments.md)）。
 
 ## 有意差异（不当作差距）
 
@@ -106,11 +108,12 @@ Artifact 的内容只由 Agent 写。人在 Web 上看、评论，要改就在�
 0. **先有评论，再删编辑。** 删掉编辑后，人唯一的反馈方式就是评论，所以 #3 必须和删除同时
    上线，不能先删。
 1. **（已完成）Agent 侧多文件 pull/push、download、list 搜索与分页。**
-1b. **沙箱按路径提供多个文件。** 解除网页只能是一个 `index.html` 的限制；改动沙箱的 CSP、访问
+1b. **（已完成）沙箱按路径提供多个文件。** 解除网页只能是一个 `index.html` 的限制；改动沙箱的 CSP、访问
    票据和公开链接，属于安全边界，单独出方案给 Frank 批准。
-2. **已读位置与 `read` 的"新变化"摘要（#2）。** 只改 Agent 侧，需要一张新表。
-3. **评论体系（#3–#7）并删除人工编辑（H）。** 涉及 Web 界面，先按 UI 规则出设计 Artifact，等
-   Frank 确认后再写代码；评论上线的同一批次里删除编辑器。
+2. **（已完成）已读位置与 `read` 的"新变化"摘要（#2）。** 只改 Agent 侧，需要一张新表。
+3. **评论体系（#3–#7）并删除人工编辑（H）。** 分三片：第 1 片 Agent 侧评论（已完成）；第 2 片
+   给 Agent 的通知与 follow/unfollow（#7）；第 3 片 Web 评论界面，先按 UI 规则出设计 Artifact，
+   等 Frank 确认后再写代码，同一批次里删除编辑器。
 4. **发布检查（#8）。** 需要一个服务端浏览器运行环境，另写方案，说明运维成本。
 5. **`save`、`move`（#12、#13）**，最后才讨论 Agent 删除（#11）。
 
@@ -118,4 +121,34 @@ Artifact 的内容只由 Agent 写。人在 Web 上看、评论，要改就在�
 
 - `coforge` CLI 不在本机 PATH 上，所以没能读取 `#artifacts` 任务板；git 历史中可见
   `#artifacts:#2`（分享）和 `#artifacts:#24`（沙箱域名）。开工前要在任务板上认领并读回。
-- Raft 的 Web 界面、服务端合并细节、通知投递方式只能从路由描述推断，不当作已验证的行为。
+- Raft 的服务端合并细节、通知投递方式只能从路由描述和 Web 端文案推断，不当作已验证的行为。
+
+## Raft 的 Web 端（app.raft.build，2026-11-12 用浏览器观察）
+
+观察方式：用已登录的浏览器打开 Artifacts 页和一个 HTML artifact，记录页面结构、iframe 属性和网络响应头；
+又读了 Web 端公开的静态脚本（`ArtifactFrame-*.js` 等）里的说明文字。只做设计对照，不复制代码。
+
+- **画廊**（`/s/<server>/artifacts`）：按标题搜索；按对话、作者、"和我有关"筛选；排序（最近打开）；
+  网格/列表两种视图。卡片显示预览（HTML 显示占位图标，Markdown 显示正文开头）、标题、版本号、
+  作者、可见范围图标、"打开于 N 小时前"。
+- **查看页**（`/artifacts/<id>`）：标题、版本号、在场信息（"1 人在看 · 你在看 · 2 人看过最新版"）；
+  右侧是评论开关、页面内查找、复制链接、更多操作。更多操作菜单：复制嵌入代码、发到对话、谁能看、
+  重命名、版本历史、文件、下载、关注、删除。**没有编辑入口**：人只看和评论。
+- **评论**：打开评论模式后，底部出现"选元素"工具，评论锚定在页面的某个元素上。
+- **页面怎么运行**：iframe 加载 `https://w-<artifact uuid>.w.raftusercontent.com/...`，每个 artifact
+  一个独立的源；`sandbox="allow-scripts allow-same-origin"`，所以页面有自己真实的源（可以用存储）。
+  流程是先加载一个"门"页（`/__porthole/door/…?ticket=…`，只运行一段按 hash 固定的脚本），再进入
+  `/_raft/open?ticket=…` 显示页面。票据经过签名，写明 artifact、版本、查看者、源、过期时间和一次性随机数。
+- **页面的 CSP**：脚本和样式允许内联，外加一份公共 CDN 白名单（cdnjs、jsdelivr、unpkg、esm.sh、
+  tailwind、jquery、plotly；字体允许 Google Fonts）；artifact 自己的文件在 `/__porthole/f/<封存令牌>/`
+  下，`connect-src` 只允许这些 CDN 和自己的文件；`frame-src 'none'`、`webrtc 'block'`、
+  `form-action 'none'`。封存令牌到期前由页面通过 `/__porthole/renew` 续期。
+- **页面能用的能力**：内置 chart.js 和 d3（`/__porthole/lib/…`）；共享文档数据库（`db.get/set/query`）；
+  上传资源；通过宿主打开链接、复制文本、打开评论框。被沙箱拦下的事（弹窗、表单提交、下载、
+  `mailto:`、设备、service worker、`document.write`）都有给作者看的说明。
+- **评论**（来自 Web 端中文文案）：评论可以锚定在整个 artifact、文本文件的某行或某几行、CSV 的
+  某行、页面上某个元素（带引用摘录）；原文改了显示"原文已改动"，当前版本里没有则显示"此版本中没有"。
+  输入框会显示"会通知：某某"；`@` 列出能看到这个 artifact 的人和 Agent，有人数上限，`@` 看不到的人会被拒绝。
+  一条评论最多 4 张图（PNG/JPEG/WebP/GIF），没发出去的保存为草稿。线程可以回复、编辑（标"已编辑"）、
+  删除、解决、重新打开；已解决的单独成组；可以按某次评审筛选；可以加载更早的评论。
+  卡片和总览显示"上次查看后有 N 条新评论"，依赖第 2 步的已读位置。
