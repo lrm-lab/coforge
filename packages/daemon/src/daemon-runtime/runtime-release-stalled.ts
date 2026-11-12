@@ -39,6 +39,11 @@ export function stalledRuntime<L extends ReleasableLaunch>(
       hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
       resumable: ports.resumable(agentId),
       noticeAcceptedForMs: ageOf(ports.noticeAcceptedAt?.(agentId)),
+      // A notice's own write starts an idle Agent's turn (`noteTurnStarted`, `message-composition`),
+      // so the two times tell a woken Agent from one whose notice was steered into a turn already
+      // running (task #14).
+      noticeAcceptedAtMs: ports.noticeAcceptedAt?.(agentId),
+      turnStartedAtMs: progress.turnStartedAtMs,
       recoveryHold: waitsOnProvider(ports.explicitHold?.(agentId)),
       // The running session declares whether a notice can steer its live turn; an adapter
       // that does not declare is read as queue-only (the longer fuse).

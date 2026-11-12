@@ -109,6 +109,11 @@ export type StalledRecoveryFacts = Readonly<{
   /** How long since the Agent's process last accepted an inbox notice; undefined when none was
    * ever accepted. The clock for "took the notice but never acted" (task #318). */
   noticeAcceptedForMs?: number;
+  /** When the process accepted that notice, absolute: compared with `turnStartedAtMs` to tell a
+   * notice that started its own turn from one steered into a turn already running (task #14). */
+  noticeAcceptedAtMs?: number;
+  /** When the launch's current turn started, absolute (`ProviderProgress.turnStartedAtMs`). */
+  turnStartedAtMs?: number;
   /** How long since the Agent last did anything the daemon can see: a checked read, an
    * operation, or provider output. The three silences share this one clock — any still fresh
    * means the Agent is working. */
@@ -175,13 +180,23 @@ function stalledRecoveryJudgment(facts: StalledRecoveryFacts): StalledRecoveryJu
   if (queuedTurnNeverStarted)
     return { reason: "queued_turn_never_started", thresholdMs: STALLED_RECOVERY_SILENCE_MS };
   // A notice the process took and then did nothing about for the whole stall window — the
-  // accepted-noticed-but-frozen case (task #318). The action must be *older than the notice*: an
-  // Agent that acted after taking it has answered, and being idle since is not being frozen.
+  // accepted-noticed-but-frozen case (task #318): the Agent was idle, the notice's write started
+  // its turn, and no turn ever began (Raft commits an idle Agent to "turn in progress" before
+  // writing, so its `stalledWithWork` covers exactly this). The action must be *older than the
+  // notice*: an Agent that acted after taking it has answered, and being idle since is not being
+  // frozen. A notice steered into a turn that was already running is *not* this case: that turn
+  // started before the notice, and its end without a read is the delivery layer's to retry — a
+  // restart would only kill work the Agent may still be finishing (task #14).
   const noticeAcceptedForMs = facts.noticeAcceptedForMs ?? 0;
+  const noticeStartedTheTurn =
+    facts.noticeAcceptedAtMs === undefined ||
+    facts.turnStartedAtMs === undefined ||
+    facts.turnStartedAtMs >= facts.noticeAcceptedAtMs;
   const noticedButFrozen =
     !facts.recoveryHold &&
     !facts.turnBusy &&
     !facts.liveTurn &&
+    noticeStartedTheTurn &&
     noticeAcceptedForMs >= STALLED_RECOVERY_SILENCE_MS &&
     (facts.lastAgentActionForMs ?? Number.POSITIVE_INFINITY) > noticeAcceptedForMs;
   if (noticedButFrozen)

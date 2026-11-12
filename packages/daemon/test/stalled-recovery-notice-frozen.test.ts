@@ -67,3 +67,28 @@ test("a notice the process accepted and never acted on for 15 minutes is recover
   expect(shouldRecoverStalledRuntime({ ...noticedIdle, resumable: false })).toBe(false);
   expect(shouldRecoverStalledRuntime({ ...noticedIdle, hasOpenToolCall: true })).toBe(false);
 });
+
+test("a notice steered into a turn already running is left to the delivery layer, not a restart", () => {
+  // A notice's own write starts an idle Agent's turn (Raft commits the Agent to "turn in progress"
+  // before writing), so the two times separate the two ways a notice can arrive: this one started
+  // its turn, that one was steered into a turn that was already going (task #14, grace's case).
+  const noticedIdle = {
+    turnBusy: false,
+    liveTurn: false,
+    silentForMs: STALLED_RECOVERY_SILENCE_MS,
+    hasOpenToolCall: false,
+    resumable: true,
+    steersBusyTurn: true,
+    noticeAcceptedForMs: STALLED_RECOVERY_SILENCE_MS,
+    lastAgentActionForMs: STALLED_RECOVERY_SILENCE_MS + 60_000,
+    noticeAcceptedAtMs: 1_000_000,
+  };
+  // The notice's write started the turn: the wake never got going, which is a frozen Agent.
+  expect(shouldRecoverStalledRuntime({ ...noticedIdle, turnStartedAtMs: 1_000_000 })).toBe(true);
+  // No turn was ever recorded in this launch: nothing to say the wake started one, so the same
+  // judgment as before applies.
+  expect(shouldRecoverStalledRuntime({ ...noticedIdle, turnStartedAtMs: undefined })).toBe(true);
+  // The notice went into a turn that had already started: that turn ending without a read is
+  // what the delivery layer retries, and killing the runtime would end work it may be finishing.
+  expect(shouldRecoverStalledRuntime({ ...noticedIdle, turnStartedAtMs: 999_000 })).toBe(false);
+});
