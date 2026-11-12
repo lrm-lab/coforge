@@ -24,14 +24,13 @@ test("a message page projects twenty artifact links with three batch reads", asy
     artifact: {
       findMany: async () => {
         calls.push("artifacts");
-        return ids.map((id) => ({
+        return ids.map((id, index) => ({
           id,
           title: `Artifact ${id.slice(-2)}`,
           preview: "first line\nsecond line",
           kind: "markdown",
           currentVersion: 2,
-          homeKey: "workspace",
-          access: "conversation",
+          homeKey: index === 0 ? `conversation:${ids[19]}` : "workspace",
           deletedAt: null,
           authorAgentId: "agent-secret",
           workspace: { slug: "docs" },
@@ -47,7 +46,15 @@ test("a message page projects twenty artifact links with three batch reads", asy
     conversation: {
       findMany: async () => {
         calls.push("conversations");
-        return [];
+        return [
+          {
+            id: ids[19],
+            channelName: "open",
+            visibility: "public",
+            hiddenFromWorkspaceAt: null,
+            members: [{ id: "member" }],
+          },
+        ];
       },
     },
   };
@@ -68,7 +75,7 @@ test("a message page projects twenty artifact links with three batch reads", asy
   });
 });
 
-test("a reader without the artifact's existing access gets a redacted card", async () => {
+test("a member reads the card but never learns the private home it came from", async () => {
   const id = ids[0]!;
   const db = {
     artifact: {
@@ -79,10 +86,9 @@ test("a reader without the artifact's existing access gets a redacted card", asy
           preview: "private preview",
           kind: "markdown",
           currentVersion: 1,
-          homeKey: "conversation:private-1",
-          access: "conversation",
+          homeKey: `conversation:${ids[5]}`,
           deletedAt: null,
-          authorAgentId: null,
+          authorAgentId: "agent-1",
           workspace: { slug: "docs" },
         },
       ],
@@ -91,7 +97,61 @@ test("a reader without the artifact's existing access gets a redacted card", asy
     conversation: {
       findMany: async () => [
         {
-          id: "private-1",
+          id: ids[5],
+          channelName: "secret",
+          visibility: "private",
+          hiddenFromWorkspaceAt: null,
+          members: [],
+        },
+      ],
+    },
+  };
+  const reads = new ArtifactReads(db as never, async () => true);
+  const [card] = (
+    await reads.messageCards({
+      workspaceId: "workspace-1",
+      reader: { userId: "user-1" },
+      messages: [{ body: `/w/docs/artifacts/${id}` }],
+    })
+  )[0]!;
+  // Every member reads it (task #20); the source names the author, never the private channel.
+  expect(card).toEqual({
+    kind: "artifact",
+    state: "open",
+    artifactId: id,
+    href: "/w/docs/artifacts/" + id,
+    title: "Private title",
+    preview: "private preview",
+    contentType: "markdown",
+    version: 1,
+    source: { agentId: "agent-1", label: "Agent" },
+    canOpen: true,
+  });
+});
+
+test("a non-member's card stays forbidden", async () => {
+  const id = ids[0]!;
+  const db = {
+    artifact: {
+      findMany: async () => [
+        {
+          id,
+          title: "Private title",
+          preview: "private preview",
+          kind: "markdown",
+          currentVersion: 1,
+          homeKey: `conversation:${ids[6]}`,
+          deletedAt: null,
+          authorAgentId: null,
+          workspace: { slug: "docs" },
+        },
+      ],
+    },
+    workspaceMembership: { findUnique: async () => null },
+    conversation: {
+      findMany: async () => [
+        {
+          id: ids[6],
           channelName: "secret",
           visibility: "private",
           hiddenFromWorkspaceAt: null,
@@ -111,7 +171,51 @@ test("a reader without the artifact's existing access gets a redacted card", asy
   expect(card).toEqual({ kind: "artifact", state: "forbidden", artifactId: id, canOpen: false });
 });
 
-test("message cards do not reveal deletion to a reader without home access", async () => {
+test("a non-member's card of a public channel's artifact stays forbidden too", async () => {
+  const id = ids[10]!;
+  const db = {
+    artifact: {
+      findMany: async () => [
+        {
+          id,
+          title: "Public channel artifact",
+          preview: "preview",
+          kind: "markdown",
+          currentVersion: 1,
+          homeKey: `conversation:${ids[11]}`,
+          deletedAt: null,
+          authorAgentId: null,
+          workspace: { slug: "docs" },
+        },
+      ],
+    },
+    workspaceMembership: { findUnique: async () => null },
+    conversation: {
+      findMany: async () => [
+        {
+          id: ids[11],
+          channelName: "open",
+          visibility: "public",
+          hiddenFromWorkspaceAt: null,
+          members: [],
+        },
+      ],
+    },
+  };
+  const reads = new ArtifactReads(db as never, async () => true);
+  const [card] = (
+    await reads.messageCards({
+      workspaceId: "workspace-1",
+      reader: { userId: "user-1" },
+      messages: [{ body: `/w/docs/artifacts/${id}` }],
+    })
+  )[0]!;
+  // The home's readers include everyone for a public channel, but the card still asks the
+  // Workspace membership `read` asks for (task #20).
+  expect(card).toEqual({ kind: "artifact", state: "forbidden", artifactId: id, canOpen: false });
+});
+
+test("message cards show a member the deletion state of any artifact", async () => {
   const inaccessible = ids[1]!;
   const readable = ids[2]!;
   const db = {
@@ -123,8 +227,7 @@ test("message cards do not reveal deletion to a reader without home access", asy
           preview: "private",
           kind: "markdown",
           currentVersion: 1,
-          homeKey: "conversation:private-2",
-          access: "conversation",
+          homeKey: `conversation:${ids[7]}`,
           deletedAt: new Date(),
           authorAgentId: "agent-secret",
           workspace: { slug: "docs" },
@@ -136,7 +239,6 @@ test("message cards do not reveal deletion to a reader without home access", asy
           kind: "markdown",
           currentVersion: 1,
           homeKey: "workspace",
-          access: "workspace",
           deletedAt: new Date(),
           authorAgentId: "agent-secret",
           workspace: { slug: "docs" },
@@ -147,7 +249,7 @@ test("message cards do not reveal deletion to a reader without home access", asy
     conversation: {
       findMany: async () => [
         {
-          id: "private-2",
+          id: ids[7],
           channelName: "secret",
           visibility: "private",
           hiddenFromWorkspaceAt: null,
@@ -168,9 +270,11 @@ test("message cards do not reveal deletion to a reader without home access", asy
       ],
     })
   )[0]!;
+  // Every member reads every artifact (task #20), so its deletion is theirs to see — the card
+  // carries no title or preview either way.
   expect(hidden).toEqual({
     kind: "artifact",
-    state: "forbidden",
+    state: "deleted",
     artifactId: inaccessible,
     canOpen: false,
   });
@@ -198,7 +302,7 @@ test("a page without artifact links does not read the artifacts experiment", asy
   expect(enabledCalls).toBe(0);
 });
 
-test("a hidden channel artifact stays forbidden in message cards", async () => {
+test("a hidden channel's artifact is forbidden even to a member", async () => {
   const id = ids[3]!;
   const db = {
     artifact: {
@@ -209,8 +313,7 @@ test("a hidden channel artifact stays forbidden in message cards", async () => {
           preview: "private",
           kind: "markdown",
           currentVersion: 1,
-          homeKey: "conversation:hidden-1",
-          access: "conversation",
+          homeKey: `conversation:${ids[8]}`,
           deletedAt: null,
           authorAgentId: null,
           workspace: { slug: "docs" },
@@ -221,7 +324,7 @@ test("a hidden channel artifact stays forbidden in message cards", async () => {
     conversation: {
       findMany: async () => [
         {
-          id: "hidden-1",
+          id: ids[8],
           channelName: "general",
           visibility: "public",
           hiddenFromWorkspaceAt: new Date(),
@@ -238,5 +341,48 @@ test("a hidden channel artifact stays forbidden in message cards", async () => {
       messages: [{ body: `/w/docs/artifacts/${id}` }],
     })
   )[0]!;
+  // A home the Workspace hides is gone for everyone, its cards with it (task #20).
   expect(card).toEqual({ kind: "artifact", state: "forbidden", artifactId: id, canOpen: false });
+});
+
+test("an Agent of the Workspace reads the card like a member", async () => {
+  const id = ids[4]!;
+  const db = {
+    artifact: {
+      findMany: async () => [
+        {
+          id,
+          title: "Agent read",
+          preview: "preview",
+          kind: "markdown",
+          currentVersion: 1,
+          homeKey: `conversation:${ids[9]}`,
+          deletedAt: null,
+          authorAgentId: "agent-1",
+          workspace: { slug: "docs" },
+        },
+      ],
+    },
+    agent: { findFirst: async () => ({ id: "agent-9" }) },
+    conversation: {
+      findMany: async () => [
+        {
+          id: ids[9],
+          channelName: "secret",
+          visibility: "private",
+          hiddenFromWorkspaceAt: null,
+          members: [],
+        },
+      ],
+    },
+  };
+  const reads = new ArtifactReads(db as never, async () => true);
+  const [card] = (
+    await reads.messageCards({
+      workspaceId: "workspace-1",
+      reader: { agentId: "agent-9" },
+      messages: [{ body: `/w/docs/artifacts/${id}` }],
+    })
+  )[0]!;
+  expect(card).toMatchObject({ state: "open", canOpen: true });
 });

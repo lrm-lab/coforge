@@ -2,10 +2,11 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import {
-  artifactReadAccess,
+  artifactHomeHidden,
   artifactsDisabled,
   artifactsEnabled,
-  canChangeArtifactAccess,
+  canManageArtifactPublicLink,
+  inWorkspace,
 } from "./artifact-access.server";
 
 function mintToken(): string {
@@ -35,16 +36,15 @@ export class ArtifactPublicLinks {
     const artifact = await this.db.artifact.findFirst({
       where: { id: input.artifactId, workspaceId: input.workspaceId, deletedAt: null },
       select: {
-        homeKey: true,
-        access: true,
         kind: true,
+        homeKey: true,
         publicLinks: { where: { revokedAt: null }, select: { token: true } },
       },
     });
-    if (
-      !artifact ||
-      !(await artifactReadAccess(this.db, input.workspaceId, { userId: input.userId }, artifact))
-    )
+    if (!artifact || !(await inWorkspace(this.db, input.workspaceId, { userId: input.userId })))
+      throw new AppError("NOT_FOUND");
+    // A home the Workspace hides is gone for everyone, its link state with it (task #20).
+    if (await artifactHomeHidden(this.db, input.workspaceId, artifact.homeKey))
       throw new AppError("NOT_FOUND");
     const origin = artifactSandboxOrigin();
     const live = artifact.publicLinks.at(0);
@@ -62,12 +62,11 @@ export class ArtifactPublicLinks {
         {
           id: string;
           homeKey: string;
-          access: string;
           authorUserId: string | null;
           authorAgentId: string | null;
           kind: string;
         }[]
-      >`SELECT "id", "homeKey", "access", "authorUserId", "authorAgentId", "kind" FROM "artifacts"
+      >`SELECT "id", "homeKey", "authorUserId", "authorAgentId", "kind" FROM "artifacts"
         WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid
           AND "deletedAt" IS NULL FOR UPDATE`;
       if (!artifact) throw new AppError("NOT_FOUND");
@@ -76,7 +75,10 @@ export class ArtifactPublicLinks {
           errorId: "artifact-public-kind",
           hint: "public links support HTML and Markdown artifacts",
         });
-      if (!(await artifactReadAccess(tx, input.workspaceId, { userId: input.userId }, artifact)))
+      if (!(await inWorkspace(tx, input.workspaceId, { userId: input.userId })))
+        throw new AppError("NOT_FOUND");
+      // A home the Workspace hides is gone for everyone; no link is minted or revoked for it.
+      if (await artifactHomeHidden(tx, input.workspaceId, artifact.homeKey))
         throw new AppError("NOT_FOUND");
       const ownerId = artifact.authorAgentId
         ? (
@@ -87,7 +89,7 @@ export class ArtifactPublicLinks {
           )?.ownerId
         : null;
       if (
-        !(await canChangeArtifactAccess(
+        !(await canManageArtifactPublicLink(
           tx,
           input.workspaceId,
           { userId: input.userId },

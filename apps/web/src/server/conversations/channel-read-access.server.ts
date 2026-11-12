@@ -178,6 +178,94 @@ export async function actorConversationAccess(
   };
 }
 
+/** Whether the Workspace hides this conversation from everyone (`hiddenFromWorkspaceAt`), for a
+ * caller that must treat the conversation's artifacts as absent too (the artifacts module's home
+ * rule, task #20). `false` for a missing conversation or a DM, which is never hidden. */
+export async function conversationHiddenFromWorkspace(
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  conversationId: string,
+) {
+  const conversation = await db.conversation.findFirst({
+    where: { id: conversationId, workspaceId },
+    select: { hiddenFromWorkspaceAt: true },
+  });
+  return conversation?.hiddenFromWorkspaceAt != null;
+}
+
+/** Which of the listed conversations the Workspace hides, as one read for a batch of artifact
+ * homes (task #20). Missing ids and DMs are simply absent from the set. */
+export async function hiddenFromWorkspaceConversationIds(
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  conversationIds: readonly string[],
+): Promise<Set<string>> {
+  if (conversationIds.length === 0) return new Set();
+  const conversations = await db.conversation.findMany({
+    where: {
+      workspaceId,
+      id: { in: [...conversationIds] },
+      hiddenFromWorkspaceAt: { not: null },
+    },
+    select: { id: true },
+  });
+  return new Set(conversations.map((conversation) => conversation.id));
+}
+
+/** What `actor` may read of each listed channel or DM home, batched for card projections
+ * (task #20): per conversation id, the fields `canReadConversationHome` reads, whether the
+ * actor is an active member, whether the Workspace hides it, and which kind it is. Unlike
+ * `actorConversationAccess` this keeps hidden conversations, flagged `hidden`, so a caller
+ * can tell "gone for everyone" from "not there"; a missing id is simply absent from the map. */
+export async function actorConversationHomeReads(
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  actor: ChannelActor,
+  conversationIds: readonly string[],
+): Promise<
+  Map<
+    string,
+    {
+      channelName: string | null;
+      visibility: string;
+      member: boolean;
+      hidden: boolean;
+      kind: "channel" | "dm";
+    }
+  >
+> {
+  if (conversationIds.length === 0) return new Map();
+  const conversations = await db.conversation.findMany({
+    where: {
+      workspaceId,
+      id: { in: [...conversationIds] },
+      OR: [{ channelName: { not: null } }, DIRECT_CONVERSATION_WHERE],
+    },
+    select: {
+      id: true,
+      channelName: true,
+      visibility: true,
+      hiddenFromWorkspaceAt: true,
+      members: {
+        where: { ...channelActorMemberWhere(actor), ...ACTIVE_MEMBER_WHERE },
+        select: { id: true },
+      },
+    },
+  });
+  return new Map(
+    conversations.map((conversation) => [
+      conversation.id,
+      {
+        channelName: conversation.channelName,
+        visibility: conversation.visibility,
+        member: conversation.members.length > 0,
+        hidden: conversation.hiddenFromWorkspaceAt !== null,
+        kind: conversation.channelName === null ? ("dm" as const) : ("channel" as const),
+      },
+    ]),
+  );
+}
+
 /** The id of the Workspace's channel named `name`, hidden ones aside — a lookup, not a read
  * grant: the caller applies its own access rule (the artifacts module's `#channel` target,
  * task #542). `undefined` when no such channel exists. */

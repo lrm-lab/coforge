@@ -5,9 +5,8 @@ model Artifact {
   workspaceId     String            @db.Uuid
   /// conversation:<conversationId> | workspace | public
   homeKey         String
-  /// The read-access tier: `conversation` keeps reads to the home conversation's readers;
-  /// `workspace` widens reads to every Workspace member. Writes never follow the tier.
-  /// A workspace-home artifact is always `workspace` (task #529).
+  /// Unused since task #20 widened reads workspace-wide; kept for rollout compatibility and
+  /// dropped by a later migration.
   access          String            @default("conversation")
   /// Unique within its home; the web URL uses a separate short id.
   name            String

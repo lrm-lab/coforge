@@ -1,8 +1,8 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
-  artifactReadAccess,
-  canChangeArtifactAccess,
+  canManageArtifactPublicLink,
+  requireArtifactRead,
   type ArtifactActor,
 } from "./artifact-access.server";
 
@@ -14,7 +14,6 @@ type Db = Pick<PrismaClient, "artifact" | "workspaceMembership" | "agent" | "con
 export type CommentedArtifact = {
   id: string;
   homeKey: string;
-  access: string;
   currentVersion: number;
   authorUserId: string | null;
   authorAgentId: string | null;
@@ -22,9 +21,9 @@ export type CommentedArtifact = {
 
 /**
  * A live artifact the actor may read, or `NOT_FOUND`. Commenting needs read access and nothing
- * more: whoever can read an artifact (its home's readers, or every member of the Workspace when its
- * tier is `workspace`) may comment on it, with no write access to its home needed. A missing
- * artifact, another Workspace's, a deleted one and one the actor cannot read are all `NOT_FOUND`.
+ * more: every member of the Workspace reads every artifact (task #20), so any member may comment
+ * on it, with no write access to its home needed. A missing artifact, another Workspace's, a
+ * deleted one, a home the Workspace hides and one the actor is no member of are all `NOT_FOUND`.
  */
 export async function requireReadableArtifact(
   db: Db,
@@ -37,14 +36,13 @@ export async function requireReadableArtifact(
     select: {
       id: true,
       homeKey: true,
-      access: true,
       currentVersion: true,
       authorUserId: true,
       authorAgentId: true,
     },
   });
-  if (!artifact || !(await artifactReadAccess(db, workspaceId, actor, artifact)))
-    throw new AppError("NOT_FOUND");
+  if (!artifact) throw new AppError("NOT_FOUND");
+  await requireArtifactRead(db, workspaceId, actor, artifact);
   return artifact;
 }
 
@@ -67,14 +65,14 @@ export async function canResolveArtifactComment(
       ? author.authorAgentId === actor.agentId
       : author.authorUserId === actor.userId;
   if (is(thread.root) || is(thread.artifact)) return true;
-  // The artifact's author, its authoring Agent's owner and the admins: the access tier's rule.
+  // The artifact's author, its authoring Agent's owner and the admins: the public-link rule.
   if (actor.userId === undefined) return false;
   const { authorAgentId } = thread.artifact;
   const ownerId = authorAgentId
     ? (await db.agent.findFirst({ where: { id: authorAgentId }, select: { ownerId: true } }))
         ?.ownerId
     : undefined;
-  return canChangeArtifactAccess(db, workspaceId, actor, {
+  return canManageArtifactPublicLink(db, workspaceId, actor, {
     ...thread.artifact,
     authorAgentOwnerId: ownerId ?? null,
   });

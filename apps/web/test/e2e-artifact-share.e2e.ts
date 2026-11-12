@@ -14,13 +14,12 @@ import {
 } from "./helpers/browser-e2e";
 
 /**
- * Who can see an artifact, from its page's Share (task #514, #529): for an artifact of a
- * conversation, its two levels, a change of them stored, and one that finds it deleted; for an
- * artifact of the Workspace, one level, and the way back is the Workspace; and one of a
- * conversation the viewer is not in, read only through the Workspace level: the way back is the
- * Workspace, the editor read only, and the narrower level confirmed before it
- * shuts the viewer out; and in a Workspace where the viewer is a member only, an artifact they
- * did not make: Share greyed, saying who can change it.
+ * An artifact's Share (task #20, #646): every member of the Workspace reads it, so the dialog
+ * has nothing to choose — it says "Everyone in the Workspace" and offers only the public link
+ * switch where the deployment has a sandbox origin. For an artifact of a conversation the
+ * viewer is not in, the page still opens read only, with the Workspace as the way back; in a
+ * Workspace where the viewer is a member only, an artifact they did not make may show the link
+ * switch disabled.
  *
  * Opt-in like the other browser E2Es: real local Web with the `artifacts` experiment switched
  * on per Workspace (it has no flag). Its texts carry the run's tail, since bytes are stored once
@@ -100,11 +99,10 @@ test("an artifact's Share: who can see it", async () => {
     await evaluate(`(document.querySelector("[data-press]")?.removeAttribute("data-press"), true)`);
   };
   const share = `[...document.querySelectorAll("main header button")].find((b) => b.textContent.trim() === "Share")`;
-  const radios = `[...document.querySelectorAll('[role="dialog"] input[type="radio"]')]`;
+  const dialog = `document.querySelector('[role="dialog"]')`;
+  const workspaceRow = `${dialog}?.textContent.includes("Everyone in the Workspace")`;
   const editor = `${pageHydrated} && document.querySelector("main .ProseMirror") != null`;
   const text = (needle: string) => `document.body.textContent.includes(${JSON.stringify(needle)})`;
-  const button = (label: string) =>
-    `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
   const pageOf = (id: string) => `${origin}/en/w/${workspace.slug}/artifacts/${id}`;
   try {
     await experiments.write(workspaceId, "artifacts", true);
@@ -117,30 +115,20 @@ test("an artifact's Share: who can see it", async () => {
       text: `Plan (run ${tail}).`,
     });
 
-    // The viewer may change who can see it: the change is stored, and shown.
+    // The viewer may manage the public link: Share says every member reads it, with no choice.
     await browser("open", pageOf(plan.id));
     await browser("wait", "--fn", editor);
     await press(share);
-    await browser("wait", "--fn", `${radios}.length === 2`);
-    expect(await evaluate<boolean>(`${radios}.some((radio) => radio.disabled)`)).toBe(false);
-    const level = (name: string) =>
-      `[...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent.includes(${JSON.stringify(name)}))`;
-    await press(level("Everyone in the Workspace"));
-    await until(
-      `${level("Everyone in the Workspace")}.querySelector("input").checked && !${radios}.some((radio) => radio.disabled)`,
-    );
-    expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).toBe(
-      "workspace",
-    );
+    await until(workspaceRow);
+    expect(
+      await evaluate<boolean>(
+        `document.querySelectorAll('[role="dialog"] input[type="radio"]').length === 0`,
+      ),
+    ).toBe(true);
     await shoot("1-share-workspace");
+    await browser("press", "Escape");
 
-    // Deleted while Share is open: the change finds it gone, and the page says it cannot open it.
-    await db.artifact.update({ where: { id: plan.id }, data: { deletedAt: new Date() } });
-    await press(level("People in"));
-    await until(`document.body.textContent.includes("Can't open this")`);
-    expect(await evaluate<boolean>(`document.querySelector('[role="dialog"]') == null`)).toBe(true);
-
-    // An artifact of the Workspace itself: one level, everyone in it; the way back is the Workspace.
+    // An artifact of the Workspace itself: the same row; the way back is the Workspace.
     const notes = await documents.create(
       { workspaceId, actor: { userId: DEV_BROWSER_USER.id } },
       { title: "Workspace notes", text: `Notes (run ${tail}).` },
@@ -151,22 +139,16 @@ test("an artifact's Share: who can see it", async () => {
       await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
     ).toEndWith(`/w/${workspace.slug}`);
     await press(share);
-    await browser("wait", "--fn", `${radios}.length === 1`);
-    expect(
-      await evaluate<string>(
-        `document.querySelector('[role="dialog"] [role="radiogroup"]').textContent`,
-      ),
-    ).toContain("Everyone in the Workspace");
+    await until(workspaceRow);
     await browser("press", "Escape");
 
-    // Shared with the Workspace from a channel the viewer is not in: read through that level
-    // alone, with no conversation to go back to, and only read from the first.
+    // From a channel the viewer is not in: every member still reads it — the page opens read
+    // only, with the Workspace as the way back and nothing to narrow.
     const leads = await documents.create(bot, {
       conversationId: closed.id,
       title: "Leads",
       text: `Leads (run ${tail}).`,
     });
-    await db.artifact.update({ where: { id: leads.id }, data: { access: "workspace" } });
     await browser("open", pageOf(leads.id));
     await browser("wait", "--fn", editor);
     expect(
@@ -181,33 +163,15 @@ test("an artifact's Share: who can see it", async () => {
       ),
     ).toBe("false");
     await shoot("2-workspace-read");
-
-    // The narrower level would shut the viewer out: asked first, then back to the Workspace.
-    await browser("open", pageOf(leads.id));
-    await browser("wait", "--fn", editor);
     await press(share);
-    await browser("wait", "--fn", `${radios}.length === 2`);
-    await press(level("People in this conversation"));
-    await until(text("you won't be able to open it yourself"));
-    await shoot("3-lock-out-confirm");
-    await press(button("Keep it"));
-    await until(`!${text("you won't be able to open it yourself")}`);
+    await until(workspaceRow);
     expect(
-      await evaluate<boolean>(
-        `${level("Everyone in the Workspace")}.querySelector("input").checked`,
-      ),
-    ).toBe(true);
-    await press(level("People in this conversation"));
-    await until(text("you won't be able to open it yourself"));
-    await press(button("Change it"));
-    await until(
-      `location.pathname.includes("/w/${workspace.slug}") && !location.pathname.includes("/artifacts/") && ${text("Only people in its conversation can see")}`,
-    );
-    expect((await db.artifact.findUniqueOrThrow({ where: { id: leads.id } })).access).toBe(
-      "conversation",
-    );
+      await evaluate<boolean>(`${text("won't be able to open it")} && ${text("Keep it")}`),
+    ).toBe(false);
+    await browser("press", "Escape");
 
-    // A member only, of an artifact they did not make: Share greyed, saying who can change it.
+    // A member only, of an artifact they did not make: where a public link exists its switch is
+    // disabled for them; where none does, Share still says who reads it.
     await experiments.write(other.id, "artifacts", true);
     const noorChannel = await db.conversation.create({
       data: {
@@ -224,15 +188,13 @@ test("an artifact's Share: who can see it", async () => {
     await browser("open", `${origin}/en/w/${other.slug}/artifacts/${brief.id}`);
     await browser("wait", "--fn", editor);
     await press(share);
-    await browser("wait", "--fn", `${radios}.length === 2`);
-    expect(await evaluate<boolean>(`${radios}.every((radio) => radio.disabled)`)).toBe(true);
-    const group = `document.querySelector('[role="dialog"] [role="radiogroup"]')`;
+    await until(workspaceRow);
     expect(
-      await evaluate<string>(
-        `document.getElementById(${group}.getAttribute("aria-describedby")).textContent`,
+      await evaluate<boolean>(
+        `(() => { const s = document.querySelector('[role="dialog"] input[role="switch"]'); return s == null || s.disabled; })()`,
       ),
-    ).toContain("Only its author");
-    await shoot("4-member-greyed");
+    ).toBe(true);
+    await shoot("4-member-share");
     await browser("press", "Escape");
   } finally {
     await browser("close").catch(() => undefined);

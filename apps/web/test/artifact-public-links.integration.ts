@@ -21,6 +21,7 @@ let workspaceId: string;
 let owner: string;
 let reader: string;
 let bystander: string;
+let outsider: string;
 let channelId: string;
 
 const artifact = (kind: string) =>
@@ -46,6 +47,7 @@ beforeAll(async () => {
   owner = await person("owner");
   reader = await person("reader");
   bystander = await person("bystander");
+  outsider = await person("outsider");
   const workspace = await db.workspace.create({
     data: {
       slug: `apl-${handle}`,
@@ -75,7 +77,7 @@ beforeAll(async () => {
 afterAll(async () => {
   rememberArtifactSandboxConfig(null);
   await db.workspace.delete({ where: { id: workspaceId } });
-  await db.user.deleteMany({ where: { id: { in: [owner, reader, bystander] } } });
+  await db.user.deleteMany({ where: { id: { in: [owner, reader, bystander, outsider] } } });
   await db.$disconnect();
 });
 
@@ -90,15 +92,23 @@ test("one who can read it sees the link, on and after it is off", async () => {
   expect(await read()).toEqual({ available: true, url: null });
 });
 
-test("one who cannot read it gets what a missing artifact gets", async () => {
+test("one outside the Workspace gets what a missing artifact gets", async () => {
   const { id: artifactId } = await artifact("html");
   await links.set({ workspaceId, artifactId, userId: owner, enabled: true });
-  const denied = await refusal(links.read({ workspaceId, artifactId, userId: bystander }));
+  const denied = await refusal(links.read({ workspaceId, artifactId, userId: outsider }));
   const missing = await refusal(
     links.read({ workspaceId, artifactId: crypto.randomUUID(), userId: reader }),
   );
   expect(denied).toBe("NOT_FOUND");
   expect(denied).toBe(missing);
+});
+
+test("a member who cannot read the home still sees the link state", async () => {
+  const { id: artifactId } = await artifact("html");
+  await links.set({ workspaceId, artifactId, userId: owner, enabled: true });
+  expect(await links.read({ workspaceId, artifactId, userId: bystander })).toEqual(
+    await links.read({ workspaceId, artifactId, userId: reader }),
+  );
 });
 
 test("a kind with no public link is not available", async () => {
@@ -119,6 +129,29 @@ test("no link can be made while the sandbox origin is unset", async () => {
     });
   } finally {
     rememberArtifactSandboxConfig({ origin: ORIGIN });
+  }
+});
+
+test("a home the Workspace hides takes its link state and link with it", async () => {
+  const { id: artifactId } = await artifact("html");
+  await links.set({ workspaceId, artifactId, userId: owner, enabled: true });
+  await db.conversation.update({
+    where: { id: channelId },
+    data: { hiddenFromWorkspaceAt: new Date() },
+  });
+  try {
+    // Even the channel's own members and the Workspace owner hear NOT_FOUND, as if the
+    // artifact were not there (task #20).
+    for (const userId of [owner, reader, bystander])
+      expect(await refusal(links.read({ workspaceId, artifactId, userId }))).toBe("NOT_FOUND");
+    expect(
+      await refusal(links.set({ workspaceId, artifactId, userId: owner, enabled: false })),
+    ).toBe("NOT_FOUND");
+  } finally {
+    await db.conversation.update({
+      where: { id: channelId },
+      data: { hiddenFromWorkspaceAt: null },
+    });
   }
 });
 

@@ -196,21 +196,34 @@ test("a public channel's artifact: every member reads, only its active members s
   );
 });
 
-test("a private channel's or a DM's artifact is unknown to whoever cannot read them", async () => {
+test("a private channel's or a DM's artifact is every member's to read; its home stays home", async () => {
   const closed = await create(inConversation(privateChannel), { agentId: agents.helper });
   const direct = await create(inConversation(dm), { userId: people.bob });
+  // Bob, the owner and a Workspace Agent outside the private channel all read it now, but the
+  // home stays theirs alone: no homeKey, no write.
   for (const reader of [
     { userId: people.bob },
     { userId: people.owner },
     { agentId: agents.stranger },
-  ] satisfies ArtifactActor[])
+  ] satisfies ArtifactActor[]) {
+    const { artifact } = await read(closed.id, reader);
+    expect(artifact.id).toBe(closed.id);
+    expect(artifact.homeKey).toBeNull();
+    expect(artifact.homeRead).toBe(false);
+    expect(artifact.canWrite).toBe(false);
+  }
+  const aliceRead = await read(closed.id, { userId: people.alice });
+  expect(aliceRead.artifact.homeKey).toBe(`conversation:${privateChannel}`);
+  expect(aliceRead.artifact.homeRead).toBe(true);
+  // The DM's artifact: its member reads the home, the owner reads only the artifact.
+  const bobRead = await read(direct.id, { userId: people.bob });
+  expect(bobRead.artifact.homeKey).toBe(`conversation:${dm}`);
+  const ownerRead = await read(direct.id, { userId: people.owner });
+  expect(ownerRead.artifact.id).toBe(direct.id);
+  expect(ownerRead.artifact.homeKey).toBeNull();
+  // Outside the Workspace nothing changes.
+  for (const reader of [{ userId: people.outsider }, { agentId: agents.foreign }])
     await expect(read(closed.id, reader)).rejects.toMatchObject({ code: "NOT_FOUND" });
-  expect((await read(closed.id, { userId: people.alice })).artifact.id).toBe(closed.id);
-  // A Workspace role grants nothing here: the owner is not in the DM.
-  await expect(read(direct.id, { userId: people.owner })).rejects.toMatchObject({
-    code: "NOT_FOUND",
-  });
-  expect((await push(direct.id, { userId: people.alice })).status).toBe("created");
   await expect(
     create(inConversation(privateChannel), { userId: people.bob }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -265,11 +278,11 @@ test("deleting is the author's or an owner's or admin's; an Agent deletes only i
   });
   expect(row.deletedAt).not.toBeNull();
   expect(row.deletedByAgentId).toBe(agents.helper);
-  // An owner or admin deletes only what they can read: a private channel they are not in keeps
-  // its artifacts unknown to them, as it keeps its messages.
+  // Deleting still needs the home's read: an owner outside the private channel hears
+  // ACCESS_DENIED, as a member who cannot write does.
   const closed = await create(inConversation(privateChannel), { userId: people.alice });
   await expect(del(closed.id, { userId: people.owner })).rejects.toMatchObject({
-    code: "NOT_FOUND",
+    code: "ACCESS_DENIED",
   });
 });
 
@@ -283,7 +296,7 @@ test("a document's own file stays under 2 MiB; other artifacts keep the larger l
   expect((await push(notes.id, { userId: people.alice }, "sha-big")).status).toBe("created");
 });
 
-test("leaving a private channel ends access; an archived channel is read only; a hidden one is gone", async () => {
+test("leaving a private channel keeps the read but ends the home; an archived channel is read only; a hidden one is gone", async () => {
   const closed = await create(inConversation(privateChannel), { userId: people.alice });
   const open = await create(inConversation(publicChannel), { userId: people.alice });
   await db.conversationMember.updateMany({
@@ -291,8 +304,13 @@ test("leaving a private channel ends access; an archived channel is read only; a
     data: { leftAt: new Date() },
   });
   try {
-    await expect(read(closed.id, { agentId: agents.helper })).rejects.toMatchObject({
-      code: "NOT_FOUND",
+    // The Agent stays a Workspace member: it still reads the artifact, without its home.
+    const { artifact } = await read(closed.id, { agentId: agents.helper });
+    expect(artifact.id).toBe(closed.id);
+    expect(artifact.homeKey).toBeNull();
+    expect(artifact.homeRead).toBe(false);
+    await expect(push(closed.id, { agentId: agents.helper })).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
     });
   } finally {
     await db.conversationMember.updateMany({

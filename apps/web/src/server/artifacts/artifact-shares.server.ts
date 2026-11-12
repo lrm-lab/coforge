@@ -6,10 +6,12 @@ import {
   ARTIFACT_SHARE_NOTE_MAX_LENGTH,
 } from "#src/features/artifacts/artifact-share-input";
 import { AppError, isAppError } from "#src/lib/app-error";
+import { hiddenFromWorkspaceConversationIds } from "#src/server/conversations/channel-read-access.server";
 import {
+  artifactHomeConversationId,
   type ArtifactActor,
-  artifactReadAccess,
   artifactsDisabled,
+  inWorkspace,
 } from "./artifact-access.server";
 
 export type ArtifactShareFailureCode = "no_access" | "archived" | "read_only" | "failed";
@@ -83,7 +85,7 @@ export class ArtifactShares {
       input.targets.length > ARTIFACT_SHARE_MAX_TARGETS
     )
       throw new AppError("INVALID_INPUT", { errorId: "artifact-share-request" });
-    const artifactIds = [...new Set(input.artifactIds)];
+    const artifactIds = [...new Set(input.artifactIds.map((id) => id.toLowerCase()))];
     const targets = [...new Set(input.targets)];
     if (!artifactIds.length || !targets.length || !input.requestId.trim())
       throw new AppError("INVALID_INPUT", {
@@ -103,18 +105,34 @@ export class ArtifactShares {
           id: { in: artifactIds },
           deletedAt: null,
         },
-        select: { id: true, title: true, homeKey: true, access: true },
+        select: { id: true, title: true, homeKey: true },
       }),
     ]);
     if (!workspace) throw new AppError("NOT_FOUND");
-    const byId = new Map(rows.map((row) => [row.id, row]));
     if (rows.length !== artifactIds.length) throw new AppError("NOT_FOUND");
-    for (const artifactId of artifactIds) {
-      const artifact = byId.get(artifactId);
-      if (!artifact) throw new AppError("NOT_FOUND");
-      if (!(await artifactReadAccess(this.db, input.workspaceId, input.actor, artifact)))
-        throw new AppError("NOT_FOUND");
-    }
+    // `findMany` answers unordered; the links and titles below pair by `artifactIds` order.
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const ordered = artifactIds.map((id) => byId.get(id)!);
+    // Every member reads every artifact (task #20), so one membership check covers them all.
+    if (!(await inWorkspace(this.db, input.workspaceId, input.actor)))
+      throw new AppError("NOT_FOUND");
+    // A home the Workspace hides is gone for everyone; its artifacts are not shared (task #20).
+    const homeIds = [
+      ...new Set(
+        rows.flatMap((row) => {
+          const conversationId = artifactHomeConversationId(row.homeKey);
+          return conversationId ? [conversationId] : [];
+        }),
+      ),
+    ];
+    const hidden = await hiddenFromWorkspaceConversationIds(this.db, input.workspaceId, homeIds);
+    if (
+      rows.some((row) => {
+        const conversationId = artifactHomeConversationId(row.homeKey);
+        return conversationId !== undefined && hidden.has(conversationId);
+      })
+    )
+      throw new AppError("NOT_FOUND");
 
     const links = artifactIds.map((id) => `/w/${workspace.slug}/artifacts/${id}`);
     const body = [input.note?.trim(), links.join("\n")].filter(Boolean).join("\n\n");
@@ -129,7 +147,7 @@ export class ArtifactShares {
             body,
             input.note,
             links,
-            rows,
+            ordered,
             input.workspaceId,
             input.actor,
           ),
@@ -160,7 +178,7 @@ export class ArtifactShares {
     fallback: string,
     note: string | undefined,
     links: readonly string[],
-    rows: readonly { id: string; title: string; homeKey: string; access: string }[],
+    rows: readonly { id: string; title: string }[],
     workspaceId: string,
     actor: ArtifactActor,
   ) {
@@ -172,12 +190,8 @@ export class ArtifactShares {
       return fallback;
     }
     if (resolved.kind !== "agent") return fallback;
-    const readable = await Promise.all(
-      rows.map((row) =>
-        artifactReadAccess(this.db, workspaceId, { agentId: resolved.agentId }, row),
-      ),
-    );
-    if (!readable.every(Boolean))
+    // Every member reads every artifact (task #20), so one membership check covers them all.
+    if (!(await inWorkspace(this.db, workspaceId, { agentId: resolved.agentId })))
       return [note?.trim(), `One artifact was shared:\n${links.join("\n")}`]
         .filter(Boolean)
         .join("\n\n");

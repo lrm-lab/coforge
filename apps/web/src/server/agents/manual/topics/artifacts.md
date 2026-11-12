@@ -1,8 +1,9 @@
 # Artifacts and web pages (`coforge artifact`)
 
 A conversation (a channel or a DM) or the Workspace keeps two kinds of page, each with every
-version it had. Whoever can read the conversation reads them. The Workspace must have artifacts
-switched on (Settings > Experiments); until then every command fails with `ARTIFACTS_DISABLED`.
+version it had. Every member of the Workspace reads them; the conversation's members write them.
+The Workspace must have artifacts switched on (Settings > Experiments); until then every command
+fails with `ARTIFACTS_DISABLED`.
 
 ## Which one to make
 

@@ -220,19 +220,26 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     // Not there, and not the reader's: one page, saying the same.
     await browser("open", pageOf(crypto.randomUUID()));
     await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
-    const missing = await evaluate<string>(`document.querySelector("main").textContent`);
     await shoot("3-unavailable");
+    // Every member reads every artifact (task #20): the private channel's document opens read
+    // only — the conversation is not the reader's to open, so the way back is the Workspace.
     const secret = await documents.create(
       { workspaceId, actor: { userId: lin.id } },
       { conversationId: closed.id, title: "Salaries", text: `Private (run ${tail}).` },
     );
     await browser("open", pageOf(secret.id));
-    await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
-    expect(await evaluate<string>(`document.querySelector("main").textContent`)).toBe(missing);
-    expect(await evaluate<boolean>(`${button("Back to the Workspace")} != null`)).toBe(true);
-    // A `?doc=` link into that conversation, once the Workspace may read it: the artifact's own
-    // page, as the conversation is not the reader's to open.
-    await db.artifact.update({ where: { id: secret.id }, data: { access: "workspace" } });
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.querySelector('main .ProseMirror[contenteditable="false"]') != null`,
+    );
+    // The way back is a link to the Workspace, not a button.
+    expect(
+      await evaluate<boolean>(
+        `[...document.querySelectorAll("main a")].some((a) => a.textContent.includes("Back to the Workspace"))`,
+      ),
+    ).toBe(true);
+    // A `?doc=` link into that conversation opens the artifact's own page the same way.
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${closed.id}?doc=${secret.id}`);
     await browser(
       "wait",

@@ -11,8 +11,8 @@ import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
 /**
  * Web pages on the sandbox origin over real artifacts (task #490): the link opens the version it
  * was made for even after a newer one is saved, and stops opening once its reader can no longer
- * read the page's home. Reads go through `ArtifactReads`, so the experiment and the home's access
- * are the same checks every artifact read makes.
+ * read the artifact. Reads go through `ArtifactReads`, so the experiment and the read rule are
+ * the same checks every artifact read makes.
  */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -131,13 +131,21 @@ async function save(artifactId: string, baseVersion: number, html: string) {
   });
 }
 
-test("a narrowed tier-reader's next link refuses at once", async () => {
-  // A second member authors a document in a private channel the reader is not in, widens it,
-  // then narrows it again: the tier's read reaches the sandbox's own check.
+test("a member's next link refuses at once once they leave the Workspace", async () => {
+  // A member reads an artifact whose home they cannot read (task #20); leaving the Workspace
+  // revokes the next link — the sandbox's own check runs on every call.
   const author = (
     await db.user.create({ data: { username: `sb-author-${handle}`, displayName: "A" } })
   ).id;
-  await db.workspaceMembership.create({ data: { workspaceId, userId: author, role: "member" } });
+  const reader = (
+    await db.user.create({ data: { username: `sb-reader-${handle}`, displayName: "R" } })
+  ).id;
+  await db.workspaceMembership.createMany({
+    data: [
+      { workspaceId, userId: author, role: "member" },
+      { workspaceId, userId: reader, role: "member" },
+    ],
+  });
   const channel = (
     await db.conversation.create({
       data: { workspaceId, channelName: `closed-${handle}`, visibility: "private" },
@@ -162,14 +170,15 @@ test("a narrowed tier-reader's next link refuses at once", async () => {
     idempotencyKey: crypto.randomUUID(),
     files: [{ path: "index.html", sha256: put("<p>shared</p>") }],
   });
-  await db.artifact.update({ where: { id: page.id }, data: { access: "workspace" } });
   const link = () =>
-    sandbox.link({ workspaceId, userId, artifactId: page.id, embedderOrigin: APP });
+    sandbox.link({ workspaceId, userId: reader, artifactId: page.id, embedderOrigin: APP });
   await link();
-  await db.artifact.update({ where: { id: page.id }, data: { access: "conversation" } });
+  await db.workspaceMembership.delete({
+    where: { workspaceId_userId: { workspaceId, userId: reader } },
+  });
   await expect(link()).rejects.toMatchObject({ code: "NOT_FOUND" });
   await db.conversation.delete({ where: { id: channel } });
-  await db.user.delete({ where: { id: author } });
+  await db.user.deleteMany({ where: { id: { in: [author, reader] } } });
 });
 
 test("a link opens its own version, and stops once its reader cannot read the page", async () => {

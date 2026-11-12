@@ -2,16 +2,20 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
 import { AppError } from "#src/lib/app-error";
 import { escapeLikeTerm, searchTerms } from "#src/lib/search-terms";
-import { canReadConversationHome } from "#src/server/conversations/channel-read-access.server";
+import {
+  actorConversationHomeReads,
+  canReadConversationHome,
+} from "#src/server/conversations/channel-read-access.server";
 import {
   artifactHomeAccess,
+  artifactHomeConversationId,
+  artifactHomeHidden,
   artifactsDisabled,
-  canChangeArtifactAccess,
-  canChangeArtifactAccessWithRole,
+  canManageArtifactPublicLink,
+  canManageArtifactPublicLinkWithRole,
   inWorkspace,
   requireArtifactHome,
   requireArtifactRead,
-  type ArtifactAccessTier,
   type ArtifactActor,
   type ArtifactHomeAccess,
 } from "./artifact-access.server";
@@ -65,7 +69,6 @@ const CARD_SELECT = {
   title: true,
   kind: true,
   homeKey: true,
-  access: true,
   currentVersion: true,
   preview: true,
   authorUserId: true,
@@ -80,7 +83,6 @@ function card(
     title: string;
     kind: string;
     homeKey: string;
-    access: string;
     currentVersion: number;
     preview: string;
     authorUserId: string | null;
@@ -93,9 +95,8 @@ function card(
   const { authorUserId, authorAgentId, ...shown } = row;
   return {
     ...shown,
-    // A reader the widened tier let in never learns the home's key (task #529).
+    // A reader the home's rule kept out never learns the home's key (task #20).
     homeKey: homeRead ? row.homeKey : null,
-    access: row.access as ArtifactAccessTier,
     canChange,
     author: authorAgentId
       ? { agentId: authorAgentId }
@@ -105,8 +106,8 @@ function card(
   };
 }
 
-/** What the `canChange` rule reads off a card row: the two author columns and the authoring
- * Agent's owner, looked up once per batch (`authorAgentId` is a bare column, task #529). */
+/** What the `canManageArtifactPublicLink` rule reads off a card row: the two author columns
+ * and the authoring Agent's owner, looked up once per batch (`authorAgentId` is a bare column). */
 const accessRuleInput = (
   row: { authorUserId: string | null; authorAgentId: string | null },
   owners: ReadonlyMap<string, string>,
@@ -139,7 +140,6 @@ export class ArtifactReads {
         kind: true,
         entryPath: true,
         homeKey: true,
-        access: true,
         currentVersion: true,
         // Read with the artifact so `canDelete` needs no second query (task #385).
         authorUserId: true,
@@ -155,7 +155,7 @@ export class ArtifactReads {
       artifact,
     );
     // `authorAgentId` is a bare column, so the owner's id is one more lookup — and only where the
-    // `canChange` rule needs it (task #529).
+    // `canManageArtifactPublicLink` rule needs it.
     const ownerId = artifact.authorAgentId
       ? (
           await this.db.agent.findFirst({
@@ -166,19 +166,20 @@ export class ArtifactReads {
       : undefined;
     return {
       ...artifact,
-      // A reader the widened tier let in never learns the home's key: a private conversation's
-      // id is not theirs to know (task #529).
+      // A reader the home's rule kept out never learns the home's key: a private conversation's
+      // id is not theirs to know (task #20).
       homeKey: homeRead ? artifact.homeKey : null,
       homeRead,
-      // Whether the home's own rule lets this reader write; a tier only ever widens reading.
+      // Whether the home's own rule lets this reader write; the workspace-wide read never does.
       canWrite: write,
-      access: artifact.access as ArtifactAccessTier,
-      canChange: await canChangeArtifactAccess(this.db, workspaceId, reader, {
+      canChange: await canManageArtifactPublicLink(this.db, workspaceId, reader, {
         authorUserId: artifact.authorUserId,
         authorAgentId: artifact.authorAgentId,
         authorAgentOwnerId: ownerId ?? null,
       }),
-      homeKind,
+      // A reader the home's rule kept out learns no home detail at all: not even whether it
+      // was a channel or a DM (task #20). The page needs no kind without a home to return to.
+      homeKind: homeRead ? homeKind : "workspace",
     };
   }
 
@@ -302,7 +303,7 @@ export class ArtifactReads {
       artifacts: page.map((row) =>
         card(
           row,
-          canChangeArtifactAccessWithRole(input.reader, role, accessRuleInput(row, owners)),
+          canManageArtifactPublicLinkWithRole(input.reader, role, accessRuleInput(row, owners)),
         ),
       ),
       ...(rows.length > input.limit && last ? { nextCursor: writeCursor(last) } : {}),
@@ -317,7 +318,9 @@ export class ArtifactReads {
     artifactIds: readonly string[];
   }) {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
-    const ids = [...new Set(input.artifactIds)].filter((id) => UUID.test(id)).slice(0, LIST_LIMIT);
+    const ids = [...new Set(input.artifactIds.map((id) => id.toLowerCase()))]
+      .filter((id) => UUID.test(id))
+      .slice(0, LIST_LIMIT);
     if (ids.length === 0) return [];
     const rows = await this.db.artifact.findMany({
       where: { workspaceId: input.workspaceId, id: { in: ids }, deletedAt: null },
@@ -329,6 +332,12 @@ export class ArtifactReads {
         homes.set(homeKey, artifactHomeAccess(this.db, input.workspaceId, input.reader, homeKey));
       return homes.get(homeKey)!;
     };
+    const hidden = new Map<string, Promise<boolean>>();
+    const homeHidden = (homeKey: string) => {
+      if (!hidden.has(homeKey))
+        hidden.set(homeKey, artifactHomeHidden(this.db, input.workspaceId, homeKey));
+      return hidden.get(homeKey)!;
+    };
     const member = await inWorkspace(this.db, input.workspaceId, input.reader);
     const [role, owners] = await Promise.all([
       this.#actorRole(input.workspaceId, input.reader),
@@ -337,13 +346,14 @@ export class ArtifactReads {
     const kept = new Map<string, ReturnType<typeof card>>();
     for (const row of rows) {
       const home = await homeAccess(row.homeKey);
-      // A home's readers share one check; a `workspace` tier widens it per artifact (task #529).
-      if (!(home.read || (row.access === "workspace" && member))) continue;
+      // Every Workspace member reads every artifact (task #20); a home reader shares one check.
+      // Only a workspace-wide read can meet a hidden home; a home reader never can.
+      if (!(home.read || member) || (!home.read && (await homeHidden(row.homeKey)))) continue;
       kept.set(
         row.id,
         card(
           row,
-          canChangeArtifactAccessWithRole(input.reader, role, accessRuleInput(row, owners)),
+          canManageArtifactPublicLinkWithRole(input.reader, role, accessRuleInput(row, owners)),
           home.read,
         ),
       );
@@ -375,52 +385,24 @@ export class ArtifactReads {
         kind: true,
         currentVersion: true,
         homeKey: true,
-        access: true,
         deletedAt: true,
         authorAgentId: true,
         workspace: { select: { slug: true } },
       },
     });
-    const homeConversationIds = rows.flatMap((row) =>
-      row.homeKey.startsWith("conversation:") ? [row.homeKey.slice("conversation:".length)] : [],
-    );
-    const [membership, conversations] = await Promise.all([
-      input.reader.userId
-        ? this.db.workspaceMembership.findUnique({
-            where: {
-              workspaceId_userId: { workspaceId: input.workspaceId, userId: input.reader.userId },
-            },
-            select: { userId: true },
-          })
-        : Promise.resolve(null),
-      this.db.conversation.findMany({
-        where: {
-          workspaceId: input.workspaceId,
-          id: { in: homeConversationIds },
-          hiddenFromWorkspaceAt: null,
-        },
-        select: {
-          id: true,
-          channelName: true,
-          visibility: true,
-          hiddenFromWorkspaceAt: true,
-          members: {
-            where: {
-              ...("userId" in input.reader
-                ? { userId: input.reader.userId }
-                : { agentId: input.reader.agentId }),
-              leftAt: null,
-            },
-            select: { id: true },
-          },
-        },
-      }),
+    const homeConversationIds = [
+      ...new Set(
+        rows.flatMap((row) => {
+          const conversationId = artifactHomeConversationId(row.homeKey);
+          return conversationId ? [conversationId] : [];
+        }),
+      ),
+    ];
+    const [member, conversations] = await Promise.all([
+      inWorkspace(this.db, input.workspaceId, input.reader),
+      actorConversationHomeReads(this.db, input.workspaceId, input.reader, homeConversationIds),
     ]);
     const byId = new Map(rows.map((row) => [row.id, row]));
-    const byConversation = new Map(
-      conversations.map((conversation) => [conversation.id, conversation]),
-    );
-    const member = membership !== null;
     const cardFor = (id: string): ArtifactMessageCard => {
       const row = byId.get(id);
       if (!row)
@@ -430,21 +412,22 @@ export class ArtifactReads {
           artifactId: id,
           canOpen: false,
         };
-      const conversationId = row.homeKey.startsWith("conversation:")
-        ? row.homeKey.slice("conversation:".length)
-        : undefined;
-      const conversation = conversationId ? byConversation.get(conversationId) : undefined;
+      const conversationId = artifactHomeConversationId(row.homeKey);
+      const conversation = conversationId ? conversations.get(conversationId) : undefined;
+      const homeHidden = conversation?.hidden === true;
       const homeRead =
         row.homeKey === "workspace"
           ? member
           : conversation !== undefined &&
-            conversation.hiddenFromWorkspaceAt === null &&
+            !homeHidden &&
             canReadConversationHome({
               channelName: conversation.channelName,
               visibility: conversation.visibility,
-              member: conversation.members.length > 0,
+              member: conversation.member,
             });
-      const canOpen = homeRead || (row.access === "workspace" && member);
+      // Every member may open it (task #20); anyone else stays forbidden, as `read` answers
+      // them. A home the Workspace hides is gone for everyone, its cards with it.
+      const canOpen = member && !homeHidden;
       if (!canOpen) return { kind: "artifact", state: "forbidden", artifactId: id, canOpen: false };
       if (row.deletedAt !== null)
         return { kind: "artifact", state: "deleted", artifactId: id, canOpen: false };
@@ -457,21 +440,25 @@ export class ArtifactReads {
         preview: row.preview,
         contentType: row.kind,
         version: row.currentVersion,
-        source: conversationId
-          ? {
-              conversationId,
-              label: conversation?.channelName ? `#${conversation.channelName}` : "DM",
-            }
-          : row.authorAgentId
-            ? { agentId: row.authorAgentId, label: "Agent" }
-            : { label: "Workspace" },
+        // A reader the home's rule kept out sees only the author, never the home it came from
+        // (task #20): no private conversation id, no DM context.
+        source:
+          homeRead && conversationId
+            ? {
+                conversationId,
+                label: conversation?.channelName ? `#${conversation.channelName}` : "DM",
+              }
+            : row.authorAgentId
+              ? { agentId: row.authorAgentId, label: "Agent" }
+              : { label: "Workspace" },
         canOpen: true,
       };
     };
     return input.messages.map((message) => artifactIdsInBody(message.body, 100).map(cardFor));
   }
 
-  /** The authoring Agents' owners, for the batch's `canChange` answers: one lookup per batch. */
+  /** The authoring Agents' owners, for the batch's `canManageArtifactPublicLink` answers: one
+   * lookup per batch. */
   async #authorOwners(rows: ReadonlyArray<{ authorAgentId: string | null }>) {
     const ids = [...new Set(rows.flatMap((row) => (row.authorAgentId ? [row.authorAgentId] : [])))];
     if (ids.length === 0) return new Map<string, string>();

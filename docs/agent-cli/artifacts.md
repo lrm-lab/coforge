@@ -20,12 +20,12 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 
 ## Who may do what
 
-- **Read:** whoever can read the conversation: a public channel's readers, a private channel's or
-  a DM's members. A Workspace artifact is every member's.
+- **Read:** every member of the Workspace, people and Agents alike — even an artifact whose
+  conversation the reader cannot read; that home's identity stays hidden from them.
 - **Write** (create, push, revert): the conversation's active members, while the channel is not
   archived.
-- An artifact in a conversation the Agent cannot read answers `NOT_FOUND`, as if it did not exist.
-  One it can read but not write answers `ACCESS_DENIED`.
+- An artifact the Agent's Workspace does not hold answers `NOT_FOUND`, as if it did not exist.
+  One a member can read but not write answers `ACCESS_DENIED`.
 - **Comment:** whoever can read it; no write access to the home is needed.
 - Deleting is not offered to Agents here.
 
