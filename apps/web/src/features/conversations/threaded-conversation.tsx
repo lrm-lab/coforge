@@ -18,7 +18,6 @@ import { useTaskPopupProfile } from "#src/features/tasks/task-popup-profile";
 import { ConversationPane } from "./conversation-pane";
 import { SeenByDirectory } from "./message-seen-by";
 import { useConversationDetailVisible } from "./conversation-navigation";
-import { useConversationHostChannels } from "./conversation-host";
 import { useConversationSync, useTaskPopupRoot } from "./use-conversation-sync";
 import { useStandaloneThread } from "./standalone-thread";
 import {
@@ -26,7 +25,6 @@ import {
   useOpenConversationTask,
   useOpenConversationThread,
 } from "./open-conversation-thread";
-import { makeReferenceBodyFormatter } from "./mention-text";
 import { ThreadPane } from "./thread-pane";
 import { TaskDiscussionPane } from "./task-discussion-pane";
 import { NO_THREADS } from "./thread-summary-model";
@@ -37,10 +35,8 @@ import { ConversationIdProvider } from "./conversation-id";
 import { ThreadStoreProvider, useConversationThreadStore } from "./thread-store";
 import { resolveConversationThreadRoot } from "./conversation-thread-search";
 import type { DirectConversationView, ThreadedConversationProps } from "./conversation-types";
-import type { ChannelSuggestion } from "./reference-completion";
+import { useConversationChannels } from "./use-conversation-channels";
 
-/** No channels to link or suggest: one array, so what is memoized on the list keeps. */
-const NO_CHANNELS: readonly ChannelSuggestion[] = [];
 /** No messages whose Tasks to read. */
 const NO_MESSAGES: DirectConversationView["messages"] = [];
 
@@ -94,19 +90,9 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   // (its replies are the thread's own Query, which the window does not bound) rather than going
   // blank or reloading the stream around the root.
   const threadRoots = useRef(new Map<string, DirectConversationView["messages"][number]>());
-  // A stored channel reference links to its channel, under its current name, only when the
-  // Workspace has that channel: every channel by id, closed ones included, from the hosting page.
-  const hostChannels = useConversationHostChannels();
-  const channelList = channels ?? hostChannels ?? NO_CHANNELS;
-  const channelNames = useMemo(
-    () => new Map(channelList.map((channel) => [channel.id, channel.name])),
-    [channelList],
-  );
-  // Preview rows would otherwise spell a reference as its raw `<@kind:…>` token; resolve those
-  // the way the message list does.
-  const formatPreviewBody = useMemo(
-    () => makeReferenceBodyFormatter(conversation.mentionables ?? [], channelNames),
-    [conversation.mentionables, channelNames],
+  const { channelList, channelNames, formatPreviewBody } = useConversationChannels(
+    channels,
+    conversation.mentionables,
   );
   const conversationTaskPopup = useOpenConversationTask();
   const {
