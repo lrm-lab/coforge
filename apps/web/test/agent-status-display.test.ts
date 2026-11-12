@@ -188,3 +188,19 @@ test("every stop a person has to clear gets the banner and its way back, in the 
 test("our words exist only for stops a person has to clear", () => {
   for (const reason of STOP_REASON_COPY_KEYS) expect(stopNeedsPerson(reason)).toBe(true);
 });
+
+test("a live Agent held on its credential reads as the stop, still online, with Retry", () => {
+  const view = agentDisplay(
+    display({
+      activityKind: "error",
+      detailKind: "runtime_error",
+      detail: "Runtime not signed in",
+      stopReason: "auth_failed",
+      stopMessage: "Runtime not signed in",
+    }),
+  );
+  expect(view.isOnline).toBe(true);
+  expect(view.alert).toBe(true);
+  expect(view.label).toBe("Runtime not signed in");
+  expect(view.recovery).toBe("retry");
+});

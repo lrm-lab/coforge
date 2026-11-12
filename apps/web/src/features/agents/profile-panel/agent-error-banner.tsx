@@ -36,8 +36,11 @@ export function AgentErrorBanner({
   // "Error: <detail>", the same label the DM header and the Activity log give this state.
   const status = agentDisplay(display);
   const label = status.alertText || status.label;
-  // A stopped Agent waits for a person; one still running retries on its own.
-  const recovery = retry && !status.isOnline ? status.recovery : undefined;
+  // A stopped Agent waits for a person; one still running retries on its own, unless the cloud
+  // display keeps a reason a person clears while it runs: a credential the Daemon holds it on
+  // (task #90). Retry is the same Start either way: on a live Agent it hands the Daemon what the
+  // hold kept, and a Stop first would drop it.
+  const recovery = retry && (!status.isOnline || status.alert) ? status.recovery : undefined;
   const resetBlocked = recovery === "reset_session" && retry?.computerOffline === true;
   const retryNote = resetBlocked ? m.agent_error_banner_computer_offline() : retry?.note;
   const showLinks = !onActivityTab && onViewLogs;

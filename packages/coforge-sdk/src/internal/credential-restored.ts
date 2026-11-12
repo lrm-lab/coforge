@@ -2,6 +2,7 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AgentCredentialRestoredSchema } from "#src/internal/gen/coforge/rpc/v1/agent_credential_pb";
 import { RPC_METHODS } from "./rpc-methods";
 import { boundedPayload } from "./bounded-payload";
+import type { AgentActivityRuntimeError } from "./runtime-error-action";
 
 /** Daemon -> server: an Agent's provider credential works again. Best-effort. */
 export const AGENT_CREDENTIAL_RESTORED_METHOD = RPC_METHODS.agentCredentialRestored;
@@ -22,6 +23,20 @@ export const CREDENTIAL_FAILURE_ERROR_REASONS: Readonly<Record<CredentialRestore
     user_model_access: "model_config_error",
     BillingError: "billing_exhausted",
   };
+
+/**
+ * The credential failure a runtime_error Activity reports, by the same rule the Daemon holds an
+ * Agent on (`credentialInvalidReason`): an action only a person takes, or an exhausted balance.
+ * Such an Agent keeps its process, so the failure waits for a person while the Agent is alive;
+ * undefined for any other failure.
+ */
+export function credentialHoldReason(
+  runtimeError: Pick<AgentActivityRuntimeError, "errorClass" | "requiredAction"> | undefined,
+): CredentialRestoredReason | undefined {
+  if (!runtimeError) return undefined;
+  if (runtimeError.errorClass === "BillingError") return "BillingError";
+  return runtimeError.requiredAction;
+}
 
 /** What made the credential usable again, as the daemon knows it. */
 export const CREDENTIAL_RELEASE_CAUSES = [
