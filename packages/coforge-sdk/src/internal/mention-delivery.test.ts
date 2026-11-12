@@ -5,7 +5,7 @@ import {
   AgentMessageDeliveryAckSchema,
   AgentMessageDeliverySchema,
   MentionDeliveryEnvelopeSchema,
-} from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
+} from "#src/internal/gen/coforge/rpc/v1/agent_delivery_pb";
 import {
   AGENT_MENTION_DELIVERY_TERMINAL_ERROR_METHOD,
   AGENT_MENTION_DELIVERY_TRANSITION_METHOD,

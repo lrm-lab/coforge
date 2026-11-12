@@ -4,7 +4,7 @@ import {
   AgentMentionDeliveryTransitionSchema,
   MentionDeliveryEnvelopeSchema,
   type MentionDeliveryEnvelope as MentionDeliveryEnvelopeMessage,
-} from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
+} from "#src/internal/gen/coforge/rpc/v1/agent_delivery_pb";
 import { RPC_METHODS } from "./rpc-methods";
 import { boundedPayload } from "./bounded-payload";
 

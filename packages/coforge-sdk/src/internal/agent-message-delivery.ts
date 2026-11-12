@@ -1,5 +1,5 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AgentMessageDeliverySchema } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
+import { AgentMessageDeliverySchema } from "#src/internal/gen/coforge/rpc/v1/agent_delivery_pb";
 import { safeUint64 } from "./agent-observation-codec";
 import { assertUint } from "./codec";
 import { AGENT_MESSAGE_METHOD } from "./index";
@@ -53,6 +53,13 @@ export type AgentMessageDelivery = {
   /** "app" when the message is an App event rather than a person's or an Agent's text. Absent
    * from a server that predates it. */
   source?: "app";
+  /** The message's own machine-readable notice kind (`system.kind`), e.g. "task.assigned_you":
+   * what tells an Agent that assigned work arrived without reading the notice's words. Absent on
+   * ordinary messages and from a server that predates it. */
+  noticeKind?: string;
+  /** The server's verdict that this delivery belongs to a Task's discussion, from the Task and
+   * its conversation rather than the target's shape. Absent from a server that predates it. */
+  taskDiscussion?: boolean;
 };
 
 export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Array {
@@ -101,6 +108,8 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
       reason: value.reason,
       attachmentCount: value.attachmentCount,
       source: value.source,
+      noticeKind: value.noticeKind,
+      taskDiscussion: value.taskDiscussion,
     }),
   );
 }
@@ -166,5 +175,7 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
     ...(value.reason ? { reason: value.reason } : {}),
     ...(value.attachmentCount !== undefined ? { attachmentCount: value.attachmentCount } : {}),
     ...(value.source === "app" ? { source: "app" as const } : {}),
+    ...(value.noticeKind ? { noticeKind: value.noticeKind } : {}),
+    ...(value.taskDiscussion !== undefined ? { taskDiscussion: value.taskDiscussion } : {}),
   };
 }

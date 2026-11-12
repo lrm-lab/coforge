@@ -26,9 +26,11 @@ import {
   AgentActivityProbeSchema,
   AgentInboxPurgeSchema,
   AgentStatusSchema,
+} from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
+import {
   AgentMessageDeliveryAckSchema,
   AgentMessageDeliveryRejectionSchema,
-} from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
+} from "#src/internal/gen/coforge/rpc/v1/agent_delivery_pb";
 import type {
   AgentSessionReport,
   AgentSessionInvalidate,
