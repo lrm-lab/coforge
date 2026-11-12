@@ -14,6 +14,7 @@ import type {
   ArtifactDirectoryInvocation,
   ArtifactDirectoryTransport,
 } from "#src/artifact-directory-args";
+import { formatUnseenComments } from "#src/artifact-comment-format";
 import { formatUnseen, type ArtifactReadAnswer } from "#src/artifact-format";
 import { asJson, pullFile, requireCall } from "#src/artifact-transfer";
 import { CliError, invalidArg } from "#src/cli-error";
@@ -74,6 +75,7 @@ export async function runPull(
     `Edit the files there, then send what changed: coforge artifact push ${shellWord(shown)}`,
     // Pulling the current version moves the Agent's read position, as a read does.
     ...(answer.unseen ? formatUnseen(answer.unseen) : []),
+    ...formatUnseenComments(id, answer.unseenComments),
   ];
   return asJson(
     invocation,

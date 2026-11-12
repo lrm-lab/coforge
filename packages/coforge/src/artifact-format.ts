@@ -1,4 +1,6 @@
 import { foldUntrustedLine, formatUtcTimestamp } from "@lrm/coforge-sdk/internal";
+import { formatUnseenComments, type UnseenCommentsAnswer } from "#src/artifact-comment-format";
+import { plural } from "#src/plural";
 
 /** What `coforge artifact` prints (task #385). The shapes are the server's answers. */
 
@@ -20,6 +22,9 @@ export type ArtifactReadAnswer = {
   /** What others pushed since the Agent last looked; null for an older version, absent from an
    * older server. */
   unseen?: ArtifactUnseen | null;
+  /** The comments of others the Agent has not read, whichever version is shown; null when the
+   * server could not say, absent from an older one. */
+  unseenComments?: UnseenCommentsAnswer | null;
 };
 
 /** A version someone else pushed since the Agent's read position. */
@@ -125,11 +130,10 @@ export function formatArtifactRead(
     lines.push(`Work on them as files: coforge artifact pull ${artifact.id}`);
   }
   if (read.unseen) lines.push(...formatUnseen(read.unseen));
+  lines.push(...formatUnseenComments(artifact.id, read.unseenComments));
   if (withText) lines.push("---", read.text);
   return lines.join("\n");
 }
-
-const versions = (count: number) => `${count} version${count === 1 ? "" : "s"}`;
 
 /** What `read` and `pull` print of `unseen`: a headline, one line per listed version, and how
  * many earlier ones the list leaves out. */
@@ -147,10 +151,10 @@ export function formatUnseen({
   const earlier = versionCount - shown.length;
   return [
     firstRead
-      ? `You haven't read it before: ${versions(versionCount)} so far. The newest:`
-      : `New since you last looked: ${versions(versionCount)}`,
+      ? `You haven't read it before: ${plural(versionCount, "version")} so far. The newest:`
+      : `New since you last looked: ${plural(versionCount, "version")}`,
     ...shown.map(unseenLine),
-    ...(earlier > 0 ? [`- … ${versions(earlier)} earlier`] : []),
+    ...(earlier > 0 ? [`- … ${plural(earlier, "version")} earlier`] : []),
   ];
 }
 

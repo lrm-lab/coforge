@@ -1,4 +1,5 @@
 import { foldUntrustedLine, frameUntrustedText } from "@lrm/coforge-sdk/internal";
+import { plural } from "./plural";
 import { agoLabel } from "./workspace-info-format";
 import type {
   AgentInboxItem,
@@ -47,8 +48,6 @@ function rowOf(parts: string[], open: string): Row {
     next: `open the first conversation above: ${open}`,
   };
 }
-
-const plural = (count: number, one: string) => `${count} ${count === 1 ? one : `${one}s`}`;
 
 function formatAgo(iso: string | null, nowMs: number): string | null {
   const at = iso ? new Date(iso) : undefined;

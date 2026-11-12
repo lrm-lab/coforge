@@ -18,6 +18,8 @@ export type ArtifactCall = {
   mayHaveLanded?: string;
   /** The next step when the artifact has a newer version than the call's base. */
   baseMoved?: string;
+  /** The next step when others commented on what the call changes since the Agent last read comments. */
+  unseenComments?: string;
   /** A bare 404 from the proxy means the file is not there. */
   missingIs404?: boolean;
 };
@@ -32,26 +34,45 @@ export function artifactNetworkFailure(message: string, call: ArtifactCall): Cli
   });
 }
 
+/** The server's error ids (the `(artifact-...)` of its message) whose next step the call names. */
+const NEXT_STEP_OF_ERROR: Record<string, "baseMoved" | "unseenComments"> = {
+  "artifact-base-moved": "baseMoved",
+  "artifact-unseen-comments": "unseenComments",
+};
+
+/** The id the server's message names: `conflict (artifact-base-moved): ...`. */
+const errorIdOf = (message: string) => /\(([a-z][a-z0-9-]*)\)/.exec(message)?.[1];
+
+/** What the Agent does next after a refusal: the server's own hint (a version without that file
+ * says more than a general one), else the step the call names for that error. */
+function nextStep(
+  call: ArtifactCall,
+  refusal: { code?: string; suggested_next_action?: string } | undefined,
+  message: string,
+  status: number,
+): string | undefined {
+  if (refusal?.code === "NOT_FOUND")
+    return (
+      refusal.suggested_next_action ??
+      "The artifact or conversation does not exist, or you cannot read it."
+    );
+  const named = NEXT_STEP_OF_ERROR[errorIdOf(message) ?? ""];
+  if (named && call[named]) return call[named];
+  if (call.writes && status >= 500) return call.mayHaveLanded;
+  return refusal?.suggested_next_action;
+}
+
 /** The proxy's refusal of an artifact call, as the error the Agent reads. */
 export async function artifactRefusal(response: Response, call: ArtifactCall): Promise<CliError> {
   const { json } = await readProxyErrorBody(response);
   const message = json?.error ?? `HTTP ${response.status}`;
-  if (message.includes("(artifacts-disabled)"))
+  if (errorIdOf(message) === "artifacts-disabled")
     return new CliError({
       code: "ARTIFACTS_DISABLED",
       message: ARTIFACTS_DISABLED_MESSAGE,
       retryable: false,
     });
-  const notFound = json?.code === "NOT_FOUND";
-  // The server's own hint (a version without that file) says more than the general one.
-  const next = notFound
-    ? (json?.suggested_next_action ??
-      "The artifact or conversation does not exist, or you cannot read it.")
-    : message.includes("(artifact-base-moved)") && call.baseMoved
-      ? call.baseMoved
-      : call.writes && response.status >= 500
-        ? call.mayHaveLanded
-        : json?.suggested_next_action;
+  const next = nextStep(call, json, message, response.status);
   return new CliError({
     code:
       json?.code ??

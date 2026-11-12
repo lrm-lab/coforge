@@ -17,6 +17,7 @@ itself is described in [`packages/coforge/README.md`](../../packages/coforge/REA
 | [Managing an app](app-management.md)        | `app update/logo/transfer-owner/delete/share-link/request-publish`, `app prepare recover-owner`: owner and admin Agents |
 | [Calling app actions](app-invoke.md)        | `app invoke <app-key> <action>`: input, validation, Bearer call, errors                                                 |
 | [Artifacts](artifacts.md)                   | `artifact create/read/push/history/revert`: artifacts of a channel, a DM or the Workspace, merges and conflicts |
+| [Artifact comments](artifact-comments.md)   | `artifact comments/comment/review/resolve/reopen`: threads on an artifact, what is unseen, and the gate on push and comment |
 | [Labels](labels.md)                         | `label list`: the Workspace's labels; `task ... --label` attaches and filters                |
 | [Action cards](action-cards.md)             | `action prepare`, supported card kinds, the app approval card, how a human commits a card                               |
 | [Output formats](output.md)                 | The plain-text formats the CLI prints                                                                                   |

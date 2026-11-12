@@ -1,9 +1,14 @@
 import { writeFile } from "node:fs/promises";
-import { agentApiRoutes, type AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
+import {
+  agentApiRoutes,
+  artifactOperationTraits,
+  type AgentArtifactRequest,
+} from "@lrm/coforge-sdk/agent";
 import { shellWord } from "#src/artifact-directory";
 import { artifactNetworkFailure, artifactRefusal, type ArtifactCall } from "#src/artifact-failure";
 import { CliError, withOutputMode } from "#src/cli-error";
 import { invalidArgument } from "#src/command-help/index";
+import { optional, parseFlags, type FlagSpec } from "#src/artifact-flags";
 import { requireProxySetup } from "#src/proxy-request";
 import {
   parseDirectoryArgs,
@@ -11,6 +16,14 @@ import {
   type ArtifactDirectoryTransport,
 } from "#src/artifact-directory-args";
 import { runArtifactDirectory } from "#src/artifact-directory-commands";
+import {
+  COMMENT_OPERATIONS,
+  isCommentOperation,
+  parseCommentArgs,
+  type ArtifactCommentInvocation,
+  type CommentOperation,
+} from "#src/artifact-comment-args";
+import { runArtifactComment } from "#src/artifact-comment-commands";
 import {
   formatArtifactCreated,
   formatArtifactHistory,
@@ -27,7 +40,10 @@ import {
  * comes from `--file <path>`, or stdin with `--file -`; the server applies the web page's rules
  * and merges an artifact's save with what others saved since its base.
  */
-export type ArtifactInvocation = ArtifactRequestInvocation | ArtifactDirectoryInvocation;
+export type ArtifactInvocation =
+  | ArtifactRequestInvocation
+  | ArtifactDirectoryInvocation
+  | ArtifactCommentInvocation;
 
 export type ArtifactRequestInvocation = {
   command: "artifact";
@@ -63,29 +79,26 @@ const OPERATIONS = [
   "share",
   "pull",
   "download",
+  ...COMMENT_OPERATIONS,
 ] as const;
 type Operation = (typeof OPERATIONS)[number];
 
-/** Each operation's flags: `text` ones take a string, `count` ones a whole number. */
-const FLAGS: Record<
-  Exclude<Operation, "pull" | "download">,
-  { text: string[]; count: string[]; positional: boolean; bool?: string[] }
-> = {
+/** Each operation's flags. */
+const FLAGS: Record<Exclude<Operation, "pull" | "download" | CommentOperation>, FlagSpec> = {
   create: {
     text: ["--title", "--target", "--file", "--kind", "--description"],
-    count: [],
-    positional: false,
+    positionals: 0,
   },
-  list: { text: ["--target", "--query", "--after"], count: ["--limit"], positional: false },
-  read: { text: ["--output"], count: ["--version"], positional: true, bool: ["--files"] },
+  list: { text: ["--target", "--query", "--after"], count: ["--limit"], positionals: 0 },
+  read: { text: ["--output"], count: ["--version"], bool: ["--files"], positionals: 1 },
   push: {
     text: ["--file", "--title", "--description", "--note", "--label"],
     count: ["--base"],
-    positional: true,
+    positionals: 1,
   },
-  history: { text: [], count: ["--before", "--limit"], positional: true },
-  revert: { text: [], count: ["--to", "--base"], positional: true },
-  share: { text: ["--to", "--target", "--note"], count: [], positional: true },
+  history: { count: ["--before", "--limit"], positionals: 1 },
+  revert: { count: ["--to", "--base"], positionals: 1 },
+  share: { text: ["--to", "--target", "--note"], positionals: 1 },
 };
 
 export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
@@ -94,51 +107,26 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
     throw invalidArgument("artifact", `Unknown artifact command ${args[0] ?? "(none)"}`);
   if (operation === "share") return parseShareArgs(args);
   if (operation === "pull" || operation === "download") return parseDirectoryArgs(args);
+  if (isCommentOperation(operation)) return parseCommentArgs(operation, args.slice(1));
   // `push <id> --base <n> --file <path>` saves one text file over an artifact; without either flag
   // the argument is a directory of files.
   if (operation === "push" && !args.includes("--base") && !args.includes("--file"))
     return parseDirectoryArgs(args);
   const command = `artifact ${operation}`;
   const flags = FLAGS[operation];
-  const text: Record<string, string> = {};
-  const count: Record<string, number> = {};
-  let artifact: string | undefined;
-  let json = false;
-  const switches = new Set<string>();
-  for (let index = 1; index < args.length; index += 1) {
-    const arg = args[index]!;
-    if (arg === "--json") {
-      json = true;
-      continue;
-    }
-    if (flags.bool?.includes(arg)) {
-      switches.add(arg);
-      continue;
-    }
-    if (!arg.startsWith("--") && flags.positional && artifact === undefined) {
-      artifact = arg;
-      continue;
-    }
-    const value = args[index + 1];
-    const known = flags.text.includes(arg) || flags.count.includes(arg);
-    if (!known) throw invalidArgument(command, `Unexpected argument ${arg}`);
-    if (value === undefined) throw invalidArgument(command, `${arg} needs a value`);
-    if (arg in text || arg in count) throw invalidArgument(command, `${arg} is given twice`);
-    if (flags.count.includes(arg)) {
-      if (!/^(0|[1-9]\d*)$/.test(value) || !Number.isSafeInteger(Number(value)))
-        throw invalidArgument(command, `${arg} takes a version number, not "${value}"`);
-      count[arg] = Number(value);
-    } else text[arg] = value;
-    index += 1;
-  }
-  if (flags.positional && !artifact)
+  const {
+    positionals: [artifact],
+    text,
+    count,
+    switches,
+    json,
+  } = parseFlags(command, args.slice(1), flags);
+  if (flags.positionals && !artifact)
     throw invalidArgument(command, "Name the artifact: its id, as create printed it");
   const need = (flag: string) => {
     if (count[flag] === undefined) throw invalidArgument(command, `${flag} is required`);
     return count[flag]!;
   };
-  const optional = <T>(key: string, value: T | undefined) =>
-    value === undefined ? {} : { [key]: value };
   const options = { ...optional("file", text["--file"]), ...(json ? { json: true } : {}) };
   switch (operation) {
     case "create": {
@@ -273,6 +261,7 @@ export async function runArtifact(
 ): Promise<unknown> {
   if (!transport.artifact) throw new Error("Artifact transport is unavailable");
   if ("directory" in invocation) return runArtifactDirectory(invocation, transport);
+  if ("comment" in invocation) return runArtifactComment(invocation, transport, readText);
   const draft = invocation.request;
   const text = invocation.file === undefined ? undefined : await readText(invocation.file);
   const request = {
@@ -377,10 +366,10 @@ export async function artifactRequest(
 ): Promise<unknown> {
   requireProxySetup("artifact", context, proxyUrl);
   const route = agentApiRoutes.proxy.artifacts;
-  // Create, push and revert change something, and none of them is replayed when run again: one
-  // that failed on the way may still have landed. Read, list and history only read.
-  const writes =
-    request.operation !== "read" && request.operation !== "list" && request.operation !== "history";
+  // Anything but a read changes something, and none of it is replayed when run again: one that
+  // failed on the way may still have landed.
+  const traits = artifactOperationTraits(request.operation);
+  const writes = !traits.readOnly;
   const call: ArtifactCall = {
     label: `artifact ${request.operation}`,
     writes,
@@ -388,6 +377,10 @@ export async function artifactRequest(
     ...("artifact" in request
       ? {
           baseMoved: `The artifact has a newer version than --base: read it (coforge artifact read ${request.artifact}) and use the version it prints.`,
+          // Others commented on what this changes or answers since the Agent last read comments.
+          ...(traits.gatedByComments
+            ? { unseenComments: `Read them first: coforge artifact comments ${request.artifact}` }
+            : {}),
         }
       : {}),
   };
@@ -408,9 +401,11 @@ export async function artifactRequest(
 }
 
 function mayHaveLanded(request: AgentArtifactRequest): string {
-  return "artifact" in request
-    ? `The change may have landed: read the artifact (coforge artifact read ${request.artifact}) before trying again.`
-    : "artifactIds" in request
-      ? "The artifact share may have landed: read the target conversation before trying again."
-      : "The artifact may have been made, and creating it again makes a second one: check the conversation's artifacts on the web page first.";
+  if ("artifactIds" in request)
+    return "The artifact share may have landed: read the target conversation before trying again.";
+  if (!("artifact" in request))
+    return "The artifact may have been made, and creating it again makes a second one: check the conversation's artifacts on the web page first.";
+  return artifactOperationTraits(request.operation).commentWrite
+    ? `The comment may have landed: read the comments (coforge artifact comments ${request.artifact} --all) before trying again.`
+    : `The change may have landed: read the artifact (coforge artifact read ${request.artifact}) before trying again.`;
 }

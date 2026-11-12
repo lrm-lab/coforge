@@ -5,9 +5,10 @@ const FILE = "--file <path>  the artifact's text; `-` reads it from stdin (a quo
 /** The `artifact` family's help (task #385): artifacts kept in a channel, a DM or the Workspace. */
 export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
-    syntax: "coforge artifact create|list|read|push|history|revert|pull|download ...",
+    syntax:
+      "coforge artifact create|list|read|push|history|revert|pull|download|comments|comment|review|resolve|reopen ...",
     guidance:
-      "An artifact is Markdown text kept in a channel, a DM, or the Workspace, with every version; a web page (`create --kind html`) is one HTML file kept the same way. Whoever can read the conversation reads it; its members write an artifact, Agents a web page. To work on one as files, `pull` it into a directory, edit, and `push` the directory: only the files that changed are sent. The Workspace must have artifacts switched on (Settings > Experiments).",
+      "An artifact is Markdown text kept in a channel, a DM, or the Workspace, with every version; a web page (`create --kind html`) is one HTML file kept the same way. Whoever can read the conversation reads it; its members write an artifact, Agents a web page. To work on one as files, `pull` it into a directory, edit, and `push` the directory: only the files that changed are sent. People and Agents comment on an artifact: `comments` reads what others wrote, `comment` and `review` write, `resolve` closes a thread. The Workspace must have artifacts switched on (Settings > Experiments).",
     example: "coforge artifact pull 0f8c…e1 --dir plan && coforge artifact push plan",
   },
   "artifact list": {
@@ -73,7 +74,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--include-hidden  send files and folders that start with . too (the state file never goes)",
     ],
     guidance:
-      "In a directory from `pull`, sends only the files whose hash differs from the pulled one, as a new version over the version pulled; a file missing from the directory is kept, not deleted. A push over an older version keeps what others changed in files you did not touch; when you and someone else changed the same file or setting it is refused (artifact-agent-base-moved) and names the files: pull the newest version, redo the change, push again. Without that state file, creates a new artifact from the directory. On success the state file moves to the new version.\nOlder form: `coforge artifact push <id> --base <version> [--file <path>|-]` saves one text over version --base (--title, --description, --note, --label also apply); the same refusal applies.",
+      "In a directory from `pull`, sends only the files whose hash differs from the pulled one, as a new version over the version pulled; a file missing from the directory is kept, not deleted. A push over an older version keeps what others changed in files you did not touch; when you and someone else changed the same file or setting it is refused (artifact-agent-base-moved) and names the files: pull the newest version, redo the change, push again. Without that state file, creates a new artifact from the directory. On success the state file moves to the new version.\nOlder form: `coforge artifact push <id> --base <version> [--file <path>|-]` saves one text over version --base (--title, --description, --note, --label also apply); the same refusal applies.\nA push is also refused (artifact-unseen-comments) while others commented, since you last ran `coforge artifact comments`, on a file it changes or on the whole artifact: the refusal counts them; read them, then push again.",
     example: "coforge artifact push plan --note 'moved the date'",
   },
   "artifact download": {
@@ -97,8 +98,57 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--to  the version to go back to",
       "--base  the current version, which must still be current",
     ],
-    guidance: "Saves version --to's text and settings as a new version; nothing is rewritten.",
+    guidance:
+      "Saves version --to's text and settings as a new version; nothing is rewritten. Unlike a push, it is not held up by comments you have not read.",
     example: "coforge artifact revert 0f8c…e1 --to 2 --base 5",
+  },
+  "artifact comments": {
+    syntax:
+      "coforge artifact comments <id> [--path <file>] [--all] [--review <id>] [--after <cursor>] [--json]",
+    flags: [
+      "--path  only this file's comments: its first comments and their replies",
+      "--all  every comment, yours and deleted ones included, without moving what you have read",
+      "--review  the comments of one review, with its summary; also moves nothing",
+      "--after  the next page: the cursor the previous page named",
+    ],
+    guidance:
+      "Prints the comments others wrote on the artifact since you last read them, oldest first, 50 a page, as threads: `c_<id> @author vN file:lines (date)`, the words indented under it, replies beneath their first comment. Reading the whole list (no --path, --review or --all) marks every comment it prints as read, which is what lets a push or comment through again (artifact-unseen-comments); read them again with --all if you need them. A page with more says the command for the next one. `read` shows how many are waiting but does not mark them read.",
+    example: "coforge artifact comments 0f8c…e1",
+  },
+  "artifact comment": {
+    syntax:
+      "coforge artifact comment <id> [--path <file>] [--lines <n|a-b>] [--reply-to <comment>] [--rev <n>] [--json]",
+    flags: [
+      "--path  the file the comment is about; none is the whole artifact",
+      "--lines  the line (`4`) or lines (`3-5`) of the file it points at, 1-based; needs --path, or --reply-to for a reply in that comment's file",
+      "--reply-to  a comment's id, as comments printed it (c_<id>): joins its thread, in its file; a reply to a resolved thread reopens it",
+      "--rev  the version it is about; the current one by default",
+    ],
+    guidance:
+      "The comment's words come from stdin, as a quoted here-document. Anyone who can read the artifact may comment, up to 8000 characters. Refused (artifact-unseen-comments) while others commented on the same file, thread or the whole artifact since you last read comments: read them first.",
+    example:
+      "coforge artifact comment 0f8c…e1 --path plan.md --lines 3-5 <<'EOF'\nThis date clashes with the launch.\nEOF",
+  },
+  "artifact review": {
+    syntax: "coforge artifact review <id> [--rev <n>] [--json]",
+    flags: ["--rev  the version it is about; the current one by default"],
+    guidance:
+      'Posts several comments at once, all or none, under one summary. The JSON comes from stdin: { "body": "summary", "comments": [...] } or just the array; each comment has body and optionally path, lines (`4` or `"3-5"`, or anchor), and replyTo. One to 50 comments; a refusal names the comment by its index and nothing is written. Prints the review\'s id (`comments --review <id>` reads it) and each comment\'s.',
+    example:
+      'coforge artifact review 0f8c…e1 <<\'EOF\'\n{"body":"Three notes","comments":[{"body":"Typo","path":"plan.md","lines":2},{"body":"Looks good overall"}]}\nEOF',
+  },
+  "artifact resolve": {
+    syntax: "coforge artifact resolve <id> <comment> [--note <text>] [--json]",
+    flags: ["--note  posted first, as a reply in the thread"],
+    guidance:
+      "Closes a thread: name its first comment (a reply is refused, naming its first comment). Allowed for the thread's author and the artifact's author. A thread already resolved is left as it is and no note is posted. Resolve after you answered or acted on the comment.",
+    example: "coforge artifact resolve 0f8c…e1 c_01a1…37f --note 'Fixed in version 4.'",
+  },
+  "artifact reopen": {
+    syntax: "coforge artifact reopen <id> <comment> [--json]",
+    guidance:
+      "Opens a resolved thread again, for the same people who may resolve it. A reply to a resolved thread reopens it too.",
+    example: "coforge artifact reopen 0f8c…e1 c_01a1…37f",
   },
   "artifact share": {
     syntax: "coforge artifact share <id>... --to <target>... [--note <text>] [--json]",

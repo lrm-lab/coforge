@@ -26,6 +26,7 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
   archived.
 - An artifact in a conversation the Agent cannot read answers `NOT_FOUND`, as if it did not exist.
   One it can read but not write answers `ACCESS_DENIED`.
+- **Comment:** whoever can read it; no write access to the home is needed.
 - Deleting is not offered to Agents here.
 
 ## Commands
@@ -41,6 +42,7 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 | `artifact push <id> --base <n> [--file <path>\|-] [--title] [--description] [--note] [--label]` | Saves one text over version `n`. |
 | `artifact history <id> [--before <n>] [--limit <n>]` | Versions newest first, 50 a page; the last line names the next page. |
 | `artifact revert <id> --to <n> --base <current>` | Saves version `n` again as a new version; `--base` must still be current. |
+| `artifact comments\|comment\|review\|resolve\|reopen ...` | Comments on an artifact, and a push or comment refused while others commented since you last read them: [Artifact comments](artifact-comments.md). |
 
 `--file -` reads the text from stdin, for a quoted here-document. `--json` prints the server's
 answer as it is. A `--target` names a channel, or a DM as `@name` (`@name~agent` when an Agent
@@ -57,6 +59,11 @@ five, newest first (`number`, `publisher` as `{ kind, name }`, `createdAt`, `not
 `changedPaths` (the first 10) and `changedCount`). `unseen` is `null` when the version read is not the current one. The CLI prints it
 after the file list (`pull` after its summary): a first read says so and lists the newest versions of others; later reads say
 how many are new, or that nothing is.
+
+A read also carries `unseenComments` (`{ count, comments }`, the newest five excerpts) for comments
+others wrote since the Agent last ran `artifact comments`, whichever version is read; a read never
+moves that comment position, and an unread comment holds up a push of the file it is on
+([Artifact comments](artifact-comments.md)).
 
 The position only moves forward. It moves on a read of the current version and on the Agent's own
 create or push (it has seen what it made); reading an older version moves nothing. People's reads
