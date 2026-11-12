@@ -21,11 +21,10 @@ import { isRefusedCredentialText } from "./launch-credential-refusal";
 
 /**
  * Reads the classified launch evidence the agent SDK attaches to a `PiLaunchError` (see
- * packages/agent/src/launch-error.ts), on the error itself or on the error it is the `cause` of
- * (the Pi provider wraps it in a typed launch error), as structured log fields.
+ * packages/agent/src/launch-error.ts), on the error or on its `cause`, as log fields.
  *
- * The fields are duck-typed and deliberately conservative: only exactly-typed
- * `policyCode`/`trace` members surface; nothing sensitive is ever included.
+ * The fields are duck-typed and conservative: only exactly-typed `policyCode`/`trace` members
+ * surface; nothing sensitive is included.
  */
 export type LaunchFailureTrace = {
   /** e.g. "PI_LAUNCH_MODEL_MISSING" — only set when the SDK classified the launch. */
@@ -121,17 +120,17 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.STARTUP_DEADLINE_EXCEEDED,
 ];
 
-/** The reasons a launch failure carries when no typed error named the cause, so the runtime's own
- * words are the only evidence of why it would not start (`launch-credential-refusal.ts`). */
+/** The reasons that carry the runtime's own words, no typed error having named the cause
+ * (`launch-credential-refusal.ts`). */
 const TEXT_ONLY_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_START_FAILED,
   LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED,
 ];
 
 /**
- * Launch failure reasons a managed Start does not retry: no attempt can succeed until a person
- * changes something on the Computer. Every other reason keeps the same attempts and backoff
- * (`launch-failure-backoff.ts`), because a transient cause may clear between attempts.
+ * Reasons a managed Start does not retry: no attempt can succeed until a person changes something
+ * on the Computer. The rest keep their attempts and backoff (`launch-failure-backoff.ts`), since a
+ * transient cause may clear between them.
  */
 export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED,
@@ -153,7 +152,8 @@ export function isNonRetryableLaunchFailure(error: unknown): boolean {
   return false;
 }
 
-/** The session report was refused by the server because this launch, daemon instance or request is no longer current. */
+/** The server refused the session report: this launch, daemon instance or request is no longer
+ * current. */
 export class AgentSessionSupersededError extends Error {
   constructor(message = "Agent session launch was superseded") {
     super(message);
@@ -162,8 +162,8 @@ export class AgentSessionSupersededError extends Error {
 }
 
 /** The server did not hand this launch its configuration and Agent API key. The reason code stays
- * one; what actually happened is kept so a Computer that could not reach the server is not told
- * to upgrade. */
+ * one; what happened is kept so a Computer that could not reach the server is not told to
+ * upgrade. */
 export class AgentAuthorizationError extends Error {
   readonly code = LAUNCH_FAILURE_REASON.AGENT_AUTHORIZATION_FAILED;
   readonly failure: AgentConfigFailure | undefined;
@@ -177,15 +177,15 @@ export class AgentAuthorizationError extends Error {
   }
 }
 
-/** Whether the refusal says this Computer's version is the problem: only then does the
- * explanation suggest an upgrade. */
+/** Whether the refusal blames this Computer's version, the only case that suggests an
+ * upgrade. */
 function namesVersionRefusal(error: AgentAuthorizationError): boolean {
   return /version/iu.test(error.upstreamCode ?? "") || /version/iu.test(error.message);
 }
 
-/** The server's own refusal code, when the error carries one: the launch route answers a refused
- * handshake with a stable code (`AGENT_LAUNCH_SUPERSEDED` and friends), and writing it down is
- * what lets a refused relaunch name its fence afterwards (task #14). */
+/** The server's own refusal code: the launch route answers a refused handshake with a stable code
+ * (`AGENT_LAUNCH_SUPERSEDED` and friends), which a refused relaunch quotes as its fence
+ * (task #14). */
 export function launchFailureUpstreamCode(error: unknown): string | undefined {
   if (error instanceof AgentAuthorizationError) return error.upstreamCode;
   if (error && typeof error === "object" && "upstreamCode" in error)
@@ -207,10 +207,9 @@ export function launchFailureReason(error: unknown): LaunchFailureReason {
   const typed =
     TYPED_REASONS.find((reason) => hasErrorCode(error, reason)) ??
     LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED;
-  // A rejected API key or a login the runtime lost reaches the daemon as the provider's words in a
-  // start failure. No retry can fix it: the launch ladder would spend its attempts on a sign-in
-  // only a person can restore, and the Agent's page would say the launch failed where it has the
-  // words for the sign-in (task #39).
+  // A rejected API key or a lost login reaches the daemon as the provider's words in a start
+  // failure. No retry can fix it: the ladder would spend its attempts on a sign-in only a person
+  // can restore, where the page has the words for it (task #39).
   if (TEXT_ONLY_LAUNCH_FAILURE_REASONS.includes(typed) && isRefusedCredentialText(error))
     return LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED;
   return typed;

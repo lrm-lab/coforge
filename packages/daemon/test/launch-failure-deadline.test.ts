@@ -42,16 +42,16 @@ test("a streak's clock starts at its first failure and never restarts on a later
   backoff.recordFailure("a", started + 600_000);
   // Two attempts in: the second did not push the clock forward.
   expect(backoff.streakStart("a")).toBe(started);
-  expect(backoff.exhausted("a", 7, started + 600_000 + 1, DEADLINE)).toBe(false);
-  expect(backoff.exhausted("a", 7, started + DEADLINE, DEADLINE)).toBe(true);
+  expect(backoff.exhaustedBy("a", 7, started + 600_000 + 1, DEADLINE)).toBeUndefined();
+  expect(backoff.exhaustedBy("a", 7, started + DEADLINE, DEADLINE)).toBe("deadline");
 });
 
 test("a success clears the streak, so the next failure is not already overdue", () => {
   const backoff = new LaunchFailureBackoff();
   backoff.recordFailure("a", 0);
-  expect(backoff.exhausted("a", 7, DEADLINE, DEADLINE)).toBe(true);
+  expect(backoff.exhaustedBy("a", 7, DEADLINE, DEADLINE)).toBe("deadline");
   backoff.reset("a");
-  expect(backoff.exhausted("a", 7, DEADLINE, DEADLINE)).toBe(false);
+  expect(backoff.exhaustedBy("a", 7, DEADLINE, DEADLINE)).toBeUndefined();
   expect(backoff.streakStart("a")).toBeUndefined();
 });
 
@@ -60,10 +60,10 @@ test("the window ends the attempts by time, not only by count", () => {
   backoff.recordFailure("a", 0);
   // Three slow attempts: the count cap has room, the window does not.
   expect(backoff.attempts("a")).toBe(1);
-  expect(backoff.exhausted("a", 7, DEADLINE - 1, DEADLINE)).toBe(false);
-  expect(backoff.exhausted("a", 7, DEADLINE, DEADLINE)).toBe(true);
+  expect(backoff.exhaustedBy("a", 7, DEADLINE - 1, DEADLINE)).toBeUndefined();
+  expect(backoff.exhaustedBy("a", 7, DEADLINE, DEADLINE)).toBe("deadline");
   // Without a window it is the old behaviour: only the count decides.
-  expect(backoff.exhausted("a", 7, DEADLINE)).toBe(false);
+  expect(backoff.exhaustedBy("a", 7, DEADLINE)).toBeUndefined();
 });
 
 test("fast failures still walk the whole ladder inside the window", () => {
@@ -72,13 +72,13 @@ test("fast failures still walk the whole ladder inside the window", () => {
   for (let attempt = 1; attempt <= 6; attempt += 1) {
     backoff.recordFailure("a", now);
     // A failure that returns in a second is nowhere near the window, so the count still has room.
-    expect(backoff.exhausted("a", 7, now + 1_000, DEADLINE)).toBe(false);
+    expect(backoff.exhaustedBy("a", 7, now + 1_000, DEADLINE)).toBeUndefined();
     now += 1_000;
   }
   backoff.recordFailure("a", now);
   expect(backoff.attempts("a")).toBe(7);
   // The seventh failure is the count cap's business, not the window's.
-  expect(backoff.exhausted("a", 7, now, DEADLINE)).toBe(true);
+  expect(backoff.exhaustedBy("a", 7, now, DEADLINE)).toBe("streak");
 });
 
 test("a wait on a recovery time spends none of the window", () => {
@@ -88,11 +88,11 @@ test("a wait on a recovery time spends none of the window", () => {
   const WAIT = 3 * 60 * 60_000;
   backoff.recordFailure("a", 0, WAIT);
   expect(backoff.streakStart("a")).toBe(WAIT);
-  expect(backoff.exhausted("a", 7, WAIT - 1, DEADLINE)).toBe(false);
+  expect(backoff.exhaustedBy("a", 7, WAIT - 1, DEADLINE)).toBeUndefined();
   // Still not used up a minute into the attempts that follow the wait...
-  expect(backoff.exhausted("a", 7, WAIT + 60_000, DEADLINE)).toBe(false);
+  expect(backoff.exhaustedBy("a", 7, WAIT + 60_000, DEADLINE)).toBeUndefined();
   // ...and every failure after the wait measures from the same start, so the window still ends.
   backoff.recordFailure("a", WAIT + 60_000);
   expect(backoff.streakStart("a")).toBe(WAIT);
-  expect(backoff.exhausted("a", 7, WAIT + DEADLINE, DEADLINE)).toBe(true);
+  expect(backoff.exhaustedBy("a", 7, WAIT + DEADLINE, DEADLINE)).toBe("deadline");
 });

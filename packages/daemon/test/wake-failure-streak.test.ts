@@ -140,9 +140,9 @@ test("failures that wait on a named quota reset do not count toward the cap", as
       beginWakeLaunch(AGENT, Promise.reject(quota), new Set(), failures),
     ).rejects.toThrow("usage limit");
 
-  expect(failures.exhausted(AGENT, WAKE_FAILURE_STREAK_CAP)).toBe(false);
+  expect(failures.exhaustedBy(AGENT, WAKE_FAILURE_STREAK_CAP)).toBeUndefined();
   await expect(
     beginWakeLaunch(AGENT, Promise.reject(new Error("spawn blew up")), new Set(), failures),
   ).rejects.toThrow("spawn blew up");
-  expect(failures.exhausted(AGENT, WAKE_FAILURE_STREAK_CAP)).toBe(false);
+  expect(failures.exhaustedBy(AGENT, WAKE_FAILURE_STREAK_CAP)).toBeUndefined();
 });
