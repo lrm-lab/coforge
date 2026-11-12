@@ -2,13 +2,8 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import {
-  TARGET_CONVERSATION_SELECT,
-  conversationTarget,
-  deliveryTarget,
-} from "#src/server/db/repositories/direct-conversation-agent-message.server";
-import { directTargets } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
-import { AgentDeliveryPublisher, agentDeliveryPush } from "./agent-delivery.server";
+import { AgentDeliveryPublisher } from "./agent-delivery.server";
+import { wakeCardAuthor } from "./action-card-outcome-wake.server";
 import { publishActionCardUpdate } from "./action-card-message.server";
 import { CentrifugoConversationRealtime } from "./conversation-realtime.server";
 
@@ -73,58 +68,15 @@ async function deliverExpired(
   publisher: AgentDeliveryPublisher | undefined,
   card: ExpiredCard,
 ) {
-  const [message, agent] = await Promise.all([
-    db.message.findUnique({
-      where: { id: card.messageId },
-      select: {
-        id: true,
-        sequence: true,
-        threadRootId: true,
-        conversation: { select: TARGET_CONVERSATION_SELECT },
-      },
-    }),
-    db.agent.findUnique({ where: { id: card.preparedByAgentId }, select: { computerId: true } }),
-  ]);
-  if (!message) return;
   const payload = card.payload as { prompt?: string } | null;
-  const delivery = await db.agentMessageDelivery.create({
-    data: {
-      workspaceId: card.workspaceId,
-      conversationId: card.conversationId,
-      agentId: card.preparedByAgentId,
-      messageId: card.messageId,
-      sequence: message.sequence,
-      reason: "expired",
-    },
-    select: { deliveryId: true, createdAt: true, reason: true },
-  });
-  const targetOf = await directTargets(db, card.workspaceId, card.preparedByAgentId, [
-    message.conversation,
-  ]);
-  const target = deliveryTarget(
-    conversationTarget(message.conversation, targetOf),
-    message.threadRootId,
+  await wakeCardAuthor(
+    db,
+    publisher,
+    card,
+    "expired",
+    (target) =>
+      `Your action card "${payload?.prompt ?? "a card"}" expired in ${target}: nobody answered it.`,
   );
-  if (!publisher) return;
-  await publisher.publish(card.workspaceId, [
-    agentDeliveryPush({
-      computerId: agent?.computerId ?? null,
-      requestId: card.messageId,
-      conversationId: card.conversationId,
-      agentId: card.preparedByAgentId,
-      messageId: card.messageId,
-      deliveryId: delivery.deliveryId,
-      sequence: message.sequence,
-      reason: delivery.reason,
-      createdAtMs: delivery.createdAt.getTime(),
-      body: `Your action card "${payload?.prompt ?? "a card"}" expired in ${target}: nobody answered it.`,
-      mentions: [],
-      target,
-      latestSenderKind: "system",
-      latestSenderHandle: "",
-      latestSenderDescription: "",
-    }),
-  ]);
 }
 
 /** How often the sweep looks for expired cards; the state itself is exact. */
