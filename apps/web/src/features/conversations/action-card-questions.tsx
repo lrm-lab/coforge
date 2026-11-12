@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, SlashCircle01 } from "@untitledui/icons";
+import { AlertCircle } from "@untitledui/icons";
 import type { OpenPersonProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Fold } from "#src/components/ui/fold";
-import { ActorName } from "#src/features/avatars/actor-name";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
@@ -18,7 +17,7 @@ import {
 import { dropDrafts, keepDrafts, keptDrafts } from "./action-card-questions-drafts";
 import { QuestionsStepper } from "./action-card-questions-stepper";
 import { WaitingOn } from "./action-card-waiting-on";
-import { cardActor } from "./action-card-actor";
+import { CardOutcome } from "./action-card-outcome";
 import { focusIgnore, IgnoredLine } from "./action-card-ignored";
 import { useUndoableIgnore } from "./use-undoable-ignore";
 
@@ -258,7 +257,7 @@ export function QuestionsActionCard({
               </Button>
             </div>
           )}
-          {!pending && <ClosedReason view={view} />}
+          {!pending && <CardOutcome view={view} />}
         </div>
       </Fold>
       <p role="status" className="sr-only">
@@ -266,30 +265,6 @@ export function QuestionsActionCard({
       </p>
     </div>
   );
-}
-
-/** Under a card closed without answers, why, in gray; under an answered one, who answered when
- * it was someone else. */
-function ClosedReason({ view }: { view: QuestionsView }) {
-  const reason =
-    view.state === "cancelled"
-      ? m.action_card_cancelled()
-      : view.state === "expired"
-        ? m.action_card_expired()
-        : undefined;
-  if (reason)
-    return (
-      <p className="flex items-center gap-1.5 px-2.5 pb-1 text-sm text-quaternary">
-        <SlashCircle01 aria-hidden="true" className="size-4 shrink-0" />
-        {reason}
-      </p>
-    );
-  const by = view.asked?.isViewer ? undefined : view.committedBy;
-  return by ? (
-    <p className="truncate px-2.5 pb-1 text-xs text-quaternary">
-      <ActorName actor={cardActor(by)} />
-    </p>
-  ) : null;
 }
 
 const NO_DRAFTS: Record<string, Draft> = {};

@@ -1,14 +1,14 @@
 import { useLayoutEffect, useState } from "react";
-import { CheckCircle, SlashCircle01 } from "@untitledui/icons";
+import { CheckCircle } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { cn } from "#src/lib/utils";
-import { m } from "#src/paraglide/messages";
 import { AnsweredAtTooltip } from "./action-card-answered-at";
 import { cardActor } from "./action-card-actor";
+import { CardOutcome } from "./action-card-outcome";
 
 type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
 
@@ -19,13 +19,6 @@ export function chosenAnswer(view: ChoiceView): string | undefined {
   return view.options.find((option) => option.id === view.result?.optionId)?.label;
 }
 
-/** What stands in for the answer on a card closed without one, in gray: withdrawn or run out. */
-function closedWithoutAnswer(view: ChoiceView): string | undefined {
-  if (view.state === "cancelled") return m.action_card_cancelled();
-  if (view.state === "expired") return m.action_card_expired();
-  return undefined;
-}
-
 /**
  * The handled card: still a card, as Frank asked (11-04), so a question that was asked and answered
  * reads as one. The question on top, two lines at most (a press on a cut question shows the rest);
@@ -34,7 +27,6 @@ function closedWithoutAnswer(view: ChoiceView): string | undefined {
  * and says when.
  */
 export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: string }) {
-  const closed = closedWithoutAnswer(view);
   const answeredBy = view.asked?.isViewer ? undefined : view.committedBy;
   const [expanded, setExpanded] = useState(false);
   const [cut, setCut] = useState(false);
@@ -75,12 +67,6 @@ export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: str
       </span>
     </span>
   );
-  const closedLine = closed && (
-    <span className="flex items-center gap-1.5 text-quaternary">
-      <SlashCircle01 aria-hidden="true" className="size-4 shrink-0" />
-      {closed}
-    </span>
-  );
   return (
     <div className="flex flex-col gap-2 px-3 py-2.5 text-sm wrap-anywhere">
       <div className="font-semibold text-secondary">
@@ -98,18 +84,8 @@ export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: str
         )}
       </div>
       {answer === undefined ? (
-        closedLine &&
-        (view.committedAt ? (
-          // Who closed it and when, as an answer's tooltip says (task #472).
-          <AnsweredAtTooltip
-            at={view.committedAt}
-            by={view.committedBy?.isViewer ? undefined : view.committedBy}
-          >
-            {closedLine}
-          </AnsweredAtTooltip>
-        ) : (
-          closedLine
-        ))
+        // Closed without an answer: ignored by the person asked, withdrawn, or run out (task #94).
+        <CardOutcome view={view} className="" />
       ) : view.committedAt ? (
         <AnsweredAtTooltip at={view.committedAt} by={answeredBy}>
           {outcome}
