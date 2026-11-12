@@ -158,8 +158,15 @@ export function useQuestionSwipe({
       offset.current = 0;
       // A turn renders the page that came in as the current one, exactly where it landed; one
       // that snapped back goes back to the classes' rest.
-      if (turn) onTurn(turn);
-      else rest(found);
+      if (turn) {
+        // The pages that turned remount under new keys; the one on the far side stays mounted as
+        // a neighbour, so it goes back to the classes' rest itself.
+        const far = turn > 0 ? found.previous : found.next;
+        far?.style.removeProperty("transition");
+        far?.style.removeProperty("transform");
+        far?.style.removeProperty("visibility");
+        onTurn(turn);
+      } else rest(found);
     };
     if (!ms) return done();
     settling.current = { timer: setTimeout(done, ms), turn };
