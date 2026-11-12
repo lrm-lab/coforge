@@ -3,6 +3,18 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
+
+/** A frame of the phone, for the delivery's before/after (task #91). */
+async function shot(
+  page: { command: <T>(method: string, params?: object) => Promise<T> },
+  name: string,
+) {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const dir = `${import.meta.dir}/../../../.amp/e2e/questions-card-phone`;
+  await mkdir(dir, { recursive: true });
+  const { data } = await page.command<{ data: string }>("Page.captureScreenshot", {});
+  await writeFile(`${dir}/${name}.png`, Buffer.from(data, "base64"));
+}
 import { devBrowserWorkspace } from "./helpers/browser-e2e";
 
 /**
@@ -190,8 +202,41 @@ test("a questions card on a phone: an @mention to wait on, keys to press, the ca
         `getComputedStyle(${card}.querySelector('[data-question-peek]')).visibility`,
       ),
     ).toBe("visible");
+    // The question is the finger, one to one (task #91).
+    const offset = () =>
+      page.evaluate<number>(
+        `new DOMMatrixReadOnly(getComputedStyle(${card}.querySelector('[data-question="region"]')).transform).m41`,
+      );
+    await until(async () => Math.round(await offset()) === -120);
+    // Held still a moment, so the frame shows what the finger sees once painted.
+    await new Promise((r) => setTimeout(r, 400));
+    await shot(page, "swipe-120");
     await touch("touchEnd", at.x - 120);
     await until(() => page.evaluate<boolean>(shown("checks")));
+    // A short, slow drag snaps back: the question stays, and comes to rest where it was.
+    const back = await page.evaluate<{ x: number; y: number }>(`(() => {
+      const box = ${card}.querySelector('[data-question="checks"]').getBoundingClientRect();
+      return { x: box.left + box.width * 0.5, y: box.top + 40 };
+    })()`);
+    const slow = (type: string, x: number) =>
+      page.command("Input.dispatchTouchEvent", {
+        type,
+        touchPoints: type === "touchEnd" ? [] : [{ x, y: back.y }],
+      });
+    await slow("touchStart", back.x);
+    for (const step of [10, 20, 30, 40]) {
+      await slow("touchMove", back.x - step);
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    await new Promise((r) => setTimeout(r, 150));
+    await slow("touchEnd", back.x - 40);
+    await new Promise((r) => setTimeout(r, 450));
+    expect(await page.evaluate<boolean>(shown("checks"))).toBe(true);
+    expect(
+      await page.evaluate<string>(
+        `${card}.querySelector('[data-question="checks"]').style.transform`,
+      ),
+    ).toBe("");
     expect(await height()).toBe(before);
 
     // The @mention opens whom it names, as one in a message does (task #563).

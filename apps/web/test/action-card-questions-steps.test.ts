@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 
 import {
-  dragOffset,
   moveStep,
+  releaseTurn,
+  settleMs,
   swipeAxis,
-  swipeDelta,
+  trackOffset,
 } from "#src/features/conversations/action-card-questions-steps";
 
 // Four questions: steps 0–3, the last one 3.
@@ -16,16 +17,6 @@ test("a questions card's steps run from the first question to the last, no furth
   expect(moveStep(3, -1, 3)).toBe(2);
 });
 
-test("a sideways swipe turns a step, a short or mostly vertical one does not (task #515)", () => {
-  // Leftward: on to the next step; rightward: back.
-  expect(swipeDelta(-80, 10)).toBe(1);
-  expect(swipeDelta(80, -10)).toBe(-1);
-  // Too short to be meant.
-  expect(swipeDelta(-30, 0)).toBe(0);
-  // A scroll that drifts sideways.
-  expect(swipeDelta(-70, 90)).toBe(0);
-});
-
 test("a touch is a swipe or a scroll once it has moved far enough to tell (task #560)", () => {
   expect(swipeAxis(-4, 2)).toBeUndefined();
   expect(swipeAxis(-12, 3)).toBe("x");
@@ -33,13 +24,38 @@ test("a touch is a swipe or a scroll once it has moved far enough to tell (task 
   expect(swipeAxis(2, -14)).toBe("y");
 });
 
-test("the question under a finger follows it at half speed, a quarter of that past an end (task #560)", () => {
-  // A question each side: half the finger's way, both ways.
-  expect(dragOffset(-60, true, true)).toBe(-30);
-  expect(dragOffset(60, true, true)).toBe(30);
-  // No further than its reach.
-  expect(dragOffset(-400, true, true)).toBe(-96);
-  // The first question pulled back, the last pushed on: it gives a little and no more.
-  expect(dragOffset(80, true, false)).toBe(10);
-  expect(dragOffset(-80, false, true)).toBe(-10);
+test("the question under a finger is the finger, and resists past an end (task #91)", () => {
+  // A question each side: one to one, both ways, up to a whole page.
+  expect(trackOffset(-60, 350, true, true)).toBe(-60);
+  expect(trackOffset(60, 350, true, true)).toBe(60);
+  expect(trackOffset(-500, 350, true, true)).toBe(-350);
+  // The first pulled back, the last pushed on: it gives, less and less, never a page.
+  const back = trackOffset(80, 350, true, false);
+  expect(back).toBeGreaterThan(30);
+  expect(back).toBeLessThan(45);
+  expect(trackOffset(-80, 350, false, true)).toBe(-back);
+  expect(trackOffset(5000, 350, true, false)).toBeLessThan(350);
+});
+
+test("let go, a question turns on distance or on a flick, else snaps back (task #91)", () => {
+  // Far enough, slowly: it turns; not far, slowly: back.
+  expect(releaseTurn(-150, -0.05, 350, true, true)).toBe(1);
+  expect(releaseTurn(150, 0.05, 350, true, true)).toBe(-1);
+  expect(releaseTurn(-60, -0.05, 350, true, true)).toBe(0);
+  // A short, fast flick turns.
+  expect(releaseTurn(-40, -0.6, 350, true, true)).toBe(1);
+  expect(releaseTurn(40, 0.6, 350, true, true)).toBe(-1);
+  // A finger that flicks back takes it back, however far it was dragged.
+  expect(releaseTurn(-200, 0.5, 350, true, true)).toBe(0);
+  // No question on that side: nothing turns.
+  expect(releaseTurn(-200, -0.8, 350, false, true)).toBe(0);
+  expect(releaseTurn(200, 0.8, 350, true, false)).toBe(0);
+});
+
+test("a question lands at the speed it was let go, within 160–320ms (task #91)", () => {
+  // A fast flick over a short way lands fast; a slow drag takes the longest.
+  expect(settleMs(200, -2)).toBeLessThan(settleMs(200, -1));
+  expect(settleMs(300, -10)).toBe(160);
+  expect(settleMs(300, 0)).toBe(320);
+  expect(settleMs(20, 0)).toBe(160);
 });
