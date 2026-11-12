@@ -9,12 +9,7 @@ import {
 } from "react";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  keepPreviousData,
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { MessageQuestionCircle, Pin01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -24,26 +19,14 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
-import { useRefreshSidebarLists } from "#src/features/conversations/sidebar-lists";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
-import { loadActivityInbox, markActivityInboxRead } from "./activity-inbox.functions";
-import { useActivityInboxRealtime } from "./use-activity-inbox-realtime";
-import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
-import { rereadQueryMissedBySubscribe } from "#src/features/realtime/query-stream-position";
-import type { SubscribedRecovery } from "#src/features/realtime/subscription-gap";
-import {
-  ACTIVITY_INBOX_LISTS_KEY,
-  ACTIVITY_INBOX_QUERY_PREFIX,
-  activityInboxQuery,
-  invalidateActivityInboxLists,
-  type ActivityInboxPage,
-  WAITING_CHOICE_CARDS_KEY,
-  waitingChoiceCardsQuery,
-} from "./activity-inbox-queries";
+import { markActivityInboxRead } from "./activity-inbox.functions";
+import { useActivityInboxRefresh } from "./use-activity-inbox-refresh";
+import { activityInboxQuery, waitingChoiceCardsQuery } from "./activity-inbox-queries";
 import { useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
@@ -88,7 +71,6 @@ export function ActivityInboxView({
   const workspaceSlug = useWorkspaceSlug();
   const desktop = useBreakpoint("lg");
   const router = useRouter();
-  const queryClient = useQueryClient();
   const markAllRead = useServerFn(markActivityInboxRead);
   const {
     start: startDone,
@@ -156,69 +138,10 @@ export function ActivityInboxView({
   const taskAlone =
     opened?.taskAlone && opened.task !== undefined ? { ...opened, task: opened.task } : undefined;
   const pane = taskAlone ? undefined : opened;
-  const refreshList = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX }),
-    [queryClient],
-  );
-  // A read here also changes the Chat sidebar's badges.
-  const refreshSidebar = useRefreshSidebarLists();
-  const refresh = useCallback(
-    () => Promise.all([refreshList(), refreshSidebar()]).then(() => undefined),
-    [refreshList, refreshSidebar],
-  );
-  // A message reads only the first page again: the rows below it keep their place and are read
-  // again when the viewer scrolls to them, so a busy channel cannot make every loaded page a
-  // request. Anything else that reaches the inbox still refreshes it whole. A read of the list
-  // under way meanwhile cannot put the older first page back (`keepLaterFirstPage`).
-  const loadFirstPage = useServerFn(loadActivityInbox);
-  const refreshFirstPage = useCallback(() => {
-    const queryKey = activityInboxQuery(workspaceId, filter).queryKey;
-    void invalidateActivityInboxLists(queryClient, workspaceId);
-    void loadFirstPage({ data: { filter } })
-      .then((page) =>
-        queryClient.setQueryData<{ pages: ActivityInboxPage[]; pageParams: unknown[] }>(
-          queryKey,
-          (current) =>
-            current ? { ...current, pages: [page, ...current.pages.slice(1)] } : current,
-        ),
-      )
-      .catch(() => undefined);
-  }, [filter, loadFirstPage, queryClient, workspaceId]);
-  // What was published after the list's first page was read but before the subscription started
-  // reaches the list only through a read.
-  // Realtime refreshes the lists only: the nav dot hears the same events and reads itself.
-  const refreshLists = useCallback(
-    () => void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_LISTS_KEY }),
-    [queryClient],
-  );
-  const onSubscribed = useCallback(
-    (recovery: SubscribedRecovery) =>
-      void rereadQueryMissedBySubscribe<{ pages: ActivityInboxPage[] }>(
-        queryClient,
-        activityInboxQuery(workspaceId, filter).queryKey,
-        userConversationChannel(user.id),
-        recovery,
-        refreshLists,
-        (data) => data?.pages[0]?.streamPositions,
-      ),
-    [filter, queryClient, refreshLists, user.id, workspaceId],
-  );
-  // A choice card posted, answered or withdrawn is announced to the person it asks as an Activity
-  // change, once per burst.
-  const refreshWaiting = useCallback(
-    () => void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY }),
-    [queryClient],
-  );
-  useActivityInboxRealtime({
+  const { refresh, refreshWaiting } = useActivityInboxRefresh({
     userId: user.id,
     workspaceId,
-    onMessage: refreshFirstPage,
-    onActivity: () => {
-      refreshLists();
-      refreshWaiting();
-    },
-    onSubscribed,
-    refreshOnPreferences: true,
+    filter,
   });
 
   // A failed change is shown in the toolbar with its retry until it succeeds or is dismissed.
