@@ -69,3 +69,50 @@ test("the sidebar's rows do not paint a resting fill over its gradient", () => {
   expect(dark).toMatch(/--color-sidebar-item-active:\s*var\(--color-sidebar-accent\);/);
   expect(dark).toMatch(/--color-chat-selected-bg:\s*var\(--color-sidebar-accent\);/);
 });
+
+/** WCAG relative luminance of a `#rrggbb` colour. */
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const v = Number.parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+test("the faintest light-mode text greys still read at 4.5:1 on every light surface (task #3)", () => {
+  const light = block(/@theme\s*\{/);
+  const value = (token: string): string => {
+    const declared = light.match(new RegExp(`${token}:\\s*([^;]+);`))?.[1]?.trim();
+    if (!declared) throw new Error(`${token} is not declared in @theme`);
+    const ref = declared.match(/^var\((--color-[\w-]+)\)$/)?.[1];
+    return ref ? value(ref) : declared;
+  };
+  // Untitled's own light surfaces (Tailwind's neutral ramp, which theme.css points them at) and
+  // the CoForge fills text sits on: rows, the selected chat, the sidebar and its current item.
+  const surfaces = {
+    "bg-primary": "#ffffff",
+    "bg-secondary (neutral-50)": "#fafafa",
+    "neutral-100": "#f5f5f5",
+    ...Object.fromEntries(
+      [
+        "--color-message-hover",
+        "--color-chat-selected-bg",
+        "--color-sidebar",
+        "--color-sidebar-accent",
+        "--color-sidebar-item-active",
+        "--color-nav-bg-current",
+      ].map((token) => [token, value(token)]),
+    ),
+  };
+  const below = ["--color-text-quaternary", "--color-thread-reply-count"].flatMap((text) =>
+    Object.entries(surfaces)
+      .filter(([, surface]) => contrast(value(text), surface) < 4.5)
+      .map(([name, surface]) => `${text} on ${name}: ${contrast(value(text), surface).toFixed(2)}`),
+  );
+  expect(below).toEqual([]);
+});
