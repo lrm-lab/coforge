@@ -211,40 +211,37 @@ test("a manifest create that cannot name an entry, or whose entry is no .md or .
   expect(await db.artifact.count({ where: { workspaceId, title: "Refused" } })).toBe(0);
 });
 
-test("a web page stays exactly one file named index.html", async () => {
+test("a web page may be several files, with any .html file as its entry", async () => {
   const page = await file("index.html", "<!doctype html><p>one</p>");
-  const style = await file("site.css", "p { color: red }\n");
-  const refused = async (answer: { status: number; body: Record<string, any> }) => {
-    expect(answer).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
-    expect(answer.body.error).toContain("artifact-page-files");
-    expect(answer.body.error).toContain("index.html");
-  };
-  // A create that would leave a page with a second file, another name, or another entry.
+  const style = await file("css/site.css", "p { color: red }\n");
+  const home = await file("home.html", "<!doctype html><p>home</p>");
   const create = (body: Record<string, unknown>) =>
     post({ operation: "create", title: "Pages", description: "A page", ...body });
-  await refused(await create({ files: [page, style] }));
-  await refused(await create({ files: [page, style], entry: "index.html" }));
-  const renamed = await file("home.html", "<!doctype html><p>home</p>");
-  await refused(await create({ files: [renamed] }));
-  await refused(await create({ files: [{ path: "index.htm", sha256: page.sha256 }] }));
-
-  const made = await create({ files: [page] });
+  const entryOf = async (id: string) =>
+    (await post({ operation: "read", artifact: id })).body.entryPath;
+  const made = await create({ files: [page, style] });
   expect(made.body).toMatchObject({ kind: "html", currentVersion: 1 });
+  expect(await entryOf(made.body.id)).toBe("index.html");
+  expect(await entryOf((await create({ files: [home, style], entry: "home.html" })).body.id)).toBe(
+    "home.html",
+  );
+  for (const body of [{ files: [home, style] }, { files: [page, style], entry: "css/site.css" }])
+    expect(await create(body)).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
+
   const artifact = made.body.id as string;
-  const push = (body: Record<string, unknown>) =>
-    post({ operation: "push", artifact, baseVersion: 1, idempotencyKey: key(), ...body });
-  // A push that adds a file, deletes the page, or opens at another path.
-  await refused(await push({ files: [style] }));
-  await refused(await push({ files: [page, style] }));
-  await refused(await push({ delete: ["index.html"] }));
-  await refused(await push({ entry: "home.html" }));
-  // One index.html, replaced, is a page's save.
+  const push = (baseVersion: number, body: Record<string, unknown>) =>
+    post({ operation: "push", artifact, baseVersion, idempotencyKey: key(), ...body });
+  const saved = (number: number) => ({ status: 200, body: { status: "created", number } });
+  expect(await push(1, { files: [home] })).toMatchObject(saved(2));
+  expect(await push(2, { entry: "home.html" })).toMatchObject(saved(3));
+  expect(await push(3, { delete: ["css/site.css"] })).toMatchObject(saved(4));
   const next = await file("index.html", "<!doctype html><p>two</p>");
-  expect(await push({ files: [next] })).toMatchObject({
-    status: 200,
-    body: { status: "created", number: 2 },
-  });
-  expect((await post({ operation: "read", artifact })).body.text).toBe("<!doctype html><p>two</p>");
+  expect(await push(4, { files: [next] })).toMatchObject(saved(5));
+  const read = (await post({ operation: "read", artifact })).body;
+  expect(read.files.map((f: { path: string }) => f.path)).toEqual(["home.html", "index.html"]);
+  expect(read.entryPath).toBe("home.html");
+  expect(await push(5, { delete: ["home.html"] })).toMatchObject({ status: 400 });
+  expect(await push(5, { files: [style], entry: "css/site.css" })).toMatchObject({ status: 400 });
 });
 
 test("a push of files adds, replaces and deletes by path, and keeps what it does not name", async () => {

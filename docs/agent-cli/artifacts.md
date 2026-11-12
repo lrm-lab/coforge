@@ -1,10 +1,11 @@
 # Artifacts and web pages (`coforge artifact`)
 
 An artifact is a set of files kept in a channel, a DM, or the Workspace, with every version it
-had (task #385): Markdown text, or a web page (`create --kind html`, task #490), one
-self-contained `index.html` shown on its own sandbox origin with its inline scripts running and no
-network; only Agents save a web page. An Agent works on an artifact as a local directory: it pulls
-it, edits files, and pushes only what changed. The Agent Manual's `artifacts` topic says when to
+had (task #385): Markdown text, or a web page (`create --kind html`, task #490): an `.html` entry
+and the files it uses (stylesheets, scripts, images, fonts, other pages), shown on its own sandbox
+origin with its scripts running and no network requests of its own; only Agents save a web page.
+An Agent works on an artifact as a local directory: it pulls it, edits files, and pushes only what
+changed. The Agent Manual's `artifacts` topic says when to
 make which. It is the same artifact the web page shows, under the same rules. The
 Workspace must have the `artifacts` experiment switched on by an owner or admin (Settings >
 Experiments); until then every command fails with `ARTIFACTS_DISABLED` and says so in Chinese and
@@ -92,8 +93,8 @@ the recorded base:
 
 Without a state file, `push <dir> --target <t> --title <t>` makes a new artifact from the files
 (without `--target`, the Workspace's) and the directory becomes its pull. The entry is `--entry`, else
-`index.html`, else the only file; an `.html` entry needs `--description`. A web page is for now
-exactly one `index.html`.
+`index.html`, else the only file; an `.html` entry needs `--description`. A web page may be any
+number of files (up to 200) with any `.html` or `.htm` file as its entry.
 
 ## The file protocol
 
@@ -106,15 +107,26 @@ exactly one `index.html`.
   most 1 GiB of uploaded bytes no version uses yet (413 `ARTIFACT_STORAGE_FULL`).
 - A create's kind comes from its entry's extension: `.md` or `.markdown` is Markdown, `.html` or
   `.htm` a web page; any other entry is refused, and a push may move the entry only to a file of
-  the same kind.
-  Until the sandbox serves several files a web page is exactly one `index.html`
-  (`artifact-page-files`).
+  the same kind. The entry must stay a file of the version.
 - `read` answers `entryPath` and `files` (`path`, `sha256`, `sizeBytes`, `kind`: `text` or
   `binary`). A download's `<path>` is one percent-encoded segment; a missing file is 404
   `artifact-file-not-found`.
 - `list` with `query`, `after` (the `nextCursor` of the page before) or `limit` (20 by default, 50 at most) answers
   `{ artifacts, nextCursor }`, with no `nextCursor` on the last page; a request with none of them
   (an older Computer) still gets the plain array.
+
+## What a web page may load
+
+The sandbox serves every file of the linked version under the link's own path, so relative
+references (`css/site.css`, `img/a.png`, a link to `other.html`) resolve inside the artifact:
+
+- An `.html` file is served only as the frame of the page (and the pages it links to); any other file
+  only as a script, style, image, font, audio or video request of a page, never as a document of its
+  own. A file of another version or artifact is not reachable through the link.
+- It still makes no network requests (no `fetch`, XHR or WebSocket), submits no form, opens no
+  window, and has no cookies or storage.
+- A link opens the page for five minutes and its files for thirty; the pane asks for a new link
+  each time it shows a page. An `.html` file is read whole and may be at most 2 MiB.
 
 ## Saving and conflicts
 

@@ -51,6 +51,8 @@ export interface ArtifactBlobStore {
 export const ARTIFACT_TEXT_LIMIT = ARTIFACT_UPLOAD_MAX_BYTES;
 export const ARTIFACT_BINARY_LIMIT = 15 * 1024 * 1024;
 export const ARTIFACT_FILE_LIMIT = 200;
+/** The file a web page opens at unless it names another. */
+export const ARTIFACT_HTML_ENTRY = "index.html";
 /** A document's (a `markdown` artifact's) own file: what a person edits in one page. */
 export const ARTIFACT_DOCUMENT_LIMIT = 2 * 1024 * 1024;
 

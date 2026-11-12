@@ -50,7 +50,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
     publicRateLimit: getAppRateLimits().publicArtifact,
     secret: () => readSessionSecret(process.env),
     now: () => new Date(),
-    publicPage: async (token) => {
+    publicPage: async (token, path) => {
       const link = await db.artifactPublicLink.findFirst({
         where: { token, revokedAt: null },
         select: {
@@ -83,7 +83,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
       });
       if (!version || version.entryPath !== link.artifact.entryPath) return null;
       const file = await db.artifactFile.findUnique({
-        where: { versionId_path: { versionId: version.id, path: version.entryPath } },
+        where: { versionId_path: { versionId: version.id, path: path ?? version.entryPath } },
         select: { sha256: true },
       });
       return file
@@ -92,6 +92,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
             artifactId: link.artifact.id,
             title: link.artifact.title,
             kind: link.artifact.kind as "html" | "markdown",
+            entryPath: version.entryPath,
             sha256: file.sha256,
           }
         : null;

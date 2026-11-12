@@ -5,14 +5,8 @@ import { nameToSlug } from "#src/lib/slug";
 import { errorType } from "#src/server/errors/error-type.server";
 import { canDeleteArtifact, type ArtifactActor } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
-import { ARTIFACT_DOCUMENT_LIMIT } from "./artifact-files.server";
-import {
-  manifestKind,
-  planManifestCreate,
-  requireSinglePage,
-  type FileManifest,
-} from "./artifact-manifest.server";
-import { ARTIFACT_HTML_ENTRY } from "./artifact-sandbox.server";
+import { ARTIFACT_DOCUMENT_LIMIT, ARTIFACT_HTML_ENTRY } from "./artifact-files.server";
+import { manifestKind, planManifestCreate, type FileManifest } from "./artifact-manifest.server";
 import type { ArtifactRevert } from "./artifact-revert.server";
 import type { Artifacts } from "./artifacts.server";
 
@@ -239,7 +233,6 @@ export class ArtifactDocuments {
     // and goes back to a version, and asks an Agent for a change. Settings included.
     if (artifact.kind === "html") requireAgent(scope);
     if (manifest) {
-      requireSinglePage(artifact.kind, manifest);
       if (manifest.entryPath !== undefined && manifestKind(manifest.entryPath) !== artifact.kind)
         throw new AppError("INVALID_INPUT", {
           errorId: "artifact-kind",

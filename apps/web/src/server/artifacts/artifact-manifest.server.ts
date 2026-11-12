@@ -1,11 +1,11 @@
 import { AppError } from "#src/lib/app-error";
 import {
   ARTIFACT_FILE_LIMIT,
+  ARTIFACT_HTML_ENTRY,
   artifactKindOfPath,
   artifactPathValid,
   type ArtifactFileInput,
 } from "./artifact-files.server";
-import { ARTIFACT_HTML_ENTRY } from "./artifact-sandbox.server";
 
 /**
  * An Agent's version sent as a manifest instead of one text: the files it adds or replaces (by
@@ -58,34 +58,7 @@ export function planManifestCreate(manifest: FileManifest, kind?: string) {
   const derived = manifestKind(entryPath);
   if (kind !== undefined && kind !== derived)
     invalid("artifact-kind", `the entry file ${entryPath} makes a ${derived} artifact`);
-  requireSinglePage(derived, { files, entryPath });
   return { files, entryPath, kind: derived };
 }
 
 const pathValid = (file: ArtifactFileInput) => artifactPathValid(file.path);
-
-/**
- * Until the sandbox serves several files, a web page is exactly one file named `index.html`: a
- * manifest that adds another file, deletes the page, or opens at another path is refused. A page
- * always has that one file, so what a push adds or deletes decides the whole set.
- */
-export function requireSinglePage(
-  kind: string,
-  manifest: {
-    files?: readonly ArtifactFileInput[];
-    deletedPaths?: readonly string[];
-    entryPath?: string;
-  },
-) {
-  if (kind !== "html") return;
-  const only = (manifest.files ?? []).every((file) => file.path === ARTIFACT_HTML_ENTRY);
-  if (
-    !only ||
-    manifest.deletedPaths?.length ||
-    (manifest.entryPath !== undefined && manifest.entryPath !== ARTIFACT_HTML_ENTRY)
-  )
-    invalid(
-      "artifact-page-files",
-      `a web page is one file named ${ARTIFACT_HTML_ENTRY} for now: send that file alone, with no other file, deletion or entry`,
-    );
-}

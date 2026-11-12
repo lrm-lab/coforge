@@ -182,7 +182,7 @@ test("an Agent makes a web page, reads its source, and saves it whole", async ()
     embedderOrigin: "http://localhost:5173",
   });
   const page = await sandbox.serve(
-    new Request(`${link.url}/page`, {
+    new Request(`${link.url}/page/index.html`, {
       headers: { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin" },
     }),
   );

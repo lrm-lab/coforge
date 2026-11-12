@@ -7,13 +7,12 @@ import {
 } from "#src/server/artifacts/artifact-sandbox-config.server";
 import {
   readSandboxTicket,
+  SANDBOX_FILE_TTL_SECONDS,
   SANDBOX_TICKET_TTL_SECONDS,
   signSandboxTicket,
 } from "#src/server/artifacts/artifact-sandbox-ticket.server";
-import {
-  ArtifactSandbox,
-  ARTIFACT_HTML_LIMIT,
-} from "#src/server/artifacts/artifact-sandbox.server";
+import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
+import { ARTIFACT_HTML_LIMIT } from "#src/server/artifacts/artifact-sandbox-files.server";
 import { withWebRtcOff } from "#src/server/artifacts/artifact-sandbox-response.server";
 import { signValue } from "#src/server/auth/signed-value.server";
 import { AppError } from "#src/lib/app-error";
@@ -21,7 +20,8 @@ import { AppError } from "#src/lib/app-error";
 /**
  * Web pages on their own origin (task #490): the sandbox origin's configuration, the signed
  * link, and what the sandbox answers — the page with headers that let its scripts run and nothing
- * load or leave, or a refusal. The browser's side of those headers is
+ * leave, or a refusal. Several files per page are `artifact-sandbox-files.test.ts`, the public
+ * hosts a page may load from `artifact-sandbox-cdns.test.ts`. The browser's side of those headers is
  * `artifact-sandbox-browser.e2e.ts`; real reads and access are `artifact-sandbox.integration.ts`.
  */
 
@@ -129,11 +129,14 @@ describe("the sandbox origin's configuration", () => {
 describe("a sandbox ticket", () => {
   const grant = { w: "w1", a: "a1", v: 3, u: "u1", o: APP };
 
-  test("reads back what was signed, until it expires", () => {
+  test("reads back what was signed; its files open for 30 minutes, the wrapper for 5", () => {
     const { ticket, expiresAt } = signSandboxTicket(grant, SECRET, NOW);
     expect(expiresAt.getTime()).toBe(NOW.getTime() + SANDBOX_TICKET_TTL_SECONDS * 1000);
     expect(readSandboxTicket(ticket, SECRET, NOW)).toMatchObject(grant);
-    expect(readSandboxTicket(ticket, SECRET, expiresAt)).toBe("expired");
+    expect(readSandboxTicket(ticket, SECRET, expiresAt)).toMatchObject(grant);
+    const filesEnd = new Date(NOW.getTime() + SANDBOX_FILE_TTL_SECONDS * 1000);
+    expect(readSandboxTicket(ticket, SECRET, new Date(filesEnd.getTime() - 1))).not.toBe("expired");
+    expect(readSandboxTicket(ticket, SECRET, filesEnd)).toBe("expired");
   });
 
   test("is refused when changed, signed with another secret, or signed for another purpose", () => {
@@ -153,6 +156,13 @@ describe("a sandbox ticket", () => {
 
 type Page = { kind?: string; entryPath?: string; sizeBytes?: number; number?: number };
 
+const entry = (page: Page, number: number) => ({
+  path: page.entryPath ?? "index.html",
+  sha256: `sha-${number}`,
+  sizeBytes: page.sizeBytes ?? PAGE.byteLength,
+  kind: "html",
+});
+
 /** A sandbox over one readable page (unless `readable` says otherwise), at a fixed time. */
 function sandbox(
   page: Page = {},
@@ -165,15 +175,13 @@ function sandbox(
       return {
         artifact: { kind: page.kind ?? "html", currentVersion: page.number ?? 2 },
         version: { number, entryPath: page.entryPath ?? "index.html" },
-        files: [
-          {
-            path: page.entryPath ?? "index.html",
-            sha256: `sha-${number}`,
-            sizeBytes: page.sizeBytes ?? PAGE.byteLength,
-            kind: "html",
-          },
-        ],
+        files: [entry(page, number)],
       };
+    },
+    file: async (input: { path: string; version?: number }) => {
+      if (options.readable && !options.readable()) throw new AppError("NOT_FOUND");
+      const row = entry(page, input.version ?? page.number ?? 2);
+      return input.path === row.path ? row : null;
     },
   };
   let now = NOW;
@@ -208,12 +216,8 @@ describe("a web page's link", () => {
     ).rejects.toMatchObject({ errorId: "artifact-sandbox-off" });
   });
 
-  test("is not given for a document, nor a page that is not one index.html within 2 MiB", async () => {
-    for (const page of [
-      { kind: "markdown" },
-      { entryPath: "main.html" },
-      { sizeBytes: ARTIFACT_HTML_LIMIT + 1 },
-    ])
+  test("is not given for a document, nor a page whose entry is over 2 MiB", async () => {
+    for (const page of [{ kind: "markdown" }, { sizeBytes: ARTIFACT_HTML_LIMIT + 1 }])
       await expect(sandbox(page).service.link(linkInput)).rejects.toMatchObject({
         code: "NOT_FOUND",
       });
@@ -228,7 +232,7 @@ describe("the sandbox's answer", () => {
   }
 
   const frame = (url: string, init: RequestInit = {}) =>
-    new Request(`${url}/page`, {
+    new Request(`${url}/page/index.html`, {
       ...init,
       headers: { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin" },
     });
@@ -239,7 +243,7 @@ describe("the sandbox's answer", () => {
     expect(response.status).toBe(200);
     const body = await response.text();
     expect(body).toContain(
-      `<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src="${new URL(url).pathname}/page">`,
+      `<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src="${new URL(url).pathname}/page/index.html">`,
     );
     const csp = (response.headers.get("content-security-policy") ?? "").split("; ");
     const nonce = /script-src 'nonce-([0-9a-f]+)'/.exec(csp.join("; "))?.[1];
@@ -261,19 +265,21 @@ describe("the sandbox's answer", () => {
     expect(again.headers.get("content-security-policy")).not.toContain(nonce!);
   });
 
-  test("the page is served only as the wrapper's frame: never a document of its own, nor another's frame", async () => {
+  test("the page is served only as a frame: never a document of its own, nor the app's frame", async () => {
     const { service, url } = await opened();
     const cases: Record<string, string>[] = [
       {},
       { "Sec-Fetch-Dest": "document", "Sec-Fetch-Site": "same-origin" },
       { "Sec-Fetch-Dest": "script", "Sec-Fetch-Site": "same-origin" },
-      // Framed by the app (or anyone) directly, out from under the wrapper.
-      { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "cross-site" },
+      // Framed by a same-site app directly, out from under the wrapper. (A cross-site frame is
+      // also what a link followed inside the opaque frame is: `artifact-sandbox-files.test.ts`.)
       { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-site" },
       { "Sec-Fetch-Dest": "iframe" },
     ];
     for (const headers of cases) {
-      expect((await service.serve(new Request(`${url}/page`, { headers }))).status).toBe(404);
+      expect((await service.serve(new Request(`${url}/page/index.html`, { headers }))).status).toBe(
+        404,
+      );
     }
   });
 
@@ -291,23 +297,25 @@ describe("the sandbox's answer", () => {
     );
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
     const csp = (response.headers.get("content-security-policy") ?? "").split("; ");
-    expect(csp).toEqual([
+    const prefix = `${SANDBOX}/a/${new URL(url).pathname.slice("/a/".length)}/page/`;
+    // Each directive starts with what a page always had; the page's own files (and, in
+    // `artifact-sandbox-cdns.test.ts`, the public hosts) come after.
+    const starts = [
       "sandbox allow-scripts",
       "default-src 'none'",
-      "script-src 'unsafe-inline'",
-      "style-src 'unsafe-inline'",
-      "img-src data: blob:",
-      "font-src data:",
-      "media-src data: blob:",
+      "script-src 'unsafe-inline' " + prefix,
+      "style-src 'unsafe-inline' " + prefix,
+      "img-src data: blob: " + prefix,
+      "font-src data: " + prefix,
+      "media-src data: blob: " + prefix,
       "connect-src 'none'",
       "form-action 'none'",
       "base-uri 'none'",
       "webrtc 'block'",
       `frame-ancestors ${SANDBOX} ${APP}`,
-    ]);
-    // No source names a host (only `frame-ancestors` does: the wrapper and the app): nothing
-    // outside loads or is reached.
-    expect(csp.slice(0, -1).join(" ")).not.toMatch(/https?:|\*/);
+    ];
+    expect(csp).toHaveLength(starts.length);
+    starts.forEach((start, index) => expect(csp[index]).toStartWith(start));
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -331,6 +339,7 @@ describe("the sandbox's answer", () => {
       "/w/acme",
       `${new URL(url).pathname}/x`,
       `${new URL(url).pathname}/page/x`,
+      `${new URL(url).pathname}/page`,
     ]) {
       const response = await service.serve(new Request(`${SANDBOX}${path}`));
       expect(response.status).toBe(404);

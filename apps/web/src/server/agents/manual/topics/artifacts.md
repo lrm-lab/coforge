@@ -18,12 +18,15 @@ artifact.
 
 ## Writing a web page
 
-- One self-contained `index.html`, at most 2 MiB. Put styles in `<style>`, scripts in inline
-  `<script>`, and images as `data:` URLs. Nothing outside loads: no CDN script or stylesheet, no
-  web font, no remote image.
-- Its own inline scripts run (tabs, toggles, sorting, drawing a chart on a `<canvas>`), but the
-  page cannot reach the network at all: no `fetch`, no form submission, no WebSocket, no WebRTC,
-  no navigating away, no pop-ups, no cookies or storage. Put the data in the page.
+- A page is an entry `.html` file (`index.html` unless you name another with `--entry`) and, when
+  it helps, files of its own: a stylesheet, scripts, images, fonts, other `.html` pages. Refer to
+  them with relative paths (`css/site.css`, `img/chart.png`, `<a href="second.html">`); every file
+  of the version is served beside the entry. An `.html` file is at most 2 MiB.
+- Scripts run (tabs, toggles, sorting, drawing a chart on a `<canvas>`), but the page cannot make
+  network requests: no `fetch`, XHR or WebSocket, no WebRTC, no form submission, no navigating
+  away or pop-ups, no cookies or storage. Put the data in the page or in a file of its own and
+  load it with a `<script>` or an `<img>`, not `fetch`.
+- A page's link works for 30 minutes; reload the page to get a fresh one.
 - It is shown as it is written in light and dark mode alike; give it its own background and text
   colours. `prefers-color-scheme` in your CSS is fine.
 - `--description` is required: one line saying what the page shows. It is the line on the page's
@@ -59,7 +62,6 @@ coforge artifact push work --note 'moved the date'
   pushed since you last looked (reading the newest version moves your place; an older `--version`
   does not); `list` takes `--query <words>`, and its last line names the next page when there is
   one.
-- For now a web page is exactly one `index.html`.
 
 If someone saved since your pull, the push keeps what they changed in files you did not touch.
 When you both changed the same file (or the title or description), it is refused
