@@ -271,13 +271,14 @@ export function stalledRecoveryDisplayText(
   }
 }
 
-/** How many times in a row a stalled turn is restarted with no message waiting for it (task
- * #404). Past this the owner is told and the Agent is left alone until a message arrives or
- * someone restarts it: a turn that hangs again every time is not helped by more restarts. */
-export const UNATTENDED_RECOVERY_LIMIT = 2;
+/** How many times in a row a stalled turn is restarted — with a message waiting or not (tasks
+ * #404, #14; Raft's `STALLED_REPLACEMENT_MAX_STREAK`). Past this the owner is told and the Agent
+ * is left alone until a message arrives or someone restarts it: a turn that hangs again every
+ * time is not helped by more restarts. */
+export const STALLED_REPLACEMENT_MAX_STREAK = 2;
 
-/** What an unattended recovery may do now: restart, report the limit (once), or nothing. */
-export type UnattendedRecoveryAdmission = "restart" | "limit" | "held";
+/** What a stalled-turn replacement may do now: restart, report the limit (once), or nothing. */
+export type StalledReplacementAdmission = "restart" | "limit" | "held";
 
 /** The first turn of a relaunch no message asked for: where the old turn stopped, and to go on
  * from there. */
