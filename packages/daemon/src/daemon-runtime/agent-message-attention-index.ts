@@ -39,6 +39,7 @@ import {
   type AttentionDecisionMessage,
   type AttentionDecisionOutcome,
 } from "./agent-message-attention-decision-log";
+import { noteFrontierSource, type FrontierSource } from "./agent-message-attention-frontier-source";
 import { planRecovery } from "./agent-message-attention-recovery";
 import type { AgentConsumedSeqPort } from "#src/persistence/agent-consumed-seq-store";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
@@ -268,18 +269,16 @@ export class AgentMessageAttentionIndex {
 
   /** What the daemon decided for one message: `agent-message-attention-decision-log.ts`. */
   logDecision(message: AttentionDecisionMessage, outcome: AttentionDecisionOutcome): void {
-    const target = message.target ?? "";
     logAttentionDecision(
       message,
       outcome,
-      this.modelSeenSequence(message.agentId, target),
-      this.#consumedByAgent.get(message.agentId)?.targets.get(target)?.exactSeqs,
+      this.#consumedByAgent.get(message.agentId),
+      message.target ?? "",
     );
   }
 
   /** Whether the Agent already saw this sequence or its preview. The delivery's conversation is
-   * bound first: a cursor still counting another conversation's sequences (the channel was
-   * recreated under the same name) says nothing about this message and is reset by the bind.
+   * bound first, so a cursor still counting a recreated channel's old sequences says nothing here.
    * A card event is never read: it carries its card's own sequence, which the Agent has read. */
   #alreadyRead(
     agentId: string,
@@ -666,11 +665,10 @@ export class AgentMessageAttentionIndex {
   }
 
   /**
-   * What one history read showed the Agent (the `message read` bookkeeping), in at most one
-   * write: `spelling` becomes an alias of `target`; the frontier moves to `through` (0 for none);
-   * the `shown` sequences (ascending) above it become exact; a `review` orders the target; and a
-   * consumption scope settles, in every other target of its conversation, exactly the messages
-   * the read returned.
+   * What one history read showed the Agent (the `message read` bookkeeping), in one write:
+   * `spelling` aliases `target`; the frontier moves to `through` (0 for none); the `shown`
+   * sequences (ascending) above it become exact; a `review` orders the target; a scope settles,
+   * across its conversation, exactly the messages the read returned.
    */
   recordHistoryRead(
     agentId: string,
@@ -686,7 +684,8 @@ export class AgentMessageAttentionIndex {
     this.#consumedState(agentId);
     const { target } = read;
     let changed = this.#setAlias(agentId, read.spelling, target);
-    if (read.through > 0) changed = this.#advanceFrontier(agentId, target, read.through) || changed;
+    if (read.through > 0)
+      changed = this.#advanceFrontier(agentId, target, read.through, "history_read") || changed;
     changed = this.#addExact(agentId, target, read.shown) || changed;
     this.#settleSeen(agentId, target);
     if (read.review) {
@@ -709,7 +708,7 @@ export class AgentMessageAttentionIndex {
     review?: { sequence: number },
   ): void {
     if (!Number.isInteger(through) || through < 1) return;
-    const changed = this.#advanceFrontier(agentId, target, through);
+    const changed = this.#advanceFrontier(agentId, target, through, "send_context");
     if (review) this.#takeReadOrder(agentId, target, review.sequence);
     if (changed || review) this.#persist(agentId);
   }
@@ -769,12 +768,11 @@ export class AgentMessageAttentionIndex {
   }
 
   /**
-   * Ties `target`'s consumed cursor to the conversation it counts in. When the cursor was counting
-   * in another conversation (the channel was recreated under the same name, and its sequences
-   * restarted), every number it holds belongs to the old one, so the target starts over: otherwise
-   * each new message would read as already consumed and never be announced. A cursor recorded in
-   * memory before its target was bound adopts the conversation unchanged; the file never holds one
-   * without a conversation, because a read drops it.
+   * Ties `target`'s consumed cursor to the conversation it counts in. A cursor counting in another
+   * conversation (the channel was recreated under the same name, its sequences restarted) holds
+   * only the old one's numbers, so the target starts over: else each new message would read as
+   * consumed and never be announced. An in-memory cursor bound after the fact adopts the
+   * conversation; the file never holds one without it, because a read drops it.
    */
   bindConversation(agentId: string, target: string, conversationId: string): void {
     const entry = this.#targetState(agentId, target);
@@ -793,6 +791,7 @@ export class AgentMessageAttentionIndex {
       delete entry.seq;
       delete entry.exactSeqs;
       delete entry.reviewedSeq;
+      noteFrontierSource(entry, "reset");
       this.#latestThreadReads.clear(agentId);
     }
     this.#persist(agentId);
@@ -811,12 +810,19 @@ export class AgentMessageAttentionIndex {
     return true;
   }
 
-  /** Moves `target`'s frontier up to `sequence` (never lower), drops the exact sequences it now
-   * covers, and settles the pending attention at or below it. Whether the frontier moved. */
-  #advanceFrontier(agentId: string, target: string, sequence: number): boolean {
+  /** Moves `target`'s frontier up to `sequence` (never lower), noting what moved it (diagnostics
+   * only), drops the exact sequences it covers, and settles the pending attention at or below
+   * it. Whether it moved. */
+  #advanceFrontier(
+    agentId: string,
+    target: string,
+    sequence: number,
+    source: FrontierSource,
+  ): boolean {
     const entry = this.#targetState(agentId, target);
     if (sequence <= (entry.seq ?? 0)) return false;
     entry.seq = sequence;
+    noteFrontierSource(entry, source);
     const exact = entry.exactSeqs;
     if (exact?.length) {
       const kept = exact.slice(firstAbove(exact, sequence));
@@ -989,7 +995,7 @@ export class AgentMessageAttentionIndex {
    * it orders nothing. */
   recordModelSeen(agentId: string, target: string, sequence: number): void {
     if (!Number.isInteger(sequence) || sequence < 1) return;
-    if (this.#advanceFrontier(agentId, target, sequence)) this.#persist(agentId);
+    if (this.#advanceFrontier(agentId, target, sequence, "model_seen")) this.#persist(agentId);
   }
 
   /**
