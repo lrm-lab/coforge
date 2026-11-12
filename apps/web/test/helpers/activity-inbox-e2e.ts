@@ -202,3 +202,76 @@ export async function seedDirectConversation(
   );
   return { conversationId: conversation.id, members };
 }
+
+/**
+ * A channel with a thread the viewer follows and has read to the end, where nothing mentions them;
+ * the channel itself is Done, so only the thread row lists. Enough replies that the thread pane
+ * scrolls. Returns the thread's root and its newest reply.
+ */
+export async function seedQuietThread(db: PrismaClient, workspaceId: string) {
+  const quietChannelId = seededUuid("e2e-activity-inbox:quiet-channel");
+  await db.conversation.upsert({
+    where: { id: quietChannelId },
+    update: { archivedAt: null },
+    create: { id: quietChannelId, workspaceId, channelName: "e2e-activity-quiet" },
+  });
+  await db.message.deleteMany({ where: { conversationId: quietChannelId } });
+  const quietViewer = await db.conversationMember.upsert({
+    where: {
+      conversationId_userId: { conversationId: quietChannelId, userId: DEV_BROWSER_USER.id },
+    },
+    update: {
+      leftAt: null,
+      readThroughSequence: 1,
+      doneThroughSequence: 1,
+      unreadFromSequence: null,
+    },
+    create: {
+      conversationId: quietChannelId,
+      workspaceId,
+      userId: DEV_BROWSER_USER.id,
+      readThroughSequence: 1,
+      doneThroughSequence: 1,
+    },
+  });
+  const quietRootId = seededUuid("e2e-activity-inbox:quiet-root");
+  const quietNewestId = seededUuid("e2e-activity-inbox:quiet-newest");
+  // Enough replies that the thread pane scrolls: the newest one is out of view at the root.
+  const quietRows = [
+    { id: quietRootId, body: "E2E quiet root", threadRootId: null },
+    ...Array.from({ length: 39 }, (_, index) => ({
+      id: seededUuid(`e2e-activity-inbox:quiet-reply-${index}`),
+      body: `E2E quiet reply ${index + 1}`,
+      threadRootId: quietRootId,
+    })),
+    { id: quietNewestId, body: "E2E quiet newest reply", threadRootId: quietRootId },
+  ];
+  for (const [index, row] of quietRows.entries())
+    await db.message.create({
+      data: {
+        ...row,
+        senderMemberId: quietViewer.id,
+        conversationId: quietChannelId,
+        workspaceId,
+        sequence: index + 1,
+      },
+    });
+  await db.threadFollow.create({
+    data: {
+      memberId: quietViewer.id,
+      rootMessageId: quietRootId,
+      conversationId: quietChannelId,
+      workspaceId,
+    },
+  });
+  await db.threadRead.create({
+    data: {
+      memberId: quietViewer.id,
+      rootMessageId: quietRootId,
+      conversationId: quietChannelId,
+      workspaceId,
+      readThroughSequence: quietRows.length,
+    },
+  });
+  return { rootId: quietRootId, newestId: quietNewestId };
+}
