@@ -9,6 +9,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { runtimeProviderSelectionRefusal } from "./runtime-provider-selection";
 import { AGENT_VISIBILITY, AGENT_VISIBILITY_VALUES } from "./agent-visibility";
+import { MAX_MODEL_TOKENS } from "#src/features/computers/computer-model-metadata";
 
 /** The Agent self-description cap, shared by the edit-form schema and the server's
  * self-service profile check so the two never disagree. */
@@ -72,6 +73,12 @@ export const createCloudAgentInputSchema = z.object({
   requestId: z.uuid(),
 });
 
+/** A model size a person typed in: a whole number of tokens, or nothing at all. */
+const modelSizeSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.coerce.number().int().min(1).max(MAX_MODEL_TOKENS).optional(),
+);
+
 const agentInputShape = {
   description: z.string().trim().max(AGENT_PROFILE_DESCRIPTION_MAX_LENGTH).default(""),
   provider: z.enum(RUNTIME_PROVIDER_VALUES).superRefine((provider, context) => {
@@ -85,6 +92,11 @@ const agentInputShape = {
    * provider and the model's reported capability; this only carries the intent. Optional so a
    * client that predates it keeps parsing, and absent means the ordinary tier. */
   fastMode: z.boolean().optional(),
+  /** What a person filled in on the model size fields (task #30): it wins over the runtime's own
+   * model entry, and an empty field submits nothing at all. Optional so a client that predates
+   * them keeps parsing. */
+  contextWindow: modelSizeSchema,
+  maxOutputTokens: modelSizeSchema,
   apiKey: apiKeySchema,
 };
 

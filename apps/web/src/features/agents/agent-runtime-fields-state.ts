@@ -6,6 +6,7 @@ import {
   type RuntimeUnavailableCode,
 } from "@lrm/coforge-sdk/internal";
 import { isPiBuiltinModelProvider } from "./agent.schemas";
+import { modelSizesDirty, type ModelSizes } from "./agent-model-sizes";
 import { modelProviderDisplayName } from "./model-provider-display";
 
 export type RuntimeCatalog = {
@@ -31,6 +32,9 @@ export type RuntimeSelection = {
   modelProvider: string;
   model: string;
   reasoning: string;
+  /** What the person filled in on the form, when they did (task #30). */
+  contextWindow?: number;
+  maxOutputTokens?: number;
   /** Whether the Agent launches with the runtime's Fast service tier. Absent means it does not. */
   fastMode?: boolean;
 };
@@ -79,10 +83,14 @@ export function isRuntimeDirty(params: {
   modelValue: string;
   submittedReasoning: string;
   submittedFastMode: boolean;
+  /** The size fields as typed: empty means the model's own entry, which is also what `initial`
+   * holds when the saved config filled none in. */
+  sizes: ModelSizes;
   initial?: RuntimeSelection;
 }): boolean {
   return (
     params.manualDirty ||
+    modelSizesDirty(params.sizes, params.initial) ||
     params.apiKey.trim() !== "" ||
     params.provider !== (params.initial?.provider ?? RUNTIME_PROVIDER.COFORGE) ||
     params.submittedModelProvider !== (params.initial?.modelProvider ?? "") ||

@@ -81,6 +81,9 @@ export function runtimeFieldsOf(
     ...(intent.modelProvider !== undefined ? { modelProvider: intent.modelProvider } : {}),
     ...(intent.providerConfig !== undefined ? { providerConfig: intent.providerConfig } : {}),
     ...(intent.fastMode ? { fastMode: true } : {}),
+    // What a person filled in on the form; absent leaves the runtime's own model entry in charge.
+    ...(intent.contextWindow !== undefined ? { contextWindow: intent.contextWindow } : {}),
+    ...(intent.maxOutputTokens !== undefined ? { maxOutputTokens: intent.maxOutputTokens } : {}),
   };
 }
 

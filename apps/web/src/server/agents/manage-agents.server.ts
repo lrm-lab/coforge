@@ -38,6 +38,10 @@ export type AgentCreateInput = {
   reasoning?: string;
   /** Whether this Agent launches with the runtime's Fast service tier; absent means it does not. */
   fastMode?: boolean;
+  /** What the person filled in on the model size fields; absent means the runtime's own model
+   * entry decides (task #30). */
+  contextWindow?: number;
+  maxOutputTokens?: number;
   computerId: string;
   apiKey?: string;
   /** Defaults to public when omitted, matching every creation path except the
@@ -132,6 +136,9 @@ export class ManageAgents {
       modelProvider: input.modelProvider?.trim() ?? "",
       reasoning: input.reasoning?.trim() ?? "",
       fastMode: input.fastMode === true,
+      // What the form filled in, when a person did (task #30).
+      ...(input.contextWindow === undefined ? {} : { contextWindow: input.contextWindow }),
+      ...(input.maxOutputTokens === undefined ? {} : { maxOutputTokens: input.maxOutputTokens }),
       hasApiKey: Boolean(apiKeyInput),
     };
     if (selection.provider === RUNTIME_PROVIDER.COFORGE && !apiKeyInput)
@@ -213,6 +220,9 @@ export class ManageAgents {
         modelProvider: input.modelProvider?.trim() ?? "",
         reasoning: input.reasoning?.trim() ?? "",
         fastMode: input.fastMode === true,
+        // What the form filled in, when a person did (task #30).
+        ...(input.contextWindow === undefined ? {} : { contextWindow: input.contextWindow }),
+        ...(input.maxOutputTokens === undefined ? {} : { maxOutputTokens: input.maxOutputTokens }),
       };
       // task #517: a full re-selection rewrites the config without reading the old one — an
       // unreadable stored config cannot block the repair that would replace it.

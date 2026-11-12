@@ -44,6 +44,11 @@ export type AgentRuntimeConfig = Readonly<{
   /** Whether this launch asked the runtime for its Fast service tier. Applied by the adapters
    * that support it (Claude Code, Codex); every other runtime ignores it. */
   fastMode?: boolean;
+  /** The context window and maximum output a person filled in on the Agent's form, when they did:
+   * they win over the runtime's own model entry, which fills whatever is left absent. The Pi
+   * runtime follows `contextWindow` for its compaction window (task #30). */
+  contextWindow?: number;
+  maxOutputTokens?: number;
   envVars?: Readonly<Record<string, string>>;
 }>;
 /** Plan-usage window status (task #50): `limit_reached` once the window's ratio hits 1.0,

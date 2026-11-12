@@ -320,3 +320,18 @@ test("rejects a start intent whose config revision is not a positive integer", (
   );
   expect(() => decodeAgentStartIntent(encoded)).toThrow("invalid Agent config revision");
 });
+
+test("a launch carries the model sizes the form filled in, and says nothing when it did not", () => {
+  const sized = { ...base, contextWindow: 200_000, maxOutputTokens: 64_000 };
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(sized))).toEqual({
+    ...sized,
+    modelProvider: "",
+    providerConfig: undefined,
+  });
+  // Absent, not zero: the daemon then follows the runtime's own model entry (task #30).
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).not.toHaveProperty("contextWindow");
+  expect(() => encodeAgentStartIntent({ ...base, contextWindow: 0 })).toThrow(/out of range/);
+  expect(() => encodeAgentStartIntent({ ...base, maxOutputTokens: 10_000_001 })).toThrow(
+    /out of range/,
+  );
+});

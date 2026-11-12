@@ -24,6 +24,25 @@ import {
 /** The longest resume or introduction prompt a start intent carries, in UTF-16 code units. */
 export const AGENT_START_PROMPT_MAX_LENGTH = 8192;
 
+/** The largest model size a launch carries: far above any model, small enough to stay a number. */
+const MAX_LAUNCH_SIZE = 10_000_000;
+
+/** A model size is never zero — absent is how a launch says "the runtime's model entry decides". */
+function assertLaunchSize(
+  name: string,
+  value: number | undefined,
+  error: (reason: string) => Error,
+) {
+  if (value === undefined) return;
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_LAUNCH_SIZE)
+    throw error(`${name} is out of range`);
+}
+
+/** On the way in a launch never fails over a size: one out of range is taken as unstated. */
+function launchSize(value: number | undefined) {
+  return value !== undefined && value >= 1 && value <= MAX_LAUNCH_SIZE ? value : undefined;
+}
+
 function assertStartPrompt(
   name: "resume" | "introduction",
   prompt: string | undefined,
@@ -71,6 +90,10 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
     throw new Error(`unsupported Agent tool profile: ${value.toolProfile}`);
   if (value.agentConfigRevision !== undefined)
     assertPositiveControlCounter(value.agentConfigRevision, "Agent config revision");
+  // A size the form filled in; the launch's compaction window follows it (task #30).
+  const launchError = (reason: string) => new Error(`invalid Agent start ${reason}`);
+  assertLaunchSize("context window", value.contextWindow, launchError);
+  assertLaunchSize("maximum output", value.maxOutputTokens, launchError);
   if ((value.resumeMessages?.length ?? 0) > 100)
     throw new Error("Agent recovery resumeMessages exceeds 100");
   const recoveryMessages = [
@@ -164,6 +187,11 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     throw new Error(`unsupported Agent tool profile: ${v.toolProfile}`);
   if (v.agentConfigRevision !== undefined)
     assertPositiveControlCounter(v.agentConfigRevision, "Agent config revision");
+  // A size the form filled in, when this server and daemon both know it (task #30).
+  const sizes = {
+    contextWindow: launchSize(v.contextWindow),
+    maxOutputTokens: launchSize(v.maxOutputTokens),
+  };
   const recoveryMessages = [...(v.wakeMessage ? [v.wakeMessage] : []), ...v.resumeMessages];
   const summaryTargets = new Set(v.unreadSummary.map(({ target }) => target));
   const messageIds = new Set(recoveryMessages.map(({ messageId }) => messageId));
@@ -244,6 +272,8 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     ...(v.introductionPrompt !== undefined ? { introductionPrompt: v.introductionPrompt } : {}),
     ...(v.fastMode === true ? { fastMode: true } : {}),
     ...(v.agentConfigRevision !== undefined ? { agentConfigRevision: v.agentConfigRevision } : {}),
+    ...(sizes.contextWindow !== undefined ? { contextWindow: sizes.contextWindow } : {}),
+    ...(sizes.maxOutputTokens !== undefined ? { maxOutputTokens: sizes.maxOutputTokens } : {}),
     ...(v.wakeMessage ? { wakeMessage: recoveryMessage(v.wakeMessage) } : {}),
     ...(v.resumeMessages.length ? { resumeMessages: v.resumeMessages.map(recoveryMessage) } : {}),
     ...(v.unreadSummary.some((entry) => entry.conversationId)

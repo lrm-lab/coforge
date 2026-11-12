@@ -52,6 +52,7 @@ export { MemoryAgentTurnBudget } from "./memory-agent-turn";
 import { installChannelTurnPolicy } from "./channel-turn-policy";
 
 import { createMemoryDispositionTool } from "./memory-disposition-tool";
+import { modelWithSizes } from "./model-size-override";
 import { contextViewRequestLogFields } from "./session-context-view-log";
 import type { CreateSessionOptions } from "./session-options";
 
@@ -487,6 +488,8 @@ export async function createSession(options: CreateSessionOptions) {
       options.model,
       PI_MODEL_UNAVAILABLE,
     );
+  // The form's sizes, when a person filled them in, win over the runtime's model entry (task #30).
+  const launchModel = model && modelWithSizes(model, options);
   const extensionDefinesBash = services.resourceLoader
     .getExtensions()
     .extensions.some((extension) => extension.tools.has("bash"));
@@ -552,7 +555,7 @@ export async function createSession(options: CreateSessionOptions) {
   const created = await createAgentSessionFromServices({
     services,
     sessionManager,
-    ...(model ? { model } : {}),
+    ...(launchModel ? { model: launchModel } : {}),
     ...(options.reasoning ? { thinkingLevel: options.reasoning as never } : {}),
     ...(memoryBudget || options.memoryControlSession
       ? {
@@ -661,13 +664,4 @@ export async function resolveAgentSessionFile(cwd: string, sessionDir: string, s
   const existing = await findSessionFileForWorkspace(workspace, sessionDir, sessionId);
   if (!existing) throw new Error("Session not found in Agent workspace");
   return existing;
-}
-
-export async function discoverModels(cwd: string) {
-  const services = await createAgentSessionServices({
-    cwd,
-    agentDir: getCoforgeAgentDir(cwd),
-    resourceLoaderOptions: { systemPromptOverride: () => "" },
-  });
-  return services.modelRuntime.getAvailableSnapshot();
 }

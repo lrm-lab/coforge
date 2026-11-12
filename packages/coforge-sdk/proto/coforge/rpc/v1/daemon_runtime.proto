@@ -263,6 +263,11 @@ message CodeAgentModelMetadata {
   // The model's reasoning levels are not yet read (Devin's per-model `thought_level` sweep still
   // pending): `reasoning_efforts` is meaningless then, and decodes as absent rather than empty.
   bool reasoning_efforts_pending = 9;
+  // What the provider's own model list says about size, for the Agent form to show and to fall
+  // back on: absent when that provider reports neither, which the form leaves blank rather than
+  // guessing (task #30). A value the person types in the form wins over these.
+  optional uint64 context_window = 10;
+  optional uint64 max_output_tokens = 11;
 }
 
 // Daemon -> server notice, method `daemon:v1:runtime_auth:status_report`: the login status of

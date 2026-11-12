@@ -37,6 +37,9 @@ export class PiProvider implements CodeAgentProvider {
         contextViewRequestLogDirectory: options.contextViewRequestLogDirectory,
         modelProvider: runtime?.modelProvider,
         model: runtime?.model,
+        // What the form filled in, when it did (task #30): the launch's Pi model carries it.
+        contextWindow: runtime?.contextWindow,
+        maxOutputTokens: runtime?.maxOutputTokens,
         reasoning: runtime?.reasoning,
         apiKey: credential?.apiKey,
         instructions: options.instructions,
