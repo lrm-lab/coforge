@@ -48,5 +48,7 @@
   "activity_back_to_list": "Back to activity",
   "activity_conversation_failed": "This conversation could not be loaded.",
   "activity_bulk_mark_all_done": "Mark all done",
-  "activity_bulk_marked_done": "Marked {count} done"
+  "activity_bulk_marked_done": "Marked {count} done",
+  "activity_flow_switch": "Switch",
+  "activity_flow_back": "Back to list"
 }

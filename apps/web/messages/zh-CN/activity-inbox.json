@@ -47,5 +47,7 @@
   "activity_back_to_list": "返回动态",
   "activity_conversation_failed": "无法加载这个会话。",
   "activity_bulk_mark_all_done": "全部完成",
-  "activity_bulk_marked_done": "已把 {count} 条标为完成"
+  "activity_bulk_marked_done": "已把 {count} 条标为完成",
+  "activity_flow_switch": "切换",
+  "activity_flow_back": "回到列表"
 }

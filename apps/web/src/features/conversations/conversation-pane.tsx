@@ -21,6 +21,7 @@ import { optimisticSavedEntry } from "./saved-messages-collection";
 import { groupSystemMessages } from "./system-message-groups";
 import { usePaneOutbox } from "./use-pane-outbox";
 import { ComposerEdgeOverlay } from "./composer-edge-overlay";
+import { useComposerHost } from "./composer-host";
 import { ConversationMessageList } from "./conversation-message-list";
 import { NewerSentinel } from "./conversation-newer-sentinel";
 import { useOwnMessagesIndex } from "./own-messages-menu";
@@ -204,6 +205,7 @@ export function ConversationPane({
   // on Activity, lines up as a channel does. Only the Task popup's discussion goes without: its
   // dialog has margins of its own.
   const column = !inTaskPopup;
+  const composerHost = useComposerHost(root?.id, inTaskPopup);
   // A window replacement in flight (an "around" read) has no messages yet, but that is not an
   // empty conversation: only a settled read may say so (stream-state.ts, #112/#113).
   const streamLoading = streamState(conversation.messages.length, streamRead) === "loading";
@@ -378,6 +380,7 @@ export function ConversationPane({
           column={column}
           conversationId={conversation.conversationId}
           threadRootId={root?.id ?? null}
+          overhead={composerHost.overhead}
           navigation={{
             index: ownIndex,
             followingLatest,
@@ -402,6 +405,8 @@ export function ConversationPane({
         canSendAsTask={canSendAsTask}
         onSent={ownIndex.add}
         quotedDraft={quotedDraft}
+        autoFocus={composerHost.autoFocus}
+        hostRef={composerHost.composerRef}
       />
     </div>
   );

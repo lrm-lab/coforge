@@ -31,6 +31,8 @@ export function ConversationComposerFooter({
   canSendAsTask,
   onSent,
   quotedDraft,
+  autoFocus,
+  hostRef,
 }: {
   conversation: Omit<DirectConversationView, "agent">;
   /** The thread root this pane replies to; absent for the main stream. */
@@ -47,6 +49,8 @@ export function ConversationComposerFooter({
   canSendAsTask?: boolean;
   onSent: ComposerProps["onSent"];
   quotedDraft?: ComposerProps["quotedDraft"];
+  autoFocus?: boolean;
+  hostRef?: ComposerProps["hostRef"];
 }) {
   const mentionCandidates = useMentionCandidates(
     conversation.mentionables,
@@ -80,6 +84,8 @@ export function ConversationComposerFooter({
             canSendAsTask={canSendAsTask}
             onSent={onSent}
             quotedDraft={quotedDraft}
+            autoFocus={autoFocus}
+            hostRef={hostRef}
           />
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type RefObject } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
 import { useAppToast } from "#src/components/ui/toast";
@@ -75,6 +75,8 @@ export function MessageComposer({
   onSend,
   canSendAsTask,
   onSent,
+  autoFocus = true,
+  hostRef,
 }: {
   conversationId: string;
   /** The thread root this composer replies to; absent for the main pane. Together with
@@ -108,6 +110,10 @@ export function MessageComposer({
   canSendAsTask?: boolean;
   /** A message of the current user's was accepted by the server. */
   onSent?: (message: SentMessage) => void;
+  /** Opening the conversation puts the caret here; false where the host keeps it (Activity). */
+  autoFocus?: boolean;
+  /** The host's ref this composer's field registers itself in (`ComposerHost.composerRef`). */
+  hostRef?: RefObject<HTMLTextAreaElement | null>;
 }) {
   const hydrated = useHydrated();
   const toast = useAppToast();
@@ -255,8 +261,16 @@ export function MessageComposer({
   // first message needs no click. Only with a fine pointer: on touch it would pop the keyboard.
   // The textarea is disabled until hydration, and a disabled field cannot take focus.
   useEffect(() => {
-    if (hydrated && window.matchMedia("(pointer: fine)").matches) focusComposer();
-  }, [draftKey, hydrated]);
+    if (autoFocus && hydrated && window.matchMedia("(pointer: fine)").matches) focusComposer();
+  }, [autoFocus, draftKey, hydrated]);
+  useEffect(() => {
+    if (!hostRef) return;
+    const field = completion.textareaRef.current;
+    hostRef.current = field;
+    return () => {
+      if (hostRef.current === field) hostRef.current = null;
+    };
+  }, [hostRef, completion.textareaRef]);
 
   /** Sends the draft, as a Task when `wantTask` (the send menu, Cmd/Ctrl+Shift+Enter) or, by
    * default, when it is an unsent Task edited back. */

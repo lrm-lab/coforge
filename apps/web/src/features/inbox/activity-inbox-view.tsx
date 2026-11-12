@@ -26,11 +26,21 @@ import { m } from "#src/paraglide/messages";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 import { markActivityInboxRead } from "./activity-inbox.functions";
 import { useActivityInboxRefresh } from "./use-activity-inbox-refresh";
-import { activityInboxQuery, waitingChoiceCardsQuery } from "./activity-inbox-queries";
+import {
+  activityInboxQuery,
+  type ActivityCompletionItem,
+  waitingChoiceCardsQuery,
+} from "./activity-inbox-queries";
 import { useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
-import { ACTIVITY_LIST_BESIDE_FROM, ActivityConversationPane } from "./activity-conversation-pane";
+import {
+  ACTIVITY_LIST_BESIDE_FROM,
+  ActivityConversationPane,
+  type ActivityPaneFlow,
+} from "./activity-conversation-pane";
+import { useActivityFlow } from "./use-activity-flow";
+import { useKeptOpenRow } from "./use-kept-open-row";
 import { openedItemKey } from "./activity-open-target";
 import { ActivityTaskPopup } from "./activity-task-popup";
 import { useActivityItemActions } from "./use-activity-item-actions";
@@ -123,12 +133,21 @@ export function ActivityInboxView({
   const pinned = useMemo(() => firstPage?.pinned ?? [], [firstPage]);
   // Pages are read at different times from a list that moves: a first page read again can hold an
   // item a later page still holds. It is shown once, and never again below Pinned.
-  const items = useMemo(() => {
+  const listed = useMemo(() => {
     const seen = new Set(pinned.map((item) => item.key));
     return (projectedData?.pages ?? [])
       .flatMap((page) => page.items)
       .filter((item) => !seen.has(item.key) && seen.add(item.key));
   }, [projectedData, pinned]);
+  const { items, release } = useKeptOpenRow(filter, listed, opened);
+  // A row marked Done leaves the list at once, the one the pane shows included.
+  const onDoneStarted = useCallback(
+    (item: ActivityCompletionItem) => {
+      release(item.key);
+      startDone(item);
+    },
+    [release, startDone],
+  );
 
   const currentKey = useMemo(
     () => openedItemKey([...pinned, ...items], opened),
@@ -150,7 +169,7 @@ export function ActivityInboxView({
     workspaceId,
     onChanged: refresh,
     onFailure: setFailure,
-    onDoneStarted: startDone,
+    onDoneStarted,
     onDoneSettled: settleDone,
   });
 
@@ -174,7 +193,7 @@ export function ActivityInboxView({
     workspaceId,
     onChanged: refresh,
     onFailure: setFailure,
-    onDoneStarted: startDone,
+    onDoneStarted,
     onDoneSettled: settleDone,
   });
   const shownWaiting = expandedWaiting ? waiting : waiting.slice(0, WAITING_SHOWN);
@@ -183,7 +202,34 @@ export function ActivityInboxView({
     ...shownWaiting.map((card) => waitingRowKey(card.messageId)),
     ...rows.map((item) => item.key),
   ];
-  const { tabStopKey, listProps, headerProps } = useActivityListKeyboard(rowKeys, rows, actions);
+  // The composer the open conversation hosts, which Enter and typing put the caret in.
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const listFlow = useActivityFlow({
+    flowing: desktop && pane !== undefined,
+    rows,
+    waiting: shownWaiting,
+    currentKey,
+    pane,
+    onOpen,
+    composerRef,
+  });
+  const { tabStopKey, listProps, headerProps, paneProps, actOnSelected, focusSelected } =
+    useActivityListKeyboard(rowKeys, rows, actions, listFlow);
+  const selectedDone = rows.some((item) => item.key === tabStopKey);
+  const flowing = listFlow !== undefined;
+  const paneFlow = useMemo<ActivityPaneFlow | undefined>(
+    () =>
+      flowing
+        ? {
+            done: selectedDone,
+            composerRef,
+            onListKey: actOnSelected,
+            onKeyDown: paneProps.onKeyDown,
+            onBackToList: focusSelected,
+          }
+        : undefined,
+    [flowing, selectedDone, actOnSelected, paneProps.onKeyDown, focusSelected],
+  );
   // Not empty while the waiting cards are still being read: they may be all there is.
   const empty =
     items.length === 0 &&
@@ -399,6 +445,7 @@ export function ActivityInboxView({
           target={pane}
           onOpen={onOpen}
           onClose={onClose}
+          flow={paneFlow}
         />
       )}
       {taskAlone && (
