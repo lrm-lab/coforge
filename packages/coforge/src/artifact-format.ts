@@ -1,3 +1,5 @@
+import { foldUntrustedLine, formatUtcTimestamp } from "@lrm/coforge-sdk/internal";
+
 /** What `coforge artifact` prints (task #385). The shapes are the server's answers. */
 
 type Card = { id: string; name: string; title: string; currentVersion: number };
@@ -15,6 +17,27 @@ export type ArtifactReadAnswer = {
   entryPath?: string | null;
   files?: ArtifactFileEntry[];
   text: string;
+  /** What others pushed since the Agent last looked; null for an older version, absent from an
+   * older server. */
+  unseen?: ArtifactUnseen | null;
+};
+
+/** A version someone else pushed since the Agent's read position. */
+type UnseenVersion = {
+  number: number;
+  publisher: { kind: "user" | "agent"; name: string };
+  createdAt: string;
+  note: string;
+  label: string;
+  /** The first paths it changed (at most ten) and how many it changed in all. */
+  changedPaths: string[];
+  changedCount: number;
+};
+
+type ArtifactUnseen = {
+  firstRead: boolean;
+  versionCount: number;
+  versions: UnseenVersion[];
 };
 
 /** How many files `read` lists unless asked for all. */
@@ -101,8 +124,47 @@ export function formatArtifactRead(
       lines.push(`  ${files.length - READ_FILES_SHOWN} more: add --files to list them all`);
     lines.push(`Work on them as files: coforge artifact pull ${artifact.id}`);
   }
+  if (read.unseen) lines.push(...formatUnseen(read.unseen));
   if (withText) lines.push("---", read.text);
   return lines.join("\n");
+}
+
+const versions = (count: number) => `${count} version${count === 1 ? "" : "s"}`;
+
+/** What `read` and `pull` print of `unseen`: a headline, one line per listed version, and how
+ * many earlier ones the list leaves out. */
+export function formatUnseen({
+  firstRead,
+  versionCount,
+  versions: shown,
+}: ArtifactUnseen): string[] {
+  if (versionCount === 0)
+    return [
+      firstRead
+        ? "Your first read of it: nothing from others to show."
+        : "Nothing new since you last looked.",
+    ];
+  const earlier = versionCount - shown.length;
+  return [
+    firstRead
+      ? `You haven't read it before: ${versions(versionCount)} so far. The newest:`
+      : `New since you last looked: ${versions(versionCount)}`,
+    ...shown.map(unseenLine),
+    ...(earlier > 0 ? [`- … ${versions(earlier)} earlier`] : []),
+  ];
+}
+
+/** Paths a version line names before it says how many more. */
+const CHANGED_SHOWN = 4;
+
+function unseenLine(version: UnseenVersion): string {
+  const said = foldUntrustedLine(version.note || version.label);
+  const paths = version.changedPaths.map(foldUntrustedLine);
+  const more = version.changedCount - CHANGED_SHOWN;
+  const changed = paths.length
+    ? ` (changed: ${paths.slice(0, CHANGED_SHOWN).join(", ")}${more > 0 ? `, +${more} more` : ""})`
+    : "";
+  return `- v${version.number} by ${foldUntrustedLine(version.publisher.name)}, ${formatUtcTimestamp(version.createdAt)}${said ? `: ${said}` : ""}${changed}`;
 }
 
 export function formatArtifactHistory(id: string, page: HistoryPage): string {

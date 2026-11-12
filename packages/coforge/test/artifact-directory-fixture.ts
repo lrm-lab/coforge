@@ -54,6 +54,7 @@ export function fakeServer(initial: Files = {}, title = "Launch plan") {
     versions.push(next);
   };
   if (Object.keys(initial).length > 0) put(initial);
+  let unseen: unknown;
   const requests: AgentArtifactRequest[] = [];
   const uploads: string[] = [];
   const downloads: { path: string; version?: number }[] = [];
@@ -77,6 +78,13 @@ export function fakeServer(initial: Files = {}, title = "Launch plan") {
     others: put,
     /** Refuse the next manifest save as a clash on these paths. */
     clash: undefined as string[] | undefined,
+    /** What a read of the current version says others pushed since the Agent last looked. */
+    get unseen() {
+      return unseen;
+    },
+    set unseen(value: unknown) {
+      unseen = value;
+    },
     transport: {
       artifact: async (request: AgentArtifactRequest) => {
         requests.push(request);
@@ -88,6 +96,7 @@ export function fakeServer(initial: Files = {}, title = "Launch plan") {
             entryPath: versions[number]!.has("index.html") ? "index.html" : "plan.md",
             files: listing(number),
             text: "",
+            ...(unseen !== undefined && request.version === undefined ? { unseen } : {}),
           };
         }
         if (request.operation !== "push" && request.operation !== "create")

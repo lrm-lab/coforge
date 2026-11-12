@@ -55,8 +55,10 @@ coforge artifact push work --note 'moved the date'
 --target '#channel' --title <t>` (add `--description <line>` when the entry is an `.html` file,
   `--entry <file>` to pick the file it opens at; without `--target` it goes to the Workspace).
 - `download <id> <path> [--output <file>] [--rev <n>]` saves one file's exact bytes.
-- `read <id>` lists the version's files and entry (`--files` for all of them); `list` takes
-  `--query <words>`, and its last line names the next page when there is one.
+- `read <id>` lists the version's files and entry (`--files` for all of them), and what others
+  pushed since you last looked (reading the newest version moves your place; an older `--version`
+  does not); `list` takes `--query <words>`, and its last line names the next page when there is
+  one.
 - For now a web page is exactly one `index.html`.
 
 If someone saved since your pull, the push keeps what they changed in files you did not touch.

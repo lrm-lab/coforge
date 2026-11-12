@@ -45,7 +45,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--output  write the text to this file instead of printing it",
     ],
     guidance:
-      "Prints the version line, the entry and the version's files, then `---` and the entry's text. To change files, `pull` the artifact instead.",
+      "Prints the version line, the entry and the version's files, what others pushed since you last read the current version, then `---` and the entry's text. To change files, `pull` the artifact instead.",
     example: "coforge artifact read 0f8c…e1 --output plan.md",
   },
   "artifact pull": {

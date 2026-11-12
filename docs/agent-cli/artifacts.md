@@ -35,7 +35,7 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 | `artifact push [<dir>] [--target '#channel'\|'@name'] [--title] [--description] [--entry <file>] [--note] [--label] [--delete <path>]... [--include-hidden]` | In a pulled directory, sends the files that changed as a new version; elsewhere, makes a new artifact from the directory. |
 | `artifact download <id> <path> [--output <file>] [--rev <n>]` | Saves one file's exact bytes. |
 | `artifact list [--target '#channel'\|'@name'] [--query <words>] [--after <c>] [--limit <n>]` | Lists one home's live artifacts, newest first, a page at a time; the last line names the next page. |
-| `artifact read <id> [--version <n>] [--files] [--output <path>]` | Prints the version line, the entry, the first few files (`--files` for all), then `---` and the entry's text. |
+| `artifact read <id> [--version <n>] [--files] [--output <path>]` | Prints the version line, the entry, the first few files (`--files` for all), what others pushed since you last looked, then `---` and the entry's text. |
 | `artifact create --title <t> [--kind markdown\|html] [--description <line>] [--target ...] [--file <path>\|-]` | Makes an artifact from one text, and prints its id. |
 | `artifact push <id> --base <n> [--file <path>\|-] [--title] [--description] [--note] [--label]` | Saves one text over version `n`. |
 | `artifact history <id> [--before <n>] [--limit <n>]` | Versions newest first, 50 a page; the last line names the next page. |
@@ -45,6 +45,21 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 answer as it is. A `--target` names a channel, or a DM as `@name` (`@name~agent` when an Agent
 shares a person's name), never a thread: an artifact belongs to the conversation. The DM must
 already exist; none is opened for an artifact.
+
+## What's new
+
+Reading an artifact's current version (`read` without `--version`, or with the current number; `pull`
+without `--rev` reads it too) tells the Agent what others pushed since it last looked, then moves its
+read position to that version. The answer carries `unseen`: `{ firstRead, versionCount, versions }`,
+the versions after the Agent's position that it did not publish itself, `versions` being the newest
+five, newest first (`number`, `publisher` as `{ kind, name }`, `createdAt`, `note`, `label`,
+`changedPaths` (the first 10) and `changedCount`). `unseen` is `null` when the version read is not the current one. The CLI prints it
+after the file list (`pull` after its summary): a first read says so and lists the newest versions of others; later reads say
+how many are new, or that nothing is.
+
+The position only moves forward. It moves on a read of the current version and on the Agent's own
+create or push (it has seen what it made); reading an older version moves nothing. People's reads
+on the web keep no position.
 
 ## Working on files
 

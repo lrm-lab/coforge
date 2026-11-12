@@ -45,7 +45,44 @@ test("pull writes every file of the version, exactly, with a state file", async 
   });
   expect(said).toContain("Pulled 3 files");
   expect(said).toContain("version 1");
+  // The current version is read without naming it, so the pull moves the Agent's read position.
+  expect(server.requests[0]).toEqual({ operation: "read", artifact: ID });
   expect(said).toContain(`coforge artifact push ${dir}`);
+});
+
+test("pull prints what others pushed since the last look, as read does", async () => {
+  const server = fakeServer({ "plan.md": "one" });
+  server.unseen = {
+    firstRead: false,
+    versionCount: 1,
+    versions: [
+      {
+        number: 1,
+        publisher: { kind: "user", name: "Alice" },
+        createdAt: "2026-11-12T09:30:00.000Z",
+        note: "moved the date",
+        label: "",
+        changedPaths: ["plan.md"],
+        changedCount: 1,
+      },
+    ],
+  };
+  const said = (await run(server, ["pull", ID, "--dir", join(root, "news")])) as string;
+  const lines = said.split("\n");
+  expect(lines.slice(-2)).toEqual([
+    "New since you last looked: 1 version",
+    "- v1 by Alice, 2026-11-12 09:30:00Z: moved the date (changed: plan.md)",
+  ]);
+  // Pulling an older version reads no position, so there is nothing to say.
+  const older = (await run(server, [
+    "pull",
+    ID,
+    "--dir",
+    join(root, "news2"),
+    "--rev",
+    "1",
+  ])) as string;
+  expect(older).not.toContain("since you last looked");
 });
 
 test("pull --rev reads and downloads that version", async () => {

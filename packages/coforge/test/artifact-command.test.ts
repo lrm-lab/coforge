@@ -206,6 +206,130 @@ test("read prints the version to save over, then the text", async () => {
   );
 });
 
+const readAnswer = (unseen: unknown) => ({
+  artifact: { id: ID, title: "Plan", currentVersion: 6 },
+  version: { number: 6, label: null },
+  entryPath: "document.md",
+  files: [{ path: "document.md", sha256: "a".repeat(64), sizeBytes: 12, kind: "text" }],
+  text: "# Plan\n",
+  unseen,
+});
+
+const unseenVersion = (number: number, extra: Record<string, unknown> = {}) => ({
+  number,
+  publisher: { kind: "user", name: "Alice" },
+  createdAt: "2026-11-12T09:30:00.000Z",
+  note: "moved the date",
+  label: "",
+  changedPaths: ["a.md", "b.css"],
+  changedCount: 2,
+  ...extra,
+});
+
+test("read lists what others pushed since the last look, after the files", async () => {
+  const { transport } = transportAnswering(
+    readAnswer({
+      firstRead: false,
+      versionCount: 7,
+      versions: [
+        unseenVersion(6),
+        unseenVersion(5, {
+          publisher: { kind: "agent", name: "Writer Bot" },
+          note: "",
+          label: "draft",
+          changedPaths: [],
+          changedCount: 0,
+        }),
+        unseenVersion(4, { note: "line one\nline two", changedPaths: ["a.md"], changedCount: 1 }),
+        unseenVersion(3),
+        unseenVersion(2),
+      ],
+    }),
+  );
+  const said = (await runArtifact(invocation(["read", ID]), transport)) as string;
+  const lines = said.split("\n");
+  const files = lines.indexOf("Work on them as files: coforge artifact pull " + ID);
+  expect(lines.slice(files + 1, files + 8)).toEqual([
+    "New since you last looked: 7 versions",
+    "- v6 by Alice, 2026-11-12 09:30:00Z: moved the date (changed: a.md, b.css)",
+    "- v5 by Writer Bot, 2026-11-12 09:30:00Z: draft",
+    "- v4 by Alice, 2026-11-12 09:30:00Z: line one line two (changed: a.md)",
+    "- v3 by Alice, 2026-11-12 09:30:00Z: moved the date (changed: a.md, b.css)",
+    "- v2 by Alice, 2026-11-12 09:30:00Z: moved the date (changed: a.md, b.css)",
+    "- … 2 versions earlier",
+  ]);
+  expect(lines[files + 8]).toBe("---");
+});
+
+test("read names four changed paths, then how many more, by the total the server counted", async () => {
+  const paths = Array.from({ length: 10 }, (_, n) => `f${n}.md`);
+  const { transport } = transportAnswering(
+    readAnswer({
+      firstRead: false,
+      versionCount: 1,
+      versions: [unseenVersion(6, { changedPaths: paths, changedCount: 14 })],
+    }),
+  );
+  const said = (await runArtifact(invocation(["read", ID]), transport)) as string;
+  expect(said).toContain(
+    "- v6 by Alice, 2026-11-12 09:30:00Z: moved the date (changed: f0.md, f1.md, f2.md, f3.md, +10 more)",
+  );
+});
+
+test("read on a first look says so, and lists the newest versions of others", async () => {
+  const { transport } = transportAnswering(
+    readAnswer({
+      firstRead: true,
+      versionCount: 2,
+      versions: [unseenVersion(6), unseenVersion(5)],
+    }),
+  );
+  const said = (await runArtifact(invocation(["read", ID]), transport)) as string;
+  expect(said).toContain(
+    [
+      "You haven't read it before: 2 versions so far. The newest:",
+      "- v6 by Alice, 2026-11-12 09:30:00Z: moved the date (changed: a.md, b.css)",
+      "- v5 by Alice, 2026-11-12 09:30:00Z: moved the date (changed: a.md, b.css)",
+      "---",
+    ].join("\n"),
+  );
+});
+
+test("read says plainly when nothing from others is new", async () => {
+  const none = { versionCount: 0, versions: [] };
+  const again = await runArtifact(
+    invocation(["read", ID]),
+    transportAnswering(readAnswer({ firstRead: false, ...none })).transport,
+  );
+  expect(again).toContain("Nothing new since you last looked.\n---");
+  const first = await runArtifact(
+    invocation(["read", ID]),
+    transportAnswering(readAnswer({ firstRead: true, ...none })).transport,
+  );
+  expect(first).toContain("Your first read of it: nothing from others to show.\n---");
+});
+
+test("read of an older version, or from an older server, prints nothing about what is new", async () => {
+  for (const unseen of [null, undefined]) {
+    const said = (await runArtifact(
+      invocation(["read", ID, "--version", "2"]),
+      transportAnswering(readAnswer(unseen)).transport,
+    )) as string;
+    expect(said).not.toContain("since you last looked");
+    expect(said).not.toContain("first read");
+    expect(said).not.toContain("haven't read");
+  }
+});
+
+test("read --json prints the server's answer as it is, with what is new", async () => {
+  const answer = readAnswer({ firstRead: true, versionCount: 1, versions: [unseenVersion(6)] });
+  const said = await runArtifact(
+    invocation(["read", ID, "--json"]),
+    transportAnswering(answer).transport,
+  );
+  expect(said).toEqual(answer);
+});
+
 function serveProxy(body: unknown, status: number) {
   const seen: unknown[] = [];
   const server = Bun.serve({

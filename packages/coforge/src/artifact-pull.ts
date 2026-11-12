@@ -14,7 +14,7 @@ import type {
   ArtifactDirectoryInvocation,
   ArtifactDirectoryTransport,
 } from "#src/artifact-directory-args";
-import type { ArtifactReadAnswer } from "#src/artifact-format";
+import { formatUnseen, type ArtifactReadAnswer } from "#src/artifact-format";
 import { asJson, pullFile, requireCall } from "#src/artifact-transfer";
 import { CliError, invalidArg } from "#src/cli-error";
 import { inPool } from "#src/pool";
@@ -72,6 +72,8 @@ export async function runPull(
     `Pulled ${files.length} file${files.length === 1 ? "" : "s"} of "${title}" (id ${id}), version ${version} of ${currentVersion}, into ${shown}.`,
     ...(answer.entryPath ? [`Entry: ${answer.entryPath}`] : []),
     `Edit the files there, then send what changed: coforge artifact push ${shellWord(shown)}`,
+    // Pulling the current version moves the Agent's read position, as a read does.
+    ...(answer.unseen ? formatUnseen(answer.unseen) : []),
   ];
   return asJson(
     invocation,
