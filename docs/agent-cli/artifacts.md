@@ -123,6 +123,10 @@ references (`css/site.css`, `img/a.png`, a link to `other.html`) resolve inside 
 - An `.html` file is served only as the frame of the page (and the pages it links to); any other file
   only as a script, style, image, font, audio or video request of a page, never as a document of its
   own. A file of another version or artifact is not reachable through the link.
+- A page may also load scripts and styles from a fixed set of public hosts (cdnjs.cloudflare.com,
+  cdn.jsdelivr.net, unpkg.com, esm.sh, cdn.tailwindcss.com, code.jquery.com, cdn.plot.ly), web fonts
+  from fonts.googleapis.com and fonts.gstatic.com, and images and fonts from those CDNs. The list
+  is `SANDBOX_PUBLIC_CDNS` in `apps/web/src/server/artifacts/artifact-sandbox-cdns.server.ts`.
 - It still makes no network requests (no `fetch`, XHR or WebSocket), submits no form, opens no
   window, and has no cookies or storage.
 - A link opens the page for five minutes and its files for thirty; the pane asks for a new link

@@ -1,3 +1,4 @@
+import { withPublicCdns } from "./artifact-sandbox-cdns.server";
 
 /**
  * What the sandbox origin answers with (task #490). A link opens a fixed wrapper page of ours,
@@ -7,13 +8,14 @@
  * wrapper, out of its reach.
  *
  * The page's headers let its own inline scripts and styles run, let it load its own files (the
- * ones under its link's prefix), and stop it sending anything over HTTP, WebSocket or WebRTC:
+ * ones under its link's prefix) and a fixed set of public hosts (`artifact-sandbox-cdns.server.ts`),
+ * and stop it sending anything over HTTP, WebSocket or WebRTC:
  * - `sandbox allow-scripts`, as a CSP directive (and on the wrapper's iframe), makes it an opaque
  *   origin: no cookies, no storage, no same-origin access to anything. Without `allow-same-origin`,
  *   `allow-forms`, `allow-popups`, `allow-modals` or `allow-top-navigation`, it can neither submit
  *   a form, open a window, nor move the page that frames it.
  * - `default-src 'none'`, with only inline script and style, `data:` / `blob:` images, fonts and
- *   media, and the page's own files: `connect-src`, `form-action`, `frame-src`
+ *   media, the page's own files and those public hosts: `connect-src`, `form-action`, `frame-src`
  *   and the rest are closed, so no request leaves. Its own files are the link's prefix
  *   (`/a/<ticket>/page/`), so a page cannot load a file of another link or version.
  * - `frame-ancestors`: the wrapper's origin and the app the link was made for.
@@ -43,7 +45,7 @@ export function sandboxPageHeaders(input: {
   const own = input.filePrefix;
   return new Headers({
     "Content-Type": "text/html; charset=utf-8",
-    "Content-Security-Policy": [
+    "Content-Security-Policy": withPublicCdns([
       "sandbox allow-scripts",
       "default-src 'none'",
       `script-src 'unsafe-inline' ${own}`,
@@ -59,7 +61,7 @@ export function sandboxPageHeaders(input: {
       // Every ancestor is checked: the wrapper, and the app framing the wrapper. That the app does
       // not frame the page directly is `serve`'s `Sec-Fetch-Site` check.
       `frame-ancestors ${input.sandboxOrigin} ${input.appOrigin}`,
-    ].join("; "),
+    ]).join("; "),
     ...COMMON,
   });
 }

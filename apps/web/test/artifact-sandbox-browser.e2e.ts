@@ -12,7 +12,9 @@ import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chro
  * to another file of the artifact opens in the frame; and no request it tries goes out — no fetch, XHR, beacon, WebSocket, WebRTC, image, script, stylesheet, form,
  * popup, nor moving the top page — framed in the app or opened in a tab of its own. It reads no
  * cookie and no storage, and an origin other than the one the link was made for cannot frame it.
- * Everything it tries is aimed at an "outside" server that counts what reaches it. A page cannot load a file of another link, whose prefix its CSP does not name.
+ * Everything it tries is aimed at an "outside" server that counts what reaches it. The public
+ * hosts its CSP names (`artifact-sandbox-cdns.server.ts`) are pinned as text only: this test never
+ * reaches them. A page cannot load a file of another link, whose prefix its CSP does not name.
  *
  * What the browser sends for a page's requests from its opaque frame (`Sec-Fetch-*`, `Origin`) is
  * recorded at the sandbox server and written, with what the page saw, to
@@ -387,7 +389,7 @@ test("a page of several files: its own style, script, module, image and font loa
   summary.pageSaw = { index: { ...index, link: undefined }, second };
 });
 
-test("the page's CSP names its own prefix, and still no connection", async () => {
+test("the page's CSP names its own prefix and the public hosts, and still no connection", async () => {
   const link = await linkFor("multi");
   const response = await sandbox.serve(
     new Request(`${link}/page/index.html`, {
@@ -395,6 +397,18 @@ test("the page's CSP names its own prefix, and still no connection", async () =>
     }),
   );
   const csp = response.headers.get("content-security-policy")!;
+  for (const host of [
+    "https://cdnjs.cloudflare.com",
+    "https://cdn.jsdelivr.net",
+    "https://unpkg.com",
+    "https://esm.sh",
+    "https://cdn.tailwindcss.com",
+    "https://code.jquery.com",
+    "https://cdn.plot.ly",
+    "https://fonts.googleapis.com",
+    "https://fonts.gstatic.com",
+  ])
+    expect(csp).toContain(host);
   expect(csp).toContain("connect-src 'none'");
   expect(csp).toContain(`${link}/page/`);
   summary.csp = csp;

@@ -22,6 +22,11 @@ artifact.
   it helps, files of its own: a stylesheet, scripts, images, fonts, other `.html` pages. Refer to
   them with relative paths (`css/site.css`, `img/chart.png`, `<a href="second.html">`); every file
   of the version is served beside the entry. An `.html` file is at most 2 MiB.
+- Scripts and styles may also come from these public hosts, and nowhere else: cdnjs.cloudflare.com,
+  cdn.jsdelivr.net, unpkg.com, esm.sh, cdn.tailwindcss.com, code.jquery.com and cdn.plot.ly; web
+  fonts from fonts.googleapis.com (styles) and fonts.gstatic.com (font files); images and fonts
+  from the same CDNs. Some readers cannot reach those hosts, so a page that must always work
+  ships its libraries and fonts as its own files.
 - Scripts run (tabs, toggles, sorting, drawing a chart on a `<canvas>`), but the page cannot make
   network requests: no `fetch`, XHR or WebSocket, no WebRTC, no form submission, no navigating
   away or pop-ups, no cookies or storage. Put the data in the page or in a file of its own and
