@@ -9,7 +9,6 @@ import {
   devBrowserWorkspace,
   localBrowserE2e,
   pageHydrated,
-  seededUuid,
 } from "./helpers/browser-e2e";
 import {
   activeCount,
@@ -22,6 +21,7 @@ import {
   rightClickRow,
   rowItems,
   seedChannel,
+  seedQuietThread,
   shownInPane,
   waitFor,
 } from "./helpers/activity-inbox-e2e";
@@ -64,70 +64,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     });
     // A second channel with a followed thread the viewer has read to the end, where nothing
     // mentions them. The channel itself is Done, so only the thread row lists.
-    const quietChannelId = seededUuid("e2e-activity-inbox:quiet-channel");
-    await db.conversation.upsert({
-      where: { id: quietChannelId },
-      update: { archivedAt: null },
-      create: { id: quietChannelId, workspaceId, channelName: "e2e-activity-quiet" },
-    });
-    await db.message.deleteMany({ where: { conversationId: quietChannelId } });
-    const quietViewer = await db.conversationMember.upsert({
-      where: {
-        conversationId_userId: { conversationId: quietChannelId, userId: DEV_BROWSER_USER.id },
-      },
-      update: {
-        leftAt: null,
-        readThroughSequence: 1,
-        doneThroughSequence: 1,
-        unreadFromSequence: null,
-      },
-      create: {
-        conversationId: quietChannelId,
-        workspaceId,
-        userId: DEV_BROWSER_USER.id,
-        readThroughSequence: 1,
-        doneThroughSequence: 1,
-      },
-    });
-    const quietRootId = seededUuid("e2e-activity-inbox:quiet-root");
-    const quietNewestId = seededUuid("e2e-activity-inbox:quiet-newest");
-    // Enough replies that the thread pane scrolls: the newest one is out of view at the root.
-    const quietRows = [
-      { id: quietRootId, body: "E2E quiet root", threadRootId: null },
-      ...Array.from({ length: 39 }, (_, index) => ({
-        id: seededUuid(`e2e-activity-inbox:quiet-reply-${index}`),
-        body: `E2E quiet reply ${index + 1}`,
-        threadRootId: quietRootId,
-      })),
-      { id: quietNewestId, body: "E2E quiet newest reply", threadRootId: quietRootId },
-    ];
-    for (const [index, row] of quietRows.entries())
-      await db.message.create({
-        data: {
-          ...row,
-          senderMemberId: quietViewer.id,
-          conversationId: quietChannelId,
-          workspaceId,
-          sequence: index + 1,
-        },
-      });
-    await db.threadFollow.create({
-      data: {
-        memberId: quietViewer.id,
-        rootMessageId: quietRootId,
-        conversationId: quietChannelId,
-        workspaceId,
-      },
-    });
-    await db.threadRead.create({
-      data: {
-        memberId: quietViewer.id,
-        rootMessageId: quietRootId,
-        conversationId: quietChannelId,
-        workspaceId,
-        readThroughSequence: quietRows.length,
-      },
-    });
+    const { rootId: quietRootId, newestId: quietNewestId } = await seedQuietThread(db, workspaceId);
     await mkdir(artifacts, { recursive: true });
 
     await browser("set", "viewport", "1440", "900");
