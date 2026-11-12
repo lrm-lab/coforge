@@ -30,7 +30,18 @@ export type AgentLaunchRefusalCode =
   | "AGENT_MIGRATING"
   | "AGENT_LAUNCH_UNSOLICITED"
   | "AGENT_LAUNCH_CONFIG_CHANGED"
+  | "AGENT_LAUNCH_STOPPED"
+  | "AGENT_LAUNCH_NOT_RESUMABLE"
   | "AGENT_LAUNCH_SUPERSEDED";
+
+/** What the final judgment read, so the route's warning names the fence without reading the Agent
+ * again. These four and nothing else: no session identity, no credential. */
+export type AgentLaunchRefusalFacts = {
+  phase?: string;
+  action?: string;
+  sameScope?: boolean;
+  stoppedAt?: boolean;
+};
 
 /** A refused launch claim. The message stays the sentence this receiver has always thrown; the
  * code is what the route relays and the Daemon writes down. */
@@ -38,6 +49,7 @@ export class AgentLaunchRefusalError extends Error {
   constructor(
     readonly code: AgentLaunchRefusalCode,
     message: string,
+    readonly facts: AgentLaunchRefusalFacts = {},
   ) {
     super(message);
     this.name = "AgentLaunchRefusalError";
@@ -102,7 +114,12 @@ export class AgentControlReceiver {
       state.launchId === input.launchId;
     if (state.phase === "starting") {
       if (sameScope) return;
-      throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch");
+      throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch", {
+        phase: state.phase,
+        action: state.action,
+        sameScope,
+        stoppedAt: agent.stoppedAt != null,
+      });
     }
     // A daemon-initiated wake resends the same requestId/controlEpoch/launchId this
     // Agent's last managed operation completed under, instead of a fresh managed scope. Accepted
@@ -111,9 +128,21 @@ export class AgentControlReceiver {
     // operation. A completed `stop` chain also ends in phase "completed" (`advance()` has no next
     // step); it carries no `launchId`, so `sameScope` already excludes it, but the action is
     // checked explicitly so this never depends on that.
-    if (state.phase === "completed" && state.action !== "stop" && sameScope && !agent.stoppedAt)
-      return;
-    throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch");
+    const facts: AgentLaunchRefusalFacts = {
+      phase: state.phase,
+      action: state.action,
+      sameScope,
+      stoppedAt: agent.stoppedAt != null,
+    };
+    // Three different refusals share this line, and telling them apart is the whole point: a
+    // person's Stop, an operation that ended without a start to resume, and a scope that moved on.
+    if (facts.stoppedAt || state.action === "stop")
+      throw new AgentLaunchRefusalError("AGENT_LAUNCH_STOPPED", "Agent launch was stopped", facts);
+    if (state.phase !== "completed")
+      throw new AgentLaunchRefusalError("AGENT_LAUNCH_NOT_RESUMABLE", "Stale Agent launch", facts);
+    if (!sameScope)
+      throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch", facts);
+    return;
   }
   /**
    * The Daemon's immediate `accepted` acknowledgement (task #584): it proves the command was

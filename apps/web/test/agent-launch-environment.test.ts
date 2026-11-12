@@ -100,7 +100,12 @@ await mockModuleForFile("#src/server/agents/agent-control.server", () => ({
     async authorizeLaunch() {
       if (launchRefusal === "plain") throw new Error("stale launch");
       if (launchRefusal === "coded")
-        throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch");
+        throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch", {
+          phase: "completed",
+          action: "start",
+          sameScope: false,
+          stoppedAt: false,
+        });
     }
   },
 }));
@@ -219,17 +224,37 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
   const uncoded = (await request("valid")) as Response;
   expect(uncoded.status).toBe(403);
   expect(await uncoded.json()).toEqual({ error: "forbidden" });
-  // A coded refusal names the fence in the body's `code`: the Daemon writes that down, so a
-  // refused relaunch stops reading as one opaque 403 (task #14).
-  launchRefusal = "coded";
-  const coded = (await request("valid")) as Response;
-  expect(coded.status).toBe(403);
-  expect(await coded.json()).toEqual({
-    error: "Stale Agent launch",
-    code: "AGENT_LAUNCH_SUPERSEDED",
-    retryable: false,
-  });
-  launchRefusal = "none";
+  // A coded refusal names the fence in the body's `code` and in the server's own warning: the
+  // Daemon writes the code down, so a refused relaunch stops reading as one opaque 403 (task #14).
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => void warnings.push(args.map(String).join(" "));
+  try {
+    launchRefusal = "coded";
+    const coded = (await request("valid")) as Response;
+    expect(coded.status).toBe(403);
+    expect(await coded.json()).toEqual({
+      error: "Stale Agent launch",
+      code: "AGENT_LAUNCH_SUPERSEDED",
+      retryable: false,
+    });
+    // The warning carries what the fence read, and nothing from the Agent's credentials.
+    expect(warnings).toContainEqual(
+      JSON.stringify({
+        event: "agent_launch.refused",
+        agent_id: "agent-1",
+        computer_id: "computer-1",
+        code: "AGENT_LAUNCH_SUPERSEDED",
+        phase: "completed",
+        action: "start",
+        same_scope: false,
+        stopped_at: false,
+      }),
+    );
+  } finally {
+    console.warn = originalWarn;
+    launchRefusal = "none";
+  }
   const failed = (await request("valid")) as Response;
   expect(failed.status).toBe(503);
   expect(await failed.json()).toEqual({ error: "service unavailable" });
