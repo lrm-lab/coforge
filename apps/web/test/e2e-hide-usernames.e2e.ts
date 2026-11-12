@@ -36,7 +36,8 @@ test(
         await browser("open", `${base}/settings?section=account`);
         await waitFor(hydrated(mainButton("Edit")));
         let text = await mainText();
-        check("account: read view lists the Display name", /Display name/.test(text));
+        // The name is the heading (task #15), not a "Display name" row under it.
+        check("account: read view does not repeat the name as a row", !/Display name/.test(text));
         check("account: read view has no Username row", !/Username/i.test(text));
         check("account: read view shows no @username", showsNoUsername(text));
         check("account: the display name is the name", /Dev Viewer/.test(text));

@@ -1,14 +1,10 @@
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
-import { useReducedMotion } from "motion/react";
 import { Camera01, Check } from "@untitledui/icons";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import AnimatedGradient from "#src/components/spell/animated-gradient";
-import { heroGradient, useWebGl2 } from "#src/features/landing/landing-brand-panel";
 import { PersonAvatarDialog } from "#src/features/profiles/person-avatar-dialog";
 import { CreatedAgentFaces } from "#src/features/agents/created-agent-faces";
-import profileBanner from "#src/features/profiles/profile-banner.webp?inline";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Badge, BadgeWithIcon } from "#src/components/base/badges/badges";
@@ -56,8 +52,6 @@ export function AccountSettings({
   onAvatarPresetChoose,
 }: SettingsContentProps) {
   const hydrated = useHydrated();
-  const gradientReady = useWebGl2();
-  const reducedMotion = useReducedMotion() ?? false;
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(profile.displayName ?? "");
   const [description, setDescription] = useState(profile.description);
@@ -110,24 +104,14 @@ export function AccountSettings({
   return (
     <div className="w-full pb-8">
       <section>
-        <div aria-hidden="true" className="relative h-32 overflow-hidden bg-primary-solid sm:h-44">
-          <img src={profileBanner} alt="" className="size-full object-cover" />
-          {/* The picture above is the gradient's own first frame, so the page shows the finished
-              banner at once; the live gradient draws over it from that same frame and then moves. */}
-          {gradientReady && (
-            <div className="absolute inset-0 isolate">
-              <AnimatedGradient config={heroGradient} theme="dark" paused={reducedMotion} />
-            </div>
-          )}
-        </div>
-        <header className="flex min-w-0 items-start gap-4 px-4 sm:gap-6 sm:px-8">
+        <header className="flex min-w-0 items-center gap-4 px-4 pt-8 sm:gap-6 sm:px-8">
           {/* The picture is the way to change it, as on an Agent's profile: a camera shows on
               hover or focus. */}
           <Button
             color="link-gray"
             noTextPadding
             aria-label={m.settings_avatar_dialog_title()}
-            className="relative -mt-12 shrink-0 rounded-full!"
+            className="relative shrink-0 rounded-full!"
             onPress={() => setAvatarDialogOpen(true)}
           >
             <ActorAvatar
@@ -150,7 +134,7 @@ export function AccountSettings({
             onSave={onAvatarPresetChoose}
             onUpload={onAvatarUpload}
           />
-          <div className="min-w-0 flex-1 pt-4">
+          <div className="min-w-0 flex-1">
             {/* Edit sits with the name it changes, not at the far edge of a wide window; while
                 editing, Cancel and Save close the form below instead. */}
             <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
@@ -158,7 +142,7 @@ export function AccountSettings({
                 {profile.name}
               </h2>
               {!editing && (
-                <Button type="button" className="shrink-0" onPress={startEditing}>
+                <Button type="button" color="secondary" className="shrink-0" onPress={startEditing}>
                   {m.settings_profile_edit()}
                 </Button>
               )}
@@ -222,24 +206,26 @@ export function AccountSettings({
             </div>
           ) : (
             <dl className="flex min-w-0 flex-col gap-6">
-              <ProfileValue label={m.settings_display_name()} value={profile.displayName || "-"} />
+              {/* The name is the heading above, so it is not listed again; a field with nothing
+                  in it is left out rather than shown as a dash. */}
               <ContactValues profile={profile} />
-              <ProfileValue
-                label={m.settings_user_description()}
-                value={profile.description || "-"}
-              />
+              {profile.description ? (
+                <ProfileValue label={m.settings_user_description()} value={profile.description} />
+              ) : null}
               <ProfileValue
                 label={m.settings_joined_at()}
                 value={hydrated ? formatCalendarDate(profile.joinedAt, timeZone, locale) : ""}
               />
-              <div className="flex min-w-0 flex-col gap-2">
-                <dt className="text-sm font-semibold text-primary">
-                  {m.settings_created_agents()}
-                </dt>
-                <dd className="flex min-w-0 flex-wrap gap-2 text-sm text-primary">
-                  <CreatedAgentFaces agents={createdAgents} />
-                </dd>
-              </div>
+              {createdAgents.length > 0 ? (
+                <div className="flex min-w-0 flex-col gap-2">
+                  <dt className="text-sm font-semibold text-primary">
+                    {m.settings_created_agents()}
+                  </dt>
+                  <dd className="flex min-w-0 flex-wrap gap-2 text-sm text-primary">
+                    <CreatedAgentFaces agents={createdAgents} />
+                  </dd>
+                </div>
+              ) : null}
             </dl>
           )}
         </div>
