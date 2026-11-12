@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import {
   artifactPath,
   folderName,
-  invalidArg,
   pullTarget,
   refuseCaseCollisions,
   removeInside,
@@ -15,8 +14,10 @@ import type {
   ArtifactDirectoryInvocation,
   ArtifactDirectoryTransport,
 } from "#src/artifact-directory-args";
-import { asJson, inPool, pullFile, requireCall, type ReadAnswer } from "#src/artifact-transfer";
-import { CliError } from "#src/cli-error";
+import type { ArtifactReadAnswer } from "#src/artifact-format";
+import { asJson, pullFile, requireCall } from "#src/artifact-transfer";
+import { CliError, invalidArg } from "#src/cli-error";
+import { inPool } from "#src/pool";
 
 /** `coforge artifact pull`: every file of a version into a directory, with its state file. */
 export async function runPull(
@@ -32,7 +33,7 @@ export async function runPull(
     operation: "read",
     artifact: draft.artifact,
     ...(draft.rev === undefined ? {} : { version: draft.rev }),
-  })) as ReadAnswer;
+  })) as ArtifactReadAnswer;
   if (!answer.version) throw invalidArg("The artifact has no versions to pull");
   if (!answer.files)
     throw new CliError({
@@ -58,8 +59,7 @@ export async function runPull(
       ...Object.fromEntries(files.map((file) => [file.path, file.sha256])),
     },
   });
-  const download = requireCall(transport.artifactDownload, "download");
-  await inPool(files, 4, (file) => pullFile(download, dir, id, version, file));
+  await inPool(files, 4, (file) => pullFile(transport, dir, id, version, file));
   const keep = new Set(files.map((file) => file.path));
   for (const path of Object.keys(previous?.files ?? {}))
     if (!keep.has(path)) await removeInside(dir, path);

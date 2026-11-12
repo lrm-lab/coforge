@@ -34,7 +34,7 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 | `artifact pull <id> [--dir <dir>] [--rev <n>]` | Writes every file of a version into a directory (by default a folder named after the title, or the id) and a hidden `.coforge-artifact.json` there. |
 | `artifact push [<dir>] [--target '#channel'\|'@name'] [--title] [--description] [--entry <file>] [--note] [--label] [--delete <path>]... [--include-hidden]` | In a pulled directory, sends the files that changed as a new version; elsewhere, makes a new artifact from the directory. |
 | `artifact download <id> <path> [--output <file>] [--rev <n>]` | Saves one file's exact bytes. |
-| `artifact list [--target '#channel'\|'@name'] [--query <words>] [--cursor <c>] [--limit <n>]` | Lists one home's live artifacts, newest first, a page at a time; the last line names the next page. |
+| `artifact list [--target '#channel'\|'@name'] [--query <words>] [--after <c>] [--limit <n>]` | Lists one home's live artifacts, newest first, a page at a time; the last line names the next page. |
 | `artifact read <id> [--version <n>] [--files] [--output <path>]` | Prints the version line, the entry, the first few files (`--files` for all), then `---` and the entry's text. |
 | `artifact create --title <t> [--kind markdown\|html] [--description <line>] [--target ...] [--file <path>\|-]` | Makes an artifact from one text, and prints its id. |
 | `artifact push <id> --base <n> [--file <path>\|-] [--title] [--description] [--note] [--label]` | Saves one text over version `n`. |

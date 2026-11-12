@@ -4,7 +4,6 @@ import type { AgentArtifactFile, AgentArtifactRequest } from "@lrm/coforge-sdk/a
 import {
   artifactPath,
   existsInside,
-  invalidArg,
   readState,
   removeInside,
   scanDirectory,
@@ -19,12 +18,13 @@ import type {
   ArtifactDirectoryInvocation,
   ArtifactDirectoryTransport,
 } from "#src/artifact-directory-args";
-import { asJson, inPool, pullFile, requireCall, type ReadAnswer } from "#src/artifact-transfer";
-import { CliError } from "#src/cli-error";
+import type { ArtifactReadAnswer } from "#src/artifact-format";
+import { asJson, pullFile, requireCall } from "#src/artifact-transfer";
+import { CliError, invalidArg, withOutputMode } from "#src/cli-error";
 import { invalidArgument } from "#src/command-help/index";
+import { inPool } from "#src/pool";
 
-/** `coforge artifact push`: the files of a directory that differ from its state, or a new
- * artifact made from a directory that has none. */
+/** What a manifest save answers. */
 type SaveAnswer = {
   status?: string;
   number?: number;
@@ -32,6 +32,14 @@ type SaveAnswer = {
   missing?: string[];
 };
 
+type CreateRequest = Extract<AgentArtifactRequest, { operation: "create" }>;
+type PushRequest = Extract<AgentArtifactRequest, { operation: "push" }>;
+
+const toManifest = (files: LocalFile[]): AgentArtifactFile[] =>
+  files.map(({ path, sha256 }) => ({ path, sha256 }));
+
+/** `coforge artifact push`: the files of a directory that differ from its state, or a new
+ * artifact made from a directory that has none. */
 export async function runPush(
   invocation: ArtifactDirectoryInvocation,
   draft: Extract<ArtifactDirectoryDraft, { operation: "push" }>,
@@ -65,10 +73,6 @@ export async function runPush(
         "Remove the file first, then push with --delete.",
       );
   const local = await scanDirectory(dir, draft.includeHidden === true);
-  const send = (request: Record<string, unknown>, files: LocalFile[]) =>
-    sendManifest(request as AgentArtifactRequest, files, transport);
-  const manifest = (files: LocalFile[]): AgentArtifactFile[] =>
-    files.map(({ path, sha256 }) => ({ path, sha256 }));
   const settings = {
     ...(draft.title === undefined ? {} : { title: draft.title }),
     ...(draft.description === undefined ? {} : { description: draft.description }),
@@ -82,8 +86,7 @@ export async function runPush(
       entry,
       settings,
       idempotencyKey,
-      send,
-      manifest,
+      transport,
     );
     const hashes = Object.fromEntries([...local.values()].map((file) => [file.path, file.sha256]));
     await writeState(dir, { artifact: created.id, version: created.currentVersion, files: hashes });
@@ -107,12 +110,12 @@ export async function runPush(
       { status: "nothing" },
       `Nothing to push: no file differs from version ${state.version}.`,
     );
-  const request = {
+  const request: PushRequest = {
     operation: "push",
     artifact: state.artifact,
     baseVersion: state.version,
     idempotencyKey,
-    ...(changed.length > 0 ? { files: manifest(changed) } : {}),
+    ...(changed.length > 0 ? { files: toManifest(changed) } : {}),
     ...(deletes.length > 0 ? { delete: deletes } : {}),
     ...(entry === undefined ? {} : { entry }),
     ...settings,
@@ -121,7 +124,7 @@ export async function runPush(
   };
   let answer: SaveAnswer;
   try {
-    answer = (await send(request, changed)) as SaveAnswer;
+    answer = (await sendManifest(request, changed, transport)) as SaveAnswer;
   } catch (error) {
     throw baseMoved(error, state, draft.dir);
   }
@@ -169,8 +172,7 @@ async function createFromDirectory(
   entryOption: string | undefined,
   settings: { title?: string; description?: string },
   idempotencyKey: string,
-  send: (request: Record<string, unknown>, files: LocalFile[]) => Promise<unknown>,
-  manifest: (files: LocalFile[]) => AgentArtifactFile[],
+  transport: ArtifactDirectoryTransport,
 ): Promise<Created> {
   const command = "artifact push";
   const title = settings.title?.trim();
@@ -196,18 +198,16 @@ async function createFromDirectory(
       "An html entry needs --description: one line saying what the page shows",
     );
   const files = [...local.values()];
-  return (await send(
-    {
-      operation: "create",
-      title,
-      ...(draft.target === undefined ? {} : { target: draft.target }),
-      ...(settings.description === undefined ? {} : { description: settings.description.trim() }),
-      files: manifest(files),
-      entry,
-      idempotencyKey,
-    },
-    files,
-  )) as Created;
+  const request: CreateRequest = {
+    operation: "create",
+    title,
+    ...(draft.target === undefined ? {} : { target: draft.target }),
+    ...(settings.description === undefined ? {} : { description: settings.description.trim() }),
+    files: toManifest(files),
+    entry,
+    idempotencyKey,
+  };
+  return (await sendManifest(request, files, transport)) as Created;
 }
 
 /**
@@ -248,15 +248,17 @@ async function sendManifest(
 }
 
 const pullAdvice = (artifact: string, dir: string) =>
-  `Pull the newest version into a fresh directory (coforge artifact pull ${artifact} --dir <new dir>), redo your change on it, and push from there. ${dir === "." ? "" : `Your edits stay in ${dir}.`}`.trim();
+  [
+    `Pull the newest version into a fresh directory (coforge artifact pull ${artifact} --dir <new dir>), redo your change on it, and push from there.`,
+    ...(dir === "." ? [] : [`Your edits stay in ${dir}.`]),
+  ].join(" ");
 
 /** A refusal because the artifact moved on: which files and settings clashed, and what to do. */
 function baseMoved(error: unknown, state: ArtifactState, dir: string): unknown {
   if (!(error instanceof CliError) || !error.message.includes("artifact-agent-base-moved"))
     return error;
   const { files, settings } = clashes(error.details);
-  return new CliError({
-    code: error.code,
+  return withOutputMode(error, error.outputMode, {
     message: [
       error.message,
       ...(files.length > 0 ? [`Files that clashed: ${files.join(", ")}`] : []),
@@ -265,8 +267,6 @@ function baseMoved(error: unknown, state: ArtifactState, dir: string): unknown {
     ].join("\n"),
     retryable: false,
     suggestedNextAction: pullAdvice(state.artifact, dir),
-    ...(error.correlationId ? { correlationId: error.correlationId } : {}),
-    ...(error.details === undefined ? {} : { details: error.details }),
   });
 }
 
@@ -278,8 +278,9 @@ function clashes(details: unknown): { files: string[]; settings: string[] } {
   return { files: lines(record.files), settings: lines(record.settings) };
 }
 
-/** After a merge, the directory lacks what others saved: take the files that differ from the
- * version the server now holds, and drop the ones it no longer has that this push did not send. */
+/** After a merge, the directory lacks what others saved: the state becomes the file list of the
+ * version the server now holds, taking the files that differ from it and dropping the ones it no
+ * longer lists. */
 async function bringMerged(
   dir: string,
   state: ArtifactState,
@@ -292,22 +293,21 @@ async function bringMerged(
     operation: "read",
     artifact: state.artifact,
     version: state.version,
-  })) as ReadAnswer;
-  const files = { ...state.files };
-  const download = requireCall(transport.artifactDownload, "download");
-  const held = new Set<string>();
-  for (const file of answer.files ?? []) {
-    const path = artifactPath(file.path);
-    held.add(path);
-    if (files[path] === file.sha256) continue;
-    await pullFile(download, dir, state.artifact, state.version, { path, sha256: file.sha256 });
-    files[path] = file.sha256;
-  }
-  if (answer.files)
-    for (const path of Object.keys(files))
-      if (!held.has(path)) {
-        await removeInside(dir, path);
-        delete files[path];
-      }
-  return { ...state, files };
+  })) as ArtifactReadAnswer;
+  if (!answer.files) return state;
+  const listed = answer.files.map((file) => ({
+    path: artifactPath(file.path),
+    sha256: file.sha256,
+  }));
+  await inPool(
+    listed.filter((file) => state.files[file.path] !== file.sha256),
+    4,
+    (file) => pullFile(transport, dir, state.artifact, state.version, file),
+  );
+  const held = new Set(listed.map((file) => file.path));
+  for (const path of Object.keys(state.files)) if (!held.has(path)) await removeInside(dir, path);
+  return {
+    ...state,
+    files: Object.fromEntries(listed.map((file) => [file.path, file.sha256])),
+  };
 }

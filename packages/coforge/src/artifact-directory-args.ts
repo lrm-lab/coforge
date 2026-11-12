@@ -59,12 +59,12 @@ export function parseDirectoryArgs(args: readonly string[]): ArtifactDirectoryIn
   const text: Record<string, string> = {};
   const count: Record<string, number> = {};
   const repeated: string[] = [];
-  let includeHidden = false;
+  const switches = new Set<string>();
   let json = false;
   for (let index = 1; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--json") json = true;
-    else if (spec.bool.includes(arg)) includeHidden = true;
+    else if (spec.bool.includes(arg)) switches.add(arg);
     else if (!arg.startsWith("--")) positionals.push(arg);
     else {
       const known = [...spec.text, ...spec.count, ...spec.repeat].includes(arg);
@@ -83,7 +83,7 @@ export function parseDirectoryArgs(args: readonly string[]): ArtifactDirectoryIn
   }
   const optional = <T>(key: string, value: T | undefined) =>
     value === undefined ? {} : { [key]: value };
-  const want = operation === "push" ? 1 : operation === "download" ? 2 : 1;
+  const want = operation === "download" ? 2 : 1;
   if (positionals.length > want || (operation !== "push" && positionals.length < want))
     throw invalidArgument(
       command,
@@ -131,7 +131,7 @@ export function parseDirectoryArgs(args: readonly string[]): ArtifactDirectoryIn
           ...optional("note", text["--note"]),
           ...optional("label", text["--label"]),
           ...(repeated.length > 0 ? { delete: repeated } : {}),
-          ...(includeHidden ? { includeHidden: true } : {}),
+          ...(switches.has("--include-hidden") ? { includeHidden: true } : {}),
         },
         ...extra,
       };

@@ -2,12 +2,12 @@ import { afterEach, expect, test } from "bun:test";
 import type { AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import { parseArgs, run, type MessageTransport } from "../index";
 import {
-  ARTIFACTS_DISABLED_MESSAGE,
   artifactRequest,
   runArtifact,
   type ArtifactInvocation,
   type ArtifactRequestInvocation,
 } from "../src/artifact-commands";
+import { ARTIFACTS_DISABLED_MESSAGE } from "../src/artifact-failure";
 import { CliError } from "../src/cli-error";
 
 /** `coforge artifact create|list|read|push|history|revert` (task #385). */

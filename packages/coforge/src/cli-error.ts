@@ -73,13 +73,22 @@ export class CliError extends Error {
   }
 }
 
+/** A bad argument or input with no help line of its own, and an optional next step. */
+export const invalidArg = (message: string, suggestedNextAction?: string): CliError =>
+  new CliError({
+    code: "INVALID_ARG",
+    message,
+    retryable: false,
+    ...(suggestedNextAction ? { suggestedNextAction } : {}),
+  });
+
 /** Returns a copy of `error` carrying a different `outputMode`, and any fields the caller now knows
  * better (`overrides`); `CliError` fields are immutable. `stdoutText` is text mode's alone, so a
  * copy for JSON drops it. */
 export function withOutputMode(
   error: CliError,
   outputMode: CliErrorOutputMode,
-  overrides: Pick<CliErrorInit, "retryable" | "suggestedNextAction"> = {},
+  overrides: Partial<Pick<CliErrorInit, "message" | "retryable" | "suggestedNextAction">> = {},
 ): CliError {
   return new CliError({
     code: error.code,

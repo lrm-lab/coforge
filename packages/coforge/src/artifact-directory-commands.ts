@@ -1,6 +1,6 @@
 import { lstat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { artifactPath, invalidArg } from "#src/artifact-directory";
+import { artifactPath } from "#src/artifact-directory";
 import type {
   ArtifactDirectoryDraft,
   ArtifactDirectoryInvocation,
@@ -9,7 +9,7 @@ import type {
 import { runPull } from "#src/artifact-pull";
 import { runPush } from "#src/artifact-push";
 import { asJson, requireCall } from "#src/artifact-transfer";
-import { CliError } from "#src/cli-error";
+import { CliError, invalidArg, withOutputMode } from "#src/cli-error";
 
 /**
  * `coforge artifact pull|push|download`: an artifact as a directory of files. A pull writes every
@@ -32,21 +32,8 @@ export async function runArtifactDirectory(
         return await runDownload(invocation, draft, transport, cwd);
     }
   } catch (error) {
-    throw error instanceof CliError && invocation.json
-      ? new CliError({ ...cliErrorInit(error), outputMode: "json" })
-      : error;
+    throw error instanceof CliError && invocation.json ? withOutputMode(error, "json") : error;
   }
-}
-
-function cliErrorInit(error: CliError) {
-  return {
-    code: error.code,
-    message: error.message,
-    retryable: error.retryable,
-    ...(error.suggestedNextAction ? { suggestedNextAction: error.suggestedNextAction } : {}),
-    ...(error.correlationId ? { correlationId: error.correlationId } : {}),
-    ...(error.details === undefined ? {} : { details: error.details }),
-  };
 }
 
 async function runDownload(

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runArtifact } from "../src/artifact-commands";
-import { inPool } from "../src/artifact-transfer";
+import { inPool } from "../src/pool";
 import {
   BINARY,
   ID,

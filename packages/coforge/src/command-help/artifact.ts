@@ -12,11 +12,11 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "artifact list": {
     syntax:
-      "coforge artifact list [--target '#channel'|'@name'] [--query <words>] [--cursor <c>] [--limit <n>] [--json]",
+      "coforge artifact list [--target '#channel'|'@name'] [--query <words>] [--after <c>] [--limit <n>] [--json]",
     flags: [
       "--target  the channel, or the DM with @name (@name~agent for an Agent); none lists the Workspace's",
       "--query  only artifacts matching these words",
-      "--cursor  the next page: the cursor the previous page's last line named",
+      "--after  the next page: the cursor the previous page's last line named",
       "--limit  how many to list in a page",
     ],
     guidance:

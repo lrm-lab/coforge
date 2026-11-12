@@ -5,13 +5,15 @@ type Card = { id: string; name: string; title: string; currentVersion: number };
 /** A row `artifact list` prints: the card, with when it last changed. */
 type ListRow = Card & { updatedAt: string };
 
-type FileRow = { path: string; sha256: string; sizeBytes: number; kind?: string };
+/** One file of a version, as the server lists it. */
+export type ArtifactFileEntry = { path: string; sha256: string; sizeBytes: number; kind?: string };
 
-type Read = {
+/** The server's answer to `read`. */
+export type ArtifactReadAnswer = {
   artifact: { id: string; title: string; currentVersion: number };
   version: { number: number; note?: string | null; label?: string | null } | null;
   entryPath?: string | null;
-  files?: FileRow[];
+  files?: ArtifactFileEntry[];
   text: string;
 };
 
@@ -78,7 +80,11 @@ const size = (bytes: number) =>
 
 /** The artifact's version line and how to save over it; then its text, unless it went to a
  * file. */
-export function formatArtifactRead(read: Read, withText: boolean, allFiles = false): string {
+export function formatArtifactRead(
+  read: ArtifactReadAnswer,
+  withText: boolean,
+  allFiles = false,
+): string {
   const { artifact, version } = read;
   const shown = version?.number ?? 0;
   const lines = [
@@ -122,7 +128,6 @@ export function formatArtifactHistory(id: string, page: HistoryPage): string {
 /** A save's answer. An Agent's save is never merged inside a file: a clash is refused by the
  * server (`artifact-agent-base-moved`), never answered here. */
 export function formatArtifactSave(
-  id: string,
   base: number,
   answer: ArtifactSaveAnswer,
 ): { message: string; next?: string } {

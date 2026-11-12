@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { CliError } from "../src/cli-error";
 import { parseArgs } from "../index";
 import { runArtifact } from "../src/artifact-commands";
-import { artifactDownloadRequest, artifactUploadRequest } from "../src/artifact-file-transport";
+import { artifactTransport } from "../src/artifact-file-transport";
 import {
   BINARY,
   CONTEXT,
@@ -81,7 +81,7 @@ test("pull, push and download parse into their own commands", () => {
     request: { operation: "push", artifact: ID, baseVersion: 3 },
   });
   expect(
-    parseArgs(["artifact", "list", "--query", "launch plan", "--cursor", "c1", "--limit", "5"]),
+    parseArgs(["artifact", "list", "--query", "launch plan", "--after", "c1", "--limit", "5"]),
   ).toEqual({
     command: "artifact",
     request: { operation: "list", query: "launch plan", after: "c1", limit: 5 },
@@ -111,11 +111,11 @@ test("list prints the cursor of the next page when there is one", async () => {
     artifact: async () => ({ artifacts: [row], nextCursor: "c2" }),
   })) as string;
   expect(said).toContain(`"Plan" (id ${ID}), version 2`);
-  expect(said).toContain("coforge artifact list --query plan --cursor c2");
+  expect(said).toContain("coforge artifact list --query plan --after c2");
   const last = (await runArtifact(invoke(["list"]), {
     artifact: async () => ({ artifacts: [row] }),
   })) as string;
-  expect(last).not.toContain("--cursor");
+  expect(last).not.toContain("--after");
   expect(await runArtifact(invoke(["list"]), { artifact: async () => ({ artifacts: [] }) })).toBe(
     "No artifacts here yet.",
   );
@@ -158,8 +158,9 @@ test("an artifact file goes up as raw bytes by its hash, and comes down exactly"
       ? new Response(null, { status: 204 })
       : new Response(BINARY, { headers: { "content-type": "image/png" } }),
   );
-  await artifactUploadRequest(proxy.endpoint, CONTEXT, proxy.proxyUrl, hash, BINARY);
-  const bytes = await artifactDownloadRequest(proxy.endpoint, CONTEXT, proxy.proxyUrl, {
+  const files = artifactTransport(proxy.endpoint, CONTEXT, proxy.proxyUrl);
+  await files.artifactUpload(hash, BINARY);
+  const bytes = await files.artifactDownload({
     artifact: ID,
     path: "img/logo bin.png",
     version: 2,
@@ -186,7 +187,7 @@ test("a refused file transfer keeps the server's reason", async () => {
     code: "INVALID_INPUT",
   });
   const upload = await failure(
-    artifactUploadRequest(tooLarge.endpoint, CONTEXT, tooLarge.proxyUrl, hash, BINARY),
+    artifactTransport(tooLarge.endpoint, CONTEXT, tooLarge.proxyUrl).artifactUpload(hash, BINARY),
   );
   expect(upload.message).toContain("artifact-quota");
   expect(upload.retryable).toBe(false);
@@ -197,7 +198,7 @@ test("a refused file transfer keeps the server's reason", async () => {
   expect(
     (
       await failure(
-        artifactDownloadRequest(disabled.endpoint, CONTEXT, disabled.proxyUrl, {
+        artifactTransport(disabled.endpoint, CONTEXT, disabled.proxyUrl).artifactDownload({
           artifact: ID,
           path: "a",
         }),
@@ -206,20 +207,18 @@ test("a refused file transfer keeps the server's reason", async () => {
   ).toBe("ARTIFACTS_DISABLED");
   const missing = serveBytes(() => new Response("not found", { status: 404 }));
   const gone = await failure(
-    artifactDownloadRequest(missing.endpoint, CONTEXT, missing.proxyUrl, {
+    artifactTransport(missing.endpoint, CONTEXT, missing.proxyUrl).artifactDownload({
       artifact: ID,
       path: "a",
     }),
   );
   expect(gone.code).toBe("NOT_FOUND");
   const unreachable = await failure(
-    artifactUploadRequest(
+    artifactTransport(
       () => new URL("http://127.0.0.1:1/x"),
       CONTEXT,
       "http://127.0.0.1:1",
-      hash,
-      BINARY,
-    ),
+    ).artifactUpload(hash, BINARY),
   );
   // Uploading the same bytes again changes nothing, so a failure on the way may be tried again.
   expect(unreachable.retryable).toBe(true);

@@ -1,9 +1,10 @@
 import { writeFile } from "node:fs/promises";
 import { agentApiRoutes, type AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import { shellWord } from "#src/artifact-directory";
+import { artifactNetworkFailure, artifactRefusal, type ArtifactCall } from "#src/artifact-failure";
 import { CliError, withOutputMode } from "#src/cli-error";
 import { invalidArgument } from "#src/command-help/index";
-import { readProxyErrorBody, requireProxySetup } from "#src/proxy-request";
+import { requireProxySetup } from "#src/proxy-request";
 import {
   parseDirectoryArgs,
   type ArtifactDirectoryInvocation,
@@ -16,6 +17,7 @@ import {
   formatArtifactList,
   formatArtifactRead,
   formatArtifactSave,
+  type ArtifactReadAnswer,
   type ArtifactSaveAnswer,
 } from "#src/artifact-format";
 
@@ -74,7 +76,7 @@ const FLAGS: Record<
     count: [],
     positional: false,
   },
-  list: { text: ["--target", "--query", "--cursor"], count: ["--limit"], positional: false },
+  list: { text: ["--target", "--query", "--after"], count: ["--limit"], positional: false },
   read: { text: ["--output"], count: ["--version"], positional: true, bool: ["--files"] },
   push: {
     text: ["--file", "--title", "--description", "--note", "--label"],
@@ -102,7 +104,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
   const count: Record<string, number> = {};
   let artifact: string | undefined;
   let json = false;
-  let allFiles = false;
+  const switches = new Set<string>();
   for (let index = 1; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--json") {
@@ -110,7 +112,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
       continue;
     }
     if (flags.bool?.includes(arg)) {
-      allFiles = true;
+      switches.add(arg);
       continue;
     }
     if (!arg.startsWith("--") && flags.positional && artifact === undefined) {
@@ -174,7 +176,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
           operation,
           ...optional("target", text["--target"]),
           ...optional("query", text["--query"]),
-          ...optional("after", text["--cursor"]),
+          ...optional("after", text["--after"]),
           // Always a page: the server answers `nextCursor` only to a paged request.
           limit: count["--limit"] ?? ARTIFACT_LIST_PAGE,
         },
@@ -185,7 +187,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
         command: "artifact",
         request: { operation, artifact: artifact!, ...optional("version", count["--version"]) },
         ...optional("output", text["--output"]),
-        ...(allFiles ? { allFiles: true } : {}),
+        ...(switches.has("--files") ? { allFiles: true } : {}),
         ...options,
       };
     case "push": {
@@ -296,13 +298,13 @@ export async function runArtifact(
           "coforge artifact list",
           ...(request.target === undefined ? [] : [`--target ${shellWord(request.target)}`]),
           ...(request.query === undefined ? [] : [`--query ${shellWord(request.query)}`]),
-          `--cursor ${cursor}`,
-          ...(request.limit === undefined ? [] : [`--limit ${request.limit}`]),
+          `--after ${cursor}`,
+          `--limit ${request.limit}`,
         ].join(" ");
       return formatArtifactList(result as never, more);
     }
     case "read": {
-      const read = result as Parameters<typeof formatArtifactRead>[0];
+      const read = result as ArtifactReadAnswer;
       if (invocation.output !== undefined) await writeFile(invocation.output, read.text);
       if (json) return result;
       return formatArtifactRead(
@@ -318,7 +320,7 @@ export async function runArtifact(
       const answer = result as ArtifactSaveAnswer;
       const base = request.baseVersion;
       if (answer.status === "missing") {
-        const formatted = formatArtifactSave(request.artifact, base, answer);
+        const formatted = formatArtifactSave(base, answer);
         throw new CliError({
           code: "ARTIFACT_MISSING",
           message: formatted.message,
@@ -327,7 +329,7 @@ export async function runArtifact(
           ...(json ? { details: answer, outputMode: "json" } : {}),
         });
       }
-      return json ? result : formatArtifactSave(request.artifact, base, answer).message;
+      return json ? result : formatArtifactSave(base, answer).message;
     }
     case "share":
       return json ? result : formatArtifactShare(result as ArtifactShareAnswer);
@@ -366,12 +368,6 @@ async function readArtifactText(file: string): Promise<string> {
   }
 }
 
-/** What the CLI says when the Workspace has not switched artifacts on: the refusal names the
- * switch and the working alternative, so an Agent that tried `artifact` learns to send the file
- * as an attachment instead of retrying or claiming a send that never happened (task #711). */
-export const ARTIFACTS_DISABLED_MESSAGE =
-  "这个工作区没有开启 artifacts：`coforge artifact` 命令不能用。要给人发文件，请用附件：先 `coforge attachment upload --path <文件> --target <会话>` 拿到附件 id，再 `coforge message send --target <会话> --attachment-id <id>` 发出（工作区 owner/admin 可在 设置 → 实验功能 打开 artifacts）。This Workspace has not enabled artifacts, so `coforge artifact` commands cannot be used. To send a file to a person, upload it as an attachment (`coforge attachment upload --path <file> --target <target>`), then send its id (`coforge message send --target <target> --attachment-id <id>`); a Workspace owner or admin can enable artifacts in Settings > Experiments.";
-
 /** `POST /api/agent/v1/artifacts` through the daemon's proxy, as the Agent. */
 export async function artifactRequest(
   proxyEndpoint: (path: string) => URL,
@@ -385,6 +381,16 @@ export async function artifactRequest(
   // that failed on the way may still have landed. Read, list and history only read.
   const writes =
     request.operation !== "read" && request.operation !== "list" && request.operation !== "history";
+  const call: ArtifactCall = {
+    label: `artifact ${request.operation}`,
+    writes,
+    ...(writes ? { mayHaveLanded: mayHaveLanded(request) } : {}),
+    ...("artifact" in request
+      ? {
+          baseMoved: `The artifact has a newer version than --base: read it (coforge artifact read ${request.artifact}) and use the version it prints.`,
+        }
+      : {}),
+  };
   let response: Response;
   try {
     response = await fetch(proxyEndpoint(route.path), {
@@ -395,41 +401,10 @@ export async function artifactRequest(
       signal: AbortSignal.timeout(30_000),
     });
   } catch {
-    throw new CliError({
-      code: "ARTIFACT_FAILED",
-      message: "agent artifact request failed (network or timeout)",
-      retryable: !writes,
-      ...(writes ? { suggestedNextAction: mayHaveLanded(request) } : {}),
-    });
+    throw artifactNetworkFailure("agent artifact request failed (network or timeout)", call);
   }
   if (response.ok) return response.json();
-  const { json } = await readProxyErrorBody(response);
-  const message = json?.error ?? `HTTP ${response.status}`;
-  if (message.includes("(artifacts-disabled)"))
-    throw new CliError({
-      code: "ARTIFACTS_DISABLED",
-      message: ARTIFACTS_DISABLED_MESSAGE,
-      retryable: false,
-    });
-  const next =
-    json?.code === "NOT_FOUND"
-      ? "The artifact or conversation does not exist, or you cannot read it."
-      : message.includes("(artifact-base-moved)") && "artifact" in request
-        ? `The artifact has a newer version than --base: read it (coforge artifact read ${request.artifact}) and use the version it prints.`
-        : writes && response.status >= 500
-          ? mayHaveLanded(request)
-          : json?.suggested_next_action;
-  throw new CliError({
-    code: json?.code ?? "ARTIFACT_FAILED",
-    message: `artifact ${request.operation} failed: ${message}`,
-    // A read is safe to run again; a missing `retryable` leaves it to the failure, as the
-    // proxy's contract says: a 5xx is worth another try.
-    retryable: !writes && (json?.retryable ?? response.status >= 500),
-    ...(next ? { suggestedNextAction: next } : {}),
-    ...(json?.proxy?.correlation_id ? { correlationId: json.proxy.correlation_id } : {}),
-    // Facts the server names for a refusal, such as the files an Agent save clashed on.
-    ...(json?.details ? { details: json.details } : {}),
-  });
+  throw await artifactRefusal(response, call);
 }
 
 function mayHaveLanded(request: AgentArtifactRequest): string {

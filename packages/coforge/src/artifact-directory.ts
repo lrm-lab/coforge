@@ -1,7 +1,8 @@
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { ARTIFACT_UPLOAD_MAX_BYTES } from "@lrm/coforge-sdk/agent";
-import { CliError } from "#src/cli-error";
+import { ARTIFACT_UPLOAD_MAX_BYTES, artifactPathValid } from "@lrm/coforge-sdk/agent";
+import { invalidArg } from "#src/cli-error";
+import { inPool } from "#src/pool";
 
 /** The hidden file a pull leaves in its directory: which artifact it came from, the version it
  * holds (the base of the next push) and each file's sha256 as pulled or last pushed. */
@@ -14,14 +15,6 @@ export type ArtifactState = {
   files: Record<string, string>;
 };
 
-export const invalidArg = (message: string, suggestedNextAction?: string): CliError =>
-  new CliError({
-    code: "INVALID_ARG",
-    message,
-    retryable: false,
-    ...(suggestedNextAction ? { suggestedNextAction } : {}),
-  });
-
 export function sha256Hex(bytes: Uint8Array): string {
   return new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 }
@@ -32,19 +25,20 @@ const isControl = (char: string) => {
 };
 
 /**
- * A file's path in an artifact, which every local path derives from: relative, `/`-separated,
- * plain segments only. Whatever the server or the command line names, nothing but a path of this
- * shape is ever joined to a directory, so nothing can leave it.
+ * A file's path in an artifact, which every local path derives from: the server's rule
+ * (`artifactPathValid`), and not the pull's own state file. Whatever the server or the command
+ * line names, nothing but a path of this shape is ever joined to a directory, so nothing can
+ * leave it.
  */
 export function artifactPath(path: string): string {
-  const bad = (why: string) => invalidArg(`Not a file path inside an artifact (${why}): "${path}"`);
-  if (path === "") throw bad("empty");
-  if (Array.from(path).some((char) => char === "\\" || isControl(char)))
-    throw bad("control character or backslash");
-  if (path.startsWith("/") || /^[A-Za-z]:/.test(path)) throw bad("absolute");
-  for (const segment of path.split("/"))
-    if (segment === "" || segment === "." || segment === "..") throw bad("empty, . or .. segment");
-  if (path === STATE_FILE) throw bad("that name is the pull's own state file");
+  if (!artifactPathValid(path))
+    throw invalidArg(
+      `Not a file path inside an artifact: "${path}" (relative, / separated, no empty, . or .. segment, no backslash, colon or control character)`,
+    );
+  if (path === STATE_FILE)
+    throw invalidArg(
+      `Not a file path inside an artifact (that name is the pull's own state file): "${path}"`,
+    );
   return path;
 }
 
@@ -187,7 +181,7 @@ export async function scanDirectory(
   root: string,
   includeHidden: boolean,
 ): Promise<Map<string, LocalFile>> {
-  const found: LocalFile[] = [];
+  const candidates: { path: string; absolute: string }[] = [];
   const walk = async (dir: string, prefix: string): Promise<void> => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const path = `${prefix}${entry.name}`;
@@ -200,22 +194,21 @@ export async function scanDirectory(
           "Replace it with the file itself, or move it out of the directory.",
         );
       if (entry.isDirectory()) await walk(absolute, `${path}/`);
-      else if (entry.isFile()) {
-        const bytes = new Uint8Array(await Bun.file(absolute).arrayBuffer());
-        if (bytes.byteLength > ARTIFACT_UPLOAD_MAX_BYTES)
-          throw invalidArg(
-            `${path} is ${bytes.byteLength} bytes, over the ${ARTIFACT_UPLOAD_MAX_BYTES} an artifact file may be`,
-          );
-        found.push({
-          path: artifactPath(path),
-          sha256: sha256Hex(bytes),
-          sizeBytes: bytes.byteLength,
-          absolute,
-        });
-      }
+      else if (entry.isFile()) candidates.push({ path: artifactPath(path), absolute });
     }
   };
   await walk(root, "");
+  const found: LocalFile[] = [];
+  await inPool(candidates, 4, async ({ path, absolute }) => {
+    // The size is checked before the bytes are read, so a huge file is refused, not loaded.
+    const { size } = await lstat(absolute);
+    if (size > ARTIFACT_UPLOAD_MAX_BYTES)
+      throw invalidArg(
+        `${path} is ${size} bytes, over the ${ARTIFACT_UPLOAD_MAX_BYTES} an artifact file may be`,
+      );
+    const bytes = new Uint8Array(await Bun.file(absolute).arrayBuffer());
+    found.push({ path, sha256: sha256Hex(bytes), sizeBytes: bytes.byteLength, absolute });
+  });
   found.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return new Map(found.map((file) => [file.path, file]));
 }
