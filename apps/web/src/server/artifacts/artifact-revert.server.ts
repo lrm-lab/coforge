@@ -35,7 +35,7 @@ export async function revertArtifact(
     workspaceId,
     artifactId,
     baseVersion: input.baseVersion,
-    exactBase: true,
+    merge: "exact",
     revertedFrom: input.to,
     publisher: actor,
     idempotencyKey: input.idempotencyKey,

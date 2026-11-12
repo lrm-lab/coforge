@@ -249,7 +249,7 @@ test("the proxy forwards the manifest and paging fields of an artifact operation
   const listing: AgentArtifactRequest = {
     operation: "list",
     query: "launch plan",
-    cursor: "c1",
+    after: "c1",
     limit: 20,
   };
   for (const body of [manifest, listing])

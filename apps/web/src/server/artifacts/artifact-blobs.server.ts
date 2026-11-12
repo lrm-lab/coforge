@@ -1,3 +1,4 @@
+import { ARTIFACT_SHA256_PATTERN } from "@lrm/coforge-sdk/agent";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type {
@@ -18,7 +19,6 @@ import {
 export const ARTIFACT_BLOB_GRACE_MS = 24 * 60 * 60 * 1000;
 /** Blobs one sweep transaction removes; the rest wait for the next batch. */
 const SWEEP_BATCH = 500;
-const SHA256 = /^[0-9a-f]{64}$/;
 
 /** Where one upload of a Workspace's blob is stored. Under `workspaces/<id>/`, so a Workspace
  * delete's prefix sweep (`WorkspaceFileCleanup`) removes it with everything else it stored; one
@@ -26,6 +26,9 @@ const SHA256 = /^[0-9a-f]{64}$/;
 export function artifactBlobKey(workspaceId: string, sha256: string, uploadId: string): string {
   return `workspaces/${workspaceId}/artifacts/blobs/${sha256}/${uploadId}`;
 }
+
+/** An upload of bytes new to the Workspace that would take its unused bytes past the quota. */
+export class ArtifactStorageFull extends Error {}
 
 type Bucket = FileStorage & Pick<BulkFileRemoval, "removeMany">;
 
@@ -68,12 +71,15 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
   }
 
   /** Stores `bytes` under their sha256, once, and grants them to `actor`, who has shown it holds
-   * them, for its saves. `sha256`, when the client names one, must be theirs. */
+   * them, for its saves. `sha256`, when the client names one, must be theirs. Bytes the Workspace
+   * does not hold yet are refused (`ArtifactStorageFull`) when they would take its unreferenced
+   * bytes past `unreferencedQuotaBytes`; bytes it holds add nothing. */
   async upload(input: {
     workspaceId: string;
     bytes: Uint8Array<ArrayBuffer>;
     sha256?: string;
     actor?: ArtifactActor;
+    unreferencedQuotaBytes?: number;
   }) {
     const blob = await this.#store(input);
     if (!input.actor) return blob;
@@ -93,10 +99,10 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
   }
 
   /** Of `sha256s`, the ones `actor` may name in a save of `artifactId`: granted to it, or used by
-   * one of that artifact's versions already. */
+   * one of that artifact's versions already; without an artifact, only the grants count. */
   async allowed(
     workspaceId: string,
-    artifactId: string,
+    artifactId: string | undefined,
     actor: ArtifactActor,
     sha256s: readonly string[],
   ): Promise<Set<string>> {
@@ -106,11 +112,13 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
         where: { workspaceId, actorKey: actorKey(actor), sha256: { in: [...sha256s] } },
         select: { sha256: true },
       }),
-      this.db.artifactFile.findMany({
-        where: { artifactId, sha256: { in: [...sha256s] } },
-        select: { sha256: true },
-        distinct: ["sha256"],
-      }),
+      artifactId === undefined
+        ? []
+        : this.db.artifactFile.findMany({
+            where: { artifactId, sha256: { in: [...sha256s] } },
+            select: { sha256: true },
+            distinct: ["sha256"],
+          }),
     ]);
     return new Set([...granted, ...used].map((row) => row.sha256));
   }
@@ -125,12 +133,18 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
     return total._sum.sizeBytes ?? 0;
   }
 
-  async #store(input: { workspaceId: string; bytes: Uint8Array<ArrayBuffer>; sha256?: string }) {
+  async #store(input: {
+    workspaceId: string;
+    bytes: Uint8Array<ArrayBuffer>;
+    sha256?: string;
+    unreferencedQuotaBytes?: number;
+  }) {
     const { workspaceId, bytes } = input;
     // Text has the larger limit, so nothing larger is read as either.
     if (bytes.length > ARTIFACT_TEXT_LIMIT) invalid("artifact-file-too-large");
     const sha256 = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
-    if (input.sha256 !== undefined && input.sha256 !== sha256) invalid("artifact-blob-sha256");
+    if (input.sha256 !== undefined && input.sha256 !== sha256)
+      invalid("artifact-blob-sha256", "the bytes sent are not the file the path names");
     const kind = isText(bytes) ? "text" : "binary";
     if (kind === "binary" && bytes.length > ARTIFACT_BINARY_LIMIT)
       invalid("artifact-file-too-large");
@@ -142,6 +156,11 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
       data: { lastUsedAt: new Date() },
     });
     if (known) return blob;
+    if (
+      input.unreferencedQuotaBytes !== undefined &&
+      (await this.unreferencedBytes(workspaceId)) + bytes.length > input.unreferencedQuotaBytes
+    )
+      throw new ArtifactStorageFull();
     // The object first, then the row that names it.
     const objectKey = artifactBlobKey(workspaceId, sha256, crypto.randomUUID());
     const bucket = await this.bucket();
@@ -161,7 +180,7 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
 
   /** One blob's bytes, or null when the Workspace stores none under `sha256`. */
   async open(workspaceId: string, sha256: string): Promise<StoredFile | null> {
-    if (!SHA256.test(sha256)) return null;
+    if (!ARTIFACT_SHA256_PATTERN.test(sha256)) return null;
     const row = await this.db.artifactBlob.findUnique({
       where: { workspaceId_sha256: { workspaceId, sha256 } },
       select: { objectKey: true },
@@ -237,8 +256,8 @@ function isText(bytes: Uint8Array): boolean {
   }
 }
 
-function invalid(errorId: string): never {
-  throw new AppError("INVALID_INPUT", { errorId });
+function invalid(errorId: string, hint?: string): never {
+  throw new AppError("INVALID_INPUT", { errorId, ...(hint ? { hint } : {}) });
 }
 
 /** How a grant names its actor. */

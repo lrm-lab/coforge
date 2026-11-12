@@ -1,23 +1,22 @@
-import { ARTIFACT_UPLOAD_MAX_BYTES } from "@lrm/coforge-sdk/agent";
+import { ARTIFACT_SHA256_PATTERN, ARTIFACT_UPLOAD_MAX_BYTES } from "@lrm/coforge-sdk/agent";
+import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
 import { AppError } from "#src/lib/app-error";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
 import { agentErrorResponse } from "#src/server/agents/agent-http-middleware.server";
 import { artifactsDisabled } from "./artifact-access.server";
-import type { StoredArtifactBlobs } from "./artifact-blobs.server";
+import { ArtifactStorageFull, type StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactKindOfPath } from "./artifact-files.server";
 import type { Artifacts } from "./artifacts.server";
 
 /** What the Agent API's file bytes run on; production's is `productionArtifacts(db)`. */
 export type AgentArtifactFileServices = {
-  artifacts: Pick<Artifacts, "read">;
-  blobs: Pick<StoredArtifactBlobs, "upload" | "open" | "inspectMany" | "unreferencedBytes">;
+  artifacts: Pick<Artifacts, "reads">;
+  blobs: Pick<StoredArtifactBlobs, "upload" | "open">;
   enabled: (workspaceId: string) => Promise<boolean>;
 };
 
 /** The bytes a Workspace may hold that no saved version names yet. */
 export const ARTIFACT_UNREFERENCED_QUOTA_BYTES = 1024 * 1024 * 1024;
-
-const SHA256 = /^[0-9a-f]{64}$/;
 
 /**
  * `PUT /api/agent/v1/artifacts/uploads/:sha256`: one file's bytes, stored under their sha256 and
@@ -35,7 +34,7 @@ export async function handleAgentArtifactUpload(
   try {
     const { workspaceId, agentId } = principal;
     if (!(await services.enabled(workspaceId))) throw artifactsDisabled();
-    if (!SHA256.test(sha256))
+    if (!ARTIFACT_SHA256_PATTERN.test(sha256))
       throw new AppError("INVALID_INPUT", {
         errorId: "artifact-blob-sha256",
         hint: "the path names the file's sha256 as 64 lowercase hex characters",
@@ -46,20 +45,19 @@ export async function handleAgentArtifactUpload(
     if (Number(declared) > ARTIFACT_UPLOAD_MAX_BYTES) return tooLarge("the file is too large");
     const bytes = new Uint8Array(await request.arrayBuffer());
     if (bytes.length > ARTIFACT_UPLOAD_MAX_BYTES) return tooLarge("the file is too large");
-    if (new Bun.CryptoHasher("sha256").update(bytes).digest("hex") !== sha256)
-      throw new AppError("INVALID_INPUT", {
-        errorId: "artifact-blob-sha256",
-        hint: "the bytes sent are not the file the path names",
-      });
-    // Only bytes new to the Workspace count against the quota: a file it holds adds nothing.
-    if (!(await services.blobs.inspectMany(workspaceId, [sha256])).has(sha256)) {
-      const held = await services.blobs.unreferencedBytes(workspaceId);
-      if (held + bytes.length > ARTIFACT_UNREFERENCED_QUOTA_BYTES)
-        return tooLarge("the Workspace holds too many uploaded files no version uses yet", true);
-    }
-    await services.blobs.upload({ workspaceId, bytes, sha256, actor: { agentId } });
+    // The store hashes the bytes (400 when they are not `sha256`) and counts only bytes new to
+    // the Workspace against the quota: a file it holds adds nothing.
+    await services.blobs.upload({
+      workspaceId,
+      bytes,
+      sha256,
+      actor: { agentId },
+      unreferencedQuotaBytes: ARTIFACT_UNREFERENCED_QUOTA_BYTES,
+    });
     return new Response(null, { status: 204 });
   } catch (error) {
+    if (error instanceof ArtifactStorageFull)
+      return tooLarge("the Workspace holds too many uploaded files no version uses yet", true);
     return agentErrorResponse(error);
   }
 }
@@ -87,15 +85,14 @@ export async function handleAgentArtifactDownload(
         errorId: "artifact-request",
         hint: "version is not accepted",
       });
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.artifact))
-      throw new AppError("NOT_FOUND");
-    const read = await services.artifacts.read({
+    if (!artifactInputs.id.safeParse(params.artifact).success) throw new AppError("NOT_FOUND");
+    const file = await services.artifacts.reads.file({
       workspaceId,
       artifactId: params.artifact,
       reader: { agentId },
+      path: params.path,
       ...(requested !== null ? { version: Number(requested) } : {}),
     });
-    const file = read.files.find((entry) => entry.path === params.path);
     const bytes = file && (await services.blobs.open(workspaceId, file.sha256));
     if (!file || !bytes)
       throw new AppError("NOT_FOUND", {

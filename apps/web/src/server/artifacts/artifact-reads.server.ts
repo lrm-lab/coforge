@@ -1,6 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
 import { AppError } from "#src/lib/app-error";
+import { escapeLikeTerm, searchTerms } from "#src/lib/search-terms";
 import { canReadConversationHome } from "#src/server/conversations/channel-read-access.server";
 import {
   artifactHomeAccess,
@@ -215,6 +216,31 @@ export class ArtifactReads {
     return { artifact, version, files };
   }
 
+  /** One file of a version (the current one by default), or null when the version has no file at
+   * `path`; a version that does not exist is `NOT_FOUND`, as in `read`. */
+  async file(input: {
+    workspaceId: string;
+    artifactId: string;
+    reader: ArtifactActor;
+    version?: number;
+    path: string;
+  }) {
+    const artifact = await this.artifact(input.workspaceId, input.artifactId, input.reader);
+    const number = input.version ?? artifact.currentVersion;
+    if (number <= 0) return null;
+    const version = await this.db.artifactVersion.findUnique({
+      where: { artifactId_number: { artifactId: artifact.id, number } },
+      select: {
+        files: {
+          where: { path: input.path },
+          select: { path: true, sha256: true, sizeBytes: true, kind: true },
+        },
+      },
+    });
+    if (!version) throw new AppError("NOT_FOUND");
+    return version.files[0] ?? null;
+  }
+
   /** The live artifacts of one home the reader may read (a conversation's, or the Workspace's
    * when none is named), most recently changed first, at most 100. */
   async list(input: { workspaceId: string; reader: ArtifactActor; conversationId?: string }) {
@@ -246,8 +272,8 @@ export class ArtifactReads {
         deletedAt: null,
         AND: [
           // `contains` does not escape LIKE wildcards: `%` and `_` in a word match themselves.
-          ...(input.query?.split(/\s+/).filter(Boolean) ?? []).map((word) => ({
-            title: { contains: word.replace(/[\\%_]/g, "\\$&"), mode: "insensitive" as const },
+          ...searchTerms(input.query ?? "").map((word) => ({
+            title: { contains: escapeLikeTerm(word), mode: "insensitive" as const },
           })),
           ...(after
             ? [

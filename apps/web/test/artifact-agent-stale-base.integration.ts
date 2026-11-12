@@ -100,7 +100,7 @@ async function push(
   });
 }
 
-const BY_PATH = { byPath: true } as const;
+const BY_PATH = { merge: "byPath" } as const;
 let made = 0;
 
 /** An artifact whose version 1 holds `a.md` (the entry), `b.txt` and `c.txt`. */

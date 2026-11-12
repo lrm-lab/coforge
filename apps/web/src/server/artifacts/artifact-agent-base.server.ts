@@ -29,7 +29,8 @@ export function refuseMovedBase(publisher: { agentId?: string }): never {
  * newline) and `settings` (`title`, `description`, `entry`).
  */
 export function refuseOverlap(input: {
-  base: ReadonlyMap<string, ArtifactFileRow>;
+  /** The paths whose content differs between the save's base and the current version. */
+  changed: ReadonlySet<string>;
   current: ReadonlyMap<string, ArtifactFileRow>;
   added: readonly ArtifactFileInput[];
   deleted: readonly string[];
@@ -41,8 +42,7 @@ export function refuseOverlap(input: {
   ]);
   const files = [...mine]
     .filter(([path, sha256]) => {
-      const theirs = input.current.get(path)?.sha256;
-      return input.base.get(path)?.sha256 !== theirs && sha256 !== theirs;
+      return input.changed.has(path) && sha256 !== input.current.get(path)?.sha256;
     })
     .map(([path]) => path)
     .sort();

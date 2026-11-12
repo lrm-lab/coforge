@@ -89,8 +89,9 @@ exactly one `index.html`.
   are there. An upload answers 204, also for bytes the Workspace already holds; 411 without
   `Content-Length`, 413 over 16 MiB, 400 when the bytes are not `<sha256>`. A Workspace keeps at
   most 1 GiB of uploaded bytes no version uses yet (413 `ARTIFACT_STORAGE_FULL`).
-- A create's kind comes from its entry's extension: `.md` is Markdown, `.html` or `.htm` a web
-  page; any other entry is refused, and a push may move the entry only to a file of the same kind.
+- A create's kind comes from its entry's extension: `.md` or `.markdown` is Markdown, `.html` or
+  `.htm` a web page; any other entry is refused, and a push may move the entry only to a file of
+  the same kind.
   Until the sandbox serves several files a web page is exactly one `index.html`
   (`artifact-page-files`).
 - `read` answers `entryPath` and `files` (`path`, `sha256`, `sizeBytes`, `kind`: `text` or

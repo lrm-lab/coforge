@@ -16,9 +16,6 @@ import { ARTIFACT_HTML_ENTRY } from "./artifact-sandbox.server";
 import type { ArtifactRevert } from "./artifact-revert.server";
 import type { Artifacts } from "./artifacts.server";
 
-/** The id of no artifact: what a save's bytes are checked against before the artifact exists. */
-const NO_ARTIFACT = "00000000-0000-0000-0000-000000000000";
-
 /** A document's one file. */
 export const DOCUMENT_PATH = "document.md";
 
@@ -172,7 +169,7 @@ export class ArtifactDocuments {
     // No artifact exists yet, so only bytes the actor uploaded count as its own.
     const [stored, granted] = await Promise.all([
       this.blobs.inspectMany(scope.workspaceId, named),
-      this.blobs.allowed(scope.workspaceId, NO_ARTIFACT, scope.actor, named),
+      this.blobs.allowed(scope.workspaceId, undefined, scope.actor, named),
     ]);
     const entry = files.find((file) => file.path === entryPath)!;
     if (kind === "markdown" && (stored.get(entry.sha256)?.sizeBytes ?? 0) > ARTIFACT_DOCUMENT_LIMIT)
@@ -270,9 +267,9 @@ export class ArtifactDocuments {
       // (`artifact-base-moved`): even a title someone changed since is not merged under it. An
       // Agent's save over an older version keeps what others changed in files it does not touch.
       ...(artifact.kind === "html"
-        ? { exactBase: true }
+        ? { merge: "exact" as const }
         : scope.actor.agentId
-          ? { byPath: true }
+          ? { merge: "byPath" as const }
           : {}),
     });
     if (saved.status === "created") await this.#refreshPreview(scope, input.artifactId);

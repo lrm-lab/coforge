@@ -1,5 +1,7 @@
-export { artifactPathValid } from "@lrm/coforge-sdk/agent";
+import { ARTIFACT_UPLOAD_MAX_BYTES } from "@lrm/coforge-sdk/agent";
 import type { Prisma } from "#src/generated/prisma/client";
+
+export { artifactPathValid } from "@lrm/coforge-sdk/agent";
 
 /** One file a push adds or replaces: bytes already uploaded under `sha256`. Its size and kind
  * come from the blob, never from the client. */
@@ -29,10 +31,11 @@ export interface ArtifactBlobStore {
     sha256s: readonly string[],
   ): Promise<string[]>;
   /** Of `sha256s`, the ones `actor` may name in a save of `artifactId`: bytes it uploaded, or
-   * ones the artifact already uses. Any other is answered as missing, so the client uploads it. */
+   * ones the artifact already uses (none, before the artifact exists). Any other is answered as
+   * missing, so the client uploads it. */
   allowed(
     workspaceId: string,
-    artifactId: string,
+    artifactId: string | undefined,
     actor: { userId?: string; agentId?: string },
     sha256s: readonly string[],
   ): Promise<Set<string>>;
@@ -45,7 +48,7 @@ export interface ArtifactBlobStore {
   }): Promise<ArtifactBlobInfo & { sha256: string }>;
 }
 
-export const ARTIFACT_TEXT_LIMIT = 16 * 1024 * 1024;
+export const ARTIFACT_TEXT_LIMIT = ARTIFACT_UPLOAD_MAX_BYTES;
 export const ARTIFACT_BINARY_LIMIT = 15 * 1024 * 1024;
 export const ARTIFACT_FILE_LIMIT = 200;
 /** A document's (a `markdown` artifact's) own file: what a person edits in one page. */

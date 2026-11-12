@@ -151,10 +151,9 @@ export class Artifacts {
     description?: string;
     files?: readonly ArtifactFileInput[];
     deletedPaths?: readonly string[];
-    /** Refuse, rather than merge, when the artifact moved past `baseVersion` (going back). */
-    exactBase?: boolean;
-    /** An Agent's save over an older base: by path only, an overlap refuses (`refuseOverlap`). */
-    byPath?: boolean;
+    /** Over an older base: `exact` refuses (going back); `byPath` merges by path and refuses an
+     * overlap (an Agent's, `refuseOverlap`); absent, files merge by line where they can. */
+    merge?: "exact" | "byPath";
     /** The version this save goes back to (`revert`). */
     revertedFrom?: number;
   }): Promise<
@@ -177,11 +176,10 @@ export class Artifacts {
     await requireArtifactWrite(this.db, input.workspaceId, input.publisher, live, "write");
     const added = [...(input.files ?? [])];
     const deleted = [...new Set(input.deletedPaths ?? [])];
-    for (const file of added) if (!artifactPathValid(file.path)) invalid("artifact-file-path");
-    for (const path of deleted) if (!artifactPathValid(path)) invalid("artifact-file-path");
-    if (new Set(added.map((file) => file.path)).size !== added.length)
+    // Every path is valid and named once: a file is added or deleted, not both, nor twice.
+    const touched = [...added.map((file) => file.path), ...deleted];
+    if (!touched.every(artifactPathValid) || new Set(touched).size !== touched.length)
       invalid("artifact-file-path");
-    if (added.some((file) => deleted.includes(file.path))) invalid("artifact-file-path");
 
     // The bytes are checked before the lock: a missing blob is a 200 the client uploads and retries.
     const named = [...new Set(added.map((file) => file.sha256))];
@@ -236,7 +234,8 @@ export class Artifacts {
 
       if (input.baseVersion > current || input.baseVersion < 0)
         throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
-      if (input.exactBase && input.baseVersion !== current) refuseMovedBase(input.publisher);
+      if (input.merge === "exact" && input.baseVersion !== current)
+        refuseMovedBase(input.publisher);
 
       // A version's files, and the settings it recorded; before the first version, none of either.
       const versionAt = async (number: number) => {
@@ -286,30 +285,32 @@ export class Artifacts {
           const now = currentFiles.get(path);
           if (before?.sha256 !== now?.sha256) othersChanged.add(path);
         }
-        if (input.byPath)
+        if (input.merge === "byPath")
           refuseOverlap({
-            base: baseFiles,
+            changed: othersChanged,
             current: currentFiles,
             added,
             deleted,
             settings: settings.conflicts,
           });
-        // A file both sides changed merges line by line when it is a document's text; any other
-        // file, or a file one side deleted, cannot be merged without a human.
-        for (const path of deleted)
-          if (othersChanged.has(path) && !input.byPath)
-            throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
-        for (const file of added) {
-          if (!othersChanged.has(file.path) || input.byPath) continue;
-          const document = locked.kind === "markdown" && file.path === settings.result.entryPath;
-          const merge = await mergeDocumentFile(this.blobs, input.workspaceId, document, {
-            base: baseFiles.get(file.path),
-            theirs: currentFiles.get(file.path),
-            mine: { ...file, ...blobs.get(file.sha256)! },
-          });
-          if (!merge) throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
-          if ("chunks" in merge) fileConflicts.push({ path: file.path, chunks: merge.chunks });
-          else lineMerged.set(file.path, merge);
+        else {
+          // A file both sides changed merges line by line when it is a document's text; any other
+          // file, or a file one side deleted, cannot be merged without a human.
+          for (const path of deleted)
+            if (othersChanged.has(path))
+              throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
+          for (const file of added) {
+            if (!othersChanged.has(file.path)) continue;
+            const document = locked.kind === "markdown" && file.path === settings.result.entryPath;
+            const merge = await mergeDocumentFile(this.blobs, input.workspaceId, document, {
+              base: baseFiles.get(file.path),
+              theirs: currentFiles.get(file.path),
+              mine: { ...file, ...blobs.get(file.sha256)! },
+            });
+            if (!merge) throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
+            if ("chunks" in merge) fileConflicts.push({ path: file.path, chunks: merge.chunks });
+            else lineMerged.set(file.path, merge);
+          }
         }
       }
       if (settings.conflicts.length || fileConflicts.length)

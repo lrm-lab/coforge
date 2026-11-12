@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
+import { ARTIFACT_SHA256_PATTERN, type AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
 import {
@@ -40,7 +40,10 @@ const { id, version, baseVersion, text, title, description, note, label, history
 const manifest = {
   files: z
     .array(
-      z.object({ path: z.string().min(1).max(1024), sha256: z.string().regex(/^[0-9a-f]{64}$/) }),
+      z.object({
+        path: z.string().min(1).max(1024),
+        sha256: z.string().regex(ARTIFACT_SHA256_PATTERN),
+      }),
     )
     .max(ARTIFACT_FILE_LIMIT)
     .optional(),
@@ -185,16 +188,16 @@ export async function runAgentArtifactOperation(
     case "push": {
       const {
         artifact,
-        files: _files,
-        delete: _delete,
-        entry: _entry,
+        files,
+        delete: deleted,
+        entry,
         ...input
       } = parsed.data as z.infer<typeof RULES.push>;
-      const files = manifestOf(parsed.data as z.infer<typeof RULES.push>);
+      const fileManifest = manifestOf({ files, delete: deleted, entry });
       return services.documents.save(scope, {
         artifactId: artifact,
         ...input,
-        ...(files ? { manifest: files } : {}),
+        ...(fileManifest ? { manifest: fileManifest } : {}),
       });
     }
     case "history": {

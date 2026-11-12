@@ -1,6 +1,7 @@
 import { AppError } from "#src/lib/app-error";
 import {
   ARTIFACT_FILE_LIMIT,
+  artifactKindOfPath,
   artifactPathValid,
   type ArtifactFileInput,
 } from "./artifact-files.server";
@@ -22,12 +23,11 @@ function invalid(errorId: string, hint?: string): never {
   throw new AppError("INVALID_INPUT", { errorId, ...(hint ? { hint } : {}) });
 }
 
-/** The kind of artifact an entry file makes: Markdown for `.md`, a web page for `.html`/`.htm`;
- * any other file is not one an artifact opens at. */
+/** The kind of artifact an entry file makes: Markdown for `.md`/`.markdown`, a web page for
+ * `.html`/`.htm`; any other file is not one an artifact opens at. */
 export function manifestKind(entryPath: string): ManifestKind {
-  const extension = entryPath.slice(entryPath.lastIndexOf(".") + 1).toLowerCase();
-  if (extension === "md") return "markdown";
-  if (extension === "html" || extension === "htm") return "html";
+  const kind = artifactKindOfPath(entryPath);
+  if (kind === "markdown" || kind === "html") return kind;
   return invalid("artifact-kind", "the entry file is a .md or .html file");
 }
 
