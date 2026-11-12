@@ -89,6 +89,8 @@ export const hostedConversationSearchShape = {
     .optional()
     .catch(undefined),
   msg: z.uuid().optional().catch(undefined),
+  /** `msg` is where the viewer's unread starts, as the opener read it (an Activity row). */
+  unread: z.uuid().optional().catch(undefined),
 };
 
 /**
@@ -110,6 +112,10 @@ export type HostedConversationTarget = ConversationPageTarget & {
   /** The file whose review opens over the conversation, with its comments, at one of them. */
   attachmentId?: string;
   commentId?: string;
+  /** Where the viewer's unread starts, as the opener already read it from the server (an
+   * Activity row): the pane draws its divider there at once rather than after its own read of
+   * it, which can land a beat after a held window paints (task #102). */
+  unreadFrom?: string;
 };
 
 /**
@@ -123,16 +129,19 @@ export function hostedConversationOpenParam(
   return `${alone}${target.kind}:${target.id}`;
 }
 
-/** The hosted conversation an address names: `open` at message `msg`. */
+/** The hosted conversation an address names: `open` at message `msg`, which is where the
+ * viewer's unread starts when `unread` names it too. */
 export function parseHostedConversation(
   open: string | undefined,
   msg?: string,
+  unread?: string,
 ): HostedConversationTarget | undefined {
   const threadAlone = open?.startsWith("thread:") || undefined;
   const taskAlone = open?.startsWith("task:") || undefined;
   const [kind, id] = open?.replace(/^(thread|task):/, "").split(":") ?? [];
   if ((kind !== "channel" && kind !== "dm") || !id) return undefined;
-  return { kind, id, messageId: msg, threadAlone, taskAlone };
+  const unreadFrom = unread !== undefined && unread === msg ? unread : undefined;
+  return { kind, id, messageId: msg, threadAlone, taskAlone, unreadFrom };
 }
 
 /** The URL hash that names a message: its row's element id, `message-<id>`. */

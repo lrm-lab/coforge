@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { conversationOpenQuery } from "./conversation-open-query";
 import { openState, type OpenRead } from "./conversation-open-state";
@@ -36,6 +36,16 @@ export function useConversationOpenRead(
   return { status: read.isError ? "error" : "pending" };
 }
 
+/**
+ * Where the viewer's unread starts in the conversation a host opens, as the host read it already
+ * (`HostedConversationTarget.unreadFrom`, an Activity row): the main stream's open takes it at
+ * once rather than after its own read (task #102). Threads and other conversations ignore it.
+ */
+export const OpenUnreadHintContext = createContext<{
+  conversationId: string;
+  messageId: string;
+} | null>(null);
+
 /** Whether this open's read is in (`useConversationOpenRead`): the read cursor's writes wait for it. */
 export function useConversationOpened(conversationId: string, rootId?: string, enabled = true) {
   return useConversationOpenRead(conversationId, rootId, enabled).status === "success";
@@ -68,11 +78,15 @@ export function useConversationOpen(
 ): { boundary?: FirstUnread; openKey: string } {
   const read = useConversationOpenRead(conversationId, rootId, keepsCursor);
   const key = `${conversationId}:${rootId ?? ""}`;
-  const state = keepsCursor ? openState(read, messages) : { waiting: false as const };
+  const hint = useContext(OpenUnreadHintContext);
+  const unreadFrom =
+    !rootId && hint?.conversationId === conversationId ? hint.messageId : undefined;
+  const state = keepsCursor ? openState(read, messages, unreadFrom) : { waiting: false as const };
   const settle = (waiting?: Waiting): Opened => ({
     key,
     boundary: state.waiting ? undefined : state.boundary,
     openKey: waiting?.strayed ? `${conversationId}:opening` : conversationId,
+    provisional: !state.waiting && state.provisional,
   });
   const [opened, setOpened] = useState<Opened | Waiting>(() =>
     state.waiting ? { key, waiting: true, strayed: !followingLatest } : settle(),
@@ -85,6 +99,10 @@ export function useConversationOpen(
       setOpened({ ...current, strayed: true });
   } else if (!current || "waiting" in current) {
     setOpened(settle(current && "waiting" in current ? current : undefined));
+  } else if (current.provisional && !state.provisional) {
+    // The read is in after an opener's position: it wins for the divider, while the landing
+    // stays where the pane already put the reader (Raft, task #102).
+    setOpened({ ...current, boundary: state.boundary, provisional: false });
   }
   // The main stream's first unread is older than all its window holds: read around it, once.
   const readAround = state.waiting && !rootId ? state.readAround : undefined;
@@ -101,6 +119,7 @@ export function useConversationOpen(
   };
 }
 
-type Opened = { key: string; boundary?: FirstUnread; openKey: string };
+/** `provisional`: settled on the opener's position (`OpenUnreadHintContext`), before the read. */
+type Opened = { key: string; boundary?: FirstUnread; openKey: string; provisional?: boolean };
 /** `strayed`: the reader left the latest while the open waited, so it does not move them. */
 type Waiting = { key: string; waiting: true; strayed: boolean };

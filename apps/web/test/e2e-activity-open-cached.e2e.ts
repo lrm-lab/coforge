@@ -15,6 +15,7 @@ import {
 import { clickActivityLink, inPane, rowItems, waitFor } from "./helpers/activity-inbox-e2e";
 import { dividerBetween, postLive, row, seedChannel } from "./helpers/open-unread-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
+import { serverFunctionIds, serverFunctionOf } from "./helpers/server-function-ids";
 
 /**
  * QA's path on staging (task #358), all within the page: a channel read in Chat, another channel
@@ -99,7 +100,15 @@ test("a channel opened from Activity round after round shows each round's divide
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `activity-open-rounds-${process.pid}`);
   const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
-  const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
+  // Each open's read of where unread starts answers late, as on a slow network: a window held from
+  // the last round paints before it, so its first picture has the divider only if the pane takes
+  // the Activity row's own first unread (task #102). Without the delay this hung on CI's timing.
+  const openRead = serverFunctionIds(["loadConversationOpen"]);
+  const proxy = sameOriginProxy(webOrigin, centrifugoOrigin, {
+    async afterUpstream(url) {
+      if (serverFunctionOf(openRead, url)) await Bun.sleep(1_500);
+    },
+  });
   const { origin } = proxy;
   const tab = (name: string) =>
     browser(

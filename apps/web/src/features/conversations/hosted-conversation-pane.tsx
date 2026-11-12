@@ -1,4 +1,4 @@
-import { memo, Suspense, useContext, useState, type Ref } from "react";
+import { memo, Suspense, useContext, useMemo, useState, type Ref } from "react";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
 
@@ -14,6 +14,7 @@ import { ConversationPage } from "./conversation-page";
 import { windowReplacement } from "./conversation-page-loader";
 import type { ConversationPageSearch, HostedConversationTarget } from "./conversation-page-search";
 import { ConversationPending } from "./conversation-pending";
+import { OpenUnreadHintContext } from "./use-conversation-open";
 import { channelNamesQuery, savedMessagesQuery } from "./conversation-queries";
 import { NO_SAVED } from "./saved-messages-collection";
 import { readChatList } from "./chat-lists-reader";
@@ -122,15 +123,23 @@ function HostedConversation({
     ...savedMessagesQuery(workspaceId),
     queryFn: () => readChatList("saved").catch(() => NO_SAVED),
   });
+  // Where the opener read the viewer's unread starts, for the divider's first picture (task #102).
+  const { id, unreadFrom } = target;
+  const unreadHint = useMemo(
+    () => (unreadFrom ? { conversationId: id, messageId: unreadFrom } : null),
+    [id, unreadFrom],
+  );
   return (
     <ConversationHostProvider channels={channels}>
-      <ConversationPage
-        target={{ kind: target.kind, id: target.id }}
-        search={search}
-        hosted
-        jumpMessage={target.messageId}
-        onJumpMessageConsumed={onJumpMessageConsumed}
-      />
+      <OpenUnreadHintContext value={unreadHint}>
+        <ConversationPage
+          target={{ kind: target.kind, id: target.id }}
+          search={search}
+          hosted
+          jumpMessage={target.messageId}
+          onJumpMessageConsumed={onJumpMessageConsumed}
+        />
+      </OpenUnreadHintContext>
     </ConversationHostProvider>
   );
 }

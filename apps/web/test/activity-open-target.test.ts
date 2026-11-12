@@ -28,7 +28,14 @@ function item(overrides: Partial<ActivityInboxItem>): ActivityInboxItem {
 test("an item opens at its first unread message, ahead of a mention already read (task #358)", () => {
   expect(
     activityOpenTarget(item({ firstMentionMessageId: "old-mention", firstUnreadMessageId: "new" })),
-  ).toMatchObject({ kind: "channel", id: "channel", messageId: "new" });
+  ).toMatchObject({ kind: "channel", id: "channel", messageId: "new", unreadFrom: "new" });
+});
+
+test("only a landing on the first unread names it, for the divider's first picture (task #102)", () => {
+  expect(activityOpenTarget(item({ firstMentionMessageId: "old-mention" }))).not.toHaveProperty(
+    "unreadFrom",
+  );
+  expect(activityOpenTarget(item({}))).not.toHaveProperty("unreadFrom");
 });
 
 test("an unread mention below earlier unread messages opens at the first of them, under its divider", () => {

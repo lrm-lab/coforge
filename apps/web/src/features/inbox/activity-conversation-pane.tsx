@@ -77,6 +77,8 @@ export function ActivityConversationPane({
       search: (previous) => ({
         ...previous,
         msg: keepsLandingForReview(previous) ? previous.msg : undefined,
+        // It names `msg`, and goes with it.
+        unread: undefined,
       }),
     });
   }, [navigate]);

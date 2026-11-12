@@ -47,3 +47,27 @@ test("a window around the first unread that does not show it opens at the latest
     boundary: first(3),
   });
 });
+
+test("an opener's own read of the first unread opens there at once, until the open's read lands (task #102)", () => {
+  // The window holds it: the divider and landing take it before the read, provisionally.
+  expect(openState({ status: "pending" }, window(1, 2, 3), "m2")).toEqual({
+    waiting: false,
+    boundary: first(2),
+    provisional: true,
+  });
+  // A failed read still leaves the opener's position.
+  expect(openState({ status: "error" }, window(1, 2, 3), "m2")).toMatchObject({
+    boundary: first(2),
+    provisional: true,
+  });
+  // The window lacks it: the open waits for the read, as without it.
+  expect(openState({ status: "pending" }, window(4, 5), "m2")).toEqual({ waiting: true });
+  // Once the read is in, it alone decides, whatever the opener said.
+  expect(openState({ status: "success", firstUnread: first(3) }, window(1, 2, 3), "m2")).toEqual({
+    waiting: false,
+    boundary: first(3),
+  });
+  expect(openState({ status: "success", firstUnread: null }, window(1, 2, 3), "m2")).toEqual({
+    waiting: false,
+  });
+});

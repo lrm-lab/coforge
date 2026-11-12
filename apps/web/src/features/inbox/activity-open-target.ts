@@ -58,9 +58,15 @@ export function activityOpenTarget({
   // the mention itself.
   const kind = mentionAction || place.kind === "channel" ? "channel" : "dm";
   const rootId = mentionAction ? mentionAction.threadRootId : thread?.root.id;
-  return rootId
-    ? threadAlone(kind, place.conversationId, rootId, anchor ?? undefined)
-    : { kind, id: place.conversationId, messageId: anchor ?? latest.id };
+  if (rootId) return threadAlone(kind, place.conversationId, rootId, anchor ?? undefined);
+  // Landing on the first unread, the pane draws its divider there at once (task #102).
+  const unreadFrom = !mentionAction && firstUnreadMessageId ? firstUnreadMessageId : undefined;
+  return {
+    kind,
+    id: place.conversationId,
+    messageId: anchor ?? latest.id,
+    ...(unreadFrom ? { unreadFrom } : {}),
+  };
 }
 
 /** A thread opened alone, scrolled to `replyId`. */

@@ -7,9 +7,10 @@ export type FirstUnread = { id: string; sequence: number };
 
 /**
  * Where the viewer's unread starts in one of their channels or DMs, or in one thread of it, read
- * when a pane opens (task #378). The pane draws its divider from this read alone, never from a
- * window it may hold from earlier (in memory or the browser's storage), whose cursor is as old as
- * that window.
+ * when a pane opens (task #378). The pane draws its divider from this read, never from a window
+ * it may hold from earlier (in memory or the browser's storage), whose cursor is as old as that
+ * window; an opener that read it already (an Activity row) places the divider until this lands
+ * (task #102).
  *
  * The rule is Activity's, the badge's too: someone else's message past the read cursor or at the
  * mark-as-unread marker (`conversationUnreadMessageSql`); in a thread, someone else's reply past

@@ -88,11 +88,12 @@ export const Route = createFileRoute("/w/$workspaceSlug/activity")({
 function ActivityPage() {
   // Only what the list and the pane's target read: the pane's own address state is read where it
   // is rendered, so a tab or Task popup change there does not re-render the list.
-  const { filter, open, msg, threadRootId, task } = Route.useSearch({
-    select: ({ filter, open, msg, threadRootId, task }) => ({
+  const { filter, open, msg, unread, threadRootId, task } = Route.useSearch({
+    select: ({ filter, open, msg, unread, threadRootId, task }) => ({
       filter,
       open,
       msg,
+      unread,
       threadRootId,
       task,
     }),
@@ -125,6 +126,7 @@ function ActivityPage() {
           filter: previous.filter,
           open: hostedConversationOpenParam(next),
           msg: next.messageId,
+          unread: next.unreadFrom,
           threadRootId: next.threadRootId,
           task: next.task,
           file: next.attachmentId,
@@ -147,11 +149,11 @@ function ActivityPage() {
   // address shows the thread rooted at `msg` alone for as long as `open` says so, whatever else
   // the pane opens over it (a profile, a Task popup); with no root it shows the conversation.
   const opened = useMemo(() => {
-    const target = parseHostedConversation(open, msg);
+    const target = parseHostedConversation(open, msg, unread);
     if (!target) return undefined;
     const threadAlone = target.threadAlone && msg !== undefined;
     return { ...target, threadRootId, threadAlone: threadAlone || undefined, task };
-  }, [open, msg, threadRootId, task]);
+  }, [open, msg, unread, threadRootId, task]);
   return (
     <ActivityInboxView
       filter={filter ?? "all"}
