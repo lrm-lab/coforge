@@ -193,10 +193,10 @@ export async function inWorkspace(db: Db, workspaceId: string, actor: ArtifactAc
   );
 }
 
-/** Whether the actor deletes an artifact it can read: its author, or a Workspace owner or admin
- * (a person); an Agent only its own. */
+/** Whether the actor deletes an artifact it can read: its author, the authoring Agent's owner,
+ * or a Workspace owner or admin (a person); an Agent only its own. */
 export async function canDeleteArtifact(
-  db: Pick<PrismaClient, "workspaceMembership">,
+  db: Pick<PrismaClient, "workspaceMembership" | "agent">,
   workspaceId: string,
   actor: ArtifactActor,
   artifact: { authorUserId: string | null; authorAgentId: string | null },
@@ -207,7 +207,13 @@ export async function canDeleteArtifact(
     where: { workspaceId_userId: { workspaceId, userId: actor.userId } },
     select: { role: true },
   });
-  return isWorkspaceAdminRole(membership?.role);
+  if (isWorkspaceAdminRole(membership?.role)) return true;
+  if (!artifact.authorAgentId) return false;
+  const author = await db.agent.findFirst({
+    where: { id: artifact.authorAgentId, workspaceId },
+    select: { ownerId: true },
+  });
+  return author?.ownerId === actor.userId;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
