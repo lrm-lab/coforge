@@ -1,8 +1,15 @@
 import { writeFile } from "node:fs/promises";
 import { agentApiRoutes, type AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
+import { shellWord } from "#src/artifact-directory";
 import { CliError, withOutputMode } from "#src/cli-error";
 import { invalidArgument } from "#src/command-help/index";
 import { readProxyErrorBody, requireProxySetup } from "#src/proxy-request";
+import {
+  parseDirectoryArgs,
+  type ArtifactDirectoryInvocation,
+  type ArtifactDirectoryTransport,
+} from "#src/artifact-directory-args";
+import { runArtifactDirectory } from "#src/artifact-directory-commands";
 import {
   formatArtifactCreated,
   formatArtifactHistory,
@@ -18,9 +25,13 @@ import {
  * comes from `--file <path>`, or stdin with `--file -`; the server applies the web page's rules
  * and merges an artifact's save with what others saved since its base.
  */
-export type ArtifactInvocation = {
+export type ArtifactInvocation = ArtifactRequestInvocation | ArtifactDirectoryInvocation;
+
+export type ArtifactRequestInvocation = {
   command: "artifact";
   request: ArtifactRequestDraft;
+  /** `read --files`: list every file of the version, not the first few. */
+  allFiles?: boolean;
   /** `--file`: where the text comes from (`-` is stdin). */
   file?: string;
   /** `read --output`: where the text goes, instead of stdout. */
@@ -35,22 +46,36 @@ type ArtifactRequestDraft =
   | Omit<Extract<AgentArtifactRequest, { operation: "create" }>, "text" | "idempotencyKey">
   | Extract<AgentArtifactRequest, { operation: "list" | "read" | "history" | "share" }>;
 
-export type ArtifactTransport = {
-  artifact?(request: AgentArtifactRequest): Promise<unknown>;
-};
+export type ArtifactTransport = ArtifactDirectoryTransport;
 
-const OPERATIONS = ["create", "list", "read", "push", "history", "revert", "share"] as const;
+/** Artifacts on one `list` page unless `--limit` says otherwise. */
+const ARTIFACT_LIST_PAGE = 20;
+
+const OPERATIONS = [
+  "create",
+  "list",
+  "read",
+  "push",
+  "history",
+  "revert",
+  "share",
+  "pull",
+  "download",
+] as const;
 type Operation = (typeof OPERATIONS)[number];
 
 /** Each operation's flags: `text` ones take a string, `count` ones a whole number. */
-const FLAGS: Record<Operation, { text: string[]; count: string[]; positional: boolean }> = {
+const FLAGS: Record<
+  Exclude<Operation, "pull" | "download">,
+  { text: string[]; count: string[]; positional: boolean; bool?: string[] }
+> = {
   create: {
     text: ["--title", "--target", "--file", "--kind", "--description"],
     count: [],
     positional: false,
   },
-  list: { text: ["--target"], count: [], positional: false },
-  read: { text: ["--output"], count: ["--version"], positional: true },
+  list: { text: ["--target", "--query", "--cursor"], count: ["--limit"], positional: false },
+  read: { text: ["--output"], count: ["--version"], positional: true, bool: ["--files"] },
   push: {
     text: ["--file", "--title", "--description", "--note", "--label"],
     count: ["--base"],
@@ -66,16 +91,26 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
   if (!OPERATIONS.includes(operation))
     throw invalidArgument("artifact", `Unknown artifact command ${args[0] ?? "(none)"}`);
   if (operation === "share") return parseShareArgs(args);
+  if (operation === "pull" || operation === "download") return parseDirectoryArgs(args);
+  // `push <id> --base <n> --file <path>` saves one text file over an artifact; without either flag
+  // the argument is a directory of files.
+  if (operation === "push" && !args.includes("--base") && !args.includes("--file"))
+    return parseDirectoryArgs(args);
   const command = `artifact ${operation}`;
   const flags = FLAGS[operation];
   const text: Record<string, string> = {};
   const count: Record<string, number> = {};
   let artifact: string | undefined;
   let json = false;
+  let allFiles = false;
   for (let index = 1; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--json") {
       json = true;
+      continue;
+    }
+    if (flags.bool?.includes(arg)) {
+      allFiles = true;
       continue;
     }
     if (!arg.startsWith("--") && flags.positional && artifact === undefined) {
@@ -135,7 +170,14 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
     case "list":
       return {
         command: "artifact",
-        request: { operation, ...optional("target", text["--target"]) },
+        request: {
+          operation,
+          ...optional("target", text["--target"]),
+          ...optional("query", text["--query"]),
+          ...optional("after", text["--cursor"]),
+          // Always a page: the server answers `nextCursor` only to a paged request.
+          limit: count["--limit"] ?? ARTIFACT_LIST_PAGE,
+        },
         ...options,
       };
     case "read":
@@ -143,6 +185,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
         command: "artifact",
         request: { operation, artifact: artifact!, ...optional("version", count["--version"]) },
         ...optional("output", text["--output"]),
+        ...(allFiles ? { allFiles: true } : {}),
         ...options,
       };
     case "push": {
@@ -179,7 +222,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
   }
 }
 
-function parseShareArgs(args: readonly string[]): ArtifactInvocation {
+function parseShareArgs(args: readonly string[]): ArtifactRequestInvocation {
   const command = "artifact share";
   const artifactIds: string[] = [];
   const targets: string[] = [];
@@ -227,6 +270,7 @@ export async function runArtifact(
   readText: (file: string) => Promise<string> = readArtifactText,
 ): Promise<unknown> {
   if (!transport.artifact) throw new Error("Artifact transport is unavailable");
+  if ("directory" in invocation) return runArtifactDirectory(invocation, transport);
   const draft = invocation.request;
   const text = invocation.file === undefined ? undefined : await readText(invocation.file);
   const request = {
@@ -245,13 +289,27 @@ export async function runArtifact(
   switch (request.operation) {
     case "create":
       return json ? result : formatArtifactCreated(result as never);
-    case "list":
-      return json ? result : formatArtifactList(result as never);
+    case "list": {
+      if (json) return result;
+      const more = (cursor: string) =>
+        [
+          "coforge artifact list",
+          ...(request.target === undefined ? [] : [`--target ${shellWord(request.target)}`]),
+          ...(request.query === undefined ? [] : [`--query ${shellWord(request.query)}`]),
+          `--cursor ${cursor}`,
+          ...(request.limit === undefined ? [] : [`--limit ${request.limit}`]),
+        ].join(" ");
+      return formatArtifactList(result as never, more);
+    }
     case "read": {
       const read = result as Parameters<typeof formatArtifactRead>[0];
       if (invocation.output !== undefined) await writeFile(invocation.output, read.text);
       if (json) return result;
-      return formatArtifactRead(read, invocation.output === undefined);
+      return formatArtifactRead(
+        read,
+        invocation.output === undefined,
+        invocation.allFiles === true,
+      );
     }
     case "history":
       return json ? result : formatArtifactHistory(request.artifact, result as never);
@@ -369,6 +427,8 @@ export async function artifactRequest(
     retryable: !writes && (json?.retryable ?? response.status >= 500),
     ...(next ? { suggestedNextAction: next } : {}),
     ...(json?.proxy?.correlation_id ? { correlationId: json.proxy.correlation_id } : {}),
+    // Facts the server names for a refusal, such as the files an Agent save clashed on.
+    ...(json?.details ? { details: json.details } : {}),
   });
 }
 

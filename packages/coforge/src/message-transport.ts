@@ -81,6 +81,8 @@ export type MessageTransport = LabelTransport & {
   setChannelMuted?(target: string, muted: boolean): Promise<unknown>;
   reminder?(request: ReminderTransportRequest): Promise<ReminderResponse>;
   artifact?: ArtifactTransport["artifact"];
+  artifactUpload?: ArtifactTransport["artifactUpload"];
+  artifactDownload?: ArtifactTransport["artifactDownload"];
   setThreadFollowed?(target: string, followed: boolean): Promise<unknown>;
   threadList?(): Promise<AgentThreadListResponse>;
   channel?(command: Omit<ChannelCommand, "idempotencyKey">): Promise<unknown>;

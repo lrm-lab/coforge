@@ -5,11 +5,21 @@ type Card = { id: string; name: string; title: string; currentVersion: number };
 /** A row `artifact list` prints: the card, with when it last changed. */
 type ListRow = Card & { updatedAt: string };
 
+type FileRow = { path: string; sha256: string; sizeBytes: number; kind?: string };
+
 type Read = {
   artifact: { id: string; title: string; currentVersion: number };
   version: { number: number; note?: string | null; label?: string | null } | null;
+  entryPath?: string | null;
+  files?: FileRow[];
   text: string;
 };
+
+/** How many files `read` lists unless asked for all. */
+const READ_FILES_SHOWN = 10;
+
+/** A list answer: the rows alone, or a page of them with the cursor of the next one. */
+type ListAnswer = ListRow[] | { artifacts: ListRow[]; nextCursor?: string | null };
 
 type HistoryPage = {
   versions: {
@@ -50,26 +60,49 @@ export function formatArtifactCreated(card: Card): string {
   ].join("\n");
 }
 
-/** The readable artifacts of a home, newest first: one line each (title, id, version, when), and
- * how to read one. */
-export function formatArtifactList(rows: ListRow[]): string {
+/** The readable artifacts of a home, newest first: one line each (title, id, version, when), how
+ * to read one, and, when more exist, the command for the next page. */
+export function formatArtifactList(
+  answer: ListAnswer,
+  nextPage?: (cursor: string) => string,
+): string {
+  const rows = Array.isArray(answer) ? answer : answer.artifacts;
+  const cursor = Array.isArray(answer) ? undefined : answer.nextCursor;
   if (rows.length === 0) return "No artifacts here yet.";
   const lines = rows.map(
     (row) => `${row.updatedAt}  "${row.title}" (id ${row.id}), version ${row.currentVersion}`,
   );
   lines.push(`Read one: ${readCommand("<id>")}`);
+  if (cursor && nextPage) lines.push(`More: ${nextPage(cursor)}`);
   return lines.join("\n");
 }
 
+const size = (bytes: number) =>
+  bytes < 1024
+    ? `${bytes} B`
+    : bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(1)} KiB`
+      : `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+
 /** The artifact's version line and how to save over it; then its text, unless it went to a
  * file. */
-export function formatArtifactRead(read: Read, withText: boolean): string {
+export function formatArtifactRead(read: Read, withText: boolean, allFiles = false): string {
   const { artifact, version } = read;
   const shown = version?.number ?? 0;
   const lines = [
     `Artifact "${artifact.title}" (id ${artifact.id}), version ${shown} of ${artifact.currentVersion}${version?.label ? `, labelled "${version.label}"` : ""}.`,
     `Save over it: ${pushCommand(artifact.id, shown)}`,
   ];
+  const files = read.files ?? [];
+  if (files.length > 0) {
+    if (read.entryPath) lines.push(`Entry: ${read.entryPath}`);
+    lines.push(`Files (${files.length}):`);
+    for (const file of allFiles ? files : files.slice(0, READ_FILES_SHOWN))
+      lines.push(`  ${file.path}  ${size(file.sizeBytes)}`);
+    if (!allFiles && files.length > READ_FILES_SHOWN)
+      lines.push(`  ${files.length - READ_FILES_SHOWN} more: add --files to list them all`);
+    lines.push(`Work on them as files: coforge artifact pull ${artifact.id}`);
+  }
   if (withText) lines.push("---", read.text);
   return lines.join("\n");
 }

@@ -5,18 +5,22 @@ const FILE = "--file <path>  the artifact's text; `-` reads it from stdin (a quo
 /** The `artifact` family's help (task #385): artifacts kept in a channel, a DM or the Workspace. */
 export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
-    syntax: "coforge artifact create|list|read|push|history|revert ...",
+    syntax: "coforge artifact create|list|read|push|history|revert|pull|download ...",
     guidance:
-      "An artifact is Markdown text kept in a channel, a DM, or the Workspace, with every version; a web page (`create --kind html`) is one HTML file kept the same way. Whoever can read the conversation reads it; its members write an artifact, Agents a web page. The Workspace must have artifacts switched on (Settings > Experiments).",
-    example: "coforge artifact create --title 'Launch plan' --target '#launch' --file plan.md",
+      "An artifact is Markdown text kept in a channel, a DM, or the Workspace, with every version; a web page (`create --kind html`) is one HTML file kept the same way. Whoever can read the conversation reads it; its members write an artifact, Agents a web page. To work on one as files, `pull` it into a directory, edit, and `push` the directory: only the files that changed are sent. The Workspace must have artifacts switched on (Settings > Experiments).",
+    example: "coforge artifact pull 0f8c…e1 --dir plan && coforge artifact push plan",
   },
   "artifact list": {
-    syntax: "coforge artifact list [--target '#channel'|'@name'] [--json]",
+    syntax:
+      "coforge artifact list [--target '#channel'|'@name'] [--query <words>] [--cursor <c>] [--limit <n>] [--json]",
     flags: [
       "--target  the channel, or the DM with @name (@name~agent for an Agent); none lists the Workspace's",
+      "--query  only artifacts matching these words",
+      "--cursor  the next page: the cursor the previous page's last line named",
+      "--limit  how many to list in a page",
     ],
     guidance:
-      "Lists the artifacts you can read in a channel, a DM, or the Workspace, newest first. Read-only; use it to check whether a `create` that timed out actually made the artifact.",
+      "Lists the artifacts you can read in a channel, a DM, or the Workspace, newest first, a page at a time; when more exist the last line is the command for the next page. Read-only; use it to check whether a `create` that timed out actually made the artifact.",
     example: "coforge artifact list --target '#launch'",
   },
   "artifact create": {
@@ -34,26 +38,53 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
     example: "coforge artifact create --title 'Launch plan' --target '#launch' --file plan.md",
   },
   "artifact read": {
-    syntax: "coforge artifact read <id> [--version <n>] [--output <path>] [--json]",
+    syntax: "coforge artifact read <id> [--version <n>] [--files] [--output <path>] [--json]",
     flags: [
       "--version  an earlier version; the current one by default",
+      "--files  list every file of the version (the first few by default)",
       "--output  write the text to this file instead of printing it",
     ],
-    guidance: "Prints the version line, then `---` and the text. Save over the version you read.",
+    guidance:
+      "Prints the version line, the entry and the version's files, then `---` and the entry's text. To change files, `pull` the artifact instead.",
     example: "coforge artifact read 0f8c…e1 --output plan.md",
+  },
+  "artifact pull": {
+    syntax: "coforge artifact pull <id> [--dir <dir>] [--rev <n>] [--json]",
+    flags: [
+      "--dir  where to write the files; by default a folder named after the title (or the id) in the current directory",
+      "--rev  an earlier version; the current one by default",
+    ],
+    guidance:
+      "Writes every file of the version into the directory, and a hidden .coforge-artifact.json there that remembers the artifact, the version pulled (the base of your next push) and each file's hash. The directory must be new, empty or an earlier pull of this artifact; pulling into that one makes it match the version, replacing files you changed. Edit the files, then `coforge artifact push <dir>`.",
+    example: "coforge artifact pull 0f8c…e1 --dir plan",
   },
   "artifact push": {
     syntax:
-      "coforge artifact push <id> --base <version> [--file <path>|-] [--title <t>] [--description <t>] [--note <t>] [--label <t>] [--json]",
+      "coforge artifact push [<dir>] [--target '#channel'|'@name'] [--title <t>] [--description <t>] [--entry <file>] [--note <t>] [--label <t>] [--delete <path>]... [--include-hidden] [--json]",
     flags: [
-      "--base  the version your text started from, as read printed it",
-      FILE,
+      "<dir>  the directory to push; the current one by default",
+      "--target  make a new artifact in this channel or DM (none: the Workspace); only for a directory that was not pulled",
+      "--title  the title; required to make a new artifact, a setting to change otherwise",
+      "--description  one line saying what it is; required when the entry is an .html file",
+      "--entry  the file it opens at; a new artifact uses index.html, or its only file, by default",
       "--note  what changed, shown in history",
-      "--label  names this version (a save with only a label still makes one)",
+      "--label  names this version (a push with only a label still makes one)",
+      "--delete  remove this path from the artifact; the file must already be gone from the directory; repeat for more",
+      "--include-hidden  send files and folders that start with . too (the state file never goes)",
     ],
     guidance:
-      "An Agent save must use the version returned by its latest read; if a person saved since --base, the push is refused with artifact-agent-base-moved. Read the newest version, redo the change, and push again. A person's web save keeps the existing merge and conflict behavior, including ARTIFACT_CONFLICT when both sides changed the same paragraph. A web page is replaced whole, never merged: when someone saved since --base the push is refused (artifact-base-moved).",
-    example: "coforge artifact push 0f8c…e1 --base 3 --file plan.md --note 'moved the date'",
+      "In a directory from `pull`, sends only the files whose hash differs from the pulled one, as a new version over the version pulled; a file missing from the directory is kept, not deleted. A push over an older version keeps what others changed in files you did not touch; when you and someone else changed the same file or setting it is refused (artifact-agent-base-moved) and names the files: pull the newest version, redo the change, push again. Without that state file, creates a new artifact from the directory. On success the state file moves to the new version.\nOlder form: `coforge artifact push <id> --base <version> [--file <path>|-]` saves one text over version --base (--title, --description, --note, --label also apply); the same refusal applies, and a person's web save keeps the line-by-line merge, with ARTIFACT_CONFLICT when both sides changed the same paragraph.",
+    example: "coforge artifact push plan --note 'moved the date'",
+  },
+  "artifact download": {
+    syntax: "coforge artifact download <id> <path> [--output <file>] [--rev <n>] [--json]",
+    flags: [
+      "<path>  the file's path in the artifact, as `read` lists it",
+      "--output  where to save it; by default its name in the current directory",
+      "--rev  an earlier version; the current one by default",
+    ],
+    guidance: "Saves one file's exact bytes, whatever its type.",
+    example: "coforge artifact download 0f8c…e1 img/logo.png --output logo.png",
   },
   "artifact history": {
     syntax: "coforge artifact history <id> [--before <version>] [--limit <n>] [--json]",

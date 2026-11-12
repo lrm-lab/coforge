@@ -1,6 +1,5 @@
 import { appConfigRequests } from "#src/app-config-request";
-import type { AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
-import { artifactRequest } from "#src/artifact-commands";
+import { artifactTransport } from "#src/artifact-file-transport";
 import {
   AGENT_SEND_LOCAL_DEADLINE_MS,
   decodeAgentMessageResponse,
@@ -178,8 +177,7 @@ export function connectLocal(
   return {
     reminder: (request: ReminderTransportRequest) =>
       reminderRequest(proxyEndpoint, context, proxyUrl, request),
-    artifact: (request: AgentArtifactRequest) =>
-      artifactRequest(proxyEndpoint, context, proxyUrl, request),
+    ...artifactTransport(proxyEndpoint, context, proxyUrl),
     inboxCheck: () => inboxCheckRequest(proxyEndpoint, context, proxyUrl),
     inboxList: (request: AgentInboxRequest) =>
       inboxListRequest(proxyEndpoint, context, proxyUrl, request),

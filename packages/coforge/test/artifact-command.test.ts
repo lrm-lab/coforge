@@ -6,6 +6,7 @@ import {
   artifactRequest,
   runArtifact,
   type ArtifactInvocation,
+  type ArtifactRequestInvocation,
 } from "../src/artifact-commands";
 import { CliError } from "../src/cli-error";
 
@@ -45,11 +46,11 @@ test("each artifact command parses into its own request", () => {
   });
   expect(parseArgs(["artifact", "list", "--target", "#launch"])).toEqual({
     command: "artifact",
-    request: { operation: "list", target: "#launch" },
+    request: { operation: "list", target: "#launch", limit: 20 },
   });
   expect(parseArgs(["artifact", "list"])).toEqual({
     command: "artifact",
-    request: { operation: "list" },
+    request: { operation: "list", limit: 20 },
   });
   const shared = parseArgs([
     "artifact",
@@ -62,7 +63,7 @@ test("each artifact command parses into its own request", () => {
     "@ada",
     "--note",
     "Read this",
-  ]) as ArtifactInvocation;
+  ]) as ArtifactRequestInvocation;
   expect(shared.request).toMatchObject({
     operation: "share",
     artifactIds: [ID, "a1"],
@@ -215,7 +216,7 @@ test("list prints a line per artifact, newest first, and how to read one", async
     invocation(["list", "--target", "#launch"]),
     transport,
   )) as string;
-  expect(sent[0]).toEqual({ operation: "list", target: "#launch" });
+  expect(sent[0]).toEqual({ operation: "list", target: "#launch", limit: 20 });
   expect(said).toContain(`"Launch plan" (id ${ID}), version 4`);
   expect(said).toContain('"Notes" (id a1), version 1');
   expect(said).toContain(`coforge artifact read <id>`);
