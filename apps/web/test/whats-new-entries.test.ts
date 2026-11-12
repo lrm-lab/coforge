@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { WHATS_NEW_CONTENT } from "#src/features/whats-new/whats-new-content";
 import {
   WHATS_NEW_ENTRIES,
+  announcedWhatsNew,
   pendingWhatsNew,
   type WhatsNewEntryData,
 } from "#src/features/whats-new/whats-new-entries";
@@ -57,4 +58,18 @@ test("an entry whose experiment is off is skipped, and shows once it is on", () 
   expect(pendingWhatsNew(entries, off)).toEqual([]);
   // Dismissing a later entry meanwhile does not count the skipped one as seen.
   expect(pendingWhatsNew(entries, { ...off, experimentOn: () => true })).toEqual(["needs-docs"]);
+});
+
+test("an announced entry opens by itself once; the others wait for the row", () => {
+  const data: WhatsNewEntryData[] = [
+    { id: "small", releasedAt: "2026-11-04T07:00:00Z" },
+    { id: "big", releasedAt: "2026-11-04T07:01:00Z", announce: true },
+    { id: "bigger", releasedAt: "2026-11-04T07:02:00Z", announce: true },
+  ];
+  // Only what still waits, in its order.
+  expect(announcedWhatsNew(data, ["big", "small", "bigger"], [])).toEqual(["big", "bigger"]);
+  // One this browser already opened by itself is not opened again.
+  expect(announcedWhatsNew(data, ["small", "big", "bigger"], ["big"])).toEqual(["bigger"]);
+  // An announced entry no longer pending (seen, or not yet released) does not open.
+  expect(announcedWhatsNew(data, ["small"], [])).toEqual([]);
 });

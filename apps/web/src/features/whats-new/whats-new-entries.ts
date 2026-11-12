@@ -13,6 +13,8 @@ export type WhatsNewEntryData = {
   /** An experiment the feature needs: while it is off in the Workspace the entry is skipped, and
    * not counted as seen. */
   experiment?: ExperimentKey;
+  /** An entry worth interrupting for: it opens by itself once, rather than waiting for the row. */
+  announce?: true;
 };
 
 export const WHATS_NEW_ENTRIES = [
@@ -50,4 +52,20 @@ export function pendingWhatsNew(
     })
     .sort((a, b) => Date.parse(a.releasedAt) - Date.parse(b.releasedAt))
     .map((entry) => entry.id);
+}
+
+/**
+ * The pending entries, in their order, that open by themselves now: those marked `announce` that
+ * this browser has not yet opened unasked (`announced`).
+ */
+export function announcedWhatsNew<Id extends string>(
+  entries: readonly WhatsNewEntryData[],
+  pending: readonly Id[],
+  announced: readonly string[],
+): Id[] {
+  return pending.filter(
+    (id) =>
+      !announced.includes(id) &&
+      entries.some((entry) => entry.id === id && entry.announce === true),
+  );
 }

@@ -35,7 +35,11 @@ import {
 import { useActivityInboxRealtime } from "#src/features/inbox/use-activity-inbox-realtime";
 import { NotificationBell } from "#src/features/usage-limits/notification-bell";
 import { SystemNotificationsProvider } from "#src/features/usage-limits/system-notifications-provider";
-import { WhatsNewRailButton, WhatsNewRow } from "#src/features/whats-new/whats-new-entry";
+import {
+  WhatsNewAnnouncer,
+  WhatsNewRailButton,
+  WhatsNewRow,
+} from "#src/features/whats-new/whats-new-entry";
 import {
   WorkspaceSwitcher,
   type WorkspaceOption,
@@ -292,6 +296,7 @@ export function AppShell({
               !tabBar && "pb-safe-bottom",
             )}
           >
+            <WhatsNewAnnouncer />
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
               {/* `contents` keeps the sidebars direct flex items of this row. On desktop
             `sidebar-collapsed` on <html> picks the expanded one or the rail; a phone has neither, its
