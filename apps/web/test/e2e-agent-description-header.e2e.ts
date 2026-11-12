@@ -66,7 +66,7 @@ test("an Agent's message header shows the first line of its description", async 
   });
   await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 1 } });
   const row = `document.querySelector('[data-message-id="${message.id}"]')`;
-  const label = `[...${row}.querySelectorAll("button")].find((el) => el.textContent === ${JSON.stringify(firstLine)})`;
+  const label = `[...${row}.querySelectorAll("*")].find((el) => el.children.length === 0 && el.textContent === ${JSON.stringify(firstLine)})`;
   const page = `${origin}/en/w/${workspace.slug}/channel/${channel.id}`;
   /** The label's own width and the width its text would need. */
   const widths = () =>
