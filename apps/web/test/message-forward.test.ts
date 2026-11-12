@@ -12,7 +12,7 @@ import {
 import {
   mapBrowserMessage,
   type BrowserMessageRow,
-} from "#src/server/conversations/conversation-history.server";
+} from "#src/server/conversations/browser-message-projection.server";
 import { attachForwardedAccess } from "#src/server/conversations/message-forward-view.server";
 import { forwardIdempotencyKey } from "#src/server/conversations/message-forwards.server";
 

@@ -11,11 +11,11 @@ import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.serve
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { workspaceUserAvatarUrl } from "./user-profile.repositories.server";
+import { browserMessageUpdates } from "#src/server/conversations/conversation-history.server";
 import {
   browserMessageFields,
-  browserMessageUpdates,
   mapBrowserMessages,
-} from "#src/server/conversations/conversation-history.server";
+} from "#src/server/conversations/browser-message-projection.server";
 import { readWindowThreads } from "#src/server/conversations/thread-summaries.server";
 import { windowPageFlags } from "#src/lib/conversation-window";
 import { othersReadThroughSequence } from "#src/server/conversations/conversation-read-state.server";

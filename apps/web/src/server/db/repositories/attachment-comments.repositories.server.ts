@@ -15,7 +15,7 @@ import { parseAttachmentCommentAnchor } from "#src/features/conversations/attach
 import {
   browserMessageFields,
   mapBrowserMessage,
-} from "#src/server/conversations/conversation-history.server";
+} from "#src/server/conversations/browser-message-projection.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import {
   channelMentionTargets,

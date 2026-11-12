@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import {
-  browserMessageUpdates,
-  mapBrowserMessage,
-} from "#src/server/conversations/conversation-history.server";
+import { browserMessageUpdates } from "#src/server/conversations/conversation-history.server";
+import { mapBrowserMessage } from "#src/server/conversations/browser-message-projection.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 

@@ -6,7 +6,7 @@ import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import { botFixture, type BotFixture } from "./app-bots-fixture";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
-import { mapBrowserMessage } from "#src/server/conversations/conversation-history.server";
+import { mapBrowserMessage } from "#src/server/conversations/browser-message-projection.server";
 
 /**
  * An app's bot wears its app's logo wherever it shows a face: the DM's open (its header and list

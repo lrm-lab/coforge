@@ -6,7 +6,7 @@ import {
 } from "#src/features/conversations/attachment-comment-anchors";
 import { previewKindFor, takesComments } from "#src/features/conversations/attachment-preview-kind";
 import type { Mentionable } from "#src/features/conversations/mention-text";
-import type { mapBrowserMessage } from "#src/server/conversations/conversation-history.server";
+import type { mapBrowserMessage } from "#src/server/conversations/browser-message-projection.server";
 import type { VersionedReactions } from "#src/server/conversations/reaction-write.server";
 
 export type AttachmentCommentActor = { workspaceId: string } & (

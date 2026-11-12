@@ -6,7 +6,7 @@ import { peopleReadableBody } from "#src/server/conversations/message-preview-li
 import {
   browserMessageFields,
   mapBrowserMessage,
-} from "#src/server/conversations/conversation-history.server";
+} from "#src/server/conversations/browser-message-projection.server";
 import { attachForwardedAccess } from "#src/server/conversations/message-forward-view.server";
 import {
   AGENT_MESSAGE_INCLUDE,
