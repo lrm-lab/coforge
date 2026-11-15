@@ -43,7 +43,9 @@ export type ComputerPlatformInfo = {
   osVersion?: string | null;
 };
 
-export function operatingSystemLabel(computer: ComputerPlatformInfo): string {
+/** The system the Computer runs ("macOS 15.1", or "Linux" without a reported version); null for a
+ * system it has not reported, which callers leave out rather than write as "Unknown". */
+export function operatingSystemLabel(computer: ComputerPlatformInfo): string | null {
   const name =
     computer.platform === "darwin"
       ? "macOS"
@@ -52,21 +54,8 @@ export function operatingSystemLabel(computer: ComputerPlatformInfo): string {
         : computer.platform === "win32"
           ? "Windows"
           : undefined;
-  return name
-    ? `${name} ${computer.osVersion || m.computer_metadata_unknown()}`
-    : m.computer_metadata_unknown();
-}
-
-/** What a Computer's CoForge version reads as. The list row and the detail panel both show it, so it
- * is stated here rather than twice; a Computer that has never reported one reads as an em dash in the
- * panel, while the list row omits the version entirely rather than repeat that in every row. */
-export function computerVersionLabel(computer: { computerVersion?: string | null }): string {
-  return computer.computerVersion || "—";
-}
-
-/** The image a cloud Computer is running. An unreported one reads as an em dash, like the runtime. */
-export function computerImageVersionLabel(computer: { imageVersion?: string | null }): string {
-  return computer.imageVersion || "—";
+  if (!name) return null;
+  return computer.osVersion ? `${name} ${computer.osVersion}` : name;
 }
 
 /** Compare the numeric portions of release versions without treating an unknown format as newer. */

@@ -1,6 +1,6 @@
 {
   "computer_file_upload_title": "上传到电脑",
-  "computer_file_upload_description": "文件会落到这台电脑的 uploads/ 目录。需启用对象存储，以便电脑出站拉取。",
+  "computer_file_upload_description": "文件会放进这台电脑的 uploads 文件夹。",
   "computer_file_upload_choose": "选择文件",
   "computer_file_upload_uploading": "上传中…",
   "computer_file_upload_uploading_progress": "上传中… {percent}%",
@@ -11,7 +11,7 @@
   "computer_file_upload_offline": "这台电脑当前离线，恢复在线后再试。",
   "computer_file_upload_unsupported": "这台电脑的软件还不支持文件上传，请升级后再试。",
   "computer_file_upload_timeout": "电脑未能在时限内写完文件，请重试。",
-  "computer_file_upload_storage_unavailable": "当前环境未启用对象存储。",
+  "computer_file_upload_storage_unavailable": "这里暂时还不能上传文件。",
   "computer_file_upload_too_large": "文件过大（上限 {limit}）。",
   "computer_file_upload_invalid_name": "文件名不被允许。",
   "computer_file_upload_unavailable": "这台电脑当前不可用于上传。"

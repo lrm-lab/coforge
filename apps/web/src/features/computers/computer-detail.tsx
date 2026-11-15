@@ -3,7 +3,6 @@ import { ChevronRight, RefreshCw01 as RotateCw, Terminal } from "@untitledui/ico
 
 import { Button } from "#src/components/base/buttons/button";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { Popconfirm } from "#src/components/ui/popconfirm";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { TerminalCommand } from "./terminal-command";
@@ -19,7 +18,7 @@ import type { RuntimeCatalog } from "#src/features/agents/agent-runtime-fields";
 import type { AgentControlExecute } from "#src/features/agents/agent-runtime-controls";
 import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
-import { ComputerRemoveAction } from "./computer-remove-action";
+import { ComputerDetailMenu } from "./computer-detail-menu";
 import { ComputerDetailAgentRoster } from "./computer-detail-agent-roster";
 import { ComputerDetailStats } from "./computer-detail-stats";
 import { activeRefusal, ComputerRefusalAlert } from "./computer-refusal";
@@ -183,6 +182,14 @@ export function ComputerDetail({
               }
             : undefined
         }
+        menu={
+          <ComputerDetailMenu
+            name={label}
+            onFormat={onFormatCloudComputer ? () => setFormatOpen(true) : undefined}
+            onRemove={onRemoveComputer}
+            onDelete={onDeleteComputer}
+          />
+        }
       />
 
       <div className="@container min-h-0 flex-1 overflow-y-auto px-page pt-6 pb-10">
@@ -192,7 +199,12 @@ export function ComputerDetail({
               <ComputerRefusalAlert refusal={refusal} computer={computer} timeZone={timeZone} />
             )}
             {/* The header band has no room for it on a phone. */}
-            <ComputerDetailWhere computer={computer} label={label} className="-mb-2 sm:hidden" />
+            <ComputerDetailWhere
+              computer={computer}
+              label={label}
+              phone
+              className="-mb-2 sm:hidden"
+            />
             <ComputerDetailStats
               computer={computer}
               label={label}
@@ -315,38 +327,6 @@ export function ComputerDetail({
               </details>
             )}
           </div>
-
-          {(onFormatCloudComputer || onDeleteComputer || onRemoveComputer) && (
-            // The page's last row: each action's consequences are spelled out in its confirmation.
-            <div className="flex flex-wrap gap-2">
-              {onFormatCloudComputer && (
-                <Button
-                  type="button"
-                  size="sm"
-                  color="secondary-destructive"
-                  onPress={() => setFormatOpen(true)}
-                >
-                  {m.computer_format_action()}
-                </Button>
-              )}
-              {onDeleteComputer && (
-                <Popconfirm
-                  title={m.computer_delete_dialog_title({ name: label })}
-                  description={m.computer_delete_description()}
-                  confirmLabel={m.computer_delete_action()}
-                  errorMessage={m.computer_delete_error()}
-                  onConfirm={onDeleteComputer}
-                >
-                  <Button type="button" size="sm" color="secondary-destructive">
-                    {m.computer_delete_action()}
-                  </Button>
-                </Popconfirm>
-              )}
-              {onRemoveComputer && (
-                <ComputerRemoveAction name={label} onConfirm={onRemoveComputer} />
-              )}
-            </div>
-          )}
         </div>
       </div>
       {onFormatCloudComputer && (
