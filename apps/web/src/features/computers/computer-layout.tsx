@@ -18,7 +18,7 @@ import { ComputerTile } from "./computer-tile";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Button } from "#src/components/base/buttons/button";
 import { humanLabel } from "#src/lib/human-label";
-import { computerListUpdateVersion, computerVersionLabel } from "./computer-identity";
+import { computerListUpdateVersion } from "./computer-identity";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 import { upgradeRunning } from "./computer-upgrade-status";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
@@ -141,7 +141,7 @@ export function ComputerLayout({
                             is what this row was asked to carry. */}
                         {computer.computerVersion && (
                           <span className="shrink-0 text-xs text-tertiary">
-                            {computerVersionLabel(computer)}
+                            {computer.computerVersion}
                           </span>
                         )}
                       </span>

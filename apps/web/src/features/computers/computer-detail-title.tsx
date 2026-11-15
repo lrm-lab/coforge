@@ -109,33 +109,38 @@ export function ComputerDetailTitle({
         />
       )}
       <ComputerDetailWhere computer={computer} label={label} className="hidden truncate sm:block" />
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-secondary px-2 py-0.5 text-xs text-secondary">
+      {/* On a phone the name keeps the room: the pill shrinks to its dot and the line below the
+          band (`ComputerDetailWhere`) says the status in words. */}
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-secondary px-2 py-0.5 text-xs text-secondary max-sm:border-0 max-sm:p-0">
         <StatusDot tone={computer.online ? "online" : "offline"} className="size-2" />
-        {computer.online ? m.computer_status_online() : m.computer_status_offline()}
+        <span className="max-sm:sr-only">{statusLabel(computer)}</span>
       </span>
     </div>
   );
 }
 
-/** Where the Computer runs: its hostname, when its name is another, and its system. */
+function statusLabel(computer: ComputerDetailView): string {
+  return computer.online ? m.computer_status_online() : m.computer_status_offline();
+}
+
+/** Where the Computer runs: its hostname, when its name is another, and its system. On a phone
+ * (`phone`) it also says whether the Computer is online, which the header band shows as a dot. */
 export function ComputerDetailWhere({
   computer,
   label,
+  phone = false,
   className,
 }: {
   computer: ComputerDetailView;
   label: string;
+  phone?: boolean;
   className?: string;
 }) {
-  return (
-    <p className={cn("min-w-0 text-sm text-tertiary", className)}>
-      {computer.name && computer.name !== label && (
-        <>
-          {computer.name}
-          {" · "}
-        </>
-      )}
-      {operatingSystemLabel(computer)}
-    </p>
-  );
+  const parts = [
+    computer.name && computer.name !== label ? computer.name : null,
+    operatingSystemLabel(computer),
+    phone ? statusLabel(computer) : null,
+  ].filter(Boolean);
+  if (!parts.length) return null;
+  return <p className={cn("min-w-0 text-sm text-tertiary", className)}>{parts.join(" · ")}</p>;
 }

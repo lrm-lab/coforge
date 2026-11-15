@@ -1,5 +1,4 @@
 import { ComputerUpgradeSlot, type ComputerUpgradeSlotState } from "./computer-upgrade-slot";
-import { computerImageVersionLabel, computerVersionLabel } from "./computer-identity";
 import { ComputerDate } from "./computer-detail-date";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { m } from "#src/paraglide/messages";
@@ -18,7 +17,7 @@ import { cn } from "#src/lib/utils";
 
 /**
  * What the machine is, as one strip of short facts — Disk, Memory, Version (and a cloud Computer's
- * Image), who added it — each a small label over its value, with no box around them (Coder's
+ * Image), who added it, each only once the Computer has reported it — each a small label over its value, with no box around them (Coder's
  * workspace page). An upgrade on offer shows below the strip.
  */
 export function ComputerDetailStats({
@@ -50,39 +49,45 @@ export function ComputerDetailStats({
   onRuntimeUpgrade: () => void;
   onImageUpgrade: () => void;
 }) {
+  const disk = computer.machine?.disk;
+  const memory = computer.machine?.memory;
+  const imageVersion = isCloud ? currentImageVersion : null;
+  const hasFacts = Boolean(disk || memory || currentVersion || imageVersion || computer.creator);
+  if (!hasFacts && !runtimeSlot && !(isCloud && imageSlot)) return null;
   return (
     <div className="flex flex-col gap-4">
-      <dl className="flex flex-wrap gap-x-12 gap-y-5">
-        <Stat label={m.computer_disk()}>
-          <MachineUsage reading={computer.machine?.disk ?? null} base={1000} warn />
-        </Stat>
-        <Stat label={m.computer_memory()}>
-          <MachineUsage reading={computer.machine?.memory ?? null} base={1024} />
-        </Stat>
-        <Stat label={m.computer_version()}>
-          {computerVersionLabel({ computerVersion: currentVersion })}
-        </Stat>
-        {isCloud && (
-          <Stat label={m.computer_image_version()}>
-            {computerImageVersionLabel({ imageVersion: currentImageVersion })}
-          </Stat>
-        )}
-        {computer.creator && (
-          <Stat label={m.computer_added_by()}>
-            <span className="flex min-w-0 items-center gap-2">
-              <ActorAvatar
-                presence={false}
-                size="xs"
-                name={creatorName}
-                src={computer.creator.avatarUrl}
-              />
-              <span className="truncate">
-                {creatorName} · <ComputerDate value={computer.connectedAt} timeZone={timeZone} />
+      {hasFacts && (
+        <dl className="flex flex-wrap gap-x-12 gap-y-5">
+          {/* A fact the Computer has not reported is left out, not written as "Unknown". */}
+          {disk && (
+            <Stat label={m.computer_disk()}>
+              <MachineUsage reading={disk} base={1000} warn />
+            </Stat>
+          )}
+          {memory && (
+            <Stat label={m.computer_memory()}>
+              <MachineUsage reading={memory} base={1024} />
+            </Stat>
+          )}
+          {currentVersion && <Stat label={m.computer_version()}>{currentVersion}</Stat>}
+          {imageVersion && <Stat label={m.computer_image_version()}>{imageVersion}</Stat>}
+          {computer.creator && (
+            <Stat label={m.computer_added_by()}>
+              <span className="flex min-w-0 items-center gap-2">
+                <ActorAvatar
+                  presence={false}
+                  size="xs"
+                  name={creatorName}
+                  src={computer.creator.avatarUrl}
+                />
+                <span className="truncate">
+                  {creatorName} · <ComputerDate value={computer.connectedAt} timeZone={timeZone} />
+                </span>
               </span>
-            </span>
-          </Stat>
-        )}
-      </dl>
+            </Stat>
+          )}
+        </dl>
+      )}
       {runtimeSlot && (
         <ComputerUpgradeSlot
           slot={runtimeSlot}
@@ -120,18 +125,16 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** How full the disk or memory is: "9% used" ("已用 9%") over a thin bar, in the warning colour when `warn`
- * and the disk is low; the amounts in its tooltip. "Unknown", with no bar, without a current
- * reading. */
+ * and the disk is low; the amounts in its tooltip. */
 function MachineUsage({
   reading,
   base,
   warn = false,
 }: {
-  reading: MachineStatusReading | null;
+  reading: MachineStatusReading;
   base: 1000 | 1024;
   warn?: boolean;
 }) {
-  if (!reading) return m.computer_metadata_unknown();
   const percent = machineUsedPercent(reading);
   const low = warn && isMachineDiskLow(reading);
   return (
