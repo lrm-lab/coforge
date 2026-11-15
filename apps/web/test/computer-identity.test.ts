@@ -4,10 +4,9 @@ import { Cloud01, Monitor01 } from "@untitledui/icons";
 import {
   availableUpdateVersion,
   computerIcon,
-  computerImageVersionLabel,
   computerLabel,
   computerListUpdateVersion,
-  computerVersionLabel,
+  operatingSystemLabel,
 } from "#src/features/computers/computer-identity";
 
 test("a cloud Computer never reads as a machine the User controls", () => {
@@ -39,14 +38,6 @@ test("an empty display name falls back to the Computer name", () => {
   expect(computerLabel(fallback)).toBe("build-box");
 });
 
-test("the version reads as the panel states it, and an unreported one as an em dash", () => {
-  // The list row and the detail panel show the same string for the same Computer; only the panel
-  // renders the fallback, because the row omits the version when there is nothing to state.
-  expect(computerVersionLabel({ computerVersion: "0.1.1-dev.2" })).toBe("0.1.1-dev.2");
-  expect(computerVersionLabel({ computerVersion: null })).toBe("—");
-  expect(computerVersionLabel({})).toBe("—");
-});
-
 test("a cloud Computer offers a newer runtime, and the list names the image when the runtime is current", () => {
   const cloud = {
     kind: "cloud",
@@ -68,8 +59,9 @@ test("a local Computer's update is a newer runtime release", () => {
   expect(availableUpdateVersion(local, "0.1.7-dev.1")).toBeUndefined();
 });
 
-test("the image row states the running image, and an unreported one as an em dash", () => {
-  expect(computerImageVersionLabel({ imageVersion: "0.1.8-dev.3" })).toBe("0.1.8-dev.3");
-  expect(computerImageVersionLabel({ imageVersion: null })).toBe("—");
-  expect(computerImageVersionLabel({})).toBe("—");
+test("a system the Computer has not reported is left out rather than read as Unknown", () => {
+  expect(operatingSystemLabel({ platform: "darwin", osVersion: "15.1" })).toBe("macOS 15.1");
+  expect(operatingSystemLabel({ platform: "linux", osVersion: null })).toBe("Linux");
+  expect(operatingSystemLabel({ platform: null })).toBeNull();
+  expect(operatingSystemLabel({ platform: "freebsd", osVersion: "14" })).toBeNull();
 });
