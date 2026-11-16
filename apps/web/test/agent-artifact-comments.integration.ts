@@ -267,7 +267,7 @@ test("a reply naming an older version needs its file in that version, as a comme
   expect(
     (await f.pushFiles(artifact, f.agents.writer, {}, { delete: ["data.csv"] })).body.status,
   ).toBe("created");
-  await catchUp(f.agents.reader, artifact);
+  await f.post(f.agents.reader, { operation: "read", artifact });
   const refused = await comment(f.agents.reader, artifact, "Still there?", {
     replyTo: root.body.id,
     version: 2,

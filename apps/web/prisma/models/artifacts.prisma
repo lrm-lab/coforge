@@ -31,6 +31,10 @@ model Artifact {
   /// conflict. Null for an artifact made before this, or by a path that sends no key.
   idempotencyKey  String?
   requestHash     String?
+  /// The message and attachment a "save as artifact" made this from, as bare ids (no foreign key
+  /// outside this module). One live artifact per attachment.
+  originMessageId    String?        @db.Uuid
+  originAttachmentId String?        @db.Uuid
   currentVersion  Int               @default(0)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
@@ -45,6 +49,7 @@ model Artifact {
   comments        ArtifactComment[]
   commentReviews  ArtifactCommentReview[]
   commentPositions ArtifactCommentPosition[]
+  commentImages   ArtifactCommentImage[]
   follows         ArtifactFollow[]
 
   @@index([workspaceId, homeKey])
@@ -59,6 +64,7 @@ model Artifact {
   /// `workspaceId_idempotencyKey` selector ignores the partial predicate: look it up with
   /// `findFirst` and `deletedAt: null`, never `findUnique` or `upsert`.
   @@unique([workspaceId, idempotencyKey], where: { idempotencyKey: { not: null }, deletedAt: null }, map: "artifacts_idempotency_key")
+  @@unique([workspaceId, originAttachmentId], where: { originAttachmentId: { not: null }, deletedAt: null }, map: "artifacts_origin_attachment_live_key")
   @@map("artifacts")
 }
 
@@ -257,6 +263,7 @@ model ArtifactComment {
   root              ArtifactComment?       @relation("ArtifactCommentThread", fields: [rootId], references: [id], onDelete: Cascade)
   replies           ArtifactComment[]      @relation("ArtifactCommentThread")
   review            ArtifactCommentReview? @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  images            ArtifactCommentImage[]
 
   /// A key is unique per artifact and author; a null author column never collides.
   @@unique([artifactId, authorAgentId, idempotencyKey])
@@ -315,4 +322,24 @@ model ArtifactFollow {
   @@unique([artifactId, agentId])
   @@unique([artifactId, userId])
   @@map("artifact_follows")
+}
+
+/// A picture attached to a comment: its bytes are an `artifact_blobs` object of the Workspace.
+model ArtifactCommentImage {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  artifactId  String          @db.Uuid
+  commentId   String          @db.Uuid
+  position    Int
+  sha256      String
+  contentType String
+  sizeBytes   Int
+  width       Int
+  height      Int
+  createdAt   DateTime        @default(now())
+  artifact    Artifact        @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  comment     ArtifactComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([commentId, position])
+  @@index([artifactId])
+  @@map("artifact_comment_images")
 }

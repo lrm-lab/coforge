@@ -31,7 +31,8 @@ export type NoticeEvent =
       note: string;
       yourFiles: readonly string[];
       renamed: { from: string; to: string } | null;
-    };
+    }
+  | { kind: "rename"; by: string; from: string; to: string };
 
 const EXCERPT_CHARS = 200;
 const COMMENTS_SHOWN = 3;
@@ -57,6 +58,7 @@ const WHAT: Record<NoticeEvent["kind"], string> = {
   review: "a review",
   resolve: "a resolve note",
   version: "a new version",
+  rename: "a new title",
 };
 
 const DID: Record<NoticeEvent["kind"], string> = {
@@ -64,6 +66,7 @@ const DID: Record<NoticeEvent["kind"], string> = {
   review: "reviewed",
   resolve: "resolved a thread of",
   version: "renamed",
+  rename: "renamed",
 };
 
 function headline(reason: NoticeReason, event: NoticeEvent): string {
@@ -135,6 +138,11 @@ function details(event: NoticeEvent): NoticeLine[] {
               { label: "New title", value: event.renamed.to, untrusted: true as const },
             ]
           : []),
+      ];
+    case "rename":
+      return [
+        { label: "Old title", value: event.from, untrusted: true },
+        { label: "New title", value: event.to, untrusted: true },
       ];
   }
 }

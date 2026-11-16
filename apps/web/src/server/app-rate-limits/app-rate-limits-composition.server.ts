@@ -17,12 +17,14 @@ export const PUBLIC_ARTIFACT_LIMIT_PER_MINUTE = 120;
 /** The other files of public artifact pages (styles, scripts, images, fonts) a minute per client
  * IP: a page may be up to 200 files, and a reader opens several. */
 export const PUBLIC_ARTIFACT_FILE_LIMIT_PER_MINUTE = 2000;
+export const ARTIFACT_AGENT_WRITE_LIMIT_PER_MINUTE = 60;
 
 export type AppRateLimits = {
   token: AppRateLimit;
   installation: AppRateLimit;
   publicArtifact: AppRateLimit;
   publicArtifactFile: AppRateLimit;
+  artifactWrite: AppRateLimit;
 };
 
 let limits: AppRateLimits | undefined;
@@ -68,6 +70,12 @@ function createAppRateLimits(redisUrl: string | undefined): AppRateLimits {
       windowMs: WINDOW_MS,
       outageLog,
     }),
+    artifactWrite: new RedisAppRateLimit(redis, {
+      keyPrefix: "coforge:ratelimit:artifact-write:v1",
+      limit: ARTIFACT_AGENT_WRITE_LIMIT_PER_MINUTE,
+      windowMs: WINDOW_MS,
+      outageLog,
+    }),
   };
 }
 
@@ -82,5 +90,11 @@ function unconfiguredLimits(outageLog: RateLimitOutageLog): AppRateLimits {
       return NO_RATE_LIMIT.admit(id);
     },
   };
-  return { token: limit, installation: limit, publicArtifact: limit, publicArtifactFile: limit };
+  return {
+    token: limit,
+    installation: limit,
+    publicArtifact: limit,
+    publicArtifactFile: limit,
+    artifactWrite: limit,
+  };
 }

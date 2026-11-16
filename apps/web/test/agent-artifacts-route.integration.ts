@@ -115,7 +115,7 @@ async function post(body: unknown) {
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db, documents, enabled: async () => enabled },
+    { db, documents, blobs, enabled: async () => enabled },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
@@ -398,7 +398,6 @@ test("a request outside the web page's rules is refused", async () => {
   const files = await put({ "plan.md": "p\n" });
   for (const body of [
     { operation: "push", artifact: key(), baseVersion: 0, idempotencyKey: key(), exactBase: true },
-    { operation: "read", artifact: "not-an-id" },
     { operation: "list", limit: 51 },
     { operation: "push", title: "   ", idempotencyKey: key(), files },
     { operation: "push", title: "Plan", idempotencyKey: "not-a-key", files },
@@ -409,6 +408,7 @@ test("a request outside the web page's rules is refused", async () => {
     { operation: "push", artifact: key(), baseVersion: 1, idempotencyKey: key(), text: "x" },
   ])
     expect(await post(body)).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
+  expect(await post({ operation: "read", artifact: "not-an-id" })).toMatchObject({ status: 404 });
   // The refusal names the field.
   expect(await post({ operation: "list", limit: 51 })).toMatchObject({
     body: { error: expect.stringContaining("limit is not accepted") },

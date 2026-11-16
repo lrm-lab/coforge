@@ -340,20 +340,19 @@ test("an entry file over 2 MiB is refused: the page could never show it whole", 
   expect(pushed.status).toBe("created");
 });
 
-test("an entry file the web page cannot show is refused when a push sets it", async () => {
+test("any file may be set as the entry by a push", async () => {
   blob("sha-data");
   const artifact = await create("entry-type");
-  await expect(
-    artifacts.push({
-      workspaceId,
-      artifactId: artifact.id,
-      baseVersion: 0,
-      publisher: { agentId },
-      idempotencyKey: "entry-type-1",
-      entryPath: "data.csv",
-      files: [file("data.csv", "sha-data")],
-    }),
-  ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "artifact-entry-type" });
+  const pushed = await artifacts.push({
+    workspaceId,
+    artifactId: artifact.id,
+    baseVersion: 0,
+    publisher: { agentId },
+    idempotencyKey: "entry-type-1",
+    entryPath: "data.csv",
+    files: [file("data.csv", "sha-data")],
+  });
+  expect(pushed.status).toBe("created");
 });
 
 test("the file limit counts the merged version", async () => {

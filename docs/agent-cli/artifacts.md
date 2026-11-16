@@ -2,9 +2,9 @@
 
 An artifact is a versioned set of files with an entry file, kept in a channel or a DM, or
 widened to the whole Workspace, with every version it had (task #385). Its type comes from its entry file, and no field
-states it: a `.md` or `.markdown` entry is a document, an `.html` or `.htm` entry a web page (the
-entry and the files it uses: stylesheets, scripts, images, fonts, other pages), shown on its own
-origin of its own with its scripts running and no network requests but its own files and a few public hosts (task #490). It follows
+states it: `html`, `markdown`, `text`, `csv`, `image`, `pdf`, `video` or `other` (`entryKind`, in `read` and on a card). An
+`.html` entry is a web page (the entry and the files it uses), shown on its own origin of its own with its scripts running and
+no network requests but its own files and a few public hosts (task #490). It follows
 the reference product, Raft: only Agents write artifacts, and only by pulling a directory and
 pushing it back; people on the web view and comment. The Agent Manual's `artifacts` topic says when
 to make which. It is the same artifact the web page shows, under the same rules. The Workspace must
@@ -12,7 +12,7 @@ have the `artifacts` experiment switched on by an owner or admin (Settings > Exp
 then every command fails with `ARTIFACTS_DISABLED` and says so in Chinese and English.
 
 The commands go through one Agent API route, `POST /api/agent/v1/artifacts`, one `operation` per
-request (`list`, `read`, `push`, `move`, `delete`, the comment operations, `follow` and `unfollow`). The daemon's proxy admits a request of
+request (`list`, `read`, `push`, `move`, `delete`, `save`, the comment operations, `image`, `follow` and `unfollow`). The daemon's proxy admits a request of
 up to 4 MiB (a manifest of 200 files, or a review of 50 comments at their limits) and passes on
 only the fields of its operation. File bytes travel on two more routes the proxy forwards unchanged: `PUT
 /api/agent/v1/artifacts/uploads/<sha256>` (raw bytes, `Content-Length` required, up to 16 MiB)
@@ -43,12 +43,13 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 | --- | --- |
 | `artifact pull <id> [--dir <dir>] [--rev <n>]` | Writes every file of a version into a directory (by default a folder named after the title, or the id) and a hidden `.coforge-artifact.json` there. |
 | `artifact push [<dir>] [--target '#channel'\|'@name'] [--title] [--description] [--entry <file>] [--note] [--label] [--delete <path>]... [--include-hidden]` | In a pulled directory, sends the files that changed as a new version; elsewhere, makes a new artifact from the directory in the home `--target` names, and prints its id. |
-| `artifact download <id> <path> [--output <file>] [--rev <n>]` | Saves one file's exact bytes. |
+| `artifact download <id> <path> [--output <file>] [--rev <n>]` | Saves one file's exact bytes. `download <id> --image <image id>` saves a comment's image. |
+| `artifact save <attachment-id>` | Makes an artifact from a message's attachment: [References, pushes and saves](artifact-references.md). |
 | `artifact list [--target '#channel'\|'@name'] [--query <words>] [--after <c>] [--limit <n>]` | Lists one conversation's live artifacts (none named: every artifact you can see), newest first, a page at a time; the last line names the next page. |
 | `artifact read <id> [--version <n>] [--files] [--output <path>]` | Prints the version line, the entry, the first few files (`--files` for all), what others pushed since you last looked, then `---` and the entry's text. |
 | `artifact move <id> --to workspace` | Widens an artifact you made from its conversation to the whole Workspace, and prints who can now see it. `--to public` is refused: only a person turns on link sharing. |
 | `artifact delete <id>` | Deletes an artifact you made. |
-| `artifact comments\|comment\|review\|resolve\|reopen ...` | Comments on an artifact, and a push or comment refused while others commented since you last read them: [Artifact comments](artifact-comments.md). |
+| `artifact comments\|comment\|review\|resolve\|reopen ...` | Comments on an artifact, and a push or comment held up by what others did since you last read: [Artifact comments](artifact-comments.md). |
 | `artifact follow <id>`, `artifact unfollow <id>` | Whether you are told of what others do on the artifact; your own push, comment or review follows it for you: [Following and notices](artifact-follows.md). |
 
 `--json` prints the server's answer as it is. A `--target` names a channel (`#channel`; `#channel:<thread>` homes it in that channel), or a DM as `@name` (`@name~agent` when an Agent
@@ -66,10 +67,8 @@ five, newest first (`number`, `publisher` as `{ kind, name }`, `createdAt`, `not
 after the file list (`pull` after its summary): a first read says so and lists the newest versions of others; later reads say
 how many are new, or that nothing is.
 
-A read also carries `unseenComments` (`{ count, comments }`, the newest five excerpts) for comments
-others wrote since the Agent last ran `artifact comments`, whichever version is read; a read never
-moves that comment position, and an unread comment holds up a push of the file it is on
-([Artifact comments](artifact-comments.md)).
+A read of the current version also carries `unseenComments` and marks as seen the comments it
+shows in full ([Artifact comments](artifact-comments.md#reading-comments)).
 
 The position only moves forward. It moves on a read of the current version and on the Agent's own
 push, a new artifact's first included (it has seen what it made); reading an older version moves nothing. People's reads
@@ -102,12 +101,12 @@ the recorded base:
   into the directory too.
 - When the server answers `nothing` (what the push names is already in the artifact), nothing is
   sent or written: the state stays at the recorded version, and `pull` brings the directory up to
-  date.
+  date. A push that only changes the title answers `nothing` with `titleChanged`.
 
 Without a state file, `push <dir> --target <t> --title <t>` makes a new artifact from the files
 (`--target` is required: without it the push is refused with `artifact-target-required`) and the directory becomes its pull; its name is made from
 the title. The entry is `--entry`, else `index.html`, else the only file. An artifact may be any
-number of files (up to 200); a web page has any `.html` or `.htm` file as its entry, and
+number of files (up to 200); any file may be the entry, and
 `--description` (one line, shown on its card) is optional for any artifact.
 
 ## The file protocol
@@ -123,40 +122,21 @@ number of files (up to 200); a web page has any `.html` or `.htm` file as its en
   nothing until the bytes are there. An upload answers 204, also for bytes the Workspace already holds; 411 without
   `Content-Length`, 413 over 16 MiB, 400 when the bytes are not `<sha256>`. A Workspace keeps at
   most 1 GiB of uploaded bytes no version uses yet (413 `ARTIFACT_STORAGE_FULL`).
-- The entry must be a `.md`, `.markdown`, `.html` or `.htm` file (`artifact-entry-type` otherwise)
-  and stay a file of the version; a push may move it to another such file, which changes the
-  artifact's type with it.
-- `read` answers `entryPath` and `files` (`path`, `sha256`, `sizeBytes`, `kind`: `text` or
+- The entry may be any file and must stay a file of the version; a push may move it to another
+  file, which changes the artifact's type with it. Only an `.html` or `.md` entry is read whole
+  by the page, so only those are limited to 2 MiB.
+- `read` answers `entryPath`, `entryKind` and `files` (`path`, `sha256`, `sizeBytes`, `kind`: `text` or
   `binary`). A download's `<path>` is one percent-encoded segment; a missing file is 404
   `artifact-file-not-found`.
 - `list` with `query`, `after` (the `nextCursor` of the page before) or `limit` (20 by default, 50 at most) answers
   `{ artifacts, nextCursor }`, with no `nextCursor` on the last page; a request with none of them
   (an older Computer) still gets the plain array.
 
-## What a web page may load
+## Web pages, references and saves
 
-A page of artifact `<uuid>` is served only from `a-<uuid>.<sandbox host>`, so its storage is its own
-and no other artifact shares it. The origin serves every file of the opened version under a file
-token's path (`/_f/<token>/<path>`), so relative references (`css/site.css`, `img/a.png`, a link to
-`other.html`) resolve inside the artifact:
-
-- An `.html` file is a document only for a frame or a tab, under the page's CSP and with the page
-  runtime injected first; any other file only as a subresource, a `fetch` or a worker script. A
-  file of another version or artifact is not reachable through the token.
-- A link is a single-use ticket: opening it spends it and redirects to the entry under a file
-  token. A used or expired ticket shows a small page and tells the framing app, which offers a
-  reload. The token's files work for 10 minutes and are cached for that long (a public link's for
-  one minute); `.html` documents are never cached.
-- A page may load scripts and styles from a fixed set of public hosts (cdnjs.cloudflare.com,
-  cdn.jsdelivr.net, unpkg.com, esm.sh, cdn.tailwindcss.com, code.jquery.com, cdn.plot.ly), web
-  fonts from fonts.googleapis.com and fonts.gstatic.com, and images and fonts from those CDNs, and
-  may `fetch` those hosts and its own files. The list is `SANDBOX_PUBLIC_CDNS` in
-  `apps/web/src/server/artifacts/artifact-sandbox-cdns.server.ts`.
-- It makes no other network requests (no WebSocket, no form, no window, no nested frame), and has no
-  cookies of ours; `localStorage` and IndexedDB belong to its artifact's origin.
-- The page runtime exposes `window.coforge.use(name)`: `user`, `artifact`, `clipboard`, `links`
-  and `comments`, answered by the app's page over `postMessage` (the Manual's `artifacts` topic
-  lists them). An `.html` file is read whole by the sandbox and may be at most 2 MiB to be shown.
+What an `.html` entry may load is in [Artifact web pages](artifact-web-pages.md). Naming an
+artifact by link or title, what a push answers, saving an attachment as an artifact and the write
+limit are in [References, pushes and saves](artifact-references.md).
 
 ## Saving and conflicts
 

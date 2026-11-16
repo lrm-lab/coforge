@@ -114,7 +114,7 @@ async function post(agentId: string, body: unknown, services: { db: typeof db } 
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db: services.db, documents, enabled: async () => true },
+    { db: services.db, documents, blobs, enabled: async () => true },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }

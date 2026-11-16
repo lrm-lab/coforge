@@ -4,6 +4,11 @@ import {
   canResolveArtifactComment,
   requireReadableArtifact,
 } from "./artifact-comment-access.server";
+import {
+  commentScope,
+  recordingRefusal,
+  requireNoUnseenChanges,
+} from "./artifact-comment-gate.server";
 import { COMMENT_SELECT, commentViews } from "./artifact-comment-view.server";
 import {
   CLEARED_RESOLUTION,
@@ -17,9 +22,6 @@ import {
 
 type Principal = { workspaceId: string; agentId: string };
 
-/** The thread's root, refused for a reply and for an actor who may not close or open threads. An
- * Agent does so as the thread's author or the artifact's: it is never a Workspace owner or admin
- * (a person may be, `canResolveArtifactComment`). */
 async function threadRoot(
   tx: CommentTx,
   principal: Principal,
@@ -54,12 +56,6 @@ async function threadRoot(
   return root;
 }
 
-/**
- * Resolves a thread by its root. Allowed for the thread's author and the artifact's author (a
- * person also as the owner of the Agent that made it, or a Workspace owner or admin). A thread
- * already resolved is left as it is: `changed: false`, and a note is not posted. A `note` is posted
- * first, as a reply that does not reopen the thread it closes.
- */
 export async function resolveComment(
   db: PrismaClient,
   principal: Principal,
@@ -67,50 +63,59 @@ export async function resolveComment(
 ) {
   const { workspaceId, agentId } = principal;
   const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
-  const done = await withCommentLock(db, artifact.id, async (tx) => {
-    const root = await threadRoot(tx, principal, artifact, input.comment);
-    if (root.resolvedAt) {
-      const closing = await tx.artifactComment.findFirst({
-        where: {
-          artifactId: artifact.id,
-          rootId: root.id,
-          authorAgentId: agentId,
-          createdAt: root.resolvedAt,
-        },
-        select: { body: true },
+  const done = await recordingRefusal(db, { artifactId: artifact.id, agentId }, () =>
+    withCommentLock(db, artifact.id, async (tx) => {
+      const root = await threadRoot(tx, principal, artifact, input.comment);
+      if (root.resolvedAt) {
+        const closing = await tx.artifactComment.findFirst({
+          where: {
+            artifactId: artifact.id,
+            rootId: root.id,
+            authorAgentId: agentId,
+            createdAt: root.resolvedAt,
+          },
+          select: { body: true },
+        });
+        return {
+          row: root,
+          changed: false,
+          note: undefined,
+          startedBy: root.authorAgentId,
+          closingNote: closing?.body,
+        };
+      }
+      await requireNoUnseenChanges(tx, {
+        workspaceId,
+        artifactId: artifact.id,
+        agentId,
+        action: "resolve",
+        scopes: [commentScope({ path: root.path, rootId: root.id })],
       });
-      return {
-        row: root,
-        changed: false,
-        note: undefined,
-        startedBy: root.authorAgentId,
-        closingNote: closing?.body,
-      };
-    }
-    const stamp = await nextStamp(tx, artifact.id);
-    const [note] = input.note
-      ? await insertComments(tx, {
-          artifactId: artifact.id,
-          agentId,
-          prepared: [
-            {
-              body: input.note,
-              path: root.path,
-              anchor: null,
-              rootId: root.id,
-              version: await currentVersionOf(tx, artifact.id),
-            },
-          ],
-          stamp,
-        })
-      : [];
-    const row = await tx.artifactComment.update({
-      where: { id: root.id },
-      data: { resolvedAt: stamp, resolvedByAgentId: agentId, resolvedByUserId: null },
-      select: COMMENT_SELECT,
-    });
-    return { row, changed: true, note, startedBy: root.authorAgentId, closingNote: input.note };
-  });
+      const stamp = await nextStamp(tx, artifact.id);
+      const [note] = input.note
+        ? await insertComments(tx, {
+            artifactId: artifact.id,
+            agentId,
+            prepared: [
+              {
+                body: input.note,
+                path: root.path,
+                anchor: null,
+                rootId: root.id,
+                version: await currentVersionOf(tx, artifact.id),
+              },
+            ],
+            stamp,
+          })
+        : [];
+      const row = await tx.artifactComment.update({
+        where: { id: root.id },
+        data: { resolvedAt: stamp, resolvedByAgentId: agentId, resolvedByUserId: null },
+        select: COMMENT_SELECT,
+      });
+      return { row, changed: true, note, startedBy: root.authorAgentId, closingNote: input.note };
+    }),
+  );
   const [comment, note] = await commentViews(
     db,
     workspaceId,
@@ -128,8 +133,6 @@ export async function resolveComment(
   };
 }
 
-/** Reopens a resolved thread by its root, for the same people who may resolve it. A thread that
- * is open is left as it is: `changed: false`. */
 export async function reopenComment(
   db: PrismaClient,
   principal: Principal,

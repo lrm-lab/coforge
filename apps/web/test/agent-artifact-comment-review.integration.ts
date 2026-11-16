@@ -146,6 +146,7 @@ test("resolve closes a thread by its root, and a reply cannot be resolved", asyn
   });
   expect(asReply.status).toBe(400);
   expect(asReply.body.error).toContain(root.body.id);
+  await catchUp(f.agents.reader, artifact);
   const done = await f.post(f.agents.reader, {
     operation: "resolve",
     artifact,
@@ -250,6 +251,7 @@ test("who may resolve: the thread's author, the artifact's author, an Agent's ow
   expect(
     (await f.post(f.agents.other, { operation: "reopen", artifact, comment: root.body.id })).status,
   ).toBe(403);
+  await catchUp(f.agents.writer, artifact);
   expect((await resolve(f.agents.writer)).body.changed).toBe(true);
   await catchUp(f.agents.other, artifact);
   const second = await comment(f.agents.other, artifact, "Thread by the other bot.");

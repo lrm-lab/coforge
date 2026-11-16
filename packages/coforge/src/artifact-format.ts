@@ -1,6 +1,11 @@
-import { foldUntrustedLine, formatUtcTimestamp } from "@lrm/coforge-sdk/internal";
-import { formatUnseenComments, type UnseenCommentsAnswer } from "#src/artifact-comment-format";
-import { plural } from "#src/plural";
+import { formatTelling, type TellingAnswer } from "#src/artifact-follow-format";
+import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
+import {
+  formatUnseen,
+  formatUnseenComments,
+  type ArtifactUnseen,
+  type UnseenCommentsAnswer,
+} from "#src/artifact-unseen-format";
 
 /** What `coforge artifact` prints (task #385). The shapes are the server's answers. */
 
@@ -17,6 +22,7 @@ export type ArtifactReadAnswer = {
   artifact: { id: string; title: string; currentVersion: number };
   version: { number: number; note?: string | null; label?: string | null } | null;
   entryPath?: string | null;
+  entryKind?: string;
   files?: ArtifactFileEntry[];
   text: string;
   /** What others pushed since the Agent last looked; null for an older version, absent from an
@@ -27,24 +33,7 @@ export type ArtifactReadAnswer = {
   unseenComments?: UnseenCommentsAnswer | null;
 };
 
-/** A version someone else pushed since the Agent's read position. */
-type UnseenVersion = {
-  number: number;
-  publisher: { kind: "user" | "agent"; name: string };
-  createdAt: string;
-  note: string;
-  label: string;
-  /** The first paths it changed (at most ten) and how many it changed in all. */
-  changedPaths: string[];
-  changedCount: number;
-};
-
-type ArtifactUnseen = {
-  firstRead: boolean;
-  versionCount: number;
-  versions: UnseenVersion[];
-};
-
+/** The server's answer to `move`. */
 export type ArtifactMovedAnswer = {
   artifact: { id: string; title: string };
   from: string;
@@ -55,6 +44,23 @@ export type ArtifactDeletedAnswer = {
   artifact: { id: string; title: string };
   deleted: true;
 };
+
+export type ArtifactSavedAnswer = TellingAnswer & {
+  artifact: { id: string; title: string; entryPath?: string };
+  created: boolean;
+  attachment: { id: string; fileName: string };
+};
+
+export function formatArtifactSaved(answer: ArtifactSavedAnswer): string {
+  const { artifact, created, attachment } = answer;
+  return [
+    created
+      ? `Saved attachment "${foldUntrustedLine(attachment.fileName)}" as artifact "${foldUntrustedLine(artifact.title)}" (id ${artifact.id}), version 1. Nothing was posted in the conversation.`
+      : `Attachment "${foldUntrustedLine(attachment.fileName)}" was already saved as artifact "${foldUntrustedLine(artifact.title)}" (id ${artifact.id}): nothing was made.`,
+    ...(created ? formatTelling(artifact.id, answer) : []),
+    `Read it: ${readCommand(artifact.id)}`,
+  ].join("\n");
+}
 
 export function formatArtifactMoved({ artifact }: ArtifactMovedAnswer): string {
   return [
@@ -113,7 +119,8 @@ export function formatArtifactRead(
   ];
   const files = read.files ?? [];
   if (files.length > 0) {
-    if (read.entryPath) lines.push(`Entry: ${read.entryPath}`);
+    if (read.entryPath)
+      lines.push(`Entry: ${read.entryPath}${read.entryKind ? ` (${read.entryKind})` : ""}`);
     lines.push(`Files (${files.length}):`);
     for (const file of allFiles ? files : files.slice(0, READ_FILES_SHOWN))
       lines.push(`  ${file.path}  ${size(file.sizeBytes)}`);
@@ -125,40 +132,4 @@ export function formatArtifactRead(
   lines.push(...formatUnseenComments(artifact.id, read.unseenComments));
   if (withText) lines.push("---", read.text);
   return lines.join("\n");
-}
-
-/** What `read` and `pull` print of `unseen`: a headline, one line per listed version, and how
- * many earlier ones the list leaves out. */
-export function formatUnseen({
-  firstRead,
-  versionCount,
-  versions: shown,
-}: ArtifactUnseen): string[] {
-  if (versionCount === 0)
-    return [
-      firstRead
-        ? "Your first read of it: nothing from others to show."
-        : "Nothing new since you last looked.",
-    ];
-  const earlier = versionCount - shown.length;
-  return [
-    firstRead
-      ? `You haven't read it before: ${plural(versionCount, "version")} so far. The newest:`
-      : `New since you last looked: ${plural(versionCount, "version")}`,
-    ...shown.map(unseenLine),
-    ...(earlier > 0 ? [`- … ${plural(earlier, "version")} earlier`] : []),
-  ];
-}
-
-/** Paths a version line names before it says how many more. */
-const CHANGED_SHOWN = 4;
-
-function unseenLine(version: UnseenVersion): string {
-  const said = foldUntrustedLine(version.note || version.label);
-  const paths = version.changedPaths.map(foldUntrustedLine);
-  const more = version.changedCount - CHANGED_SHOWN;
-  const changed = paths.length
-    ? ` (changed: ${paths.slice(0, CHANGED_SHOWN).join(", ")}${more > 0 ? `, +${more} more` : ""})`
-    : "";
-  return `- v${version.number} by ${foldUntrustedLine(version.publisher.name)}, ${formatUtcTimestamp(version.createdAt)}${said ? `: ${said}` : ""}${changed}`;
 }

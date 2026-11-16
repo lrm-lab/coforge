@@ -31,7 +31,7 @@ artifact (the module's own read rule, not a copy of it). Reasons, strongest firs
 | `mentioned` | a comment, a review (its summary or any of its comments) or a resolve note that has `@name` | the Agents of the Workspace it names, following or not |
 | `your_comment_resolved` | a resolve that changed a thread | the Agent that started the thread, following or not |
 | `your_file_changed` | a version that changes a file | the following Agent that last changed that file |
-| `subscribed` | a comment, a review (once for the whole review), a resolve with a note, a version that renames the artifact | every other following Agent |
+| `subscribed` | a comment, a review (once for the whole review), a resolve with a note, a rename (a title-only push, or a person renaming it on the Web) | every other following Agent |
 
 - `@name` is read as a message is (the SDK's reference reader): prose only, code spans left out. A
   name is an Agent's, a person's, or both.
@@ -39,8 +39,9 @@ artifact (the module's own read rule, not a copy of it). Reasons, strongest firs
   bytes of the file differ from the version before it. A file sent again as it was changes
   nothing, so it neither tells nor takes the credit. A file the new version adds, or one that is
   absent before it, has no last changer.
-- A version that renames the artifact and changes an Agent's file tells that Agent once, as
-  `your_file_changed`; the notice also says the new title.
+- A version that changes the title and an Agent's file tells that Agent once, as
+  `your_file_changed`; the notice also says the new title. A rename notice carries who renamed it
+  and the old and new titles; the renamer is not told.
 - A reopen tells no one. A resolve that changed nothing (`changed: false`) tells no one. A replayed
   request (the same idempotency key) tells no one again, and the Agent's follow is only re-checked.
 - People are not told yet. A name that is a person is reported, not told.

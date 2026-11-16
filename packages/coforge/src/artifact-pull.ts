@@ -14,8 +14,8 @@ import type {
   ArtifactDirectoryInvocation,
   ArtifactDirectoryTransport,
 } from "#src/artifact-directory-args";
-import { formatUnseenComments } from "#src/artifact-comment-format";
-import { formatUnseen, type ArtifactReadAnswer } from "#src/artifact-format";
+import { formatUnseen, formatUnseenComments } from "#src/artifact-unseen-format";
+import type { ArtifactReadAnswer } from "#src/artifact-format";
 import { asJson, pullFile, requireCall } from "#src/artifact-transfer";
 import { CliError, invalidArg } from "#src/cli-error";
 import { inPool } from "#src/pool";

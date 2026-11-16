@@ -32,7 +32,7 @@ A comment is addressed by its id, which `comments` prints as `c_<id>`; every com
 or without the `c_`. (A uuid(7)'s first characters are its timestamp, so a short prefix would not
 tell two comments apart.)
 
-## Reading: `comments`
+## Reading comments
 
 `{ artifact, path?, all?, review?, after? }` answers `{ view, comments, nextCursor?,
 unseenVersionCount, review? }`, oldest first, 50 a page (`nextCursor` names the next).
@@ -57,20 +57,23 @@ Agent's own push marks versions it made as seen and nobody's comments. Comments 
 and stamps its time after taking it, so commit order and that order agree and a position never
 skips a comment committed later.
 
-`read` carries `unseenComments`, `{ count, comments }`, beside `unseen` (which stays about
-versions): `count` of the comments by others after the comment position, and the newest five, each
-`{ id, author, path, createdAt, excerpt }`, the excerpt at most 200 characters. It is computed on
-every read, of an older version and of a current one whose version summary could not be made too
-(then `unseen` is `null`), and `null` only when the summary itself failed. It never moves the
-position: only `comments` does.
+A `read` of the current version carries `unseenComments`, `{ count, comments, excerpts, unread }`,
+beside `unseen` (which stays about versions): `count` of the comments by others after the comment
+position; the first few in full (up to 5, within 8000 characters, as `comments` lists them); then up
+to 5 `excerpts` (`{ id, author, path, version, createdAt, excerpt }`, at most 200 characters); and
+`unread`, how many are not in full. The read marks the versions it shows and the comments shown in
+full as seen; the CLI says `N more: coforge artifact comments <id>`. It is `null` for an older
+version, which moves nothing.
+
+Each comment lists its `images`: `[{ id, contentType, sizeBytes, width, height }]`.
 
 ## Writing
 
-- `comment` `{ artifact, body, path?, anchor?, replyTo?, version?, idempotencyKey }` answers the
+- `comment` `{ artifact, body?, path?, anchor?, replyTo?, version?, images?, idempotencyKey }` answers the
   comment, with `newlyFollowing`, `notified` and `notNotified`
   ([Following and notices](artifact-follows.md)). The same key with the same words replays it; the same key with other words is a
   `CONFLICT` (`artifact-idempotency-mismatch`). The CLI sends a fresh key per invocation.
-- `review` `{ artifact, body?, comments: [{ body, path?, anchor?, replyTo? }, ...1 to 50],
+- `review` `{ artifact, body?, comments: [{ body, path?, anchor?, replyTo?, images? }, ...1 to 50],
   version?, idempotencyKey }` answers `{ review, comments }` and the same three fields. One transaction: a refusal of any
   comment names its index (`comments[2]: ...`, `details.index`) and nothing is written. The
   review's comments list in the order written.
@@ -82,45 +85,56 @@ position: only `comments` does.
   left as it is (`changed: false`) and a note is not posted; a `note` is posted first, as a reply
   that does not reopen the thread it closes.
 
+## Images
+
+A comment carries up to 4 images (30 in a review): PNG, JPEG, GIF or WebP, recognised by signature,
+at most 10 MiB and 40 megapixels. The Agent uploads each (`PUT /api/agent/v1/artifacts/uploads/<sha256>`,
+as for files) and names the sha256s in `images`; a comment may have images and no `body`. Refusals:
+`artifact-image-not-found` (not uploaded by this Agent), `-empty`, `-too-large`, `-type`, `-pixels`.
+`image` `{ artifact, image }` (a read) answers `{ id, contentType, sizeBytes, width, height, data }`,
+`data` being base64. Images are stored as uploaded: their metadata is not stripped, and an upload
+not attached expires with the unreferenced-blob sweep (a day), not an hour. Tables:
+`artifact_comment_images`.
+
 ## The unseen gate
 
-A `push`, a `comment` and a `review` are refused with `CONFLICT`,
-`artifact-unseen-comments` (409) while others commented since the Agent's comment position:
+A `push`, a `comment`, a `review` and a `resolve` are refused with `CONFLICT`,
+`artifact-unseen-changes` (409) while others commented since the Agent's comment position, or
+(comment, review, resolve) pushed a version since its version position that changed the file:
 
-- **push:** on a file the push changes (the paths it adds, replaces or deletes), on the entry file it leaves and the one it opens at when it
-  changes `entry` (an entry-only push touches no file but changes what the artifact opens at), or
-  on the whole artifact. A push that changes only settings (title, description, note, label) is
-  held up by whole-artifact comments alone.
-- **comment, review:** on the same file, the same thread, or the whole artifact. A comment on the
-  whole artifact is held up by whole-artifact comments and by comments in its thread.
+- **push:** comments on a file the push changes (the paths it adds, replaces or deletes), on the entry file it leaves and the one it opens at when it
+  changes `entry`, or on the whole artifact. A push is not held up by versions: the base check handles those.
+- **comment, review, resolve:** comments on the same file, the same thread, or the whole artifact,
+  and versions of others that changed the file (any version for the whole artifact).
 
-The refusal's `details` are `count` and `commentIds` (the first ten, oldest first, comma-separated;
-a review adds `index`, the first comment it is about). Reading the comments with `comments` clears
-it, and the same request sent again succeeds. A request whose idempotency key already landed
-replays instead of being refused. The gate never answers for an artifact the Agent cannot read.
+The refusal's `details` are flat: `commentCount`, `unread`, `versionCount`, `skippedComments`,
+`skippedVersions`, `unseen` (a JSON string of `{ comments, excerpts, versions }`: up to 5 comments in
+full, then up to 5 excerpts, and the newest versions) and, for a review, `index`. What the refusal
+shows in full counts as seen, so the same request sent again succeeds unless `unread > 0`, when
+`comments` must be read first. A request whose idempotency key already landed replays instead of
+being refused. The gate never answers for an artifact the Agent cannot read.
 
-The check of a push is part of the push: it runs in the push's transaction after the replay check,
-under the artifact's comment lock, which every comment write takes too, so no comment
-lands between the check and the commit. An error of the check is the push's error; the gate does
-not let a push through when it cannot look.
+The check is part of the write: it runs in its transaction after the replay check, under the
+artifact's comment lock, which every comment write takes too, so no comment lands between the check
+and the commit. A refused write rolls back; the positions advance after. An error of the check is
+the write's error: the gate does not let a write through when it cannot look.
 
 ## CLI
 
 | Command | Does |
 | --- | --- |
 | `artifact comments <id> [--path <file>] [--all] [--review <id>] [--after <cursor>]` | Prints the unseen comments as threads. |
-| `artifact comment <id> [--path <file>] [--lines <n\|a-b>] [--reply-to <c>] [--rev <n>]` | Posts the words on stdin. |
-| `artifact review <id> [--rev <n>]` | Posts the JSON on stdin: `{ body?, comments: [...] }` or the bare array; a comment is `{ body, path?, lines?, anchor?, replyTo? }`, `lines` being `4` or `"3-5"`. |
+| `artifact comment <id> [--path <file>] [--lines <n\|a-b>] [--reply-to <c>] [--rev <n>] [--image <file>]...` | Posts the words on stdin, with up to 4 images. |
+| `artifact review <id> [--rev <n>]` | Posts the JSON on stdin: `{ body?, comments: [...] }` or the bare array; a comment is `{ body, path?, lines?, anchor?, replyTo?, images? }` (`images`: local file paths), `lines` being `4` or `"3-5"`. |
 | `artifact resolve <id> <comment> [--note <text>]` | Closes a thread. |
 | `artifact reopen <id> <comment>` | Opens it again. |
 
 A thread prints as `c_<id> @author vN path:lines (date)`, the words indented under it (every line
 after the first behind `│ `, so a body cannot pass for output), its replies beneath it, and
 `[resolved by @name, date]` on a resolved one. `read` and `pull` add `N new comments from others`
-with the newest excerpts, beside the versions part and whichever version is read. `--lines` is
+with the comments in full and excerpts, beside the versions part. `--lines` is
 expanded into a `lines` anchor; the CLI checks nothing else of a comment's values: the server
-judges them and names the field. A push, comment or review refused for unseen comments prints the count
-and `Read them first: coforge artifact comments <id>`.
+judges them and names the field. A write refused for unseen changes prints what it was shown and the exact retry. `download <id> --image <image id>` saves an image.
 
 ## Storage
 

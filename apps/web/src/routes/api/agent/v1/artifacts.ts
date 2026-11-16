@@ -6,14 +6,17 @@ import {
   agentErrorResponse,
 } from "#src/server/agents/agent-http-middleware.server";
 import {
+  ArtifactRateLimited,
   runAgentArtifactOperation,
   type AgentArtifactServices,
 } from "#src/server/artifacts/agent-artifacts.server";
 import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import {
+  productionArtifactAttachments,
   productionArtifactNotices,
   productionArtifacts,
 } from "#src/server/artifacts/artifact-composition.server";
+import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
 
 export async function handleAgentArtifactPost(
   request: Request,
@@ -25,6 +28,7 @@ export async function handleAgentArtifactPost(
     if (!body) throw new AppError("INVALID_INPUT", { errorId: "artifact-request" });
     return Response.json(await runAgentArtifactOperation(services, principal, body));
   } catch (error) {
+    if (error instanceof ArtifactRateLimited) return error.response();
     return agentErrorResponse(error);
   }
 }
@@ -33,13 +37,18 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      POST: ({ request, context: { principal, db } }) =>
-        handleAgentArtifactPost(request, principal, {
+      POST: ({ request, context: { principal, db } }) => {
+        const { documents, blobs } = productionArtifacts(db);
+        return handleAgentArtifactPost(request, principal, {
           db,
-          documents: productionArtifacts(db).documents,
+          documents,
+          blobs,
           enabled: (workspaceId) => artifactsEnabled(db, workspaceId),
           notices: productionArtifactNotices(db),
-        }),
+          attachments: productionArtifactAttachments(db),
+          writeLimit: getAppRateLimits().artifactWrite,
+        });
+      },
     },
   },
 });

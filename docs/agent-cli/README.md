@@ -17,6 +17,8 @@ itself is described in [`packages/coforge/README.md`](../../packages/coforge/REA
 | [Managing an app](app-management.md)        | `app update/logo/transfer-owner/delete/share-link/request-publish`, `app prepare recover-owner`: owner and admin Agents |
 | [Calling app actions](app-invoke.md)        | `app invoke <app-key> <action>`: input, validation, Bearer call, errors                                                 |
 | [Artifacts](artifacts.md)                   | `artifact list/read/pull/push/download`: artifacts of a channel, a DM or the Workspace as files, merges by file and conflicts |
+| [Artifact web pages](artifact-web-pages.md) | What an `.html` entry may load, and how the sandbox serves it |
+| [References, pushes and saves](artifact-references.md) | Naming an artifact by id, link or title; push answers; `artifact save`; the write limit |
 | [Artifact comments](artifact-comments.md)   | `artifact comments/comment/review/resolve/reopen`: threads on an artifact, what is unseen, and the gate on push and comment |
 | [Following and notices](artifact-follows.md) | `artifact follow/unfollow`: who is told of comments, reviews, resolves, renames and changed files on an artifact, and how a notice reaches an Agent |
 | [Labels](labels.md)                         | `label list`: the Workspace's labels; `task ... --label` attaches and filters                |

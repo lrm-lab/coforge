@@ -277,3 +277,44 @@ test("each operation says whether a repeat is safe (a read or a follow, never mo
       commentWrite: false,
     });
 });
+
+test("a comment may carry up to four image uploads and no text, and save and image are operations", () => {
+  const sha = "c".repeat(64);
+  const comment = { operation: "comment", artifact: "a1", idempotencyKey: "k" };
+  expect(decodeAgentArtifactRequest({ ...comment, images: [sha] })).toMatchObject({
+    images: [sha],
+  });
+  expect(decodeAgentArtifactRequest({ ...comment, images: Array(5).fill(sha) })).toBeNull();
+  expect(decodeAgentArtifactRequest({ ...comment, images: ["nope"] })).toBeNull();
+  expect(decodeAgentArtifactRequest({ operation: "save", attachment: "x" })).toEqual({
+    operation: "save",
+    attachment: "x",
+  });
+  expect(decodeAgentArtifactRequest({ operation: "save" })).toBeNull();
+  expect(decodeAgentArtifactRequest({ operation: "image", artifact: "a1", image: "i" })).toEqual({
+    operation: "image",
+    artifact: "a1",
+    image: "i",
+  });
+  expect(decodeAgentArtifactRequest({ operation: "image", artifact: "a1" })).toBeNull();
+});
+
+test("a review comment may carry images", () => {
+  const sha = "d".repeat(64);
+  expect(
+    decodeAgentArtifactRequest({
+      operation: "review",
+      artifact: "a1",
+      idempotencyKey: "k",
+      comments: [{ body: "x", images: [sha] }],
+    }),
+  ).not.toBeNull();
+  expect(
+    decodeAgentArtifactRequest({
+      operation: "review",
+      artifact: "a1",
+      idempotencyKey: "k",
+      comments: [{ body: "x", images: [1] }],
+    }),
+  ).toBeNull();
+});

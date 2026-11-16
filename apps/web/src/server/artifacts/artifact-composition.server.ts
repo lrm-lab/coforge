@@ -17,6 +17,9 @@ import type { ArtifactActor } from "./artifact-access.server";
 import type { ArtifactMessageCard } from "./artifact-reads.server";
 import { ArtifactShares } from "./artifact-shares.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
+import type { ArtifactAttachmentPort } from "./agent-artifact-save.server";
+import { AppError, isAppError } from "#src/lib/app-error";
+import { readAuthorizedAttachment } from "#src/server/attachments/attachment.server";
 import { createSystemAgentEvents } from "#src/server/app-agent-events/app-agent-events-composition.server";
 export type { ArtifactMessageCard } from "./artifact-reads.server";
 
@@ -33,6 +36,37 @@ export function productionArtifacts(db: PrismaClient) {
     documents: new ArtifactDocuments(db, artifacts, blobs),
     visibility: artifacts.visibility,
     publicLinks: new ArtifactPublicLinks(db),
+  };
+}
+
+export function productionArtifactAttachments(db: PrismaClient): ArtifactAttachmentPort {
+  return {
+    async read({ workspaceId, agentId }, attachmentId) {
+      try {
+        const { attachment, open } = await readAuthorizedAttachment(db, {
+          attachmentId,
+          workspaceId,
+          agentId,
+        });
+        if (!attachment.messageId) return null;
+        return {
+          id: attachment.id,
+          messageId: attachment.messageId,
+          conversationId: attachment.conversationId,
+          fileName: attachment.fileName,
+          sizeBytes: attachment.sizeBytes,
+          bytes: async () => {
+            const file = await open();
+            if (!file) throw new AppError("TEMPORARILY_UNAVAILABLE");
+            return new Uint8Array(await new Response(file.body).arrayBuffer());
+          },
+        };
+      } catch (error) {
+        if (isAppError(error) && (error.code === "NOT_FOUND" || error.code === "ACCESS_DENIED"))
+          return null;
+        throw error;
+      }
+    },
   };
 }
 

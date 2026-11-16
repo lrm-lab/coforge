@@ -1,28 +1,22 @@
 import { isRecord } from "#src/internal/json-record";
 import {
+  ARTIFACT_COMMENT_IMAGES_MAX,
   isAnchorShape,
   isReviewCommentShape,
   type AgentArtifactAnchor,
   type AgentReviewComment,
 } from "./artifact-comments";
 
-/** The largest artifact request the local proxy admits: a manifest of 200 files, or a review of
- * 50 comments at their size limits, JSON-escaped. */
 export const ARTIFACT_REQUEST_MAX_BYTES = 4 * 1024 * 1024;
 
-/** The largest file an Agent uploads for a push: a text file's limit (a binary one's is 15 MiB). */
 export const ARTIFACT_UPLOAD_MAX_BYTES = 16 * 1024 * 1024;
 
-/** One file a push adds or replaces: its path in the artifact and the sha256 of bytes already
- * uploaded. A push answered `missing` names the sha256s to upload before sending it again. */
 export type AgentArtifactFile = { path: string; sha256: string };
 
 export type AgentArtifactRequest =
   | { operation: "list"; target?: string; query?: string; after?: string; limit?: number }
   | { operation: "read"; artifact: string; version?: number }
   | {
-      /** A new version of an artifact over `baseVersion`: `files` added or replaced, `delete`
-       * removed, `entry` the file it opens at. */
       operation: "push";
       artifact: string;
       baseVersion: number;
@@ -49,7 +43,6 @@ export type AgentArtifactRequest =
       operation: "comments";
       artifact: string;
       path?: string;
-      /** Everything, without moving the Agent's place; the default is what others wrote since. */
       all?: boolean;
       review?: string;
       after?: string;
@@ -57,11 +50,12 @@ export type AgentArtifactRequest =
   | {
       operation: "comment";
       artifact: string;
-      body: string;
+      body?: string;
       path?: string;
       anchor?: AgentArtifactAnchor;
       replyTo?: string;
       version?: number;
+      images?: string[];
       idempotencyKey: string;
     }
   | {
@@ -78,16 +72,16 @@ export type AgentArtifactRequest =
       to: string;
     }
   | { operation: "delete"; artifact: string }
+  | { operation: "save"; attachment: string }
+  | { operation: "image"; artifact: string; image: string }
   | { operation: "resolve"; artifact: string; comment: string; note?: string }
   | { operation: "reopen"; artifact: string; comment: string }
   | { operation: "follow"; artifact: string }
   | { operation: "unfollow"; artifact: string };
 
-/** What a field of a request is on the wire: a string, a whole non-negative number, a boolean, a
- * list of strings, a manifest of files (`{ path, sha256 }`), an anchor (`{ type, data }`) or a
- * review's comments. */
 type FieldKind =
   | "string"
+  | "sha256s"
   | "number"
   | "boolean"
   | "strings"
@@ -97,6 +91,10 @@ type FieldKind =
 
 const FIELD_CHECKS: Record<FieldKind, (value: unknown) => boolean> = {
   string: (value) => typeof value === "string",
+  sha256s: (value) =>
+    Array.isArray(value) &&
+    value.length <= ARTIFACT_COMMENT_IMAGES_MAX &&
+    value.every((item) => typeof item === "string" && ARTIFACT_SHA256_PATTERN.test(item)),
   number: (value) => Number.isSafeInteger(value) && (value as number) >= 0,
   boolean: (value) => typeof value === "boolean",
   strings: (value) => Array.isArray(value) && value.every((item) => typeof item === "string"),
@@ -109,9 +107,7 @@ type OperationShape = {
   fields: Record<string, FieldKind>;
   required: readonly string[];
   repeatable?: true;
-  /** Held up while others commented on what it touches since the Agent last read comments. */
   gatedByComments?: true;
-  /** Writes a comment or the state of a thread. */
   commentWrite?: true;
 };
 
@@ -171,8 +167,9 @@ const OPERATIONS = {
       idempotencyKey: "string",
       version: "number",
       anchor: "anchor",
+      images: "sha256s",
     },
-    required: ["artifact", "body", "idempotencyKey"],
+    required: ["artifact", "idempotencyKey"],
     gatedByComments: true,
     commentWrite: true,
   },
@@ -191,6 +188,7 @@ const OPERATIONS = {
   resolve: {
     fields: { artifact: "string", comment: "string", note: "string" },
     required: ["artifact", "comment"],
+    gatedByComments: true,
     commentWrite: true,
   },
   reopen: {
@@ -198,12 +196,16 @@ const OPERATIONS = {
     required: ["artifact", "comment"],
     commentWrite: true,
   },
+  save: { fields: { attachment: "string" }, required: ["attachment"] },
+  image: {
+    fields: { artifact: "string", image: "string" },
+    required: ["artifact", "image"],
+    repeatable: true,
+  },
   follow: { fields: { artifact: "string" }, required: ["artifact"], repeatable: true },
   unfollow: { fields: { artifact: "string" }, required: ["artifact"], repeatable: true },
 } as const satisfies Record<AgentArtifactRequest["operation"], OperationShape>;
 
-/** What an operation does, for a client that reports its failures: whether running it again is safe, whether
- * unseen comments hold it up, and whether it writes a comment or the state of a thread. */
 export function artifactOperationTraits(operation: AgentArtifactRequest["operation"]) {
   const shape: OperationShape = OPERATIONS[operation];
   return {
@@ -213,15 +215,8 @@ export function artifactOperationTraits(operation: AgentArtifactRequest["operati
   };
 }
 
-/** The fields only a push over an artifact carries, which a push that makes one never does. */
 const PUSH_OVER_ONLY = ["baseVersion", "note", "label", "delete"] as const;
 
-/**
- * The request a body is, or null: a known operation with exactly its own fields, strings as
- * strings and numbers as whole non-negative numbers. Nothing else is passed on, so a client
- * cannot reach a save's internal options. A push names an `artifact` and its `baseVersion`, or
- * names neither and makes one: it then needs a `title` and `files`, and takes a `target`.
- */
 export function decodeAgentArtifactRequest(value: unknown): AgentArtifactRequest | null {
   if (!isRecord(value)) return null;
   const operation = value.operation;
@@ -247,14 +242,8 @@ export function decodeAgentArtifactRequest(value: unknown): AgentArtifactRequest
   return request as AgentArtifactRequest;
 }
 
-/** A file's bytes are named by their sha256, as 64 lowercase hex digits, on every artifact route. */
 export const ARTIFACT_SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
-/**
- * A file path inside an artifact, as segments: no empty segment (`a//b`, a trailing `/`), no
- * `.`/`..`, no backslash, colon or control character, nothing absolute. `a..b.txt` is a normal
- * name and passes. The server refuses any other path; a client checks the same rule.
- */
 export function artifactPathValid(path: string): boolean {
   if (!path || path.startsWith("/") || path.endsWith("/")) return false;
   return path

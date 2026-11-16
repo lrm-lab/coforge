@@ -22,9 +22,11 @@ const bodies = (answer: { body: Record<string, any> }) =>
   (answer.body.comments as { body?: string }[]).map((entry) => entry.body);
 
 test("the unseen read lists what others wrote, oldest first, moves the position, and stays moved", async () => {
-  const artifact = await f.make("Unseen");
-  await comment(f.agents.reader, artifact, "Mine, never unseen.");
+  const artifact = await f.make("Unseen", undefined, { unread: true });
+  await f.post(f.agents.reader, { operation: "read", artifact });
+  expect((await comment(f.agents.reader, artifact, "Mine, never unseen.")).status).toBe(200);
   await catchUp(f.agents.writer, artifact);
+  expect((await f.pushText(artifact, f.agents.writer, "v2\n")).body.status).toBe("created");
   await comment(f.agents.writer, artifact, "First from the writer.");
   await f.personComments(artifact, f.alice, { body: "Alice says hello.", path: "plan.md" });
   const first = await comments(f.agents.reader, artifact);
@@ -37,7 +39,8 @@ test("the unseen read lists what others wrote, oldest first, moves the position,
   expect(first.body.unseenVersionCount).toBe(1);
   // Read: nothing is unseen any more, and a comment of its own is never unseen.
   expect(bodies(await comments(f.agents.reader, artifact))).toEqual([]);
-  await comment(f.agents.reader, artifact, "Still mine.");
+  await f.post(f.agents.reader, { operation: "read", artifact });
+  expect((await comment(f.agents.reader, artifact, "Still mine.")).status).toBe(200);
   expect(bodies(await comments(f.agents.reader, artifact))).toEqual([]);
   await f.personComments(artifact, f.alice, { body: "Third." });
   expect(bodies(await comments(f.agents.reader, artifact))).toEqual(["Third."]);
@@ -52,8 +55,9 @@ test("the unseen read lists what others wrote, oldest first, moves the position,
 });
 
 test("all lists everything including its own, moves nothing, and never rewinds the position", async () => {
-  const artifact = await f.make("All view");
-  await comment(f.agents.reader, artifact, "One.");
+  const artifact = await f.make("All view", undefined, { unread: true });
+  await f.post(f.agents.reader, { operation: "read", artifact });
+  expect((await comment(f.agents.reader, artifact, "One.")).status).toBe(200);
   await catchUp(f.agents.writer, artifact);
   await comment(f.agents.writer, artifact, "Two.");
   const all = await comments(f.agents.reader, artifact, { all: true });
@@ -75,7 +79,7 @@ test("all lists everything including its own, moves nothing, and never rewinds t
     seenId: position.seenId,
   });
   // The comment position is a table of its own: the version position is untouched.
-  expect(await f.db.artifactReadPosition.count({ where: readers })).toBe(0);
+  expect((await f.db.artifactReadPosition.findFirstOrThrow({ where: readers })).version).toBe(1);
 });
 
 test("comments page by 50 with a cursor; the position moves over the page returned only", async () => {
@@ -147,7 +151,7 @@ test("a path filter lists one file's root comments and their replies, and moves 
 });
 
 test("a comment read before any version read does not make the artifact a read one", async () => {
-  const artifact = await f.make("First read stays first");
+  const artifact = await f.make("First read stays first", undefined, { unread: true });
   await comment(f.agents.writer, artifact, "Hello.");
   await comments(f.agents.reader, artifact);
   const read = await f.post(f.agents.reader, { operation: "read", artifact });
@@ -164,7 +168,7 @@ test("the unseen version count says how many versions of others came since the A
   expect((await comments(f.agents.reader, artifact)).body.unseenVersionCount).toBe(2);
 });
 
-test("read summarises the unseen comments beside the versions and does not move the comment position", async () => {
+test("read shows the unseen comments of the current version in full and marks them seen", async () => {
   const artifact = await f.make("Read summary");
   await f.post(f.agents.reader, { operation: "read", artifact });
   for (let index = 1; index <= 7; index += 1)
@@ -173,34 +177,29 @@ test("read summarises the unseen comments beside the versions and does not move 
       path: index % 2 ? "plan.md" : null,
     });
   const read = await f.post(f.agents.reader, { operation: "read", artifact });
-  // A sibling of `unseen`, which stays about versions.
   expect(read.body.unseen).toEqual({ firstRead: false, versionCount: 0, versions: [] });
-  expect(read.body.unseenComments.count).toBe(7);
-  expect(read.body.unseenComments.comments).toHaveLength(5);
-  // Newest first, an excerpt of at most 200 characters, with who, where and when.
-  expect(read.body.unseenComments.comments[0]).toMatchObject({
+  const block = read.body.unseenComments;
+  expect(block.count).toBe(7);
+  expect(block.comments).toHaveLength(5);
+  expect(block.comments[0]).toMatchObject({
     author: { kind: "user", name: "Alice" },
     path: "plan.md",
+    body: "11111",
+    images: [],
   });
-  expect(read.body.unseenComments.comments[0].excerpt.length).toBeLessThanOrEqual(200);
-  expect(read.body.unseenComments.comments[0].id).toBeString();
-  expect(read.body.unseenComments.comments[0].createdAt).toBeString();
-  expect(read.body.unseenComments.comments[1].excerpt).toBe("66666");
-  // Reading again says the same; only `comments` moves the position.
-  const unseenCount = async (extra: object = {}) =>
-    (await f.post(f.agents.reader, { operation: "read", artifact, ...extra })).body.unseenComments
-      .count;
-  expect(await unseenCount()).toBe(7);
-  expect(bodies(await comments(f.agents.reader, artifact))).toHaveLength(7);
-  expect(await unseenCount()).toBe(0);
-  // An older version's read carries no version summary, and still the comments.
+  expect(block.excerpts).toHaveLength(2);
+  expect(block.excerpts[1].excerpt.length).toBeLessThanOrEqual(200);
+  expect(block.unread).toBe(2);
+  const again = (await f.post(f.agents.reader, { operation: "read", artifact })).body
+    .unseenComments;
+  expect(again.count).toBe(2);
+  expect(again.comments).toHaveLength(2);
+  expect(again.unread).toBe(0);
+  expect(bodies(await comments(f.agents.reader, artifact))).toEqual([]);
   await catchUp(f.agents.writer, artifact);
   expect((await f.pushText(artifact, f.agents.writer, "two\n")).body.status).toBe("created");
   await f.personComments(artifact, f.alice, { body: "Eighth." });
   const older = await f.post(f.agents.reader, { operation: "read", artifact, version: 1 });
   expect(older.body.unseen).toBeNull();
-  expect(older.body.unseenComments).toMatchObject({ count: 1 });
-  expect(older.body.unseenComments.comments[0].excerpt).toBe("Eighth.");
-  // A comment alone makes no version unseen, and the summary is exact at the page edge.
-  expect(await unseenCount({ version: 2 })).toBe(1);
+  expect(older.body.unseenComments).toBeNull();
 });

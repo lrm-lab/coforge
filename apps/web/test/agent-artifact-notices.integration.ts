@@ -215,9 +215,10 @@ test("a version that changes only what its writer last changed tells nobody", as
   expect(pushed.body.notified).toEqual([]);
 });
 
-test("a rename tells followers, and one notice when it also changes their file", async () => {
+test("a title-only push renames without a version and tells the following Agents once, not the renamer; with files it notifies as a version", async () => {
   const artifact = await f.make("Old title");
   await follow(f.agents.reader, artifact);
+  await follow(f.agents.other, artifact);
   const current = (await f.db.artifact.findUniqueOrThrow({ where: { id: artifact } }))
     .currentVersion;
   const renamed = await f.post(f.agents.other, {
@@ -227,25 +228,34 @@ test("a rename tells followers, and one notice when it also changes their file",
     idempotencyKey: f.key(),
     title: "New title",
   });
-  expect(renamed.body.status).toBe("created");
-  const reasons = Object.fromEntries(
-    (renamed.body.notified as { name: string; reason: string }[]).map((n) => [n.name, n.reason]),
+  expect(renamed.body.status).toBe("nothing");
+  expect(renamed.body.titleChanged).toEqual({ from: "Old title" });
+  expect((await f.db.artifact.findUniqueOrThrow({ where: { id: artifact } })).currentVersion).toBe(
+    current,
   );
-  expect(reasons).toEqual({ [names.writer]: "subscribed", [names.reader]: "subscribed" });
-  const [renameNotice] = await told(f.agents.reader, artifact);
-  expect(renameNotice!.body).toContain('- Old title: "Old title"');
-  expect(renameNotice!.body).toContain('- New title: "New title"');
+  expect(renamed.body.notified).toEqual(
+    expect.arrayContaining([
+      { name: names.reader, reason: "subscribed" },
+      { name: names.writer, reason: "subscribed" },
+    ]),
+  );
+  expect(renamed.body.notified).toHaveLength(2);
+  const [notice] = await told(f.agents.reader, artifact);
+  expect(await told(f.agents.reader, artifact)).toHaveLength(1);
+  expect(notice!.body).toContain(names.other);
+  expect(notice!.body).toContain("Old title");
+  expect(notice!.body).toContain("New title");
+  expect(await told(f.agents.other, artifact)).toHaveLength(0);
 
   const both = await f.post(f.agents.other, {
     operation: "push",
     artifact,
-    baseVersion: current + 1,
+    baseVersion: current,
     idempotencyKey: f.key(),
     title: "Newer title",
     files: await f.manifestOf(f.agents.other, { "plan.md": "changed\n" }),
   });
   expect(both.body.notified).toContainEqual({ name: names.writer, reason: "your_file_changed" });
-  expect(await told(f.agents.writer, artifact)).toHaveLength(2);
 });
 
 test("an Agent that cannot read the artifact is not told and is named", async () => {

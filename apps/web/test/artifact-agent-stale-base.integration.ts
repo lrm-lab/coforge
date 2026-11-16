@@ -286,15 +286,18 @@ test("an artifact made and pushed through the documents keeps what others pushed
       baseVersion: 1,
       idempotencyKey: crypto.randomUUID(),
       title: "Notes 2",
+      description: "two",
     },
   );
-  expect(await save(1, { text: "# Notes\n\nfirst\n\nsecond, edited\n" })).toMatchObject({
-    status: "created",
-    mergedSettings: ["title"],
-  });
+  const merged = await save(1, { text: "# Notes\n\nfirst\n\nsecond, edited\n" });
+  expect(merged).toMatchObject({ status: "created" });
+  expect((merged as { mergedSettings: string[] }).mergedSettings.sort()).toEqual([
+    "description",
+    "title",
+  ]);
   // Another push of the same file over version 1 is refused, not merged.
   const details = await refusal(save(1, { text: "# Notes\n\nfirst, edited\n\nsecond\n" }));
   expect(details.files).toBe("document.md");
   // Settings of its own over the version it read still save.
-  expect((await save(3, { title: "Notes 3" })).status).toBe("created");
+  expect((await save(3, { title: "Notes 3", text: "# Notes\n\nthree\n" })).status).toBe("created");
 });

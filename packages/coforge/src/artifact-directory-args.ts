@@ -21,7 +21,8 @@ export type ArtifactDirectoryDraft =
       delete?: string[];
       includeHidden?: boolean;
     }
-  | { operation: "download"; artifact: string; path: string; output?: string; rev?: number };
+  | { operation: "download"; artifact: string; path: string; output?: string; rev?: number }
+  | { operation: "image"; artifact: string; image: string; output?: string };
 
 export type ArtifactDirectoryInvocation = {
   command: "artifact";
@@ -42,7 +43,7 @@ export type ArtifactDirectoryTransport = {
 
 const DIRECTORY_FLAGS: Record<"pull" | "push" | "download", FlagSpec> = {
   pull: { text: ["--dir"], count: ["--rev"], positionals: 1 },
-  download: { text: ["--output"], count: ["--rev"], positionals: 2 },
+  download: { text: ["--output", "--image"], count: ["--rev"], positionals: 2 },
   push: {
     text: ["--target", "--title", "--description", "--entry", "--note", "--label"],
     bool: ["--include-hidden"],
@@ -59,6 +60,24 @@ export function parseDirectoryArgs(args: readonly string[]): ArtifactDirectoryIn
     args.slice(1),
     DIRECTORY_FLAGS[operation],
   );
+  const image = text["--image"];
+  if (operation === "download" && image !== undefined) {
+    if (positionals.length !== 1 || count["--rev"] !== undefined)
+      throw invalidArgument(
+        command,
+        "Save a comment's image with: coforge artifact download <id> --image <image id> [--output <file>]",
+      );
+    return {
+      command: "artifact",
+      directory: {
+        operation: "image",
+        artifact: positionals[0]!,
+        image,
+        ...optional("output", text["--output"]),
+      },
+      ...(json ? { json: true as const } : {}),
+    };
+  }
   const want = operation === "download" ? 2 : 1;
   if (operation !== "push" && positionals.length < want)
     throw invalidArgument(

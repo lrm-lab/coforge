@@ -2,6 +2,9 @@ import { z } from "zod";
 import {
   ANCHOR_DATA_MAX_BYTES,
   ARTIFACT_ANCHOR_TYPES,
+  ARTIFACT_COMMENT_IMAGES_MAX,
+  ARTIFACT_REVIEW_IMAGES_MAX,
+  ARTIFACT_SHA256_PATTERN,
   COMMENT_BODY_MAX,
   REVIEW_COMMENTS_MAX,
   artifactPathValid,
@@ -9,18 +12,20 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { artifactInputs } from "./artifact-inputs";
 
-/**
- * The shape of every comment input: one set of rules for every client that comments, so a
- * comment one of them takes the others take too.
- */
-
-/** A page of `comments`. */
 export const COMMENT_PAGE_SIZE = 50;
 
-/** Text, with no NUL, which would store it as binary (as a document's text is refused). */
 const noNul = (value: string) => !value.includes("\u0000");
 
 export const commentBody = z.string().trim().min(1).max(COMMENT_BODY_MAX).refine(noNul);
+
+const commentText = z.string().trim().max(COMMENT_BODY_MAX).refine(noNul).default("");
+
+const commentImages = z
+  .array(z.string().regex(ARTIFACT_SHA256_PATTERN))
+  .max(ARTIFACT_COMMENT_IMAGES_MAX);
+
+const hasTextOrImage = (comment: { body: string; images?: readonly string[] | undefined }) =>
+  comment.body !== "" || (comment.images?.length ?? 0) > 0;
 
 const anchorText = (min: number, max: number) => z.string().min(min).max(max).refine(noNul);
 
@@ -47,7 +52,6 @@ const textData = z
   })
   .strict();
 
-/** The shape each anchor type's `data` has; a type without an entry here does not type-check. */
 const ANCHOR_DATA = {
   file: noData,
   lines: linesData,
@@ -55,9 +59,6 @@ const ANCHOR_DATA = {
   text: textData,
 } satisfies Record<(typeof ARTIFACT_ANCHOR_TYPES)[number], z.ZodType>;
 
-/** Where a comment points inside its file: `{ type, data }`, `data` at most 4 KiB as JSON and the
- * shape its type names: `file` `{}`, `lines` `{ start, end }` (1-based), `element` `{ selector,
- * quote? }`, `text` `{ quote, prefix?, suffix? }`. */
 export const commentAnchor = z
   .object({ type: z.enum(ARTIFACT_ANCHOR_TYPES), data: z.record(z.string(), z.unknown()) })
   .strict()
@@ -72,12 +73,12 @@ export const commentAnchor = z
       context.addIssue({ code: "custom", message: "anchor data is over 4 KiB", path: ["data"] });
   });
 
-/** The fields a comment has, alone and inside a review. */
 const commentFields = {
-  body: commentBody,
+  body: commentText,
   path: filePath.optional(),
   anchor: commentAnchor.optional(),
   replyTo: artifactInputs.id.optional(),
+  images: commentImages.optional(),
 };
 
 export const commentInputs = {
@@ -88,19 +89,36 @@ export const commentInputs = {
     review: artifactInputs.id.optional(),
     after: z.string().max(200).optional(),
   }),
-  comment: z.object({
-    artifact: artifactInputs.id,
-    ...commentFields,
-    version: artifactInputs.version.optional(),
-    idempotencyKey: artifactInputs.id,
-  }),
-  review: z.object({
-    artifact: artifactInputs.id,
-    body: commentBody.optional(),
-    comments: z.array(z.object(commentFields).strict()).min(1).max(REVIEW_COMMENTS_MAX),
-    version: artifactInputs.version.optional(),
-    idempotencyKey: artifactInputs.id,
-  }),
+  comment: z
+    .object({
+      artifact: artifactInputs.id,
+      ...commentFields,
+      version: artifactInputs.version.optional(),
+      idempotencyKey: artifactInputs.id,
+    })
+    .refine(hasTextOrImage, { message: "the comment is empty", path: ["body"] }),
+  review: z
+    .object({
+      artifact: artifactInputs.id,
+      body: commentBody.optional(),
+      comments: z
+        .array(
+          z
+            .object(commentFields)
+            .strict()
+            .refine(hasTextOrImage, { message: "the comment is empty", path: ["body"] }),
+        )
+        .min(1)
+        .max(REVIEW_COMMENTS_MAX),
+      version: artifactInputs.version.optional(),
+      idempotencyKey: artifactInputs.id,
+    })
+    .refine(
+      (review) =>
+        review.comments.reduce((total, comment) => total + (comment.images?.length ?? 0), 0) <=
+        ARTIFACT_REVIEW_IMAGES_MAX,
+      { message: "a review carries at most 30 images", path: ["comments"] },
+    ),
   resolve: z.object({
     artifact: artifactInputs.id,
     comment: artifactInputs.id,

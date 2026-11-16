@@ -206,7 +206,7 @@ test("a push with no artifact takes its entry from its files, and its entry defa
   );
 });
 
-test("a push with no artifact that cannot name an entry, or whose entry is no .md or .html, is refused", async () => {
+test("a push with no artifact that cannot name an entry is refused, and any file may be the entry", async () => {
   const notes = await file("notes.md", "# Notes\n");
   const more = await file("more.md", "# More\n");
   const csv = await file("data.csv", "a,b\n");
@@ -219,8 +219,6 @@ test("a push with no artifact that cannot name an entry, or whose entry is no .m
   // Two files and none is index.html: the entry must be named.
   await refused({ files: [notes, more] }, "artifact-entry-missing");
   await refused({ files: [notes], entry: "other.md" }, "artifact-entry-missing");
-  await refused({ files: [csv] }, "artifact-entry-type");
-  await refused({ files: [notes, csv], entry: "data.csv" }, "artifact-entry-type");
   await refused({ files: [{ path: "../notes.md", sha256: notes.sha256 }] }, "artifact-file-path");
   // A new artifact has no files to delete or base to push over, and no kind is stated: the
   // request itself is outside the contract.
@@ -229,6 +227,10 @@ test("a push with no artifact that cannot name an entry, or whose entry is no .m
   await refused({ files: [notes], kind: "html" }, "artifact-request");
   await refused({ files: [] }, "artifact-request");
   expect(await db.artifact.count({ where: { workspaceId, title: "Refused" } })).toBe(0);
+  const data = await create({ title: "Data entry", files: [csv] });
+  expect(data).toMatchObject({ status: 200, body: { entryPath: "data.csv", entryKind: "csv" } });
+  const both = await create({ title: "Data entry 2", files: [notes, csv], entry: "data.csv" });
+  expect(both.body).toMatchObject({ entryPath: "data.csv", entryKind: "csv" });
 });
 
 test("a web page may be several files, with any .html file as its entry", async () => {
@@ -245,8 +247,14 @@ test("a web page may be several files, with any .html file as its entry", async 
   expect(await entryOf((await make({ files: [home, style], entry: "home.html" })).body.id)).toBe(
     "home.html",
   );
-  for (const body of [{ files: [home, style] }, { files: [page, style], entry: "css/site.css" }])
-    expect(await make(body)).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
+  expect(await make({ files: [home, style] })).toMatchObject({
+    status: 400,
+    body: { code: "INVALID_INPUT" },
+  });
+  expect((await make({ files: [page, style], entry: "css/site.css" })).body).toMatchObject({
+    entryPath: "css/site.css",
+    entryKind: "text",
+  });
 
   const artifact = made.body.id as string;
   const push = (baseVersion: number, body: Record<string, unknown>) =>
@@ -261,7 +269,7 @@ test("a web page may be several files, with any .html file as its entry", async 
   expect(read.files.map((f: { path: string }) => f.path)).toEqual(["home.html", "index.html"]);
   expect(read.entryPath).toBe("home.html");
   expect(await push(5, { delete: ["home.html"] })).toMatchObject({ status: 400 });
-  expect(await push(5, { files: [style], entry: "css/site.css" })).toMatchObject({ status: 400 });
+  expect(await push(5, { files: [style], entry: "css/site.css" })).toMatchObject(saved(6));
 });
 
 test("a push of files adds, replaces and deletes by path, and keeps what it does not name", async () => {
@@ -295,9 +303,14 @@ test("a push of files adds, replaces and deletes by path, and keeps what it does
     entryPath: "GUIDE.md",
     text: "# Guide\n",
   });
-  const answer = await push(3, { entry: "b.txt" });
-  expect(answer).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
-  expect(answer.body.error).toContain("artifact-entry-type");
+  expect(await push(3, { entry: "b.txt" })).toMatchObject({
+    status: 200,
+    body: { status: "created", number: 4 },
+  });
+  expect((await post({ operation: "read", artifact })).body).toMatchObject({
+    entryPath: "b.txt",
+    entryKind: "text",
+  });
 });
 
 test("a push naming bytes not uploaded is answered missing, and lands when sent again", async () => {

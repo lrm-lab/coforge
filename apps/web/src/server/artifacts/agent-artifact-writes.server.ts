@@ -2,13 +2,18 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import type { CommentInput, ReviewInput } from "#src/features/artifacts/artifact-comment-inputs";
 import { followByWriting } from "./artifact-follows.server";
 import { postComment, postReview } from "./artifact-comments.server";
+import type { CommentImageBlobs } from "./artifact-comment-images.server";
 import { resolveComment } from "./artifact-comment-threads.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { ArtifactNotices, NOBODY_TOLD, type NoticedArtifact } from "./artifact-notices.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
 
 type Principal = { workspaceId: string; agentId: string };
-type Writes = { db: PrismaClient; notices?: ArtifactNoticePort | undefined };
+type Writes = {
+  db: PrismaClient;
+  blobs: CommentImageBlobs;
+  notices?: ArtifactNoticePort | undefined;
+};
 
 const noticesOf = (writes: Writes) =>
   writes.notices && new ArtifactNotices(writes.db, writes.notices);
@@ -33,7 +38,7 @@ function followed(writes: Writes, principal: Principal, artifactId: string) {
 }
 
 export async function commentOnArtifact(writes: Writes, principal: Principal, input: CommentInput) {
-  const { artifact, comment } = await postComment(writes.db, principal, input);
+  const { artifact, comment } = await postComment(writes.db, writes.blobs, principal, input);
   const follow = await followed(writes, principal, artifact.id);
   const told = !("deleted" in comment)
     ? ((await noticesOf(writes)?.comment({
@@ -52,7 +57,12 @@ export async function commentOnArtifact(writes: Writes, principal: Principal, in
 }
 
 export async function reviewArtifact(writes: Writes, principal: Principal, input: ReviewInput) {
-  const { artifact, review, comments } = await postReview(writes.db, principal, input);
+  const { artifact, review, comments } = await postReview(
+    writes.db,
+    writes.blobs,
+    principal,
+    input,
+  );
   const follow = await followed(writes, principal, artifact.id);
   const told =
     (await noticesOf(writes)?.review({
@@ -96,12 +106,13 @@ export async function followedByPush(
   writes: Writes,
   principal: Principal,
   artifactId: string,
-  saved: { status: string; number?: number },
-  note: string | undefined,
+  saved: { status: string; number?: number; titleChanged?: { from: string } },
+  push: { note?: string | undefined; idempotencyKey: string },
 ) {
-  if (saved.status !== "created" && saved.status !== "replayed") return {};
-  const follow = await followed(writes, principal, artifactId);
-  if (saved.number === undefined) return follow;
+  const renamed = saved.status === "nothing" ? saved.titleChanged : undefined;
+  if (saved.status !== "created" && saved.status !== "replayed" && !renamed) return {};
+  const follow = renamed ? {} : await followed(writes, principal, artifactId);
+  if (!renamed && saved.number === undefined) return follow;
   const artifact = await bestEffort("artifacts:notice_read_failed", null, () =>
     writes.db.artifact.findFirst({
       where: { id: artifactId, workspaceId: principal.workspaceId },
@@ -115,16 +126,26 @@ export async function followedByPush(
       },
     }),
   );
+  const notices = noticesOf(writes);
+  const noticed = (artifact satisfies NoticedArtifact | null) ?? undefined;
   const told =
-    artifact &&
-    ((await noticesOf(writes)?.version({
-      workspaceId: principal.workspaceId,
-      artifact: artifact satisfies NoticedArtifact,
-      writerId: principal.agentId,
-      number: saved.number,
-      note: note ?? "",
-    })) ??
-      NOBODY_TOLD);
+    noticed &&
+    (renamed
+      ? await notices?.rename({
+          workspaceId: principal.workspaceId,
+          artifact: noticed,
+          writerId: principal.agentId,
+          from: renamed.from,
+          to: noticed.title,
+          key: push.idempotencyKey,
+        })
+      : await notices?.version({
+          workspaceId: principal.workspaceId,
+          artifact: noticed,
+          writerId: principal.agentId,
+          number: saved.number!,
+          note: push.note ?? "",
+        }));
   return { ...follow, ...(told ?? NOBODY_TOLD) };
 }
 

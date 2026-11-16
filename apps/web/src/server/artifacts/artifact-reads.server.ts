@@ -25,14 +25,12 @@ import {
   type ArtifactViewer,
 } from "./artifact-access.server";
 
-/** Artifacts one list or one batch of cards shows at most. */
 const LIST_LIMIT = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const epochTimestamp = (at: Date) =>
   Prisma.sql`(TIMESTAMP 'epoch' + ${at.getTime()}::bigint * INTERVAL '1 millisecond')`;
 
-/** A list cursor: the last artifact of a page, as its change time and id. Opaque to clients. */
 const writeCursor = (row: { updatedAt: Date; id: string }) =>
   Buffer.from(JSON.stringify([row.updatedAt.getTime(), row.id])).toString("base64url");
 
@@ -46,9 +44,7 @@ function readCursor(cursor: string): { at: Date; id: string } {
       UUID.test(id)
     )
       return { at: new Date(time), id };
-  } catch {
-    // Not a cursor this server made.
-  }
+  } catch {}
   throw new AppError("INVALID_INPUT", { errorId: "artifact-list-cursor" });
 }
 
@@ -68,7 +64,6 @@ export type ArtifactMessageCard =
   | { kind: "artifact"; state: "forbidden"; artifactId: string; canOpen: false }
   | { kind: "artifact"; state: "deleted"; artifactId: string; canOpen: false };
 
-/** What a card and a list row show of an artifact: never its content beyond the preview. */
 const CARD_SELECT = {
   id: true,
   name: true,
@@ -102,6 +97,7 @@ function card(
   return {
     ...shown,
     homeKey,
+    entryKind: artifactKindOfPath(row.entryPath),
     access: artifactTier(row),
     canChange,
     author: authorAgentId ? { agentId: authorAgentId } : null,
@@ -115,18 +111,12 @@ const accessRuleInput = (
   authorAgentOwnerId: (row.authorAgentId ? owners.get(row.authorAgentId) : undefined) ?? null,
 });
 
-/**
- * Reading artifacts (task #385): one version with its files, a list, and cards. Each asks the
- * experiment, then the reader's access to the artifact's home, as every operation does.
- */
 export class ArtifactReads {
   constructor(
     private readonly db: PrismaClient,
     private readonly enabled: (workspaceId: string) => Promise<boolean>,
   ) {}
 
-  /** A live artifact the reader may read, with what a read shows of it, and the viewer's
-   * Workspace standing (`artifactViewer`) every check of the read shared. */
   async artifact(workspaceId: string, artifactId: string, reader: ArtifactActor) {
     if (!(await this.enabled(workspaceId))) throw artifactsDisabled();
     const [artifact, viewer] = await Promise.all([
@@ -163,9 +153,6 @@ export class ArtifactReads {
     };
   }
 
-  /** The artifact and one version (its current one by default) with that version's files, and
-   * the viewer standing the read resolved (`artifactViewer`), so a caller's own rule — a
-   * delete's — needs no second membership read. */
   async read(input: {
     workspaceId: string;
     artifactId: string;
@@ -202,8 +189,6 @@ export class ArtifactReads {
     return { artifact, version, files, viewer, authorAgentOwnerId };
   }
 
-  /** One file of a version (the current one by default), or null when the version has no file at
-   * `path`; a version that does not exist is `NOT_FOUND`, as in `read`. */
   async file(input: {
     workspaceId: string;
     artifactId: string;
@@ -227,10 +212,6 @@ export class ArtifactReads {
     return version.files[0] ?? null;
   }
 
-  /** One file of a pinned version with no reader: the sandbox's subresources come under a
-   * signed ticket that already proved its reader may read the artifact, so this asks only that
-   * the experiment is on, the artifact is live in the workspace and the version has the file —
-   * never who asks (task #25). */
   async fileInVersion(input: {
     workspaceId: string;
     artifactId: string;
@@ -255,17 +236,12 @@ export class ArtifactReads {
     return (await this.listPage({ ...input, limit: LIST_LIMIT })).artifacts;
   }
 
-  /**
-   * One page of `list`, `limit` artifacts at a time: only those whose title holds every word of
-   * `query` (any case), after the artifact `cursor` names (a previous page's `nextCursor`, absent
-   * on the last page). Pages are stable while artifacts change: the cursor is the position in
-   * the newest-changed-first order, not an offset.
-   */
   async listPage(input: {
     workspaceId: string;
     reader: ArtifactActor;
     conversationId?: string;
     query?: string;
+    title?: string;
     cursor?: string;
     limit: number;
   }) {
@@ -302,8 +278,6 @@ export class ArtifactReads {
     };
   }
 
-  /** Cards of the named artifacts the reader may read, in the order named; any other is left
-   * out, as if it did not exist. */
   async cards(input: {
     workspaceId: string;
     reader: ArtifactActor;
@@ -352,11 +326,6 @@ export class ArtifactReads {
     return ids.flatMap((id) => (kept.has(id) ? [kept.get(id)!] : []));
   }
 
-  /**
-   * The live projections embedded in one browser message page. The three reads are deliberately
-   * fixed: artifact rows, the viewer's Workspace membership, and all referenced conversations.
-   * Access is then decided in memory so a page with twenty links does not create twenty reads.
-   */
   async messageCards(input: {
     workspaceId: string;
     reader: ArtifactActor;
@@ -474,6 +443,7 @@ export class ArtifactReads {
       reader: ArtifactActor;
       conversationId?: string;
       query?: string;
+      title?: string;
       limit: number;
     },
     viewer: ArtifactViewer,
@@ -492,9 +462,12 @@ export class ArtifactReads {
           OR (${goneReach} AND a."homeKey" LIKE 'conversation:%' AND NOT EXISTS (
             SELECT 1 FROM "conversations" home
             WHERE a."homeKey" = ${homeKeyOfConversation} AND ${home.stands})))`;
-    const titled = searchTerms(input.query ?? "").map(
-      (word) => Prisma.sql`a."title" ILIKE ${containsPattern(word)}`,
-    );
+    const titled = [
+      ...(input.title === undefined ? [] : [Prisma.sql`a."title" = ${input.title}`]),
+      ...searchTerms(input.query ?? "").map(
+        (word) => Prisma.sql`a."title" ILIKE ${containsPattern(word)}`,
+      ),
+    ];
     const afterCursor = after
       ? [
           Prisma.sql`(a."updatedAt" < ${epochTimestamp(after.at)}

@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
 import type { AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import { parseArgs, run, type MessageTransport } from "../index";
@@ -259,28 +262,63 @@ function serveProxy(body: unknown, status: number) {
     ).catch((caught: unknown) => caught as CliError);
 }
 
-test("a push or comment refused for unseen comments says how many and how to read them", async () => {
-  const call = serveProxy(
-    {
-      error:
-        "conflict (artifact-unseen-comments): 3 comments from others, new since you last read comments and about what this touches: read them with `coforge artifact comments x`, then send this again",
-      code: "CONFLICT",
-      retryable: false,
-      details: { count: 3, commentIds: `${C1},${C2},${C3}` },
-    },
-    409,
-  );
+test("a push or comment refused for unseen changes prints what was shown and the exact retry", async () => {
+  const shown = {
+    comments: [
+      {
+        id: C1,
+        author: { kind: "user", name: "Alice" },
+        version: 1,
+        path: "plan.md",
+        replyTo: null,
+        body: "Please reword.",
+        createdAt: "2026-11-12T09:30:00.000Z",
+        images: [],
+      },
+    ],
+    excerpts: [
+      {
+        id: C2,
+        author: { kind: "user", name: "Bob" },
+        path: null,
+        version: 1,
+        createdAt: "2026-11-12T09:31:00.000Z",
+        excerpt: "Long text",
+      },
+    ],
+    versions: [],
+  };
+  const refusal = (unread: number) =>
+    serveProxy(
+      {
+        error: "conflict (artifact-unseen-changes): Held",
+        code: "CONFLICT",
+        retryable: false,
+        details: {
+          commentCount: 2,
+          unread,
+          versionCount: 0,
+          skippedComments: 0,
+          skippedVersions: 0,
+          unseen: JSON.stringify(shown),
+        },
+      },
+      409,
+    );
   for (const request of [
     { operation: "push", artifact: ID, baseVersion: 1, idempotencyKey: ID, text: "x" },
     { operation: "comment", artifact: ID, body: "x", idempotencyKey: ID },
     { operation: "review", artifact: ID, comments: [{ body: "x" }], idempotencyKey: ID },
   ] as AgentArtifactRequest[]) {
-    const error = (await call(request)) as CliError;
+    const error = (await refusal(0)(request)) as CliError;
     expect(error.code).toBe("CONFLICT");
-    expect(error.message).toContain("3 comments from others");
-    expect(error.suggestedNextAction).toBe(`Read them first: coforge artifact comments ${ID}`);
-    expect(error.details).toMatchObject({ count: 3 });
+    expect(error.contextText).toContain("Please reword.");
+    expect(error.contextText).toContain("Long text");
+    expect(error.suggestedNextAction).toContain("Run the same command again");
+    expect(error.details).toMatchObject({ commentCount: 2 });
     expect(error.retryable).toBe(false);
+    const unread = (await refusal(1)(request)) as CliError;
+    expect(unread.suggestedNextAction).toContain(`coforge artifact comments ${ID}`);
   }
 });
 
@@ -326,7 +364,96 @@ test("--help describes the comment commands", async () => {
   expect(await run(["artifact", "reopen", "--help"], transport)).toContain(
     "coforge artifact reopen <id> <comment>",
   );
-  expect(await run(["artifact", "push", "--help"], transport)).toContain(
-    "artifact-unseen-comments",
+  expect(await run(["artifact", "push", "--help"], transport)).toContain("artifact-unseen-changes");
+});
+
+test("comment --image is repeatable, takes no text, and uploads each image before sending", async () => {
+  expect(invocation(["comment", ID, "--image", "a.png", "--image", "b.jpg"])).toEqual({
+    command: "artifact",
+    comment: { operation: "comment", artifact: ID, imagePaths: ["a.png", "b.jpg"] },
+  });
+  const dir = await mkdtemp(join(tmpdir(), "img-"));
+  const png = join(dir, "a.png");
+  await writeFile(png, Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]));
+  const text = join(dir, "notes.txt");
+  await writeFile(text, "not an image");
+  const sent: unknown[] = [];
+  const uploaded: string[] = [];
+  const transport = {
+    artifact: async (request: AgentArtifactRequest) => {
+      sent.push(request);
+      return {
+        id: C1,
+        author: { kind: "agent", name: "me" },
+        version: 1,
+        path: null,
+        replyTo: null,
+        createdAt: "2026-11-12T09:30:00.000Z",
+        reviewId: null,
+        resolvedAt: null,
+        resolvedBy: null,
+      };
+    },
+    artifactUpload: async (sha256: string) => {
+      uploaded.push(sha256);
+    },
+  };
+  const draft = (paths: string[]) =>
+    invocation(["comment", ID, ...paths.flatMap((path) => ["--image", path])]);
+  await runArtifact(draft([png]), transport, async () => "");
+  expect(uploaded).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ operation: "comment", images: uploaded });
+  expect(sent[0]).not.toHaveProperty("body");
+  await expect(runArtifact(draft([text]), transport, async () => "")).rejects.toThrow(
+    "not a PNG, JPEG, GIF or WebP",
   );
+  await expect(
+    runArtifact(draft([png, png, png, png, png]), transport, async () => ""),
+  ).rejects.toThrow("at most 4");
+  await expect(runArtifact(invocation(["comment", ID]), transport, async () => "")).rejects.toThrow(
+    "--image",
+  );
+  expect(sent).toHaveLength(1);
+});
+
+test("save takes an attachment id and prints what it made", async () => {
+  expect(invocation(["save", ID])).toEqual({
+    command: "artifact",
+    request: { operation: "save", attachment: ID },
+  });
+  const said = (await runArtifact(invocation(["save", ID]), {
+    artifact: async () => ({
+      artifact: { id: C1, title: "Notes.md", entryPath: "Notes.md" },
+      created: true,
+      attachment: { id: ID, fileName: "Notes.md" },
+      newlyFollowing: true,
+    }),
+  })) as string;
+  expect(said).toContain('Saved attachment "Notes.md" as artifact "Notes.md"');
+  const again = (await runArtifact(invocation(["save", ID]), {
+    artifact: async () => ({
+      artifact: { id: C1, title: "Notes.md" },
+      created: false,
+      attachment: { id: ID, fileName: "Notes.md" },
+    }),
+  })) as string;
+  expect(again).toContain("was already saved");
+});
+
+test("download --image saves the image the server returns", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dl-"));
+  const out = join(dir, "got.png");
+  const bytes = Uint8Array.from([1, 2, 3, 4]);
+  const said = (await runArtifact(
+    invocation(["download", ID, "--image", "img1", "--output", out]),
+    {
+      artifact: async () => ({
+        contentType: "image/png",
+        sizeBytes: 4,
+        data: Buffer.from(bytes).toString("base64"),
+      }),
+    },
+  )) as string;
+  expect(said).toContain("Saved image img1");
+  expect(new Uint8Array(await readFile(out))).toEqual(bytes);
 });

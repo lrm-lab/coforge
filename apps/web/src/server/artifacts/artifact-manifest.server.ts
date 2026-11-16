@@ -1,5 +1,4 @@
 import { AppError } from "#src/lib/app-error";
-import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import {
   ARTIFACT_FILE_LIMIT,
   ARTIFACT_HTML_ENTRY,
@@ -7,10 +6,6 @@ import {
   type ArtifactFileInput,
 } from "./artifact-files.server";
 
-/**
- * An Agent's version as a manifest of files: the files it adds or replaces (by the sha256 of
- * bytes uploaded before), the paths it deletes, and the file the artifact opens at.
- */
 export type FileManifest = {
   files?: readonly ArtifactFileInput[];
   deletedPaths?: readonly string[];
@@ -21,17 +16,6 @@ function invalid(errorId: string, hint?: string): never {
   throw new AppError("INVALID_INPUT", { errorId, ...(hint ? { hint } : {}) });
 }
 
-/** The entry file is one the web page can show: a Markdown file, or an html page. The artifact's
- * type is that file's. */
-export function requireOpenableEntry(entryPath: string): void {
-  if (artifactOpenableKind(entryPath) === null)
-    invalid("artifact-entry-type", "the entry file is a .md or .html file");
-}
-
-/**
- * What a manifest makes of a new artifact: its files and its entry (the manifest's own, else
- * `index.html` when it has one, else its only file). A new artifact has nothing to delete.
- */
 export function planManifestCreate(manifest: FileManifest) {
   const files = manifest.files ?? [];
   if (manifest.deletedPaths?.length)
@@ -51,7 +35,6 @@ export function planManifestCreate(manifest: FileManifest) {
       "artifact-entry-missing",
       `name the entry file among the files (entry), or send an ${ARTIFACT_HTML_ENTRY} or one file`,
     );
-  requireOpenableEntry(entryPath);
   return { files, entryPath };
 }
 

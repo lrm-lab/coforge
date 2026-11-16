@@ -3,32 +3,25 @@ import {
   ARTIFACT_UPLOAD_MAX_BYTES,
   artifactPathValid,
 } from "@lrm/coforge-sdk/agent";
-import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
 import { AppError } from "#src/lib/app-error";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
 import { agentErrorResponse } from "#src/server/agents/agent-http-middleware.server";
 import { artifactsDisabled } from "./artifact-access.server";
+import { resolveArtifactReference } from "./artifact-reference.server";
 import { ArtifactStorageFull, type StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactContentType } from "./artifact-content-types.server";
 import type { Artifacts } from "./artifacts.server";
 
-/** What the Agent API's file bytes run on; production's is `productionArtifacts(db)`. */
 export type AgentArtifactFileServices = {
   artifacts: Pick<Artifacts, "reads">;
   blobs: Pick<StoredArtifactBlobs, "upload" | "open">;
   enabled: (workspaceId: string) => Promise<boolean>;
 };
 
-/** The bytes a Workspace may hold that no saved version names yet. */
+const REFERENCE_MAX_CHARS = 2000;
+
 export const ARTIFACT_UNREFERENCED_QUOTA_BYTES = 1024 * 1024 * 1024;
 
-/**
- * `PUT /api/agent/v1/artifacts/uploads/:sha256`: one file's bytes, stored under their sha256 and
- * granted to the Agent, so a push can name them. Uploading bytes the Workspace already holds
- * answers the same 204. Refused before the body is read: no `Content-Length` (411) or a larger
- * file than a push takes (413); and once read, bytes that are not `sha256` (400), or that would
- * take the Workspace's unused bytes past the quota (413).
- */
 export async function handleAgentArtifactUpload(
   request: Request,
   sha256: string,
@@ -49,8 +42,6 @@ export async function handleAgentArtifactUpload(
     if (Number(declared) > ARTIFACT_UPLOAD_MAX_BYTES) return tooLarge("the file is too large");
     const bytes = new Uint8Array(await request.arrayBuffer());
     if (bytes.length > ARTIFACT_UPLOAD_MAX_BYTES) return tooLarge("the file is too large");
-    // The store hashes the bytes (400 when they are not `sha256`) and counts only bytes new to
-    // the Workspace against the quota: a file it holds adds nothing.
     await services.blobs.upload({
       workspaceId,
       bytes,
@@ -69,11 +60,6 @@ export async function handleAgentArtifactUpload(
 const tooLarge = (message: string, quota = false) =>
   errorResponse(quota ? "ARTIFACT_STORAGE_FULL" : "PAYLOAD_TOO_LARGE", message, 413, false);
 
-/**
- * `GET /api/agent/v1/artifacts/:artifact/files/:path?version=n`: one file of a version (the
- * current one by default) as the exact bytes stored. Whoever may read the artifact may read its
- * files, and one it may not read is `NOT_FOUND`, as `read` answers.
- */
 export async function handleAgentArtifactDownload(
   request: Request,
   params: { artifact: string; path: string },
@@ -89,15 +75,22 @@ export async function handleAgentArtifactDownload(
         errorId: "artifact-request",
         hint: "version is not accepted",
       });
-    // A path no artifact can hold names nothing; it never reaches the database.
-    if (!artifactInputs.id.safeParse(params.artifact).success || !artifactPathValid(params.path))
+    if (!artifactPathValid(params.path) || params.artifact.length > REFERENCE_MAX_CHARS)
       throw new AppError("NOT_FOUND");
+    const reader = { agentId };
+    const reference = await resolveArtifactReference(
+      params.artifact,
+      async (title) =>
+        (await services.artifacts.reads.listPage({ workspaceId, reader, title, limit: 6 }))
+          .artifacts,
+    );
+    const version = requested !== null ? Number(requested) : reference.version;
     const file = await services.artifacts.reads.file({
       workspaceId,
-      artifactId: params.artifact,
-      reader: { agentId },
+      artifactId: reference.artifactId,
+      reader,
       path: params.path,
-      ...(requested !== null ? { version: Number(requested) } : {}),
+      ...(version !== undefined ? { version } : {}),
     });
     const bytes = file && (await services.blobs.open(workspaceId, file.sha256));
     if (!file || !bytes)

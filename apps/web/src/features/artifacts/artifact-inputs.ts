@@ -9,7 +9,7 @@ export const artifactInputs = {
   id: z.uuid(),
   version: z.number().int().positive(),
   baseVersion: z.number().int().nonnegative(),
-  title: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(300),
   description: z.string().max(1000),
   note: z.string().max(500),
   label: z.string().max(60),

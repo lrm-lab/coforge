@@ -1,5 +1,8 @@
 import type { Artifact, PrismaClient } from "#src/generated/prisma/client";
-import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
+import {
+  artifactKindOfPath,
+  artifactOpenableKind,
+} from "#src/features/artifacts/artifact-path-kind";
 import { AppError } from "#src/lib/app-error";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import type { ArtifactPublisher } from "./artifact-access.server";
@@ -13,14 +16,6 @@ import {
 } from "./artifact-files.server";
 import { writeVersion } from "./artifact-version-write.server";
 
-/**
- * Creating an artifact (task #385): the one insert, with idempotent-create replay on top. A
- * create that carries a key the Workspace already used returns the artifact it made (replay)
- * when the inputs match, and is a conflict when they differ, so a lost response on the first
- * try does not leave a second document behind. The caller has already checked the experiment,
- * the name and the home.
- */
-
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export type CreateArtifactInput = {
@@ -31,14 +26,11 @@ export type CreateArtifactInput = {
   description?: string;
   entryPath: string;
   author: ArtifactPublisher;
-  /** An idempotent create: the client's key, and a hash of this create's inputs. The same key
-   * with the same hash returns the artifact already made; with a different hash it is a
-   * conflict. */
   idempotencyKey?: string;
   requestHash?: string;
+  origin?: { messageId: string; attachmentId: string };
 };
 
-/** Validates the name and description, then inserts the artifact row. */
 export async function createArtifact(
   db: Pick<PrismaClient, "artifact">,
   input: CreateArtifactInput,
@@ -55,6 +47,9 @@ export async function createArtifact(
       kind: artifactKindOfPath(input.entryPath),
       entryPath: input.entryPath,
       authorAgentId: input.author.agentId,
+      ...(input.origin
+        ? { originMessageId: input.origin.messageId, originAttachmentId: input.origin.attachmentId }
+        : {}),
       ...(input.idempotencyKey !== undefined
         ? { idempotencyKey: input.idempotencyKey, requestHash: input.requestHash ?? null }
         : {}),
@@ -62,13 +57,6 @@ export async function createArtifact(
   });
 }
 
-/**
- * A create and, given `version`, its version 1 in one transaction (task #25): the row, its
- * files and its idempotent replay land together or not at all, and version 1 never meets the
- * comment gate — no comment can exist on an artifact not yet made. Missing or ungranted bytes
- * refuse the whole create before anything is written, so no artifact row is left without its
- * version. `fresh` is false on an idempotent replay.
- */
 export async function createVersionedArtifact(
   db: PrismaClient,
   blobs: ArtifactBlobStore,
@@ -90,10 +78,10 @@ export async function createVersionedArtifact(
     const limit = blob.kind === "text" ? ARTIFACT_TEXT_LIMIT : ARTIFACT_BINARY_LIMIT;
     if (blob.sizeBytes > limit) invalid("artifact-file-too-large");
   }
-  // The entry is what the page shows whole: over the read limit it would render blank.
   const entryFile = files.find((file) => file.path === input.entryPath);
   if (
     entryFile !== undefined &&
+    artifactOpenableKind(input.entryPath) !== null &&
     stored.get(entryFile.sha256)!.sizeBytes > ARTIFACT_ENTRY_READ_LIMIT
   )
     invalid("artifact-entry-too-large");
@@ -110,7 +98,6 @@ export async function createVersionedArtifact(
       }
       const artifact = await createArtifact(tx, input);
       if (input.version !== undefined) {
-        // In this transaction, so the sweep of unused blobs leaves them.
         const gone = await blobs.use(tx, input.workspaceId, named);
         if (gone.length)
           throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-bytes-missing" });
@@ -141,8 +128,6 @@ export async function createVersionedArtifact(
       return { artifact, fresh: true };
     });
   } catch (error) {
-    // Two racing creates with one key — or one name — can surface either unique index's
-    // violation; the key's replay decides before the name's conflict does.
     if (isUniqueViolation(error) && input.idempotencyKey !== undefined) {
       const replay = await createReplay(
         db,
@@ -152,15 +137,12 @@ export async function createVersionedArtifact(
       );
       if (replay) return { artifact: replay, fresh: false };
     }
-    // The live-name unique index is the authority: a soft-deleted row releases the name.
     if (isUniqueViolation(error))
       throw new AppError("CONFLICT", { errorId: "artifact-name-taken" });
     throw error;
   }
 }
 
-/** The live artifact a create's key already made, when its inputs match (replay); a different
- * `requestHash` is a conflict. Null when the key has made nothing. */
 export async function createReplay(
   db: Pick<PrismaClient, "artifact">,
   workspaceId: string,

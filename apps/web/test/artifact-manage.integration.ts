@@ -106,7 +106,7 @@ const post = async (agentId: string, body: unknown) => {
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db, documents, enabled: async () => true },
+    { db, documents, blobs, enabled: async () => true },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 };

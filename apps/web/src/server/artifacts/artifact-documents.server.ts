@@ -10,30 +10,18 @@ import {
 } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
-import { ARTIFACT_ENTRY_READ_LIMIT } from "./artifact-files.server";
+import { ARTIFACT_ENTRY_READ_LIMIT, ARTIFACT_TITLE_MAX } from "./artifact-files.server";
 import { planManifestCreate, type FileManifest } from "./artifact-manifest.server";
 import type { Artifacts } from "./artifacts.server";
 
-/** The name a title of no Latin letters or digits falls back to. */
 const FALLBACK_NAME = "artifact";
-/** Names tried in sequence for an artifact whose title's name is taken in its home (`plan`,
- * `plan-2`, `plan-3`), before a short random suffix, which a title of no Latin letters or digits
- * (named `artifact`) reaches soon. */
 const SEQUENTIAL_NAMES = 3;
 const NAME_TRIES = 8;
 
-/** Who reads, and in which Workspace. */
 export type DocumentScope = { workspaceId: string; actor: ArtifactActor };
 
-/** Who writes, and in which Workspace: an Agent. */
 export type WriteScope = { workspaceId: string; actor: ArtifactPublisher };
 
-/**
- * The artifact use cases the Agent API and the web page share (task #385): an Agent writes an
- * artifact as a manifest of files (`create` for a new one, `push` over a version), and either
- * reads one back — the web page shows the entry file's text and never handles blobs. Every
- * operation is the artifact service's, with its experiment check, access rules and merge.
- */
 export class ArtifactDocuments {
   constructor(
     private readonly db: PrismaClient,
@@ -49,15 +37,15 @@ export class ArtifactDocuments {
       description?: string;
       manifest: FileManifest;
       idempotencyKey?: string;
+      origin?: { messageId: string; attachmentId: string };
     },
   ) {
     const plan = planManifestCreate(input.manifest);
     const title = input.title.trim();
-    if (!title || title.length > 200)
+    if (!title || [...title].length > ARTIFACT_TITLE_MAX)
       throw new AppError("INVALID_INPUT", { errorId: "artifact-title" });
     const description = input.description?.trim() ?? "";
     const home = { kind: "conversation", conversationId: input.conversationId } as const;
-    // The create's inputs, hashed, so a retry with the same key but different inputs is caught.
     const requestHash =
       input.idempotencyKey === undefined
         ? undefined
@@ -77,17 +65,13 @@ export class ArtifactDocuments {
             : `${base}-${crypto.randomUUID().slice(0, 6)}`;
       let previewed = false;
       try {
-        // The artifact row and version 1 commit in one transaction (`Artifacts.create`): a
-        // create whose bytes are missing leaves nothing behind, and a replay with the same
-        // key returns the artifact already made without a second version. A fresh create's
-        // preview refreshes before its announcement, so listening pages never read the old
-        // line; a replayed one refreshes after, as it always did.
         const created = await this.artifacts.create({
           workspaceId: scope.workspaceId,
           home,
           name,
           title,
           ...(description ? { description } : {}),
+          ...(input.origin ? { origin: input.origin } : {}),
           entryPath: plan.entryPath,
           author: scope.actor,
           ...(input.idempotencyKey !== undefined
@@ -102,7 +86,6 @@ export class ArtifactDocuments {
           },
           beforeAnnounce: async (artifactId) => {
             previewed = true;
-            // The card's preview line, as a push's refresh leaves it (best effort).
             await this.#refreshPreview(scope, artifactId);
           },
         });
@@ -117,13 +100,9 @@ export class ArtifactDocuments {
     }
   }
 
-  /** The sha256s of a manifest create's files the Agent has not uploaded: asked before the
-   * artifact is made, so a create the client must retry after uploading leaves nothing behind.
-   * A manifest that would not make an artifact is refused here as `create` refuses it. */
   async missingBytes(scope: WriteScope, input: { manifest: FileManifest }): Promise<string[]> {
     const { files } = planManifestCreate(input.manifest);
     const named = [...new Set(files.map((file) => file.sha256))];
-    // No artifact exists yet, so only bytes the Agent uploaded count as its own.
     const [stored, granted] = await Promise.all([
       this.blobs.inspectMany(scope.workspaceId, named),
       this.blobs.allowed(scope.workspaceId, undefined, scope.actor, named),
@@ -131,10 +110,6 @@ export class ArtifactDocuments {
     return named.filter((sha256) => !stored.has(sha256) || !granted.has(sha256));
   }
 
-  /** The artifact at a version (its current one by default), with its entry file's text and
-   * whether the actor may delete it; an entry file too large to read whole has no text here.
-   * `body: "markdown"` is the viewer's read: a body only for a document's entry — a web page's
-   * is the sandbox's to serve. An Agent's read (the default) gets any entry's text. */
   async load(
     scope: DocumentScope,
     input: { artifactId: string; version?: number },
@@ -162,13 +137,6 @@ export class ArtifactDocuments {
     };
   }
 
-  /**
-   * Pushes a version over `baseVersion`: the manifest's files and the settings, saved as any
-   * artifact save is — merged by path with what others saved meanwhile, or refused when both
-   * changed the same file or setting (`artifact-base-moved`), and nothing written. `afterSave`
-   * is the caller's bookkeeping for a saved version (an Agent's read position): it runs beside
-   * the preview refresh, before the version's announcement, on a created or replayed push.
-   */
   async push(
     scope: WriteScope,
     input: {
@@ -184,8 +152,6 @@ export class ArtifactDocuments {
     options?: { afterSave?: (saved: { number: number }) => Promise<void> },
   ) {
     const { manifest, ...settings } = input;
-    // A bookkeeping failure must not keep the announcement back: it is kept and rethrown once
-    // the push (and its announcement) is done, as it always surfaced after the save.
     let tailError: { error: unknown } | undefined;
     const saved = await this.artifacts.push({
       workspaceId: scope.workspaceId,
@@ -224,20 +190,23 @@ export class ArtifactDocuments {
     return this.artifacts.reads.list({ ...reader(scope), ...input });
   }
 
-  /** A page of the same list, filtered by title words (`ArtifactReads.listPage`). */
   listPage(
     scope: DocumentScope,
-    input: { conversationId?: string; query?: string; cursor?: string; limit: number },
+    input: {
+      conversationId?: string;
+      query?: string;
+      title?: string;
+      cursor?: string;
+      limit: number;
+    },
   ) {
     return this.artifacts.reads.listPage({ ...reader(scope), ...input });
   }
 
-  /** Cards of the named artifacts the actor may read; any other is left out. */
   cards(scope: DocumentScope, artifactIds: readonly string[]) {
     return this.artifacts.reads.cards({ ...reader(scope), artifactIds });
   }
 
-  /** The preview after a save that committed: a failure is logged, never the save's. */
   async #refreshPreview(scope: { workspaceId: string }, artifactId: string) {
     try {
       await refreshPreview(this.db, this.blobs, scope.workspaceId, artifactId);
@@ -249,8 +218,6 @@ export class ArtifactDocuments {
   }
 }
 
-/** A stable hash of a create's inputs, so a retry with the same idempotency key but a different
- * title, home or files is caught as a conflict rather than silently returning the first artifact. */
 function createRequestHash(input: {
   homeKey: string;
   title: string;
@@ -270,10 +237,6 @@ function createRequestHash(input: {
 
 const reader = (scope: DocumentScope) => ({ workspaceId: scope.workspaceId, reader: scope.actor });
 
-/**
- * A Markdown file's card line: its first two lines with text, without the Markdown marks that open
- * them (headings, quotes, list bullets), each at most 200 characters.
- */
 function artifactPreview(text: string): string {
   return text
     .split("\n")
@@ -288,11 +251,6 @@ function artifactPreview(text: string): string {
     .join("\n");
 }
 
-/**
- * Keeps an artifact's preview from its current version: a Markdown entry's first lines, and a web
- * page's description. Read after a save, written only while that version is still the current
- * one, best effort (a card shows the previous preview until the next save).
- */
 async function refreshPreview(
   db: PrismaClient,
   blobs: Pick<StoredArtifactBlobs, "read">,
@@ -305,7 +263,6 @@ async function refreshPreview(
   });
   if (!artifact || artifact.currentVersion <= 0) return;
   const kind = artifactOpenableKind(artifact.entryPath);
-  // A web page's card line is its description (task #490): its source reads as nothing.
   if (kind === "html") {
     await db.artifact.updateMany({
       where: { id: artifactId, currentVersion: artifact.currentVersion },
@@ -313,7 +270,13 @@ async function refreshPreview(
     });
     return;
   }
-  if (kind !== "markdown") return;
+  if (kind !== "markdown") {
+    await db.artifact.updateMany({
+      where: { id: artifactId, currentVersion: artifact.currentVersion },
+      data: { preview: "" },
+    });
+    return;
+  }
   const file = await db.artifactFile.findFirst({
     where: {
       artifactId,

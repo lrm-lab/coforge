@@ -17,25 +17,27 @@ import {
   type PostedReviewAnswer,
   type ResolvedAnswer,
 } from "#src/artifact-comment-format";
+import type { ArtifactDirectoryTransport } from "#src/artifact-directory-args";
+import {
+  COMMENT_IMAGES_MAX,
+  REVIEW_IMAGES_MAX,
+  requireImageCount,
+  uploadImage,
+} from "#src/artifact-images";
 import { CliError, invalidArg, withOutputMode } from "#src/cli-error";
 
 type ReviewRequest = Extract<AgentArtifactRequest, { operation: "review" }>;
 type ReviewComment = ReviewRequest["comments"][number];
 
-/**
- * Sends one comment operation and says what came of it. A comment's words, and a review's JSON,
- * are read from stdin (`readStdin`) before anything is sent; a retry of a lost response is a
- * new request with a new key, so the writes name what may have landed (`artifactRequest`).
- */
 export async function runArtifactComment(
   invocation: ArtifactCommentInvocation,
-  transport: { artifact?: (request: AgentArtifactRequest) => Promise<unknown> },
+  transport: Pick<ArtifactDirectoryTransport, "artifact" | "artifactUpload">,
   readStdin: () => Promise<string>,
 ): Promise<unknown> {
   if (!transport.artifact) throw new Error("Artifact transport is unavailable");
   const json = invocation.json === true;
   const draft = invocation.comment;
-  const request = await buildRequest(draft, readStdin);
+  const request = await buildRequest(draft, readStdin, transport);
   const result = await transport.artifact(request).catch((error: unknown) => {
     throw error instanceof CliError ? withOutputMode(error, json ? "json" : "text") : error;
   });
@@ -57,6 +59,7 @@ export async function runArtifactComment(
 async function buildRequest(
   draft: ArtifactCommentDraft,
   readStdin: () => Promise<string>,
+  transport: Pick<ArtifactDirectoryTransport, "artifactUpload">,
 ): Promise<AgentArtifactRequest> {
   switch (draft.operation) {
     case "comments":
@@ -64,27 +67,56 @@ async function buildRequest(
     case "reopen":
       return draft;
     case "comment": {
+      const { imagePaths = [], ...rest } = draft;
+      requireImageCount(imagePaths.length, COMMENT_IMAGES_MAX, "a comment");
       const body = (await readStdin()).trim();
-      if (!body)
+      if (!body && imagePaths.length === 0)
         throw invalidArg(
-          "Write the comment on stdin, for example with a quoted here-document (<<'EOF')",
+          "Write the comment on stdin, for example with a quoted here-document (<<'EOF'), or attach an image with --image <path>",
         );
-      return { ...draft, body, idempotencyKey: crypto.randomUUID() };
+      const images = await Promise.all(imagePaths.map((path) => uploadImage(transport, path)));
+      return {
+        ...rest,
+        ...(body ? { body } : {}),
+        ...(images.length > 0 ? { images } : {}),
+        idempotencyKey: crypto.randomUUID(),
+      };
     }
     case "review": {
       const { body, comments } = parseReview(await readStdin());
+      const total = comments.reduce(
+        (sum, comment) => sum + (Array.isArray(comment.images) ? comment.images.length : 0),
+        0,
+      );
+      requireImageCount(total, REVIEW_IMAGES_MAX, "a review");
+      for (const [index, comment] of comments.entries())
+        requireImageCount(
+          Array.isArray(comment.images) ? comment.images.length : 0,
+          COMMENT_IMAGES_MAX,
+          `comments[${index}]`,
+        );
+      const uploaded = await Promise.all(
+        comments.map(async (comment) =>
+          Array.isArray(comment.images)
+            ? {
+                ...comment,
+                images: await Promise.all(
+                  comment.images.map((path) => uploadImage(transport, String(path))),
+                ),
+              }
+            : comment,
+        ),
+      );
       return {
         ...draft,
         ...(body === undefined ? {} : { body }),
-        comments,
+        comments: uploaded,
         idempotencyKey: crypto.randomUUID(),
       };
     }
   }
 }
 
-/** A review's JSON: `{ body?, comments: [...] }` or the bare array of comments. The server judges
- * every field; only the `lines` shorthand of a comment and the `c_` of a `replyTo` are changed. */
 function parseReview(text: string): Pick<ReviewRequest, "body" | "comments"> {
   let parsed: unknown;
   try {
@@ -103,8 +135,6 @@ function parseReview(text: string): Pick<ReviewRequest, "body" | "comments"> {
   };
 }
 
-/** One comment of a review as the server takes it; `lines` (`N` or `a-b`) is the shorthand for a
- * `lines` anchor, and a `replyTo` may carry the `c_` it was printed with. */
 function reviewComment(value: unknown, index: number): ReviewComment {
   if (!isRecord(value)) return value as ReviewComment;
   const { lines, replyTo, ...rest } = value;

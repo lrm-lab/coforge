@@ -105,26 +105,30 @@ const doc = (...paragraphs: string[]) => `${paragraphs.join("\n\n")}\n`;
 
 test("a version keeps the title and description it was saved with", async () => {
   const id = await document("# One\n", { title: "First", description: "the first" });
-  await save(id, 1, undefined, { title: "Second" });
+  await save(id, 1, undefined, { title: "Second", description: "the second" });
   expect((await current(id, 1)).version).toMatchObject({
     title: "First",
     description: "the first",
   });
   expect((await current(id, 2)).version).toMatchObject({
     title: "Second",
-    description: "the first",
+    description: "the second",
   });
   expect((await current(id)).artifact.title).toBe("Second");
+  expect(await save(id, 2, undefined, { title: "Third" })).toMatchObject({
+    status: "nothing",
+    titleChanged: { from: "Second" },
+  });
+  expect((await current(id)).artifact).toMatchObject({ title: "Third", currentVersion: 2 });
 });
 
 test("settings merge item by item: each side's change to a different item is kept", async () => {
   const id = await document("# Plan\n", { title: "Plan", description: "draft" });
-  // Someone retitles it (version 2) while this save, still on version 1, changes the description.
-  await save(id, 1, undefined, { title: "Launch plan" });
-  const merged = await save(id, 1, undefined, { description: "ready for review" });
-  expect(merged).toMatchObject({ status: "created", number: 3, mergedSettings: ["title"] });
-  // The version keeps what it took from others.
-  expect((await current(id, 3)).version?.merged).toEqual({ files: [], settings: ["title"] });
+  // Someone changes the description (version 2) while this save, still on version 1, retitles it.
+  await save(id, 1, undefined, { description: "ready for review" });
+  const merged = await save(id, 1, doc("# Plan", "more"), { title: "Launch plan" });
+  expect(merged).toMatchObject({ status: "created", number: 3, mergedSettings: ["description"] });
+  expect((await current(id, 3)).version?.merged).toEqual({ files: [], settings: ["description"] });
   expect((await current(id)).artifact).toMatchObject({
     title: "Launch plan",
     description: "ready for review",
@@ -133,7 +137,7 @@ test("settings merge item by item: each side's change to a different item is kep
   // others' description stays.
   await save(id, 3, undefined, { description: "ready" });
   expect(
-    await save(id, 3, doc("# Plan", "more"), {
+    await save(id, 3, doc("# Plan", "more", "again"), {
       title: "Launch plan",
       description: "ready for review",
     }),
@@ -145,7 +149,7 @@ test("settings merge item by item: each side's change to a different item is kep
 
 test("two different values for one setting refuse the push, naming it, and write nothing", async () => {
   const id = await document("# Notes\n", { title: "Notes" });
-  await save(id, 1, undefined, { title: "Team notes" });
+  await save(id, 1, undefined, { title: "Team notes", description: "shared" });
   await expect(save(id, 1, "# Notes\nmore\n", { title: "My notes" })).rejects.toMatchObject({
     code: "CONFLICT",
     errorId: "artifact-base-moved",

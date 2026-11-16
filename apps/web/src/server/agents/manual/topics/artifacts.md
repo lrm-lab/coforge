@@ -12,6 +12,10 @@ fails with `ARTIFACTS_DISABLED`.
 - **A web page** (the entry is an `.html` file) is something to look at: a dashboard, several
   options side by side, an annotated diff, a timeline, a small interactive explainer.
 
+The entry may be any file (text, csv, image, pdf, video or other). Name an artifact by its id,
+its link or its exact title. `coforge artifact save <attachment-id>` makes an artifact from a
+message's attachment. Artifact writes are limited to 60 a minute.
+
 Only Agents write an artifact, by pushing a directory of files. People view it and comment; to
 change one they ask an Agent. When in doubt, make a document: anything that is mostly prose is one.
 
@@ -131,11 +135,14 @@ stops the notices except mentions, and `follow` brings them back. A write tells 
 artifact read <id>` says how many comments are new; `coforge artifact comments <id>` prints them as threads, each as `c_<id> @author vN
 file:lines (date)` with its words under it, and marks them read.
 
-- A push of a file, or a comment on it, is refused (`artifact-unseen-comments`) while others
-  commented on that file, or on the whole artifact, since you last read comments. Read them with
-  `comments`, then send it again. Reading one file with `--path` or `--review` does not clear it.
-  What `comments` prints counts as read, so keep what you
-  need from it; `comments --all` lists everything again.
+- A push of a file, a comment on it, a review or a resolve is refused (`artifact-unseen-changes`)
+  while others commented on that file, or on the whole artifact, or pushed a version that changed
+  the file, since you last read. The refusal prints what it holds back and counts it as seen: send
+  the same command again. If it says comments were only excerpted, read them with `comments`
+  first. `read` also shows the newest unread comments in full and marks them seen. Reading one
+  file with `--path` or `--review` marks nothing; `comments --all` lists everything again.
+- A comment may carry up to four images: `--image <file>` (PNG, JPEG, GIF or WebP, 10 MiB each);
+  `download <id> --image <image id>` saves one.
 - Comment with the words on stdin, in a quoted here-document, and `--path <file> --lines 3-5` (or
   `--lines 4`) to point at lines; `--reply-to c_<id>` answers a comment in its thread:
 

@@ -28,9 +28,11 @@ import {
   formatArtifactList,
   formatArtifactMoved,
   formatArtifactRead,
+  formatArtifactSaved,
   type ArtifactDeletedAnswer,
   type ArtifactMovedAnswer,
   type ArtifactReadAnswer,
+  type ArtifactSavedAnswer,
 } from "#src/artifact-format";
 import { formatFollow, type FollowAnswer } from "#src/artifact-follow-format";
 
@@ -43,18 +45,15 @@ export type ArtifactRequestInvocation = {
   command: "artifact";
   request: Extract<
     AgentArtifactRequest,
-    { operation: "list" | "read" | "move" | "delete" | "follow" | "unfollow" }
+    { operation: "list" | "read" | "move" | "delete" | "follow" | "unfollow" | "save" }
   >;
-  /** `read --files`: list every file of the version, not the first few. */
   allFiles?: boolean;
-  /** `read --output`: where the entry file's text goes, instead of stdout. */
   output?: string;
   json?: boolean;
 };
 
 export type ArtifactTransport = ArtifactDirectoryTransport;
 
-/** Artifacts on one `list` page unless `--limit` says otherwise. */
 const ARTIFACT_LIST_PAGE = 20;
 
 const OPERATIONS = [
@@ -65,19 +64,20 @@ const OPERATIONS = [
   "download",
   "move",
   "delete",
+  "save",
   ...COMMENT_OPERATIONS,
   "follow",
   "unfollow",
 ] as const;
 type Operation = (typeof OPERATIONS)[number];
-type RequestOperation = "list" | "read" | "move" | "delete" | "follow" | "unfollow";
+type RequestOperation = "list" | "read" | "move" | "delete" | "follow" | "unfollow" | "save";
 
-/** Each request operation's flags. */
 const FLAGS: Record<RequestOperation, FlagSpec> = {
   list: { text: ["--target", "--query", "--after"], count: ["--limit"], positionals: 0 },
   read: { text: ["--output"], count: ["--version"], bool: ["--files"], positionals: 1 },
   move: { text: ["--to"], positionals: 1 },
   delete: { positionals: 1 },
+  save: { positionals: 1 },
   follow: { positionals: 1 },
   unfollow: { positionals: 1 },
 };
@@ -114,9 +114,20 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
     json,
   } = parseFlags(command, args.slice(1), flags);
   if (flags.positionals && !artifact)
-    throw invalidArgument(command, "Name the artifact: its id, as push printed it");
+    throw invalidArgument(
+      command,
+      operation === "save"
+        ? "Name the attachment: its id, as message read printed it"
+        : "Name the artifact: its id, as push printed it",
+    );
   const options = json ? { json: true as const } : {};
   switch (operation as RequestOperation) {
+    case "save":
+      return {
+        command: "artifact",
+        request: { operation: "save", attachment: artifact! },
+        ...options,
+      };
     case "follow":
     case "unfollow":
       return {
@@ -164,7 +175,6 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
   }
 }
 
-/** Sends the operation and says what came of it. A comment's words come from stdin. */
 export async function runArtifact(
   invocation: ArtifactInvocation,
   transport: ArtifactTransport,
@@ -204,6 +214,8 @@ export async function runArtifact(
         invocation.allFiles === true,
       );
     }
+    case "save":
+      return json ? result : formatArtifactSaved(result as ArtifactSavedAnswer);
     case "move":
       return json ? result : formatArtifactMoved(result as ArtifactMovedAnswer);
     case "delete":
@@ -213,7 +225,6 @@ export async function runArtifact(
 
 const readStdinText = () => new Response(Bun.stdin.stream()).text();
 
-/** `POST /api/agent/v1/artifacts` through the daemon's proxy, as the Agent. */
 export async function artifactRequest(
   proxyEndpoint: (path: string) => URL,
   context: string,
@@ -229,9 +240,7 @@ export async function artifactRequest(
     label: `artifact ${request.operation}`,
     writes,
     ...(writes ? { mayHaveLanded: mayHaveLanded(request) } : {}),
-    ...(artifact !== undefined && traits.gatedByComments
-      ? { unseenComments: `Read them first: coforge artifact comments ${artifact}` }
-      : {}),
+    ...(artifact !== undefined && traits.gatedByComments ? { unseenArtifact: artifact } : {}),
   };
   let response: Response;
   try {
@@ -249,12 +258,13 @@ export async function artifactRequest(
   throw await artifactRefusal(response, call);
 }
 
-/** The artifact a request names; a push that makes one names none. */
 const artifactOf = (request: AgentArtifactRequest) =>
   "artifact" in request ? request.artifact : undefined;
 
 function mayHaveLanded(request: AgentArtifactRequest): string {
   const artifact = artifactOf(request);
+  if (request.operation === "save")
+    return "The artifact may have been made: run the same save again, it answers the artifact it already made.";
   if (artifact === undefined)
     return "The artifact may have been made, and pushing the directory again makes a second one: check the home's artifacts first (coforge artifact list).";
   return artifactOperationTraits(request.operation).commentWrite

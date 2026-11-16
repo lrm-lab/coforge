@@ -99,14 +99,18 @@ export async function commentsFixture(prefix: string) {
     },
   };
 
-  async function post(agentId: string, body: unknown, overrides: { db?: PrismaClient } = {}) {
+  async function post(
+    agentId: string,
+    body: unknown,
+    overrides: Partial<Parameters<typeof handleAgentArtifactPost>[2]> = {},
+  ) {
     const response = await handleAgentArtifactPost(
       new Request("http://local/api/agent/v1/artifacts", {
         method: "POST",
         body: JSON.stringify(body),
       }),
       { workspaceId, agentId },
-      { db, documents, enabled: async () => true, notices, ...overrides },
+      { db, documents, blobs, enabled: async () => true, notices, ...overrides },
     );
     return { status: response.status, body: (await response.json()) as Record<string, any> };
   }
@@ -132,7 +136,7 @@ export async function commentsFixture(prefix: string) {
   async function make(
     title: string,
     files: Record<string, string> = { "plan.md": "one\ntwo\nthree\n" },
-    options: { target?: string; by?: string } = {},
+    options: { target?: string; by?: string; unread?: boolean } = {},
   ) {
     const by = options.by ?? agents.writer;
     const created = await post(by, {
@@ -144,7 +148,14 @@ export async function commentsFixture(prefix: string) {
       entry: "plan.md",
     });
     if (created.status !== 200) throw new Error(`create failed: ${JSON.stringify(created.body)}`);
-    return created.body.id as string;
+    const artifactId = created.body.id as string;
+    if (options.unread) return artifactId;
+    await db.artifactReadPosition.createMany({
+      data: Object.values(agents)
+        .filter((agentId) => agentId !== by)
+        .map((agentId) => ({ artifactId, agentId, version: 1 })),
+    });
+    return artifactId;
   }
 
   /** A person's comment, written straight into the table (the Agent API writes an Agent's). */
@@ -239,6 +250,7 @@ export async function commentsFixture(prefix: string) {
     key,
     make,
     manifestOf,
+    blobs,
     personComments,
     pushText,
     pushFiles,

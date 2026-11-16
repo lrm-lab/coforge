@@ -6,6 +6,7 @@ import type {
   ArtifactDirectoryInvocation,
   ArtifactDirectoryTransport,
 } from "#src/artifact-directory-args";
+import { runDownloadImage } from "#src/artifact-image-download";
 import { runPull } from "#src/artifact-pull";
 import { runPush } from "#src/artifact-push";
 import { asJson, requireCall } from "#src/artifact-transfer";
@@ -30,6 +31,8 @@ export async function runArtifactDirectory(
         return await runPush(invocation, draft, transport, cwd);
       case "download":
         return await runDownload(invocation, draft, transport, cwd);
+      case "image":
+        return await runDownloadImage(invocation, draft, transport, cwd);
     }
   } catch (error) {
     throw error instanceof CliError && invocation.json ? withOutputMode(error, "json") : error;

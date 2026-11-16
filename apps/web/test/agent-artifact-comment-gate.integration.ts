@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { lockComments } from "#src/server/artifacts/artifact-comment-write.server";
 import { commentsFixture, type CommentsFixture } from "./helpers/artifact-comments-fixture";
+import { gateHelpers } from "./helpers/artifact-gate-helpers";
 
 /**
- * The unseen-comments gate: a push, a comment or a review is refused (`artifact-unseen-comments`,
- * 409) while others commented, since the Agent's comment position, on what it is about to change
- * or answer. Reading the comments (`comments`, which moves the position) clears it.
+ * The unseen gate: a push, a comment, a review or a resolve is refused (`artifact-unseen-changes`,
+ * 409) while others commented, since the Agent's comment position, on what it is about to change or
+ * answer, and (for a comment, a review, a resolve) while others pushed a version that changed its
+ * file. What the refusal shows in full counts as seen, so the same request goes through unless some
+ * comments were only excerpted (`unread`).
  */
 let f: CommentsFixture;
 beforeAll(async () => {
@@ -13,42 +16,25 @@ beforeAll(async () => {
 });
 afterAll(() => f.cleanup());
 
-const FILES = { "plan.md": "one\ntwo\n", "data.csv": "x\n1\n" };
-const comment = (agentId: string, artifact: string, body: string, extra: object = {}) =>
-  f.post(agentId, { operation: "comment", artifact, body, idempotencyKey: f.key(), ...extra });
-const read = (agentId: string, artifact: string, extra: object = {}) =>
-  f.post(agentId, { operation: "comments", artifact, ...extra });
-
-function expectGate(
-  answer: { status: number; body: Record<string, any> },
-  count: number,
-  ids: string[],
-) {
-  expect(answer.status).toBe(409);
-  expect(answer.body.error).toContain("(artifact-unseen-comments)");
-  expect(answer.body.code).toBe("CONFLICT");
-  expect(answer.body.details.count).toBe(count);
-  expect((answer.body.details.commentIds as string).split(",")).toEqual(ids);
-}
+const { FILES, comment, read, shownIn, expectGate } = gateHelpers(() => f);
 
 test("a push of a file is refused while others commented on that file since the position", async () => {
   const artifact = await f.make("Gate by file", FILES);
   const onPlan = await f.personComments(artifact, f.alice, { body: "Plan note.", path: "plan.md" });
   const refused = await f.pushText(artifact, f.agents.reader, "three\n");
   expectGate(refused, 1, [onPlan.id]);
-  expect(refused.body.error).toContain("coforge artifact comments");
   // Nothing was saved, and the same request goes through once the comments were read.
   expect((await f.db.artifact.findUniqueOrThrow({ where: { id: artifact } })).currentVersion).toBe(
     1,
   );
-  await read(f.agents.reader, artifact);
+  expect(shownIn(refused).comments.map((entry) => entry.body)).toEqual(["Plan note."]);
+  expect(refused.body.details.unread).toBe(0);
   expect((await f.pushText(artifact, f.agents.reader, "three\n")).body.status).toBe("created");
 });
 
 test("a manifest push is gated by the files it changes or deletes, and by the whole artifact", async () => {
   const artifact = await f.make("Gate manifest", FILES);
   const onPlan = await f.personComments(artifact, f.alice, { body: "Plan note.", path: "plan.md" });
-  // A push of another file is not in the way of a comment on plan.md.
   expect((await f.pushFiles(artifact, f.agents.reader, { "data.csv": "x\n2\n" })).body.status).toBe(
     "created",
   );
@@ -59,16 +45,11 @@ test("a manifest push is gated by the files it changes or deletes, and by the wh
     body: "Data note.",
     path: "data.csv",
   });
-  expectGate(await f.pushFiles(artifact, f.agents.reader, { "data.csv": "x\n3\n" }), 1, [
-    onData.id,
-  ]);
-  // A file taken away counts as a file changed.
   expectGate(await f.pushFiles(artifact, f.agents.reader, {}, { delete: ["data.csv"] }), 1, [
     onData.id,
   ]);
-  // A comment on the whole artifact is in the way of every push, settings included.
   const whole = await f.personComments(artifact, f.alice, { body: "Overall." });
-  await read(f.agents.reader, artifact);
+  expectGate(await f.pushFiles(artifact, f.agents.reader, { "data.csv": "x\n3\n" }), 1, [whole.id]);
   const settings = (agentId: string) =>
     f.post(agentId, {
       operation: "push",
@@ -76,14 +57,11 @@ test("a manifest push is gated by the files it changes or deletes, and by the wh
       baseVersion: 2,
       idempotencyKey: f.key(),
       title: "Renamed",
+      description: "A description",
     });
-  expect((await settings(f.agents.reader)).body.status).toBe("created");
   const wholeAgain = await f.personComments(artifact, f.alice, { body: "Overall, again." });
-  expectGate(await f.pushFiles(artifact, f.agents.reader, { "data.csv": "x\n4\n" }), 1, [
-    wholeAgain.id,
-  ]);
   expectGate(await settings(f.agents.reader), 1, [wholeAgain.id]);
-  expect(whole.id).not.toBe(wholeAgain.id);
+  expect((await settings(f.agents.reader)).body.status).toBe("created");
 });
 
 test("a settings-only push is held up by whole-artifact comments alone", async () => {
@@ -110,17 +88,68 @@ test("an Agent's own comments, older ones and its own push never stand in its wa
   expect((await f.pushText(artifact, f.agents.reader, "mine again\n")).body.status).toBe("created");
 });
 
-test("a push does not mark the comments of others as seen, and a read of the artifact does not either", async () => {
+test("a read of the artifact marks the comments it shows in full as seen, a push marks none", async () => {
   const artifact = await f.make("Gate seen", FILES);
   await f.post(f.agents.reader, { operation: "read", artifact });
   const note = await f.personComments(artifact, f.alice, { body: "Look.", path: "plan.md" });
-  expectGate(await f.pushText(artifact, f.agents.reader, "a\n"), 1, [note.id]);
-  // Reading the artifact lists the comment and still leaves it unseen.
+  expect((await f.pushFiles(artifact, f.agents.reader, { "data.csv": "x\n2\n" })).status).toBe(200);
   const summary = await f.post(f.agents.reader, { operation: "read", artifact });
   expect(summary.body.unseenComments.count).toBe(1);
-  expectGate(await f.pushText(artifact, f.agents.reader, "a\n"), 1, [note.id]);
-  // Its own push on another path moved its version position, not the comment one.
-  expectGate(await f.pushFiles(artifact, f.agents.reader, { "plan.md": "b\n" }), 1, [note.id]);
+  expect(summary.body.unseenComments.comments.map((entry: { id: string }) => entry.id)).toEqual([
+    note.id,
+  ]);
+  expect(summary.body.unseenComments.unread).toBe(0);
+  expect((await f.pushText(artifact, f.agents.reader, "a\n")).body.status).toBe("created");
+  const again = await f.post(f.agents.reader, { operation: "read", artifact });
+  expect(again.body.unseenComments.count).toBe(0);
+});
+
+test("a read shows only a few comments in full; the rest stay unseen and hold a push until listed", async () => {
+  const artifact = await f.make("Gate unread", FILES);
+  const written = [];
+  for (let index = 0; index < 12; index += 1)
+    written.push(await f.personComments(artifact, f.alice, { body: `n${index}`, path: "plan.md" }));
+  const summary = await f.post(f.agents.reader, { operation: "read", artifact });
+  const block = summary.body.unseenComments;
+  expect(block.count).toBe(12);
+  expect(block.comments.map((entry: { id: string }) => entry.id)).toEqual(
+    written.slice(0, 5).map((row) => row.id),
+  );
+  expect(block.excerpts.map((entry: { id: string }) => entry.id)).toEqual(
+    written.slice(5, 10).map((row) => row.id),
+  );
+  expect(block.unread).toBe(7);
+  const refused = await f.pushText(artifact, f.agents.reader, "z\n");
+  expectGate(
+    refused,
+    7,
+    written.slice(5, 12).map((row) => row.id),
+  );
+  expect(refused.body.details.unread).toBe(2);
+  const second = await f.pushText(artifact, f.agents.reader, "z\n");
+  expect(second.status).toBe(409);
+  expect(second.body.details.unread).toBe(0);
+  expect((await f.pushText(artifact, f.agents.reader, "z\n")).body.status).toBe("created");
+
+  const more = await f.make("Gate unread listed", FILES);
+  for (let index = 0; index < 8; index += 1)
+    await f.personComments(more, f.alice, { body: `m${index}`, path: "plan.md" });
+  const held = await f.pushText(more, f.agents.reader, "z\n");
+  expect(held.body.details.unread).toBe(3);
+  expect((await read(f.agents.reader, more)).body.comments).toHaveLength(3);
+  expect((await f.pushText(more, f.agents.reader, "z\n")).body.status).toBe("created");
+});
+
+test("a read of an older version moves nothing and shows no unseen block", async () => {
+  const artifact = await f.make("Gate older", FILES);
+  await f.pushFiles(artifact, f.agents.writer, { "data.csv": "x\n2\n" });
+  await f.personComments(artifact, f.alice, { body: "Look.", path: "plan.md" });
+  const older = await f.post(f.agents.reader, { operation: "read", artifact, version: 1 });
+  expect(older.body.unseen).toBeNull();
+  expect(older.body.unseenComments).toBeNull();
+  const current = await f.post(f.agents.reader, { operation: "read", artifact });
+  expect(current.body.unseenComments.count).toBe(1);
+  expect(current.body.unseen.versionCount).toBe(1);
 });
 
 test("a filtered read does not clear the gate; the unfiltered one does", async () => {
@@ -130,24 +159,38 @@ test("a filtered read does not clear the gate; the unfiltered one does", async (
   expect((await read(f.agents.reader, artifact, { path: "plan.md" })).body.comments).toHaveLength(
     1,
   );
-  expectGate(await f.pushText(artifact, f.agents.reader, "z\n"), 1, [onPlan.id]);
   expectGate(await f.pushFiles(artifact, f.agents.reader, { "data.csv": "x\n9\n" }), 1, [
     onData.id,
   ]);
-  await read(f.agents.reader, artifact);
+  expectGate(await f.pushText(artifact, f.agents.reader, "z\n"), 1, [onPlan.id]);
   expect((await f.pushText(artifact, f.agents.reader, "z\n")).body.status).toBe("created");
 });
 
-test("the refusal counts them all and lists the first ten", async () => {
+test("the refusal counts them all, shows a few in full and excerpts the next few", async () => {
   const artifact = await f.make("Gate many", FILES);
   const written = [];
   for (let index = 0; index < 12; index += 1)
     written.push(await f.personComments(artifact, f.alice, { body: `n${index}` }));
-  expectGate(
-    await f.pushText(artifact, f.agents.reader, "z\n"),
-    12,
-    written.slice(0, 10).map((row) => row.id),
+  const refused = await f.pushText(artifact, f.agents.reader, "z\n");
+  expect(refused.status).toBe(409);
+  expect(refused.body.details.commentCount).toBe(12);
+  expect(refused.body.details.unread).toBe(7);
+  const shown = shownIn(refused);
+  expect(shown.comments.map((entry) => entry.id)).toEqual(written.slice(0, 5).map((row) => row.id));
+  expect(shown.excerpts.map((entry) => entry.id)).toEqual(
+    written.slice(5, 10).map((row) => row.id),
   );
+});
+
+test("comments the refusal passes over are reported as skipped and counted as seen", async () => {
+  const artifact = await f.make("Gate skipped", FILES);
+  await f.personComments(artifact, f.alice, { body: "On data.", path: "data.csv" });
+  const onPlan = await f.personComments(artifact, f.alice, { body: "On plan.", path: "plan.md" });
+  const refused = await f.pushText(artifact, f.agents.reader, "z\n");
+  expectGate(refused, 1, [onPlan.id]);
+  expect(refused.body.details.skippedComments).toBe(1);
+  const later = await read(f.agents.reader, artifact);
+  expect(later.body.comments).toEqual([]);
 });
 
 test("a deleted comment does not hold a push up", async () => {
@@ -155,78 +198,6 @@ test("a deleted comment does not hold a push up", async () => {
   const gone = await f.personComments(artifact, f.alice, { body: "Withdrawn.", path: "plan.md" });
   await f.db.artifactComment.update({ where: { id: gone.id }, data: { deletedAt: new Date() } });
   expect((await f.pushText(artifact, f.agents.reader, "z\n")).body.status).toBe("created");
-});
-
-test("a comment is held up by unseen comments on its file, its thread or the whole artifact", async () => {
-  const artifact = await f.make("Gate comment", FILES);
-  const root = await comment(f.agents.writer, artifact, "A thread on data.", { path: "data.csv" });
-  await read(f.agents.reader, artifact);
-  // Another file: no clash. The same file: refused until read.
-  const onPlan = await f.personComments(artifact, f.alice, { body: "Plan.", path: "plan.md" });
-  expect((await comment(f.agents.reader, artifact, "On data.", { path: "data.csv" })).status).toBe(
-    200,
-  );
-  expectGate(await comment(f.agents.reader, artifact, "On plan.", { path: "plan.md" }), 1, [
-    onPlan.id,
-  ]);
-  await read(f.agents.reader, artifact);
-  expect((await comment(f.agents.reader, artifact, "On plan.", { path: "plan.md" })).status).toBe(
-    200,
-  );
-  // The same thread: refused, though the reply's own path is another file.
-  const reply = await f.personComments(artifact, f.alice, {
-    body: "In the thread.",
-    path: "data.csv",
-    replyToRoot: root.body.id,
-  });
-  expectGate(
-    await comment(f.agents.reader, artifact, "Answer.", { replyTo: root.body.id, path: "plan.md" }),
-    1,
-    [reply.id],
-  );
-  await read(f.agents.reader, artifact);
-  // The whole artifact: refused for a comment on a file and for one on the whole.
-  const whole = await f.personComments(artifact, f.alice, { body: "Overall." });
-  expectGate(await comment(f.agents.reader, artifact, "On plan.", { path: "plan.md" }), 1, [
-    whole.id,
-  ]);
-  expectGate(await comment(f.agents.reader, artifact, "Overall, too."), 1, [whole.id]);
-  await read(f.agents.reader, artifact);
-  // A comment on the whole artifact is not held up by a note on one file.
-  await f.personComments(artifact, f.alice, { body: "More on plan.", path: "plan.md" });
-  expect((await comment(f.agents.reader, artifact, "Overall, too.")).status).toBe(200);
-});
-
-test("a review is held up as a whole and names the first comment that clashes", async () => {
-  const artifact = await f.make("Gate review", FILES);
-  const onData = await f.personComments(artifact, f.alice, { body: "Data.", path: "data.csv" });
-  const answer = await f.post(f.agents.reader, {
-    operation: "review",
-    artifact,
-    comments: [
-      { body: "On plan.", path: "plan.md" },
-      { body: "On data.", path: "data.csv" },
-    ],
-    idempotencyKey: f.key(),
-  });
-  expectGate(answer, 1, [onData.id]);
-  expect(answer.body.details.index).toBe(1);
-  expect(
-    await f.db.artifactComment.count({
-      where: { artifactId: artifact, authorAgentId: f.agents.reader },
-    }),
-  ).toBe(0);
-  await read(f.agents.reader, artifact);
-  const retry = await f.post(f.agents.reader, {
-    operation: "review",
-    artifact,
-    comments: [
-      { body: "On plan.", path: "plan.md" },
-      { body: "On data.", path: "data.csv" },
-    ],
-    idempotencyKey: f.key(),
-  });
-  expect(retry.status).toBe(200);
 });
 
 test("a save or comment that already landed replays, though someone commented since", async () => {
@@ -274,7 +245,7 @@ test("a request for an artifact the Agent cannot read is answered as missing, no
   try {
     const answer = await f.pushText(hidden, f.agents.reader, "z\n");
     expect(answer.status).toBe(404);
-    expect(JSON.stringify(answer.body)).not.toContain("artifact-unseen-comments");
+    expect(JSON.stringify(answer.body)).not.toContain("artifact-unseen-changes");
   } finally {
     await f.db.conversation.update({
       where: { id: channel.id },
@@ -308,11 +279,8 @@ test("an unseen read from a cursor beyond the position does not mark what it ski
     3,
     written.map((row) => row.id),
   );
-  // A cursor at the position (what a page of the unfiltered read names) goes on as usual.
   const first = await read(f.agents.reader, artifact);
-  expect(first.body.comments).toHaveLength(3);
-  const behind = await read(f.agents.reader, artifact, { after: ahead });
-  expect(behind.body.comments).toEqual([]);
+  expect(first.body.comments).toEqual([]);
   expect((await f.pushText(artifact, f.agents.reader, "z\n")).body.status).toBe("created");
 });
 
@@ -330,7 +298,6 @@ test("a push that only changes the entry file is gated by comments on the old an
     });
   // The new entry has a comment the Agent has not read.
   expectGate(await entryOnly(f.agents.reader, "other.md"), 1, [onOther.id]);
-  await read(f.agents.reader, artifact);
   expect((await entryOnly(f.agents.reader, "other.md")).body.status).toBe("created");
   // The entry it leaves has one too.
   const onOld = await f.personComments(artifact, f.alice, { body: "Old.", path: "other.md" });

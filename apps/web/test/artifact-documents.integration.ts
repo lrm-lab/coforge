@@ -167,16 +167,13 @@ test("the entry file gives the type: a web page's card line is its description, 
     manifest: await manifest(writer, { "index.html": "<p>hi</p>" }),
   });
   expect(bare.preview).toBe("");
-  // An entry file the page cannot show is refused before anything is made.
-  const before = await db.artifact.count({ where: { workspaceId } });
-  await expect(
-    documents.create(writing(writer), {
-      conversationId: channelId,
-      title: "Data",
-      manifest: await manifest(writer, { "data.csv": "a,b\n" }),
-    }),
-  ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "artifact-entry-type" });
-  expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
+  const data = await documents.create(writing(writer), {
+    conversationId: channelId,
+    title: "Data",
+    manifest: await manifest(writer, { "data.csv": "a,b\n" }),
+  });
+  expect(data.entryPath).toBe("data.csv");
+  expect(data.preview).toBe("");
 });
 
 test("the viewer reads a body only for a document's entry; an Agent's read gets the entry's text", async () => {

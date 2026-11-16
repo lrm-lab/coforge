@@ -2,10 +2,8 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { errorType } from "#src/server/errors/error-type.server";
 import { actorNames, actorOf } from "./artifact-actor-names.server";
 
-/** How many unseen versions a read lists (the newest); the count is of all of them. */
 const UNSEEN_VERSIONS_SHOWN = 5;
 
-/** How many changed paths a listed version names; `changedCount` is of all of them. */
 const CHANGED_PATHS_SHOWN = 10;
 
 type PositionDb = Pick<
@@ -13,7 +11,6 @@ type PositionDb = Pick<
   "artifactReadPosition" | "artifactVersion" | "agent" | "user" | "$executeRaw"
 >;
 
-/** A version someone else published since the Agent's position, as a read shows it. */
 export type UnseenVersion = {
   number: number;
   publisher: { kind: "user" | "agent"; name: string };
@@ -24,19 +21,12 @@ export type UnseenVersion = {
   changedCount: number;
 };
 
-/** What others published since an Agent last looked, as the answer to a read of the current
- * version. `firstRead` is true when the Agent had no position. */
 export type UnseenSummary = {
   firstRead: boolean;
   versionCount: number;
   versions: UnseenVersion[];
 };
 
-/**
- * Moves an Agent's position on an artifact to `version`, never backwards: a stored value that is
- * already as far is left alone (a re-read writes nothing), and reads that race each other cannot
- * rewind it.
- */
 export async function advanceReadPosition(
   db: Pick<PositionDb, "$executeRaw">,
   input: { artifactId: string; agentId: string; version: number },
@@ -49,10 +39,6 @@ export async function advanceReadPosition(
     WHERE "artifact_read_positions"."version" < EXCLUDED."version"`;
 }
 
-/**
- * The position after a save or read that already committed: a failure is logged, never the
- * caller's, so a stored write or a read does not turn into an error over bookkeeping.
- */
 export async function noteReadPosition(
   db: Pick<PositionDb, "$executeRaw">,
   input: { artifactId: string; agentId: string; version: number },
@@ -64,8 +50,6 @@ export async function noteReadPosition(
   }
 }
 
-/** How many versions others published after the Agent's version position, up to the current one:
- * what `comments` says beside the comments, so the Agent knows to read the artifact again. */
 export async function countUnseenVersions(
   db: Pick<PositionDb, "artifactReadPosition" | "artifactVersion">,
   input: { artifactId: string; agentId: string; current: number },
@@ -89,13 +73,6 @@ function logPositionFailure(error: unknown) {
   );
 }
 
-/**
- * What an Agent reads when it reads the artifact's current version: the versions others
- * published after its position up to the version shown (all of them on a first read), computed
- * before the position moves to that version. Reading an older version answers `null` and moves
- * nothing. The position is bookkeeping: if it cannot be read, the answer is `null`; if it cannot
- * be written, the answer is still what was computed.
- */
 export async function readWithPosition(
   db: PositionDb,
   input: {
@@ -124,8 +101,8 @@ export async function readWithPosition(
   return summary;
 }
 
-async function unseenVersions(
-  db: PositionDb,
+export async function unseenVersions(
+  db: Pick<PositionDb, "artifactVersion" | "agent" | "user">,
   input: {
     artifactId: string;
     agentId: string;
@@ -136,9 +113,7 @@ async function unseenVersions(
 ) {
   const where = {
     artifactId: input.artifactId,
-    // Up to the version the read shows: one published since the load is for the next read.
     number: { gt: input.after, lte: input.current },
-    // A version with no publisher (a removed account) is someone else's.
     OR: [{ publisherAgentId: null }, { publisherAgentId: { not: input.agentId } }],
   };
   const [versionCount, rows] = await Promise.all([
@@ -162,7 +137,7 @@ async function unseenVersions(
     agentIds: rows.flatMap((row) => row.publisherAgentId ?? []),
   });
   const versions = rows.map(({ publisherAgentId, changedPaths, ...version }): UnseenVersion => {
-    const paths = pathsOf(changedPaths);
+    const paths = changedPathsOf(changedPaths);
     return {
       ...version,
       changedPaths: paths.slice(0, CHANGED_PATHS_SHOWN),
@@ -173,9 +148,7 @@ async function unseenVersions(
   return { versionCount, versions };
 }
 
-/** What a version changed (`{ added, deleted }` as a save stores it), as one list of paths:
- * files added or replaced, then files removed. */
-function pathsOf(changed: unknown): string[] {
+export function changedPathsOf(changed: unknown): string[] {
   if (!changed || typeof changed !== "object") return [];
   const { added, deleted } = changed as { added?: unknown; deleted?: unknown };
   return [added, deleted].flatMap((paths) =>

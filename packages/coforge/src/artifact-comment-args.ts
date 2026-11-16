@@ -19,7 +19,7 @@ type Request<T extends CommentOperation> = Extract<AgentArtifactRequest, { opera
 /** A request before its text is read and its idempotency key made. */
 export type ArtifactCommentDraft =
   | Request<"comments">
-  | Omit<Request<"comment">, "body" | "idempotencyKey">
+  | (Omit<Request<"comment">, "body" | "idempotencyKey" | "images"> & { imagePaths?: string[] })
   | Omit<Request<"review">, "body" | "comments" | "idempotencyKey">
   | Request<"resolve">
   | Request<"reopen">;
@@ -32,7 +32,12 @@ export type ArtifactCommentInvocation = {
 
 const FLAGS: Record<CommentOperation, FlagSpec> = {
   comments: { text: ["--path", "--review", "--after"], bool: ["--all"], positionals: 1 },
-  comment: { text: ["--path", "--lines", "--reply-to"], count: ["--rev"], positionals: 1 },
+  comment: {
+    text: ["--path", "--lines", "--reply-to"],
+    count: ["--rev"],
+    repeat: ["--image"],
+    positionals: 1,
+  },
   review: { count: ["--rev"], positionals: 1 },
   resolve: { text: ["--note"], positionals: 2 },
   reopen: { positionals: 2 },
@@ -54,7 +59,11 @@ export function parseCommentArgs(
   args: readonly string[],
 ): ArtifactCommentInvocation {
   const command = `artifact ${operation}`;
-  const { positionals, text, count, switches, json } = parseFlags(command, args, FLAGS[operation]);
+  const { positionals, text, count, repeated, switches, json } = parseFlags(
+    command,
+    args,
+    FLAGS[operation],
+  );
   const [artifact, comment] = positionals;
   if (!artifact) throw invalidArgument(command, "Name the artifact: its id, as create printed it");
   const draft = (): ArtifactCommentDraft => {
@@ -80,6 +89,7 @@ export function parseCommentArgs(
           ...optional("anchor", anchor),
           ...optional("replyTo", text["--reply-to"] && commentIdOf(text["--reply-to"])),
           ...optional("version", count["--rev"]),
+          ...(repeated.length > 0 ? { imagePaths: repeated } : {}),
         };
       }
       case "review":

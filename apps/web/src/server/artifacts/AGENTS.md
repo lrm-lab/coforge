@@ -39,9 +39,9 @@ modules, and the sandbox implementation.
 The artifacts module follows the reference product, Raft; add nothing it does not have.
 
 - An artifact is a versioned set of files with an entry file. Its type comes from the entry file's
-  extension (`artifactKindOfPath`: `.html` is a web page, `.md` a document); no request field
-  states it, the `kind` column a create still fills is write-only until its drop release, and an
-  entry that is neither is refused (`artifact-entry-type`).
+  extension (`artifactKindOfPath`: html, markdown, text, csv, image, pdf, video, other); no request
+  field states it and the `kind` column a create still fills is write-only until its drop release.
+  Any file may be the entry; only an html or markdown entry is read whole (2 MiB).
 - Who sees an artifact: whoever reads its home conversation (`access` `conversation`), or every
   Workspace member and Agent once it is `workspace`; a legacy `homeKey` of `workspace` reads as
   wide. An unseen artifact answers `NOT_FOUND`. A hidden or deleted home leaves it to the author
@@ -105,7 +105,7 @@ Comments on artifacts are written for Agents (the Agent API's `comments`, `comme
   a comment write needs them in, and checks the gate after its replay check, inside its
   transaction (`Artifacts.push`): no comment lands between the check and the
   commit. Errors of the check propagate: the gate never fails open.
-- The gate and the unseen read share `unseenWhere`; change the definition of "unseen" only there.
+- The gate and the unseen read share `unseenWhere`; change the definition of "unseen" only there. A refused write rolls back, so `recordingRefusal` advances the positions after it; a `UnseenChanges` error must keep flat `details` (the Agent API refuses nested ones).
 - The comment position is `artifact_comment_positions`, not the version position
   (`artifact_read_positions`): it moves only in `comments` with no filter; a version read, a push
   or `read` never moves it.

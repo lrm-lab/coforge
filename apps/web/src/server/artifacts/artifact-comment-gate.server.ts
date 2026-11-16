@@ -1,86 +1,206 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { COMMENT_ORDER, commentPositionOf, unseenWhere } from "./artifact-comment-unseen.server";
+import { advanceCommentPosition } from "./artifact-comment-unseen.server";
+import {
+  advanceReadPosition,
+  changedPathsOf,
+  unseenVersions,
+} from "./artifact-read-positions.server";
+import { unseenCommentBlock } from "./artifact-unseen-block.server";
 
-/** How many comment ids a refusal lists; its `count` is of all of them. */
-const IDS_LISTED = 10;
+const VERSION_SCAN_LIMIT = 500;
 
-/** How many unseen comments the gate of a review reads to find the first comment it is about. */
-const REVIEW_SCAN_LIMIT = 1000;
+export type WriteScope = {
+  paths: readonly string[];
+  threadIds: readonly string[];
+  everything: boolean;
+  versions: boolean;
+};
 
-/** What an Agent is about to touch: the files it changes or comments on, and the threads it
- * answers. Comments on the whole artifact (no path) are always in the way. */
-export type CommentScope = { paths: readonly string[]; threadIds: readonly string[] };
+export type GatedWrite = "push" | "comment" | "review" | "resolve";
 
-type GateDb = Pick<PrismaClient, "artifactComment" | "artifactCommentPosition">;
+const HELD: Record<GatedWrite, string> = {
+  push: "Held, nothing was pushed",
+  comment: "Held, the comment was not posted",
+  review: "Held, nothing of the review was posted",
+  resolve: "Held, the thread was not resolved",
+};
 
-type UnseenRow = { id: string; path: string | null; rootId: string | null };
+type GateDb = Pick<
+  PrismaClient,
+  | "artifact"
+  | "artifactComment"
+  | "artifactCommentPosition"
+  | "artifactCommentImage"
+  | "artifactReadPosition"
+  | "artifactVersion"
+  | "agent"
+  | "user"
+>;
 
-const isAbout = (scope: CommentScope, row: UnseenRow) =>
+export class UnseenChanges extends AppError {
+  constructor(
+    details: NonNullable<ConstructorParameters<typeof AppError>[1]>["details"],
+    hint: string,
+    readonly seen: { commentId: string | null; version: number },
+  ) {
+    super("CONFLICT", { errorId: "artifact-unseen-changes", details, hint });
+  }
+}
+
+const aboutScope = (scope: WriteScope): Prisma.ArtifactCommentWhereInput[] =>
+  scope.everything
+    ? [{}]
+    : [
+        { path: null },
+        ...(scope.paths.length ? [{ path: { in: [...scope.paths] } }] : []),
+        ...(scope.threadIds.length
+          ? [{ rootId: { in: [...scope.threadIds] } }, { id: { in: [...scope.threadIds] } }]
+          : []),
+      ];
+
+const commentIsAbout = (scope: WriteScope, row: { id: string; path: string | null }) =>
+  scope.everything ||
   row.path === null ||
   scope.paths.includes(row.path) ||
-  scope.threadIds.includes(row.id) ||
-  (row.rootId !== null && scope.threadIds.includes(row.rootId));
+  scope.threadIds.includes(row.id);
 
-/**
- * Refuses with the gate's error while others commented, since the Agent's comment position, on
- * what any of `scopes` touches: a push (one scope of the files it changes), a comment (its file
- * and thread) or a review (one scope per comment, with `indexed`: the refusal then names the first
- * comment that clashes). Reads once, and counts only when the comments listed are not all of them.
- * Callers that must not race a comment write hold the comment lock.
- */
-export async function requireNoUnseenComments(
+const versionIsAbout = (scope: WriteScope, paths: readonly string[]) =>
+  scope.versions && (scope.everything || paths.some((path) => scope.paths.includes(path)));
+
+export async function requireNoUnseenChanges(
   db: GateDb,
   input: {
+    workspaceId: string;
     artifactId: string;
     agentId: string;
-    scopes: readonly CommentScope[];
+    action: GatedWrite;
+    scopes: readonly WriteScope[];
     indexed?: boolean;
   },
 ): Promise<void> {
-  const { artifactId, agentId, scopes } = input;
-  const position = await commentPositionOf(db, input);
-  const paths = scopes.flatMap((scope) => scope.paths);
-  const threadIds = scopes.flatMap((scope) => scope.threadIds);
-  const where: Prisma.ArtifactCommentWhereInput = {
-    AND: [
-      unseenWhere({ artifactId, agentId, position }),
-      {
-        OR: [
-          { path: null },
-          ...(paths.length ? [{ path: { in: paths } }] : []),
-          ...(threadIds.length ? [{ rootId: { in: threadIds } }, { id: { in: threadIds } }] : []),
-        ],
-      },
-    ],
-  };
-  const limit = input.indexed ? REVIEW_SCAN_LIMIT : IDS_LISTED;
-  const rows = await db.artifactComment.findMany({
-    where,
-    orderBy: [...COMMENT_ORDER],
-    take: limit,
-    select: { id: true, path: true, rootId: true },
-  });
-  if (rows.length === 0) return;
-  const count = rows.length < limit ? rows.length : await db.artifactComment.count({ where });
-  throw unseenCommentsRefusal(
-    artifactId,
-    { count, ids: rows.slice(0, IDS_LISTED).map((row) => row.id) },
-    input.indexed
-      ? scopes.findIndex((scope) => rows.some((row) => isAbout(scope, row)))
-      : undefined,
+  const { workspaceId, artifactId, agentId, scopes } = input;
+  const about: Prisma.ArtifactCommentWhereInput = { OR: scopes.flatMap(aboutScope) };
+  const [comments, versions] = await Promise.all([
+    unseenCommentBlock(db, { workspaceId, artifactId, agentId, about }),
+    unseenOtherVersions(db, { workspaceId, artifactId, agentId, scopes }),
+  ]);
+  if (comments.count === 0 && !versions.relevant) return;
+  const index = input.indexed
+    ? scopes.findIndex(
+        (scope, at) =>
+          [...comments.comments, ...comments.excerpts].some((row) => commentIsAbout(scope, row)) ||
+          versions.relevantScopes.includes(at),
+      )
+    : -1;
+  const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+  const next =
+    comments.unread > 0
+      ? `${comments.unread} of the comments are only excerpted: read them in full first (coforge artifact comments ${artifactId}), then send the same request again`
+      : "what is shown counts as seen: send the same request again";
+  throw new UnseenChanges(
+    {
+      commentCount: comments.count,
+      unread: comments.unread,
+      versionCount: versions.count,
+      skippedComments: comments.skipped,
+      skippedVersions: Math.max(0, versions.count - versions.shown.length),
+      unseen: JSON.stringify({
+        comments: comments.comments,
+        excerpts: comments.excerpts,
+        versions: versions.shown,
+      }),
+      ...(index >= 0 ? { index } : {}),
+    },
+    `${HELD[input.action]}: ${plural(comments.count, "new comment")} and ${plural(versions.count, "new version")} from others about what this touches${index >= 0 ? ` (first: comments[${index}])` : ""}; ${next}`,
+    { commentId: comments.seenThrough, version: versions.current },
   );
 }
 
-/**
- * The gate of an Agent's push: the files it adds or replaces and the paths it deletes (`touched`),
- * and the entry file it leaves and the one it opens at when it changes the entry; an entry-only
- * change touches no file but changes what the artifact opens at. A push that changes no file is
- * held up by whole-artifact comments alone.
- */
-export function requireNoUnseenCommentsOnPush(
+async function unseenOtherVersions(
   db: GateDb,
   input: {
+    workspaceId: string;
+    artifactId: string;
+    agentId: string;
+    scopes: readonly WriteScope[];
+  },
+) {
+  const { artifactId, agentId, scopes } = input;
+  const [position, artifact] = await Promise.all([
+    db.artifactReadPosition.findUnique({
+      where: { artifactId_agentId: { artifactId, agentId } },
+      select: { version: true },
+    }),
+    db.artifact.findUniqueOrThrow({ where: { id: artifactId }, select: { currentVersion: true } }),
+  ]);
+  const after = position?.version ?? 0;
+  const current = artifact.currentVersion;
+  const listed = await unseenVersions(db, { ...input, after, current });
+  const none = { count: 0, shown: [], relevant: false, relevantScopes: [] as number[], current };
+  if (listed.versionCount === 0) return none;
+  const rows = scopes.some((scope) => scope.versions)
+    ? await db.artifactVersion.findMany({
+        where: {
+          artifactId,
+          number: { gt: after, lte: current },
+          OR: [{ publisherAgentId: null }, { publisherAgentId: { not: agentId } }],
+        },
+        orderBy: { number: "desc" },
+        take: VERSION_SCAN_LIMIT,
+        select: { changedPaths: true },
+      })
+    : [];
+  const hits = scopes.flatMap((scope, at) =>
+    rows.some((row) => versionIsAbout(scope, changedPathsOf(row.changedPaths))) ? [at] : [],
+  );
+  return {
+    count: listed.versionCount,
+    shown: listed.versions,
+    relevant: hits.length > 0,
+    relevantScopes: hits,
+    current,
+  };
+}
+
+export async function recordingRefusal<T>(
+  db: Pick<PrismaClient, "$executeRaw">,
+  input: { artifactId: string; agentId: string },
+  work: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof UnseenChanges) {
+      const { commentId, version } = error.seen;
+      if (commentId) await advanceCommentPosition(db, { ...input, commentId });
+      await advanceReadPosition(db, { ...input, version });
+    }
+    throw error;
+  }
+}
+
+export const pushScope = (paths: readonly string[]): WriteScope => ({
+  paths,
+  threadIds: [],
+  everything: false,
+  versions: false,
+});
+
+export const commentScope = (prepared: {
+  path: string | null;
+  rootId: string | null;
+}): WriteScope => ({
+  paths: prepared.path === null ? [] : [prepared.path],
+  threadIds: prepared.rootId === null ? [] : [prepared.rootId],
+  everything: prepared.path === null,
+  versions: true,
+});
+
+export function requireNoUnseenChangesOnPush(
+  db: GateDb,
+  input: {
+    workspaceId: string;
     artifactId: string;
     agentId: string;
     touched: readonly string[];
@@ -88,37 +208,16 @@ export function requireNoUnseenCommentsOnPush(
   },
 ) {
   const { current, pushed } = input.entry;
-  return requireNoUnseenComments(db, {
+  return requireNoUnseenChanges(db, {
+    workspaceId: input.workspaceId,
     artifactId: input.artifactId,
     agentId: input.agentId,
+    action: "push",
     scopes: [
-      {
-        paths: [
-          ...input.touched,
-          ...(pushed !== undefined && pushed !== current ? [current, pushed] : []),
-        ],
-        threadIds: [],
-      },
+      pushScope([
+        ...input.touched,
+        ...(pushed !== undefined && pushed !== current ? [current, pushed] : []),
+      ]),
     ],
-  });
-}
-
-/** The refusal: how many comments of others came since the Agent last read them, and which. */
-function unseenCommentsRefusal(
-  artifactId: string,
-  unseen: { count: number; ids: string[] },
-  index?: number,
-) {
-  const many = unseen.count === 1 ? "1 comment" : `${unseen.count} comments`;
-  return new AppError("CONFLICT", {
-    errorId: "artifact-unseen-comments",
-    details: {
-      count: unseen.count,
-      commentIds: unseen.ids.join(","),
-      ...(index === undefined ? {} : { index }),
-    },
-    hint: `${many} from others, new since you last read comments and about what this touches${
-      index === undefined ? "" : ` (first: comments[${index}])`
-    }: read ${unseen.count === 1 ? "it" : "them"} with \`coforge artifact comments ${artifactId}\`, then send this again`,
   });
 }

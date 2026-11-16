@@ -206,7 +206,12 @@ test("read says how many comments are new, newest first, beside the versions", a
     transportAnswering(
       readAnswer({
         unseen: NO_NEW_VERSIONS,
-        unseenComments: { count: 7, comments: [excerpt(C3, "Newest."), excerpt(C2, "Older.")] },
+        unseenComments: {
+          count: 7,
+          comments: [],
+          excerpts: [excerpt(C3, "Newest."), excerpt(C2, "Older.")],
+          unread: 7,
+        },
       }),
     ).transport,
   )) as string;
@@ -214,10 +219,10 @@ test("read says how many comments are new, newest first, beside the versions", a
   expect(said).toContain("Nothing new since you last looked.");
   expect(said).toContain(
     [
-      `7 new comments from others (read them: coforge artifact comments ${ID}), newest first:`,
+      "7 new comments from others:",
       `- c_${C3} @Alice plan.md, 2026-11-12 09:30:00Z: Newest.`,
       `- c_${C2} @Alice plan.md, 2026-11-12 09:30:00Z: Older.`,
-      "- … 5 earlier",
+      `7 comments not read yet (5 not even excerpted): coforge artifact comments ${ID}`,
       "---",
     ].join("\n"),
   );
@@ -241,7 +246,7 @@ test("read says how many comments are new, newest first, beside the versions", a
             },
           ],
         },
-        unseenComments: { count: 1, comments: [excerpt(C1, "One.")] },
+        unseenComments: { count: 1, comments: [], excerpts: [excerpt(C1, "One.")], unread: 1 },
       }),
     ).transport,
   )) as string;
@@ -255,7 +260,7 @@ test("an older version's read, which has no version summary, still says the comm
     transportAnswering(
       readAnswer({
         unseen: null,
-        unseenComments: { count: 1, comments: [excerpt(C1, "One.")] },
+        unseenComments: { count: 1, comments: [], excerpts: [excerpt(C1, "One.")], unread: 1 },
       }),
     ).transport,
   )) as string;
@@ -264,7 +269,7 @@ test("an older version's read, which has no version summary, still says the comm
 
 test("no comments waiting, an older server, or a summary that failed: the read says nothing of them", async () => {
   for (const extra of [
-    { unseenComments: { count: 0, comments: [] } },
+    { unseenComments: { count: 0, comments: [], excerpts: [], unread: 0 } },
     { unseenComments: null },
     {},
   ]) {

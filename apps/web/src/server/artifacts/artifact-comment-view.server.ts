@@ -1,7 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { actorNames, actorOf, type ArtifactActorName } from "./artifact-actor-names.server";
 
-/** The columns of a comment a reader is shown. */
 export const COMMENT_SELECT = {
   id: true,
   version: true,
@@ -22,8 +21,6 @@ export const COMMENT_SELECT = {
 
 export type CommentRow = Prisma.ArtifactCommentGetPayload<{ select: typeof COMMENT_SELECT }>;
 
-/** A comment as a reader sees it. `replyTo` is the thread's root (null on a root); `resolvedAt`
- * and `resolvedBy` are set only on a resolved root. */
 export type ArtifactCommentView = {
   id: string;
   author: ArtifactActorName;
@@ -35,17 +32,27 @@ export type ArtifactCommentView = {
   createdAt: Date;
   editedAt: Date | null;
   reviewId: string | null;
+  images: ArtifactCommentImageView[];
   resolvedAt: Date | null;
   resolvedBy: ArtifactActorName | null;
 };
 
-/** A deleted comment: where it was and who wrote it, never what it said. */
-export type DeletedCommentView = Omit<ArtifactCommentView, "body" | "anchor" | "editedAt"> & {
+export type ArtifactCommentImageView = {
+  id: string;
+  contentType: string;
+  sizeBytes: number;
+  width: number;
+  height: number;
+};
+
+export type DeletedCommentView = Omit<
+  ArtifactCommentView,
+  "body" | "anchor" | "editedAt" | "images"
+> & {
   deleted: true;
   deletedAt: Date;
 };
 
-/** The columns of a review a reader is shown. */
 export const REVIEW_SELECT = {
   id: true,
   version: true,
@@ -65,7 +72,7 @@ export type ReviewView = {
   createdAt: Date;
 };
 
-type ViewDb = Pick<PrismaClient, "agent" | "user">;
+type ViewDb = Pick<PrismaClient, "agent" | "user" | "artifactCommentImage">;
 
 type Named = {
   authorUserId: string | null;
@@ -76,7 +83,6 @@ type Named = {
 
 const isString = (value: string | null | undefined): value is string => typeof value === "string";
 
-/** Every name the rows show, in one lookup. */
 async function namesOf(db: ViewDb, workspaceId: string, rows: readonly Named[]) {
   return actorNames(db, workspaceId, {
     userIds: rows.flatMap((row) => [row.authorUserId, row.resolvedByUserId].filter(isString)),
@@ -84,8 +90,33 @@ async function namesOf(db: ViewDb, workspaceId: string, rows: readonly Named[]) 
   });
 }
 
+type ImagesByComment = ReadonlyMap<string, ArtifactCommentImageView[]>;
+
+async function imagesOf(db: ViewDb, rows: readonly CommentRow[]): Promise<ImagesByComment> {
+  const ids = rows.filter((row) => !row.deletedAt).map((row) => row.id);
+  const found = ids.length
+    ? await db.artifactCommentImage.findMany({
+        where: { commentId: { in: ids } },
+        orderBy: [{ commentId: "asc" }, { position: "asc" }],
+        select: {
+          id: true,
+          commentId: true,
+          contentType: true,
+          sizeBytes: true,
+          width: true,
+          height: true,
+        },
+      })
+    : [];
+  const byComment = new Map<string, ArtifactCommentImageView[]>();
+  for (const { commentId, ...image } of found)
+    byComment.set(commentId, [...(byComment.get(commentId) ?? []), image]);
+  return byComment;
+}
+
 function commentViewOf(
   names: ReadonlyMap<string, string>,
+  images: ImagesByComment,
   row: CommentRow,
 ): ArtifactCommentView | DeletedCommentView {
   const resolvedBy =
@@ -104,33 +135,39 @@ function commentViewOf(
     resolvedBy,
   };
   if (row.deletedAt) return { ...shared, deleted: true as const, deletedAt: row.deletedAt };
-  return { ...shared, anchor: row.anchor, body: row.body, editedAt: row.editedAt };
+  return {
+    ...shared,
+    anchor: row.anchor,
+    body: row.body,
+    editedAt: row.editedAt,
+    images: images.get(row.id) ?? [],
+  };
 }
 
-/** The comments as readers see them, in the order given. */
 export async function commentViews(
   db: ViewDb,
   workspaceId: string,
   rows: readonly CommentRow[],
 ): Promise<(ArtifactCommentView | DeletedCommentView)[]> {
   if (rows.length === 0) return [];
-  const names = await namesOf(db, workspaceId, rows);
-  return rows.map((row) => commentViewOf(names, row));
+  const [names, images] = await Promise.all([namesOf(db, workspaceId, rows), imagesOf(db, rows)]);
+  return rows.map((row) => commentViewOf(names, images, row));
 }
 
-/** One comment as readers see it. */
 export async function commentView(db: ViewDb, workspaceId: string, row: CommentRow) {
   return (await commentViews(db, workspaceId, [row]))[0]!;
 }
 
-/** A review and its comments as readers see them: every name in one lookup. */
 export async function reviewViews(
   db: ViewDb,
   workspaceId: string,
   review: ReviewRow,
   rows: readonly CommentRow[],
 ): Promise<{ review: ReviewView; comments: (ArtifactCommentView | DeletedCommentView)[] }> {
-  const names = await namesOf(db, workspaceId, [review, ...rows]);
+  const [names, images] = await Promise.all([
+    namesOf(db, workspaceId, [review, ...rows]),
+    imagesOf(db, rows),
+  ]);
   return {
     review: {
       id: review.id,
@@ -139,6 +176,6 @@ export async function reviewViews(
       body: review.body,
       createdAt: review.createdAt,
     },
-    comments: rows.map((row) => commentViewOf(names, row)),
+    comments: rows.map((row) => commentViewOf(names, images, row)),
   };
 }

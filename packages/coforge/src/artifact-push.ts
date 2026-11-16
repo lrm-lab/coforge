@@ -29,6 +29,8 @@ import { inPool } from "#src/pool";
 /** What a manifest save answers. */
 type SaveAnswer = TellingAnswer & {
   status?: string;
+  unchanged?: boolean;
+  titleChanged?: { from: string };
   number?: number;
   merged?: string[];
   missing?: string[];
@@ -130,6 +132,12 @@ export async function runPush(
   }
   // "Nothing" names no version: the server holds what this push names, but maybe in a version
   // newer than the base, so the directory stays as pulled until the next pull.
+  if (answer.status === "nothing" && answer.titleChanged)
+    return asJson(
+      invocation,
+      answer,
+      `Renamed from "${answer.titleChanged.from}": only the title changed, so no new version was made. The directory is still at version ${state.version}.`,
+    );
   if (answer.status === "nothing")
     return asJson(
       invocation,

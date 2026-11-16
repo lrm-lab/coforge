@@ -81,6 +81,7 @@ test("a push, a comment and a review follow for the Agent, the first time only",
     undefined,
   );
 
+  await f.post(f.agents.other, { operation: "read", artifact });
   const commented = await f.post(f.agents.other, {
     operation: "comment",
     artifact,

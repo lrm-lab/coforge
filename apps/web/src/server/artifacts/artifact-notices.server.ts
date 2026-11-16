@@ -98,6 +98,17 @@ export class ArtifactNotices {
     return this.guarded(() => this.versionNotice(input));
   }
 
+  rename(input: Context & { from: string; to: string; key: string }) {
+    return this.guarded(() =>
+      this.tell(input, {
+        key: `rename:${input.key}`,
+        texts: [],
+        event: (by) => ({ kind: "rename", by, from: input.from, to: input.to }),
+        followers: "subscribed",
+      }),
+    );
+  }
+
   private async guarded(work: () => Promise<NoticeReport>): Promise<NoticeReport> {
     try {
       return await work();

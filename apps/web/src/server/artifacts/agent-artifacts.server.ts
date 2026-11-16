@@ -5,13 +5,17 @@ import { commentInputs } from "#src/features/artifacts/artifact-comment-inputs";
 import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
 import { AppError } from "#src/lib/app-error";
 import { errorType } from "#src/server/errors/error-type.server";
-import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import {
-  directConversationIdBetween,
-  visibleChannelIdByName,
-} from "#src/server/conversations/channel-read-access.server";
+import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
 import { artifactsDisabled } from "./artifact-access.server";
-import { listComments, unseenCommentSummary } from "./artifact-comment-reads.server";
+import { admitArtifactWrite } from "./agent-artifact-rate-limit.server";
+import { resolveArtifactTarget } from "./agent-artifact-target.server";
+import {
+  saveAttachmentAsArtifact,
+  type ArtifactAttachmentPort,
+} from "./agent-artifact-save.server";
+import { readCommentImage } from "./artifact-comment-images.server";
+import { resolveArtifactReference } from "./artifact-reference.server";
+import { listComments, readUnseenComments } from "./artifact-comment-reads.server";
 import { reopenComment } from "./artifact-comment-threads.server";
 import { followArtifact, unfollowArtifact } from "./artifact-follows.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
@@ -22,42 +26,49 @@ import {
   reviewArtifact,
   resolveArtifactThread,
 } from "./agent-artifact-writes.server";
+import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { ARTIFACT_FILE_LIMIT } from "./artifact-files.server";
 import { noteReadPosition, readWithPosition } from "./artifact-read-positions.server";
 import type { FileManifest } from "./artifact-manifest.server";
 import type { ArtifactDocuments } from "./artifact-documents.server";
+import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 
-/** What the Agent API's operations run on; production's is `productionArtifacts(db)`. */
 export type AgentArtifactServices = {
   db: PrismaClient;
   documents: Pick<
     ArtifactDocuments,
-    "create" | "list" | "listPage" | "load" | "push" | "missingBytes" | "remove" | "moveToWorkspace"
+    | "create"
+    | "cards"
+    | "list"
+    | "listPage"
+    | "load"
+    | "push"
+    | "missingBytes"
+    | "remove"
+    | "moveToWorkspace"
   >;
+  blobs: Pick<StoredArtifactBlobs, "allowed" | "use" | "read" | "upload">;
   enabled: (workspaceId: string) => Promise<boolean>;
   notices?: ArtifactNoticePort | undefined;
+  attachments?: ArtifactAttachmentPort | undefined;
+  writeLimit?: AppRateLimit | undefined;
 };
 
 const { id, version, baseVersion, title, description, note, label } = artifactInputs;
 
-/** A file a push adds or replaces: its path (its shape only here; the domain judges it) and the
- * sha256 of bytes uploaded before. */
 const manifestFile = z.object({
   path: z.string().min(1).max(1024),
   sha256: z.string().regex(ARTIFACT_SHA256_PATTERN),
 });
 
-/** A version sent as files: what it adds or replaces, what it deletes, and the file it opens at. */
 const manifest = {
   files: z.array(manifestFile).max(ARTIFACT_FILE_LIMIT).optional(),
   delete: z.array(z.string().min(1).max(1024)).max(ARTIFACT_FILE_LIMIT).optional(),
   entry: z.string().min(1).max(1024).optional(),
 };
 
-/** A list page: 20 by default and 50 at most. */
 const LIST_PAGE_DEFAULT = 20;
 
-/** A push over a version of an artifact. */
 const PUSH_OVER = z.object({
   artifact: id,
   baseVersion,
@@ -69,7 +80,6 @@ const PUSH_OVER = z.object({
   ...manifest,
 });
 
-/** A push of files with no artifact yet, which makes one: the files are its first version. */
 const MOVE_TARGET_PUBLIC = "public";
 
 const PUSH_NEW = z.object({
@@ -82,7 +92,6 @@ const PUSH_NEW = z.object({
   entry: manifest.entry,
 });
 
-/** The web page's rules, for the same fields (`artifacts.functions.ts`). */
 const RULES = {
   list: z.object({
     target: z.string().optional(),
@@ -95,24 +104,53 @@ const RULES = {
   move: z.object({ artifact: id, to: z.string().max(40) }),
   delete: z.object({ artifact: id }),
   ...commentInputs,
+  save: z.object({ attachment: z.string().max(100) }),
+  image: z.object({ artifact: id, image: id }),
   follow: z.object({ artifact: id }),
   unfollow: z.object({ artifact: id }),
 } satisfies Record<AgentArtifactRequest["operation"], z.ZodType>;
 
-/**
- * One `coforge artifact` operation, as the Agent (task #385). The rules are the web page's: the
- * same input limits, and the artifact service's experiment check and access rules. An Agent
- * writes an artifact only by pushing files: bytes not uploaded yet come back as
- * `{ status: "missing" }`, to upload and send the same request again. The experiment is checked
- * first, so a Workspace without artifacts answers `artifacts-disabled` whatever was asked.
- */
-export async function runAgentArtifactOperation(
+export { ArtifactRateLimited } from "./agent-artifact-rate-limit.server";
+
+const REFERENCE_MAX_CHARS = 2000;
+const VERSIONED = new Set(["read", "comment", "review"]);
+
+async function resolvedReference(
   services: AgentArtifactServices,
   principal: { workspaceId: string; agentId: string },
   request: AgentArtifactRequest,
+): Promise<AgentArtifactRequest> {
+  if (!("artifact" in request) || request.artifact === undefined) return request;
+  if (request.artifact.length > REFERENCE_MAX_CHARS)
+    throw new AppError("INVALID_INPUT", {
+      errorId: "artifact-request",
+      hint: "artifact is too long",
+    });
+  const scope = { workspaceId: principal.workspaceId, actor: { agentId: principal.agentId } };
+  const { artifactId, version } = await resolveArtifactReference(
+    request.artifact,
+    async (name) => (await services.documents.listPage(scope, { title: name, limit: 6 })).artifacts,
+  );
+  return {
+    ...request,
+    artifact: artifactId,
+    ...(version !== undefined &&
+    VERSIONED.has(request.operation) &&
+    (request as { version?: number }).version === undefined
+      ? { version }
+      : {}),
+  } as AgentArtifactRequest;
+}
+
+export async function runAgentArtifactOperation(
+  services: AgentArtifactServices,
+  principal: { workspaceId: string; agentId: string },
+  asked: AgentArtifactRequest,
 ) {
   const { workspaceId, agentId } = principal;
   if (!(await services.enabled(workspaceId))) throw artifactsDisabled();
+  await admitArtifactWrite(services.writeLimit, agentId, asked.operation);
+  const request = await resolvedReference(services, principal, asked);
   const rule =
     request.operation === "push" && request.artifact === undefined
       ? PUSH_NEW
@@ -126,7 +164,7 @@ export async function runAgentArtifactOperation(
     });
   }
   const scope = { workspaceId, actor: { agentId } };
-  const writes = { db: services.db, notices: services.notices };
+  const writes = { db: services.db, blobs: services.blobs, notices: services.notices };
   switch (request.operation) {
     case "list": {
       const { target, after, ...page } = parsed.data as z.infer<typeof RULES.list>;
@@ -134,7 +172,6 @@ export async function runAgentArtifactOperation(
         target === undefined
           ? undefined
           : await resolveArtifactTarget(services.db, principal, target);
-      // A request that asks for no page gets the plain list it always did (an older Computer's).
       if (after === undefined && Object.keys(page).length === 0)
         return services.documents.list(scope, { conversationId });
       return services.documents.listPage(scope, {
@@ -150,22 +187,22 @@ export async function runAgentArtifactOperation(
         artifactId: input.artifact,
         version: input.version,
       });
-      // What others published since this Agent last looked, when the current version is read, and
-      // the comments of others it has not read, whichever version is.
-      const [unseen, unseenComments] = await Promise.all([
-        readWithPosition(services.db, {
-          artifactId: read.artifact.id,
-          agentId,
-          workspaceId,
-          shown: read.version?.number ?? 0,
-          current: read.artifact.currentVersion,
-        }),
-        unseenCommentsOf(services.db, principal, read.artifact.id),
-      ]);
-      // The shown version's entry file, beside its files (`files` of `read`).
+      const current = (read.version?.number ?? 0) === read.artifact.currentVersion;
+      const unseen = await readWithPosition(services.db, {
+        artifactId: read.artifact.id,
+        agentId,
+        workspaceId,
+        shown: read.version?.number ?? 0,
+        current: read.artifact.currentVersion,
+      });
+      const unseenComments = current
+        ? await unseenCommentsOf(services.db, principal, read.artifact.id)
+        : null;
+      const entryPath = read.version?.entryPath ?? read.artifact.entryPath;
       return {
         ...read,
-        entryPath: read.version?.entryPath ?? read.artifact.entryPath,
+        entryPath,
+        entryKind: artifactKindOfPath(entryPath),
         unseen,
         unseenComments,
       };
@@ -189,7 +226,6 @@ export async function runAgentArtifactOperation(
           manifest: files,
           idempotencyKey: input.idempotencyKey,
         });
-        // The Agent has seen what it made: version 1, which a replayed create is also.
         if (created.currentVersion > 0)
           await noteReadPosition(services.db, { artifactId: created.id, agentId, version: 1 });
         return { ...created, ...(await followedByCreate(writes, principal, created)) };
@@ -202,8 +238,6 @@ export async function runAgentArtifactOperation(
         ...input
       } = parsed.data as z.infer<typeof PUSH_OVER>;
       const fileManifest = manifestOf({ files, delete: deleted, entry });
-      // The Agent has seen what it published; a merged push's answer says what was merged. The
-      // position write runs beside the preview refresh, before the announcement.
       const saved = await services.documents.push(
         scope,
         {
@@ -218,7 +252,9 @@ export async function runAgentArtifactOperation(
       );
       return {
         ...saved,
-        ...(await followedByPush(writes, principal, artifact, saved, input.note)),
+        ...(saved.status === "nothing" ? { unchanged: true } : {}),
+        ...(saved.status === "replayed" ? { replayed: true } : {}),
+        ...(await followedByPush(writes, principal, artifact, saved, input)),
       };
     }
     case "move": {
@@ -258,6 +294,23 @@ export async function runAgentArtifactOperation(
       return resolveArtifactThread(writes, principal, parsed.data as z.infer<typeof RULES.resolve>);
     case "reopen":
       return reopenComment(services.db, principal, parsed.data as z.infer<typeof RULES.reopen>);
+    case "save": {
+      const saved = await saveAttachmentAsArtifact(
+        services,
+        principal,
+        (parsed.data as z.infer<typeof RULES.save>).attachment,
+      );
+      if (!saved.created) return saved;
+      await noteReadPosition(services.db, { artifactId: saved.artifact.id, agentId, version: 1 });
+      return { ...saved, ...(await followedByCreate(writes, principal, saved.artifact)) };
+    }
+    case "image":
+      return readCommentImage(
+        services.db,
+        services.blobs,
+        principal,
+        parsed.data as z.infer<typeof RULES.image>,
+      );
     case "follow":
       return followArtifact(
         services.db,
@@ -273,15 +326,13 @@ export async function runAgentArtifactOperation(
   }
 }
 
-/** What a read says of the comments the Agent has not read, beside the versions: bookkeeping, so
- * a failure is logged and the read answers `null` for it. */
 async function unseenCommentsOf(
   db: PrismaClient,
   principal: { workspaceId: string; agentId: string },
   artifactId: string,
 ) {
   try {
-    return await unseenCommentSummary(db, { ...principal, artifactId });
+    return await readUnseenComments(db, { ...principal, artifactId });
   } catch (error) {
     console.warn(
       JSON.stringify({ event: "artifacts:unseen_comments_failed", error_type: errorType(error) }),
@@ -290,7 +341,6 @@ async function unseenCommentsOf(
   }
 }
 
-/** The manifest a push carries, or none when it sends settings only. */
 function manifestOf(input: {
   files?: { path: string; sha256: string }[];
   delete?: string[];
@@ -308,66 +358,4 @@ function manifestOf(input: {
 function withoutOperation(request: AgentArtifactRequest) {
   const { operation: _operation, ...fields } = request;
   return fields;
-}
-
-const CHANNEL_TARGET = /^#([a-z0-9][a-z0-9_-]{0,63})(?::(\S+))?$/;
-const DM_TARGET = /^(?:dm:)?@([a-z0-9][a-z0-9_-]{0,63})(?:~(human|agent))?(?::(\S+))?$/;
-const TASK_NUMBER = /^#[1-9]\d*$/;
-
-export async function resolveArtifactTarget(
-  db: PrismaClient,
-  principal: { workspaceId: string; agentId: string },
-  target: string,
-): Promise<string> {
-  const [, channel, channelSuffix] = CHANNEL_TARGET.exec(target) ?? [];
-  const [, peer, peerKind, peerSuffix] = DM_TARGET.exec(target) ?? [];
-  if (!channel && !peer)
-    throw new AppError("INVALID_INPUT", {
-      errorId: "artifact-target",
-      hint: "name #channel or @name (@name~agent for an Agent), or a thread of one",
-    });
-  const suffix = channelSuffix ?? peerSuffix;
-  if (suffix !== undefined && TASK_NUMBER.test(suffix))
-    throw new AppError("INVALID_INPUT", {
-      errorId: "artifact-target-task",
-      hint: `a task cannot be an artifact's home: name its conversation, ${channel ? `#${channel}` : `@${peer}`}`,
-    });
-  if (suffix?.startsWith("#"))
-    throw new AppError("INVALID_INPUT", {
-      errorId: "artifact-target",
-      hint: "name #channel or @name (@name~agent for an Agent), or a thread of one",
-    });
-  const { workspaceId, agentId } = principal;
-  if (channel) {
-    // A lookup only: whether the Agent may write there is the artifact service's to answer.
-    const id = await visibleChannelIdByName(db, workspaceId, channel);
-    if (id === undefined) throw new AppError("NOT_FOUND");
-    return id;
-  }
-  const [user, agent] = await Promise.all([
-    peerKind === "agent"
-      ? null
-      : db.user.findFirst({
-          where: { username: peer, memberships: { some: { workspaceId } } },
-          select: { id: true },
-        }),
-    peerKind === "human"
-      ? null
-      : db.agent.findFirst({
-          where: { workspaceId, name: peer, ...ACTIVE_AGENT_WHERE },
-          select: { id: true },
-        }),
-  ]);
-  const otherAgent = agent && agent.id !== agentId ? agent : null;
-  // As `message send`: a name a person and an Agent share needs its `~human` or `~agent`.
-  if (user && otherAgent)
-    throw new AppError("AMBIGUOUS_TARGET", {
-      hint: `@${peer} is a person and an Agent: name @${peer}~human or @${peer}~agent`,
-    });
-  const peerMember = user ? { userId: user.id } : otherAgent ? { agentId: otherAgent.id } : null;
-  if (peerMember) {
-    const id = await directConversationIdBetween(db, workspaceId, { agentId }, peerMember);
-    if (id !== undefined) return id;
-  }
-  throw new AppError("NOT_FOUND");
 }
