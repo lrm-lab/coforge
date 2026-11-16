@@ -1,6 +1,8 @@
-// Commit granularity (task #595): one commit does one thing. Three rules over each
+// Commit granularity (task #595): one commit does one thing. Four rules over each
 // non-merge commit in a range:
 //
+//   commit-title   the first line is a Conventional Commit title (`feat(scope): …`); `Revert "…"`,
+//                  `fixup!`, `squash!` and `amend!` commits pass;
 //   revert-effect  the message carries a `Revert-effect:` trailer saying what reverting
 //                  this commit would break (`none` is fine for docs and tests);
 //   rename-purity  every detected rename scores R100 — a rename that also edits is two
@@ -12,7 +14,7 @@
 //
 // `Granularity-exempt: <reason>` in the message bypasses rename-purity and commit-mix —
 // never revert-effect — and the bypass is reported, not silent. Merge commits are exempt
-// from all three. The commit-msg hook checks only the message; hard-rules.ts --range
+// from all four. The commit-msg hook checks only the message; hard-rules.ts --range
 // (pre-push and CI) checks whole commits. --staged skips these rules: the index has no
 // message for a trailer or an exemption to live in.
 //
@@ -27,14 +29,19 @@ export const RENAME_PURITY_FIX =
 export const COMMIT_MIX_FIX =
   "This commit moves code into a new file and changes behavior in one step. Split it: one commit that only moves the code (same lines, new home), one that changes behavior. If they must stay together, add `Granularity-exempt: <reason>`.";
 
+export const COMMIT_TITLE_FIX =
+  'Start the message with a Conventional Commit title: `<type>(<optional scope>)!: <description>`, where type is feat, fix, docs, test, refactor, chore, perf, ci, build, style or revert. `Merge`, `Revert "…"`, `fixup!`, `squash!` and `amend!` titles pass.';
+
 const MIN_MOVED_LINES = 30;
 const MIX_RATIO = 0.4;
 const MIN_LINE = 20;
 
+const TITLE =
+  /^(?:(?:feat|fix|docs|test|refactor|chore|perf|ci|build|style|revert)(?:\([^()\s][^()]*\))?!?: \S|Merge |Revert "|(?:fixup|squash|amend)! )/;
 const REVERT_TRAILER = /^Revert-effect:[ \t]*\S/m;
 const EXEMPT_TRAILER = /^Granularity-exempt:[ \t]*(\S.*)$/m;
 
-type Rule = "revert-effect" | "rename-purity" | "commit-mix";
+type Rule = "commit-title" | "revert-effect" | "rename-purity" | "commit-mix";
 export type GranularityViolation = { rule: Rule; sha: string; found: string };
 export type GranularityExemption = { sha: string; reason: string };
 export type GranularityResult = {
@@ -47,6 +54,12 @@ const norm = (line: string) => line.trim();
 /** The `Granularity-exempt:` reason a message carries, if any. */
 export function exemptReason(message: string): string | undefined {
   return EXEMPT_TRAILER.exec(message)?.[1]?.trim();
+}
+
+/** Whether the message's first line (comment lines aside) is a Conventional Commit title. */
+export function hasConventionalTitle(message: string): boolean {
+  const title = message.split("\n").find((line) => !line.startsWith("#"));
+  return title !== undefined && TITLE.test(title);
 }
 
 /** Whether the message satisfies the `Revert-effect:` trailer rule. */
@@ -163,6 +176,12 @@ export function rangeGranularity(base: string, head: string): GranularityResult 
     const message = commitMessage(sha);
     const exempt = exemptReason(message);
     if (exempt) result.exemptions.push({ sha: sha.slice(0, 9), reason: exempt });
+    if (!hasConventionalTitle(message))
+      result.violations.push({
+        rule: "commit-title",
+        sha: sha.slice(0, 9),
+        found: `title is not a Conventional Commit: ${message.split("\n")[0]!.slice(0, 80)}`,
+      });
     if (!hasRevertEffect(message))
       result.violations.push({
         rule: "revert-effect",
@@ -214,9 +233,16 @@ async function checkMessageFile(path: string): Promise<number> {
   // Comments (# lines) are stripped by git before this hook runs on most setups,
   // but a hand-run or unusual editor may leave them; the trailer regex only looks
   // at real lines anyway.
-  if (hasRevertEffect(message)) return 0;
-  console.error(`commit-msg: missing Revert-effect trailer.\n${REVERT_EFFECT_FIX}`);
-  return 1;
+  const problems = [
+    ...(hasConventionalTitle(message)
+      ? []
+      : [`commit-msg: the title is not a Conventional Commit.\n${COMMIT_TITLE_FIX}`]),
+    ...(hasRevertEffect(message)
+      ? []
+      : [`commit-msg: missing Revert-effect trailer.\n${REVERT_EFFECT_FIX}`]),
+  ];
+  for (const problem of problems) console.error(problem);
+  return problems.length === 0 ? 0 : 1;
 }
 
 if (import.meta.main) {

@@ -62,6 +62,19 @@ test("a commit not on origin/main that breaks a rule fails, naming the base and 
   expect(result.stderr).toContain("git fetch origin");
 });
 
+test("a trailing blank line in an unpushed commit fails the gate, as pre-push and CI would", () => {
+  installed();
+  repo.seed({ "README.md": "# Repo\n" });
+  withOrigin();
+  repo.seed({ "notes.txt": "one\n\n" });
+
+  const result = runGate();
+
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("diff-check: whitespace errors");
+  expect(result.stderr).toContain("notes.txt");
+});
+
 test("a stale origin/main judges from its old commit until it is fetched", () => {
   installed();
   repo.seed({ "README.md": "# Repo\n" });

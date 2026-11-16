@@ -1,7 +1,7 @@
 // The local gate `bun run check` (and so `mise run check`) runs first, before a push: the hooks
 // must be installed (a hooks path of the user's own only warns), the commits not yet on
-// origin/main must pass the hard rules (scripts/ci/hard-rules.ts) as CI's Plan checks job judges
-// them, and the script-contract suites CI's infrastructure-contracts job would select for the
+// origin/main must pass the hard rules and the whitespace check (scripts/ci/range-checks.ts) as CI's
+// Plan checks job judges them, and the script-contract suites CI's infrastructure-contracts job would select for the
 // same paths must pass (the `local` track of scripts/ci/selection.ts, the same map CI uses —
 // this is what keeps a scripts/deploy format failure like #592's out of main). It only reads:
 // it never changes git config. It does nothing in CI (`CI` set to anything but `false` or `0`),
@@ -15,7 +15,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { selectChecks } from "./selection";
 
 const HOOKS_PATH = ".githooks";
-const checker = join(import.meta.dir, "hard-rules.ts");
+const checker = join(import.meta.dir, "range-checks.ts");
 
 function git(...args: string[]): { exitCode: number; stdout: string } {
   const result = Bun.spawnSync(["git", ...args], { stdout: "pipe", stderr: "ignore" });

@@ -83,7 +83,7 @@ export class TestRepo {
    * under the commit-msg granularity rule when a later --range judges it. */
   seed(
     files: Record<string, string | Uint8Array>,
-    { message = "seed", env = {} }: { message?: string; env?: Record<string, string> } = {},
+    { message = "chore: seed", env = {} }: { message?: string; env?: Record<string, string> } = {},
   ): string {
     this.write(files);
     this.ok("add", "-A");
@@ -108,14 +108,23 @@ export class TestRepo {
   /** `git commit` of the index as it is, with the hook. The trailer paragraph keeps the
    * commit-msg granularity rule satisfied; callers may add their own `-m` paragraphs. */
   commit(...args: string[]): Run {
-    return this.run(["git", "commit", "-q", "-m", "change", "-m", "Revert-effect: none", ...args]);
+    return this.run([
+      "git",
+      "commit",
+      "-q",
+      "-m",
+      "chore: change",
+      "-m",
+      "Revert-effect: none",
+      ...args,
+    ]);
   }
 
   /** `git commit` with the hook, after staging everything. */
   commitAll(env: Record<string, string> = {}, ...args: string[]): Run {
     this.ok("add", "-A");
     return this.run(
-      ["git", "commit", "-q", "-m", "change", "-m", "Revert-effect: none", ...args],
+      ["git", "commit", "-q", "-m", "chore: change", "-m", "Revert-effect: none", ...args],
       env,
     );
   }

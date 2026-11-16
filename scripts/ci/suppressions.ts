@@ -1,13 +1,17 @@
 import { MARKDOWN } from "./markdown-links";
 
-// The new-suppression rule's line matcher (scripts/ci/hard-rules.ts, rule 11). The token alternatives end in a character class so that this file's
+// The new-suppression rule's line matcher (scripts/ci/hard-rules.ts). The token alternatives end in a character class so that this file's
 // own lines carry none of the tokens. A directive counts after a comment opener, or, in a file with
 // block comments, at the start of a line (after any `*`), where a comment opened earlier holds it.
 const DIRECTIVE = String.raw`((?:oxlint-disabl[e]|eslint-disabl[e]|biome-ignor[e]|@ts-(?:ignor[e]|expect-erro[r]|nochec[k])).*)`;
 const MARKED_DIRECTIVE = new RegExp(String.raw`(?:\/\/+|\/\*+|<!--)\s*${DIRECTIVE}`);
 const LINE_START_DIRECTIVE = new RegExp(String.raw`^\s*\**\s*${DIRECTIVE}`);
 const BLOCK_COMMENT_FILE = /\.(?:[cm]?[jt]sx?|vue|svelte|css|scss|less|rs)$/;
-const SKIPPED_TEST = /\.(?:skip|only)(?:\.each)?\s*[(`]/;
+const SKIPPED_TEST =
+  /\.(?:skip(?:If)?|only|todo)(?:\.each)?\s*[(`]|(?<![\w.$])x(?:it|test|describe)\s*\(/;
+// cargo-deny: a `skip`, `skip-tree`, `ignore` or `exceptions` key, or an ignored advisory id. A
+// bare `{ name = … }` entry is not matched: the same shape lists a `[bans] deny` ban.
+const DENY_EXEMPTION = /^\s*(?:(?:skip|skip-tree|ignore|exceptions)\s*=|"RUSTSEC-)/;
 const RUST_ALLOW = /#!?\[(?:allow|expec[t])\(.*/;
 const SCRIPT_FILE = /\.[cm]?[jt]sx?$/;
 const TEST_FILE =
@@ -23,6 +27,7 @@ export function suppressionIn(path: string, line: string): string | undefined {
     MARKED_DIRECTIVE.exec(line)?.[1] ??
     (BLOCK_COMMENT_FILE.test(path) ? LINE_START_DIRECTIVE.exec(line)?.[1] : undefined) ??
     (path.endsWith(".rs") ? RUST_ALLOW.exec(line)?.[0] : undefined) ??
+    (/(?:^|\/)deny\.toml$/.test(path) && DENY_EXEMPTION.test(line) ? line : undefined) ??
     (skipped ? skipped[0].replace(/\s/g, "") : undefined);
   return found?.trim();
 }

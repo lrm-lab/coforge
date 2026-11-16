@@ -9,6 +9,16 @@ describe("pre-edit hook", () => {
   test("asks before exemption config", () => {
     expect(decide(".oxlintrc.json").kind).toBe("ask");
     expect(decide("apps/web/tsconfig.json").kind).toBe("ask");
+    for (const path of ["apps/web/.oxfmtrc.json", "crates/installer/deny.toml", "crates/installer/about.toml"])
+      expect(decide(path).kind).toBe("ask");
+  });
+  test("no longer asks for a config file that does not exist", () => {
+    expect(decide(".prettierignore").kind).toBe("allow");
+  });
+  test("denies hand edits to generated files", () => {
+    expect(decide("apps/web/src/routeTree.gen.ts").kind).toBe("deny");
+    expect(decide("crates/installer/contract/install-contract.json").kind).toBe("deny");
+    expect(decide("apps/web/src/routes/index.tsx").kind).not.toBe("deny");
   });
   test("injects the doc a path needs", () => {
     expect(decide("packages/x/a.test.ts")).toEqual({ kind: "context", text: expect.stringContaining("docs/agents/testing.md") });

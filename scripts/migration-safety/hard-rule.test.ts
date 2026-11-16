@@ -131,7 +131,7 @@ describe("CI (a range)", () => {
     const path = migration("20261101000000_a");
     repo.write({ [path]: RISKY });
     annotate(path, rows);
-    repo.seed({ [path]: repo.run(["cat", path]).stdout }, { message: "add" });
+    repo.seed({ [path]: repo.run(["cat", path]).stdout }, { message: "feat: add" });
     return base;
   }
 
@@ -171,7 +171,7 @@ describe("CI (a range)", () => {
     const base = repo.seed({ "README.md": "# r\n" });
     repo.seed(
       { [migration("20261101000000_a")]: 'CREATE TABLE "x" (id int);\n' },
-      { message: "add" },
+      { message: "feat: add" },
     );
     expect(
       repo.check(["--range", base, "HEAD"], {

@@ -264,26 +264,6 @@ test("moving a suppression is not a new one, but a second identical one is", () 
   expect(result.stderr).toContain("new-suppression (1)");
 });
 
-test("every skip and focus call in a test file is blocked; skipIf and todo are not", () => {
-  repo.seed({ "README.md": "# Repo\n" });
-  repo.write({
-    "src/a.test.ts": [
-      `${SKIP("test.concurrent")}"a", () => {});`,
-      `${SKIP("bench")}"b", () => {});`,
-      `${SKIP("suite")}"c", () => {});`,
-      `${ONLY("test.concurrent")}"d", () => {});`,
-      `test.skipIf(true)("e", () => {});`,
-      `test.todo("f");`,
-      "",
-    ].join("\n"),
-  });
-
-  const result = repo.commitAll();
-
-  expect(result.stderr).toContain("new-suppression (4)");
-  for (const line of [1, 2, 3, 4]) expect(result.stderr).toContain(`src/a.test.ts:${line}`);
-});
-
 test("a registered skill directory is exempt from the file rules, not from the author rule", () => {
   const lock = { skills: { "vendored-skill": {} } };
   repo.seed({ "skills-lock.json": JSON.stringify(lock) });

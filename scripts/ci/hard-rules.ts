@@ -25,11 +25,13 @@ import {
 import { commitIdentities, type IdentityMatch, stagedIdentities } from "./commit-identity";
 import { linkPath, MARKDOWN, markdownLinks } from "./markdown-links";
 import { suppressionIn } from "./suppressions";
+import { serverDirectiveFiles, TREE_FIX, type TreeRule, treeViolations } from "./tree-rules";
 import { unquote } from "./unquote";
 import { MIGRATION_SAFETY_FIX, migrationSafetyViolations } from "../migration-safety/hard-rule";
 import { MIGRATION_IMMUTABLE_FIX, migrationImmutabilityViolations } from "./migration-immutable";
 import {
   COMMIT_MIX_FIX,
+  COMMIT_TITLE_FIX,
   granularityFor,
   RENAME_PURITY_FIX,
   REVERT_EFFECT_FIX,
@@ -43,9 +45,11 @@ type Rule =
   | "author-identity"
   | "migration-safety"
   | "migration-immutable"
+  | "commit-title"
   | "revert-effect"
   | "rename-purity"
-  | "commit-mix";
+  | "commit-mix"
+  | TreeRule;
 type Violation = { rule: Rule; location: string; found: string };
 
 const FIX: Record<Rule, string> = {
@@ -60,9 +64,11 @@ const FIX: Record<Rule, string> = {
     "Commit as the person running the Agent, never as an Agent or bot (AGENTS.md); author and committer both count: set `git config user.name` and `git config user.email` to their own identity. Rewrite a listed commit not yet on main with `git rebase --exec 'git commit --amend --no-edit --reset-author' <base>`; one already on main is rewritten only when Frank asks. A Co-authored-by trailer is not checked.",
   "migration-safety": MIGRATION_SAFETY_FIX,
   "migration-immutable": MIGRATION_IMMUTABLE_FIX,
+  "commit-title": COMMIT_TITLE_FIX,
   "revert-effect": REVERT_EFFECT_FIX,
   "rename-purity": RENAME_PURITY_FIX,
   "commit-mix": COMMIT_MIX_FIX,
+  ...TREE_FIX,
 };
 
 // Rule 4: relative Markdown links, parsed by markdown-links.ts.
@@ -347,6 +353,16 @@ const isCommit = (revision: string) =>
     stderr: "ignore",
   }).exitCode === 0;
 
+/** The rules judged on the tree the change leaves (tree-rules.ts). */
+function treeRuleViolations(source: ChangeSource, changes: Change[]): Violation[] {
+  const paths = trackedPaths(source);
+  const read = (wanted: string[]) => readFiles(resultRevision(source), wanted);
+  const added = changes
+    .filter((change) => /^[ACR]/.test(change.status))
+    .map((change) => change.path);
+  return treeViolations({ paths, read }, added, serverDirectiveFiles(source));
+}
+
 /** The file rules over a change: size, Markdown length and links, and new suppressions. */
 async function fileViolations(source: ChangeSource): Promise<Violation[]> {
   const exempt = exemption(source);
@@ -356,6 +372,7 @@ async function fileViolations(source: ChangeSource): Promise<Violation[]> {
     ...markdownLineViolations(source, exempt, changes),
     ...linkViolations(source, exempt, changes),
     ...suppressionViolations(source, exempt),
+    ...treeRuleViolations(source, changes),
     ...migrationSafetyViolations(source),
     ...migrationImmutabilityViolations(source).map((violation) => ({
       rule: "migration-immutable" as const,

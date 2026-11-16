@@ -31,6 +31,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/db/` — the Prisma client, repositories (a DM's list preferences apart from its messages; the Agent attention rule in `agent-attention`), and the shared unique-violation check.
 - `server/errors/` — public error mapping and request error handling.
 - `server/canonical-hash.server.ts` — one value as key-sorted JSON and its SHA-256 (`payloadHash`): the hash a retried request is told apart by (an app event's payload, an artifact comment's request).
+- `server/experiments/` — the experiments a Workspace's owner or admin switches in Settings: the catalog, the Workspace's stored choices, and the realtime signal that its features changed.
 - `server/feature-flags/` — whether a feature is on for a Workspace (`isFeatureEnabled`): the flag registry, and the flagd definition file the boot reads and installs as the OpenFeature provider (`COFORGE_FEATURE_FLAGS_FILE`).
 - `server/egress/` — outbound HTTP to an address a third party chose (Web Push endpoints, app webhooks): resolve, require every address public, then send pinned to the checked address, no redirect (`OutboundEgress`).
 - `server/files/` — file storage (per object, and bulk removal by keys or prefix), delivery, uploaded-image validation, and replacing a row's stored image (`stored-image-replacement`).
@@ -41,6 +42,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/notifications/` — Web Push and in-page notification delivery (its egress check is `server/egress/`), and a person's account notification settings (pause, quiet hours, preview, sound, a phone's wait while the computer is in use, the device list and test).
 
 - `server/onboarding/` — `OnboardingWizard`: the first-sign-in wizard's state, assistant configuration (while it has never run) and completion (role saved, `onboardingPendingSince` cleared, assistant started).
+- `server/openviking/` — OpenViking account, user and ACL provisioning, the deny-by-default route catalog, its policy gateway and private runtime client, and Memory Agent read shaping (see Workspace memory modules in `apps/web/AGENTS.md`).
 - `server/pi-chat/` — User/Workspace-authorized native Pi commands (started, then their reply read by request id), scoped RPC reply chunks and private live feedback over the existing Daemon connection.
 - `server/profiles/` — user avatars.
 - `server/projects/` — project settings, images, and repository file download.
@@ -51,6 +53,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/sweeps/` — `registerBackgroundSweeps`, the one call the Centrifugo RPC composition makes to start the periodic sweeps (Agent activity, app-notification presence) and to connect the presence observer to the status caches.
 - `server/tasks/` — the message-backed TaskBoard, the shape a Task command must have, the Tasks page's overview reads, its Task view, history records, and notice wording.
 - `server/usage-limits/` — provider usage-limit events: the Activity-observation hook that opens and merges them on quota reports, the sweep that closes them (reset passed, recovered, agents gone, aged out), the owner/admin-only list and seen/dismiss use cases, and the `usage.limit.changed.v1` push to owner/admin channels.
+- `server/whats-new/` — what a person has dismissed of "What's new" (stored on their preferences) and which entries are still pending for them in a Workspace.
 - `server/workspace-memory/` — memory profiles, grounded offers, task-requested or Memory-initiated four-role diagnosis (`memory-diagnosis-scope.server.ts` binds visible Task evidence), target-only Hint receipts and source ACL checks.
 - `server/workspaces/` — Workspace catalog (name, icon and URL, with the former slugs that keep naming a Workspace), selection, enrollment, member roles, member directory, join links, admitting a member (`admitWorkspaceMember`, the one step a join link takes), who welcomes new members (`workspace-onboarding`, `member-welcome`), one submitted server connection per Workspace, deleting a Workspace, removing its memory first and its stored files after, and going out of a Workspace (leaving or deleting it) to the next one.
 

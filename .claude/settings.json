@@ -4,6 +4,10 @@
       {
         "matcher": "Edit|Write|MultiEdit",
         "hooks": [{ "type": "command", "command": "bun \"$CLAUDE_PROJECT_DIR\"/scripts/agent-hooks/pre-edit.ts", "timeout": 10 }]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "bun \"$CLAUDE_PROJECT_DIR\"/scripts/agent-hooks/pre-bash.ts", "timeout": 10 }]
       }
     ]
   }

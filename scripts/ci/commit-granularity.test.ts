@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   exemptReason,
+  hasConventionalTitle,
   hasRevertEffect,
   mixStats,
   rangeGranularity,
@@ -28,6 +29,46 @@ describe("message rules", () => {
     expect(exemptReason("s\n\nGranularity-exempt: release pairing\n")).toBe("release pairing");
     expect(exemptReason("s\n\nGranularity-exempt:\n")).toBeUndefined();
     expect(exemptReason("s\n")).toBeUndefined();
+  });
+});
+
+describe("commit title", () => {
+  test("a Conventional Commit title passes, with a scope or a breaking mark", () => {
+    for (const title of [
+      "feat: add a thing",
+      "fix(web): the share dialog's row",
+      "refactor(web)!: drop the old seam",
+      "revert: undo the change",
+      'Revert "feat: add a thing"',
+      "Merge branch 'main' into x",
+      "fixup! feat: add a thing",
+      "squash! fix: a",
+    ])
+      expect({ title, ok: hasConventionalTitle(`${title}\n\nRevert-effect: none\n`) }).toEqual({
+        title,
+        ok: true,
+      });
+  });
+
+  test("anything else fails: no type, an unknown type, no space, an empty description", () => {
+    for (const title of [
+      "daemon: give OpenCode ten minutes to start",
+      "Task popup: chips row scrolls sideways only",
+      "feature: add a thing",
+      "feat:add a thing",
+      "feat: ",
+      "feat(): a",
+      "Add a thing",
+      "",
+    ])
+      expect({ title, ok: hasConventionalTitle(`${title}\n\nRevert-effect: none\n`) }).toEqual({
+        title,
+        ok: false,
+      });
+  });
+
+  test("comment lines before the title are ignored", () => {
+    expect(hasConventionalTitle("# Please enter a message\nfix: a\n")).toBe(true);
   });
 });
 
@@ -150,11 +191,55 @@ describe("range checks", () => {
     expect(repo.commitAll().exitCode).toBe(0);
   });
 
+  test("the commit-msg hook refuses a title that is not a Conventional Commit", () => {
+    repo.seed({ "a.txt": "hello\n" });
+    repo.write({ "a.txt": "hello world\n" });
+    repo.ok("add", "-A");
+
+    const bad = repo.run([
+      "git",
+      "commit",
+      "-q",
+      "-m",
+      "Tweak things",
+      "-m",
+      "Revert-effect: none",
+    ]);
+
+    expect(bad.exitCode).not.toBe(0);
+    expect(bad.stderr).toContain("not a Conventional Commit");
+    expect(bad.stderr).not.toContain("Revert-effect trailer");
+    const good = repo.run([
+      "git",
+      "commit",
+      "-q",
+      "-m",
+      "fix: tweak things",
+      "-m",
+      "Revert-effect: none",
+    ]);
+    expect(good.exitCode).toBe(0);
+  });
+
+  test("range mode flags a title that is not a Conventional Commit, merges excepted", () => {
+    const base = repo.seed({ "a.txt": "one\n" });
+    repo.write({ "b.txt": "two\n" });
+    repo.ok("add", "-A");
+    repo.ok("commit", "-q", "--no-verify", "-m", "Tweak things", "-m", "Revert-effect: none");
+
+    const result = repo.range(base, repo.head());
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("commit-title");
+    expect(result.stderr).toContain("Tweak things");
+    expect(result.stderr).not.toContain("revert-effect");
+  });
+
   test("range mode flags a commit without the trailer", () => {
     const base = repo.seed({ "a.txt": "one\n" });
     repo.write({ "b.txt": "two\n" });
     repo.ok("add", "-A");
-    repo.ok("commit", "-q", "--no-verify", "-m", "seed without trailer");
+    repo.ok("commit", "-q", "--no-verify", "-m", "chore: seed without trailer");
     const head = repo.head();
     const result = repo.range(base, head);
     expect(result.exitCode).not.toBe(0);

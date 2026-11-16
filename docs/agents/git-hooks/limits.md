@@ -9,7 +9,8 @@ Part of [Git hooks](README.md): what the [hooks](README.md), the `mise run check
   `core.hooksPath` is unset, and only warns when it names your own hooks directory (the last value
   git reads, resolved from the work tree's top, so `./.githooks` or an absolute path count): the
   repository's pre-commit and pre-push then do not run unless your hooks call them, but the gate
-  still range-checks the commits not yet on your local `origin/main`, so a violation is reported
+  still range-checks the commits not yet on your local `origin/main` (the hard rules and the
+  whitespace check, `scripts/ci/range-checks.ts`), so a violation is reported
   before a push that follows the check. Without `origin` or `origin/main` it says so and skips
   that part; a stale `origin/main` can list others' commits, so a failure names its base and asks
   for `git fetch origin`. The same range also selects the script-contract suites

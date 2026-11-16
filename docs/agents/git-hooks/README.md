@@ -19,7 +19,7 @@ would be custom code either way.
 
 `.githooks/pre-commit` runs the [hard rules](hard-rules.md) on the content being committed (the
 [file size limit](size-limit.md) among them), `.githooks/commit-msg` checks the message's
-`Revert-effect:` trailer, and `.githooks/pre-push` the rules on what a push sends; each
+Conventional Commit title and `Revert-effect:` trailer, and `.githooks/pre-push` the rules on what a push sends; each
 reports every violation before failing.
 
 ## Topics

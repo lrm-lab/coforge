@@ -6,8 +6,8 @@ Rules a machine enforces, with no allowlist and no inline override. One checker,
 `scripts/ci/hard-rules.ts`, runs in three places, plus the commit-msg hook's message check
 (`scripts/ci/commit-granularity.ts`):
 
-- **commit-msg**: every non-merge commit message carries a `Revert-effect:` trailer (below).
-  Merge commits are exempt; `--no-verify` skips it like the other hooks.
+- **commit-msg**: every non-merge commit message has a Conventional Commit title and carries a
+  `Revert-effect:` trailer (below). Merge commits are exempt; `--no-verify` skips it like the other hooks.
 - **pre-commit**, `--staged`: the staged content against HEAD, and the author and the committer.
   The granularity diff rules do not run here — they judge a commit's message and diff
   together, and the index has no message yet.
@@ -45,9 +45,18 @@ one `hard-rules: <message>` line, prefixed `::error::` on GitHub Actions.
 | `author-identity` | The author or the committer looks like an Agent or bot (patterns below). |
 | `migration-safety` | A migration the change adds has a high-risk statement and no valid safety annotation, a hash that no longer matches, a `rewrite` verdict, or no `lock_timeout` where one is required. See [Migration safety](migration-safety.md). |
 | `migration-immutable` | The change edits, renames or deletes an `apps/web/prisma/migrations/*/migration.sql` that already exists on the base (HEAD for a commit, the range's base for CI). A new migration directory is allowed; the one approved unapplied-deletion list is described under [Migration safety](migration-safety.md#immutability). |
+| `commit-title` | A non-merge commit's first line is not a Conventional Commit title: `<type>(<scope>)!: <description>` with type feat, fix, docs, test, refactor, chore, perf, ci, build, style or revert. `Merge …`, `Revert "…"`, `fixup!`, `squash!` and `amend!` titles pass. |
 | `revert-effect` | A non-merge commit's message has no `Revert-effect:` trailer with a non-empty value (`none` is fine for docs and tests). |
 | `rename-purity` | A commit's rename detection scores a rename below R100 — it moved and edited in one step. |
 | `commit-mix` | A commit moves at least 30 deleted lines (20+ chars each) into new files and the non-move share of its changed lines is at least 40% — code extraction and a behavior change in one commit. |
+| `module-map` | A directory under `apps/web/src/features/` or `apps/web/src/server/` is not named (as `` `features/<name>/` `` or `` `server/<name>/` ``) in that directory's `AGENTS.md`, or a map bullet's leading directories name one that does not exist. Judged on the tree the change leaves, wherever the map file exists. |
+| `docs-index` | Where the root `AGENTS.md` and `README.md` exist: a file or directory directly under `docs/` is not linked from `README.md` (a link to the path or anything inside it counts), or a nested `AGENTS.md` is linked from neither `README.md` nor an ancestor `AGENTS.md`. Links in code are not links. |
+| `no-nextjs` | Any tracked `package.json` lists `next` in its dependencies, dev, peer or optional dependencies, or a file under `apps/web/src` contains `"use server"` or `getServerSideProps`. |
+| `no-decision-docs` | The change adds a file under `docs/adr/` or `docs/architecture.md`: the repository keeps no decision logs. |
+
+The last four rules read the tree the change leaves (the index, or the range head) through
+`scripts/ci/tree-rules.ts`, not the diff, so a commit that leaves any of them broken is blocked even
+if it did not cause it; `no-decision-docs` alone judges the files the change adds.
 
 **Markdown length.** Markdown means `.md`, `.mdx`, `.mdc`, and `.markdown`. A file must have
 fewer than 200 lines: line 200 is already a violation. A final unterminated line counts, while a
@@ -76,9 +85,10 @@ files only (so prose in `.txt`, YAML or a heredoc is not flagged), directives th
 `biome-ignore`, `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`; in Rust, `#[allow(`,
 `#![allow(`, `#[expect(` and `#![expect(`; in JavaScript or TypeScript test files
 (`*.test.*`, `*.spec.*`, `*.e2e.*`, `*.integration.*`, or under a `test/`, `tests/` or
-`__tests__/` directory), any `.skip` or `.only` call, `.each` and tagged-template forms included.
-Not covered: `test.skipIf`, `test.todo`, and `xit(`, `fit(` or `xdescribe(`, which would also
-match ordinary functions of those names. Markdown (`.md`, `.mdx`, `.mdc`, `.markdown`) is
+`__tests__/` directory), any `.skip`, `.skipIf`, `.only` or `.todo` call (`.each` and tagged-template forms included) or an
+`xit(`, `xtest(` or `xdescribe(` call; in a `deny.toml`, a `skip`, `skip-tree`, `ignore` or `exceptions`
+key, a `{ crate|name|id = … }` entry or a `"RUSTSEC-…"` string. Not covered: `fit(` and `fdescribe(`,
+which would also match ordinary functions of those names. Markdown (`.md`, `.mdx`, `.mdc`, `.markdown`) is
 link-checked and may name every token. A `.skip(` inside a string literal in a test file is
 flagged too. Every file is read as text (`git diff --text`), so a
 `-diff` attribute or a NUL byte does not hide a line.
@@ -123,10 +133,19 @@ review message id may follow it). Each offending commit gets a `::warning::` and
 table in CI and a printed warning on pre-push; nothing fails. Commits carrying the trailer are
 silent, and merge commits are skipped. Warn-only today (`reviewed-in.ts` never fails a run); whether it becomes a hard rule is a later decision.
 
+**Claude Code hooks.** `.claude/settings.json` registers two PreToolUse hooks in
+`scripts/agent-hooks/` for what no git hook sees. They stop only Claude Code, so a rule a git hook
+or CI can judge lives there instead. `pre-edit.ts` denies a hand edit to a `package.json`,
+`bun.lock`, `routeTree.gen.ts` or `crates/installer/contract/`, asks before an exemption config
+(`.oxlintrc.json`, `.oxfmtrc.json`, `tsconfig*.json`, `bunfig.toml`, `deny.toml`, `about.toml`), and
+adds the doc an edit needs. `pre-bash.ts` denies a typed `oxfmt` call (`bunx oxfmt`, `bun x oxfmt`,
+`sh -c "oxfmt …"`); package scripts that call it are not typed commands and pass.
+
 **Whitespace check.** `scripts/ci/diff-check.ts` is the blocking companion (task #628), run by
 `range-checks.ts` after the hard rules: it applies the same `git diff --check` CI's "Select
 checks" step runs, from the range's merge base, so pre-push refuses the trailing whitespace and
-blank line at EOF that step would reject only after the push. It shares the hard rules' input
+blank line at EOF that step would reject only after the push. The local gate
+(`mise run check`) runs it with the hard rules. It shares the hard rules' input
 contract — bad input exits 2, no base warns and passes — and can only add failures, never
 clear the hard rules' verdict.
 

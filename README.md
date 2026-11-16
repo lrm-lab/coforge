@@ -43,6 +43,9 @@ The architecture invariants every change must respect are in
 | [docs/pi-chat/README.md](docs/pi-chat/README.md) | Independent cloud Pi conversations, signed host access, native history, deployment and acceptance |
 | [docs/database-schema/](docs/database-schema/README.md) | Database schema and conversation/delivery model |
 | [Attachment comment maintenance](docs/database-schema/attachment-comment-migration.md) | Read-only preflight, private local-copy rehearsal, journal recovery and integration checks |
+| [docs/memory/](docs/memory/) | OpenViking channel memory: the write path from closed public channels into typed sessions |
+| [docs/architecture/](docs/architecture/) | Task-scoped Agent sessions: one Agent identity, a disposable execution session per delegated Task |
+| [docs/records/](docs/records/) | Weekly report behaviour specs: present mode, reading and editing |
 | [docs/memory-disposition.md](docs/memory-disposition.md) | Target-only Memory Hint receipts, configuration, and validation |
 | [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md) | Message delivery guarantees |
 | [docs/realtime-events.md](docs/realtime-events.md) | Realtime events: who publishes each `*.v1` event and who receives it |
@@ -51,6 +54,7 @@ The architecture invariants every change must respect are in
 | [docs/app-bot/](docs/app-bot/README.md) | App Bot: an app's managed Agent per Workspace - declare, grant, the bot key and status line, what the key may call |
 | [docs/app-notifications.md](docs/app-notifications.md) | App notifications: the pg-boss outbox that records events in the domain transaction and fans them out to installed apps |
 | [docs/app-agent-events/](docs/app-agent-events/README.md) | App events for an Agent (Agent inbound): scopes, approval, the Agent-bound token, the dedicated conversation, and the HTTP API |
+| [docs/app-notifications/](docs/app-notifications/) | App notifications detail: HTTP delivery, presence events, subscriptions, the webhook secret |
 | [docs/app-marketplace.md](docs/app-marketplace.md) | App Marketplace: publish and offline review, installing a listed app, private share links, the platform operator who decides, and the first operator's grant |
 | [docs/feature-flags.md](docs/feature-flags.md) | Feature flags: turning a dark feature on per Workspace with a flagd definition file |
 | [docs/observability/](docs/observability/README.md) | Agent Activity, status, and observability baseline |
