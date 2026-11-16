@@ -46,12 +46,10 @@ import type { ReminderSnapshotAsks } from "./reminder-snapshot-asks";
 import { subscribeProviderScans } from "./provider-scan-handlers";
 import type { ResetCreditConsumeResult } from "./reset-credit-consume";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
-import { subscribeLocalSessionQueries } from "./local-session-query-handlers";
 import { subscribeComputerFileQueries } from "./computer-file-query-handlers";
 import { subscribeContextViewQueries } from "./context-view-query-handlers";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view-store";
-import { LocalSessionCatalog } from "#src/local-session/local-session-catalog";
 import {
   RuntimePublicationSubscriptions,
   type RuntimePublicationSubscriptionPorts,
@@ -145,7 +143,6 @@ export class RuntimeStartup {
   #readyWait: RuntimeReadyWaitWatch | undefined;
   /** The current attempt's hold, which the watch reads its count from. */
   #publications: RuntimePublicationSubscriptions | undefined;
-  readonly #localSessions = new LocalSessionCatalog();
 
   constructor(private readonly ports: RuntimeStartupPorts) {}
 
@@ -282,13 +279,6 @@ export class RuntimeStartup {
         connection,
         observations: ports.workspaceQueries,
         deleteWorkspace: (request) => ports.deleteWorkspace(request),
-        currentTransport: () => ports.transport(),
-        isStopping: () => ports.isStopping(),
-      }))
-        this.#subscribe(unsubscribe);
-      for (const unsubscribe of subscribeLocalSessionQueries(transport, {
-        connection,
-        catalog: this.#localSessions,
         currentTransport: () => ports.transport(),
         isStopping: () => ports.isStopping(),
       }))

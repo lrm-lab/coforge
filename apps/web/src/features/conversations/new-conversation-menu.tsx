@@ -1,6 +1,6 @@
-import { lazy, Suspense, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { getRouteApi } from "@tanstack/react-router";
-import { MessageSmileCircle, PlusSquare, Terminal, User01, Users01 } from "@untitledui/icons";
+import { MessageSmileCircle, PlusSquare, User01, Users01 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -10,19 +10,12 @@ import { StartDirectMessagePopover } from "./start-direct-message-popover";
 
 const workspaceRoute = getRouteApi("/w/$workspaceSlug");
 
-// The wizard loads when 接手本机会话 is first opened, so the Chat list does not carry it.
-const LocalSessionHandoffDialog = lazy(() =>
-  import("#src/features/computers/local-session-handoff-dialog").then((module) => ({
-    default: module.LocalSessionHandoffDialog,
-  })),
-);
-
-type Opened = "direct" | "agent" | "handoff";
-const OPENED: readonly Opened[] = ["direct", "agent", "handoff"];
+type Opened = "direct" | "agent";
+const OPENED: readonly Opened[] = ["direct", "agent"];
 
 /**
  * The Chat list header's one "+": 新建群聊, 新建私聊 and, for a viewer whose role may create
- * Agents, 新建 Agent and 接手本机会话. 私聊's picker opens under this same "+".
+ * Agents, 新建 Agent. 私聊's picker opens under this same "+".
  */
 export function NewConversationMenu({ onCreateChannel }: { onCreateChannel: () => void }) {
   const label = m.conversation_new();
@@ -55,7 +48,6 @@ export function NewConversationMenu({ onCreateChannel }: { onCreateChannel: () =
             {canCreateAgents && (
               <>
                 <Dropdown.Item id="agent" icon={MessageSmileCircle} label={m.header_new_agent()} />
-                <Dropdown.Item id="handoff" icon={Terminal} label={m.handoff_title()} />
               </>
             )}
           </Dropdown.Menu>
@@ -67,11 +59,6 @@ export function NewConversationMenu({ onCreateChannel }: { onCreateChannel: () =
         onOpenChange={openOnly("direct")}
       />
       <NewAgentDialog open={opened === "agent"} onOpenChange={openOnly("agent")} />
-      {opened === "handoff" && (
-        <Suspense fallback={null}>
-          <LocalSessionHandoffDialog open onOpenChange={openOnly("handoff")} />
-        </Suspense>
-      )}
     </>
   );
 }

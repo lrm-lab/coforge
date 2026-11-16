@@ -4,7 +4,6 @@ These rules apply to `src/features/computers/`.
 
 ## Module map
 
-- The handoff wizard (`local-session-handoff-dialog.tsx`, `handoff-session-picker.tsx`, `handoff-form.tsx`, `handoff-states.tsx`, `use-handoff-create.ts`, `use-local-session-handoff.ts`, `local-session-state.ts`, `local-session-list.ts`, `handoff-briefing.ts`): the dialog owns the session search, so "换一个会话" returns to the same list; creating the Agent, opening its DM and sending the briefing share one idempotency key and a resend never recreates; an unfinished empty list is busy, never empty, and sessions come out newest first; `use-local-session-handoff.ts` is the one place to swap in fixture data.
 - One Computer's detail panel is `computer-detail*.tsx` with `use-computer-detail-lifecycle.ts` (upgrade slots, restart polling); `computer-layout.tsx` holds list/detail selection.
 - `runtime-reset-credit-action.tsx` — the runtime popover's "Use reset · N" button and its confirm dialog (outside the popover, like the sign-out dialog); takes the count and an `onConsume(idempotencyKey)` as props
 - `reset-credit-attempt.ts` — the reset attempt's idempotency key per Computer + provider + account label (`sessionStorage`, memory fallback); expires 10 minutes after it was made, cleared only on a settled outcome, kept after `unknown`, a refusal or a thrown failure. The dialog treats `already_redeemed` like `reset` (toast, close); any other settled answer shows its message and turns Confirm off (`ConfirmDialog`'s `confirmDisabled`)
