@@ -69,6 +69,7 @@ The architecture invariants every change must respect are in
 | [docs/design/](docs/design/README.md) | Product UI design guidance |
 | [docs/design/onboarding-wizard.md](docs/design/onboarding-wizard.md) | The first-sign-in setup wizard: who sees it, its four steps, the gate on the assistant's introduction, skipping |
 | [docs/design-tokens.md](docs/design-tokens.md) | Design tokens |
+| [docs/design-tokens-coforge.md](docs/design-tokens-coforge.md) | Design tokens Untitled UI has no equivalent for |
 | [docs/operations/aliyun-oss-cdn/](docs/operations/aliyun-oss-cdn/README.md) | OSS/CDN provisioning runbook |
 | [docs/operations/cdn-certificates/](docs/operations/cdn-certificates/README.md) | CDN certificate renewal runbook |
 | [docs/agents/testing.md](docs/agents/testing.md) | Testing guidance for agents |
