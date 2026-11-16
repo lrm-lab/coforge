@@ -12,8 +12,9 @@
 # out of the deploy .env file and container environment.
 #
 # The functions that read the host secret files live in deploy-secrets.sh, the release snapshot
-# functions in deploy-release-snapshot.sh and the bounded failure diagnostics in
-# deploy-diagnostics.sh. This script sources them from its own directory. They ship to the host together, and the
+# functions in deploy-release-snapshot.sh, the bounded failure diagnostics in
+# deploy-diagnostics.sh and the post-deploy image retention in deploy-image-retention.sh.
+# These ship to the host together, and the
 # deploy workflows run the host copy: ssh HOST "bash ~/coforge-staging/scripts/deploy/remote-deploy.sh ARGS"
 #
 # Usage:
@@ -34,6 +35,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/deploy-release-snapshot.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/deploy-diagnostics.sh"
 # shellcheck source=deploy-wildcard-probe.sh
 source "$(dirname "${BASH_SOURCE[0]}")/deploy-wildcard-probe.sh"
+# shellcheck source=deploy-image-retention.sh
+source "$(dirname "${BASH_SOURCE[0]}")/deploy-image-retention.sh"
+
+# Report state the sourced helpers and report() share; under `set -u` it must
+# exist before the same-image no-op branch can read it.
+deploy_warning=
 
 usage() {
 	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS] [--public-health-timeout SECONDS] [--wildcard-probe-host HOST] [--wildcard-probe-timeout SECONDS]\n' "$0" >&2
@@ -180,7 +187,9 @@ fi
 last_healthy="$current_image"
 
 if [ -n "$current_image" ] && [ "$current_image" = "$image" ]; then
+	prune_deploy_images
 	printf 'previous_web_image=%s\nhealth_result=healthy\noutcome=healthy\nrollback_target=\n' "$current_image"
+	[ -z "$deploy_warning" ] || printf 'warning=%s\n' "$deploy_warning"
 	exit 0
 fi
 
@@ -276,6 +285,7 @@ fail_deployment() {
 	candidate_diagnostics || true
 	if rollback "$last_healthy"; then
 		public_health || true
+		prune_deploy_images
 		report "$last_healthy" "$reason" "rolled_back" "$last_healthy"
 	elif [ -z "$last_healthy" ]; then
 		report "" "$reason; restored the empty bootstrap state" "bootstrap_failed" ""
@@ -284,8 +294,6 @@ fail_deployment() {
 	fi
 	exit 0
 }
-
-deploy_warning=
 
 report() {
 	printf 'previous_web_image=%s\nhealth_result=%s\noutcome=%s\nrollback_target=%s\n' \
@@ -422,5 +430,7 @@ printf '%s\n' \
 	"CURRENT_WEB_IMAGE=$image" >"$state_file.tmp"
 chmod 600 "$state_file.tmp"
 mv "$state_file.tmp" "$state_file"
+
+prune_deploy_images
 
 report "$current_image" "healthy" "healthy" "$current_image"
