@@ -2,34 +2,35 @@ import { useMemo, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { Link } from "@tanstack/react-router";
-import { Lock01, Trash01 } from "@untitledui/icons";
+import {
+  ArrowUpRight,
+  Building02,
+  Globe02,
+  Lock01,
+  MessageChatCircle,
+  Trash01,
+} from "@untitledui/icons";
 
 import { m } from "#src/paraglide/messages";
+import { loadArtifactMarks } from "./artifact-gallery.functions";
+import { CardBadges } from "./artifact-gallery-card";
+import { useConversationName } from "./artifact-gallery-filters";
 import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import {
   artifactCardQuery,
+  artifactMarksQuery,
   useArtifactActor,
   useArtifactsOn,
   type ArtifactCard,
 } from "./artifact-queries";
 import { useArtifactLink } from "./artifact-beside-chat";
 
-/** How the server's read of a message saw one artifact it links to, for this reader: one they
- * may open, one they may not (nothing of it is shown), or one deleted (said only to those who
- * could open it). */
 export type ArtifactCardState = {
   artifactId: string;
   state: "open" | "forbidden" | "deleted";
 };
 
-/**
- * The cards of the artifacts a message links to (task #385, #514): each its kind, title, first
- * two lines, version and who changed it last; the card is a link to its page. A link the
- * message's read (`states`) found shut to this reader shows one line saying so, never its title;
- * a deleted one says it was deleted. Nothing shows while documents are off, or before the card is
- * read.
- */
 export function MessageArtifactCards({
   body,
   states,
@@ -54,8 +55,6 @@ export function MessageArtifactCards({
   );
 }
 
-/** `body` as it reads beside its documents' cards (`bodyWithArtifactTitles`), from the cards
- * already read and the read's `states`: a link reads as written until its card shows. */
 export function useBodyWithArtifactTitles(
   body: string,
   states?: readonly ArtifactCardState[],
@@ -67,7 +66,6 @@ export function useBodyWithArtifactTitles(
   const shown = cards.flatMap(({ data }) =>
     data ? [[data.id, data.title || m.doc_untitled()] as const] : [],
   );
-  // The cards read anew on every render; their titles, as one string, change far less.
   const titles = JSON.stringify(shown);
   const placeholders = on
     ? JSON.stringify(
@@ -89,15 +87,16 @@ export function useBodyWithArtifactTitles(
 
 function ArtifactCardView({ artifactId }: { artifactId: string }) {
   const { data: card } = useQuery(artifactCardQuery(artifactId));
+  const { data: marks } = useQuery(artifactMarksQuery(artifactId));
   const linkTo = useArtifactLink();
   if (!card) return null;
   return (
     <ArtifactCardFace
       card={card}
+      marks={marks ?? undefined}
       title={(title) => (
         <Link
           {...linkTo(card.id)}
-          // The message row opens its actions on a click; this click is the card's alone.
           onClick={(event) => event.stopPropagation()}
           className="min-w-0 truncate text-left text-sm font-semibold text-primary outline-none before:absolute before:inset-0 before:rounded-xl"
         >
@@ -108,20 +107,30 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
   );
 }
 
-/** A card as it reads: kind, title, first two lines, who changed it last. `title` makes the title
- * a way in (in chat, a link over the whole card); without it the card is only shown (a preview of
- * what a send will post). */
+type CardMarks = NonNullable<Awaited<ReturnType<typeof loadArtifactMarks>>[number]>;
+
 export function ArtifactCardFace({
   card,
+  marks,
   title: titleAs,
 }: {
   card: ArtifactCard;
+  marks?: CardMarks;
   title?: (title: string) => ReactNode;
 }) {
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
   const title = card.title || m.doc_untitled();
   const kind = kindLabel(card.entryPath);
+  const nameOf = useConversationName();
+  const scope = marks?.link
+    ? { Icon: Globe02, label: m.av_vis_link() }
+    : card.access === "workspace"
+      ? { Icon: Building02, label: m.av_vis_workspace() }
+      : {
+          Icon: MessageChatCircle,
+          label: nameOf((card.homeKey ?? "").replace(/^conversation:/, "")) ?? m.av_vis_home_dm(),
+        };
   return (
     <article
       aria-label={m.doc_card_label({ kind, title })}
@@ -130,29 +139,42 @@ export function ArtifactCardFace({
       <ArtifactIcon entryPath={card.entryPath} />
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-baseline gap-2">
-          {/* The title is the card's one way in; its hit area covers the whole card. */}
           {titleAs ? (
             titleAs(title)
           ) : (
             <span className="min-w-0 truncate text-sm font-semibold text-primary">{title}</span>
           )}
+          <span className="shrink-0 text-xs text-quaternary tabular-nums">
+            v{card.currentVersion}
+          </span>
           <span className="shrink-0 text-xs text-quaternary">{kind}</span>
+          {marks && (
+            <ArrowUpRight
+              aria-hidden="true"
+              className="ml-auto size-4 shrink-0 text-fg-quaternary"
+            />
+          )}
         </p>
         {card.preview && (
           <p className="mt-0.5 line-clamp-2 text-sm whitespace-pre-line text-tertiary">
             {card.preview}
           </p>
         )}
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <ArtifactEditedLine actor={actorOf(card.author)} time={time(card.updatedAt)} />
+          {marks && (
+            <span className="flex items-center gap-1 text-xs text-tertiary">
+              <scope.Icon aria-hidden="true" className="size-3.5 shrink-0" />
+              <span className="max-w-32 truncate">{scope.label}</span>
+            </span>
+          )}
+          {marks && <CardBadges card={marks} />}
         </div>
       </div>
     </article>
   );
 }
 
-/** A linked artifact this reader may not open, or one deleted: the card's frame and one line, no
- * title or text, and nothing to click. */
 function ArtifactCardPlaceholder({ state }: { state: "forbidden" | "deleted" }) {
   const Icon = state === "forbidden" ? Lock01 : Trash01;
   return (

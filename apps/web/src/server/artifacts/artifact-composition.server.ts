@@ -15,9 +15,16 @@ import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { ArtifactPublicLinks } from "./artifact-public-links.server";
 import { publicPageLookup } from "./artifact-public-page.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
-import type { ArtifactActor } from "./artifact-access.server";
+import { artifactsEnabled, type ArtifactActor } from "./artifact-access.server";
 import type { ArtifactMessageCard } from "./artifact-reads.server";
 import { ArtifactShares } from "./artifact-shares.server";
+import { artifactDownload, artifactFilePreview } from "./artifact-download.server";
+import { ArtifactGallery } from "./artifact-gallery.server";
+import { ArtifactPersonFollows } from "./artifact-person-follows.server";
+import { ArtifactRenames } from "./artifact-rename.server";
+import { ArtifactVersionHistory } from "./artifact-version-history.server";
+import { ArtifactViewerPositions } from "./artifact-viewer-positions.server";
+import { productionArtifactViewing } from "./artifact-viewing.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
 import type { ArtifactAttachmentPort } from "./agent-artifact-save.server";
 import { AppError, isAppError } from "#src/lib/app-error";
@@ -25,8 +32,6 @@ import { readAuthorizedAttachment } from "#src/server/attachments/attachment.ser
 import { createSystemAgentEvents } from "#src/server/app-agent-events/app-agent-events-composition.server";
 export type { ArtifactMessageCard } from "./artifact-reads.server";
 
-/** The artifact services of production: bytes in the private file bucket, each new version
- * announced over Centrifugo, the experiment read from the Workspace. */
 export function productionArtifacts(db: PrismaClient) {
   const blobs = new StoredArtifactBlobs(db, getFileStorage);
   const artifacts = new Artifacts(db, blobs, {
@@ -38,6 +43,19 @@ export function productionArtifacts(db: PrismaClient) {
     documents: new ArtifactDocuments(db, artifacts, blobs),
     visibility: artifacts.visibility,
     publicLinks: new ArtifactPublicLinks(db),
+    gallery: new ArtifactGallery(
+      db,
+      (workspaceId) => artifactsEnabled(db, workspaceId),
+      artifacts.reads,
+    ),
+    renames: new ArtifactRenames(db, artifacts.reads, productionArtifactNotices(db)),
+    personFollows: new ArtifactPersonFollows(db, artifacts.reads),
+    versionHistory: new ArtifactVersionHistory(db, artifacts.reads),
+    viewerPositions: new ArtifactViewerPositions(db, artifacts.reads, productionArtifactViewing()),
+    download: (input: Parameters<typeof artifactDownload>[1]) =>
+      artifactDownload({ reads: artifacts.reads, blobs }, input),
+    filePreview: (input: Parameters<typeof artifactFilePreview>[1]) =>
+      artifactFilePreview({ reads: artifacts.reads, blobs }, input),
   };
 }
 
@@ -124,7 +142,6 @@ export function productionArtifactSandbox(db: PrismaClient) {
   });
 }
 
-/** Batched live card projection for a page of browser messages. */
 export function artifactMessageCards(
   db: PrismaClient,
   input: {

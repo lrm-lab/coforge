@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { z } from "zod";
@@ -16,22 +16,27 @@ import {
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { isAppError } from "#src/lib/app-error";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { deleteArtifact } from "./artifacts.functions";
 import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
+import { ArtifactFileView } from "./artifact-file-view";
+import { ArtifactFilesPanel } from "./artifact-files-panel";
 import { ArtifactMarkdown } from "./artifact-markdown";
-import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
+import { ArtifactMoreMenu } from "./artifact-more-menu";
 import {
   ARTIFACT_TITLE_ID,
   ArtifactPageHeader,
+  useHomeName,
   type ArtifactHome,
   type ArtifactPaneControls,
 } from "./artifact-page-header";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
+import { ArtifactPresenceChip, useKeepViewing } from "./artifact-presence-chip";
 import { ArtifactSendDialog } from "./artifact-send-dialog";
-import { ArtifactShareDialog, shareIcon } from "./artifact-share-dialog";
+import { ArtifactUpdateBanner, ViewingVersionNotice } from "./artifact-update-banner";
 import { isWebPageEntry } from "./artifact-path-kind";
 import { PaneFrame } from "./artifact-parts";
 import {
@@ -46,19 +51,15 @@ import {
 } from "./artifact-realtime";
 import { artifactPageRoute } from "./artifact-search";
 import { artifactDataEvents } from "./artifact-page-data-events";
+import { openArtifact } from "./artifact-viewer.functions";
 import { ArtifactWebPage } from "./artifact-web-page";
+import { VisibilityPill } from "./artifact-visibility-pill";
+import { useArtifactActions } from "./use-artifact-actions";
+import { useArtifactVisibility } from "./use-artifact-visibility";
 
-/** Where an artifact shows: on its own page, or beside its conversation's chat (Frank, 11-05),
- * which closes rather than goes back. */
 type ArtifactPlace = { pane?: ArtifactPaneControls };
 
-/**
- * An artifact's own page (task #514), or the pane beside its conversation's chat (Frank, 11-05,
- * as Claude opens an artifact beside the conversation): its header, and its document or web page
- * to read. People view and comment; an Agent writes it. A version published meanwhile is read in.
- */
 export function ArtifactPage({ artifactId, pane }: { artifactId: string } & ArtifactPlace) {
-  // An address that names no artifact at all is not there: no read could find one.
   if (!z.uuid().safeParse(artifactId).success)
     return pane ? (
       <PaneFrame full={pane.full}>
@@ -77,12 +78,21 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   const workspaceId = useCurrentWorkspaceId();
   const workspaceSlug = useWorkspaceSlug();
   const read = useQuery(artifactDocumentQuery(artifactId));
+  const [pinned, setPinned] = useState<number | null>(null);
+  const [incoming, setIncoming] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [sharing, setSharing] = useState(false);
   const [sendingTo, setSendingTo] = useState(false);
   const [finding, setFinding] = useState(false);
-  const current = read.data;
-  const latest = current?.artifact.currentVersion ?? 0;
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const latest = read.data?.artifact.currentVersion ?? 0;
+  const older = pinned !== null && pinned !== latest;
+  const pinnedRead = useQuery({
+    ...artifactDocumentQuery(artifactId, pinned ?? undefined),
+    enabled: older,
+  });
+  const current = older ? (pinnedRead.data ?? read.data) : read.data;
+  const shownVersion = older && pinnedRead.data ? pinned : latest;
 
   const homeKey = current?.artifact.homeKey;
   const homeId = homeKey ? artifactHomeConversation(homeKey) : undefined;
@@ -91,6 +101,14 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     conversationId: homeId ?? null,
   };
   const link = useArtifactLinkSharing(artifactId, current !== undefined);
+  const homeName = useHomeName(home) ?? m.av_vis_home_dm();
+  const visibility = useArtifactVisibility({
+    artifactId,
+    tier: current?.artifact.access ?? "conversation",
+    link,
+    homeName,
+  });
+
   useRealtimeSubscription({
     channel:
       homeId === undefined || !workspaceId
@@ -106,28 +124,23 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         if (dataChange.artifactId === artifactId) artifactDataEvents.emit(dataChange);
         return;
       }
-      const event =
-        decodeArtifactVersionPublishedEvent(data) ?? decodeArtifactAccessChangedEvent(data);
-      if (event?.artifactId !== artifactId) return;
-      // Taken in quietly: nothing says who changed it (Frank, 11-05).
-      void refreshArtifact(queryClient, artifactId, homeId ?? null);
+      const published = decodeArtifactVersionPublishedEvent(data);
+      if (published?.artifactId === artifactId) {
+        if (published.number > latest) setIncoming(published.number);
+        void refreshArtifact(queryClient, artifactId, homeId ?? null, { document: false });
+        return;
+      }
+      if (decodeArtifactAccessChangedEvent(data)?.artifactId === artifactId)
+        void refreshArtifact(queryClient, artifactId, homeId ?? null);
     },
   });
 
-  // Gone or not the viewer's (the server says so), or never read: the page is not there. A read
-  // that failed once the artifact showed keeps it.
-  const failure = read.error;
-  if (isGone(failure) || (failure && !current)) {
-    const unavailable = (
-      <ArtifactUnavailable
-        gone={isGone(failure)}
-        retrying={read.isFetching}
-        onRetry={() => void read.refetch()}
-        onClose={pane?.onClose}
-      />
-    );
-    return pane ? <PaneFrame full={pane.full}>{unavailable}</PaneFrame> : unavailable;
-  }
+  useEffect(() => {
+    if (latest > 0)
+      void openArtifact({ data: { artifactId, version: latest } }).catch(() => undefined);
+  }, [artifactId, latest]);
+  useKeepViewing(artifactId, latest > 0);
+
   const entryPath = current?.artifact.entryPath;
   const webPage = entryPath !== undefined && isWebPageEntry(entryPath);
   const title = current?.artifact.title || m.doc_untitled();
@@ -150,44 +163,117 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
       );
     else void router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } });
   };
+  const viewLatest = () => {
+    setIncoming(null);
+    setPinned(null);
+    setOpenPath(null);
+    void refreshArtifact(queryClient, artifactId, homeId ?? null);
+  };
+  const choose = (version: number) => {
+    setOpenPath(null);
+    setPinned(version === latest ? null : version);
+  };
+  const files = current?.files ?? [];
+  const canChange = current?.artifact.canChange === true;
+  const { onMoreAction, dialogs, following } = useArtifactActions({
+    artifactId,
+    homeId: homeId ?? null,
+    title,
+    shownVersion,
+    entryPath: entryPath ?? "",
+    files,
+    link,
+    loaded: current !== undefined,
+    actions: {
+      find: () => setFinding(true),
+      "copy-link": () => void copy(pageHref(), m.doc_link_copied()),
+      send: () => setSendingTo(true),
+      files: () => setFilesOpen(true),
+      delete: () => setDeleting(true),
+    },
+  });
+  const phone = !useBreakpoint("sm");
+  const failure = read.error;
+  if (isGone(failure) || (failure && !current)) {
+    const unavailable = (
+      <ArtifactUnavailable
+        gone={isGone(failure)}
+        retrying={read.isFetching}
+        onRetry={() => void read.refetch()}
+        onClose={pane?.onClose}
+      />
+    );
+    return pane ? <PaneFrame full={pane.full}>{unavailable}</PaneFrame> : unavailable;
+  }
   const body = (
     <>
       <ArtifactPageHeader
+        artifactId={artifactId}
         entryPath={entryPath}
         title={title}
-        version={current?.artifact.currentVersion}
+        shownVersion={current ? shownVersion : undefined}
         home={home}
-        canDelete={current?.canDelete === true}
-        shareIcon={shareIcon(link)}
-        onShare={
-          current &&
-          (() => {
-            link.refresh();
-            setSharing(true);
-          })
-        }
-        onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
-        onOpenInTab={
-          webPage
-            ? () =>
-                void openInTab(artifactId, latest).catch(() =>
-                  toast.error(m.doc_open_in_tab_failed()),
-                )
-            : undefined
-        }
-        onFind={webPage ? () => setFinding(true) : undefined}
-        onDelete={() => setDeleting(true)}
         pane={pane}
+        onChooseVersion={choose}
+        onFind={webPage && !openPath ? () => setFinding(true) : undefined}
+        onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
+        pills={
+          current && (
+            <>
+              <VisibilityPill
+                visibility={visibility}
+                canChange={canChange}
+                linkAvailable={link.available}
+              />
+              <ArtifactPresenceChip artifactId={artifactId} />
+            </>
+          )
+        }
+        menu={
+          current && (
+            <ArtifactMoreMenu
+              artifactId={artifactId}
+              shownVersion={shownVersion}
+              phone={phone}
+              fileCount={files.length}
+              canChange={canChange}
+              canDelete={current.canDelete}
+              canFind={webPage}
+              following={following}
+              visibility={visibility}
+              linkAvailable={link.available}
+              onChooseVersion={choose}
+              onAction={onMoreAction}
+            />
+          )
+        }
       />
       <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
+          {incoming !== null && incoming > latest && (
+            <ArtifactUpdateBanner artifactId={artifactId} incoming={incoming} onView={viewLatest} />
+          )}
+          {older && (
+            <ViewingVersionNotice
+              version={pinned}
+              failed={pinnedRead.isError}
+              onBack={() => setPinned(null)}
+            />
+          )}
           {!current ? (
             <LoadingBody />
+          ) : openPath ? (
+            <ArtifactFileView
+              artifactId={artifactId}
+              version={shownVersion}
+              path={openPath}
+              onBack={() => setOpenPath(null)}
+            />
           ) : webPage ? (
             <ArtifactWebPage
-              key={latest}
+              key={shownVersion}
               artifactId={artifactId}
-              version={latest}
+              version={shownVersion}
               title={title}
               entryPath={current.artifact.entryPath}
               finding={finding}
@@ -197,28 +283,27 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
             <ArtifactMarkdown text={current.text} />
           )}
         </div>
+        {filesOpen && current && (
+          <ArtifactFilesPanel
+            artifactId={artifactId}
+            version={shownVersion}
+            entryPath={current.artifact.entryPath}
+            files={files}
+            openPath={openPath}
+            onOpen={setOpenPath}
+            onClose={() => setFilesOpen(false)}
+          />
+        )}
       </div>
-      <ArtifactShareDialog
-        open={sharing}
-        onOpenChange={(open) => {
-          setSharing(open);
-          if (!open) link.dismiss();
-        }}
-        title={title}
-        canChange={current?.artifact.canChange}
-        link={link}
-        onCopyLink={() => void copy(pageHref(), m.doc_link_copied())}
-        onCopyPublicLink={(url) => void copy(url, m.doc_public_link_copied())}
-        onSend={() => {
-          setSharing(false);
-          link.dismiss();
-          setSendingTo(true);
-        }}
-      />
+      {visibility.dialog}
+      {dialogs}
       {sendingTo && (
         <ArtifactSendDialog
           artifactId={artifactId}
           title={title}
+          canChange={canChange}
+          tier={current?.artifact.access ?? "conversation"}
+          linkAvailable={link.available}
           onClose={() => setSendingTo(false)}
         />
       )}
@@ -247,26 +332,6 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   );
 }
 
-/**
- * A web page in a tab of its own: the sandbox's link, asked for on the click (it is short-lived).
- * The tab opens at once, so no pop-up blocker takes it for one the page opened by itself, and is
- * cut off from this page before it goes to the link; a link that cannot be had closes it, and
- * throws for the page to say so.
- */
-async function openInTab(artifactId: string, version: number) {
-  const tab = window.open("", "_blank");
-  if (!tab) return;
-  tab.opener = null;
-  try {
-    tab.location.href = (await loadArtifactSandboxLink({ data: { artifactId, version } })).url;
-  } catch (cause) {
-    tab.close();
-    throw cause;
-  }
-}
-
-/** The server's answer for an artifact that is not there for the viewer: deleted, never there,
- * or not theirs to read. */
 const isGone = (error: unknown) =>
   isAppError(error) && (error.code === "NOT_FOUND" || error.code === "ACCESS_DENIED");
 
@@ -281,11 +346,6 @@ function LoadingBody() {
   );
 }
 
-/**
- * The page with no artifact to show. Deleted, never there, or not the viewer's to see: the server
- * does not say which, so neither does the page (`gone`). A read that failed otherwise, before
- * anything showed, says so and tries again.
- */
 function ArtifactUnavailable({
   gone,
   retrying = false,
@@ -295,7 +355,6 @@ function ArtifactUnavailable({
   gone: boolean;
   retrying?: boolean;
   onRetry?: () => void;
-  /** Beside the chat: the way out closes the pane rather than leaving the conversation. */
   onClose?: () => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();

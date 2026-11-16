@@ -3,6 +3,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  Browser,
   File02 as FileText,
   Folder,
   LogOut01 as LogOut,
@@ -28,6 +29,7 @@ import { PhoneTabBar } from "#src/components/layout/phone-tab-bar";
 import { ShellLinks } from "#src/components/layout/shell-links";
 import { CHAT_SECTIONS, sectionOf, tabHomeOf } from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
+import { artifactsOnQuery } from "#src/features/artifacts/artifact-queries";
 import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
 import {
   activityNavAttentionQuery,
@@ -60,18 +62,10 @@ import { cx } from "#src/utils/cx";
 export type AppUser = {
   id: string;
   name: string;
-  /** Null for an account made with a phone number alone. */
   email: string | null;
   avatarUrl?: string | null;
 };
 
-/**
- * Whether the viewer has unread activity anywhere, and how many items when the server counts them
- * — the nav Activity badge. A message the server sent to this person's own channel lights it with
- * no read at all; a Done, read-all or mark-unread in any of their pages says where the inbox now
- * stands, which the badge takes; anything else that reaches the inbox (a mention from outside the
- * channel, a Task assignment) re-reads it (`activityNavAttentionRealtime`).
- */
 function useActivityAttention(user: AppUser, workspaceId: string) {
   const queryClient = useQueryClient();
   const { onMessage, onActivity, onAttention, onSubscribed } = useMemo(
@@ -98,20 +92,15 @@ function useNavItems(
   activity: { hasUnread: boolean; unreadCount?: number },
 ): (NavItemType & {
   icon: FC<{ className?: string }>;
-  /** The Activity row's number, for the collapsed rail to draw on its icon. */
   unreadCount?: number;
   bareHref: string;
-  /** Sections under `base` this item is also current for. */
   sections?: readonly string[];
-  /** The phone's tab bar carries this item itself; the Workspace tab lists the rest. */
   tab?: "chat" | "activity";
 })[] {
-  // The number when the server counts some, else the dot while anything is unread (an item the
-  // count leaves out, such as a Task, or a server that counts nothing).
   const unreadCount =
     activity.unreadCount && activity.unreadCount > 0 ? activity.unreadCount : undefined;
   const { hasUnread } = activity;
-  // The Records link goes back to the page last open there, which changes as the person moves.
+  const artifactsOn = useQuery(artifactsOnQuery(workspaceId)).data === true;
   const recordsHref = recordsNavHref(workspaceId);
   return useMemo(() => {
     const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
@@ -119,7 +108,6 @@ function useNavItems(
       unreadCount !== undefined ? (
         <>
           <UnreadBadge count={unreadCount} />
-          {/* The badge is hidden from assistive tech, so the row names its count here. */}
           <span className="sr-only">{m.conversation_thread_unread({ count: unreadCount })}</span>
         </>
       ) : hasUnread ? (
@@ -148,6 +136,16 @@ function useNavItems(
       },
       ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
       { label: m.projects_title(), ...item("projects"), icon: Folder },
+      ...(artifactsOn
+        ? [
+            {
+              label: m.navigation_artifacts(),
+              ...item("artifacts"),
+              sections: ["artifacts", "artifact"],
+              icon: Browser,
+            },
+          ]
+        : []),
       {
         label: m.navigation_agents(),
         ...item("members"),
@@ -168,7 +166,7 @@ function useNavItems(
         icon: Monitor,
       },
     ];
-  }, [base, recordsPreview, aiWorkbench, unreadCount, hasUnread, recordsHref]);
+  }, [base, recordsPreview, aiWorkbench, artifactsOn, unreadCount, hasUnread, recordsHref]);
 }
 
 export function AppShell({
@@ -183,23 +181,17 @@ export function AppShell({
   canSeeUsageLimits = false,
   aiWorkbench = false,
 }: {
-  /** Whether the Workspace has AI Workbench on; its sidebar entry shows only then. */
   aiWorkbench?: boolean;
-  /** An owner or admin, who sees the Workspace's system notifications. */
   canSeeUsageLimits?: boolean;
   user: AppUser;
   workspaces: WorkspaceOption[];
-  /** The Workspace the page URL names. */
   currentWorkspace: WorkspaceOption;
   onSelectWorkspace?: (slug: string) => Promise<void> | void;
   onCreateWorkspace?: (input: CreateWorkspaceInput) => Promise<void>;
   onSignOut: () => Promise<void> | void;
-  /** Purple dot on 记录 for a Leader preview hour or an unread member assignment. */
   recordsPreview?: boolean;
   children: React.ReactNode;
 }) {
-  // pathname is de-localized (src/router.tsx); item.href is localized, so we
-  // match on bareHref (with sub-route prefix matching) instead.
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
@@ -207,8 +199,6 @@ export function AppShell({
     select: (state) => state.location.searchStr,
   });
   const itemOpen = useRouterState({
-    // The page's validated search, not the raw address: Activity drops an `open` it can't read,
-    // and then shows its list, which the tab bar belongs under.
     select: (state) =>
       (state.matches.at(-1)?.search as { open?: unknown } | undefined)?.open !== undefined,
   });
@@ -217,7 +207,6 @@ export function AppShell({
   useEffect(() => {
     if (!pathname.startsWith(`${base}/records`)) return;
     const query = !searchStr ? "" : searchStr.startsWith("?") ? searchStr : `?${searchStr}`;
-    // Remembered within the Workspace, so it holds the path under `/w/<slug>`.
     rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${query}`);
   }, [workspaceId, base, pathname, searchStr]);
   const activityAttention = useActivityAttention(user, workspaceId);
@@ -225,11 +214,8 @@ export function AppShell({
   useWorkspaceTabTitle(currentWorkspace.name);
   const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
   const section = sectionOf(pathname);
-  // The phone's tab bar shows on a tab home only; Chat's list is on screen without its own address
-  // when a conversation's back arrow brings it back, which the page reports.
   const [chatListOpen, setChatListOpen] = useState(false);
   const tabHome = tabHomeOf({ section, itemOpen, chatListOpen });
-  // The tab bar is mounted on a phone's tab home only, never hidden by CSS on a desktop.
   const phone = !useBreakpoint("lg");
   const activeUrl = navItems.find((item) =>
     item.sections
@@ -249,8 +235,6 @@ export function AppShell({
   const chatHref = chatItem?.href;
   const activityHref = activityItem?.href;
   const tabBar = phone && chatHref && activityHref ? tabHome : null;
-  // The Workspace layout hands its handlers and user over inline, so the tab pages' context keeps
-  // them stable itself: it changes only with what the pages show.
   const selectWorkspace = useLatestCallback(onSelectWorkspace);
   const createWorkspace = useLatestCallback(onCreateWorkspace);
   const signOut = useLatestCallback(onSignOut);
@@ -289,8 +273,6 @@ export function AppShell({
     <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>
       <PhoneShellContext value={phoneShell}>
         <ChatListOpenContext value={setChatListOpen}>
-          {/* Clears the notch on a phone, and its home indicator unless the tab bar, which has its own
-        padding for it, is showing. */}
           <div
             className={cx(
               "flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased lg:bg-sidebar",
@@ -299,9 +281,6 @@ export function AppShell({
           >
             <WhatsNewAnnouncer />
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-              {/* `contents` keeps the sidebars direct flex items of this row. On desktop
-            `sidebar-collapsed` on <html> picks the expanded one or the rail; a phone has neither, its
-            tab bar below the content takes their place. */}
               <ShellLinks>
                 <SidebarExpanded
                   activeUrl={activeUrl}
@@ -348,9 +327,6 @@ export function AppShell({
                 />
               </ShellLinks>
 
-              {/* On desktop the content is one white card inset 8px from the sidebar's background; a
-            page made of several panels (Chat, Settings, Records) marks itself `data-panel-cards` and
-            draws a card per panel, 8px apart. */}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
                   <ChatListShownContext value={phone && chatListOpen}>
@@ -381,9 +357,6 @@ export function AppShell({
   );
 }
 
-/** The foot of the expanded sidebar: the user and the bell as one row on the nav rows' grid, the
- * avatar on the icons' column and the name on the labels' line, one hover surface for the whole
- * row. The email is in the menu, not under the name. */
 function UserRow({
   workspaceSlug,
   ...menu
@@ -410,11 +383,9 @@ function UserMenuCard({
   onSignOut,
   compact = false,
 }: {
-  /** The Workspace path (`/w/<slug>`) Settings lives under. */
   base: string;
   user: AppUser;
   onSignOut: () => Promise<void> | void;
-  /** The avatar alone, at the foot of the collapsed rail. */
   compact?: boolean;
 }) {
   const avatar = (
@@ -424,8 +395,6 @@ function UserMenuCard({
       name={user.name}
       alt={user.name}
       src={user.avatarUrl}
-      // An uploaded photo is a rounded square in the row, a circle on the rail; a sticker is bare
-      // either way.
       rounded={compact}
       className={compact ? undefined : "rounded-md"}
     />
@@ -474,7 +443,6 @@ function UserMenuCard({
   );
 }
 
-/** Name over email; the email is absent for an account made with a phone number alone. */
 function UserIdentity({ user }: { user: AppUser }) {
   return (
     <span className="grid min-w-0 flex-1">

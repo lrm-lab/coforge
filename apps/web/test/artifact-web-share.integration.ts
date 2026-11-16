@@ -9,12 +9,6 @@ import { Artifacts, type ArtifactBlobStore } from "#src/server/artifacts/artifac
 import { postUserMessage } from "#src/server/conversations/user-message-post.server";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
-/**
- * A person's artifact share from the web (artifacts task #2): the share service with the person's
- * own send into channels and DMs (`postUserMessage`). The person must be able to read the
- * artifact, or nothing is sent anywhere; each destination then takes their send there or fails
- * with a reason; documents off refuses everything. The request names no actor and is capped.
- */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
@@ -47,12 +41,13 @@ const ports = {
   idempotency: { execute: (_scope: unknown, persist: () => Promise<never>) => persist() },
   publisher: quietCentrifugo(),
 };
-const share = (userId: string, targets: string[]) =>
+const share = (userId: string, targets: string[], unseen: "hold" | "send" = "send") =>
   shares.share({
     workspaceId,
     actor: { userId },
     artifactId,
     targets,
+    unseen,
     note: "Have a look",
     requestId: crypto.randomUUID(),
     send: ({ target, idempotencyKey, body }) =>
@@ -163,8 +158,6 @@ test("a reader shares into a channel and a DM they may post in: one message each
 
 test("someone who cannot read the artifact sends nothing anywhere", async () => {
   const before = (await linkMessages()).length;
-  // Dave is in no Workspace at all; every member reads every artifact (task #20), so only
-  // someone outside reads nothing.
   const refused = await share(people.dave, [rooms.open]).catch((error: unknown) => error);
   expect(isAppError(refused) && refused.code).toBe("NOT_FOUND");
   expect((await linkMessages()).length).toBe(before);
@@ -224,7 +217,6 @@ test("with documents off, nothing is shared", async () => {
 });
 
 test("the service refuses more targets than its cap", async () => {
-  // Distinct ids: the service drops repeats before it counts.
   const distinct = Array.from({ length: 21 }, () => crypto.randomUUID());
   const refused = await share(people.alice, distinct).catch((error: unknown) => error);
   expect(isAppError(refused) && refused.code).toBe("INVALID_INPUT");
@@ -252,7 +244,6 @@ test("the web request names no actor and carries at most the picker's ten destin
 });
 
 test("a retry under the same request id posts nothing twice", async () => {
-  // As Redis does: a key that completed answers with the message it made, without persisting.
   const done = new Map<string, unknown>();
   const remembering = {
     db,
@@ -275,6 +266,7 @@ test("a retry under the same request id posts nothing twice", async () => {
       targets: [rooms.aliceBob],
       note: "Retry me",
       requestId,
+      unseen: "send",
       send: ({ target, idempotencyKey, body }) =>
         postUserMessage(remembering as never, {
           workspaceId,
@@ -292,4 +284,49 @@ test("a retry under the same request id posts nothing twice", async () => {
     where: { conversationId: rooms.aliceBob, body: { startsWith: "Retry me" } },
   });
   expect(posted).toBe(1);
+});
+
+test("recipients who cannot read the artifact hold the send, counted per destination", async () => {
+  const before = (await linkMessages()).length;
+  const held = await share(people.alice, [rooms.open, rooms.aliceBob, rooms.closed], "hold");
+  expect(held).toEqual({
+    outcome: "held",
+    results: [],
+    held: [
+      { target: rooms.open, people: 1, agents: 0 },
+      { target: rooms.aliceBob, people: 1, agents: 0 },
+    ],
+  });
+  expect((await linkMessages()).length).toBe(before);
+  const everyone = await share(people.alice, [rooms.closed], "hold");
+  expect(everyone.outcome).toBe("success");
+});
+
+test("widening the artifact or turning on its link ends the hold; sending anyway skips it", async () => {
+  await db.artifact.update({ where: { id: artifactId }, data: { access: "workspace" } });
+  try {
+    expect((await share(people.alice, [rooms.open], "hold")).outcome).toBe("success");
+  } finally {
+    await db.artifact.update({ where: { id: artifactId }, data: { access: "conversation" } });
+  }
+  const link = await db.artifactPublicLink.create({
+    data: { artifactId, token: `tok-${crypto.randomUUID()}`, createdByUserId: people.alice },
+  });
+  try {
+    expect((await share(people.alice, [rooms.aliceBob], "hold")).outcome).toBe("success");
+  } finally {
+    await db.artifactPublicLink.delete({ where: { id: link.id } });
+  }
+  expect((await share(people.alice, [rooms.open], "hold")).outcome).toBe("held");
+  expect((await share(people.alice, [rooms.open], "send")).outcome).toBe("success");
+});
+
+test("a request may say how to treat recipients who cannot see it, and only that", () => {
+  const base = {
+    artifactId: crypto.randomUUID(),
+    destinations: [crypto.randomUUID()],
+    requestId: crypto.randomUUID(),
+  };
+  expect(shareArtifactInputSchema.safeParse({ ...base, unseen: "send" }).success).toBe(true);
+  expect(shareArtifactInputSchema.safeParse({ ...base, unseen: "maybe" }).success).toBe(false);
 });

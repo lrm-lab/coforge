@@ -24,7 +24,6 @@ const scopeOf = (context: { workspaceId: string; user: { id: string } }) => ({
   actor: { userId: context.user.id },
 });
 
-/** The documents of a conversation, or of the Workspace when none is named, newest first. */
 export const listArtifacts = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ conversationId: id.optional() }).strict())
@@ -32,7 +31,6 @@ export const listArtifacts = createServerFn({ method: "GET" })
     productionArtifacts(context.db).documents.list(scopeOf(context), data),
   );
 
-/** Cards (title, preview, version) of documents a message names; unreadable ones are left out. */
 export const loadArtifactCards = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactIds: z.array(id).min(1).max(100) }).strict())
@@ -40,16 +38,17 @@ export const loadArtifactCards = createServerFn({ method: "GET" })
     productionArtifacts(context.db).documents.cards(scopeOf(context), data.artifactIds),
   );
 
-/** A document at its current version, with its text. */
 export const loadArtifactDocument = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
-  .validator(z.object({ artifactId: id }).strict())
+  .validator(z.object({ artifactId: id, version: artifactInputs.version.optional() }).strict())
   .handler(({ context, data }) =>
-    // The viewer reads a body only for a document's entry; a web page's is the sandbox's.
-    productionArtifacts(context.db).documents.load(scopeOf(context), data, { body: "markdown" }),
+    productionArtifacts(context.db).documents.load(
+      scopeOf(context),
+      { artifactId: data.artifactId, version: data.version },
+      { body: "markdown" },
+    ),
   );
 
-/** Whether an artifact can have a public link, and the one it has (task #646). */
 export const loadArtifactLinkSharing = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactId: id }).strict())
@@ -96,7 +95,6 @@ export const loadArtifactAccessLoss = createServerFn({ method: "GET" })
     }),
   );
 
-/** Deletes a document: its author's, or a Workspace owner's or admin's. */
 export const deleteArtifact = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactId: id }).strict())
@@ -109,14 +107,6 @@ export const deleteArtifact = createServerFn({ method: "POST" })
     return { deleted: true as const };
   });
 
-/**
- * Sends an artifact's link into channels and DMs as the signed-in person (artifacts task #2): one
- * message per destination, the optional note above the link. The actor is always the session's
- * person, never the request's. The service refuses the whole request when they are no member of
- * the Workspace or a home is hidden, or documents are off; each destination then takes the person's own send there (a
- * channel they are in and that is not archived, a DM they may write in), so one can fail while the
- * rest go through, and a retry with the same `requestId` sends only to those that failed.
- */
 export const shareArtifact = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(shareArtifactInputSchema)
@@ -143,6 +133,7 @@ export const shareArtifact = createServerFn({ method: "POST" })
       targets: data.destinations,
       note: data.note || undefined,
       requestId: data.requestId,
+      unseen: data.unseen,
       send: ({ target, idempotencyKey, body }) =>
         postUserMessage(ports, {
           workspaceId,

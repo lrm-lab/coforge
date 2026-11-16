@@ -98,7 +98,7 @@ export class ArtifactNotices {
     return this.guarded(() => this.versionNotice(input));
   }
 
-  rename(input: Context & { from: string; to: string; key: string }) {
+  rename(input: (Context | PersonContext) & { from: string; to: string; key: string }) {
     return this.guarded(() =>
       this.tell(input, {
         key: `rename:${input.key}`,
@@ -148,8 +148,8 @@ export class ArtifactNotices {
     });
   }
 
-  private async audience(input: Context, plan: Plan): Promise<Audience> {
-    const { artifact, writerId } = input;
+  private async audience(input: Context | PersonContext, plan: Plan): Promise<Audience> {
+    const { artifact } = input;
     const [mentions, followers] = await Promise.all([
       mentionedIn(this.db, input.workspaceId, plan.texts),
       plan.followers === undefined ? [] : followerIds(this.db, artifact.id),
@@ -158,17 +158,20 @@ export class ArtifactNotices {
     if (plan.followers) for (const agentId of followers) agents.set(agentId, plan.followers);
     for (const [agentId, reason] of plan.own ?? []) agents.set(agentId, reason);
     for (const agent of mentions.agents) agents.set(agent.id, "mentioned");
-    agents.delete(writerId);
+    if ("writerId" in input) agents.delete(input.writerId);
     return { agents, people: mentions.people };
   }
 
-  private async tell(input: Context, plan: Plan): Promise<NoticeReport> {
+  private async tell(input: Context | PersonContext, plan: Plan): Promise<NoticeReport> {
     const { artifact, workspaceId } = input;
     const { agents, people } = await this.audience(input, plan);
-    const writer = await this.db.agent.findUniqueOrThrow({
-      where: { id: input.writerId },
-      select: { name: true },
-    });
+    const writer =
+      "writerId" in input
+        ? await this.db.agent.findUniqueOrThrow({
+            where: { id: input.writerId },
+            select: { name: true },
+          })
+        : { name: input.writerName };
     const named = await this.db.agent.findMany({
       where: { id: { in: [...agents.keys()] }, workspaceId, ...ACTIVE_AGENT_WHERE },
       select: { id: true, name: true },
@@ -214,6 +217,12 @@ type Context = {
   workspaceId: string;
   artifact: NoticedArtifact;
   writerId: string;
+};
+
+type PersonContext = {
+  workspaceId: string;
+  artifact: NoticedArtifact;
+  writerName: string;
 };
 
 type Plan = {

@@ -19,3 +19,9 @@ These rules apply to `src/features/artifacts/`. They extend
   Its per-method level floors are in `artifact-page-levels.ts`; each confirm-gated capability
   (`links`, `data`, `assets`) has its own decline count, and only the `data` consent is kept for
   the frame.
+- Who can see an artifact is the home conversation, the Workspace, or anyone with the link
+  (`use-artifact-visibility.tsx`); narrowing and link changes confirm, and a person never sees a
+  fixed "everyone, always" rule. Sending to people who cannot read it is held until the sender
+  chooses to widen, share by link, or send anyway.
+- The viewer's actions live in the page header and the ⋯ menu (`artifact-more-menu.tsx`); show an
+  action only when the viewer may do it.

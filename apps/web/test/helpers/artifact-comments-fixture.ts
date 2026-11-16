@@ -10,11 +10,6 @@ import { LocalFileStorage } from "#src/server/files/file-storage.server";
 import { productionArtifactNotices } from "#src/server/artifacts/artifact-composition.server";
 import { handleAgentArtifactPost } from "#src/routes/api/agent/v1/artifacts";
 
-/**
- * A Workspace for the artifact comment suites: Alice (owner) and Bob (member), three Agents in a
- * public channel, a private channel only Alice and the Writer Bot are in, and `post`, one Agent's
- * request on `POST /api/agent/v1/artifacts`.
- */
 export type CommentsFixture = Awaited<ReturnType<typeof commentsFixture>>;
 
 export async function commentsFixture(prefix: string) {
@@ -118,7 +113,6 @@ export async function commentsFixture(prefix: string) {
   const sha256 = (bytes: Uint8Array<ArrayBuffer>) =>
     new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 
-  /** Uploads each file's bytes for the Agent, and names them as a manifest. */
   async function manifestOf(agentId: string, files: Record<string, string>) {
     const named: { path: string; sha256: string }[] = [];
     for (const [path, content] of Object.entries(files)) {
@@ -131,8 +125,6 @@ export async function commentsFixture(prefix: string) {
 
   const key = () => crypto.randomUUID();
 
-  /** An artifact of the given files, entry `plan.md`, made by the Writer Bot in the public
-   * channel (version 1). */
   async function make(
     title: string,
     files: Record<string, string> = { "plan.md": "one\ntwo\nthree\n" },
@@ -158,7 +150,6 @@ export async function commentsFixture(prefix: string) {
     return artifactId;
   }
 
-  /** A person's comment, written straight into the table (the Agent API writes an Agent's). */
   async function personComments(
     artifactId: string,
     userId: string,
@@ -184,12 +175,10 @@ export async function commentsFixture(prefix: string) {
     });
   }
 
-  /** A push of `plan.md` alone over the newest version, by an Agent. */
   function pushText(artifactId: string, agentId: string, text: string) {
     return pushFiles(artifactId, agentId, { "plan.md": text });
   }
 
-  /** A push of some files over the newest version, by an Agent. */
   async function pushFiles(
     artifactId: string,
     agentId: string,
@@ -208,8 +197,6 @@ export async function commentsFixture(prefix: string) {
     });
   }
 
-  /** Resolves once a request is waiting on an advisory lock: the observable that a write is
-   * blocked on the comment lock, not merely slow. */
   async function waitForLockWaiter() {
     for (let attempt = 0; attempt < 200; attempt += 1) {
       const [row] = await db.$queryRaw<{ waiting: number }[]>`
@@ -221,7 +208,6 @@ export async function commentsFixture(prefix: string) {
     throw new Error("no request is waiting on an advisory lock");
   }
 
-  /** The notices an Agent was sent, oldest first: each Message body in its dedicated conversation. */
   async function noticesOf(agentId: string) {
     const rows = await db.systemAgentEvent.findMany({
       where: { agentId },
@@ -240,6 +226,9 @@ export async function commentsFixture(prefix: string) {
 
   return {
     db,
+    artifacts,
+    documents,
+    blobs,
     workspaceId,
     alice,
     bob,
@@ -250,7 +239,6 @@ export async function commentsFixture(prefix: string) {
     key,
     make,
     manifestOf,
-    blobs,
     personComments,
     pushText,
     pushFiles,

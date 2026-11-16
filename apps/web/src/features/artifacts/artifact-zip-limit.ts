@@ -1,0 +1,1 @@
+export const ARTIFACT_ZIP_LIMIT_BYTES = 50 * 1024 * 1024;

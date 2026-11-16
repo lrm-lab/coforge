@@ -2,17 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  DotsHorizontal,
-  LinkExternal01,
+  ChevronDown,
   Link01,
   Maximize01,
   Minimize01,
   SearchLg,
-  Trash01,
   XClose,
 } from "@untitledui/icons";
+import { Button as AriaButton } from "react-aria-components";
+import type { ReactNode } from "react";
 
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -24,158 +23,129 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ArtifactIcon } from "./artifact-parts";
+import { VersionMenu } from "./artifact-version-menu";
 
-/** The page's title, which names its `main`. */
 export const ARTIFACT_TITLE_ID = "artifact-page-title";
 
-/** An artifact beside its conversation's chat (Frank, 11-05): full screen and close in place of
- * the way back, as the chat is right there. */
 export type ArtifactPaneControls = { full: boolean; onToggleFull: () => void; onClose: () => void };
 
-/** Where an artifact lives, as its page's way back names it. */
 export type ArtifactHome = { kind: "channel" | "dm" | "workspace"; conversationId: string | null };
 
-/**
- * An artifact's page's header (task #514): the way back to its conversation, its type, title and
- * version, then Share and more (copy link, open a web page in a tab of its own, delete).
- * Beside the chat it has no way back, and ends with full screen and close (`pane`).
- */
 export function ArtifactPageHeader({
+  artifactId,
   entryPath,
   title,
-  version,
+  shownVersion,
   home,
-  canDelete,
-  shareIcon,
-  onShare,
-  onCopyLink,
-  onOpenInTab,
+  pills,
+  onChooseVersion,
   onFind,
-  onDelete,
+  onCopyLink,
+  menu,
   pane,
 }: {
-  /** Undefined until the artifact is read: the header holds its place. */
+  artifactId: string;
   entryPath: string | undefined;
   title: string;
-  /** Absent until the artifact is read. */
-  version?: number;
+  shownVersion?: number;
   home: ArtifactHome | undefined;
-  canDelete: boolean;
-  /** The icon on the Share button: the public link's, or the Workspace's. */
-  shareIcon?: typeof ArrowLeft;
-  /** Absent until the artifact is read. */
-  onShare?: () => void;
-  onCopyLink?: () => void;
-  onOpenInTab?: () => void;
+  pills?: ReactNode;
+  onChooseVersion: (version: number) => void;
   onFind?: () => void;
-  onDelete?: () => void;
+  onCopyLink?: () => void;
+  menu?: ReactNode;
   pane?: ArtifactPaneControls;
 }) {
   const Title = pane ? "h2" : "h1";
   return (
     <header
       className={cn(
-        "flex h-14 shrink-0 items-center gap-2 border-b border-secondary",
+        "flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-secondary py-2 sm:min-h-14 sm:flex-nowrap",
         pane ? "pr-2 pl-4" : "px-3 sm:px-4",
       )}
     >
-      {!pane && (
-        <>
-          <BackToHome home={home} />
-          <span
-            aria-hidden="true"
-            className="h-5 w-px shrink-0 bg-border-secondary max-sm:hidden"
-          />
-        </>
-      )}
+      {!pane && <BackToHome home={home} />}
       {entryPath === undefined ? (
         <Skeleton className="h-4 w-40" />
       ) : (
         <>
           <ArtifactIcon entryPath={entryPath} size="sm" />
-          {/* Beside the chat, the conversation's page holds the page's own heading. */}
           <Title
             id={ARTIFACT_TITLE_ID}
             className="min-w-0 truncate text-sm font-semibold text-primary"
           >
             {title}
           </Title>
-          {version !== undefined && (
-            <span className="shrink-0 text-xs text-tertiary tabular-nums max-sm:hidden">
-              v{version}
-            </span>
+          {shownVersion !== undefined && (
+            <Dropdown.Root>
+              <AriaButton
+                aria-label={m.av_version_switch({ version: shownVersion })}
+                className="flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs text-tertiary tabular-nums outline-focus-ring ring-1 ring-secondary ring-inset hover:bg-primary_hover focus-visible:outline-2"
+              >
+                v{shownVersion}
+                <ChevronDown aria-hidden="true" className="size-3" />
+              </AriaButton>
+              <Dropdown.Popover placement="bottom start" className="w-72">
+                <VersionMenu
+                  artifactId={artifactId}
+                  shown={shownVersion}
+                  onChoose={onChooseVersion}
+                />
+              </Dropdown.Popover>
+            </Dropdown.Root>
           )}
         </>
       )}
-      <span className="flex-1" />
-      {onFind && (
-        <ButtonUtility
-          icon={SearchLg}
-          size="sm"
-          color="tertiary"
-          tooltip={m.doc_page_find()}
-          onClick={onFind}
-        />
-      )}
-      {onShare &&
-        (pane ? (
-          // Beside the chat the title needs the room: Share keeps its icon and its tooltip.
+      <span className="flex-1 max-sm:order-1" />
+      <div className="flex min-w-0 items-center gap-1.5 max-sm:order-last max-sm:basis-full sm:order-none">
+        {pills}
+      </div>
+      <div className="flex shrink-0 items-center gap-1 max-sm:order-2">
+        {onFind && (
           <ButtonUtility
-            icon={shareIcon}
+            icon={SearchLg}
             size="sm"
             color="tertiary"
-            tooltip={m.doc_share()}
-            onClick={onShare}
+            tooltip={m.doc_page_find()}
+            className="max-sm:hidden"
+            onClick={onFind}
           />
-        ) : (
-          <Button size="sm" color="secondary" iconLeading={shareIcon} onClick={onShare}>
-            {m.doc_share()}
-          </Button>
-        ))}
-      {onCopyLink && (
-        <Dropdown.Root>
-          <ButtonUtility icon={DotsHorizontal} size="sm" color="tertiary" tooltip={m.doc_more()} />
-          <Dropdown.Popover placement="bottom end">
-            <Dropdown.Menu
-              aria-label={m.doc_more()}
-              onAction={(key) =>
-                key === "delete" ? onDelete?.() : key === "tab" ? onOpenInTab?.() : onCopyLink()
-              }
-            >
-              <Dropdown.Item id="copy" icon={Link01} label={m.doc_copy_link()} />
-              {onOpenInTab && (
-                <Dropdown.Item id="tab" icon={LinkExternal01} label={m.doc_open_in_tab()} />
-              )}
-              {canDelete && <Dropdown.Separator />}
-              {canDelete && <Dropdown.Item id="delete" icon={Trash01} label={m.doc_delete()} />}
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown.Root>
-      )}
-      {pane && (
-        <>
+        )}
+        {onCopyLink && (
           <ButtonUtility
-            icon={pane.full ? Minimize01 : Maximize01}
+            icon={Link01}
             size="sm"
             color="tertiary"
-            tooltip={pane.full ? m.doc_exit_fullscreen() : m.doc_fullscreen()}
-            className="max-md:hidden"
-            onClick={pane.onToggleFull}
+            tooltip={m.doc_copy_link()}
+            className="max-sm:hidden"
+            onClick={onCopyLink}
           />
-          <ButtonUtility
-            icon={XClose}
-            size="sm"
-            color="tertiary"
-            tooltip={m.doc_close()}
-            onClick={pane.onClose}
-          />
-        </>
-      )}
+        )}
+        {menu}
+        {pane && (
+          <>
+            <ButtonUtility
+              icon={pane.full ? Minimize01 : Maximize01}
+              size="sm"
+              color="tertiary"
+              tooltip={pane.full ? m.doc_exit_fullscreen() : m.doc_fullscreen()}
+              className="max-md:hidden"
+              onClick={pane.onToggleFull}
+            />
+            <ButtonUtility
+              icon={XClose}
+              size="sm"
+              color="tertiary"
+              tooltip={m.doc_close()}
+              onClick={pane.onClose}
+            />
+          </>
+        )}
+      </div>
     </header>
   );
 }
 
-/** A channel home's name as the page says it ("#launch"); undefined for a DM or the Workspace. */
 export function useHomeName(home: ArtifactHome | undefined): string | undefined {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const channelId = home?.kind === "channel" ? home.conversationId : null;
@@ -184,15 +154,10 @@ export function useHomeName(home: ArtifactHome | undefined): string | undefined 
   return name ? `#${name}` : undefined;
 }
 
-/** Back to the conversation the artifact lives in: a channel by its name, a DM as "Back"; with no
- * conversation to go back to (one of the Workspace, or one the reader reaches only
- * workspace-wide, task #20), back to the Workspace. */
 function BackToHome({ home }: { home: ArtifactHome | undefined }) {
   const workspaceSlug = useWorkspaceSlug();
   const toWorkspace = home !== undefined && (!home.conversationId || home.kind === "workspace");
   const homeName = useHomeName(home);
-  // A channel reads its group avatar and name, no `#` (task #55); the share dialog's sentence
-  // keeps `#name`.
   const channel = home?.kind === "channel" && home.conversationId ? home.conversationId : null;
   const label = toWorkspace ? (
     m.doc_back_to_workspace()

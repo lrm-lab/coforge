@@ -11,20 +11,6 @@ import {
 import { taskDiscussionAccess, taskDiscussionBoardSelect } from "./task-discussion-access.server";
 import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
 
-/**
- * The one rule for reading a channel, as a query, as raw SQL, in memory and by id; every channel
- * read applies one of the four, and `channel-read-access.integration.test.ts` holds them to the
- * same answer.
- *
- * A public channel is readable by every Workspace member and every Agent of the Workspace; a
- * private one only by its active members (`ACTIVE_MEMBER_WHERE`). A Workspace role grants nothing
- * here: an owner or admin outside a private channel does not see it. The caller has already
- * established that the reader belongs to the Workspace (`authorizeChannelActor`). A channel hidden
- * from the Workspace (`VISIBLE_CONVERSATION_WHERE`) and a DM are never read.
- *
- * The rule sits under `AND`, so a caller's own `OR` spread beside it narrows the read and can
- * never replace it; a caller with its own `AND` nests both instead of spreading.
- */
 export function visibleChannelWhere(workspaceId: string, reader: ChannelActor) {
   return {
     ...channelWhere(workspaceId),
@@ -43,7 +29,6 @@ export function visibleChannelWhere(workspaceId: string, reader: ChannelActor) {
   } satisfies Prisma.ConversationWhereInput;
 }
 
-/** Every channel of the Workspace a read may ever reach: not a DM, not hidden. */
 function channelWhere(workspaceId: string) {
   return {
     workspaceId,
@@ -52,18 +37,10 @@ function channelWhere(workspaceId: string) {
   } satisfies Prisma.ConversationWhereInput;
 }
 
-/**
- * The by-id form, for a single-channel read on a hot path: `channelByIdWhere` reads the channel
- * without `visibleChannelWhere`'s member probe, and `requireReadableChannel` then applies the
- * rule, probing the reader's member row only for a private channel. The read must select
- * `visibility` and go through `requireReadableChannel`.
- */
 export function channelByIdWhere(workspaceId: string, channelId: string) {
   return { id: channelId, ...channelWhere(workspaceId) } satisfies Prisma.ConversationWhereInput;
 }
 
-/** A channel read through `channelByIdWhere`, or `NOT_FOUND`: a missing channel and one the
- * reader cannot read answer alike. */
 export async function requireReadableChannel<Channel extends { id: string; visibility: string }>(
   db: Pick<PrismaClient, "conversationMember">,
   workspaceId: string,
@@ -85,13 +62,10 @@ export async function requireReadableChannel<Channel extends { id: string; visib
   return channel;
 }
 
-/** `visibleChannelWhere` for a channel already read: `isActiveMember` is whether the reader has
- * an active member row in it. */
 export function canReadChannel(channel: { visibility: string }, isActiveMember: boolean) {
   return channel.visibility === CHANNEL_VISIBILITY.PUBLIC || isActiveMember;
 }
 
-/** The shared in-memory read rule for an artifact's conversation home. */
 export function canReadConversationHome(input: {
   channelName: string | null;
   visibility: string;
@@ -100,13 +74,6 @@ export function canReadConversationHome(input: {
   return input.channelName === null ? input.member : canReadChannel(input, input.member);
 }
 
-/**
- * Whether a person reads one conversation, for a gate that has only its id (a realtime
- * subscription, a file download): a DM they are an active member of, or a channel of a Workspace
- * they belong to that `canReadChannel` lets them read; never a hidden one. `"private"` is a
- * private channel they are not in, which a caller that keeps such a channel unknown reports as
- * missing; `undefined` is none of these. `where` narrows which conversation is meant.
- */
 export async function personConversationAccess(
   db: Pick<PrismaClient, "conversation">,
   userId: string,
@@ -119,7 +86,6 @@ export async function personConversationAccess(
       OR: [
         { ...DIRECT_CONVERSATION_WHERE, members: { some: { userId, ...ACTIVE_MEMBER_WHERE } } },
         { channelName: { not: null }, workspace: { members: { some: { userId } } } },
-        // A task's own conversation: its board decides (`taskDiscussionAccess`).
         { kind: "task_thread", workspace: { members: { some: { userId } } } },
       ],
     },
@@ -137,13 +103,6 @@ export async function personConversationAccess(
   return canReadChannel(conversation, conversation.members.length > 0) ? "read" : "private";
 }
 
-/**
- * What `actor` — a person or an Agent — may do in one channel or DM, for a caller that holds
- * only the conversation's id and must not read the conversation tables itself (the artifacts
- * module's home rule, task #542): `read` is `canReadChannel`'s answer — a DM's active members
- * only — `write` adds an unarchived home, and `kind` names which it is. `undefined` is a
- * conversation the Workspace cannot see or that is not a channel or a DM.
- */
 export async function actorConversationAccess(
   db: Pick<PrismaClient, "conversation">,
   workspaceId: string,
@@ -325,9 +284,40 @@ export async function actorsWithoutConversationRead(
   return { people, agents };
 }
 
-/** The id of the Workspace's channel named `name`, hidden ones aside — a lookup, not a read
- * grant: the caller applies its own access rule (the artifacts module's `#channel` target,
- * task #542). `undefined` when no such channel exists. */
+export async function membersWithoutOtherConversationRead(
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  targetId: string,
+  homeId: string,
+): Promise<{ people: number; agents: number } | undefined> {
+  const [target, home] = await Promise.all(
+    [targetId, homeId].map((id) =>
+      db.conversation.findFirst({
+        where: {
+          id,
+          workspaceId,
+          ...VISIBLE_CONVERSATION_WHERE,
+          OR: [{ channelName: { not: null } }, DIRECT_CONVERSATION_WHERE],
+        },
+        select: {
+          channelName: true,
+          visibility: true,
+          members: { where: ACTIVE_MEMBER_WHERE, select: { userId: true, agentId: true } },
+        },
+      }),
+    ),
+  );
+  if (!target || !home) return undefined;
+  if (home.channelName !== null && home.visibility === CHANNEL_VISIBILITY.PUBLIC)
+    return { people: 0, agents: 0 };
+  const seated = new Set(home.members.map((member) => member.userId ?? member.agentId));
+  const lacking = target.members.filter((member) => !seated.has(member.userId ?? member.agentId));
+  return {
+    people: lacking.filter((member) => member.userId !== null).length,
+    agents: lacking.filter((member) => member.agentId !== null).length,
+  };
+}
+
 export async function visibleChannelIdByName(
   db: Pick<PrismaClient, "conversation">,
   workspaceId: string,
@@ -340,9 +330,6 @@ export async function visibleChannelIdByName(
   return channel?.id;
 }
 
-/** The id of the direct conversation `memberA` and `memberB` share, both actively seated — a
- * lookup, never an open: a DM that does not exist answers `undefined` (the artifacts module's
- * `@name` target, task #542). */
 export async function directConversationIdBetween(
   db: Pick<PrismaClient, "conversation">,
   workspaceId: string,
@@ -363,8 +350,6 @@ export async function directConversationIdBetween(
   return conversation?.id;
 }
 
-/** The conversations a person acts on a message in (save, react, download a file): a channel by
- * `visibleChannelWhere`, or a DM, which the caller still checks is theirs by their member row. */
 export function readableConversationWhere(workspaceId: string, reader: { userId: string }) {
   return {
     AND: [
@@ -372,7 +357,6 @@ export function readableConversationWhere(workspaceId: string, reader: { userId:
         OR: [
           visibleChannelWhere(workspaceId, reader),
           { ...VISIBLE_CONVERSATION_WHERE, ...DIRECT_CONVERSATION_WHERE },
-          // A task's own conversation: readable as its board is, never by its own seats.
           {
             kind: "task_thread",
             taskDiscussionOf: {
@@ -396,8 +380,6 @@ export function readableConversationWhere(workspaceId: string, reader: { userId:
   } satisfies Prisma.ConversationWhereInput;
 }
 
-/** A conversation a person may read, for a raw query over `"conversations" <alias>`: a channel by
- * `readableChannelSql`, a direct conversation only while they are an active member of it. */
 export function readablePersonConversationSql(alias: string, workspaceId: string, userId: string) {
   const conversation = Prisma.raw(alias);
   return Prisma.sql`(${readableChannelSql(alias, workspaceId, { userId })}
@@ -407,8 +389,6 @@ export function readablePersonConversationSql(alias: string, workspaceId: string
       AND v."leftAt" IS NULL))`;
 }
 
-/** `visibleChannelWhere` for a raw query over `"conversations" <alias>`; the alias is a
- * repository-owned identifier. */
 export function readableChannelSql(alias: string, workspaceId: string, reader: ChannelActor) {
   const conversation = Prisma.raw(alias);
   const readerColumn = Prisma.raw("userId" in reader ? '"userId"' : '"agentId"');

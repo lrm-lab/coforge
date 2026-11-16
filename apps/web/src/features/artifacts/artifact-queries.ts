@@ -2,6 +2,13 @@ import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query"
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
+import { loadArtifactMarks } from "./artifact-gallery.functions";
+import {
+  loadArtifactFilePreview,
+  loadArtifactFollowing,
+  loadArtifactVersions,
+  loadArtifactViewers,
+} from "./artifact-viewer.functions";
 import {
   listArtifacts,
   loadArtifactCards,
@@ -10,15 +17,11 @@ import {
 } from "./artifacts.functions";
 import { loadArtifactsOn } from "./artifacts-on.functions";
 
-/** A document as a list row and a card show it (`listArtifacts`, `loadArtifactCards`). */
 export type ArtifactCard = Awaited<ReturnType<typeof listArtifacts>>[number];
-/** Who wrote an artifact: the Agent that did, or nobody (the field is absent). */
 type ArtifactActorRef = { agentId: string } | null;
 
-/** Every documents query, to refresh after a delete, a change of access or a published version. */
 export const ARTIFACTS_KEY = ["artifacts"] as const;
 
-/** Whether documents are on in the Workspace; read again on a page's next use after a minute. */
 export const artifactsOnQuery = (workspaceId: string | undefined) =>
   queryOptions({
     queryKey: [...ARTIFACTS_KEY, "on", workspaceId],
@@ -26,7 +29,6 @@ export const artifactsOnQuery = (workspaceId: string | undefined) =>
     staleTime: 60_000,
   });
 
-/** Whether documents are on here: `true` or `false` once read, `undefined` until then. */
 export function useArtifactsOn(): boolean | undefined {
   return useQuery(artifactsOnQuery(useCurrentWorkspaceId())).data;
 }
@@ -38,7 +40,6 @@ export const artifactListQuery = (conversationId: string) =>
     staleTime: 0,
   });
 
-/** One card per query, so every message naming the same document shares one read. */
 export const artifactCardQuery = (artifactId: string) =>
   queryOptions({
     queryKey: [...ARTIFACTS_KEY, "card", artifactId],
@@ -47,48 +48,81 @@ export const artifactCardQuery = (artifactId: string) =>
     staleTime: 30_000,
   });
 
-/** A document at its current version. */
-export const artifactDocumentQuery = (artifactId: string) =>
+export const artifactDocumentQuery = (artifactId: string, version?: number) =>
   queryOptions({
-    queryKey: [...ARTIFACTS_KEY, "document", artifactId],
-    queryFn: () => loadArtifactDocument({ data: { artifactId } }),
+    queryKey: [...ARTIFACTS_KEY, "document", artifactId, version ?? "latest"],
+    queryFn: () => loadArtifactDocument({ data: { artifactId, version } }),
     staleTime: 0,
   });
 
-/** Whether an artifact can have a public link, and the one it has. */
+export type ArtifactDocument = Awaited<ReturnType<typeof loadArtifactDocument>>;
+
+export const artifactVersionsQuery = (artifactId: string) =>
+  queryOptions({
+    queryKey: [...ARTIFACTS_KEY, "versions", artifactId],
+    queryFn: () => loadArtifactVersions({ data: { artifactId } }),
+    staleTime: 0,
+  });
+
+export const artifactViewersQuery = (artifactId: string) =>
+  queryOptions({
+    queryKey: [...ARTIFACTS_KEY, "viewers", artifactId],
+    queryFn: () => loadArtifactViewers({ data: { artifactId } }),
+    staleTime: 0,
+  });
+
+export const artifactFollowingQuery = (artifactId: string) =>
+  queryOptions({
+    queryKey: [...ARTIFACTS_KEY, "following", artifactId],
+    queryFn: () => loadArtifactFollowing({ data: { artifactId } }),
+  });
+
+export const artifactMarksQuery = (artifactId: string) =>
+  queryOptions({
+    queryKey: [...ARTIFACTS_KEY, "marks", artifactId],
+    queryFn: async () =>
+      (await loadArtifactMarks({ data: { artifactIds: [artifactId] } })).at(0) ?? null,
+    staleTime: 30_000,
+  });
+
+export const artifactFilePreviewQuery = (artifactId: string, version: number, path: string) =>
+  queryOptions({
+    queryKey: [...ARTIFACTS_KEY, "file", artifactId, version, path],
+    queryFn: () => loadArtifactFilePreview({ data: { artifactId, version, path } }),
+    staleTime: Infinity,
+  });
+
 export const artifactLinkSharingQuery = (artifactId: string) =>
   queryOptions({
     queryKey: [...ARTIFACTS_KEY, "link-sharing", artifactId],
     queryFn: () => loadArtifactLinkSharing({ data: { artifactId } }),
   });
 
-/** After an artifact changed: its read, its cards and its home's list — only that home's, so a
- * version published in one conversation does not refetch every open Files tab (`homeId` is the
- * home conversation's id, `null` for a Workspace artifact, which no list shows). */
 export function refreshArtifact(
   queryClient: QueryClient,
   artifactId: string,
   homeId: string | null,
+  options: { document?: boolean } = {},
 ): Promise<void> {
+  const document = options.document ?? true;
   return queryClient.invalidateQueries({
     predicate: ({ queryKey: [root, kind, id] }) => {
       if (root !== ARTIFACTS_KEY[0]) return false;
       if (kind === "list") return id === homeId;
-      return id === artifactId && (kind === "card" || kind === "document");
+      if (id !== artifactId) return false;
+      return kind === "document"
+        ? document
+        : ["card", "versions", "marks", "viewers"].includes(String(kind));
     },
   });
 }
 
-/** The home conversation a document's `homeKey` names, or null for a Workspace document. */
 export function artifactHomeConversation(homeKey: string): string | null {
   return homeKey.startsWith("conversation:") ? homeKey.slice("conversation:".length) : null;
 }
 
-/** An artifact's author as the page shows it: the Agent's name and face. */
 export type ArtifactActorView = { name: string; avatarUrl?: string };
 
-/** Names authors from the Workspace directory, read once for every artifact; an Agent it does not
- * list (deleted, or not yet read) is undefined. */
 export function useArtifactActor() {
   const { data } = useWorkspaceDirectory();
   return (actor: ArtifactActorRef): ArtifactActorView | undefined => {

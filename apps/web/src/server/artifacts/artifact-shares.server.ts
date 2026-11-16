@@ -5,7 +5,13 @@ import {
   ARTIFACT_SHARE_NOTE_MAX_LENGTH,
 } from "#src/features/artifacts/artifact-share-input";
 import { AppError, isAppError } from "#src/lib/app-error";
-import { artifactsDisabled, requireArtifactRead } from "./artifact-access.server";
+import { membersWithoutOtherConversationRead } from "#src/server/conversations/channel-read-access.server";
+import {
+  artifactHomeConversationId,
+  artifactTier,
+  artifactsDisabled,
+  requireArtifactRead,
+} from "./artifact-access.server";
 
 export type ArtifactShareFailureCode = "no_access" | "archived" | "read_only" | "failed";
 export type ArtifactShareDestinationResult =
@@ -20,12 +26,15 @@ export type ArtifactShareDestinationResult =
       error: { code: ArtifactShareFailureCode };
     };
 
-export type ArtifactShareResult = {
-  outcome: "success" | "partial_failure" | "all_failed" | "idempotent_replay";
-  results: ArtifactShareDestinationResult[];
-};
+export type ArtifactShareHold = { target: string; people: number; agents: number };
 
-/** One destination key, stable across retries and independent of the number of artifacts shared. */
+export type ArtifactShareResult =
+  | {
+      outcome: "success" | "partial_failure" | "all_failed" | "idempotent_replay";
+      results: ArtifactShareDestinationResult[];
+    }
+  | { outcome: "held"; results: []; held: ArtifactShareHold[] };
+
 export function artifactShareIdempotencyKey(requestId: string, target: string): string {
   const bytes = createHash("sha256").update(`artifact-share:${requestId}:${target}`).digest();
   bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x80;
@@ -40,16 +49,16 @@ type ArtifactShareSender = (input: {
   body: string;
 }) => Promise<{ id: string; sequence: number }>;
 
-/**
- * Sends live artifact links, as a person, by posting ordinary messages. The artifact rows are
- * checked once before any destination is attempted; every destination then uses the person's
- * normal message authorization and its own derived idempotency key.
- */
 export class ArtifactShares {
   constructor(
     private readonly db: Pick<
       PrismaClient,
-      "artifact" | "workspace" | "workspaceMembership" | "agent" | "conversation"
+      | "artifact"
+      | "artifactPublicLink"
+      | "workspace"
+      | "workspaceMembership"
+      | "agent"
+      | "conversation"
     >,
     private readonly enabled: (workspaceId: string) => Promise<boolean>,
   ) {}
@@ -61,6 +70,7 @@ export class ArtifactShares {
     targets: readonly string[];
     note?: string;
     requestId: string;
+    unseen?: "hold" | "send";
     send: ArtifactShareSender;
   }): Promise<ArtifactShareResult> {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
@@ -91,6 +101,10 @@ export class ArtifactShares {
     ]);
     if (!workspace || !row) throw new AppError("NOT_FOUND");
     await requireArtifactRead(this.db, input.workspaceId, input.actor, row);
+    if (input.unseen !== "send") {
+      const held = await this.recipientsWhoCannotSee(input.workspaceId, row, targets);
+      if (held.length > 0) return { outcome: "held", results: [], held };
+    }
 
     const body = [input.note?.trim(), `/w/${workspace.slug}/artifacts/${artifactId}`]
       .filter(Boolean)
@@ -122,6 +136,31 @@ export class ArtifactShares {
         succeeded === 0 ? "all_failed" : succeeded < results.length ? "partial_failure" : "success",
       results,
     };
+  }
+
+  private async recipientsWhoCannotSee(
+    workspaceId: string,
+    artifact: { id: string; homeKey: string; access: string },
+    targets: readonly string[],
+  ): Promise<ArtifactShareHold[]> {
+    const home = artifactHomeConversationId(artifact.homeKey);
+    if (artifactTier(artifact) === "workspace" || !home) return [];
+    const link = await this.db.artifactPublicLink.findFirst({
+      where: { artifactId: artifact.id, revokedAt: null },
+      select: { id: true },
+    });
+    if (link) return [];
+    const counts = await Promise.all(
+      targets.map(async (target) => ({
+        target,
+        ...(await membersWithoutOtherConversationRead(this.db, workspaceId, target, home)),
+      })),
+    );
+    return counts.flatMap(({ target, people, agents }) =>
+      people === undefined || agents === undefined || people + agents === 0
+        ? []
+        : [{ target, people, agents }],
+    );
   }
 }
 

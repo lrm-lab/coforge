@@ -53,6 +53,7 @@ model Artifact {
   follows         ArtifactFollow[]
   pageDocuments   ArtifactPageDocument[]
   pageAssets      ArtifactPageAsset[]
+  viewerPositions ArtifactViewerPosition[]
 
   @@index([workspaceId, homeKey])
   /// The live name is unique per home (`deletedAt IS NULL`), so a soft delete releases it at once.
@@ -344,4 +345,22 @@ model ArtifactCommentImage {
   @@index([commentId, position])
   @@index([artifactId])
   @@map("artifact_comment_images")
+}
+
+/// Where a person is on an artifact: when they last opened it (`openedAt`, which orders the
+/// gallery's "recently opened"), the newest version they have seen (it only moves forward, so
+/// reading an older version never rewinds it), and the last comment they were shown. `userId` has
+/// no foreign key: this module adds none to a table outside it. Goes with the artifact.
+model ArtifactViewerPosition {
+  artifactId    String    @db.Uuid
+  userId        String    @db.Uuid
+  openedAt      DateTime
+  seenVersion   Int
+  commentSeenAt DateTime?
+  commentSeenId String?   @db.Uuid
+  artifact      Artifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@id([artifactId, userId])
+  @@index([userId, openedAt(sort: Desc)])
+  @@map("artifact_viewer_positions")
 }

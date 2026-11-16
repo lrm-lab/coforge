@@ -122,6 +122,7 @@ import { Route as WWorkspaceSlugChatDraftsRouteImport } from './routes/w.$worksp
 import { Route as WWorkspaceSlugChatSavedRouteImport } from './routes/w.$workspaceSlug/_chat.saved'
 import { Route as WWorkspaceSlugComputersComputersRouteImport } from './routes/w.$workspaceSlug/_computers.computers'
 import { Route as WWorkspaceSlugAgentAgentIdRouteImport } from './routes/w.$workspaceSlug/agent.$agentId'
+import { Route as WWorkspaceSlugArtifactsIndexRouteImport } from './routes/w.$workspaceSlug/artifacts.index'
 import { Route as WWorkspaceSlugArtifactsArtifactIdRouteImport } from './routes/w.$workspaceSlug/artifacts.$artifactId'
 import { Route as WWorkspaceSlugProjectsIndexRouteImport } from './routes/w.$workspaceSlug/projects.index'
 import { Route as WWorkspaceSlugProjectsProjectSlugRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug'
@@ -179,6 +180,7 @@ import { Route as ApiAgentV1MessagesMessageIdResolveRouteImport } from './routes
 import { Route as ApiAgentV1ThreadsThreadUnfollowRouteImport } from './routes/api/agent/v1/threads_.$thread.unfollow'
 import { Route as ApiWorkspacesWorkspaceIdAppsAppKeyLogoRouteImport } from './routes/api/workspaces/$workspaceId/apps/$appKey/logo'
 import { Route as ApiWorkspacesWorkspaceIdUsersUserIdAvatarRouteImport } from './routes/api/workspaces/$workspaceId/users/$userId/avatar'
+import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
 import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRouteImport } from './routes/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
 import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRouteImport } from './routes/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
 import { Route as WWorkspaceSlugProjectsProjectSlugTreeSplatRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug_.tree.$'
@@ -795,6 +797,12 @@ const WWorkspaceSlugAgentAgentIdRoute =
     path: '/agent/$agentId',
     getParentRoute: () => WWorkspaceSlugRoute,
   } as any)
+const WWorkspaceSlugArtifactsIndexRoute =
+  WWorkspaceSlugArtifactsIndexRouteImport.update({
+    id: '/artifacts/',
+    path: '/artifacts/',
+    getParentRoute: () => WWorkspaceSlugRoute,
+  } as any)
 const WWorkspaceSlugArtifactsArtifactIdRoute =
   WWorkspaceSlugArtifactsArtifactIdRouteImport.update({
     id: '/artifacts/$artifactId',
@@ -1127,6 +1135,12 @@ const ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute =
     path: '/api/workspaces/$workspaceId/users/$userId/avatar',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute =
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRouteImport.update({
+    id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download',
+    path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute =
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRouteImport.update({
     id: '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html',
@@ -1326,6 +1340,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/records/settings': typeof WWorkspaceSlugRecordsSettingsRoute
   '/w/$workspaceSlug/records/stats': typeof WWorkspaceSlugRecordsStatsRoute
   '/w/$workspaceSlug/': typeof WWorkspaceSlugChatIndexRoute
+  '/w/$workspaceSlug/artifacts/': typeof WWorkspaceSlugArtifactsIndexRoute
   '/w/$workspaceSlug/projects/': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records/': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
@@ -1376,6 +1391,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   '/w/$workspaceSlug/projects/$projectSlug/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
@@ -1507,6 +1523,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
   '/w/$workspaceSlug/records/settings': typeof WWorkspaceSlugRecordsSettingsRoute
   '/w/$workspaceSlug/records/stats': typeof WWorkspaceSlugRecordsStatsRoute
+  '/w/$workspaceSlug/artifacts': typeof WWorkspaceSlugArtifactsIndexRoute
   '/w/$workspaceSlug/projects': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
@@ -1557,6 +1574,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   '/w/$workspaceSlug/projects/$projectSlug/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
@@ -1693,6 +1711,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/records/settings': typeof WWorkspaceSlugRecordsSettingsRoute
   '/w/$workspaceSlug/records/stats': typeof WWorkspaceSlugRecordsStatsRoute
   '/w/$workspaceSlug/_chat/': typeof WWorkspaceSlugChatIndexRoute
+  '/w/$workspaceSlug/artifacts/': typeof WWorkspaceSlugArtifactsIndexRoute
   '/w/$workspaceSlug/projects/': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records/': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
@@ -1743,6 +1762,7 @@ export interface FileRoutesById {
   '/api/agent/v1/threads_/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   '/w/$workspaceSlug/projects/$projectSlug_/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
@@ -1878,6 +1898,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/records/settings'
     | '/w/$workspaceSlug/records/stats'
     | '/w/$workspaceSlug/'
+    | '/w/$workspaceSlug/artifacts/'
     | '/w/$workspaceSlug/projects/'
     | '/w/$workspaceSlug/records/'
     | '/api/agent/v1/actions/prepare'
@@ -1928,6 +1949,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/threads/$thread/unfollow'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
     | '/w/$workspaceSlug/projects/$projectSlug/tree/$'
@@ -2059,6 +2081,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/records/dashboard'
     | '/w/$workspaceSlug/records/settings'
     | '/w/$workspaceSlug/records/stats'
+    | '/w/$workspaceSlug/artifacts'
     | '/w/$workspaceSlug/projects'
     | '/w/$workspaceSlug/records'
     | '/api/agent/v1/actions/prepare'
@@ -2109,6 +2132,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/threads/$thread/unfollow'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
     | '/w/$workspaceSlug/projects/$projectSlug/tree/$'
@@ -2244,6 +2268,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/records/settings'
     | '/w/$workspaceSlug/records/stats'
     | '/w/$workspaceSlug/_chat/'
+    | '/w/$workspaceSlug/artifacts/'
     | '/w/$workspaceSlug/projects/'
     | '/w/$workspaceSlug/records/'
     | '/api/agent/v1/actions/prepare'
@@ -2294,6 +2319,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/threads_/$thread/unfollow'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
     | '/w/$workspaceSlug/projects/$projectSlug_/tree/$'
@@ -2436,6 +2462,7 @@ export interface RootRouteChildren {
   ApiAgentV1ThreadsThreadUnfollowRoute: typeof ApiAgentV1ThreadsThreadUnfollowRoute
   ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute: typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute: typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   ApiAgentV1AppsOwnedIndexRoute: typeof ApiAgentV1AppsOwnedIndexRoute
@@ -3243,6 +3270,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugAgentAgentIdRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
     }
+    '/w/$workspaceSlug/artifacts/': {
+      id: '/w/$workspaceSlug/artifacts/'
+      path: '/artifacts'
+      fullPath: '/w/$workspaceSlug/artifacts/'
+      preLoaderRoute: typeof WWorkspaceSlugArtifactsIndexRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
     '/w/$workspaceSlug/artifacts/$artifactId': {
       id: '/w/$workspaceSlug/artifacts/$artifactId'
       path: '/artifacts/$artifactId'
@@ -3642,6 +3676,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': {
+      id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
+      path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
+      fullPath: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
+      preLoaderRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': {
       id: '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
       path: '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
@@ -3859,6 +3900,7 @@ interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugAgentAgentIdRoute: typeof WWorkspaceSlugAgentAgentIdRoute
   WWorkspaceSlugArtifactsArtifactIdRoute: typeof WWorkspaceSlugArtifactsArtifactIdRoute
   WWorkspaceSlugProjectsProjectSlugRoute: typeof WWorkspaceSlugProjectsProjectSlugRoute
+  WWorkspaceSlugArtifactsIndexRoute: typeof WWorkspaceSlugArtifactsIndexRoute
   WWorkspaceSlugProjectsIndexRoute: typeof WWorkspaceSlugProjectsIndexRoute
   WWorkspaceSlugProjectsProjectSlugSettingsRoute: typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
   WWorkspaceSlugProjectsProjectSlugTreeSplatRoute: typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
@@ -3882,6 +3924,7 @@ const WWorkspaceSlugRouteChildren: WWorkspaceSlugRouteChildren = {
     WWorkspaceSlugArtifactsArtifactIdRoute,
   WWorkspaceSlugProjectsProjectSlugRoute:
     WWorkspaceSlugProjectsProjectSlugRoute,
+  WWorkspaceSlugArtifactsIndexRoute: WWorkspaceSlugArtifactsIndexRoute,
   WWorkspaceSlugProjectsIndexRoute: WWorkspaceSlugProjectsIndexRoute,
   WWorkspaceSlugProjectsProjectSlugSettingsRoute:
     WWorkspaceSlugProjectsProjectSlugSettingsRoute,
@@ -4115,6 +4158,8 @@ const rootRouteChildren: RootRouteChildren = {
     ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute,
   ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute:
     ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute,
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute:
+    ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute,
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute:
     ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute,
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute:
@@ -4141,13 +4186,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

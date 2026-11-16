@@ -15,7 +15,7 @@ import { quietCentrifugo } from "./helpers/fake-centrifugo";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * Sending an artifact into a conversation (artifacts task #2): from its page's Share, "Send to…"
+ * Sending an artifact into a conversation (artifacts task #2): from its page's ⋯ menu, "Send to…"
  * opens Forward's picker with the artifact's card as what arrives; the channel picked gets a
  * message with the note above the link, which reads there as the card. In the same channel, a
  * link to an artifact the viewer may not open shows only that they have no access, and one to a
@@ -93,8 +93,6 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     );
     await browser("screenshot", join(artifacts, `${shot}.png`));
   };
-  const button = (label: string, scope = "") =>
-    `[...document.querySelectorAll('${scope} button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
   const press = async (selector: string) => {
     await evaluate(`(${selector}.setAttribute("data-press", ""), true)`);
     await browser("click", "[data-press]");
@@ -116,9 +114,11 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
   };
   const openSend = async () => {
     await waitFor(`${pageHydrated} && document.querySelector("main .ProseMirror") != null`, 60_000);
-    await press(button("Share", "main header"));
-    await waitFor(`${button("Send to…", '[role="dialog"]')} !== undefined`);
-    await press(button("Send to…", '[role="dialog"]'));
+    await press(`document.querySelector('main header button[aria-label="More actions"]')`);
+    await waitFor(`document.querySelector('[role="menuitem"]') !== null`);
+    await press(
+      `[...document.querySelectorAll('[role="menuitem"]')].find((i) => i.textContent.trim() === "Send to…")`,
+    );
     await waitFor(
       `document.querySelector('[role="dialog"] input[placeholder="Search channels, people or Agents"]') !== null`,
     );
@@ -153,7 +153,7 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
       },
     });
 
-    // From Share, Send to… opens the picker with the card; the note goes above the link.
+    // From the ⋯ menu, Send to… opens the picker with the card; the note goes above the link.
     await browser("set", "viewport", "1280", "860");
     await browser("open", `${origin}/en/w/${workspace.slug}/artifacts/${plan.id}`);
     await openSend();

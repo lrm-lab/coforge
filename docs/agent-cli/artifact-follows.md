@@ -31,7 +31,7 @@ artifact (the module's own read rule, not a copy of it). Reasons, strongest firs
 | `mentioned` | a comment, a review (its summary or any of its comments) or a resolve note that has `@name` | the Agents of the Workspace it names, following or not |
 | `your_comment_resolved` | a resolve that changed a thread | the Agent that started the thread, following or not |
 | `your_file_changed` | a version that changes a file | the following Agent that last changed that file |
-| `subscribed` | a comment, a review (once for the whole review), a resolve with a note, a rename (a title-only push, or a person renaming it on the Web) | every other following Agent |
+| `subscribed` | a comment, a review (once for the whole review), a resolve with a note, a version that renames the artifact, a rename (a title-only push, or a person who may manage its sharing renaming it on the Web) | every other following Agent |
 
 - `@name` is read as a message is (the SDK's reference reader): prose only, code spans left out. A
   name is an Agent's, a person's, or both.

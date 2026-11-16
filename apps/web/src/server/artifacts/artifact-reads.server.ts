@@ -5,10 +5,10 @@ import { AppError } from "#src/lib/app-error";
 import { containsPattern, searchTerms } from "#src/lib/search-terms";
 import {
   actorConversationHomeReads,
-  actorConversationHomeSql,
   type ActorConversationHomeRead,
 } from "#src/server/conversations/channel-read-access.server";
 import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
+import { epochTimestamp, visibleToReaderSql } from "./artifact-visible.server";
 import {
   artifactAuthorOwnerId,
   artifactHomeConversationId,
@@ -27,9 +27,6 @@ import {
 
 const LIST_LIMIT = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const epochTimestamp = (at: Date) =>
-  Prisma.sql`(TIMESTAMP 'epoch' + ${at.getTime()}::bigint * INTERVAL '1 millisecond')`;
 
 const writeCursor = (row: { updatedAt: Date; id: string }) =>
   Buffer.from(JSON.stringify([row.updatedAt.getTime(), row.id])).toString("base64url");
@@ -449,19 +446,13 @@ export class ArtifactReads {
     viewer: ArtifactViewer,
     after: { at: Date; id: string } | undefined,
   ): Promise<string[]> {
-    const { workspaceId, reader } = input;
-    const home = actorConversationHomeSql("home", workspaceId, reader);
-    const homeKeyOfConversation = Prisma.sql`'conversation:' || home."id"::text`;
-    const goneReach = await this.#goneHomeReach(workspaceId, reader, viewer);
-    const visible = input.conversationId
-      ? Prisma.sql`a."homeKey" = ${`conversation:${input.conversationId}`}`
-      : Prisma.sql`(a."access" = 'workspace' OR a."homeKey" = 'workspace'
-          OR EXISTS (
-            SELECT 1 FROM "conversations" home
-            WHERE a."homeKey" = ${homeKeyOfConversation} AND ${home.reads})
-          OR (${goneReach} AND a."homeKey" LIKE 'conversation:%' AND NOT EXISTS (
-            SELECT 1 FROM "conversations" home
-            WHERE a."homeKey" = ${homeKeyOfConversation} AND ${home.stands})))`;
+    const { workspaceId } = input;
+    const visible = visibleToReaderSql({
+      workspaceId,
+      reader: input.reader,
+      viewer,
+      conversationId: input.conversationId,
+    });
     const titled = [
       ...(input.title === undefined ? [] : [Prisma.sql`a."title" = ${input.title}`]),
       ...searchTerms(input.query ?? "").map(
@@ -481,14 +472,5 @@ export class ArtifactReads {
       ORDER BY a."updatedAt" DESC, a."id" DESC
       LIMIT ${input.limit + 1}`;
     return rows.map((row) => row.id);
-  }
-
-  async #goneHomeReach(workspaceId: string, reader: ArtifactActor, viewer: ArtifactViewer) {
-    if (reader.agentId !== undefined)
-      return Prisma.sql`a."authorAgentId" = ${reader.agentId}::uuid`;
-    if (isWorkspaceAdminRole(viewer.role ?? undefined)) return Prisma.sql`TRUE`;
-    return Prisma.sql`a."authorAgentId" IN (
-      SELECT "id" FROM "agents"
-      WHERE "workspaceId" = ${workspaceId}::uuid AND "ownerId" = ${reader.userId}::uuid)`;
   }
 }

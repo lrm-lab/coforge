@@ -28,23 +28,21 @@ import {
 } from "./message-forward-model";
 import { ForwardComposer, ForwardTargetPane } from "./message-forward-panes";
 
-/** How long typing pauses before the targets are searched. */
 const SEARCH_DEBOUNCE_MS = 250;
 
 type ForwardChannel = Extract<ForwardTarget, { kind: "channel" }>;
 
-/** A failure the last press of send leaves on screen; `retry` offers "Try Again" where trying the
- * same request again can help. */
-export type ShareNotice = { text: string; retry?: boolean };
+export type ShareNotice = {
+  text: string;
+  retry?: boolean;
+  actions?: readonly { label: string; run: () => Promise<boolean> }[];
+};
 
-/** The words that name what is being sent: "Forward" for a message, "Send" for an artifact. */
 export type ShareDialogCopy = {
   title: string;
   send: string;
-  /** The button once targets are picked: "Forward to 2". */
   sendTo: (count: number) => string;
   joinAndSend: string;
-  /** Said over the note while sending will join channels first (the button is only an icon). */
   joinNotice: (channels: string) => string;
   sentTo: (target: string) => string;
   sentToMany: (count: number) => string;
@@ -52,15 +50,6 @@ export type ShareDialogCopy = {
   none: (count: number) => string;
 };
 
-/**
- * Sends something into conversations (task #237's Forward, and an artifact's Send): pick up to ten
- * destinations, optionally add a note, and send. One column at every width (Frank, 11-10, design
- * B; task #50): search, the targets one line each with the picked ones first, then what arrives
- * as one line that opens, the note and the send button; a phone has it as a sheet from the bottom
- * edge, as every picker there. It mounts per opening, so its request id is one per
- * opening: pressing send again after a partial failure retries only the destinations that failed.
- * What is sent, and how, is the caller's: `preview` shows it and `deliver` sends it.
- */
 export function ConversationShareDialog({
   copy,
   summary,
@@ -72,21 +61,16 @@ export function ConversationShareDialog({
   onDelivered,
 }: {
   copy: ShareDialogCopy;
-  /** What arrives, in one line: who and the start of it. */
   summary: ReactNode;
-  /** What arrives, in full, when that line is opened. */
   preview: ReactNode;
   noteMaxLength: number;
-  /** One request to every destination, under the opening's request id. */
   deliver: (input: {
     requestId: string;
     destinations: string[];
     note: string | undefined;
   }) => Promise<ForwardMessageResult>;
-  /** What a request that threw says (and whether trying again can help). */
   errorNotice: (error: unknown) => ShareNotice;
   onClose: () => void;
-  /** Every destination took it; the dialog closes too. */
   onDelivered?: () => void;
 }) {
   const router = useRouter();
@@ -104,8 +88,6 @@ export function ConversationShareDialog({
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<ShareNotice | null>(null);
   const [failed, setFailed] = useState<ReadonlyMap<string, ForwardFailureCode>>(new Map());
-  // A direct conversation opened for a target, and a channel joined, stay so for a retry: the
-  // retry must name the same destinations its request id was first sent with.
   const directIds = useRef(new Map<string, string>());
   const joinedIds = useRef(new Set<string>());
 
@@ -121,16 +103,11 @@ export function ConversationShareDialog({
   });
 
   const picked = [...selected.values()];
-  // Picked destinations or a typed note are the user's edits; every way out asks before dropping
-  // them.
   const guard = useUnsavedChangesGuard({
-    // Mounted only while open.
     overlayOpen: true,
     dirty: picked.length > 0 || note.trim() !== "",
     close: onClose,
   });
-  // A public channel the viewer has not joined is joined on send; the button says so, so nothing
-  // joins silently.
   const unjoined = picked.filter(
     (target): target is ForwardChannel =>
       target.kind === "channel" &&
@@ -153,7 +130,6 @@ export function ConversationShareDialog({
     });
   }
 
-  /** The conversation a target forwards into: a person or Agent without a DM gets one opened. */
   async function destinationOf(target: ForwardTarget) {
     if (target.kind === "channel") return target.conversationId;
     const key = forwardTargetKey(target);
@@ -205,8 +181,6 @@ export function ConversationShareDialog({
         ),
       );
       setNotice({
-        // An archived, read-only or inaccessible destination refuses again; Try Again is only
-        // for one that may take it on another attempt.
         retry: [...outcome.failed.values()].some(isRetryableForwardFailure),
         text:
           outcome.kind === "partial"
@@ -220,7 +194,6 @@ export function ConversationShareDialog({
     }
   }
 
-  /** The toast after a finished send, with a way to the destination (the first, for several). */
   function announce(delivered: ForwardTarget[], destinations: string[]) {
     const first = delivered[0]!;
     const destination = destinations[0]!;
@@ -241,6 +214,16 @@ export function ConversationShareDialog({
     );
   }
 
+  async function settle(action: { run: () => Promise<boolean> }) {
+    setSending(true);
+    try {
+      if (!(await action.run())) return;
+    } finally {
+      setSending(false);
+    }
+    void send();
+  }
+
   const noticeView = notice && (
     <div className="flex items-start justify-between gap-3">
       <p role="alert" className="text-sm text-error-primary">
@@ -256,6 +239,21 @@ export function ConversationShareDialog({
         >
           {m.message_forward_try_again()}
         </Button>
+      )}
+      {notice.actions && (
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {notice.actions.map((action) => (
+            <Button
+              key={action.label}
+              size="sm"
+              color="link-color"
+              isDisabled={sending}
+              onPress={() => void settle(action)}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -281,8 +279,6 @@ export function ConversationShareDialog({
               onClose={sending ? undefined : guard.requestClose}
               className="px-4 pt-3 pb-3 sm:px-6 sm:pt-5"
             />
-            {/* 20rem of list, giving way when the window is short (or zoomed) down to two rows;
-                shorter still, the dialog scrolls, so the send button is never out of reach. */}
             <div className="flex min-h-24 flex-1 flex-col sm:flex-[0_1_20rem]">
               <ForwardTargetPane
                 query={query}

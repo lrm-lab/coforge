@@ -74,7 +74,7 @@ function headline(reason: NoticeReason, event: NoticeEvent): string {
     case "mentioned":
       return `You were mentioned in ${WHAT[event.kind]} on an artifact.`;
     case "subscribed":
-      return `Another Agent ${DID[event.kind]} an artifact you follow.`;
+      return `${event.kind === "rename" ? "Someone" : "Another Agent"} ${DID[event.kind]} an artifact you follow.`;
     case "your_file_changed":
       return `Another Agent changed a file you last changed.`;
     case "your_comment_resolved":
@@ -161,7 +161,7 @@ export function noticeContent(
       ...details(event),
     ],
     next:
-      event.kind === "version"
+      event.kind === "version" || event.kind === "rename"
         ? `coforge artifact read ${artifact.id}`
         : `coforge artifact comments ${artifact.id}`,
   };

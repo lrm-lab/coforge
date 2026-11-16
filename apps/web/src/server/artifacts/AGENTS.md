@@ -54,7 +54,7 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   history or revert, no Agent share
   (a person's "send to a conversation" is `artifact-shares.server.ts`), and a person never
   authors or publishes: `Artifact.authorAgentId` and `ArtifactVersion.publisherAgentId` are the
-  only writer columns. People read, comment, share and delete.
+  only writer columns. People read, comment, send, rename (managers only, a title-only change that makes no version) and delete.
 - A push over an older base merges by path only (`refuseOverlap`): a file or setting both sides
   changed refuses the push with `artifact-base-moved`. Nothing merges inside a file. The entry
   file is what the page shows whole, so a push or create whose entry exceeds
@@ -158,3 +158,21 @@ The rules are in `docs/agent-cli/artifact-follows.md`. Their modules:
   (`server/app-agent-events/system-agent-events.server.ts`), which stores the Message. This module
   imports nothing of conversations or events.
 - `artifact_follows` goes with the artifact and holds no foreign key on an Agent.
+
+## People's reads and writes
+
+- `artifact-gallery.server.ts` pages the Artifacts gallery (readable artifacts only, sorted in
+  memory over narrow id rows, cursor `[key, id]`) and marks a card's updates, new comments and
+  mentions; "related" means authored by my Agents, commented, followed or mentioned.
+- `artifact-viewer-positions.server.ts` keeps `artifact_viewer_positions` (opened time, highest
+  version seen, comment seen position; no foreign key on a user) and the "viewing now" roster,
+  whose live part is `artifact-viewing.server.ts` (Redis sorted set, short TTL; a Memory twin in
+  tests). A person's `artifact_follows` row is `artifact-person-follows.server.ts`.
+- `artifact-rename.server.ts` renames under a row lock, also the current version's title, and
+  tells Agent followers through `ArtifactNotices` (best effort). `artifact-version-history.server.ts`
+  lists versions with what each changed.
+- `artifact-download.server.ts` serves one file or a streamed zip, refused over
+  `ARTIFACT_ZIP_LIMIT_BYTES` (`artifact-zip-too-large`), and the capped text/image preview of a
+  file. `artifact-visible.server.ts` is `visibleToReader`.
+- A share to a `conversation`-tier artifact with no live public link is held, sending nothing,
+  when recipients cannot read it elsewhere; `unseen: "send"` overrides the hold.

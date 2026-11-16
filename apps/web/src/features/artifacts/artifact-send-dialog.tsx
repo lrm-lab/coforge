@@ -1,20 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
+import { useRef } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import {
   ConversationShareDialog,
   type ShareDialogCopy,
+  type ShareNotice,
 } from "#src/features/conversations/conversation-share-dialog";
 import type { ForwardMessageResult } from "#src/features/conversations/message-forward";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { ArtifactCardFace } from "./artifact-card";
 import { ArtifactIcon } from "./artifact-parts";
-import { artifactCardQuery } from "./artifact-queries";
+import { ARTIFACTS_KEY, artifactCardQuery } from "./artifact-queries";
 import { ARTIFACT_SHARE_NOTE_MAX_LENGTH } from "./artifact-share-input";
-import { shareArtifact } from "./artifacts.functions";
+import { setArtifactAccess, setArtifactLinkSharing, shareArtifact } from "./artifacts.functions";
 
-/** Read per render: the messages follow the current locale. */
 const sendCopy = (title: string): ShareDialogCopy => ({
   title: m.doc_send_title({ title }),
   send: m.doc_send_send(),
@@ -27,22 +28,64 @@ const sendCopy = (title: string): ShareDialogCopy => ({
   none: () => m.doc_send_none(),
 });
 
-/**
- * Sends an artifact into channels and DMs (artifacts task #2): Forward's picker and note
- * (`ConversationShareDialog`), with the artifact's card as what arrives. Each destination gets a
- * message with the note above the artifact's link, which reads there as its card.
- */
+class UnseenRecipients extends Error {
+  constructor(readonly count: number) {
+    super("recipients cannot see the artifact");
+  }
+}
+
 export function ArtifactSendDialog({
   artifactId,
   title,
+  canChange,
+  tier,
+  linkAvailable,
   onClose,
 }: {
   artifactId: string;
   title: string;
+  canChange: boolean;
+  tier: "conversation" | "workspace";
+  linkAvailable: boolean;
   onClose: () => void;
 }) {
   const share = useServerFn(shareArtifact);
+  const queryClient = useQueryClient();
   const { data: card } = useQuery(artifactCardQuery(artifactId));
+  const anyway = useRef(false);
+  const widen = useMutation({
+    mutationFn: () => setArtifactAccess({ data: { artifactId, access: "workspace" } }),
+  });
+  const openLink = useMutation({
+    mutationFn: () => setArtifactLinkSharing({ data: { artifactId, enabled: true } }),
+  });
+  const fix = (change: () => Promise<unknown>) => async () => {
+    try {
+      await change();
+      void queryClient.invalidateQueries({ queryKey: ARTIFACTS_KEY });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const heldNotice = (count: number): ShareNotice => ({
+    text: m.av_send_held({ count }),
+    actions: [
+      ...(canChange && tier === "conversation"
+        ? [{ label: m.av_send_make_visible(), run: fix(() => widen.mutateAsync()) }]
+        : []),
+      ...(canChange && linkAvailable
+        ? [{ label: m.av_send_turn_on_link(), run: fix(() => openLink.mutateAsync()) }]
+        : []),
+      {
+        label: m.av_send_anyway(),
+        run: async () => {
+          anyway.current = true;
+          return true;
+        },
+      },
+    ],
+  });
   return (
     <ConversationShareDialog
       copy={sendCopy(title || m.doc_untitled())}
@@ -57,8 +100,17 @@ export function ArtifactSendDialog({
       preview={card ? <ArtifactCardFace card={card} /> : null}
       noteMaxLength={ARTIFACT_SHARE_NOTE_MAX_LENGTH}
       deliver={async ({ requestId, destinations, note }): Promise<ForwardMessageResult> => {
-        const result = await share({ data: { artifactId, destinations, note, requestId } });
-        // The share names a destination its target; the dialog reads Forward's shape.
+        const result = await share({
+          data: {
+            artifactId,
+            destinations,
+            note,
+            requestId,
+            unseen: anyway.current ? "send" : "hold",
+          },
+        });
+        if (result.outcome === "held")
+          throw new UnseenRecipients(result.held.reduce((sum, h) => sum + h.people + h.agents, 0));
         return {
           outcome: result.outcome,
           results: result.results.map(({ target, ...entry }) => ({
@@ -68,9 +120,11 @@ export function ArtifactSendDialog({
         };
       }}
       errorNotice={(error) =>
-        isAppErrorCode(error, "NOT_FOUND")
-          ? { text: m.doc_send_gone() }
-          : { retry: true, text: m.doc_send_uncertain() }
+        error instanceof UnseenRecipients
+          ? heldNotice(error.count)
+          : isAppErrorCode(error, "NOT_FOUND")
+            ? { text: m.doc_send_gone() }
+            : { retry: true, text: m.doc_send_uncertain() }
       }
       onClose={onClose}
     />
