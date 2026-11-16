@@ -20,6 +20,7 @@ type DaemonInbox = {
 export type InboxTransport = {
   inboxList?(request: AgentInboxRequest): Promise<AgentInboxListResponse>;
   inboxCheck?(): Promise<unknown>;
+  external?: object;
 };
 
 function pendingRows(inbox: DaemonInbox): InboxPendingRow[] {
@@ -72,6 +73,7 @@ export async function runInboxCheck(
     ),
     seals: inbox?.seals ?? [],
     ...("error" in daemon ? { daemonError: daemon.error } : {}),
+    ...(transport.external ? { externalAgent: true as const } : {}),
   };
   if (!json) return formatInboxCheck(result, Date.now());
   // Message ordering fields stay out of JSON: they are for the `--after` in the text only.

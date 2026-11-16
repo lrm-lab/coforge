@@ -1,17 +1,24 @@
 import type { AgentProfileShowResponse } from "@lrm/coforge-sdk/agent";
 import { CliError } from "#src/cli-error";
 
-export type WhoamiInvocation = { command: "whoami"; json?: boolean };
+export type WhoamiInvocation = { command: "whoami"; json?: boolean; prompt?: boolean };
 
-const WHOAMI_USAGE = "Usage: coforge whoami [--json]";
+const WHOAMI_USAGE = "Usage: coforge whoami [--json | --prompt]";
 
 export function parseWhoamiArgs(args: readonly string[]): WhoamiInvocation {
   let json = false;
+  let prompt = false;
   for (const arg of args) {
     if (arg === "--json") json = true;
+    else if (arg === "--prompt") prompt = true;
     else throw new Error(WHOAMI_USAGE);
   }
-  return { command: "whoami", ...(json ? { json: true } : {}) };
+  if (json && prompt) throw new Error(WHOAMI_USAGE);
+  return {
+    command: "whoami",
+    ...(json ? { json: true } : {}),
+    ...(prompt ? { prompt: true } : {}),
+  };
 }
 
 export type WhoamiResult = {
@@ -27,9 +34,13 @@ export type WhoamiResult = {
   proxyUrl?: string;
   /** CoForge has only daemon-spawned Agents today (no self-hosted Agent client), so this is
    * always `"daemon-managed"`; the field exists so a future client kind has somewhere to report. */
-  clientMode: "daemon-managed";
+  clientMode: "daemon-managed" | "external";
+  /** External Agents only: the credential comes from a saved profile. */
+  credentialSource?: "profile";
+  profile?: { slug: string; path: string };
+  serverUrl?: string;
   credential: {
-    source: "agent-context-env" | "none";
+    source: "agent-context-env" | "profile" | "none";
     present: boolean;
     /** First 4 characters (the fixed `sfp_` prefix) plus an ellipsis; never the token value. */
     redacted?: string;
@@ -84,7 +95,15 @@ function buildWhoamiResult(): WhoamiResult {
   };
 }
 
-function formatWhoami(result: WhoamiResult): string {
+export function managedPromptUnavailable(): CliError {
+  return new CliError({
+    code: "PROMPT_UNAVAILABLE",
+    message: "A managed Agent's instructions come from its daemon.",
+    retryable: false,
+  });
+}
+
+export function formatWhoami(result: WhoamiResult): string {
   const lines = ["## Who am I", ""];
   if (result.agentId) lines.push(`Agent ID: ${result.agentId}`);
   if (result.agentName) lines.push(`Agent name: @${result.agentName}`);
@@ -96,6 +115,8 @@ function formatWhoami(result: WhoamiResult): string {
   if (result.computerHostname) lines.push(`Computer hostname: ${result.computerHostname}`);
   if (result.agentWorkspacePath) lines.push(`Agent workspace: ${result.agentWorkspacePath}`);
   if (result.proxyUrl) lines.push(`Agent proxy: ${result.proxyUrl}`);
+  if (result.serverUrl) lines.push(`Server URL: ${result.serverUrl}`);
+  if (result.profile) lines.push(`Profile: ${result.profile.slug} (${result.profile.path})`);
   lines.push(`Client mode: ${result.clientMode}`);
   lines.push(
     `Credential: source=${result.credential.source} present=${result.credential.present ? "yes" : "no"}` +

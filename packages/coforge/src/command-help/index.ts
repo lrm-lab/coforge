@@ -1,5 +1,6 @@
 import { CliError } from "../cli-error";
 import type { HelpEntry } from "./entry";
+import { agentHelp } from "./agent";
 import { appHelp } from "./app";
 import { artifactHelp } from "./artifact";
 import { messageHelp } from "./message";
@@ -19,6 +20,7 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   ...taskHelp,
   ...artifactHelp,
   ...appHelp,
+  ...agentHelp,
   ...messageHelp,
   channel: {
     syntax:
@@ -207,7 +209,8 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     syntax: "coforge action prepare --target <target>",
   },
   whoami: {
-    syntax: "coforge whoami [--json]",
+    syntax: "coforge whoami [--json | --prompt]",
+    flags: ["--prompt  print the Agent's operating guide (external Agents)"],
   },
   version: {
     syntax: "coforge version [--json]",

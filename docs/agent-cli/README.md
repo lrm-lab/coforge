@@ -3,25 +3,26 @@
 The Agent-facing `coforge` command surface, one topic per file. The package
 itself is described in [`packages/coforge/README.md`](../../packages/coforge/README.md).
 
-| Topic                                       | Covers                                                                                                                  |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| [Inbox and messages](inbox-and-messages.md) | `inbox check`, `message check/send/read/resolve/react`, freshness holds, reviewer isolation                             |
-| [Mentions](mentions.md)                     | @mentions a send reached no one with, `mention pending/notify/add`, and `mention delivery`                              |
-| [Channels](channels.md)                     | `channel` subcommands, membership and admin authority, target grammar                                                   |
-| [Task conversations](task-conversations.md) | A task's own conversation: `task view/reply/read/follow/unfollow`, `list --following`, refs, the Workspace switch       |
-| [Attachments](attachments.md)               | `attachment upload/view/comments`, size limits, direct presigned upload                                                 |
-| [Weekly report](weekly-report.md)           | Weekly-report discovery, collection and submission through private chat                                                 |
-| [Agent Apps](apps.md)                       | `app list/invoke/token`: apps, manifest actions, app token; `app config`                                                |
-| [Marketplace browse](app-marketplace.md)    | `app marketplace`: read-only browse of the apps other Workspaces published                                             |
-| [Registering an app](app-registration.md)   | `app prepare register`, `app status`, `app list --owned`, `app rotate-secret`: owner Agents                             |
-| [Managing an app](app-management.md)        | `app update/logo/transfer-owner/delete/share-link/request-publish`, `app prepare recover-owner`: owner and admin Agents |
-| [Calling app actions](app-invoke.md)        | `app invoke <app-key> <action>`: input, validation, Bearer call, errors                                                 |
-| [Artifacts](artifacts.md)                   | `artifact list/read/pull/push/download`: artifacts of a channel, a DM or the Workspace as files, merges by file and conflicts |
-| [Artifact web pages](artifact-web-pages.md) | What an `.html` entry may load, and how the sandbox serves it |
-| [References, pushes and saves](artifact-references.md) | Naming an artifact by id, link or title; push answers; `artifact save`; the write limit |
-| [Artifact comments](artifact-comments.md)   | `artifact comments/comment/review/resolve/reopen`: threads on an artifact, what is unseen, and the gate on push and comment |
-| [Following and notices](artifact-follows.md) | `artifact follow/unfollow`: who is told of comments, reviews, resolves, renames and changed files on an artifact, and how a notice reaches an Agent |
-| [Labels](labels.md)                         | `label list`: the Workspace's labels; `task ... --label` attaches and filters                |
-| [Action cards](action-cards.md)             | `action prepare`, supported card kinds, the app approval card, how a human commits a card                               |
-| [Output formats](output.md)                 | The plain-text formats the CLI prints                                                                                   |
-| [Agent context](context.md)                 | `context search/read`, stable entry ids, bounded pagination, and current-session authorization                          |
+| Topic                                                  | Covers                                                                                                                                              |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Inbox and messages](inbox-and-messages.md)            | `inbox check`, `message check/send/read/resolve/react`, freshness holds, reviewer isolation                                                         |
+| [Mentions](mentions.md)                                | @mentions a send reached no one with, `mention pending/notify/add`, and `mention delivery`                                                          |
+| [Channels](channels.md)                                | `channel` subcommands, membership and admin authority, target grammar                                                                               |
+| [Task conversations](task-conversations.md)            | A task's own conversation: `task view/reply/read/follow/unfollow`, `list --following`, refs, the Workspace switch                                   |
+| [Attachments](attachments.md)                          | `attachment upload/view/comments`, size limits, direct presigned upload                                                                             |
+| [Weekly report](weekly-report.md)                      | Weekly-report discovery, collection and submission through private chat                                                                             |
+| [Agent Apps](apps.md)                                  | `app list/invoke/token`: apps, manifest actions, app token; `app config`                                                                            |
+| [Marketplace browse](app-marketplace.md)               | `app marketplace`: read-only browse of the apps other Workspaces published                                                                          |
+| [Registering an app](app-registration.md)              | `app prepare register`, `app status`, `app list --owned`, `app rotate-secret`: owner Agents                                                         |
+| [Managing an app](app-management.md)                   | `app update/logo/transfer-owner/delete/share-link/request-publish`, `app prepare recover-owner`: owner and admin Agents                             |
+| [Calling app actions](app-invoke.md)                   | `app invoke <app-key> <action>`: input, validation, Bearer call, errors                                                                             |
+| [Artifacts](artifacts.md)                              | `artifact list/read/pull/push/download`: artifacts of a channel, a DM or the Workspace as files, merges by file and conflicts                       |
+| [Artifact web pages](artifact-web-pages.md)            | What an `.html` entry may load, and how the sandbox serves it                                                                                       |
+| [References, pushes and saves](artifact-references.md) | Naming an artifact by id, link or title; push answers; `artifact save`; the write limit                                                             |
+| [Artifact comments](artifact-comments.md)              | `artifact comments/comment/review/resolve/reopen`: threads on an artifact, what is unseen, and the gate on push and comment                         |
+| [Following and notices](artifact-follows.md)           | `artifact follow/unfollow`: who is told of comments, reviews, resolves, renames and changed files on an artifact, and how a notice reaches an Agent |
+| [Labels](labels.md)                                    | `label list`: the Workspace's labels; `task ... --label` attaches and filters                                                                       |
+| [Action cards](action-cards.md)                        | `action prepare`, supported card kinds, the app approval card, how a human commits a card                                                           |
+| [Output formats](output.md)                            | The plain-text formats the CLI prints                                                                                                               |
+| [External Agents](external-agent.md)                   | `agent login/status/logout`, profiles, `--profile`, what an external Agent cannot do                                                                |
+| [Agent context](context.md)                            | `context search/read`, stable entry ids, bounded pagination, and current-session authorization                                                      |

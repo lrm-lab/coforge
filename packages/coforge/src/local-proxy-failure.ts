@@ -1,3 +1,4 @@
+import { externalRefusalOf } from "./external/refusal";
 import { CliError, NO_MESSAGE_SENT_NEXT_ACTION, unknownDeliveryNextAction } from "./cli-error";
 import { proxyFailureCode } from "./proxy-failure-code";
 import { operationFailedCode, type AgentProxyErrorBody } from "./proxy-request";
@@ -21,6 +22,8 @@ export function proxyHttpFailure(
   target: string | undefined,
   { idempotent = false }: ProxyFailureOptions = {},
 ): CliError {
+  const external = externalRefusalOf(status, body.json);
+  if (external) return external;
   const isSend = operation === "send";
   const proxy = body.json?.proxy;
   const isLocalPrecondition = proxy?.failure_class === "local_precondition";

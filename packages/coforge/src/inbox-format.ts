@@ -38,6 +38,7 @@ export type InboxCheckResult = {
   seals?: InboxSeal[];
   /** Why the daemon's own part could not be read; its rows and App items are then missing. */
   daemonError?: string;
+  externalAgent?: true;
 };
 
 type Row = { lines: string[]; next: string };
@@ -200,6 +201,8 @@ export function formatInboxCheck(result: InboxCheckResult, nowMs: number): strin
     (seals.length > 0 || result.appItems.some((app) => app.appId === "system.reminder"))
   )
     sections.push("Reminder seals: not checked");
+  if (result.externalAgent)
+    sections.push("App items and reminder seals: not available for external Agents.");
   if (result.daemonError)
     sections.push(
       `Daemon pending buffer unavailable (${result.daemonError}); not-yet-delivered counts and App items are not shown.`,

@@ -1,3 +1,4 @@
+import { isAgentCredential } from "./agent-credential";
 import {
   agentApiRoutes,
   decodeAgentInboxListResponse,
@@ -12,8 +13,7 @@ export async function inboxCheckRequest(
   context: string,
   proxyUrl: string,
 ) {
-  if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
-    throw new Error("coforge agent context is invalid");
+  if (!context || !isAgentCredential(context)) throw new Error("coforge agent context is invalid");
   if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
   const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.inbox.path), {
     method: agentApiRoutes.local.inbox.method,

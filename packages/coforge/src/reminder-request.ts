@@ -1,3 +1,5 @@
+import { externalRefusalOf } from "./external/refusal";
+import { isAgentCredential } from "./agent-credential";
 import {
   decodeAgentReminderOperationResponse,
   decodeLocalReminderRequest,
@@ -17,8 +19,7 @@ export async function reminderRequest(
   proxyUrl: string,
   fields: ReminderTransportRequest,
 ): Promise<ReminderResponse> {
-  if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
-    throw new Error("coforge agent context is invalid");
+  if (!context || !isAgentCredential(context)) throw new Error("coforge agent context is invalid");
   if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
   const idempotencyKey =
     (fields.operation === "ack" || fields.operation === "dismiss") &&
@@ -41,7 +42,14 @@ export async function reminderRequest(
   } catch {
     throw new Error("agent reminder request failed (network or timeout)");
   }
-  if (!response.ok) throw new Error(`agent reminder request failed (${response.status})`);
+  if (!response.ok) {
+    const refusal = externalRefusalOf(
+      response.status,
+      await response.json().catch(() => undefined),
+    );
+    if (refusal) throw refusal;
+    throw new Error(`agent reminder request failed (${response.status})`);
+  }
   const result = (await response.json()) as ReminderResponse;
   if (fields.operation === "ack" || fields.operation === "dismiss") return result;
   // The daemon answers some reminder commands with a local shape — a seal/unseal result or a
