@@ -6,8 +6,9 @@ name: Deploy Web (production)
 # manual dispatch itself (docs/release/staging-to-production.md). Runtime
 # Most runtime secrets live on the host under infra/production/secrets. This
 # workflow ships the Compose assets and refreshes only the cloud-computer
-# secrets (COFORGE_CLOUD_CLUSTER_TOKEN / COFORGE_CLOUD_SERVICE_PASSWORD) from
-# the production GitHub Environment.
+# secrets (COFORGE_CLOUD_CLUSTER_TOKEN / COFORGE_CLOUD_SERVICE_PASSWORD) and the
+# Caddy DNS-01 credentials (ALIDNS_ACCESS_KEY_ID / ALIDNS_ACCESS_KEY_SECRET)
+# from the production GitHub Environment.
 
 on:
   workflow_dispatch:
@@ -108,6 +109,18 @@ jobs:
         with:
           install-args: bun
 
+      - name: Require the DNS-01 credentials
+        env:
+          ALIDNS_ACCESS_KEY_ID: ${{ secrets.ALIDNS_ACCESS_KEY_ID }}
+          ALIDNS_ACCESS_KEY_SECRET: ${{ secrets.ALIDNS_ACCESS_KEY_SECRET }}
+        run: |
+          for name in ALIDNS_ACCESS_KEY_ID ALIDNS_ACCESS_KEY_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "$name is missing from the production GitHub Environment" >&2
+              exit 1
+            fi
+          done
+
       - name: Prepare the SSH identity
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -146,6 +159,7 @@ jobs:
             scripts/deploy/deploy-secrets.sh \
             scripts/deploy/deploy-release-snapshot.sh \
             scripts/deploy/deploy-diagnostics.sh \
+            scripts/deploy/deploy-wildcard-probe.sh \
             scripts/deploy/catalog-snapshot.sh \
             scripts/deploy/remote-deploy.sh
           ssh -i "$SSH_DIR/key" \
@@ -163,6 +177,8 @@ jobs:
         env:
           COFORGE_CLOUD_CLUSTER_TOKEN: ${{ secrets.COFORGE_CLOUD_CLUSTER_TOKEN }}
           COFORGE_CLOUD_SERVICE_PASSWORD: ${{ secrets.COFORGE_CLOUD_SERVICE_PASSWORD }}
+          ALIDNS_ACCESS_KEY_ID: ${{ secrets.ALIDNS_ACCESS_KEY_ID }}
+          ALIDNS_ACCESS_KEY_SECRET: ${{ secrets.ALIDNS_ACCESS_KEY_SECRET }}
         run: |
           if [ -z "$COFORGE_CLOUD_CLUSTER_TOKEN" ]; then
             echo "COFORGE_CLOUD_CLUSTER_TOKEN is empty; cloud computers stay disabled" >&2
@@ -170,6 +186,7 @@ jobs:
           bash scripts/deploy/ship-secrets.sh \
             --environment production \
             --secrets-dir "$REMOTE_ROOT/infra/production/secrets" \
+            --required "ALIDNS_ACCESS_KEY_ID ALIDNS_ACCESS_KEY_SECRET" \
             --optional "COFORGE_CLOUD_CLUSTER_TOKEN COFORGE_CLOUD_SERVICE_PASSWORD"
 
       - name: Deploy image and check health
@@ -187,7 +204,8 @@ jobs:
               --secrets-dir '$REMOTE_ROOT/infra/production/secrets' \
               --state-file '$REMOTE_ROOT/state.env' \
               --web-health-url http://127.0.0.1:18080/health \
-              --public-health-url https://coforge.cn/health" \
+              --public-health-url https://coforge.cn/health \
+              --wildcard-probe-host a-00000000-0000-0000-0000-000000000000.coforgeusercontent.com" \
             > remote-report.env
 
       - name: Log out of the image registry
@@ -205,6 +223,8 @@ jobs:
       - name: Check the remote outcome
         run: |
           cat remote-report.env >> "$GITHUB_STEP_SUMMARY"
+          warning="$(sed -n 's/^warning=//p' remote-report.env)"
+          if [ -n "$warning" ]; then echo "::warning::$warning"; fi
           outcome="$(sed -n 's/^outcome=//p' remote-report.env)"
           if [ "$outcome" != "healthy" ]; then
             echo "deployment outcome: ${outcome:-missing}" >&2

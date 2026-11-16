@@ -20,6 +20,8 @@ test("optional GitHub deployment credentials reach Compose without entering stdo
       "coforge_web_push_public_key",
       "coforge_web_push_private_key",
       "coforge_file_delivery_key",
+      "alidns_access_key_id",
+      "alidns_access_key_secret",
       "centrifugo_token_hmac_secret_key",
     ])
       await writeFile(join(directory, name), "fixture");
@@ -88,6 +90,8 @@ test("compose exports the loaded secrets to the docker process environment", asy
       coforge_web_push_public_key: "push-public-value",
       coforge_web_push_private_key: "push-private-value",
       coforge_file_delivery_key: "file-delivery-value",
+      alidns_access_key_id: "alidns-id-value",
+      alidns_access_key_secret: "alidns-secret-value",
       centrifugo_token_hmac_secret_key: "hmac-value",
       coforge_cloud_cluster_token: "cluster-token-value",
       coforge_oidc_signing_jwks: '{"keys":[]}',
@@ -134,6 +138,8 @@ test("compose exports the loaded secrets to the docker process environment", asy
       COFORGE_WEB_PUSH_PUBLIC_KEY: "push-public-value",
       COFORGE_WEB_PUSH_PRIVATE_KEY: "push-private-value",
       COFORGE_FILE_DELIVERY_KEY: "file-delivery-value",
+      ALIDNS_ACCESS_KEY_ID: "alidns-id-value",
+      ALIDNS_ACCESS_KEY_SECRET: "alidns-secret-value",
       COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY: "hmac-value",
       COFORGE_CLOUD_CLUSTER_TOKEN: "cluster-token-value",
       COFORGE_OIDC_SIGNING_JWKS: '{"keys":[]}',
@@ -311,4 +317,110 @@ describe("Login with CoForge signing keyset", () => {
       });
     },
   );
+});
+
+describe("Caddy DNS-01 credentials", () => {
+  const baseSecrets = [
+    "authing_app_id",
+    "authing_app_secret",
+    "coforge_session_secret",
+    "coforge_agent_credential_encryption_key",
+    "coforge_web_push_public_key",
+    "coforge_web_push_private_key",
+    "coforge_file_delivery_key",
+    "alidns_access_key_id",
+    "alidns_access_key_secret",
+    "centrifugo_token_hmac_secret_key",
+  ];
+
+  for (const missing of ["alidns_access_key_id", "alidns_access_key_secret"]) {
+    test(`load_compose_secrets fails closed without ${missing}`, async () => {
+      const directory = await mkdtemp(join(tmpdir(), "coforge-alidns-secret-"));
+      try {
+        for (const name of baseSecrets) {
+          if (name !== missing) await writeFile(join(directory, name), "fixture");
+        }
+        const child = Bun.spawn(
+          [
+            "bash",
+            "-euc",
+            `${await readFile(secretsScript, "utf8")}\nsecrets_dir="$1"\nload_compose_secrets`,
+            "test",
+            directory,
+          ],
+          { stdout: "pipe", stderr: "pipe" },
+        );
+        expect(await child.exited).not.toBe(0);
+        expect(await new Response(child.stdout).text()).toBe("");
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+  }
+
+  test.each(["staging", "production"] as const)(
+    "%s caddy runs the DNS-capable image and receives the credentials",
+    async (environment) => {
+      const caddy = (await readCompose(environment)).services.caddy;
+      expect(caddy?.image).toMatch(
+        /^ghcr\.io\/lrm-lab\/coforge\/coforge-caddy@sha256:[0-9a-f]{64}$/,
+      );
+      expect(caddy?.image).not.toMatch(/@sha256:0{64}$/);
+      expect(caddy?.environment?.ALIDNS_ACCESS_KEY_ID).toStartWith("${ALIDNS_ACCESS_KEY_ID:?");
+      expect(caddy?.environment?.ALIDNS_ACCESS_KEY_SECRET).toStartWith(
+        "${ALIDNS_ACCESS_KEY_SECRET:?",
+      );
+    },
+  );
+
+  test.each([
+    ["staging", "*.staging.coforgeusercontent.com"],
+    ["production", "*.coforgeusercontent.com"],
+  ] as const)("%s Caddyfile has DNS-01 only on its wildcard", async (environment, site) => {
+    const caddyfile = await Bun.file(
+      new URL(`../../infra/${environment}/caddy/Caddyfile`, import.meta.url),
+    ).text();
+    const siteStart = /^(?=[^\s#{][^\n]* \{$)/m;
+    const withDns = caddyfile.split(siteStart).filter((block) => block.includes("dns alidns"));
+    expect(withDns).toHaveLength(1);
+    expect(withDns[0]).toStartWith(`${site} {`);
+    expect(withDns[0]).toContain("access_key_id {env.ALIDNS_ACCESS_KEY_ID}");
+    expect(withDns[0]).toContain("access_key_secret {env.ALIDNS_ACCESS_KEY_SECRET}");
+    expect(withDns[0]).toContain("resolvers 223.5.5.5");
+    expect(withDns[0]).toContain("import usercontent");
+    const snippet = caddyfile.split(siteStart).find((block) => block.startsWith("(usercontent) {"));
+    expect(snippet).toContain("reverse_proxy web:3000");
+    expect(snippet).toContain("X-Coforge-Agent-Api-Key delete");
+    expect(snippet).not.toContain("dns alidns");
+    expect(caddyfile).not.toContain("acme_dns");
+  });
+
+  test.each(["deploy-staging.yml", "deploy-production.yml"] as const)(
+    "%s requires and ships both credentials without echoing them",
+    async (file) => {
+      const workflow = await Bun.file(
+        new URL(`../../.github/workflows/${file}`, import.meta.url),
+      ).text();
+      for (const name of ["ALIDNS_ACCESS_KEY_ID", "ALIDNS_ACCESS_KEY_SECRET"]) {
+        expect(workflow).toContain(`${name}: \${{ secrets.${name} }}`);
+        expect(workflow).toMatch(new RegExp(`--required "[^"]*\\b${name}\\b`));
+        expect(workflow).not.toMatch(new RegExp(`echo "\\$${name}"`));
+      }
+      const requireStep = workflow.indexOf("- name: Require the DNS-01 credentials");
+      expect(requireStep).toBeGreaterThan(-1);
+      expect(requireStep).toBeLessThan(workflow.indexOf("- name: Prepare the SSH identity"));
+      expect(requireStep).toBeLessThan(workflow.indexOf("- name: Copy deployment assets"));
+    },
+  );
+
+  test("production ships the DNS-01 files whether or not the cluster token is set", async () => {
+    const workflow = await Bun.file(
+      new URL("../../.github/workflows/deploy-production.yml", import.meta.url),
+    ).text();
+    const start = workflow.indexOf("- name: Sync cloud-computer secrets");
+    const step = workflow.slice(start, workflow.indexOf("- name: Deploy image and check health"));
+    expect(step).toMatch(/--required "ALIDNS_ACCESS_KEY_ID ALIDNS_ACCESS_KEY_SECRET"/);
+    expect(step).toContain("scripts/deploy/ship-secrets.sh");
+    expect(step).not.toMatch(/\bexit\b|\breturn\b/);
+  });
 });

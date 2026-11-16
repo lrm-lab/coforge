@@ -119,6 +119,18 @@ jobs:
       - name: Install toolchain
         run: mise install bun
 
+      - name: Require the DNS-01 credentials
+        env:
+          ALIDNS_ACCESS_KEY_ID: ${{ secrets.ALIDNS_ACCESS_KEY_ID }}
+          ALIDNS_ACCESS_KEY_SECRET: ${{ secrets.ALIDNS_ACCESS_KEY_SECRET }}
+        run: |
+          for name in ALIDNS_ACCESS_KEY_ID ALIDNS_ACCESS_KEY_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "$name is missing from the staging GitHub Environment" >&2
+              exit 1
+            fi
+          done
+
       - name: Validate Web Push key pair
         env:
           COFORGE_WEB_PUSH_PUBLIC_KEY: ${{ vars.COFORGE_WEB_PUSH_PUBLIC_KEY }}
@@ -168,6 +180,7 @@ jobs:
             scripts/deploy/deploy-secrets.sh \
             scripts/deploy/deploy-release-snapshot.sh \
             scripts/deploy/deploy-diagnostics.sh \
+            scripts/deploy/deploy-wildcard-probe.sh \
             scripts/deploy/catalog-snapshot.sh \
             scripts/deploy/remote-deploy.sh
           ssh -i "$SSH_DIR/key" \
@@ -194,6 +207,8 @@ jobs:
           COFORGE_GITHUB_WEBHOOK_SECRET: ${{ secrets.COFORGE_GITHUB_WEBHOOK_SECRET }}
           COFORGE_AUTHING_WEBHOOK_SECRET: ${{ secrets.COFORGE_AUTHING_WEBHOOK_SECRET }}
           COFORGE_FILE_DELIVERY_KEY: ${{ secrets.COFORGE_FILE_DELIVERY_KEY }}
+          ALIDNS_ACCESS_KEY_ID: ${{ secrets.ALIDNS_ACCESS_KEY_ID }}
+          ALIDNS_ACCESS_KEY_SECRET: ${{ secrets.ALIDNS_ACCESS_KEY_SECRET }}
           COFORGE_CLOUD_CLUSTER_TOKEN: ${{ secrets.COFORGE_CLOUD_CLUSTER_TOKEN }}
           COFORGE_RETAINED_CLOUD_IMAGE_IDS: ${{ vars.COFORGE_RETAINED_CLOUD_IMAGE_IDS }}
           COFORGE_PLATFORM_OPERATORS: ${{ vars.COFORGE_PLATFORM_OPERATORS }}
@@ -202,7 +217,7 @@ jobs:
           bash scripts/deploy/ship-secrets.sh \
             --environment staging \
             --secrets-dir "$REMOTE_ROOT/infra/staging/secrets" \
-            --required "AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=otel_traces_endpoint COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_FILE_DELIVERY_KEY COFORGE_CLOUD_CLUSTER_TOKEN" \
+            --required "ALIDNS_ACCESS_KEY_ID ALIDNS_ACCESS_KEY_SECRET AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=otel_traces_endpoint COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_FILE_DELIVERY_KEY COFORGE_CLOUD_CLUSTER_TOKEN" \
             --optional "COFORGE_GITHUB_APP_SLUG COFORGE_COMMIT_COAUTHOR COFORGE_GITHUB_CLIENT_SECRET COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY COFORGE_GITHUB_WEBHOOK_SECRET COFORGE_RETAINED_CLOUD_IMAGE_IDS COFORGE_CLOUD_IMAGE_UPDATES_PAUSED COFORGE_PLATFORM_OPERATORS COFORGE_AUTHING_WEBHOOK_SECRET"
 
       - name: Deploy image and check health
@@ -222,13 +237,14 @@ jobs:
                 --secrets-dir '$REMOTE_ROOT/infra/staging/secrets' \
                 --state-file '$REMOTE_ROOT/state.env' \
                 --web-health-url http://127.0.0.1:18080/health \
-                --public-health-url https://staging.coforge.cn/health"
+                --public-health-url https://staging.coforge.cn/health \
+                --wildcard-probe-host a-00000000-0000-0000-0000-000000000000.staging.coforgeusercontent.com"
           } > remote-report.env
 
       - name: Check the remote outcome
         run: |
           expected_keys='health_result|outcome|previous_web_image|rollback_target'
-          seen="$(cut -d= -f1 remote-report.env | grep -v '^$' | sort | uniq | paste -sd'|')"
+          seen="$(cut -d= -f1 remote-report.env | grep -v '^$' | grep -v '^warning$' | sort | uniq | paste -sd'|')"
           if [ "$seen" != "$expected_keys" ]; then
             echo "remote report keys mismatch: $seen" >&2
             exit 1
@@ -239,6 +255,8 @@ jobs:
             echo "health_result=$(sed -n 's/^health_result=//p' remote-report.env)"
             echo "rollback_target=$(sed -n 's/^rollback_target=//p' remote-report.env)"
           } >> "$GITHUB_OUTPUT"
+          warning="$(sed -n 's/^warning=//p' remote-report.env)"
+          if [ -n "$warning" ]; then echo "::warning::$warning"; fi
         id: outcome
 
       - name: Fail on an unhealthy deployment

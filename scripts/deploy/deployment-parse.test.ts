@@ -74,6 +74,19 @@ describe("parseState", () => {
     );
   });
 
+  test("parses the optional warning line", () => {
+    const outputs = parseRemoteOutputs(
+      [
+        "previous_web_image=",
+        "health_result=healthy",
+        "outcome=healthy",
+        "rollback_target=",
+        "warning=wildcard certificate is not served",
+      ].join("\n"),
+    );
+    expect(outputs.warning).toBe("wildcard certificate is not served");
+  });
+
   test("rejects a malformed line", () => {
     expect(() => parseState("garbage line\n")).toThrow(InvalidStateError);
   });

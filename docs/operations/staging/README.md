@@ -28,4 +28,5 @@ gh workflow run deploy-staging.yml --repo lrm-lab/coforge --ref main
 - [GitHub Environment secrets (repository `staging` environment)](github-environment.md): GitHub Environment secrets and variables, bulk configuration, and when each kind of value takes effect.
 - [触发 Computer 本地分发发布](computer-release-trigger.md): Triggering a local Computer distribution release to staging, and why published versions are immutable.
 - [在 staging 上启用云电脑](../cloud-swarm/staging-bring-up.md): Staging Swarm token, Computer publish, computer image, and the manager `host` process.
+- [User-content wildcard certificate](../usercontent-certificate/README.md): The Caddy DNS-01 issuer for `*.staging.coforgeusercontent.com`, its RAM user and secrets.
 - [Personal GitHub connection](github-connection.md): The staging GitHub App configuration, its Environment values, and manual acceptance.

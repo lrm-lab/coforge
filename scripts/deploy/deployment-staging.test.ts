@@ -132,6 +132,8 @@ describe("staging user file persistence", () => {
         "coforge_web_push_public_key",
         "coforge_web_push_private_key",
         "coforge_file_delivery_key",
+        "alidns_access_key_id",
+        "alidns_access_key_secret",
         "centrifugo_token_hmac_secret_key",
       ])
         await writeFile(join(directory, name), "fixture");

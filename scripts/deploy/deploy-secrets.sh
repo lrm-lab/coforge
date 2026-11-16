@@ -13,6 +13,8 @@ load_compose_secrets() {
 	COFORGE_WEB_PUSH_PRIVATE_KEY="$(cat "$secrets_dir/coforge_web_push_private_key")"
 	COFORGE_FILE_DELIVERY_KEY="$(cat "$secrets_dir/coforge_file_delivery_key")"
 	COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY="$(cat "$secrets_dir/centrifugo_token_hmac_secret_key")"
+	ALIDNS_ACCESS_KEY_ID="$(cat "$secrets_dir/alidns_access_key_id")"
+	ALIDNS_ACCESS_KEY_SECRET="$(cat "$secrets_dir/alidns_access_key_secret")"
 	# Optional deployment values; required Compose fields still fail closed.
 	for name in COFORGE_CLOUD_CLUSTER_TOKEN COFORGE_CLOUD_SERVICE_PASSWORD COFORGE_CLOUD_IMAGE_UPDATES_PAUSED COFORGE_GITHUB_CLIENT_SECRET COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY COFORGE_GITHUB_APP_SLUG COFORGE_COMMIT_COAUTHOR COFORGE_GITHUB_WEBHOOK_SECRET COFORGE_RETAINED_CLOUD_IMAGE_IDS COFORGE_PLATFORM_OPERATORS COFORGE_OIDC_SIGNING_JWKS COFORGE_AUTHING_WEBHOOK_SECRET; do
 		printf -v "$name" '%s' ""
@@ -22,7 +24,7 @@ load_compose_secrets() {
 			printf -v "$name" '%s' "$(cat "$secrets_dir/$file")"
 		fi
 	done
-	for name in AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY; do
+	for name in AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY ALIDNS_ACCESS_KEY_ID ALIDNS_ACCESS_KEY_SECRET; do
 		[ -n "${!name}" ] || {
 			printf '%s secret file is empty\n' "$name" >&2
 			exit 1
@@ -50,7 +52,9 @@ compose() {
 	# comment inside that continued chain ends it early and drops them all.
 	# ${arr[@]+...} keeps an empty COMPOSE_ARGS from tripping `set -u` on
 	# bash < 4.4 (macOS's /bin/bash is 3.2; the tests run this under it).
-	AUTHING_APP_ID="$AUTHING_APP_ID" \
+	ALIDNS_ACCESS_KEY_ID="$ALIDNS_ACCESS_KEY_ID" \
+		ALIDNS_ACCESS_KEY_SECRET="$ALIDNS_ACCESS_KEY_SECRET" \
+		AUTHING_APP_ID="$AUTHING_APP_ID" \
 		AUTHING_APP_SECRET="$AUTHING_APP_SECRET" \
 		COFORGE_SESSION_SECRET="$COFORGE_SESSION_SECRET" \
 		COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY="$COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY" \

@@ -14,7 +14,11 @@ describe("Web image pull under a deadline", () => {
   const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
   const healthyCaddyfile = "staging.example.test {\n}\n# last healthy\n";
 
-  async function deployWithWebPull(fixture: { stalledPulls: number; pullFails?: boolean }) {
+  async function deployWithWebPull(fixture: {
+    stalledPulls: number;
+    pullFails?: boolean;
+    wildcardProbe?: { host: string; handshakeSucceeds: boolean };
+  }) {
     const root = await mkdtemp(join(tmpdir(), "coforge-deploy-web-pull-"));
     try {
       await mkdir(join(root, "bin"));
@@ -74,6 +78,8 @@ exit 0
       await writeFile(
         join(root, "bin/curl"),
         `#!/bin/bash
+echo "curl $*" >> "$FIXTURE_ROOT/calls"
+if [[ "$*" = *--resolve* ]]; then exit "$WILDCARD_CURL_EXIT"; fi
 if [[ "$*" = *http_code* ]]; then echo 200; fi
 exit 0
 `,
@@ -95,6 +101,9 @@ exit 0
           "http://127.0.0.1/health",
           "--public-health-url",
           "https://example.test/health",
+          ...(fixture.wildcardProbe
+            ? ["--wildcard-probe-host", fixture.wildcardProbe.host, "--wildcard-probe-timeout", "0"]
+            : []),
         ],
         {
           env: {
@@ -102,6 +111,7 @@ exit 0
             PATH: `${join(root, "bin")}:${Bun.env.PATH}`,
             FIXTURE_ROOT: root,
             IMAGE_REF: registryImage,
+            WILDCARD_CURL_EXIT: fixture.wildcardProbe?.handshakeSucceeds ? "0" : "60",
             STALLED_PULLS: String(fixture.stalledPulls),
             PULL_FAILS: fixture.pullFails ? "1" : "",
           },
@@ -134,6 +144,40 @@ exit 0
       .filter(
         (line) => line.startsWith("timeout ") && line.endsWith(`pull --quiet ${registryImage}`),
       );
+
+  const probeHost = "a-00000000-0000-0000-0000-000000000000.sandbox.example.test";
+
+  test("no probe host means no wildcard probe", async () => {
+    const result = await deployWithWebPull({ stalledPulls: 0 });
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.calls).not.toContain("--resolve");
+    expect(parseRemoteOutputs(result.stdout).warning).toBeNull();
+  });
+
+  test("a served wildcard certificate adds no warning", async () => {
+    const result = await deployWithWebPull({
+      stalledPulls: 0,
+      wildcardProbe: { host: probeHost, handshakeSucceeds: true },
+    });
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.calls).toContain(`--resolve ${probeHost}:443:127.0.0.1`);
+    const outputs = parseRemoteOutputs(result.stdout);
+    expect(outputs.outcome).toBe("healthy");
+    expect(outputs.warning).toBeNull();
+  });
+
+  test("a missing wildcard certificate warns, points to the triage and never rolls back", async () => {
+    const result = await deployWithWebPull({
+      stalledPulls: 0,
+      wildcardProbe: { host: probeHost, handshakeSucceeds: false },
+    });
+    expect(result.code, result.stderr).toBe(0);
+    const outputs = parseRemoteOutputs(result.stdout);
+    expect(outputs.outcome).toBe("healthy");
+    expect(outputs.warning).toContain(probeHost);
+    expect(outputs.warning).toContain("may still be issuing");
+    expect(outputs.warning).toContain("docs/operations/usercontent-certificate");
+  });
 
   test("a stalled pull is abandoned at its deadline and a fresh one deploys the candidate", async () => {
     const result = await deployWithWebPull({ stalledPulls: 1 });

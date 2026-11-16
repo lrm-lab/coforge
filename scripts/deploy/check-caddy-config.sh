@@ -66,6 +66,8 @@ check_dir="$(cd "$check_dir" && pwd -P)"
 if ! docker run --rm \
 	-e "COFORGE_DESKTOP_UPSTREAM=$upstream" \
 	-e "COFORGE_DESKTOP_PROXY_SECRET=caddy-config-check" \
+	-e "ALIDNS_ACCESS_KEY_ID=validate-only" \
+	-e "ALIDNS_ACCESS_KEY_SECRET=validate-only" \
 	-v "$check_dir:/etc/caddy:ro" \
 	"$image" \
 	caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then

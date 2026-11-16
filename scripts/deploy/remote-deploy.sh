@@ -32,9 +32,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/deploy-secrets.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/deploy-release-snapshot.sh"
 # shellcheck source=deploy-diagnostics.sh
 source "$(dirname "${BASH_SOURCE[0]}")/deploy-diagnostics.sh"
+# shellcheck source=deploy-wildcard-probe.sh
+source "$(dirname "${BASH_SOURCE[0]}")/deploy-wildcard-probe.sh"
 
 usage() {
-	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS] [--public-health-timeout SECONDS]\n' "$0" >&2
+	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS] [--public-health-timeout SECONDS] [--wildcard-probe-host HOST] [--wildcard-probe-timeout SECONDS]\n' "$0" >&2
 	exit 2
 }
 
@@ -44,6 +46,8 @@ timeout=120
 # no certificate when Caddy starts: it obtains one after it is up, and until then a TLS handshake
 # fails with an internal-error alert, so one attempt reads as a broken release.
 public_health_timeout=180
+wildcard_probe_timeout=60
+wildcard_probe_host=
 # Each Web image pull attempt ends at a deadline, then a forced kill. On 2026-10-13 and 2026-10-16
 # one layer's connection from the production host to ghcr.io fell to well under 1 Mbps without
 # ever failing, and the unbounded pull outlived the 15-minute job. The Engine abandons a pull when
@@ -67,6 +71,14 @@ while [ "$#" -gt 0 ]; do
 		;;
 	--timeout)
 		timeout="${2:?}"
+		shift 2
+		;;
+	--wildcard-probe-host)
+		wildcard_probe_host="${2:?}"
+		shift 2
+		;;
+	--wildcard-probe-timeout)
+		wildcard_probe_timeout="${2:?}"
 		shift 2
 		;;
 	--public-health-timeout)
@@ -273,9 +285,12 @@ fail_deployment() {
 	exit 0
 }
 
+deploy_warning=
+
 report() {
 	printf 'previous_web_image=%s\nhealth_result=%s\noutcome=%s\nrollback_target=%s\n' \
 		"${1:-}" "$2" "$3" "${4:-}"
+	[ -z "$deploy_warning" ] || printf 'warning=%s\n' "$deploy_warning"
 }
 
 write_deploy_env "$image"
@@ -399,6 +414,8 @@ if ! wait_for_public_health; then
 fi
 
 snapshot_release
+
+wait_for_wildcard_certificate
 
 printf '%s\n' \
 	"PREVIOUS_WEB_IMAGE=$current_image" \

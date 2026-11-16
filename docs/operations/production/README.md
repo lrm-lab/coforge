@@ -129,7 +129,8 @@ the Prisma migration, and rolls back to the last healthy release on failure.
 Most secrets stay on the host (backed up in 1Password). Cloud-computer secrets
 `COFORGE_CLOUD_CLUSTER_TOKEN` and `COFORGE_CLOUD_SERVICE_PASSWORD` also live in
 the GitHub `production` Environment; each deploy refreshes only those two files
-on the host.
+on the host. The Caddy DNS-01 credentials `ALIDNS_ACCESS_KEY_ID` and `ALIDNS_ACCESS_KEY_SECRET`
+are refreshed the same way ([wildcard certificate](../usercontent-certificate/README.md)).
 
 ### GitHub `production` Environment
 
@@ -141,6 +142,7 @@ on the host.
 | Secret | `DEPLOY_SSH_KEY` | Private half of an ed25519 key used only for this deploy; its public half is in `~deploy/.ssh/authorized_keys` |
 | Secret | `DEPLOY_SSH_HOST_KEY` | The host's ed25519 public host key (`<type> <key>`) |
 | Secret | `COFORGE_CLOUD_CLUSTER_TOKEN` | Swarm cluster token; deploy writes `secrets/coforge_cloud_cluster_token` |
+| Secret | `ALIDNS_ACCESS_KEY_ID`, `ALIDNS_ACCESS_KEY_SECRET` | AccessKey of RAM user `coforge-production-usercontent-dns`; deploy writes `secrets/alidns_access_key_id` and `secrets/alidns_access_key_secret` |
 | Secret | `COFORGE_CLOUD_SERVICE_PASSWORD` | Settings → 云电脑服务 unlock password; deploy writes `secrets/coforge_cloud_service_password` |
 
 ## Cloud computers

@@ -18,7 +18,7 @@ x-journald-logging: &journald-logging
 services:
   caddy:
     logging: *journald-logging
-    image: caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+    image: ghcr.io/lrm-lab/coforge/coforge-caddy@sha256:853ccc282957eb4a0007c33d782becf35f6e90943efe4ff9ec7f537ffc675c80
     command:
       - caddy
       - run
@@ -31,6 +31,8 @@ services:
       # The deploy script refreshes this value from the Caddyfile so only a
       # Caddyfile change recreates this container (admin is off: no reload).
       COFORGE_CADDYFILE_SHA256: ${COFORGE_CADDYFILE_SHA256:?deploy script writes .env}
+      ALIDNS_ACCESS_KEY_ID: ${ALIDNS_ACCESS_KEY_ID:?deploy script reads alidns_access_key_id}
+      ALIDNS_ACCESS_KEY_SECRET: ${ALIDNS_ACCESS_KEY_SECRET:?deploy script reads alidns_access_key_secret}
       # Internal address of the Swarm desktop proxy. Caddy reaches it after the
       # web app allows the signed-in computer owner. Not a public listener.
       COFORGE_DESKTOP_UPSTREAM: 10.110.158.143:6090

@@ -85,13 +85,42 @@ research.coforge.cn {
 # desktop routes. The dedicated domain's filing cleared (task #coforge-backend:#9),
 # so staging serves on staging.coforgeusercontent.com; the interim coforge.cn
 # subdomain only redirects already-shared links to the same path on it.
-staging.coforgeusercontent.com {
+(usercontent) {
+	log {
+		output file /data/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-Coforge-Agent-Api-Key delete
+			}
+		}
+	}
+
 	handle {
 		encode
 		reverse_proxy web:3000 {
 			header_up X-Request-Id {http.request.uuid}
 		}
 	}
+}
+
+staging.coforgeusercontent.com {
+	import usercontent
+}
+
+*.staging.coforgeusercontent.com {
+	tls {
+		dns alidns {
+			access_key_id {env.ALIDNS_ACCESS_KEY_ID}
+			access_key_secret {env.ALIDNS_ACCESS_KEY_SECRET}
+		}
+		resolvers 223.5.5.5 223.6.6.6
+	}
+
+	import usercontent
 }
 
 staging-usercontent.coforge.cn {

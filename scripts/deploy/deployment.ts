@@ -176,9 +176,11 @@ export interface RemoteOutputs {
   readonly healthResult: string;
   readonly outcome: DeploymentOutcome;
   readonly rollbackTarget: string | null;
+  readonly warning: string | null;
 }
 
 const OUTPUT_KEYS = ["previous_web_image", "health_result", "outcome", "rollback_target"];
+const OPTIONAL_OUTPUT_KEYS = ["warning"];
 
 /** Strictly parses the remote deploy script's key=value report. */
 export function parseRemoteOutputs(content: string): RemoteOutputs {
@@ -191,7 +193,7 @@ export function parseRemoteOutputs(content: string): RemoteOutputs {
       throw new Error("remote output line is malformed");
     }
     const key = line.slice(0, separator);
-    if (!OUTPUT_KEYS.includes(key)) {
+    if (!OUTPUT_KEYS.includes(key) && !OPTIONAL_OUTPUT_KEYS.includes(key)) {
       throw new Error(`unexpected remote output key`);
     }
     if (values.has(key)) {
@@ -209,6 +211,7 @@ export function parseRemoteOutputs(content: string): RemoteOutputs {
     healthResult: values.get("health_result") ?? "",
     outcome: validateOutcome(values.get("outcome") ?? ""),
     rollbackTarget: parseOptionalImage("rollback", values.get("rollback_target") ?? ""),
+    warning: values.get("warning") ?? null,
   };
 }
 

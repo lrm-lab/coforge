@@ -50,6 +50,8 @@ describe("candidate failure diagnostics", () => {
           "coforge_web_push_public_key",
           "coforge_web_push_private_key",
           "coforge_file_delivery_key",
+          "alidns_access_key_id",
+          "alidns_access_key_secret",
           "postgres_password",
           "redis_password",
           "centrifugo_http_api_key",
