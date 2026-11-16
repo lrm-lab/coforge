@@ -86,11 +86,13 @@ export function isRuntimeDirty(params: {
   /** The size fields as typed: empty means the model's own entry, which is also what `initial`
    * holds when the saved config filled none in. */
   sizes: ModelSizes;
+  /** Whether the size fields are shown (`modelSizesApply`): hidden ones change nothing. */
+  sizesApply: boolean;
   initial?: RuntimeSelection;
 }): boolean {
   return (
     params.manualDirty ||
-    modelSizesDirty(params.sizes, params.initial) ||
+    (params.sizesApply && modelSizesDirty(params.sizes, params.initial)) ||
     params.apiKey.trim() !== "" ||
     params.provider !== (params.initial?.provider ?? RUNTIME_PROVIDER.COFORGE) ||
     params.submittedModelProvider !== (params.initial?.modelProvider ?? "") ||

@@ -16,7 +16,7 @@ import { StatusDot } from "#src/components/ui/status-dot";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { AGENT_VISIBILITY } from "./agent-visibility";
-import { agentCreateErrorMessage } from "./agent-form";
+import { agentCreateErrorMessage, sizesFromForm } from "./agent-form";
 import { AgentOptionCard } from "./agent-option-card";
 import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields";
 import { AgentRuntimeSignInNotice } from "./agent-runtime-sign-in-notice";
@@ -144,6 +144,7 @@ export function LocalAgentForm({
           modelProvider: String(form.get("modelProvider") ?? "").trim() || undefined,
           reasoning: String(form.get("reasoning") ?? "").trim(),
           fastMode: form.get("fastMode") === "true",
+          ...sizesFromForm(form),
           apiKey: String(form.get("apiKey") ?? "").trim() || undefined,
           computerId: computerLocked ? computerId : String(form.get("computerId") ?? ""),
           actionCardMessageId,

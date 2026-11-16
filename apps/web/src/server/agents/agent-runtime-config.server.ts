@@ -1,4 +1,5 @@
 import { parseRuntimeProvider, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { modelSizesApply } from "#src/features/agents/agent-model-sizes";
 import { runtimeProviderSelectionRefusal } from "#src/features/agents/runtime-provider-selection";
 import { AppError } from "#src/lib/app-error";
 
@@ -45,6 +46,12 @@ export function assertProviderSelectable(provider: unknown) {
   if (refusal) throw new AppError("INVALID_INPUT", { errorId: refusal });
 }
 
+/** Whether a config's sizes do anything (`modelSizesApply`): Pi on the Computer's own configured
+ * providers or on OpenRouter. A built-in provider is stored under its key (`kind: "coforge"`). */
+function sizesApply(runtime: RuntimeProvider, provider: AgentRuntimeProviderConfig) {
+  return modelSizesApply(runtime, provider.kind === "coforge" ? provider.providerId : "");
+}
+
 /** The stored config for what was picked, with the Agent's encrypted environment when it has one. */
 export function agentRuntimeConfig(
   selection: {
@@ -59,6 +66,8 @@ export function agentRuntimeConfig(
   provider: AgentRuntimeProviderConfig,
   environment?: EncryptedAgentEnvironment,
 ): AgentRuntimeConfig {
+  // Sizes for a pick that does not read them are not kept (task #124).
+  const sized = sizesApply(selection.provider, provider);
   return {
     runtime: selection.provider,
     provider,
@@ -66,8 +75,10 @@ export function agentRuntimeConfig(
     modelProvider: selection.modelProvider,
     reasoning: selection.reasoning,
     ...(selection.fastMode ? { fastMode: true } : {}),
-    ...(selection.contextWindow === undefined ? {} : { contextWindow: selection.contextWindow }),
-    ...(selection.maxOutputTokens === undefined
+    ...(!sized || selection.contextWindow === undefined
+      ? {}
+      : { contextWindow: selection.contextWindow }),
+    ...(!sized || selection.maxOutputTokens === undefined
       ? {}
       : { maxOutputTokens: selection.maxOutputTokens }),
     ...(environment ? { environment } : {}),
@@ -224,6 +235,8 @@ export function runtimeStartFields(config: AgentRuntimeConfig, agentConfigRevisi
     config.provider.kind === "coforge"
       ? { kind: config.provider.kind, providerId: config.provider.providerId }
       : config.provider;
+  // A pair saved before sizes were limited to the picks that read them is left out (task #124).
+  const sized = sizesApply(config.runtime, config.provider);
   return {
     provider: config.runtime,
     model: config.model,
@@ -231,8 +244,12 @@ export function runtimeStartFields(config: AgentRuntimeConfig, agentConfigRevisi
     reasoning: config.reasoning,
     providerConfig: launchProviderConfig,
     // The form's sizes, when a person filled them in; absent leaves the model entry in charge.
-    ...(config.contextWindow === undefined ? {} : { contextWindow: config.contextWindow }),
-    ...(config.maxOutputTokens === undefined ? {} : { maxOutputTokens: config.maxOutputTokens }),
+    ...(!sized || config.contextWindow === undefined
+      ? {}
+      : { contextWindow: config.contextWindow }),
+    ...(!sized || config.maxOutputTokens === undefined
+      ? {}
+      : { maxOutputTokens: config.maxOutputTokens }),
     // Absent means the ordinary tier; never send a `false` the daemon would have to read as one.
     ...(config.fastMode ? { fastMode: true } : {}),
     ...(agentConfigRevision > 0 ? { agentConfigRevision } : {}),
