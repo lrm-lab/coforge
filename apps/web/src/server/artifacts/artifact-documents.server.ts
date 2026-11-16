@@ -82,10 +82,13 @@ export class ArtifactDocuments {
           : attempt <= SEQUENTIAL_NAMES
             ? `${base}-${attempt}`
             : `${base}-${crypto.randomUUID().slice(0, 6)}`;
+      let previewed = false;
       try {
         // The artifact row and version 1 commit in one transaction (`Artifacts.create`): a
         // create whose bytes are missing leaves nothing behind, and a replay with the same
-        // key returns the artifact already made without a second version.
+        // key returns the artifact already made without a second version. A fresh create's
+        // preview refreshes before its announcement, so listening pages never read the old
+        // line; a replayed one refreshes after, as it always did.
         const created = await this.artifacts.create({
           workspaceId: scope.workspaceId,
           home,
@@ -104,9 +107,13 @@ export class ArtifactDocuments {
                 ? crypto.randomUUID()
                 : `${input.idempotencyKey}:v1`,
           },
+          beforeAnnounce: async (artifactId) => {
+            previewed = true;
+            // The card's preview line, as a push's refresh leaves it (best effort).
+            await this.#refreshPreview(scope, artifactId);
+          },
         });
-        // The card's preview line, as a push's refresh leaves it (best effort).
-        await this.#refreshPreview(scope, created.id);
+        if (!previewed) await this.#refreshPreview(scope, created.id);
         return (
           await this.artifacts.reads.cards({ ...reader(scope), artifactIds: [created.id] })
         )[0]!;
@@ -165,7 +172,9 @@ export class ArtifactDocuments {
   /**
    * Pushes a version over `baseVersion`: the manifest's files and the settings, saved as any
    * artifact save is — merged by path with what others saved meanwhile, or refused when both
-   * changed the same file or setting (`artifact-base-moved`), and nothing written.
+   * changed the same file or setting (`artifact-base-moved`), and nothing written. `afterSave`
+   * is the caller's bookkeeping for a saved version (an Agent's read position): it runs beside
+   * the preview refresh, before the version's announcement, on a created or replayed push.
    */
   async push(
     scope: WriteScope,
@@ -179,8 +188,12 @@ export class ArtifactDocuments {
       note?: string;
       label?: string;
     },
+    options?: { afterSave?: (saved: { number: number }) => Promise<void> },
   ) {
     const { manifest, ...settings } = input;
+    // A bookkeeping failure must not keep the announcement back: it is kept and rethrown once
+    // the push (and its announcement) is done, as it always surfaced after the save.
+    let tailError: { error: unknown } | undefined;
     const saved = await this.artifacts.push({
       workspaceId: scope.workspaceId,
       publisher: scope.actor,
@@ -188,8 +201,17 @@ export class ArtifactDocuments {
       ...(manifest?.deletedPaths && { deletedPaths: manifest.deletedPaths }),
       ...(manifest?.entryPath !== undefined && { entryPath: manifest.entryPath }),
       ...settings,
+      beforeAnnounce: async (created) => {
+        await Promise.all([
+          created.previewStale ? this.#refreshPreview(scope, input.artifactId) : undefined,
+          options?.afterSave?.(created)?.catch((error: unknown) => {
+            tailError = { error };
+          }),
+        ]);
+      },
     });
-    if (saved.status === "created") await this.#refreshPreview(scope, input.artifactId);
+    if (tailError) throw tailError.error;
+    if (saved.status === "replayed") await options?.afterSave?.(saved);
     return saved;
   }
 
