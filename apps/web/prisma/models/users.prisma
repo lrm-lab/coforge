@@ -57,6 +57,7 @@ model User {
   webPushSubscriptions        WebPushSubscription[]
   attachments                 Attachment[]
   deviceAuthorizations        DeviceAuthorization[]
+  approvedExternalCredentials ExternalAgentCredential[]   @relation("ExternalAgentCredentialApprover")
   weeklyReportCyclesCreated   WeeklyReportCycle[]             @relation("WeeklyReportCycleCreator")
   weeklyReportsAuthored       WeeklyReport[]                  @relation("WeeklyReportAuthor")
   weeklyReportFavorites       WeeklyReportFavorite[]
@@ -158,6 +159,14 @@ model DeviceAuthorization {
   /// Null until a signed-in browser approves this grant; the token is minted for this user.
   userId         String?   @map("user_id") @db.Uuid
   status         String    @default("pending")
+  /// The OAuth client that started the grant: `coforge-computer` or `coforge-cli`. A code only
+  /// redeems for its own client.
+  clientId       String    @default("coforge-computer") @map("client_id")
+  /// What a `coforge-cli` code asks for (`kind: "external_agent"`, the Agent and the machine);
+  /// null for a Computer code.
+  grant          Json?
+  approvedAgentId     String?   @map("approved_agent_id") @db.Uuid
+  approvedWorkspaceId String?   @map("approved_workspace_id") @db.Uuid
   expiresAt      DateTime  @map("expires_at")
   approvedAt     DateTime? @map("approved_at")
   /// Last poll, so a Computer polling faster than the advertised interval gets `slow_down`.

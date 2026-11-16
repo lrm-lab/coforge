@@ -20,6 +20,7 @@ import {
   requiredRuntimeConfig,
   runtimeStartFields,
 } from "./agent-runtime-config.server";
+import { createExternalAgent, type ExternalAgentCreateInput } from "./external-agent-create.server";
 import { AgentConfigApply } from "./agent-config-apply.server";
 import type { AgentRuntimeCredentials } from "./agent-runtime-credentials.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
@@ -120,7 +121,8 @@ export class ManageAgents {
       );
   }
 
-  async create(principal: AgentPrincipal, input: AgentCreateInput) {
+  async create(principal: AgentPrincipal, input: AgentCreateInput | ExternalAgentCreateInput) {
+    if ("hosting" in input) return createExternalAgent(this.agents, principal, input);
     if (!principal.role) throw new AppError("ACCESS_DENIED");
     assertCanCreateAgents(principal.role);
     const name = input.name.trim().toLowerCase();
@@ -206,6 +208,8 @@ export class ManageAgents {
       // the restart below, so a stopped/deleted Agent cannot be silently rewritten either.
       assertAgentLive(current);
       assertNotAppBot(current);
+      if (current.hosting === "external")
+        throw new AppError("INVALID_INPUT", { errorId: "agent-external-no-runtime" });
       // A Computer can be chosen only while the Agent has none; after that it moves through
       // the migration flow, never through this update.
       if (current.computerId && input.computerId && input.computerId !== current.computerId)

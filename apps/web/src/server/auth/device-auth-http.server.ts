@@ -1,5 +1,10 @@
 import { publicOrigin } from "#src/server/http/public-origin.server";
-import { deviceAuthorizationStore } from "./device-auth-store.server";
+import { deviceAuthorizationStore, externalAgentDeviceDeps } from "./device-auth-store.server";
+import {
+  EXTERNAL_DEVICE_CLIENT_ID,
+  parseExternalAuthorizeBody,
+  resolveExternalAgentGrant,
+} from "./device-auth-external-agent.server";
 import { authorizeDevice, DEVICE_CLIENT_ID, pollDeviceToken } from "./device-auth.server";
 import { e2eDevice, e2eToken, oauthDiscovery as e2eDiscovery } from "./e2e-device-auth.server";
 
@@ -46,11 +51,42 @@ export async function deviceAuthorizationRequest(
 ): Promise<Response> {
   if (useE2EDouble(environment)) return e2eDevice(request);
   const body = new URLSearchParams(await request.text());
-  if (body.get("client_id") !== DEVICE_CLIENT_ID)
+  const clientId = body.get("client_id");
+  if (clientId !== DEVICE_CLIENT_ID && clientId !== EXTERNAL_DEVICE_CLIENT_ID)
     return Response.json({ error: "invalid_client" }, { status: 400, headers: NO_STORE });
   const deviceStore = deviceAuthorizationStore();
   if (!deviceStore) return unavailable();
-  const result = await authorizeDevice({ store: deviceStore, origin: publicOrigin(request) });
+  let grant;
+  if (clientId === EXTERNAL_DEVICE_CLIENT_ID) {
+    const external = externalAgentDeviceDeps();
+    if (!external) return unavailable();
+    const requested = parseExternalAuthorizeBody(body);
+    if (!requested)
+      return Response.json(
+        {
+          error: "invalid_request",
+          error_description:
+            "workspace, agent, machine_name, hostname, os and client_name are required",
+        },
+        { status: 400, headers: NO_STORE },
+      );
+    const resolution = await resolveExternalAgentGrant(external.directory, requested);
+    if (!resolution.ok)
+      return Response.json(
+        {
+          error: "invalid_request",
+          error_description: resolution.description,
+          coforge_code: resolution.coforgeCode,
+        },
+        { status: 400, headers: NO_STORE },
+      );
+    grant = resolution.grant;
+  }
+  const result = await authorizeDevice({
+    store: deviceStore,
+    origin: publicOrigin(request),
+    ...(grant ? { clientId: EXTERNAL_DEVICE_CLIENT_ID, grant } : {}),
+  });
   return Response.json(
     {
       device_code: result.deviceCode,
@@ -71,7 +107,8 @@ export async function deviceTokenRequest(
   const body = new URLSearchParams(await request.text());
   if (body.get("grant_type") !== "urn:ietf:params:oauth:grant-type:device_code")
     return Response.json({ error: "unsupported_grant_type" }, { status: 400, headers: NO_STORE });
-  if (body.get("client_id") !== DEVICE_CLIENT_ID)
+  const clientId = body.get("client_id");
+  if (clientId !== DEVICE_CLIENT_ID && clientId !== EXTERNAL_DEVICE_CLIENT_ID)
     return Response.json({ error: "invalid_client" }, { status: 400, headers: NO_STORE });
   const deviceCode = body.get("device_code");
   if (!deviceCode)
@@ -79,9 +116,34 @@ export async function deviceTokenRequest(
   const deviceStore = deviceAuthorizationStore();
   if (!deviceStore) return unavailable();
 
-  const outcome = await pollDeviceToken({ store: deviceStore, deviceCode, environment });
+  const outcome = await pollDeviceToken({
+    store: deviceStore,
+    deviceCode,
+    environment,
+    clientId,
+    ...(clientId === EXTERNAL_DEVICE_CLIENT_ID ? { external: externalAgentDeviceDeps() } : {}),
+  });
   if (outcome.status === "error")
-    return Response.json({ error: outcome.error }, { status: 400, headers: NO_STORE });
+    return Response.json(
+      {
+        error: outcome.error,
+        ...(outcome.coforgeCode ? { coforge_code: outcome.coforgeCode } : {}),
+      },
+      { status: 400, headers: NO_STORE },
+    );
+  if (outcome.status === "authorized_external_agent")
+    return Response.json(
+      {
+        kind: "external_agent",
+        credential_id: outcome.credentialId,
+        api_key: outcome.apiKey,
+        agent_id: outcome.agentId,
+        agent_name: outcome.agentName,
+        workspace_id: outcome.workspaceId,
+        workspace_slug: outcome.workspaceSlug,
+      },
+      { headers: NO_STORE },
+    );
   return Response.json(
     {
       access_token: outcome.accessToken,

@@ -139,6 +139,15 @@ export const createAgentInputSchema = z
 
 export type CreateAgentInput = z.infer<typeof createAgentInputSchema>;
 
+export const createExternalAgentInputSchema = z.object({
+  hosting: z.literal("external"),
+  name: nameSchema,
+  displayName: displayNameSchema,
+  description: z.string().trim().max(AGENT_PROFILE_DESCRIPTION_MAX_LENGTH).default(""),
+  visibility: z.enum(AGENT_VISIBILITY_VALUES).default(AGENT_VISIBILITY.PUBLIC),
+});
+export type CreateExternalAgentInput = z.infer<typeof createExternalAgentInputSchema>;
+
 export const updateAgentInputSchema = z
   .object({
     ...agentInputShape,

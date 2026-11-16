@@ -158,7 +158,7 @@ export type DirectConversationRepository = {
       workspaceId: string;
       agentId: string;
       computerId?: string;
-      appBot?: boolean;
+      inboxPolled?: boolean;
       target?: string;
       deliveryTarget?: string;
       attachments: AttachmentMetadata[];

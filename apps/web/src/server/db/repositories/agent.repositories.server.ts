@@ -32,6 +32,8 @@ export type AgentRecord = {
   createdAt: Date;
   ownerId: string;
   computerId?: string;
+  /** Where the Agent runs (`Agent.hosting`): absent reads as managed. */
+  hosting?: "managed" | "external";
   /** `undefined` when the stored row's config cannot be read — one bad row never fails a read
    * (the readers then show no runtime); only a write-path caller may treat it as required. */
   runtimeConfig: AgentRuntimeConfig | undefined;
@@ -68,6 +70,7 @@ function mapAgent(agent: {
   createdAt: Date;
   ownerId: string;
   computerId: string | null;
+  hosting?: string;
   runtimeConfig: unknown;
   runtimeConfigRevision?: number;
   runtimeSession?: unknown;
@@ -88,6 +91,7 @@ function mapAgent(agent: {
     ownerId: agent.ownerId,
     description: description ?? "",
     ...(computerId ? { computerId } : {}),
+    hosting: agent.hosting === "external" ? "external" : "managed",
     runtimeConfig,
     runtimeConfigRevision: agent.runtimeConfigRevision ?? 0,
     stoppedAt: agent.stoppedAt ?? null,

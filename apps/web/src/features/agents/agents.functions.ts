@@ -9,6 +9,7 @@ import {
   agentIdSchema,
   changeAgentVisibilityInputSchema,
   createAgentInputSchema,
+  createExternalAgentInputSchema,
   deleteAgentInputSchema,
   saveAgentRuntimeCredentialInputSchema,
   saveAgentEnvironmentInputSchema,
@@ -131,6 +132,16 @@ export const createAgent = createServerFn({ method: "POST" })
         data.actionCardMessageId,
         created.agent.id,
       );
+    return created;
+  });
+
+export const createExternalAgent = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(createExternalAgentInputSchema)
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    const role = await workspaceMemberRole(db, workspaceId, user.id);
+    const created = await manageAgents(db).create({ userId: user.id, workspaceId, role }, data);
+    await publishAgentDirectoryChanged(workspaceId, created.agent.id, "created");
     return created;
   });
 

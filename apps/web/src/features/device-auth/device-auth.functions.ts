@@ -3,7 +3,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "#src/features/auth/function-auth";
 import { userCodeInputSchema } from "./device-auth.schemas";
 import { approveUserCode, denyUserCode, lookupUserCode } from "#src/server/auth/device-auth.server";
-import { deviceAuthorizationStore } from "#src/server/auth/device-auth-store.server";
+import {
+  deviceAuthorizationStore,
+  externalAgentDeviceDeps,
+} from "#src/server/auth/device-auth-store.server";
+import type { ExternalGrantDetails } from "#src/server/auth/device-auth-external-agent.server";
 import { signedInAccount } from "#src/server/auth/signed-in-account.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 
@@ -13,7 +17,15 @@ import { requireDatabaseClient } from "#src/server/db/client.server";
  * have one, so an unauthenticated caller must never be able to settle a grant.
  */
 
-export type DeviceCodeState = "ok" | "unknown" | "expired" | "settled" | "unavailable";
+export type DeviceCodeState =
+  | "ok"
+  | "unknown"
+  | "expired"
+  | "settled"
+  | "unavailable"
+  | "not_authorized"
+  | "agent_not_external"
+  | "agent_unavailable";
 
 /** Resolves the signed-in user for the approval page, redirecting to /login when there is none -
  * which is what makes "sign in first, then approve" a property of the route rather than an
@@ -31,11 +43,16 @@ export const getDeviceVerifyUser = createServerFn({ method: "GET" })
 export const checkDeviceCode = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(userCodeInputSchema)
-  .handler(async ({ data }): Promise<{ state: DeviceCodeState }> => {
+  .handler(async ({ data }): Promise<{ state: DeviceCodeState; grant?: ExternalGrantDetails }> => {
     const store = deviceAuthorizationStore();
     if (!store) return { state: "unavailable" };
-    const lookup = await lookupUserCode({ store, userCode: data.userCode });
-    return { state: lookup.found ? "ok" : lookup.reason };
+    const lookup = await lookupUserCode({
+      store,
+      userCode: data.userCode,
+      directory: externalAgentDeviceDeps()?.directory,
+    });
+    if (!lookup.found) return { state: lookup.reason };
+    return lookup.external ? { state: "ok", grant: lookup.external } : { state: "ok" };
   });
 
 export const approveDeviceCode = createServerFn({ method: "POST" })
@@ -45,7 +62,12 @@ export const approveDeviceCode = createServerFn({ method: "POST" })
     const user = context.user;
     const store = deviceAuthorizationStore();
     if (!store) return { state: "unavailable" };
-    const result = await approveUserCode({ store, userCode: data.userCode, userId: user.id });
+    const result = await approveUserCode({
+      store,
+      userCode: data.userCode,
+      userId: user.id,
+      directory: externalAgentDeviceDeps()?.directory,
+    });
     return { state: result.found ? "ok" : result.reason };
   });
 
@@ -55,6 +77,10 @@ export const denyDeviceCode = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ state: DeviceCodeState }> => {
     const store = deviceAuthorizationStore();
     if (!store) return { state: "unavailable" };
-    const result = await denyUserCode({ store, userCode: data.userCode });
+    const result = await denyUserCode({
+      store,
+      userCode: data.userCode,
+      directory: externalAgentDeviceDeps()?.directory,
+    });
     return { state: result.found ? "ok" : result.reason };
   });

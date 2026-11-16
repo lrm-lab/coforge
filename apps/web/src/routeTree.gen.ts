@@ -80,6 +80,7 @@ import { Route as WWorkspaceSlugTasksRouteImport } from './routes/w.$workspaceSl
 import { Route as WWorkspaceSlugWorkspaceRouteImport } from './routes/w.$workspaceSlug/workspace'
 import { Route as ApiAgentV1ArtifactsRouteImport } from './routes/api/agent/v1/artifacts'
 import { Route as ApiAgentV1ChannelsRouteImport } from './routes/api/agent/v1/channels'
+import { Route as ApiAgentV1ContextRouteImport } from './routes/api/agent/v1/context'
 import { Route as ApiAgentV1EventsRouteImport } from './routes/api/agent/v1/events'
 import { Route as ApiAgentV1GithubCommitTrailersRouteImport } from './routes/api/agent/v1/github-commit-trailers'
 import { Route as ApiAgentV1GithubCredentialsRouteImport } from './routes/api/agent/v1/github-credentials'
@@ -171,6 +172,7 @@ import { Route as ApiAgentV1ChannelsChannelMembersRouteImport } from './routes/a
 import { Route as ApiAgentV1ChannelsChannelMuteRouteImport } from './routes/api/agent/v1/channels_.$channel.mute'
 import { Route as ApiAgentV1ChannelsChannelUnarchiveRouteImport } from './routes/api/agent/v1/channels_.$channel.unarchive'
 import { Route as ApiAgentV1ChannelsChannelUnmuteRouteImport } from './routes/api/agent/v1/channels_.$channel.unmute'
+import { Route as ApiAgentV1CredentialsSelfRevokeRouteImport } from './routes/api/agent/v1/credentials/self.revoke'
 import { Route as ApiAgentV1MessagesMessageIdMentionDeliveriesRouteImport } from './routes/api/agent/v1/messages_.$messageId.mention-deliveries'
 import { Route as ApiAgentV1MessagesMessageIdReactionsRouteImport } from './routes/api/agent/v1/messages_.$messageId.reactions'
 import { Route as ApiAgentV1MessagesMessageIdResolveRouteImport } from './routes/api/agent/v1/messages_.$messageId.resolve'
@@ -561,6 +563,11 @@ const ApiAgentV1ArtifactsRoute = ApiAgentV1ArtifactsRouteImport.update({
 const ApiAgentV1ChannelsRoute = ApiAgentV1ChannelsRouteImport.update({
   id: '/api/agent/v1/channels',
   path: '/api/agent/v1/channels',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentV1ContextRoute = ApiAgentV1ContextRouteImport.update({
+  id: '/api/agent/v1/context',
+  path: '/api/agent/v1/context',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAgentV1EventsRoute = ApiAgentV1EventsRouteImport.update({
@@ -1082,6 +1089,12 @@ const ApiAgentV1ChannelsChannelUnmuteRoute =
     path: '/unmute',
     getParentRoute: () => ApiAgentV1ChannelsChannelRoute,
   } as any)
+const ApiAgentV1CredentialsSelfRevokeRoute =
+  ApiAgentV1CredentialsSelfRevokeRouteImport.update({
+    id: '/api/agent/v1/credentials/self/revoke',
+    path: '/api/agent/v1/credentials/self/revoke',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1MessagesMessageIdMentionDeliveriesRoute =
   ApiAgentV1MessagesMessageIdMentionDeliveriesRouteImport.update({
     id: '/api/agent/v1/messages_/$messageId/mention-deliveries',
@@ -1298,6 +1311,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
   '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
+  '/api/agent/v1/context': typeof ApiAgentV1ContextRoute
   '/api/agent/v1/events': typeof ApiAgentV1EventsRoute
   '/api/agent/v1/github-commit-trailers': typeof ApiAgentV1GithubCommitTrailersRoute
   '/api/agent/v1/github-credentials': typeof ApiAgentV1GithubCredentialsRoute
@@ -1388,6 +1402,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/channels/$channel/mute': typeof ApiAgentV1ChannelsChannelMuteRoute
   '/api/agent/v1/channels/$channel/unarchive': typeof ApiAgentV1ChannelsChannelUnarchiveRoute
   '/api/agent/v1/channels/$channel/unmute': typeof ApiAgentV1ChannelsChannelUnmuteRoute
+  '/api/agent/v1/credentials/self/revoke': typeof ApiAgentV1CredentialsSelfRevokeRoute
   '/api/agent/v1/messages/$messageId/mention-deliveries': typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   '/api/agent/v1/messages/$messageId/reactions': typeof ApiAgentV1MessagesMessageIdReactionsRoute
   '/api/agent/v1/messages/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
@@ -1482,6 +1497,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
   '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
+  '/api/agent/v1/context': typeof ApiAgentV1ContextRoute
   '/api/agent/v1/events': typeof ApiAgentV1EventsRoute
   '/api/agent/v1/github-commit-trailers': typeof ApiAgentV1GithubCommitTrailersRoute
   '/api/agent/v1/github-credentials': typeof ApiAgentV1GithubCredentialsRoute
@@ -1571,6 +1587,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/channels/$channel/mute': typeof ApiAgentV1ChannelsChannelMuteRoute
   '/api/agent/v1/channels/$channel/unarchive': typeof ApiAgentV1ChannelsChannelUnarchiveRoute
   '/api/agent/v1/channels/$channel/unmute': typeof ApiAgentV1ChannelsChannelUnmuteRoute
+  '/api/agent/v1/credentials/self/revoke': typeof ApiAgentV1CredentialsSelfRevokeRoute
   '/api/agent/v1/messages/$messageId/mention-deliveries': typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   '/api/agent/v1/messages/$messageId/reactions': typeof ApiAgentV1MessagesMessageIdReactionsRoute
   '/api/agent/v1/messages/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
@@ -1669,6 +1686,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
   '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
+  '/api/agent/v1/context': typeof ApiAgentV1ContextRoute
   '/api/agent/v1/events': typeof ApiAgentV1EventsRoute
   '/api/agent/v1/github-commit-trailers': typeof ApiAgentV1GithubCommitTrailersRoute
   '/api/agent/v1/github-credentials': typeof ApiAgentV1GithubCredentialsRoute
@@ -1759,6 +1777,7 @@ export interface FileRoutesById {
   '/api/agent/v1/channels_/$channel/mute': typeof ApiAgentV1ChannelsChannelMuteRoute
   '/api/agent/v1/channels_/$channel/unarchive': typeof ApiAgentV1ChannelsChannelUnarchiveRoute
   '/api/agent/v1/channels_/$channel/unmute': typeof ApiAgentV1ChannelsChannelUnmuteRoute
+  '/api/agent/v1/credentials/self/revoke': typeof ApiAgentV1CredentialsSelfRevokeRoute
   '/api/agent/v1/messages_/$messageId/mention-deliveries': typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   '/api/agent/v1/messages_/$messageId/reactions': typeof ApiAgentV1MessagesMessageIdReactionsRoute
   '/api/agent/v1/messages_/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
@@ -1856,6 +1875,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/workspace'
     | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
+    | '/api/agent/v1/context'
     | '/api/agent/v1/events'
     | '/api/agent/v1/github-commit-trailers'
     | '/api/agent/v1/github-credentials'
@@ -1946,6 +1966,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/channels/$channel/mute'
     | '/api/agent/v1/channels/$channel/unarchive'
     | '/api/agent/v1/channels/$channel/unmute'
+    | '/api/agent/v1/credentials/self/revoke'
     | '/api/agent/v1/messages/$messageId/mention-deliveries'
     | '/api/agent/v1/messages/$messageId/reactions'
     | '/api/agent/v1/messages/$messageId/resolve'
@@ -2040,6 +2061,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/workspace'
     | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
+    | '/api/agent/v1/context'
     | '/api/agent/v1/events'
     | '/api/agent/v1/github-commit-trailers'
     | '/api/agent/v1/github-credentials'
@@ -2129,6 +2151,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/channels/$channel/mute'
     | '/api/agent/v1/channels/$channel/unarchive'
     | '/api/agent/v1/channels/$channel/unmute'
+    | '/api/agent/v1/credentials/self/revoke'
     | '/api/agent/v1/messages/$messageId/mention-deliveries'
     | '/api/agent/v1/messages/$messageId/reactions'
     | '/api/agent/v1/messages/$messageId/resolve'
@@ -2226,6 +2249,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/workspace'
     | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
+    | '/api/agent/v1/context'
     | '/api/agent/v1/events'
     | '/api/agent/v1/github-commit-trailers'
     | '/api/agent/v1/github-credentials'
@@ -2316,6 +2340,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/channels_/$channel/mute'
     | '/api/agent/v1/channels_/$channel/unarchive'
     | '/api/agent/v1/channels_/$channel/unmute'
+    | '/api/agent/v1/credentials/self/revoke'
     | '/api/agent/v1/messages_/$messageId/mention-deliveries'
     | '/api/agent/v1/messages_/$messageId/reactions'
     | '/api/agent/v1/messages_/$messageId/resolve'
@@ -2398,6 +2423,7 @@ export interface RootRouteChildren {
   OidcDotwellKnownOpenidConfigurationRoute: typeof OidcDotwellKnownOpenidConfigurationRoute
   ApiAgentV1ArtifactsRoute: typeof ApiAgentV1ArtifactsRoute
   ApiAgentV1ChannelsRoute: typeof ApiAgentV1ChannelsRoute
+  ApiAgentV1ContextRoute: typeof ApiAgentV1ContextRoute
   ApiAgentV1EventsRoute: typeof ApiAgentV1EventsRoute
   ApiAgentV1GithubCommitTrailersRoute: typeof ApiAgentV1GithubCommitTrailersRoute
   ApiAgentV1GithubCredentialsRoute: typeof ApiAgentV1GithubCredentialsRoute
@@ -2459,6 +2485,7 @@ export interface RootRouteChildren {
   ApiAgentV1AppsAppIdTokenRoute: typeof ApiAgentV1AppsAppIdTokenRoute
   ApiAgentV1AppsRegistrationsStatusRoute: typeof ApiAgentV1AppsRegistrationsStatusRoute
   ApiAgentV1ArtifactsUploadsSha256Route: typeof ApiAgentV1ArtifactsUploadsSha256Route
+  ApiAgentV1CredentialsSelfRevokeRoute: typeof ApiAgentV1CredentialsSelfRevokeRoute
   ApiAgentV1MessagesMessageIdMentionDeliveriesRoute: typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   ApiAgentV1MessagesMessageIdReactionsRoute: typeof ApiAgentV1MessagesMessageIdReactionsRoute
   ApiAgentV1MessagesMessageIdResolveRoute: typeof ApiAgentV1MessagesMessageIdResolveRoute
@@ -2979,6 +3006,13 @@ declare module '@tanstack/react-router' {
       path: '/api/agent/v1/channels'
       fullPath: '/api/agent/v1/channels'
       preLoaderRoute: typeof ApiAgentV1ChannelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/context': {
+      id: '/api/agent/v1/context'
+      path: '/api/agent/v1/context'
+      fullPath: '/api/agent/v1/context'
+      preLoaderRoute: typeof ApiAgentV1ContextRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agent/v1/events': {
@@ -3618,6 +3652,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1ChannelsChannelUnmuteRouteImport
       parentRoute: typeof ApiAgentV1ChannelsChannelRoute
     }
+    '/api/agent/v1/credentials/self/revoke': {
+      id: '/api/agent/v1/credentials/self/revoke'
+      path: '/api/agent/v1/credentials/self/revoke'
+      fullPath: '/api/agent/v1/credentials/self/revoke'
+      preLoaderRoute: typeof ApiAgentV1CredentialsSelfRevokeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/messages_/$messageId/mention-deliveries': {
       id: '/api/agent/v1/messages_/$messageId/mention-deliveries'
       path: '/api/agent/v1/messages/$messageId/mention-deliveries'
@@ -4088,6 +4129,7 @@ const rootRouteChildren: RootRouteChildren = {
     OidcDotwellKnownOpenidConfigurationRoute,
   ApiAgentV1ArtifactsRoute: ApiAgentV1ArtifactsRoute,
   ApiAgentV1ChannelsRoute: ApiAgentV1ChannelsRoute,
+  ApiAgentV1ContextRoute: ApiAgentV1ContextRoute,
   ApiAgentV1EventsRoute: ApiAgentV1EventsRoute,
   ApiAgentV1GithubCommitTrailersRoute: ApiAgentV1GithubCommitTrailersRoute,
   ApiAgentV1GithubCredentialsRoute: ApiAgentV1GithubCredentialsRoute,
@@ -4164,6 +4206,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1AppsRegistrationsStatusRoute:
     ApiAgentV1AppsRegistrationsStatusRoute,
   ApiAgentV1ArtifactsUploadsSha256Route: ApiAgentV1ArtifactsUploadsSha256Route,
+  ApiAgentV1CredentialsSelfRevokeRoute: ApiAgentV1CredentialsSelfRevokeRoute,
   ApiAgentV1MessagesMessageIdMentionDeliveriesRoute:
     ApiAgentV1MessagesMessageIdMentionDeliveriesRoute,
   ApiAgentV1MessagesMessageIdReactionsRoute:

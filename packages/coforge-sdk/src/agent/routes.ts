@@ -139,6 +139,8 @@ const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
 export const agentApiRoutes = {
   proxy: {
     workspace: { method: "GET", path: "/api/agent/v1/workspace" },
+    agentContext: { method: "GET", path: "/api/agent/v1/context" },
+    credentialSelfRevoke: { method: "POST", path: "/api/agent/v1/credentials/self/revoke" },
     computerUpdateNotice: { method: "GET", path: "/api/agent/v1/computer-update-notice" },
     manual: {
       get: { method: "GET", path: "/api/agent/v1/manual" },

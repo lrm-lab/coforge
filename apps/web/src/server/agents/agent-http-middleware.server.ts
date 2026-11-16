@@ -12,6 +12,8 @@ import { errorResponse } from "./agent-http-error.server";
 import { authenticateAgentHttpRequest } from "./agent-api-http.server";
 import { authenticateAppBotRequest } from "#src/server/app-bots/app-bot-agent-api.server";
 import { createAppBots } from "#src/server/app-bots/app-bots-composition.server";
+import { authenticateExternalAgentRequest } from "./external-agent-http.server";
+import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import { handleWorkspaceAssistantCommand } from "./workspace-assistant-http.server";
 
 /**
@@ -108,6 +110,16 @@ export const agentAuthMiddleware = createMiddleware().server(async ({ next, requ
   const db = getDatabaseClient();
   if (!db) return textResponse("unauthorized", { status: 401, headers: NO_STORE });
   try {
+    const external = await authenticateExternalAgentRequest(
+      request,
+      new PrismaExternalAgentCredentialRepository(db),
+    );
+    if (external instanceof Response) return noStore(external);
+    if (external) {
+      const result = await next({ context: { principal: external.principal, db } });
+      result.response = noStore(result.response);
+      return result;
+    }
     // An app's bot presents its key alone and has no Computer; its calls are bounded by capability.
     const bot = await authenticateAppBotRequest(request, createAppBots(db));
     if (bot instanceof Response) return noStore(bot);

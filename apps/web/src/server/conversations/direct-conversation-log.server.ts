@@ -76,7 +76,8 @@ export function logAgentCreated(input: {
   workspaceId: string;
   agentId: string;
   creatorUserId: string;
-  computerId: string;
+  computerId?: string;
+  hosting?: string;
 }) {
   console.info(
     JSON.stringify({
@@ -85,6 +86,7 @@ export function logAgentCreated(input: {
       agent_id: input.agentId,
       creator_user_id: input.creatorUserId,
       computer_id: input.computerId,
+      ...(input.hosting ? { hosting: input.hosting } : {}),
     }),
   );
 }

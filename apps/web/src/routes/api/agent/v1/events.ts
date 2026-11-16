@@ -61,15 +61,25 @@ export async function handleAgentEventsGet(
   }
 }
 
+export function routeAgentEventsGet(
+  request: Request,
+  principal: AgentEventsGetPrincipal,
+  db: PrismaClient,
+  handlers: {
+    inbox: typeof handleAppBotEventsGet;
+    drain: typeof handleAgentEventsRouteGet;
+  } = { inbox: handleAppBotEventsGet, drain: handleAgentEventsRouteGet },
+) {
+  return "appBot" in principal || "external" in principal
+    ? handlers.inbox(request, principal, db)
+    : handlers.drain(request, principal, db);
+}
+
 export const Route = createFileRoute("/api/agent/v1/events")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      GET: ({ request, context: { principal, db } }) =>
-        // An app's bot reads its inbox without taking it (`AppBotInbox`).
-        "appBot" in principal
-          ? handleAppBotEventsGet(request, principal, db)
-          : handleAgentEventsRouteGet(request, principal, db),
+      GET: ({ request, context: { principal, db } }) => routeAgentEventsGet(request, principal, db),
     },
   },
 });
