@@ -179,4 +179,6 @@ The rules are in `docs/agent-cli/artifact-follows.md`. Their modules:
   `ARTIFACT_ZIP_LIMIT_BYTES` (`artifact-zip-too-large`), and the capped text/image preview of a
   file. `artifact-visible.server.ts` is `visibleToReader`.
 - A share to a `conversation`-tier artifact with no live public link is held, sending nothing,
-  when recipients cannot read it elsewhere; `unseen: "send"` overrides the hold.
+  when recipients cannot read it elsewhere; `unseen: "send"` overrides the hold. The caller passes
+  the sender's post check (`mayPost`) with `send`, and the hold runs it on every target before
+  counting anyone, since this module reaches conversations only through `channel-read-access`.

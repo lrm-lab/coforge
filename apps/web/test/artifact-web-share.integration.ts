@@ -7,6 +7,7 @@ import { isAppError } from "#src/lib/app-error";
 import { ArtifactShares } from "#src/server/artifacts/artifact-shares.server";
 import { Artifacts, type ArtifactBlobStore } from "#src/server/artifacts/artifacts.server";
 import { postUserMessage } from "#src/server/conversations/user-message-post.server";
+import { assertUserMayPost } from "#src/server/conversations/user-post-access.server";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 const connectionString = Bun.env.DATABASE_URL;
@@ -58,6 +59,7 @@ const share = (userId: string, targets: string[], unseen: "hold" | "send" = "sen
         idempotencyKey,
         body,
       }),
+    mayPost: (target) => assertUserMayPost(db, workspaceId, userId, target),
   });
 const linkMessages = () =>
   db.message.findMany({
@@ -275,6 +277,7 @@ test("a retry under the same request id posts nothing twice", async () => {
           idempotencyKey,
           body,
         }),
+      mayPost: (target) => assertUserMayPost(db, workspaceId, people.alice, target),
     });
   const first = await once();
   const second = await once();

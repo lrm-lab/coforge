@@ -6,7 +6,6 @@ import {
 } from "#src/features/artifacts/artifact-share-input";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { membersWithoutOtherConversationRead } from "#src/server/conversations/channel-read-access.server";
-import { assertUserMayPost } from "#src/server/conversations/user-post-access.server";
 import {
   artifactHomeConversationId,
   artifactTier,
@@ -65,6 +64,7 @@ export class ArtifactShares {
     requestId: string;
     unseen?: "hold" | "send";
     send: ArtifactShareSender;
+    mayPost: (target: string) => Promise<void>;
   }): Promise<ArtifactShareResult> {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const targets = [...new Set(input.targets)];
@@ -95,7 +95,12 @@ export class ArtifactShares {
     if (!workspace || !row) throw new AppError("NOT_FOUND");
     await requireArtifactRead(this.db, input.workspaceId, input.actor, row);
     if (input.unseen !== "send") {
-      const held = await this.recipientsWhoCannotSee(input.workspaceId, input.actor, row, targets);
+      const held = await this.recipientsWhoCannotSee(
+        input.workspaceId,
+        row,
+        targets,
+        input.mayPost,
+      );
       if (held.length > 0) return { outcome: "held", results: [], held };
     }
 
@@ -133,9 +138,9 @@ export class ArtifactShares {
 
   private async recipientsWhoCannotSee(
     workspaceId: string,
-    actor: { userId: string },
     artifact: { id: string; homeKey: string; access: string },
     targets: readonly string[],
+    mayPost: (target: string) => Promise<void>,
   ): Promise<ArtifactShareHold[]> {
     const home = artifactHomeConversationId(artifact.homeKey);
     if (artifactTier(artifact) === "workspace" || !home) return [];
@@ -144,8 +149,7 @@ export class ArtifactShares {
       select: { id: true },
     });
     if (link) return [];
-    for (const target of targets)
-      await assertUserMayPost(this.db, workspaceId, actor.userId, target);
+    for (const target of targets) await mayPost(target);
     const counts = await Promise.all(
       targets.map(async (target) => ({
         target,

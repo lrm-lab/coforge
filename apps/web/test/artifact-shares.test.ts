@@ -22,6 +22,7 @@ test("artifact share posts one live-link message per target with derived keys, t
     targets: ["#launch", "@ada"],
     note: "Please review",
     requestId: "00000000-0000-4000-8000-000000000002",
+    mayPost: async () => {},
     send: async (input) => {
       sent.push(input);
       return { id: `message-${sent.length}`, sequence: sent.length };
@@ -53,6 +54,7 @@ test("artifact share refuses a non-member's artifact before sending", async () =
       artifactId: ARTIFACT,
       targets: ["#launch"],
       requestId: "00000000-0000-4000-8000-000000000002",
+      mayPost: async () => {},
       send: async () => {
         sends += 1;
         return { id: "message", sequence: 1 };
@@ -96,6 +98,7 @@ test("a home the Workspace hides is not shared", async () => {
       artifactId: ARTIFACT,
       targets: ["#launch"],
       requestId: "00000000-0000-4000-8000-000000000002",
+      mayPost: async () => {},
       send: async ({ body }) => {
         sent.push(body);
         return { id: "message", sequence: 1 };
@@ -113,6 +116,7 @@ test("artifact sharing rejects more than twenty targets", async () => {
     actor: { userId: "user-1" } as const,
     requestId: "00000000-0000-4000-8000-000000000005",
     send,
+    mayPost: async () => {},
   };
   await expect(
     shares.share({

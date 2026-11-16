@@ -12,6 +12,7 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { postUserMessage } from "#src/server/conversations/user-message-post.server";
+import { assertUserMayPost } from "#src/server/conversations/user-post-access.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { artifactInputs } from "./artifact-inputs";
@@ -142,5 +143,6 @@ export const shareArtifact = createServerFn({ method: "POST" })
           idempotencyKey,
           body,
         }),
+      mayPost: (target) => assertUserMayPost(db, workspaceId, user.id, target),
     });
   });

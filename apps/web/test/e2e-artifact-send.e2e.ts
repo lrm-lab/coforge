@@ -9,6 +9,7 @@ import {
   productionArtifacts,
 } from "#src/server/artifacts/artifact-composition.server";
 import { postUserMessage } from "#src/server/conversations/user-message-post.server";
+import { assertUserMayPost } from "#src/server/conversations/user-post-access.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
@@ -150,6 +151,7 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
           },
           { workspaceId, userId: noor.id, conversationId, idempotencyKey, body },
         ),
+      mayPost: (conversationId) => assertUserMayPost(db, workspaceId, noor.id, conversationId),
     });
   try {
     await experiments.write(workspaceId, "artifacts", true);
