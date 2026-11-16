@@ -14,12 +14,6 @@ import {
   decodeAgentWorkspaceDeleteRequest,
   encodeAgentWorkspaceDeleteResult,
   AGENT_WORKSPACE_DELETE_RESULT_METHOD,
-  decodeLocalSessionSearchRequest,
-  encodeLocalSessionSearchResult,
-  LOCAL_SESSION_SEARCH_RESULT_METHOD,
-  decodeLocalSessionExcerptRequest,
-  encodeLocalSessionExcerptResult,
-  LOCAL_SESSION_EXCERPT_RESULT_METHOD,
   decodeAgentContextViewRequest,
   encodeAgentContextViewResult,
   isAgentContextViewRequest,
@@ -93,8 +87,6 @@ export class DaemonQueries {
   readonly file;
   readonly scan;
   readonly deletion;
-  readonly localSessionSearch;
-  readonly localSessionExcerpt;
   readonly agentContextView;
   readonly computerFilePull;
   readonly piChat;
@@ -127,18 +119,6 @@ export class DaemonQueries {
       decodeAgentWorkspaceDeleteRequest,
       encodeAgentWorkspaceDeleteResult,
       AGENT_WORKSPACE_DELETE_RESULT_METHOD,
-      rpc,
-    );
-    this.localSessionSearch = new DaemonQuery(
-      decodeLocalSessionSearchRequest,
-      encodeLocalSessionSearchResult,
-      LOCAL_SESSION_SEARCH_RESULT_METHOD,
-      rpc,
-    );
-    this.localSessionExcerpt = new DaemonQuery(
-      decodeLocalSessionExcerptRequest,
-      encodeLocalSessionExcerptResult,
-      LOCAL_SESSION_EXCERPT_RESULT_METHOD,
       rpc,
     );
     this.agentContextView = new DaemonQuery(
@@ -176,8 +156,6 @@ export class DaemonQueries {
       this.scan,
       this.file,
       this.deletion,
-      this.localSessionSearch,
-      this.localSessionExcerpt,
       this.agentContextView,
       this.computerFilePull,
     ].some((query) => query.receive(bytes, scope));

@@ -64,7 +64,6 @@ These rules apply to `src/server/computers/`.
   reason and of the last daemon instance whose return was announced.
 - `computer-workspace-files.server.ts` requests one local Daemon workspace scan
   for the Computer owner's detail inventory; the Daemon owns directory traversal.
-- `computer-local-sessions.server.ts` and its production composition own the Computer-owner gate and short-lived request/reply flow for bounded local Claude Code and Codex Session discovery; `local-session-capability.server.ts` rejects old daemons before publication.
 - `computer-model-catalog-refresh.server.ts` is an explicit model probe — scoped to one provider when
   the request names it; ordinary catalog reads use the stored inventory. The same probe is the
   Computer page's "Rescan runtimes": the daemon re-runs runtime discovery before it re-reports.
