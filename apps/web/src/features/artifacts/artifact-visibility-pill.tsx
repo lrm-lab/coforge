@@ -9,7 +9,7 @@ import {
 } from "./use-artifact-visibility";
 
 const pillClass =
-  "flex min-w-0 max-w-48 shrink items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset";
+  "flex min-w-0 max-w-64 shrink items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset";
 
 export function VisibilityPill({
   visibility,

@@ -1,30 +1,19 @@
 import { Link } from "@tanstack/react-router";
-import { Building02, Code01, Globe02, MessageChatCircle } from "@untitledui/icons";
+import { Code01 } from "@untitledui/icons";
 
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { messageSlots } from "#src/lib/message-slots";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { loadArtifactGallery } from "./artifact-gallery.functions";
 import type { GallerySort } from "./artifact-gallery-model";
-import { useConversationName } from "./artifact-gallery-filters";
+import { GalleryCardVisibility } from "./artifact-gallery-visibility";
 import { ArtifactActor } from "./artifact-parts";
 import { isWebPageEntry } from "./artifact-path-kind";
+import { MarkdownPreview } from "./artifact-preview";
 import { useArtifactActor } from "./artifact-queries";
 import { artifactPageRoute } from "./artifact-search";
-
-export type GalleryCard = Awaited<ReturnType<typeof loadArtifactGallery>>["artifacts"][number];
-
-export function useScopeOf() {
-  const nameOf = useConversationName();
-  return (card: GalleryCard) => {
-    if (card.link) return { Icon: Globe02, label: m.av_vis_link() };
-    if (card.access === "workspace") return { Icon: Building02, label: m.av_vis_workspace() };
-    const id = card.homeKey.replace(/^conversation:/, "");
-    return { Icon: MessageChatCircle, label: nameOf(id) ?? m.av_vis_home_dm() };
-  };
-}
+import type { GalleryCard } from "./artifact-scope";
 
 export function CardBadges({
   card,
@@ -61,22 +50,20 @@ function Preview({ card }: { card: GalleryCard }) {
       </div>
     );
   return (
-    <p
+    <div
       className={cn(
-        "h-full overflow-hidden px-3 pt-3 text-xs/5 whitespace-pre-line text-tertiary",
+        "h-full overflow-hidden px-3 pt-3 text-xs/5 text-tertiary",
         "[mask-image:linear-gradient(to_bottom,black_65%,transparent)]",
       )}
     >
-      {card.preview}
-    </p>
+      <MarkdownPreview markdown={card.preview} />
+    </div>
   );
 }
 
 export function GalleryGridCard({ card, sort }: { card: GalleryCard; sort: GallerySort }) {
   const workspaceSlug = useWorkspaceSlug();
   const actorOf = useArtifactActor();
-  const scopeOf = useScopeOf();
-  const scope = scopeOf(card);
   return (
     <article className="relative flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary transition hover:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring">
       <div className="h-32 border-b border-secondary">
@@ -96,7 +83,7 @@ export function GalleryGridCard({ card, sort }: { card: GalleryCard; sort: Galle
         </p>
         <div className="flex items-center justify-between gap-2 text-xs text-tertiary">
           <ArtifactActor actor={actorOf(card.author)} />
-          <scope.Icon aria-label={scope.label} className="size-3.5 shrink-0" />
+          <GalleryCardVisibility card={card} />
         </div>
         <CardBadges card={card} />
         <WhenLine card={card} sort={sort} className="text-xs text-quaternary" />

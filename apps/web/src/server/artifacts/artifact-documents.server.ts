@@ -238,18 +238,17 @@ function createRequestHash(input: {
 
 const reader = (scope: DocumentScope) => ({ workspaceId: scope.workspaceId, reader: scope.actor });
 
+const PREVIEW_LINES = 12;
+const PREVIEW_CHARACTERS = 600;
+
 function artifactPreview(text: string): string {
   return text
+    .trim()
     .split("\n")
-    .map((line) =>
-      line
-        .replace(/^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/, "")
-        .trim()
-        .slice(0, 200),
-    )
-    .filter((line) => line !== "")
-    .slice(0, 2)
-    .join("\n");
+    .slice(0, PREVIEW_LINES)
+    .join("\n")
+    .slice(0, PREVIEW_CHARACTERS)
+    .trim();
 }
 
 async function refreshPreview(

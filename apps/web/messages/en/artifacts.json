@@ -91,7 +91,7 @@
   "av_update_view": "View latest",
   "av_vis_aria": "Who can see: {scope}. Change who can see",
   "av_vis_aria_fixed": "Who can see: {scope}",
-  "av_vis_workspace": "Everyone in the Workspace",
+  "av_vis_workspace": "Everyone in {workspace}",
   "av_vis_link": "Anyone with the link",
   "av_vis_home_dm": "This conversation",
   "av_who_can_see": "Who can see",
@@ -208,5 +208,9 @@
   "ag_col_updated": "Updated",
   "ag_col_comments": "Comments",
   "ag_col_visibility": "Who can see",
-  "ag_html_tag": "HTML"
+  "ag_html_tag": "HTML",
+  "av_home_chip_aria": "Home conversation: {name}",
+  "ag_group_visibility": "Who can see",
+  "ag_group_conversations": "Channels and DMs",
+  "doc_send_selected": "{count} selected"
 }

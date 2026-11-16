@@ -27,7 +27,12 @@ import {
 } from "#src/components/layout/phone-shell";
 import { PhoneTabBar } from "#src/components/layout/phone-tab-bar";
 import { ShellLinks } from "#src/components/layout/shell-links";
-import { CHAT_SECTIONS, sectionOf, tabHomeOf } from "#src/components/layout/tab-home";
+import {
+  CHAT_SECTIONS,
+  isStandalonePage,
+  sectionOf,
+  tabHomeOf,
+} from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { artifactsOnQuery } from "#src/features/artifacts/artifact-queries";
 import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
@@ -268,6 +273,18 @@ export function AppShell({
       signOut,
     ],
   );
+
+  if (isStandalonePage(pathname))
+    return (
+      <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>
+        <PhoneShellContext value={phoneShell}>
+          <div className="flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
+            <WhatsNewAnnouncer />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+          </div>
+        </PhoneShellContext>
+      </SystemNotificationsProvider>
+    );
 
   return (
     <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>

@@ -12,7 +12,7 @@ import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { ArtifactCardFace } from "./artifact-card";
 import { ArtifactIcon } from "./artifact-parts";
-import { ARTIFACTS_KEY, artifactCardQuery } from "./artifact-queries";
+import { ARTIFACTS_KEY, artifactCardQuery, artifactMarksQuery } from "./artifact-queries";
 import { ARTIFACT_SHARE_NOTE_MAX_LENGTH } from "./artifact-share-input";
 import { setArtifactAccess, setArtifactLinkSharing, shareArtifact } from "./artifacts.functions";
 
@@ -20,6 +20,7 @@ const sendCopy = (title: string): ShareDialogCopy => ({
   title: m.doc_send_title({ title }),
   send: m.doc_send_send(),
   sendTo: (count) => m.doc_send_send_to({ count }),
+  selected: (count) => m.doc_send_selected({ count }),
   joinAndSend: m.doc_send_join_and_send(),
   joinNotice: (channels) => m.doc_send_join_notice({ channels }),
   sentTo: (target) => m.doc_send_sent_to({ target }),
@@ -52,6 +53,7 @@ export function ArtifactSendDialog({
   const share = useServerFn(shareArtifact);
   const queryClient = useQueryClient();
   const { data: card } = useQuery(artifactCardQuery(artifactId));
+  const { data: marks } = useQuery(artifactMarksQuery(artifactId));
   const anyway = useRef(false);
   const widen = useMutation({
     mutationFn: () => setArtifactAccess({ data: { artifactId, access: "workspace" } }),
@@ -97,7 +99,8 @@ export function ArtifactSendDialog({
           </span>
         </>
       }
-      preview={card ? <ArtifactCardFace card={card} /> : null}
+      preview={card ? <ArtifactCardFace card={card} marks={marks ?? undefined} asPreview /> : null}
+      split
       noteMaxLength={ARTIFACT_SHARE_NOTE_MAX_LENGTH}
       deliver={async ({ requestId, destinations, note }): Promise<ForwardMessageResult> => {
         const result = await share({

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { z } from "zod";
@@ -34,7 +34,8 @@ import {
   type ArtifactPaneControls,
 } from "./artifact-page-header";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
-import { ArtifactPresenceChip, useKeepViewing } from "./artifact-presence-chip";
+import { ArtifactHomeChip } from "./artifact-home-chip";
+import { ArtifactPresenceChip, useKeepViewing, useRecordOpen } from "./artifact-presence-chip";
 import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactUpdateBanner, ViewingVersionNotice } from "./artifact-update-banner";
 import { isWebPageEntry } from "./artifact-path-kind";
@@ -51,7 +52,6 @@ import {
 } from "./artifact-realtime";
 import { artifactPageRoute } from "./artifact-search";
 import { artifactDataEvents } from "./artifact-page-data-events";
-import { openArtifact } from "./artifact-viewer.functions";
 import { ArtifactWebPage } from "./artifact-web-page";
 import { VisibilityPill } from "./artifact-visibility-pill";
 import { useArtifactActions } from "./use-artifact-actions";
@@ -135,10 +135,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     },
   });
 
-  useEffect(() => {
-    if (latest > 0)
-      void openArtifact({ data: { artifactId, version: latest } }).catch(() => undefined);
-  }, [artifactId, latest]);
+  useRecordOpen(artifactId, latest);
   useKeepViewing(artifactId, latest > 0);
 
   const entryPath = current?.artifact.entryPath;
@@ -226,6 +223,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
                 canChange={canChange}
                 linkAvailable={link.available}
               />
+              {home && visibility.current !== "conversation" && <ArtifactHomeChip home={home} />}
               <ArtifactPresenceChip artifactId={artifactId} />
             </>
           )

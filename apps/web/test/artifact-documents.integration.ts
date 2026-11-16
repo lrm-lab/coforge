@@ -125,7 +125,7 @@ test("a new artifact holds its files as version 1, named from its title, with a 
     }),
   });
   expect(first).toMatchObject({ name: "launch-plan", title: "Launch plan", currentVersion: 1 });
-  expect(first.preview).toBe("Launch plan\nShip in May.");
+  expect(first.preview).toBe("# Launch plan\n\nShip in May.\n\nRisks: none.");
   // The same title again gets a free name of its own.
   const second = await documents.create(writing(writer), {
     conversationId: channelId,
@@ -220,7 +220,7 @@ test("a push is a new version with its preview, and a clash with another Agent's
     errorId: "artifact-base-moved",
   });
   const [card] = await documents.cards(reading(bob), [doc.id]);
-  expect(card).toMatchObject({ id: doc.id, title: "Notes", preview: "A\nB", currentVersion: 3 });
+  expect(card).toMatchObject({ id: doc.id, title: "Notes", preview: "A\n\nB", currentVersion: 3 });
 });
 
 test("an idempotent create replays the same artifact, and a different input with one key conflicts", async () => {

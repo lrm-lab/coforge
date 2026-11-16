@@ -2,16 +2,17 @@ import { SubmenuTrigger } from "react-aria-components";
 import {
   Bell01,
   BellOff01,
-  Building02,
+  ClockRewind,
   Code01,
+  Copy01,
   DotsHorizontal,
   Download01,
   Edit03,
-  File02,
   Link01,
   SearchLg,
   Send01,
   Trash01,
+  Users01,
 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -73,7 +74,7 @@ export function ArtifactMoreMenu({
           <Dropdown.Item id="send" icon={Send01} label={m.doc_send_action()} />
           {canChange && (
             <SubmenuTrigger>
-              <Dropdown.Item id="who" icon={Building02} label={m.av_who_can_see()} />
+              <Dropdown.Item id="who" icon={Users01} label={m.av_who_can_see()} />
               <Dropdown.SubmenuPopover className="w-64">
                 <VisibilityMenu
                   visibility={visibility}
@@ -86,7 +87,7 @@ export function ArtifactMoreMenu({
           <Dropdown.Separator />
           {canChange && <Dropdown.Item id="rename" icon={Edit03} label={m.av_menu_rename()} />}
           <SubmenuTrigger>
-            <Dropdown.Item id="versions" icon={File02} label={m.av_versions()} />
+            <Dropdown.Item id="versions" icon={ClockRewind} label={m.av_versions()} />
             <Dropdown.SubmenuPopover className="w-72">
               <VersionMenu
                 artifactId={artifactId}
@@ -95,7 +96,7 @@ export function ArtifactMoreMenu({
               />
             </Dropdown.SubmenuPopover>
           </SubmenuTrigger>
-          <Dropdown.Item id="files" icon={File02} label={m.av_menu_files()} />
+          <Dropdown.Item id="files" icon={Copy01} label={m.av_menu_files()} />
           <Dropdown.Item
             id="download"
             icon={Download01}

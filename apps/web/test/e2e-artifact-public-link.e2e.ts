@@ -39,7 +39,7 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
     orderBy: { createdAt: "asc" },
-    include: { workspace: { select: { slug: true } } },
+    include: { workspace: { select: { slug: true, name: true } } },
   });
   const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
@@ -97,11 +97,11 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     return url!;
   };
   const turnOff = async () => {
-    await chrome.chooseFromPill("Everyone in the Workspace");
+    await chrome.chooseFromPill(`Everyone in ${workspace.name}`);
     await chrome.until(`document.body.textContent.includes("Turn off link sharing?")`);
     expect(await chrome.dialogText()).toContain("The public link will stop working.");
     await chrome.confirmDialog("Turn off link sharing");
-    await chrome.untilPillScope("Everyone in the Workspace");
+    await chrome.untilPillScope(`Everyone in ${workspace.name}`);
   };
   try {
     await experiments.write(workspaceId, "artifacts", true);

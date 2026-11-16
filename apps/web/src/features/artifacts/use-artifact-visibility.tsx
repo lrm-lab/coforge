@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building02, Globe02, MessageChatCircle } from "@untitledui/icons";
+import { Globe02, MessageChatCircle, Users01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -16,7 +16,7 @@ export type VisibilityChoice = "conversation" | "workspace" | "link";
 
 export const visibilityIcon = {
   conversation: MessageChatCircle,
-  workspace: Building02,
+  workspace: Users01,
   link: Globe02,
 } as const;
 
@@ -89,7 +89,7 @@ export function useArtifactVisibility({
 
   const label = {
     conversation: homeName ?? m.av_vis_home_dm(),
-    workspace: m.av_vis_workspace(),
+    workspace: m.av_vis_workspace({ workspace: workspaceName }),
     link: m.av_vis_link(),
   } satisfies Record<VisibilityChoice, string>;
 
@@ -183,13 +183,19 @@ export function VisibilityMenu({
   visibility,
   linkAvailable,
   narrowable,
+  canChange = true,
 }: {
   visibility: Pick<ReturnType<typeof useArtifactVisibility>, "current" | "label" | "request">;
   linkAvailable: boolean;
   narrowable: boolean;
+  canChange?: boolean;
 }) {
   const choices = (["conversation", "workspace", "link"] as const).filter(
-    (choice) => (choice !== "link" || linkAvailable) && (choice !== "conversation" || narrowable),
+    (choice) =>
+      choice === visibility.current ||
+      (canChange &&
+        (choice !== "link" || linkAvailable) &&
+        (choice !== "conversation" || narrowable)),
   );
   return (
     <Dropdown.Menu
@@ -202,6 +208,7 @@ export function VisibilityMenu({
         <Dropdown.Item
           key={choice}
           id={choice}
+          isDisabled={!canChange}
           icon={visibilityIcon[choice]}
           label={visibility.label[choice]}
         />

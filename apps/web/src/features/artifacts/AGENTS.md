@@ -25,3 +25,11 @@ These rules apply to `src/features/artifacts/`. They extend
   chooses to widen, share by link, or send anyway.
 - The viewer's actions live in the page header and the ⋯ menu (`artifact-more-menu.tsx`); show an
   action only when the viewer may do it.
+- An artifact's own page owns the window: `isStandalonePage` (`components/layout/tab-home.ts`) makes
+  `AppShell` drop the sidebar and tab bar there; the gallery keeps the shell. The header reads, left
+  to right, back link, title, version, who can see, home conversation (only when it is not the
+  scope), who is viewing, then find, copy link and more; a viewer's open must be recorded before
+  the viewers roster is read (`useRecordOpen`).
+- The Workspace scope is named by the Workspace (`av_vis_workspace` takes it); never a generic
+  "everyone". A card's stored `preview` is a Markdown excerpt: render it with `MarkdownPreview`, or
+  flatten it with `plainPreview` where one line is all there is.

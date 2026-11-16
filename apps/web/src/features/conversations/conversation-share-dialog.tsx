@@ -13,6 +13,7 @@ import {
 } from "#src/components/ui/unsaved-changes-dialog";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { joinPublicChannel } from "./channels.functions";
@@ -42,6 +43,7 @@ export type ShareDialogCopy = {
   title: string;
   send: string;
   sendTo: (count: number) => string;
+  selected?: (count: number) => string;
   joinAndSend: string;
   joinNotice: (channels: string) => string;
   sentTo: (target: string) => string;
@@ -59,6 +61,7 @@ export function ConversationShareDialog({
   errorNotice,
   onClose,
   onDelivered,
+  split = false,
 }: {
   copy: ShareDialogCopy;
   summary: ReactNode;
@@ -72,6 +75,7 @@ export function ConversationShareDialog({
   errorNotice: (error: unknown) => ShareNotice;
   onClose: () => void;
   onDelivered?: () => void;
+  split?: boolean;
 }) {
   const router = useRouter();
   const toast = useAppToast();
@@ -268,7 +272,12 @@ export function ConversationShareDialog({
         }}
         className="max-sm:px-0 max-sm:[--modal-pb:0px]"
       >
-        <Modal className="w-full max-sm:rounded-t-2xl max-sm:rounded-b-none sm:max-w-lg">
+        <Modal
+          className={cn(
+            "w-full max-sm:rounded-t-2xl max-sm:rounded-b-none",
+            split ? "sm:max-w-4xl" : "sm:max-w-lg",
+          )}
+        >
           <Dialog className="flex max-h-[inherit] flex-col overflow-y-auto text-left max-sm:h-[min(88dvh,var(--visual-viewport-height))]">
             <div
               aria-hidden="true"
@@ -279,45 +288,66 @@ export function ConversationShareDialog({
               onClose={sending ? undefined : guard.requestClose}
               className="px-4 pt-3 pb-3 sm:px-6 sm:pt-5"
             />
-            <div className="flex min-h-24 flex-1 flex-col sm:flex-[0_1_20rem]">
-              <ForwardTargetPane
-                query={query}
-                onQueryChange={setQuery}
-                targets={targets.data ?? null}
-                failed={failed}
-                error={targets.isError}
-                selected={selected}
-                onToggle={toggle}
-              />
+            <div
+              className={cn(
+                split
+                  ? "flex min-h-0 flex-1 flex-col sm:flex-row sm:border-t sm:border-secondary"
+                  : "contents",
+              )}
+            >
+              <div
+                className={cn(
+                  "flex min-h-24 flex-1 flex-col",
+                  split ? "sm:min-h-[26rem] sm:basis-1/2 sm:pt-4" : "sm:flex-[0_1_20rem]",
+                )}
+              >
+                <ForwardTargetPane
+                  query={query}
+                  onQueryChange={setQuery}
+                  targets={targets.data ?? null}
+                  failed={failed}
+                  error={targets.isError}
+                  selected={selected}
+                  selectedLabel={copy.selected}
+                  onToggle={toggle}
+                />
+              </div>
+              <div
+                className={
+                  split ? "flex flex-col sm:basis-1/2 sm:border-l sm:border-secondary" : "contents"
+                }
+              >
+                <ForwardComposer
+                  summary={summary}
+                  preview={preview}
+                  previewShown={split}
+                  canSend={picked.length > 0 && !sending}
+                  note={note}
+                  onNoteChange={setNote}
+                  noteMaxLength={noteMaxLength}
+                  placeholder={placeholder}
+                  sendLabel={
+                    unjoined.length > 0
+                      ? copy.joinAndSend
+                      : picked.length > 0
+                        ? copy.sendTo(picked.length)
+                        : copy.send
+                  }
+                  sending={sending}
+                  onSend={() => void send()}
+                  notice={noticeView}
+                  joinNotice={
+                    unjoined.length > 0
+                      ? copy.joinNotice(
+                          new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(
+                            unjoined.map(forwardTargetLabel),
+                          ),
+                        )
+                      : undefined
+                  }
+                />
+              </div>
             </div>
-            <ForwardComposer
-              summary={summary}
-              preview={preview}
-              canSend={picked.length > 0 && !sending}
-              note={note}
-              onNoteChange={setNote}
-              noteMaxLength={noteMaxLength}
-              placeholder={placeholder}
-              sendLabel={
-                unjoined.length > 0
-                  ? copy.joinAndSend
-                  : picked.length > 0
-                    ? copy.sendTo(picked.length)
-                    : copy.send
-              }
-              sending={sending}
-              onSend={() => void send()}
-              notice={noticeView}
-              joinNotice={
-                unjoined.length > 0
-                  ? copy.joinNotice(
-                      new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(
-                        unjoined.map(forwardTargetLabel),
-                      ),
-                    )
-                  : undefined
-              }
-            />
           </Dialog>
         </Modal>
       </ModalOverlay>

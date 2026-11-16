@@ -96,6 +96,7 @@ export function ForwardTargetPane({
   failed,
   error,
   selected,
+  selectedLabel,
   onToggle,
 }: {
   query: string;
@@ -106,6 +107,7 @@ export function ForwardTargetPane({
   failed: ReadonlyMap<string, ForwardFailureCode>;
   error: boolean;
   selected: ReadonlyMap<string, ForwardTarget>;
+  selectedLabel?: (count: number) => string;
   onToggle: (target: ForwardTarget, on: boolean) => void;
 }) {
   const rows = targets === null ? [...selected.values()] : pinnedTargets(selected, targets);
@@ -121,6 +123,11 @@ export function ForwardTargetPane({
           onChange={onQueryChange}
         />
       </div>
+      {selectedLabel && (
+        <p role="status" className="px-4 text-xs font-medium text-tertiary sm:px-6">
+          {selectedLabel(selected.size)}
+        </p>
+      )}
       {selected.size >= FORWARD_DESTINATIONS_MAX && (
         // Why the rest have greyed out.
         <p role="status" className="px-4 text-sm text-tertiary sm:px-6">
@@ -159,8 +166,17 @@ export function ForwardTargetPane({
 
 /** What arrives, as one line (`summary`) that opens into the whole of it (`preview`): the list is
  * the dialog's work, so the content stays out of its way until asked for. */
-function WhatArrives({ summary, preview }: { summary: ReactNode; preview: ReactNode }) {
+function WhatArrives({
+  summary,
+  preview,
+  shown,
+}: {
+  summary: ReactNode;
+  preview: ReactNode;
+  shown: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  if (shown) return preview;
   return (
     <div className="rounded-lg border border-secondary">
       <AriaButton
@@ -193,6 +209,7 @@ function WhatArrives({ summary, preview }: { summary: ReactNode; preview: ReactN
 export function ForwardComposer({
   summary,
   preview,
+  previewShown = false,
   canSend,
   note,
   onNoteChange,
@@ -206,6 +223,7 @@ export function ForwardComposer({
 }: {
   summary: ReactNode;
   preview: ReactNode;
+  previewShown?: boolean;
   canSend: boolean;
   note: string;
   onNoteChange: (note: string) => void;
@@ -229,8 +247,13 @@ export function ForwardComposer({
     if (canSend && !sending) onSend();
   };
   return (
-    <div className="flex shrink-0 flex-col gap-3 border-t border-secondary px-4 pt-4 pb-[max(1rem,var(--spacing-safe-bottom))] sm:px-6 sm:pb-6">
-      <WhatArrives summary={summary} preview={preview} />
+    <div
+      className={cn(
+        "flex shrink-0 flex-col gap-3 border-t border-secondary px-4 pt-4 pb-[max(1rem,var(--spacing-safe-bottom))] sm:px-6 sm:pb-6",
+        previewShown && "sm:border-t-0",
+      )}
+    >
+      <WhatArrives summary={summary} preview={preview} shown={previewShown} />
       {notice}
       {joinNotice && <p className="-mb-1 px-1 text-sm text-tertiary">{joinNotice}</p>}
       {/* A form, as under the messages: the send button submits it. */}

@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -15,13 +14,12 @@ import type { ReactNode } from "react";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { channelNamesQuery } from "#src/features/conversations/conversation-queries";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { useConversationName } from "./artifact-gallery-filters";
 import { ArtifactIcon } from "./artifact-parts";
 import { VersionMenu } from "./artifact-version-menu";
 
@@ -96,10 +94,10 @@ export function ArtifactPageHeader({
           )}
         </>
       )}
-      <span className="flex-1 max-sm:order-1" />
-      <div className="flex min-w-0 items-center gap-1.5 max-sm:order-last max-sm:basis-full sm:order-none">
+      <div className="flex min-w-0 items-center gap-1.5 max-sm:order-last max-sm:basis-full">
         {pills}
       </div>
+      <span className="flex-1 max-sm:order-1" />
       <div className="flex shrink-0 items-center gap-1 max-sm:order-2">
         {onFind && (
           <ButtonUtility
@@ -147,11 +145,10 @@ export function ArtifactPageHeader({
 }
 
 export function useHomeName(home: ArtifactHome | undefined): string | undefined {
-  const workspaceId = useCurrentWorkspaceId() ?? "";
-  const channelId = home?.kind === "channel" ? home.conversationId : null;
-  const channels = useQuery({ ...channelNamesQuery(workspaceId), enabled: channelId !== null });
-  const name = channelId ? channels.data?.find((c) => c.id === channelId)?.name : undefined;
-  return name ? `#${name}` : undefined;
+  const nameOf = useConversationName();
+  return home?.conversationId && home.kind !== "workspace"
+    ? nameOf(home.conversationId)
+    : undefined;
 }
 
 function BackToHome({ home }: { home: ArtifactHome | undefined }) {

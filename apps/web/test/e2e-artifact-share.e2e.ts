@@ -39,6 +39,10 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
   const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
+  const workspaceName = (
+    await db.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { name: true } })
+  ).name;
+  const everyone = `Everyone in ${workspaceName}`;
   const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
@@ -131,13 +135,13 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
       await evaluate<string[]>(
         `[...document.querySelectorAll('[role="menuitemradio"]')].map((i) => i.textContent.trim())`,
       ),
-    ).toEqual([`#e2e-share-${tail}`, "Everyone in the Workspace", "Anyone with the link"]);
+    ).toEqual([`#e2e-share-${tail}`, everyone, "Anyone with the link"]);
     await shoot("1-pill-menu");
     await chrome.closeMenus();
 
     // Widening to the Workspace needs no confirmation; the pill and the Workspace's readers follow.
-    await chrome.chooseFromPill("Everyone in the Workspace");
-    await chrome.untilPillScope("Everyone in the Workspace");
+    await chrome.chooseFromPill(everyone);
+    await chrome.untilPillScope(everyone);
     expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).toBe(
       "workspace",
     );
@@ -194,7 +198,7 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     expect(await evaluate<string>(`document.querySelector("main header a").textContent`)).toBe(
       "Back to the Workspace",
     );
-    await chrome.untilPillScope("Everyone in the Workspace");
+    await chrome.untilPillScope(everyone);
     await shoot("4-workspace-read");
     await chrome.press(`document.querySelector('main header button[aria-label^="Who can see:"]')`);
     await chrome.until(`document.querySelector('[role="menuitemradio"]') != null`);
@@ -202,7 +206,7 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
       await evaluate<string[]>(
         `[...document.querySelectorAll('[role="menuitemradio"]')].map((i) => i.textContent.trim())`,
       ),
-    ).toEqual(["Everyone in the Workspace", "Anyone with the link"]);
+    ).toEqual([everyone, "Anyone with the link"]);
     await chrome.closeMenus();
 
     // A member only, of an artifact they did not make: the pill says who can see it and changes

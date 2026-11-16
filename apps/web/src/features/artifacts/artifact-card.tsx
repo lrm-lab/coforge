@@ -2,19 +2,13 @@ import { useMemo, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { Link } from "@tanstack/react-router";
-import {
-  ArrowUpRight,
-  Building02,
-  Globe02,
-  Lock01,
-  MessageChatCircle,
-  Trash01,
-} from "@untitledui/icons";
+import { ArrowUpRight, Lock01, Trash01 } from "@untitledui/icons";
 
 import { m } from "#src/paraglide/messages";
 import { loadArtifactMarks } from "./artifact-gallery.functions";
 import { CardBadges } from "./artifact-gallery-card";
-import { useConversationName } from "./artifact-gallery-filters";
+import { useScopeOf } from "./artifact-scope";
+import { plainPreview } from "./artifact-preview";
 import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import {
@@ -112,25 +106,23 @@ type CardMarks = NonNullable<Awaited<ReturnType<typeof loadArtifactMarks>>[numbe
 export function ArtifactCardFace({
   card,
   marks,
+  asPreview = false,
   title: titleAs,
 }: {
   card: ArtifactCard;
   marks?: CardMarks;
+  asPreview?: boolean;
   title?: (title: string) => ReactNode;
 }) {
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
   const title = card.title || m.doc_untitled();
   const kind = kindLabel(card.entryPath);
-  const nameOf = useConversationName();
-  const scope = marks?.link
-    ? { Icon: Globe02, label: m.av_vis_link() }
-    : card.access === "workspace"
-      ? { Icon: Building02, label: m.av_vis_workspace() }
-      : {
-          Icon: MessageChatCircle,
-          label: nameOf((card.homeKey ?? "").replace(/^conversation:/, "")) ?? m.av_vis_home_dm(),
-        };
+  const scope = useScopeOf()({
+    link: marks?.link === true,
+    access: card.access,
+    homeKey: card.homeKey ?? "",
+  });
   return (
     <article
       aria-label={m.doc_card_label({ kind, title })}
@@ -148,7 +140,7 @@ export function ArtifactCardFace({
             v{card.currentVersion}
           </span>
           <span className="shrink-0 text-xs text-quaternary">{kind}</span>
-          {marks && (
+          {marks && !asPreview && (
             <ArrowUpRight
               aria-hidden="true"
               className="ml-auto size-4 shrink-0 text-fg-quaternary"
@@ -157,7 +149,7 @@ export function ArtifactCardFace({
         </p>
         {card.preview && (
           <p className="mt-0.5 line-clamp-2 text-sm whitespace-pre-line text-tertiary">
-            {card.preview}
+            {plainPreview(card.preview)}
           </p>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">

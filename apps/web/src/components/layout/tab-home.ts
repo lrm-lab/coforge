@@ -12,6 +12,12 @@ export function sectionOf(pathname: string): string {
   return splitWorkspacePath(pathname)?.rest.split("/")[1] ?? "";
 }
 
+/** A page that owns the whole window, with no sidebar or tab bar: one artifact's own page. */
+export function isStandalonePage(pathname: string): boolean {
+  const [, section, id] = splitWorkspacePath(pathname)?.rest.split("/") ?? [];
+  return section === "artifacts" && Boolean(id);
+}
+
 /**
  * Which tab's home page is on a phone's screen, or null when the bar is hidden: only a tab's home
  * shows it, never a conversation, thread, task, project, settings or any other inner page.
