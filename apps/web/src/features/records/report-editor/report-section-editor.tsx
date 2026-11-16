@@ -39,6 +39,7 @@ export function ReportSectionEditor({
     editable,
     showBubbleMenu: editable,
     debounceMs: 150,
+    sectionGaps: true,
   };
   return <ContentEditor ref={editorRef} {...props} />;
 }
