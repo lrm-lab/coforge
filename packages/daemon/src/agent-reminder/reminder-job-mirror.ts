@@ -16,6 +16,11 @@ export class ReminderJobMirror {
     return this.#jobs.get(agentId)?.values() ?? [];
   }
 
+  /** Whether a snapshot has synchronised this Agent yet: without one its changes cannot install. */
+  authorized(agentId: string): boolean {
+    return this.#authorized.has(agentId);
+  }
+
   clear(): void {
     this.#jobs.clear();
     this.#authorized.clear();

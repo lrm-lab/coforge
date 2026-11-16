@@ -38,6 +38,8 @@ export type RuntimeServicesPorts = {
   notifyAppItem(agentId: string, itemId: string): Promise<boolean>;
   /** The reminder job that came due, delivered through the Agent's wake path. */
   acceptReminderDue(job: ReminderJob, late: boolean): Promise<boolean>;
+  /** Asks for an Agent's reminder snapshot, for a change that arrived before one did. */
+  requestReminderSnapshot(agentId: string): void;
   /** The cleaner's host-injected clock and measurements. */
   systemCleaner: Pick<SystemCleanerOptions, "clock" | "measureMemoryFile" | "measureDiskSpace">;
   stopAgent(agentId: string): Promise<void>;
@@ -79,6 +81,8 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
     },
     (job: ReminderJob, occurrence: { late: boolean }) =>
       ports.acceptReminderDue(job, occurrence.late),
+    undefined,
+    (agentId) => ports.requestReminderSnapshot(agentId),
   );
   const systemCleaner = new Cleaner({
     ...ports.systemCleaner,

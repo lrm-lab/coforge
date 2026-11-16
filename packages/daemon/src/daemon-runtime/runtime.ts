@@ -111,6 +111,7 @@ import { RuntimeTurn } from "./runtime-turn-management";
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ColdIdleSweep } from "./cold-idle-sweep";
+import { ReminderSnapshotAsks, reminderAgentIds } from "./reminder-snapshot-asks";
 import { assembleAgentConfigApply } from "./agent-config-apply-assembly";
 import { stalledRecoverySweep } from "./stalled-recovery-sweep";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
@@ -202,7 +203,6 @@ export class DaemonRuntime {
     () => this.#agentProcessManager,
     () => this.#currentActivityLaunches,
   );
-  /** Durable context-view indexing and availability reporting for this Workspace runtime. */
   readonly #contextViewService: AgentContextViewService;
   readonly #localQueries: RuntimeLocalQueries;
   /** Busy-gated delivery holding for providers with no safe busy path. */
@@ -321,6 +321,10 @@ export class DaemonRuntime {
     credential: this.#credentialHolds,
   });
   readonly #reminders: ReminderScheduler;
+  readonly #reminderSnapshots = new ReminderSnapshotAsks({
+    requestReminderSnapshot: (agentId, reason) =>
+      requestReminderSnapshot(this.#appInboxSyncPorts(), agentId, { reason }),
+  });
   readonly #appConfigs: AgentAppConfigSync;
   /** This Computer's Agent migration runs; absent when the transport cannot reach the route. */
   readonly #migrations: AgentMigrationRunner | undefined;
@@ -331,15 +335,12 @@ export class DaemonRuntime {
    * it (`applyConfig`/`replaceOwnerSnapshot`). */
   readonly systemCleaner: SystemCleaner;
   readonly #runtimeInstanceId = crypto.randomUUID();
-  /** The consumed cursor and draft ledger; its store says why it is durable. */
   readonly #consumedSeqs: AgentConsumedSeqStore;
   readonly #startedAt = Date.now();
   readonly #agentContexts = new Map<string, string>();
-  /** Latest server-authored context-view gate received in a delivery. */
   readonly #contextViewEnabled = new Map<string, boolean>();
   readonly #agentProxyTokens = new Map<string, string>();
   readonly agentApiKeys = new Map<string, string>();
-  /** Agents launched with the weekly-report-collect skill pack. */
   readonly #collectSkillAgents = new Set<string>();
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
   readonly #inputDrain = assembleInputDrain({
@@ -358,12 +359,9 @@ export class DaemonRuntime {
     drafts: () => this.#drafts,
     introducedAgents: () => this.#introducedAgents,
   });
-  /** Delivery admission, launch-boundary recovery, and turn-open bookkeeping. */
   readonly #launchCustody: AgentLaunchCustody;
-  /** Agents whose current process already received its introduction turn. */
   readonly #introducedAgents = new Set<string>();
   readonly #desktops = createAgentDesktopHolds();
-  /** Which Agents are stopping and which Session each launch reported. */
   readonly #stopState = new AgentStopRegistry();
   readonly #currentActivityLaunches = new Map<string, ActivityLaunch>();
   readonly #agentStatusSequences = new Map<string, number>();
@@ -575,6 +573,8 @@ export class DaemonRuntime {
       systemCleaner,
       stopAgent: (agentId) => this.stopAgent(agentId),
       runningAgentIds: () => this.#agentProcessManager.runningAgentIds(),
+      requestReminderSnapshot: (agentId) =>
+        this.#reminderSnapshots.request(agentId, "unsynchronised_upsert"),
       forgetLocalAgent: (agentId) => this.#forgetLocalAgent(agentId),
       upgradeResults: this.lifecycle,
     });
@@ -794,7 +794,8 @@ export class DaemonRuntime {
         this.#upgradeResults,
         this.#connection.workspaceId,
       ),
-      requestReminderSnapshot: (agentId) => this.#requestReminderSnapshot(agentId),
+      reminderSnapshots: this.#reminderSnapshots,
+      reminderAgentIds: () => reminderAgentIds(this.#agentProcessManager, this.#agentLaunches),
       resyncAppConfigs: () => this.#resyncAppConfigs(),
       activityPublisher: this.#activityPublisher,
       coldIdleSweep: this.#coldIdleSweep,
@@ -997,6 +998,7 @@ export class DaemonRuntime {
         assertAgentNotStopping: (id) => this.#assertAgentNotStopping(id),
         migrations: this.#migrations,
         requestAppConfigSnapshot: (id) => this.#requestAppConfigSnapshot(id),
+        requestReminderSnapshot: (id) => this.#reminderSnapshots.request(id, "agent_start"),
         inputDrain: this.#inputDrain,
         introducedAgents: this.#introducedAgents,
         agentLaunches: this.#agentLaunches,
@@ -1359,10 +1361,6 @@ export class DaemonRuntime {
     requestAppConfigSnapshot(this.#appInboxSyncPorts(), agentId);
   }
 
-  async #requestReminderSnapshot(agentId: string): Promise<void> {
-    return requestReminderSnapshot(this.#appInboxSyncPorts(), agentId);
-  }
-
   async inbox(context: string, request: LocalInboxRequest): Promise<InboxResponse> {
     return inbox(this.#appInboxSyncPorts(), context, request);
   }
@@ -1374,7 +1372,7 @@ export class DaemonRuntime {
   issueAgentContext(agentId: string, context: string = crypto.randomUUID()): string {
     this.#assertRunning();
     this.#agentContexts.set(agentId, context);
-    void this.#requestReminderSnapshot(agentId).catch(() => {});
+    this.#reminderSnapshots.request(agentId, "agent_context");
     return context;
   }
 

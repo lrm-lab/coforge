@@ -43,34 +43,53 @@ export function requestAppConfigSnapshot(ports: RuntimeAppInboxSyncPorts, agentI
   );
 }
 
-/** Asks once per start and per connection for the Agent's reminders. Both ways this can end
- * without a snapshot — the connection has no such method, or the ask fails — used to be silent, and
- * a Daemon whose reminders never arrived looked exactly like a Daemon with none (2026-11-16: three
- * days of an Agent's reminders never firing, no line anywhere). Neither is an error to retry here:
- * the next start or the next connection asks again, and that is what the line says. */
+/** What asked for the snapshot, so a line that never got one names its trigger. */
+export type ReminderSnapshotReason =
+  | "connection"
+  | "agent_start"
+  | "agent_context"
+  | "unsynchronised_upsert";
+
+const SNAPSHOT_RETRY_DELAYS_MS = [500, 2_000];
+
+/** Asks for the Agent's reminders. Both ways this can end without a snapshot — the connection has
+ * no such method, or the ask fails — used to be silent, and a Daemon whose reminders never arrived
+ * looked exactly like a Daemon with none (2026-11-16: three days of an Agent's reminders never
+ * firing, no line anywhere). A failed ask is retried before it is only logged. */
 export async function requestReminderSnapshot(
   ports: RuntimeAppInboxSyncPorts,
   agentId: string,
-): Promise<void> {
+  options: { reason?: ReminderSnapshotReason; retryDelaysMs?: readonly number[] } = {},
+): Promise<boolean> {
   const transport = ports.transport();
   if (!transport.requestSnapshot) {
     logger.warn("This connection cannot ask for an Agent's reminders", {
       event: "reminder_snapshot:unavailable",
       agent_id: agentId,
+      reason: options.reason,
       outcome: "skipped",
     });
-    return;
+    return false;
   }
-  try {
-    const sync: ReminderSync = await transport.requestSnapshot({ ...ports.env(), agentId });
-    await ports.reminders.apply(sync);
-  } catch (error) {
-    logger.warn("Asking for an Agent's reminders failed; the next connection asks again", {
-      event: "reminder_snapshot:failed",
-      agent_id: agentId,
-      error_code: diagnosticErrorName(error),
-      outcome: "failed",
-    });
+  const delays = options.retryDelaysMs ?? SNAPSHOT_RETRY_DELAYS_MS;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const sync: ReminderSync = await transport.requestSnapshot({ ...ports.env(), agentId });
+      await ports.reminders.apply(sync);
+      return true;
+    } catch (error) {
+      const last = attempt >= delays.length;
+      logger.warn("Asking for an Agent's reminders failed", {
+        event: "reminder_snapshot:failed",
+        agent_id: agentId,
+        reason: options.reason,
+        attempt: attempt + 1,
+        error_code: diagnosticErrorName(error),
+        outcome: last ? "failed" : "retrying",
+      });
+      if (last) return false;
+      await new Promise<void>((resolve) => setTimeout(resolve, delays[attempt]!));
+    }
   }
 }
 
