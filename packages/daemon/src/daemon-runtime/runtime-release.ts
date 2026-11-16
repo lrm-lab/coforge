@@ -74,12 +74,15 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   explicitHold?(agentId: string): DeliveryHoldReason | undefined;
   /** The Agent's deliveries wait for its provider credential: no reason to wake it for them. */
   credentialHeld?(agentId: string): boolean;
-  /** When the Agent's process last accepted an inbox notice; undefined when none was accepted —
-   * the clock for the frozen-after-notice judgment (task #318). */
+  /** When the Agent's process last accepted an inbox notice, as wall time; undefined when none
+   * was accepted. Compared with the turn's start, never aged. */
   noticeAcceptedAt?(agentId: string): number | undefined;
-  /** When the Agent last did anything a checked read or an operation counts as. Provider
-   * output's clock is the launch's progress, not this. */
-  lastAgentActionAt?(agentId: string): number | undefined;
+  /** How long ago it did, in awake time: the clock for the frozen-after-notice judgment (task
+   * #318). */
+  noticeAcceptedForMs?(agentId: string): number | undefined;
+  /** How long ago the Agent last did anything a checked read or an operation counts as, in awake
+   * time. Provider output's clock is the launch's progress, not this. */
+  lastAgentActionForMs?(agentId: string): number | undefined;
   /** The session reported to the cloud can be resumed by a relaunch. */
   resumable(agentId: string): boolean;
   /** The native session this runtime last reported. */

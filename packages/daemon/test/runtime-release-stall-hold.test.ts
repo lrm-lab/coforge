@@ -9,12 +9,17 @@ import {
   ProviderProgress,
 } from "#src/daemon-runtime/stalled-recovery";
 import type { DeliveryHoldReason } from "#src/daemon-runtime/agent-delivery-gate";
+import { installAwakeClock } from "./fixtures/awake-clock";
 
 type Launch = { stopping: boolean; progress?: ProviderProgress };
 
 const START = new Date("2026-11-06T00:00:00.000Z");
 
-afterEach(() => setSystemTime());
+let awakeClock: ReturnType<typeof installAwakeClock> | undefined;
+afterEach(() => {
+  setSystemTime();
+  awakeClock?.restore();
+});
 
 /** A queued delivery whose turn never began, with no live turn: the stall branch that fires for
  * an idle runtime, and the one a provider-limit hold must keep from restarting. */
@@ -27,6 +32,8 @@ function subject(
   } = {},
 ) {
   setSystemTime(START);
+  // Silence is awake time: the fake minutes `advance` passes are awake ones.
+  awakeClock = installAwakeClock();
   const launch: Launch = { stopping: false, progress: new ProviderProgress() };
   const session = {
     hasLiveTurn: options.busyTurn === true,

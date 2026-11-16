@@ -94,12 +94,41 @@ test("a delivery queued for 15 minutes whose turn never began is recovered by th
 
 // Open tool calls are the launch's `ToolCallLedger` (tool-call-ledger.test.ts).
 test("provider progress counts every provider event", () => {
-  setSystemTime(START);
-  const progress = new ProviderProgress();
-  setSystemTime(minutes(10));
+  let awakeMs = 0;
+  const progress = new ProviderProgress(undefined, () => awakeMs);
+  awakeMs = 10 * 60_000;
   expect(progress.silentForMs()).toBe(10 * 60_000);
   progress.observe();
   expect(progress.silentForMs()).toBe(0);
+});
+
+test("silence is awake time: the minutes a machine slept through are not the provider's", () => {
+  setSystemTime(START);
+  let awakeMs = 0;
+  const progress = new ProviderProgress(undefined, () => awakeMs);
+  const busy = {
+    turnBusy: true,
+    liveTurn: true,
+    hasOpenToolCall: false,
+    resumable: true,
+    steersBusyTurn: true,
+  };
+  // The machine slept for 20 minutes, the provider frozen with it: the wall clock is past the
+  // fuse, the clock the provider could run on has moved seconds.
+  setSystemTime(minutes(20));
+  awakeMs = 5_000;
+  expect(progress.silentForMs()).toBe(5_000);
+  expect(shouldRecoverStalledRuntime({ ...busy, silentForMs: progress.silentForMs() })).toBe(false);
+  // The same turn is stalled once the awake clock itself passes the fuse.
+  awakeMs = STALLED_RECOVERY_SILENCE_MS;
+  expect(progress.silentForMs()).toBe(STALLED_RECOVERY_SILENCE_MS);
+  expect(shouldRecoverStalledRuntime({ ...busy, silentForMs: progress.silentForMs() })).toBe(true);
+  // A started turn restarts the clock on awake time too.
+  progress.noteTurnStarted();
+  expect(progress.silentForMs()).toBe(0);
+  // The absolute stamps the log and the turn-start comparison read stay on the wall clock.
+  expect(progress.lastEventAtMs).toBe(minutes(20).getTime());
+  expect(progress.turnStartedAtMs).toBe(minutes(20).getTime());
 });
 
 test("work stops counting at the turn's own bookkeeping, which is not progress", () => {

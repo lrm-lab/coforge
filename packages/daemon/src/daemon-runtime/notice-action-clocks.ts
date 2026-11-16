@@ -1,42 +1,46 @@
+import { awakeClockMs } from "#src/platform/awake-clock";
 import type { AttentionDecisionOutcome } from "./agent-message-attention-decision-log";
 
 /** Per-Agent clocks for the frozen-after-notice judgment (task #318): when the process last
  * accepted an inbox notice, and when it last did anything a checked read or operation counts
- * as. Provider output's clock lives in `RuntimeProgress`, not here. */
+ * as. Provider output's clock lives in `RuntimeProgress`, not here. The judgment reads ages, so
+ * each stamp is on the awake clock (a sleeping machine is not a frozen Agent); the notice's
+ * wall-clock time is also kept, for ordering it against the turn's start. */
 export class NoticeActionClocks {
-  readonly #noticeAcceptedAt = new Map<string, number>();
-  readonly #lastAgentActionAt = new Map<string, number>();
+  readonly #noticeAccepted = new Map<string, { atMs: number; awakeMs: number }>();
+  readonly #lastAgentActionAwakeMs = new Map<string, number>();
 
+  constructor(private readonly awakeClock: () => number = awakeClockMs) {}
+
+  /** When the process accepted the notice, as wall time. */
   noticeAcceptedAt(agentId: string): number | undefined {
-    return this.#noticeAcceptedAt.get(agentId);
+    return this.#noticeAccepted.get(agentId)?.atMs;
   }
 
-  lastAgentActionAt(agentId: string): number | undefined {
-    return this.#lastAgentActionAt.get(agentId);
+  /** How long ago the process accepted it, in awake time. */
+  noticeAcceptedForMs(agentId: string): number | undefined {
+    return this.#ageOf(this.#noticeAccepted.get(agentId)?.awakeMs);
+  }
+
+  /** How long ago the Agent last acted, in awake time. */
+  lastAgentActionForMs(agentId: string): number | undefined {
+    return this.#ageOf(this.#lastAgentActionAwakeMs.get(agentId));
   }
 
   /** The Agent's process accepted an inbox notice: its frozen-after-notice clock starts. */
   noteNoticeAccepted(agentId: string): void {
-    this.#noticeAcceptedAt.set(agentId, Date.now());
+    this.#noticeAccepted.set(agentId, { atMs: Date.now(), awakeMs: this.awakeClock() });
   }
 
   /** A checked read or an operation counts as the Agent acting: its frozen-after-notice
    * judgment starts over. */
   noteAgentAction(agentId: string): void {
-    this.#lastAgentActionAt.set(agentId, Date.now());
+    this.#lastAgentActionAwakeMs.set(agentId, this.awakeClock());
   }
-}
 
-/** The frozen-after-notice ports `RuntimeRelease.stalled` reads, bound to the attention index
- * that owns the clocks. */
-export function noticeActionClockPorts(clocks: () => NoticeActionClocks): Readonly<{
-  noticeAcceptedAt(agentId: string): number | undefined;
-  lastAgentActionAt(agentId: string): number | undefined;
-}> {
-  return {
-    noticeAcceptedAt: (agentId) => clocks().noticeAcceptedAt(agentId),
-    lastAgentActionAt: (agentId) => clocks().lastAgentActionAt(agentId),
-  };
+  #ageOf(awakeMs: number | undefined): number | undefined {
+    return awakeMs === undefined ? undefined : this.awakeClock() - awakeMs;
+  }
 }
 
 /** `authorizedAgent` wrapped so every forwarded request also stamps the Agent's action clock:

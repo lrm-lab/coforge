@@ -1,5 +1,6 @@
 import { foldUntrustedLine, truncateCodePoints } from "@lrm/coforge-sdk/internal";
 import { PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
+import { awakeClockMs } from "#src/platform/awake-clock";
 import { processClockMs } from "#src/platform/process-tree";
 import { isTurnNeutralEvent } from "./stalled-turn-indicator";
 
@@ -37,15 +38,22 @@ export class ProviderProgress {
   #lastWorkAtMs = this.#lastEventAtMs;
   #turnStartedAtMs = this.#lastEventAtMs;
   #turnStartedProcessClockMs: number;
+  /** When the provider last reported anything, on the awake clock: the silence's own age. */
+  #lastEventAwakeMs: number;
 
-  constructor(private readonly processClock: () => number = processClockMs) {
+  constructor(
+    private readonly processClock: () => number = processClockMs,
+    private readonly awakeClock: () => number = awakeClockMs,
+  ) {
     this.#turnStartedProcessClockMs = processClock();
+    this.#lastEventAwakeMs = awakeClock();
   }
 
   #lastCompletedAtMs: number | undefined;
 
   observe(event?: Readonly<{ type: string }>): void {
     this.#lastEventAtMs = Date.now();
+    this.#lastEventAwakeMs = this.awakeClock();
     // A turn's own silence is judged on what the turn did, not on the bookkeeping a provider emits
     // around it: a context-window reading says nothing about a running command (task #41).
     if (!event || !isTurnNeutralEvent(event)) this.#lastWorkAtMs = this.#lastEventAtMs;
@@ -61,6 +69,7 @@ export class ProviderProgress {
    * client: a turn is never judged by the quiet spell before it began. */
   noteTurnStarted(): void {
     this.#lastEventAtMs = Date.now();
+    this.#lastEventAwakeMs = this.awakeClock();
     this.#lastWorkAtMs = this.#lastEventAtMs;
     this.#turnStartedAtMs = this.#lastEventAtMs;
     this.#turnStartedProcessClockMs = this.processClock();
@@ -86,8 +95,10 @@ export class ProviderProgress {
     return this.#lastWorkAtMs;
   }
 
+  /** How long the provider has been silent, in awake time: the minutes a sleeping machine spent
+   * frozen with its Agent are not the provider's silence. */
   silentForMs(): number {
-    return Date.now() - this.#lastEventAtMs;
+    return this.awakeClock() - this.#lastEventAwakeMs;
   }
 }
 

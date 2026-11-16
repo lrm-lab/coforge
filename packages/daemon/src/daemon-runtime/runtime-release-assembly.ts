@@ -53,7 +53,8 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
   runningMentionIdentity(agentId: string): unknown;
   noticeActionClocks(): {
     noticeAcceptedAt(agentId: string): number | undefined;
-    lastAgentActionAt(agentId: string): number | undefined;
+    noticeAcceptedForMs(agentId: string): number | undefined;
+    lastAgentActionForMs(agentId: string): number | undefined;
   };
   releaseSurvivingHolds(agentId: string): void;
   wakeAgent(agentId: string, restart: WakeRestart): Promise<unknown>;
@@ -72,7 +73,8 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     restartConfig: (agentId) => input.processManager().restartConfig(agentId),
     lastBusy: (agentId) => input.activityPublisher().lastBusy(agentId),
     noticeAcceptedAt: (agentId) => input.noticeActionClocks().noticeAcceptedAt(agentId),
-    lastAgentActionAt: (agentId) => input.noticeActionClocks().lastAgentActionAt(agentId),
+    noticeAcceptedForMs: (agentId) => input.noticeActionClocks().noticeAcceptedForMs(agentId),
+    lastAgentActionForMs: (agentId) => input.noticeActionClocks().lastAgentActionForMs(agentId),
     resumable: (agentId) => input.runningMentionIdentity(agentId) !== undefined,
     sessionId: (agentId) => input.stopState().sessionId(agentId),
     isStopping: (agentId) => input.stopState().stopping(agentId),

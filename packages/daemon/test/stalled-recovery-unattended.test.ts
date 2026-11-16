@@ -15,6 +15,7 @@ import {
   STALLED_REPLACEMENT_MAX_STREAK,
   stalledRecoveryDisplayText,
 } from "#src/daemon-runtime/stalled-recovery";
+import { installAwakeClock } from "./fixtures/awake-clock";
 
 // A busy turn that went silent is restarted even when no message waits for it (task #404): the
 // relaunch resumes the session and tells the Agent where it stopped. Restarts with nothing
@@ -85,6 +86,8 @@ function release() {
 test("the judgment RuntimeRelease makes names its reason and the fuse it used", () => {
   const START = new Date("2026-10-15T00:00:00.000Z");
   setSystemTime(START);
+  // Silence is awake time: the fake minutes pass on both clocks.
+  const awake = installAwakeClock();
   try {
     const { runtimeRelease } = release();
     setSystemTime(new Date(START.getTime() + 16 * 60_000));
@@ -101,6 +104,7 @@ test("the judgment RuntimeRelease makes names its reason and the fuse it used", 
     });
   } finally {
     setSystemTime();
+    awake.restore();
   }
 });
 
@@ -283,6 +287,7 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     abortMentionCarry: () => {},
     release: async () => {},
   });
+  const awake = installAwakeClock();
   try {
     launch.progress = new ProviderProgress();
     setSystemTime(new Date(Date.now() + 16 * 60_000));
@@ -305,6 +310,7 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     });
   } finally {
     setSystemTime();
+    awake.restore();
     publisher.forgetBusy("agent-a");
   }
 });

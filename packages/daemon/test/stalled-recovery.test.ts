@@ -12,6 +12,7 @@ import type {
 } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { installAwakeClock } from "./fixtures/awake-clock";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { captureDaemonLogs } from "./log-capture";
 
@@ -31,7 +32,12 @@ const START = new Date("2026-10-15T00:00:00.000Z");
 const minutes = (count: number) => new Date(START.getTime() + count * 60_000);
 
 afterAll(() => rm(connection.workspaceRoot, { recursive: true, force: true }));
-afterEach(() => setSystemTime());
+let awakeClock: ReturnType<typeof installAwakeClock> | undefined;
+afterEach(() => {
+  setSystemTime();
+  awakeClock?.restore();
+  awakeClock = undefined;
+});
 
 /** One managed Agent whose sessions can be driven, stopped and counted. */
 async function harness(
@@ -48,6 +54,9 @@ async function harness(
   } = {},
 ) {
   setSystemTime(START);
+  // Silence is awake time: fake minutes pass on both clocks; `sleep` only on the wall's.
+  const awake = installAwakeClock();
+  awakeClock = awake;
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
   const sessions: Array<{
@@ -203,6 +212,7 @@ async function harness(
     terminals,
     cloud,
     noticeEntered: noticeEntered.promise,
+    sleep: awake.sleep,
     deliver,
     mention,
   };
@@ -258,6 +268,29 @@ test("a message for a turn silent for 15 minutes restarts the provider, resuming
     expect(kinds).not.toContain("stopped");
     expect(kinds).not.toContain("runtime_crashed");
     expect(h.activities.every((activity) => activity.launchId === "launch-1")).toBe(true);
+  } finally {
+    await h.runtime.stop();
+  }
+});
+
+test("a turn silent only because the machine slept is not restarted; it is once it stays silent awake", async () => {
+  const h = await harness();
+  try {
+    h.sessions[0]!.emit({ type: "progress" });
+    // The machine slept for 20 minutes and the provider with it: wall time is past the fuse.
+    h.sleep(20 * 60_000);
+    await h.deliver(1);
+
+    expect(h.sessions).toHaveLength(1);
+    expect(h.sessions[0]!.disposed).toBe(false);
+    expect(h.sessions[0]!.notices).toHaveLength(1);
+    expect(h.activities.map((activity) => activity.detailKind)).not.toContain("stalled_recovery");
+
+    // Awake and silent for the fuse: the same turn is stalled.
+    setSystemTime(new Date(Date.now() + 15 * 60_000));
+    await h.deliver(2);
+    expect(h.sessions).toHaveLength(2);
+    expect(h.sessions[0]!.disposed).toBe(true);
   } finally {
     await h.runtime.stop();
   }

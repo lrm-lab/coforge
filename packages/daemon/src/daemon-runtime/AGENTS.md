@@ -33,7 +33,8 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   minutes for a session that declares `steersBusyTurn`, 60 for one that only queues
   input — with no open tool call and
   a resumable session even when no message waits, but never while a background task
-  runs. Such an unattended restart resumes
+  runs. Silence is awake time (`platform/awake-clock.ts`), so a machine's sleep never counts
+  toward a fuse. Such an unattended restart resumes
   with a prompt naming where the turn stopped, and at most `UNATTENDED_RECOVERY_LIMIT` run in a row
   before a turn completes; past that the owner sees an error and only a message or a restart helps.
 - `agent-config-apply.ts` (built by `agent-config-apply-assembly.ts`) applies an `AgentConfigSync` only

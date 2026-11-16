@@ -1,6 +1,8 @@
 import { expect, setSystemTime, test } from "bun:test";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { AgentDeliveryGate } from "#src/daemon-runtime/agent-delivery-gate";
+import { LaunchInboxes } from "#src/daemon-runtime/launch-inbox";
+import { STALLED_RECOVERY_SILENCE_MS } from "#src/daemon-runtime/stalled-recovery";
 
 const delivery = (id: string): AgentMessageDelivery => ({
   protocolMajor: 1,
@@ -192,19 +194,33 @@ test("discarding conversations removes only their held deliveries", () => {
 });
 
 test("the queue measures how long the oldest held delivery has waited", () => {
-  const queue = new AgentDeliveryGate();
+  let awakeMs = 0;
+  const queue = new AgentDeliveryGate(new LaunchInboxes(() => awakeMs));
+  expect(queue.queuedForMs("agent-1")).toBeUndefined();
+  queue.enqueue("agent-1", delivery("one"));
+  queue.enqueue("agent-1", delivery("two"));
+  awakeMs = 15 * 60_000;
+  expect(queue.queuedForMs("agent-1")).toBe(15 * 60_000);
+  // Draining clears the clock; the next delivery starts its own wait.
+  queue.discardPending("agent-1");
+  expect(queue.queuedForMs("agent-1")).toBeUndefined();
+  queue.enqueue("agent-1", delivery("three"));
+  expect(queue.queuedForMs("agent-1")).toBe(0);
+});
+
+test("a delivery's wait is awake time: the minutes a machine slept through do not count", () => {
+  let awakeMs = 0;
+  const queue = new AgentDeliveryGate(new LaunchInboxes(() => awakeMs));
   try {
     setSystemTime(new Date("2026-11-02T00:00:00.000Z"));
-    expect(queue.queuedForMs("agent-1")).toBeUndefined();
     queue.enqueue("agent-1", delivery("one"));
-    queue.enqueue("agent-1", delivery("two"));
-    setSystemTime(new Date("2026-11-02T00:15:00.000Z"));
-    expect(queue.queuedForMs("agent-1")).toBe(15 * 60_000);
-    // Draining clears the clock; the next delivery starts its own wait.
-    queue.discardPending("agent-1");
-    expect(queue.queuedForMs("agent-1")).toBeUndefined();
-    queue.enqueue("agent-1", delivery("three"));
-    expect(queue.queuedForMs("agent-1")).toBe(0);
+    // The machine slept for 20 minutes: the wall clock is past the stall fuse, the awake clock
+    // has moved seconds.
+    setSystemTime(new Date("2026-11-02T00:20:00.000Z"));
+    awakeMs = 5_000;
+    expect(queue.queuedForMs("agent-1")).toBe(5_000);
+    awakeMs = STALLED_RECOVERY_SILENCE_MS;
+    expect(queue.queuedForMs("agent-1")).toBe(STALLED_RECOVERY_SILENCE_MS);
   } finally {
     setSystemTime();
   }
@@ -213,23 +229,19 @@ test("the queue measures how long the oldest held delivery has waited", () => {
 /** A resend is the server offering a delivery again with a request of its own; it is still the one
  * delivery, so the queue holds it once, in the place the first attempt took. */
 test("a delivery enqueued again while held replaces its earlier request instead of queueing twice", () => {
-  const queue = new AgentDeliveryGate();
-  try {
-    setSystemTime(new Date("2026-11-02T00:00:00.000Z"));
-    queue.enqueue("agent-1", delivery("one"));
-    queue.enqueue("agent-1", delivery("two"));
-    setSystemTime(new Date("2026-11-02T00:15:00.000Z"));
-    queue.enqueue("agent-1", { ...delivery("one"), requestId: "request-one-resent" });
-    expect(queue.pending("agent-1").map((message) => message.deliveryId)).toEqual([
-      "delivery-one",
-      "delivery-two",
-    ]);
-    expect(queue.pending("agent-1")[0]!.requestId).toBe("request-one-resent");
-    // The wait is the oldest held delivery's, not restarted by a resend.
-    expect(queue.queuedForMs("agent-1")).toBe(15 * 60_000);
-  } finally {
-    setSystemTime();
-  }
+  let awakeMs = 0;
+  const queue = new AgentDeliveryGate(new LaunchInboxes(() => awakeMs));
+  queue.enqueue("agent-1", delivery("one"));
+  queue.enqueue("agent-1", delivery("two"));
+  awakeMs = 15 * 60_000;
+  queue.enqueue("agent-1", { ...delivery("one"), requestId: "request-one-resent" });
+  expect(queue.pending("agent-1").map((message) => message.deliveryId)).toEqual([
+    "delivery-one",
+    "delivery-two",
+  ]);
+  expect(queue.pending("agent-1")[0]!.requestId).toBe("request-one-resent");
+  // The wait is the oldest held delivery's, not restarted by a resend.
+  expect(queue.queuedForMs("agent-1")).toBe(15 * 60_000);
 });
 
 test("distinct deliveries of one message are both held", () => {

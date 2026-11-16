@@ -1,4 +1,5 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { awakeClockMs } from "#src/platform/awake-clock";
 import type { CarriedStart } from "./provider-replay-recovery";
 import type { AgentInputQueue } from "./runtime-launch-intent";
 
@@ -7,20 +8,28 @@ import type { AgentInputQueue } from "./runtime-launch-intent";
  * it, oldest first, and what a cold start still owes it. It outlives the Agent's launches.
  */
 export class LaunchInbox {
+  constructor(private readonly awakeClock: () => number = awakeClockMs) {}
+
   /** Deliveries held for a later notice or launch, oldest first. */
   held: AgentMessageDelivery[] = [];
-  /** When the oldest held delivery began waiting; the stall sweep's clock for a delivery whose
-   * turn never started. */
-  heldSince: number | undefined;
+  /** When the oldest held delivery began waiting, on the awake clock. */
+  #heldSince: number | undefined;
   /** What a cold start of a rejected Session did not finish telling the Agent. */
   owed: CarriedStart | undefined;
   /** The input the launch drains in order: deliveries, prompts, the startup input, recovery. */
   input: AgentInputQueue | undefined;
 
+  /** How long the oldest held delivery has waited, in awake time (a sleeping machine does not
+   * make a delivery wait); undefined when none is held. The stall sweep's clock for a delivery
+   * whose turn never started. */
+  queuedForMs(): number | undefined {
+    return this.#heldSince === undefined ? undefined : this.awakeClock() - this.#heldSince;
+  }
+
   /** Holds a delivery. A resend of one already held is the same delivery: it takes the earlier
    * entry's place, so the wait the oldest has put in is not restarted. */
   hold(message: AgentMessageDelivery): void {
-    if (this.held.length === 0) this.heldSince = Date.now();
+    if (this.held.length === 0) this.#heldSince = this.awakeClock();
     const held = this.held.findIndex((entry) => entry.deliveryId === message.deliveryId);
     if (held >= 0) this.held[held] = message;
     else this.held.push(message);
@@ -32,7 +41,7 @@ export class LaunchInbox {
     const kept: AgentMessageDelivery[] = [];
     for (const message of this.held) (dropped(message) ? gone : kept).push(message);
     this.held = kept;
-    if (!kept.length) this.heldSince = undefined;
+    if (!kept.length) this.#heldSince = undefined;
     return gone;
   }
 
@@ -58,11 +67,13 @@ export class LaunchInbox {
 export class LaunchInboxes {
   readonly #inboxes = new Map<string, LaunchInbox>();
 
+  constructor(private readonly awakeClock: () => number = awakeClockMs) {}
+
   /** The Agent's inbox, created when it has none. */
   of(agentId: string): LaunchInbox {
     const existing = this.#inboxes.get(agentId);
     if (existing) return existing;
-    const created = new LaunchInbox();
+    const created = new LaunchInbox(this.awakeClock);
     this.#inboxes.set(agentId, created);
     return created;
   }

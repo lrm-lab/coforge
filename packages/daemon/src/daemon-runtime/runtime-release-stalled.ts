@@ -38,7 +38,7 @@ export function stalledRuntime<L extends ReleasableLaunch>(
       queuedForMs: ports.queuedForMs(agentId),
       hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
       resumable: ports.resumable(agentId),
-      noticeAcceptedForMs: ageOf(ports.noticeAcceptedAt?.(agentId)),
+      noticeAcceptedForMs: ports.noticeAcceptedForMs?.(agentId),
       // A notice's own write starts an idle Agent's turn (`noteTurnStarted`, `message-composition`),
       // so the two times tell a woken Agent from one whose notice was steered into a turn already
       // running (task #14).
@@ -50,14 +50,10 @@ export function stalledRuntime<L extends ReleasableLaunch>(
       steersBusyTurn: session.steersBusyTurn === true,
       lastAgentActionForMs: Math.min(
         progress.silentForMs(),
-        ageOf(ports.lastAgentActionAt?.(agentId)) ?? Number.POSITIVE_INFINITY,
+        ports.lastAgentActionForMs?.(agentId) ?? Number.POSITIVE_INFINITY,
       ),
     },
     { lastEventAtMs: progress.lastEventAtMs },
   );
   return basis ? { launch, session, restart, basis } : undefined;
-}
-
-function ageOf(atMs: number | undefined): number | undefined {
-  return atMs === undefined ? undefined : Date.now() - atMs;
 }

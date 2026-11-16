@@ -76,7 +76,8 @@ async function stopWithCarriedMention(carried: boolean) {
     runningMentionIdentity: () => ({ launchId: "l1", sessionId: "s1" }),
     noticeActionClocks: () => ({
       noticeAcceptedAt: () => undefined,
-      lastAgentActionAt: () => undefined,
+      noticeAcceptedForMs: () => undefined,
+      lastAgentActionForMs: () => undefined,
     }),
     releaseSurvivingHolds: () => {},
     wakeAgent: async (agentId) => void woken.push(agentId),

@@ -82,7 +82,8 @@ function fixture() {
     runningMentionIdentity: () => ({ launchId: "l1", sessionId: "s1" }),
     noticeActionClocks: () => ({
       noticeAcceptedAt: () => undefined,
-      lastAgentActionAt: () => undefined,
+      noticeAcceptedForMs: () => undefined,
+      lastAgentActionForMs: () => undefined,
     }),
     releaseSurvivingHolds: () => {},
     wakeAgent: async () => {},

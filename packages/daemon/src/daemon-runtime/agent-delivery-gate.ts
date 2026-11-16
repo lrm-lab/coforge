@@ -176,8 +176,7 @@ export class AgentDeliveryGate {
   /** How long the Agent's oldest held delivery has waited, or undefined when none is held: a
    * delivery queued this moment has waited nothing, whatever the provider did before it. */
   queuedForMs(agentId: string): number | undefined {
-    const since = this.inboxes.peek(agentId)?.heldSince;
-    return since === undefined ? undefined : Date.now() - since;
+    return this.inboxes.peek(agentId)?.queuedForMs();
   }
 
   /**
