@@ -132,8 +132,7 @@ export async function runHostProcess(config: HostProcessConfig): Promise<void> {
           hostname: process.env.COFORGE_DESKTOP_PROXY_HOST || "0.0.0.0",
           port: proxyPort,
           proxySecret:
-            process.env.COFORGE_DESKTOP_PROXY_SECRET?.trim() ||
-            process.env.COFORGE_CLUSTER_TOKEN,
+            process.env.COFORGE_DESKTOP_PROXY_SECRET?.trim() || process.env.COFORGE_CLUSTER_TOKEN,
           resolve: (computerId) => containers.desktopEndpoint(computerId),
           handleRequest: createPiChatHandler({
             secret: config.token,
