@@ -106,4 +106,53 @@ describe("computer offline episodes against a real Redis", () => {
     ).toBeNull();
     await client.del(markerKey(computerId));
   });
+
+  test("a claim left by a lost send expires and the episode alerts on a later tick", async () => {
+    const computerId = `crash-${crypto.randomUUID()}`;
+    const offlineAt = 7_000;
+    const alerts = new ComputerOfflineAlerts({ possible: () => true, redis: () => redis });
+    alerts.computerPresence(presenceChange(computerId, "offline", offlineAt));
+    await waitFor(() => client.get(markerKey(computerId)));
+
+    const claimKey = `coforge:computer-offline-alert:v1:${computerId}:${offlineAt}`;
+    const target: ComputerOfflineAlertTarget = {
+      status: "ready",
+      workspaceId: "w1",
+      ownerId: "u1",
+      computerName: "Studio",
+      workspaceSlug: "lab",
+      username: "frank",
+    };
+    const options = {
+      redis: () => redis,
+      lock: { acquire: async () => true },
+      possible: () => true,
+      now: () => offlineAt + COMPUTER_OFFLINE_ALERT_AFTER_MS,
+      resolve: async () => target,
+      stillOnline: async () => false,
+    };
+    // The first sweep claims the episode and then never finishes its send, as a process lost
+    // mid-alert would; its claim is the only thing left holding the episode.
+    const lost = new ComputerOfflineAlertSweep({
+      ...options,
+      claimTtlMs: 80,
+      notify: () => new Promise<void>(() => {}),
+    });
+    void lost.tick();
+    await waitFor(() => client.get(claimKey));
+    await waitFor(async () => ((await client.get(claimKey)) === null ? true : null));
+
+    const notified: number[] = [];
+    const sweep = new ComputerOfflineAlertSweep({
+      ...options,
+      notify: async (input) => {
+        notified.push(input.offlineAtMs);
+      },
+    });
+    await sweep.tick();
+    expect(notified).toEqual([offlineAt]);
+    expect(await client.get(markerKey(computerId))).toBeNull();
+    expect(await client.sismember(INDEX, computerId)).toBe(false);
+    await client.del(markerKey(computerId));
+  });
 });

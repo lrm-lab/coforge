@@ -257,6 +257,16 @@ describe("ComputerOfflineAlertSweep", () => {
     expect(sets.get(indexKey)?.has(COMPUTER_ID) ?? false).toBe(false);
   });
 
+  test("the claim carries a TTL so a lost send cannot hold the episode", async () => {
+    const { subject, calls } = sweep({
+      members: [COMPUTER_ID],
+      marker: String(OFFLINE_AT),
+      resolve: async () => ready,
+    });
+    await subject.tick();
+    expect(calls).toContain(`send SET ${claimKey} 1 NX PX 600000`);
+  });
+
   test("a second episode alerts again", async () => {
     const secondOfflineAt = OFFLINE_AT + 120_000;
     let now = OFFLINE_AT + COMPUTER_OFFLINE_ALERT_AFTER_MS;
