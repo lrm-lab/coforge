@@ -45,7 +45,8 @@ const store: ArtifactBlobStore = {
 };
 /** Seconds are added to the sandbox's clock by the test that ages a link. */
 let clockOffsetMs = 0;
-const artifacts = new Artifacts(db, store, { enabled: async () => true });
+let switchedOn = true;
+const artifacts = new Artifacts(db, store, { enabled: async () => switchedOn });
 const sandbox = new ArtifactSandbox({
   reads: artifacts.reads,
   readBlob: (workspaceId, sha256) => store.read(workspaceId, sha256),
@@ -301,15 +302,15 @@ test("a ticket reaches only its own artifact's version", async () => {
   ).toBe("/* two */");
 });
 
-test("a ticket's files stop opening 30 minutes after the link, as access ends, and for no one else", async () => {
+test("a ticket's files stop opening 10 minutes after the link, as access ends, and for no one else", async () => {
   const page = await multiPage("expiry");
   const link = await linkTo(page.id);
-  clockOffsetMs = 29 * 60 * 1000;
+  clockOffsetMs = 9 * 60 * 1000;
   try {
     expect((await sandbox.serve(asset(link.url, "app.js", "script"))).status).toBe(200);
     // The wrapper is open for five minutes only.
     expect((await sandbox.serve(new Request(link.url))).status).toBe(403);
-    clockOffsetMs = 30 * 60 * 1000 + 1000;
+    clockOffsetMs = 10 * 60 * 1000 + 1000;
     expect((await sandbox.serve(asset(link.url, "app.js", "script"))).status).toBe(403);
   } finally {
     clockOffsetMs = 0;
@@ -356,4 +357,38 @@ test("a file stops opening when the page's home is hidden from the Workspace", a
   expect((await sandbox.serve(asset(link.url, "a.css", "style"))).status).toBe(200);
   expect((await sandbox.serve(frame(link.url, "home.html"))).status).toBe(404);
   await db.conversation.delete({ where: { id: channel } });
+});
+
+test("fileInVersion's real queries refuse a deleted artifact, another workspace, another version, a missing file, and a disabled experiment", async () => {
+  const page = await multiPage("pin");
+  const other = await db.workspace.create({
+    data: {
+      slug: `sandbox-other-${handle}`,
+      name: "Other",
+      members: { create: { userId, role: "member" } },
+    },
+  });
+  const file = (over: Partial<Parameters<typeof artifacts.reads.fileInVersion>[0]>) =>
+    artifacts.reads.fileInVersion({
+      workspaceId,
+      artifactId: page.id,
+      version: 1,
+      path: "app.js",
+      ...over,
+    });
+  try {
+    expect(await file({})).not.toBeNull();
+    expect(await file({ workspaceId: other.id })).toBeNull();
+    expect(await file({ version: 2 })).toBeNull();
+    expect(await file({ path: "nope.js" })).toBeNull();
+    await db.artifact.update({ where: { id: page.id }, data: { deletedAt: new Date() } });
+    expect(await file({})).toBeNull();
+    await db.artifact.update({ where: { id: page.id }, data: { deletedAt: null } });
+    switchedOn = false;
+    await expect(file({})).rejects.toMatchObject({ errorId: "artifacts-disabled" });
+    switchedOn = true;
+  } finally {
+    switchedOn = true;
+    await db.workspace.delete({ where: { id: other.id } }).catch(() => undefined);
+  }
 });
