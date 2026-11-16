@@ -311,12 +311,16 @@ export function ReportTabsEditor({
           active
             ? "bg-primary font-medium text-primary shadow-xs ring-1 ring-secondary"
             : "bg-primary text-tertiary ring-1 ring-transparent hover:text-secondary",
+          // A tab is not a link: no underline on hover (jing, task #106).
+          "hover:*:data-text:decoration-transparent",
         )
       : cn(
-          "rounded-none px-1 pb-2.5 pt-1 text-sm",
+          "rounded-none px-1 pb-2.5 pt-1 text-sm hover:*:data-text:decoration-transparent",
           active
             ? "border-b-2 border-brand-solid font-semibold text-primary"
-            : "border-b-2 border-transparent text-tertiary hover:text-secondary",
+            : // At rest lighter than the open tab, in bold on hover (jing, task #106); `TabLabel`
+              // keeps the width.
+              "border-b-2 border-transparent font-medium text-tertiary hover:text-secondary hover:*:data-text:font-semibold",
         );
 
   const chevronClass = cn("size-6 shrink-0 p-1 text-fg-quaternary", editableTabs ? "" : "mb-2");
@@ -353,7 +357,7 @@ export function ReportTabsEditor({
           onDoubleClick={() => startEditingTab(name)}
           className={tabButtonClass(name === activeTab)}
         >
-          {name}
+          <TabLabel name={name} />
         </Button>
       )}
       {editableTabs ? (
@@ -539,5 +543,18 @@ export function ReportTabsEditor({
         />
       ) : null}
     </div>
+  );
+}
+
+/** A tab's name, as wide as its bold form whatever its weight, so a tab set in bold on hover
+ * does not push its neighbours along. */
+function TabLabel({ name }: { name: string }) {
+  return (
+    <span className="inline-grid">
+      <span aria-hidden="true" className="invisible col-start-1 row-start-1 font-semibold">
+        {name}
+      </span>
+      <span className="col-start-1 row-start-1">{name}</span>
+    </span>
   );
 }
