@@ -27,6 +27,7 @@ export class ArtifactViewerPositions {
       SET "openedAt" = EXCLUDED."openedAt",
           "seenVersion" = GREATEST("artifact_viewer_positions"."seenVersion", EXCLUDED."seenVersion")`;
     await this.viewing.mark(artifact.id, input.userId);
+    return this.#rosterOf(artifact, input);
   }
 
   async heartbeat(input: Place) {
@@ -38,6 +39,10 @@ export class ArtifactViewerPositions {
     const artifact = await this.reads.artifact(input.workspaceId, input.artifactId, {
       userId: input.userId,
     });
+    return this.#rosterOf(artifact, input);
+  }
+
+  async #rosterOf(artifact: { id: string; currentVersion: number }, input: Place) {
     const [rows, nowIds] = await Promise.all([
       this.db.artifactViewerPosition.findMany({
         where: { artifactId: artifact.id },

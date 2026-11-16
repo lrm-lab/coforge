@@ -1,4 +1,5 @@
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorAvatarStack, AVATAR_STACK_RING } from "#src/features/avatars/actor-avatar-stack";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -48,8 +49,9 @@ export function ChannelHeaderFaces({
   return (
     <div className="flex shrink-0 items-center">
       {shown.length > 0 && (
-        <div
-          className="hidden items-center -space-x-1 md:flex"
+        <ActorAvatarStack
+          overlap="tight"
+          className="hidden md:flex"
           aria-label={m.channel_settings_members()}
         >
           {shown.map((entry) => {
@@ -72,7 +74,7 @@ export function ChannelHeaderFaces({
                   alt=""
                   src={entry.avatarUrl ?? undefined}
                   name={entry.displayName}
-                  className="ring-[1.5px] ring-bg-primary"
+                  className={AVATAR_STACK_RING.thin}
                 />
                 <span className="sr-only">{entry.displayName}</span>
               </>
@@ -123,13 +125,13 @@ export function ChannelHeaderFaces({
                   alt=""
                   initials={`+${more}`}
                   contentClassName="bg-brand-primary text-brand-secondary *:text-brand-secondary"
-                  className="ring-[1.5px] ring-bg-primary"
+                  className={AVATAR_STACK_RING.thin}
                 />
                 <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
               </TooltipTrigger>
             </Tooltip>
           )}
-        </div>
+        </ActorAvatarStack>
       )}
       {canAdd && (
         <AvatarAddButton

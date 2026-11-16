@@ -1,20 +1,7 @@
 import Markdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { memo, type ReactNode } from "react";
 
-import type { ReactNode } from "react";
-
-const MARKDOWN_MARKER = /^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/;
-const PLAIN_LINES = 2;
-const PLAIN_LINE_CHARACTERS = 200;
-
-export function plainPreview(markdown: string): string {
-  return markdown
-    .split("\n")
-    .map((line) => line.replace(MARKDOWN_MARKER, "").trim().slice(0, PLAIN_LINE_CHARACTERS))
-    .filter((line) => line !== "")
-    .slice(0, PLAIN_LINES)
-    .join("\n");
-}
+import { MESSAGE_REMARK_PLUGINS } from "#src/lib/message-syntax";
 
 const Heading = ({ children }: { children?: ReactNode }) => (
   <p className="mt-2 font-semibold text-primary first:mt-0">{children}</p>
@@ -42,12 +29,13 @@ const PREVIEW_COMPONENTS: Components = {
     </pre>
   ),
   table: () => null,
+  input: () => null,
 };
 
-export function MarkdownPreview({ markdown }: { markdown: string }) {
+export const MarkdownPreview = memo(function MarkdownPreview({ markdown }: { markdown: string }) {
   return (
-    <Markdown remarkPlugins={[remarkGfm]} components={PREVIEW_COMPONENTS}>
+    <Markdown remarkPlugins={MESSAGE_REMARK_PLUGINS} components={PREVIEW_COMPONENTS}>
       {markdown}
     </Markdown>
   );
-}
+});

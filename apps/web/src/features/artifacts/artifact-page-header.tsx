@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ChevronDown,
@@ -15,11 +15,11 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
-import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { useConversationName } from "./artifact-gallery-filters";
+import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
+import { useArrivedFromGallery } from "./artifact-search";
 import { ArtifactIcon } from "./artifact-parts";
 import { VersionMenu } from "./artifact-version-menu";
 
@@ -27,14 +27,13 @@ export const ARTIFACT_TITLE_ID = "artifact-page-title";
 
 export type ArtifactPaneControls = { full: boolean; onToggleFull: () => void; onClose: () => void };
 
-export type ArtifactHome = { kind: "channel" | "dm" | "workspace"; conversationId: string | null };
-
 export function ArtifactPageHeader({
   artifactId,
   entryPath,
   title,
   shownVersion,
   home,
+  homeName,
   pills,
   onChooseVersion,
   onFind,
@@ -47,6 +46,7 @@ export function ArtifactPageHeader({
   title: string;
   shownVersion?: number;
   home: ArtifactHome | undefined;
+  homeName: string | undefined;
   pills?: ReactNode;
   onChooseVersion: (version: number) => void;
   onFind?: () => void;
@@ -62,7 +62,7 @@ export function ArtifactPageHeader({
         pane ? "pr-2 pl-4" : "px-3 sm:px-4",
       )}
     >
-      {!pane && <BackToHome home={home} />}
+      {!pane && <BackToHome home={home} homeName={homeName} />}
       {entryPath === undefined ? (
         <Skeleton className="h-4 w-40" />
       ) : (
@@ -144,44 +144,44 @@ export function ArtifactPageHeader({
   );
 }
 
-export function useHomeName(home: ArtifactHome | undefined): string | undefined {
-  const nameOf = useConversationName();
-  return home?.conversationId && home.kind !== "workspace"
-    ? nameOf(home.conversationId)
-    : undefined;
-}
-
-function BackToHome({ home }: { home: ArtifactHome | undefined }) {
+function BackToHome({
+  home,
+  homeName,
+}: {
+  home: ArtifactHome | undefined;
+  homeName: string | undefined;
+}) {
   const workspaceSlug = useWorkspaceSlug();
-  const toWorkspace = home !== undefined && (!home.conversationId || home.kind === "workspace");
-  const homeName = useHomeName(home);
-  const channel = home?.kind === "channel" && home.conversationId ? home.conversationId : null;
-  const label = toWorkspace ? (
+  const router = useRouter();
+  const fromGallery = useArrivedFromGallery();
+  const channel = home?.kind === "channel" ? homeConversationOf(home) : undefined;
+  const label = fromGallery ? (
+    m.navigation_artifacts()
+  ) : home !== undefined && !homeConversationOf(home) ? (
     m.doc_back_to_workspace()
   ) : channel && homeName ? (
     <ChannelPlace id={channel} name={homeName.replace(/^#/, "")} />
   ) : (
     (homeName ?? m.doc_back())
   );
-  const className =
-    "flex min-w-0 shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-tertiary outline-focus-ring hover:bg-primary_hover hover:text-secondary focus-visible:outline-2";
-  const inner = (
-    <>
+  const target = fromGallery
+    ? ({ to: "/w/$workspaceSlug/artifacts", params: { workspaceSlug } } as const)
+    : homeLinkProps(home, workspaceSlug);
+  return (
+    <Link
+      {...target}
+      onClick={
+        fromGallery
+          ? (event) => {
+              event.preventDefault();
+              router.history.back();
+            }
+          : undefined
+      }
+      className="flex min-w-0 shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-tertiary outline-focus-ring hover:bg-primary_hover hover:text-secondary focus-visible:outline-2"
+    >
       <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
       <span className="max-w-40 truncate max-sm:sr-only">{label}</span>
-    </>
-  );
-  if (!home?.conversationId || home.kind === "workspace")
-    return (
-      <Link to="/w/$workspaceSlug" params={{ workspaceSlug }} className={className}>
-        {inner}
-      </Link>
-    );
-  const target =
-    home.kind === "channel" ? { channelId: home.conversationId } : { dmId: home.conversationId };
-  return (
-    <Link {...conversationRoute(target, workspaceSlug)} className={className}>
-      {inner}
     </Link>
   );
 }

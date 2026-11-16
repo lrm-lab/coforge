@@ -1,25 +1,32 @@
 import { Link } from "@tanstack/react-router";
 import { MessageChatCircle } from "@untitledui/icons";
 
-import { conversationRoute } from "#src/features/conversations/last-conversation";
+import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { useHomeName, type ArtifactHome } from "./artifact-page-header";
+import type { VisibilityChoice } from "./artifact-scope";
+import { pressablePillClass } from "./artifact-visibility-pill";
 
-export function ArtifactHomeChip({ home }: { home: ArtifactHome }) {
+export function ArtifactHomeChip({
+  home,
+  homeName,
+  scope,
+}: {
+  home: ArtifactHome;
+  homeName: string | undefined;
+  scope: VisibilityChoice;
+}) {
   const workspaceSlug = useWorkspaceSlug();
-  const name = useHomeName(home);
-  if (!home.conversationId || home.kind === "workspace" || !name) return null;
-  const target =
-    home.kind === "channel" ? { channelId: home.conversationId } : { dmId: home.conversationId };
+  if (scope === "conversation" || !homeConversationOf(home) || !homeName) return null;
   return (
     <Link
-      {...conversationRoute(target, workspaceSlug)}
-      aria-label={m.av_home_chip_aria({ name })}
-      className="flex min-w-0 max-w-40 shrink items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
+      {...homeLinkProps(home, workspaceSlug)}
+      aria-label={m.av_home_chip_aria({ name: homeName })}
+      className={cn(pressablePillClass, "max-w-40")}
     >
       <MessageChatCircle aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="truncate">{name}</span>
+      <span className="truncate">{homeName}</span>
     </Link>
   );
 }

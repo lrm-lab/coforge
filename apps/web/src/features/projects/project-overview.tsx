@@ -4,6 +4,7 @@ import { ArrowUpRight } from "@untitledui/icons";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorAvatarStack, AVATAR_STACK_RING } from "#src/features/avatars/actor-avatar-stack";
 import { loadFinishedTasks } from "#src/features/tasks/tasks.functions";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
 import { m } from "#src/paraglide/messages";
@@ -181,7 +182,7 @@ function People({ people }: { people: Overview["people"] }) {
   if (people.length === 0) return <span className="text-sm text-quaternary">—</span>;
   return (
     <span className="flex items-center gap-2">
-      <span className="flex -space-x-1.5">
+      <ActorAvatarStack>
         {people.slice(0, 5).map((person) => (
           <ActorAvatar
             key={person.id}
@@ -191,10 +192,10 @@ function People({ people }: { people: Overview["people"] }) {
             alt={person.name}
             src={person.avatarUrl ?? undefined}
             agentId={person.kind === "agent" ? person.id : undefined}
-            className="ring-2 ring-bg-primary"
+            className={AVATAR_STACK_RING.regular}
           />
         ))}
-      </span>
+      </ActorAvatarStack>
       <span className="truncate text-sm text-secondary">
         {people
           .slice(0, 3)

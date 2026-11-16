@@ -33,13 +33,12 @@ export const loadArtifactVersions = createServerFn({ method: "GET" })
 export const openArtifact = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactId: id, version: artifactInputs.version.optional() }).strict())
-  .handler(async ({ context, data }) => {
-    await productionArtifacts(context.db).viewerPositions.open({
+  .handler(({ context, data }) =>
+    productionArtifacts(context.db).viewerPositions.open({
       ...placeOf(context, data),
       version: data.version,
-    });
-    return { opened: true as const };
-  });
+    }),
+  );
 
 export const keepArtifactViewing = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

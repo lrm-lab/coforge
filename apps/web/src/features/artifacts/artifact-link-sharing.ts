@@ -4,6 +4,7 @@ import { artifactLinkSharingQuery } from "./artifact-queries";
 import { setArtifactLinkSharing } from "./artifacts.functions";
 
 export type ArtifactLinkSharing = {
+  loaded: boolean;
   available: boolean;
   url: string | null;
   apply: (enabled: boolean) => Promise<string | null>;
@@ -22,6 +23,7 @@ export function useArtifactLinkSharing(artifactId: string, enabled: boolean): Ar
     onError: () => void queryClient.invalidateQueries({ queryKey: query.queryKey }),
   });
   return {
+    loaded: data !== undefined,
     available: data?.available === true,
     url: data?.url ?? null,
     apply: async (next) => {

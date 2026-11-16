@@ -27,12 +27,8 @@ import {
 } from "#src/components/layout/phone-shell";
 import { PhoneTabBar } from "#src/components/layout/phone-tab-bar";
 import { ShellLinks } from "#src/components/layout/shell-links";
-import {
-  CHAT_SECTIONS,
-  isStandalonePage,
-  sectionOf,
-  tabHomeOf,
-} from "#src/components/layout/tab-home";
+import { useIsStandalonePage } from "#src/components/layout/standalone-page";
+import { CHAT_SECTIONS, sectionOf, tabHomeOf } from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { artifactsOnQuery } from "#src/features/artifacts/artifact-queries";
 import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
@@ -174,18 +170,7 @@ function useNavItems(
   }, [base, recordsPreview, aiWorkbench, artifactsOn, unreadCount, hasUnread, recordsHref]);
 }
 
-export function AppShell({
-  user,
-  workspaces,
-  currentWorkspace,
-  onSelectWorkspace,
-  onCreateWorkspace,
-  onSignOut,
-  children,
-  recordsPreview = false,
-  canSeeUsageLimits = false,
-  aiWorkbench = false,
-}: {
+type AppShellProps = {
   aiWorkbench?: boolean;
   canSeeUsageLimits?: boolean;
   user: AppUser;
@@ -196,7 +181,39 @@ export function AppShell({
   onSignOut: () => Promise<void> | void;
   recordsPreview?: boolean;
   children: React.ReactNode;
-}) {
+};
+
+export function AppShell(props: AppShellProps) {
+  const standalone = useIsStandalonePage();
+  useWorkspaceTabTitle(props.currentWorkspace.name);
+  return (
+    <SystemNotificationsProvider
+      viewerId={props.user.id}
+      enabled={props.canSeeUsageLimits ?? false}
+    >
+      <WhatsNewAnnouncer />
+      {standalone ? (
+        <div className="flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">{props.children}</div>
+        </div>
+      ) : (
+        <WorkspaceChrome {...props} />
+      )}
+    </SystemNotificationsProvider>
+  );
+}
+
+function WorkspaceChrome({
+  user,
+  workspaces,
+  currentWorkspace,
+  onSelectWorkspace,
+  onCreateWorkspace,
+  onSignOut,
+  children,
+  recordsPreview = false,
+  aiWorkbench = false,
+}: AppShellProps) {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
@@ -216,7 +233,6 @@ export function AppShell({
   }, [workspaceId, base, pathname, searchStr]);
   const activityAttention = useActivityAttention(user, workspaceId);
   useReportActivityUnread(activityAttention.hasUnread, activityAttention.unreadCount);
-  useWorkspaceTabTitle(currentWorkspace.name);
   const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
   const section = sectionOf(pathname);
   const [chatListOpen, setChatListOpen] = useState(false);
@@ -274,103 +290,88 @@ export function AppShell({
     ],
   );
 
-  if (isStandalonePage(pathname))
-    return (
-      <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>
-        <PhoneShellContext value={phoneShell}>
-          <div className="flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
-            <WhatsNewAnnouncer />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
-          </div>
-        </PhoneShellContext>
-      </SystemNotificationsProvider>
-    );
-
   return (
-    <SystemNotificationsProvider viewerId={user.id} enabled={canSeeUsageLimits}>
-      <PhoneShellContext value={phoneShell}>
-        <ChatListOpenContext value={setChatListOpen}>
-          <div
-            className={cx(
-              "flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased lg:bg-sidebar",
-              !tabBar && "pb-safe-bottom",
-            )}
-          >
-            <WhatsNewAnnouncer />
-            <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-              <ShellLinks>
-                <SidebarExpanded
-                  activeUrl={activeUrl}
-                  items={navItems}
-                  header={
-                    <>
-                      <div className="flex min-w-0 flex-1">{workspaceSwitcher}</div>
-                      <SidebarToggle />
-                    </>
-                  }
-                  search={<SearchField />}
-                  footer={
-                    <>
-                      <WhatsNewRow />
-                      <UserRow
-                        base={base}
-                        user={user}
-                        onSignOut={onSignOut}
-                        workspaceSlug={currentWorkspace.slug}
-                      />
-                    </>
-                  }
-                />
-                <SidebarRail
-                  activeUrl={activeUrl}
-                  items={navItems}
-                  header={
-                    <>
-                      <SidebarToggle expand />
-                      {phoneShell.workspaceSwitcher}
-                      <SearchRailButton />
-                    </>
-                  }
-                  footer={
-                    <>
-                      <WhatsNewRailButton />
-                      <NotificationBell
-                        workspaceSlug={currentWorkspace.slug}
-                        badgeRing="ring-sidebar"
-                      />
-                      <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
-                    </>
-                  }
-                />
-              </ShellLinks>
+    <PhoneShellContext value={phoneShell}>
+      <ChatListOpenContext value={setChatListOpen}>
+        <div
+          className={cx(
+            "flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased lg:bg-sidebar",
+            !tabBar && "pb-safe-bottom",
+          )}
+        >
+          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+            <ShellLinks>
+              <SidebarExpanded
+                activeUrl={activeUrl}
+                items={navItems}
+                header={
+                  <>
+                    <div className="flex min-w-0 flex-1">{workspaceSwitcher}</div>
+                    <SidebarToggle />
+                  </>
+                }
+                search={<SearchField />}
+                footer={
+                  <>
+                    <WhatsNewRow />
+                    <UserRow
+                      base={base}
+                      user={user}
+                      onSignOut={onSignOut}
+                      workspaceSlug={currentWorkspace.slug}
+                    />
+                  </>
+                }
+              />
+              <SidebarRail
+                activeUrl={activeUrl}
+                items={navItems}
+                header={
+                  <>
+                    <SidebarToggle expand />
+                    {phoneShell.workspaceSwitcher}
+                    <SearchRailButton />
+                  </>
+                }
+                footer={
+                  <>
+                    <WhatsNewRailButton />
+                    <NotificationBell
+                      workspaceSlug={currentWorkspace.slug}
+                      badgeRing="ring-sidebar"
+                    />
+                    <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
+                  </>
+                }
+              />
+            </ShellLinks>
 
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
-                  <ChatListShownContext value={phone && chatListOpen}>
-                    {children}
-                  </ChatListShownContext>
-                </div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
+                <ChatListShownContext value={phone && chatListOpen}>
+                  {children}
+                </ChatListShownContext>
               </div>
             </div>
-            {tabBar && chatHref && activityHref && (
-              <ShellLinks>
-                <PhoneTabBar
-                  current={tabBar}
-                  chatHref={chatHref}
-                  activityHref={activityHref}
-                  activityUnread={{
-                    count: activityItem?.unreadCount,
-                    lit: Boolean(activityItem?.badge),
-                  }}
-                  base={base}
-                  user={user}
-                />
-              </ShellLinks>
-            )}
           </div>
-        </ChatListOpenContext>
-      </PhoneShellContext>
-    </SystemNotificationsProvider>
+          {tabBar && chatHref && activityHref && (
+            <ShellLinks>
+              <PhoneTabBar
+                current={tabBar}
+                chatHref={chatHref}
+                activityHref={activityHref}
+                activityUnread={{
+                  count: activityItem?.unreadCount,
+                  lit: Boolean(activityItem?.badge),
+                }}
+                base={base}
+                user={user}
+              />
+            </ShellLinks>
+          )}
+        </div>
+      </ChatListOpenContext>
+    </PhoneShellContext>
   );
 }
 

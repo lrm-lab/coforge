@@ -1,51 +1,91 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
-import { useConversationName } from "./artifact-gallery-filters";
-import { useScopeOf, type GalleryCard } from "./artifact-scope";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
-import { artifactCardQuery, artifactLinkSharingQuery } from "./artifact-queries";
+import { artifactCardQuery, artifactHomeConversation } from "./artifact-queries";
+import type { useScopeOf } from "./artifact-scope";
 import { VisibilityMenu, useArtifactVisibility } from "./use-artifact-visibility";
 
-export function GalleryCardVisibility({ card }: { card: GalleryCard }) {
-  const [opened, setOpened] = useState(false);
-  const nameOf = useConversationName();
-  const scope = useScopeOf()(card);
-  const read = useQuery({ ...artifactCardQuery(card.id), enabled: opened });
-  const sharing = useQuery({ ...artifactLinkSharingQuery(card.id), enabled: opened });
-  const link = useArtifactLinkSharing(card.id, opened);
+type CardScope = ReturnType<ReturnType<typeof useScopeOf>>;
+
+export function GalleryCardVisibility({
+  artifactId,
+  tier,
+  scope,
+}: {
+  artifactId: string;
+  tier: "conversation" | "workspace";
+  scope: CardScope;
+}) {
+  const [open, setOpen] = useState(false);
+  const [engaged, setEngaged] = useState(false);
+  return (
+    <Dropdown.Root
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setEngaged(true);
+      }}
+    >
+      <AriaButton
+        aria-label={m.av_vis_aria({ scope: scope.label })}
+        className="relative z-10 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-quaternary outline-focus-ring hover:bg-primary_hover hover:text-fg-quaternary_hover focus-visible:outline-2"
+      >
+        <scope.Icon aria-hidden="true" className="size-4" />
+      </AriaButton>
+      {engaged && (
+        <VisibilityPopover
+          artifactId={artifactId}
+          tier={tier}
+          homeName={scope.homeName}
+          open={open}
+          onIdle={() => setEngaged(false)}
+        />
+      )}
+    </Dropdown.Root>
+  );
+}
+
+function VisibilityPopover({
+  artifactId,
+  tier,
+  homeName,
+  open,
+  onIdle,
+}: {
+  artifactId: string;
+  tier: "conversation" | "workspace";
+  homeName: string | undefined;
+  open: boolean;
+  onIdle: () => void;
+}) {
+  const read = useQuery(artifactCardQuery(artifactId));
+  const link = useArtifactLinkSharing(artifactId, true);
   const visibility = useArtifactVisibility({
-    artifactId: card.id,
-    tier: card.access,
+    artifactId,
+    tier,
     link,
-    homeName: nameOf(card.homeKey.replace(/^conversation:/, "")),
+    homeName,
+    canChange: read.data?.canChange === true,
+    narrowable: artifactHomeConversation(read.data?.homeKey ?? "") !== null,
   });
-  const detail = read.data;
+  const idle = !open && !visibility.confirming;
+  useEffect(() => {
+    if (idle) onIdle();
+  }, [idle, onIdle]);
   return (
     <>
-      <Dropdown.Root onOpenChange={(open) => open && setOpened(true)}>
-        <AriaButton
-          aria-label={m.av_vis_aria({ scope: scope.label })}
-          className="relative z-10 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-quaternary outline-focus-ring hover:bg-primary_hover hover:text-fg-quaternary_hover focus-visible:outline-2"
-        >
-          <scope.Icon aria-hidden="true" className="size-4" />
-        </AriaButton>
-        <Dropdown.Popover placement="bottom end">
-          {detail && sharing.data ? (
-            <VisibilityMenu
-              visibility={visibility}
-              linkAvailable={link.available}
-              narrowable={detail.canChange && (detail.homeKey ?? "").startsWith("conversation:")}
-              canChange={detail.canChange}
-            />
-          ) : (
-            <div aria-busy="true" className="h-24 w-56" />
-          )}
-        </Dropdown.Popover>
-      </Dropdown.Root>
+      <Dropdown.Popover placement="bottom end">
+        {read.data === null || read.isError ? (
+          <p className="w-56 px-3 py-2 text-sm text-tertiary">{m.doc_unavailable_title()}</p>
+        ) : read.data && link.loaded ? (
+          <VisibilityMenu visibility={visibility} />
+        ) : (
+          <div aria-busy="true" className="h-24 w-56" />
+        )}
+      </Dropdown.Popover>
       {visibility.dialog}
     </>
   );

@@ -1,15 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import { ChevronDown, Grid01, List, SearchLg, XClose } from "@untitledui/icons";
 
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
-import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { channelNamesQuery } from "#src/features/conversations/conversation-queries";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
-import { useWorkspaceName } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -20,7 +16,8 @@ import type {
   GallerySort,
   GalleryView,
 } from "./artifact-gallery-model";
-import { visibilityIcon } from "./use-artifact-visibility";
+import { useScopeLabels, visibilityIcon } from "./artifact-scope";
+import { useConversationNames } from "./use-conversation-name";
 
 const chipClass = (active: boolean) =>
   cn(
@@ -134,20 +131,6 @@ function Row({
   );
 }
 
-export function useConversationName() {
-  const workspaceId = useCurrentWorkspaceId() ?? "";
-  const channels = useQuery(channelNamesQuery(workspaceId)).data ?? [];
-  const directory = useWorkspaceDirectory().data;
-  return (id: string) => {
-    const channel = channels.find((entry) => entry.id === id);
-    if (channel) return `#${channel.name}`;
-    const person = directory?.people.find((entry) => entry.dmId === id);
-    if (person) return `@${person.name}`;
-    const agent = directory?.agents.find((entry) => entry.dmId === id);
-    return agent ? `@${agent.name}` : undefined;
-  };
-}
-
 export function ConversationFilter({
   scope,
   onChange,
@@ -155,26 +138,15 @@ export function ConversationFilter({
   scope: GalleryScope | undefined;
   onChange: (scope: GalleryScope | undefined) => void;
 }) {
-  const workspaceId = useCurrentWorkspaceId() ?? "";
-  const channels = useQuery(channelNamesQuery(workspaceId)).data ?? [];
-  const directory = useWorkspaceDirectory().data;
-  const nameOf = useConversationName();
-  const workspace = useWorkspaceName();
+  const names = useConversationNames();
+  const labels = useScopeLabels();
   const label =
-    scope?.kind === "link"
-      ? m.av_vis_link()
-      : scope?.kind === "workspace"
-        ? m.av_vis_workspace({ workspace })
-        : scope
-          ? (nameOf(scope.conversationId) ?? m.ag_filter_conversation())
-          : m.ag_filter_conversation();
-  const rooms = [
-    ...channels.map((entry) => ({ id: entry.id, name: `#${entry.name}` })),
-    ...(directory?.people.flatMap((p) => (p.dmId ? [{ id: p.dmId, name: `@${p.name}` }] : [])) ??
-      []),
-    ...(directory?.agents.flatMap((a) => (a.dmId ? [{ id: a.dmId, name: `@${a.name}` }] : [])) ??
-      []),
-  ];
+    scope === undefined
+      ? m.ag_filter_conversation()
+      : scope.kind === "conversation"
+        ? (names.get(scope.conversationId) ?? m.ag_filter_conversation())
+        : labels[scope.kind];
+  const rooms = [...names].map(([id, name]) => ({ id, name }));
   return (
     <PickerChip
       label={scope ? m.ag_conversation_chip({ name: label }) : label}
@@ -188,12 +160,8 @@ export function ConversationFilter({
       >
         {(query) => {
           const visible = [
-            { kind: "link" as const, name: m.av_vis_link(), icon: visibilityIcon.link },
-            {
-              kind: "workspace" as const,
-              name: m.av_vis_workspace({ workspace }),
-              icon: visibilityIcon.workspace,
-            },
+            { kind: "link" as const, name: labels.link, icon: visibilityIcon.link },
+            { kind: "workspace" as const, name: labels.workspace, icon: visibilityIcon.workspace },
           ].filter((entry) => entry.name.toLowerCase().includes(query));
           const matching = rooms.filter((room) => room.name.toLowerCase().includes(query));
           return [

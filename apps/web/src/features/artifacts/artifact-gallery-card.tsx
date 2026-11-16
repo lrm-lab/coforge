@@ -12,8 +12,8 @@ import { ArtifactActor } from "./artifact-parts";
 import { isWebPageEntry } from "./artifact-path-kind";
 import { MarkdownPreview } from "./artifact-preview";
 import { useArtifactActor } from "./artifact-queries";
-import { artifactPageRoute } from "./artifact-search";
-import type { GalleryCard } from "./artifact-scope";
+import { artifactPageRoute, galleryEntryState } from "./artifact-search";
+import type { GalleryCard, useScopeOf } from "./artifact-scope";
 
 export function CardBadges({
   card,
@@ -61,7 +61,15 @@ function Preview({ card }: { card: GalleryCard }) {
   );
 }
 
-export function GalleryGridCard({ card, sort }: { card: GalleryCard; sort: GallerySort }) {
+export function GalleryGridCard({
+  card,
+  sort,
+  scope,
+}: {
+  card: GalleryCard;
+  sort: GallerySort;
+  scope: ReturnType<ReturnType<typeof useScopeOf>>;
+}) {
   const workspaceSlug = useWorkspaceSlug();
   const actorOf = useArtifactActor();
   return (
@@ -73,6 +81,7 @@ export function GalleryGridCard({ card, sort }: { card: GalleryCard; sort: Galle
         <p className="flex min-w-0 items-baseline gap-1.5">
           <Link
             {...artifactPageRoute(workspaceSlug, card.id)}
+            state={galleryEntryState}
             className="min-w-0 truncate text-sm font-semibold text-primary outline-none before:absolute before:inset-0"
           >
             {card.title || m.doc_untitled()}
@@ -83,7 +92,7 @@ export function GalleryGridCard({ card, sort }: { card: GalleryCard; sort: Galle
         </p>
         <div className="flex items-center justify-between gap-2 text-xs text-tertiary">
           <ArtifactActor actor={actorOf(card.author)} />
-          <GalleryCardVisibility card={card} />
+          <GalleryCardVisibility artifactId={card.id} tier={card.access} scope={scope} />
         </div>
         <CardBadges card={card} />
         <WhenLine card={card} sort={sort} className="text-xs text-quaternary" />

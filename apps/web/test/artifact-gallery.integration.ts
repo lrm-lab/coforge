@@ -118,6 +118,17 @@ test("recently opened puts what the person opened first, newest first, never-ope
   expect(opened.artifacts[2]!.openedAt).toBeNull();
 });
 
+test("opening an artifact answers with the roster that already counts the opener as viewing", async () => {
+  const roster = await positions.open({
+    workspaceId: f.workspaceId,
+    artifactId: ids.alpha!,
+    userId: f.alice,
+  });
+  expect(roster.you).toBe(f.alice);
+  expect(roster.viewingNow.map((person) => person.userId)).toContain(f.alice);
+  expect(roster.seen.map((person) => person.userId)).toContain(f.alice);
+});
+
 test("a page is stable and a cursor continues it, in both sorts", async () => {
   for (const sort of ["opened", "updated"] as const) {
     const first = await page(f.bob, { sort, limit: 2 });

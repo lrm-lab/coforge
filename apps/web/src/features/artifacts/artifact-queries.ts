@@ -71,6 +71,8 @@ export const artifactViewersQuery = (artifactId: string) =>
     staleTime: 0,
   });
 
+export type ArtifactViewers = Awaited<ReturnType<typeof loadArtifactViewers>>;
+
 export const artifactFollowingQuery = (artifactId: string) =>
   queryOptions({
     queryKey: [...ARTIFACTS_KEY, "following", artifactId],

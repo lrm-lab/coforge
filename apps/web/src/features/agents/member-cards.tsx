@@ -2,6 +2,7 @@ import { GridListItem } from "react-aria-components";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Archive, Calendar, DotsVertical, Edit01, Monitor01 as Monitor } from "@untitledui/icons";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -83,20 +84,13 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
       {total > 0 && (
         <div className="mt-auto flex justify-end pt-1">
           <Tooltip title={m.member_created_agents_tooltip()} arrow>
-            <TooltipTrigger className="flex cursor-default items-center -space-x-1.5 rounded-full outline-focus-ring focus-visible:outline-2">
+            <TooltipTrigger className="flex cursor-default items-center rounded-full outline-focus-ring focus-visible:outline-2">
               <span className="sr-only">{m.member_created_agents_count({ count: total })}</span>
-              {items.map((agent) => (
-                <AgentStackFace key={agent.id} agent={agent} />
-              ))}
-              {more > 0 && (
-                <ActorAvatar
-                  presence={false}
-                  size="xs"
-                  alt=""
-                  initials={`+${more}`}
-                  className="ring-2 ring-bg-primary"
-                />
-              )}
+              <ActorAvatarStack more={more}>
+                {items.map((agent) => (
+                  <AgentStackFace key={agent.id} agent={agent} />
+                ))}
+              </ActorAvatarStack>
             </TooltipTrigger>
           </Tooltip>
         </div>

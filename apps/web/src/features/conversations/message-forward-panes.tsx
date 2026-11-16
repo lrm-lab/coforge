@@ -96,7 +96,7 @@ export function ForwardTargetPane({
   failed,
   error,
   selected,
-  selectedLabel,
+  status,
   onToggle,
 }: {
   query: string;
@@ -107,7 +107,7 @@ export function ForwardTargetPane({
   failed: ReadonlyMap<string, ForwardFailureCode>;
   error: boolean;
   selected: ReadonlyMap<string, ForwardTarget>;
-  selectedLabel?: (count: number) => string;
+  status?: ReactNode;
   onToggle: (target: ForwardTarget, on: boolean) => void;
 }) {
   const rows = targets === null ? [...selected.values()] : pinnedTargets(selected, targets);
@@ -123,11 +123,7 @@ export function ForwardTargetPane({
           onChange={onQueryChange}
         />
       </div>
-      {selectedLabel && (
-        <p role="status" className="px-4 text-xs font-medium text-tertiary sm:px-6">
-          {selectedLabel(selected.size)}
-        </p>
-      )}
+      {status}
       {selected.size >= FORWARD_DESTINATIONS_MAX && (
         // Why the rest have greyed out.
         <p role="status" className="px-4 text-sm text-tertiary sm:px-6">
@@ -166,17 +162,8 @@ export function ForwardTargetPane({
 
 /** What arrives, as one line (`summary`) that opens into the whole of it (`preview`): the list is
  * the dialog's work, so the content stays out of its way until asked for. */
-function WhatArrives({
-  summary,
-  preview,
-  shown,
-}: {
-  summary: ReactNode;
-  preview: ReactNode;
-  shown: boolean;
-}) {
+export function WhatArrives({ summary, preview }: { summary: ReactNode; preview: ReactNode }) {
   const [open, setOpen] = useState(false);
-  if (shown) return preview;
   return (
     <div className="rounded-lg border border-secondary">
       <AriaButton
@@ -207,9 +194,8 @@ function WhatArrives({
  * 11-10), whose send button is named for what it does: how many it goes to, or that sending joins a
  * channel first. Enter sends, as in a conversation. */
 export function ForwardComposer({
-  summary,
-  preview,
-  previewShown = false,
+  arrives,
+  className,
   canSend,
   note,
   onNoteChange,
@@ -221,9 +207,8 @@ export function ForwardComposer({
   notice,
   joinNotice,
 }: {
-  summary: ReactNode;
-  preview: ReactNode;
-  previewShown?: boolean;
+  arrives: ReactNode;
+  className?: string;
   canSend: boolean;
   note: string;
   onNoteChange: (note: string) => void;
@@ -250,10 +235,10 @@ export function ForwardComposer({
     <div
       className={cn(
         "flex shrink-0 flex-col gap-3 border-t border-secondary px-4 pt-4 pb-[max(1rem,var(--spacing-safe-bottom))] sm:px-6 sm:pb-6",
-        previewShown && "sm:border-t-0",
+        className,
       )}
     >
-      <WhatArrives summary={summary} preview={preview} shown={previewShown} />
+      {arrives}
       {notice}
       {joinNotice && <p className="-mb-1 px-1 text-sm text-tertiary">{joinNotice}</p>}
       {/* A form, as under the messages: the send button submits it. */}

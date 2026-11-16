@@ -8,7 +8,7 @@ import { m } from "#src/paraglide/messages";
 import { loadArtifactMarks } from "./artifact-gallery.functions";
 import { CardBadges } from "./artifact-gallery-card";
 import { useScopeOf } from "./artifact-scope";
-import { plainPreview } from "./artifact-preview";
+import { MarkdownPreview } from "./artifact-preview";
 import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import {
@@ -87,6 +87,7 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
   return (
     <ArtifactCardFace
       card={card}
+      link={marks?.link}
       marks={marks ?? undefined}
       title={(title) => (
         <Link
@@ -105,13 +106,13 @@ type CardMarks = NonNullable<Awaited<ReturnType<typeof loadArtifactMarks>>[numbe
 
 export function ArtifactCardFace({
   card,
+  link,
   marks,
-  asPreview = false,
   title: titleAs,
 }: {
   card: ArtifactCard;
+  link?: boolean;
   marks?: CardMarks;
-  asPreview?: boolean;
   title?: (title: string) => ReactNode;
 }) {
   const actorOf = useArtifactActor();
@@ -119,7 +120,7 @@ export function ArtifactCardFace({
   const title = card.title || m.doc_untitled();
   const kind = kindLabel(card.entryPath);
   const scope = useScopeOf()({
-    link: marks?.link === true,
+    link: link === true,
     access: card.access,
     homeKey: card.homeKey ?? "",
   });
@@ -140,7 +141,7 @@ export function ArtifactCardFace({
             v{card.currentVersion}
           </span>
           <span className="shrink-0 text-xs text-quaternary">{kind}</span>
-          {marks && !asPreview && (
+          {marks && (
             <ArrowUpRight
               aria-hidden="true"
               className="ml-auto size-4 shrink-0 text-fg-quaternary"
@@ -148,13 +149,13 @@ export function ArtifactCardFace({
           )}
         </p>
         {card.preview && (
-          <p className="mt-0.5 line-clamp-2 text-sm whitespace-pre-line text-tertiary">
-            {plainPreview(card.preview)}
-          </p>
+          <div className="mt-0.5 line-clamp-2 text-sm text-tertiary">
+            <MarkdownPreview markdown={card.preview} />
+          </div>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <ArtifactEditedLine actor={actorOf(card.author)} time={time(card.updatedAt)} />
-          {marks && (
+          {link !== undefined && (
             <span className="flex items-center gap-1 text-xs text-tertiary">
               <scope.Icon aria-hidden="true" className="size-3.5 shrink-0" />
               <span className="max-w-32 truncate">{scope.label}</span>

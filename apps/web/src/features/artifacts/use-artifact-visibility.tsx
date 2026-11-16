@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Globe02, MessageChatCircle, Users01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -9,16 +8,9 @@ import { m } from "#src/paraglide/messages";
 import { useWorkspaceName } from "#src/features/workspaces/workspace-route";
 import { lossChanged, narrowRefusalMessage } from "./artifact-narrow-refusal";
 import { ARTIFACTS_KEY } from "./artifact-queries";
+import { useScopeLabels, visibilityIcon, type VisibilityChoice } from "./artifact-scope";
 import type { ArtifactLinkSharing } from "./artifact-link-sharing";
 import { loadArtifactAccessLoss, setArtifactAccess } from "./artifacts.functions";
-
-export type VisibilityChoice = "conversation" | "workspace" | "link";
-
-export const visibilityIcon = {
-  conversation: MessageChatCircle,
-  workspace: Users01,
-  link: Globe02,
-} as const;
 
 type Confirmation = { choice: VisibilityChoice; narrowing: boolean; linkOff: boolean };
 
@@ -33,16 +25,22 @@ function confirmationFor(
   return narrowing || linkOff ? { choice, narrowing, linkOff } : null;
 }
 
+export type ArtifactVisibility = ReturnType<typeof useArtifactVisibility>;
+
 export function useArtifactVisibility({
   artifactId,
   tier,
   link,
   homeName,
+  canChange,
+  narrowable,
 }: {
   artifactId: string;
   tier: "conversation" | "workspace";
   link: ArtifactLinkSharing;
   homeName: string | undefined;
+  canChange: boolean;
+  narrowable: boolean;
 }) {
   const queryClient = useQueryClient();
   const workspaceName = useWorkspaceName();
@@ -87,11 +85,8 @@ export function useArtifactVisibility({
     else void apply({ choice, narrowing: false, linkOff: false }).catch(() => undefined);
   };
 
-  const label = {
-    conversation: homeName ?? m.av_vis_home_dm(),
-    workspace: m.av_vis_workspace({ workspace: workspaceName }),
-    link: m.av_vis_link(),
-  } satisfies Record<VisibilityChoice, string>;
+  const scopeLabels = useScopeLabels();
+  const label = { ...scopeLabels, conversation: homeName ?? scopeLabels.conversation };
 
   const narrowDescription = {
     checking: m.av_vis_narrow_checking(),
@@ -176,23 +171,23 @@ export function useArtifactVisibility({
     />
   );
 
-  return { current, label, request, dialog };
+  return {
+    current,
+    label,
+    request,
+    dialog,
+    confirming: confirming !== null,
+    canChange,
+    narrowable,
+    linkAvailable: link.available,
+  };
 }
 
-export function VisibilityMenu({
-  visibility,
-  linkAvailable,
-  narrowable,
-  canChange = true,
-}: {
-  visibility: Pick<ReturnType<typeof useArtifactVisibility>, "current" | "label" | "request">;
-  linkAvailable: boolean;
-  narrowable: boolean;
-  canChange?: boolean;
-}) {
+export function VisibilityMenu({ visibility }: { visibility: ArtifactVisibility }) {
+  const { current, canChange, narrowable, linkAvailable } = visibility;
   const choices = (["conversation", "workspace", "link"] as const).filter(
     (choice) =>
-      choice === visibility.current ||
+      choice === current ||
       (canChange &&
         (choice !== "link" || linkAvailable) &&
         (choice !== "conversation" || narrowable)),
@@ -201,7 +196,7 @@ export function VisibilityMenu({
     <Dropdown.Menu
       aria-label={m.av_who_can_see()}
       selectionMode="single"
-      selectedKeys={[visibility.current]}
+      selectedKeys={[current]}
       onAction={(key) => visibility.request(key as VisibilityChoice)}
     >
       {choices.map((choice) => (

@@ -1,4 +1,4 @@
-import { redirect, useRouter } from "@tanstack/react-router";
+import { redirect, useLocation, useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { loadArtifactsOn } from "./artifacts-on.functions";
@@ -69,4 +69,16 @@ export async function redirectDocLink(
   const url = new URL(location.href, "http://local");
   for (const field of DOC_LINK_FIELDS) url.searchParams.delete(field);
   throw redirect({ href: `${url.pathname}${url.search}${url.hash}`, replace: true });
+}
+
+declare module "@tanstack/react-router" {
+  interface HistoryState {
+    artifactFrom?: "gallery";
+  }
+}
+
+export const galleryEntryState = { artifactFrom: "gallery" } as const;
+
+export function useArrivedFromGallery(): boolean {
+  return useLocation({ select: (location) => location.state.artifactFrom === "gallery" });
 }

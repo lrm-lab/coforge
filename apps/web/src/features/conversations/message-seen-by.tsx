@@ -8,6 +8,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorAvatarStack, AVATAR_STACK_RING } from "#src/features/avatars/actor-avatar-stack";
 import { formatMomentForDisplay } from "#src/lib/dates";
 import { cn } from "#src/lib/utils";
 import { useTimeFormat } from "#src/lib/time-format-context";
@@ -103,13 +104,13 @@ function ReaderAvatar({ reader, size = "xs" }: { reader: Reader; size?: "xs" | "
 /** The first few readers' faces, overlapping, after the count. */
 function ReaderFaces({ readers }: { readers: readonly Reader[] }) {
   return (
-    <span aria-hidden="true" className="ml-2 flex shrink-0 -space-x-1.5">
+    <ActorAvatarStack aria-hidden="true" className="ml-2 shrink-0">
       {readers.slice(0, 3).map((reader) => (
-        <span key={mentionKey(reader)} className="rounded-full ring-2 ring-bg-primary">
+        <span key={mentionKey(reader)} className={cn("rounded-full", AVATAR_STACK_RING.regular)}>
           <ReaderAvatar reader={reader} />
         </span>
       ))}
-    </span>
+    </ActorAvatarStack>
   );
 }
 

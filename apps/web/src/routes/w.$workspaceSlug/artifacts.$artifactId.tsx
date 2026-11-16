@@ -9,6 +9,7 @@ import { NotFoundPage } from "#src/features/errors/not-found-page";
 
 export const Route = createFileRoute("/w/$workspaceSlug/artifacts/$artifactId")({
   ssr: "data-only",
+  staticData: { standalone: true },
   component: ArtifactRoutePage,
 });
 

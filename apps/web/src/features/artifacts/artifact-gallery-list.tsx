@@ -8,7 +8,7 @@ import { useScopeOf, type GalleryCard } from "./artifact-scope";
 import type { GallerySort } from "./artifact-gallery-model";
 import { ArtifactActor, ArtifactIcon } from "./artifact-parts";
 import { useArtifactActor } from "./artifact-queries";
-import { artifactPageRoute } from "./artifact-search";
+import { artifactPageRoute, galleryEntryState } from "./artifact-search";
 
 export function GalleryList({ cards, sort }: { cards: GalleryCard[]; sort: GallerySort }) {
   const workspaceSlug = useWorkspaceSlug();
@@ -42,6 +42,7 @@ export function GalleryList({ cards, sort }: { cards: GalleryCard[]; sort: Galle
                     <ArtifactIcon entryPath={card.entryPath} size="sm" />
                     <Link
                       {...artifactPageRoute(workspaceSlug, card.id)}
+                      state={galleryEntryState}
                       className="min-w-0 truncate font-semibold text-primary outline-focus-ring after:absolute after:inset-0 focus-visible:outline-2"
                     >
                       {card.title || m.doc_untitled()}

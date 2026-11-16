@@ -13,7 +13,6 @@ import {
   conversationRealtimeChannel,
   workspaceConversationChannel,
 } from "#src/features/conversations/conversation-realtime";
-import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -29,10 +28,9 @@ import { ArtifactMoreMenu } from "./artifact-more-menu";
 import {
   ARTIFACT_TITLE_ID,
   ArtifactPageHeader,
-  useHomeName,
-  type ArtifactHome,
   type ArtifactPaneControls,
 } from "./artifact-page-header";
+import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
 import { ArtifactHomeChip } from "./artifact-home-chip";
 import { ArtifactPresenceChip, useKeepViewing, useRecordOpen } from "./artifact-presence-chip";
@@ -54,6 +52,7 @@ import { artifactPageRoute } from "./artifact-search";
 import { artifactDataEvents } from "./artifact-page-data-events";
 import { ArtifactWebPage } from "./artifact-web-page";
 import { VisibilityPill } from "./artifact-visibility-pill";
+import { useConversationName } from "./use-conversation-name";
 import { useArtifactActions } from "./use-artifact-actions";
 import { useArtifactVisibility } from "./use-artifact-visibility";
 
@@ -101,12 +100,17 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     conversationId: homeId ?? null,
   };
   const link = useArtifactLinkSharing(artifactId, current !== undefined);
-  const homeName = useHomeName(home);
+  const nameOf = useConversationName();
+  const homeConversation = homeConversationOf(home);
+  const homeName = homeConversation ? nameOf(homeConversation) : undefined;
+  const canChange = current?.artifact.canChange === true;
   const visibility = useArtifactVisibility({
     artifactId,
     tier: current?.artifact.access ?? "conversation",
     link,
     homeName,
+    canChange,
+    narrowable: current?.artifact.narrowable === true,
   });
 
   useRealtimeSubscription({
@@ -135,7 +139,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     },
   });
 
-  useRecordOpen(artifactId, latest);
+  const opened = useRecordOpen(artifactId, latest);
   useKeepViewing(artifactId, latest > 0);
 
   const entryPath = current?.artifact.entryPath;
@@ -149,16 +153,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, artifactId)).publicHref}`;
   const backHome = () => {
     if (pane) pane.onClose();
-    else if (home?.conversationId && home.kind !== "workspace")
-      void router.navigate(
-        conversationRoute(
-          home.kind === "channel"
-            ? { channelId: home.conversationId }
-            : { dmId: home.conversationId },
-          workspaceSlug,
-        ),
-      );
-    else void router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } });
+    else void router.navigate(homeLinkProps(home, workspaceSlug));
   };
   const viewLatest = () => {
     setIncoming(null);
@@ -171,7 +166,6 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     setPinned(version === latest ? null : version);
   };
   const files = current?.files ?? [];
-  const canChange = current?.artifact.canChange === true;
   const { onMoreAction, dialogs, following } = useArtifactActions({
     artifactId,
     homeId: homeId ?? null,
@@ -210,6 +204,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         title={title}
         shownVersion={current ? shownVersion : undefined}
         home={home}
+        homeName={homeName}
         pane={pane}
         onChooseVersion={choose}
         onFind={webPage && !openPath ? () => setFinding(true) : undefined}
@@ -217,14 +212,11 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         pills={
           current && (
             <>
-              <VisibilityPill
-                visibility={visibility}
-                narrowable={current.artifact.narrowable}
-                canChange={canChange}
-                linkAvailable={link.available}
-              />
-              {home && visibility.current !== "conversation" && <ArtifactHomeChip home={home} />}
-              <ArtifactPresenceChip artifactId={artifactId} />
+              <VisibilityPill visibility={visibility} />
+              {home && (
+                <ArtifactHomeChip home={home} homeName={homeName} scope={visibility.current} />
+              )}
+              <ArtifactPresenceChip artifactId={artifactId} ready={opened} />
             </>
           )
         }
@@ -235,13 +227,10 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
               shownVersion={shownVersion}
               phone={phone}
               fileCount={files.length}
-              canChange={canChange}
               canDelete={current.canDelete}
               canFind={webPage}
               following={following}
               visibility={visibility}
-              narrowable={current.artifact.narrowable}
-              linkAvailable={link.available}
               onChooseVersion={choose}
               onAction={onMoreAction}
             />
@@ -304,6 +293,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
           canChange={canChange}
           tier={current?.artifact.access ?? "conversation"}
           linkAvailable={link.available}
+          link={link.url !== null}
           onClose={() => setSendingTo(false)}
         />
       )}

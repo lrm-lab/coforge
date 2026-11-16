@@ -24,6 +24,7 @@ import {
 } from "./artifact-gallery-model";
 import { ArtifactIcon } from "./artifact-parts";
 import { ARTIFACTS_KEY } from "./artifact-queries";
+import { useScopeOf } from "./artifact-scope";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -52,6 +53,7 @@ export function ArtifactGalleryPage() {
   const [filters, setFilters] = useState<GalleryFilters>(initialFilters);
   const [typed, setTyped] = useState("");
   const [view, setView] = useGalleryView();
+  const scopeOf = useScopeOf();
   useEffect(() => {
     const timer = setTimeout(
       () => setFilters((previous) => ({ ...previous, query: typed.trim() })),
@@ -117,7 +119,12 @@ export function ArtifactGalleryPage() {
             {view === "grid" ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
                 {cards.map((card) => (
-                  <GalleryGridCard key={card.id} card={card} sort={filters.sort} />
+                  <GalleryGridCard
+                    key={card.id}
+                    card={card}
+                    sort={filters.sort}
+                    scope={scopeOf(card)}
+                  />
                 ))}
               </div>
             ) : (

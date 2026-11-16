@@ -28,6 +28,7 @@ import {
   isUnjoinedChannel,
 } from "./message-forward-model";
 import { ForwardComposer, ForwardTargetPane } from "./message-forward-panes";
+import { stackedShareLayout, type ShareLayout } from "./share-dialog-layout";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -43,7 +44,6 @@ export type ShareDialogCopy = {
   title: string;
   send: string;
   sendTo: (count: number) => string;
-  selected?: (count: number) => string;
   joinAndSend: string;
   joinNotice: (channels: string) => string;
   sentTo: (target: string) => string;
@@ -61,10 +61,10 @@ export function ConversationShareDialog({
   errorNotice,
   onClose,
   onDelivered,
-  split = false,
+  layout = stackedShareLayout,
 }: {
   copy: ShareDialogCopy;
-  summary: ReactNode;
+  summary?: ReactNode;
   preview: ReactNode;
   noteMaxLength: number;
   deliver: (input: {
@@ -75,7 +75,7 @@ export function ConversationShareDialog({
   errorNotice: (error: unknown) => ShareNotice;
   onClose: () => void;
   onDelivered?: () => void;
-  split?: boolean;
+  layout?: ShareLayout;
 }) {
   const router = useRouter();
   const toast = useAppToast();
@@ -273,10 +273,7 @@ export function ConversationShareDialog({
         className="max-sm:px-0 max-sm:[--modal-pb:0px]"
       >
         <Modal
-          className={cn(
-            "w-full max-sm:rounded-t-2xl max-sm:rounded-b-none",
-            split ? "sm:max-w-4xl" : "sm:max-w-lg",
-          )}
+          className={cn("w-full max-sm:rounded-t-2xl max-sm:rounded-b-none", layout.modalClassName)}
         >
           <Dialog className="flex max-h-[inherit] flex-col overflow-y-auto text-left max-sm:h-[min(88dvh,var(--visual-viewport-height))]">
             <div
@@ -288,19 +285,8 @@ export function ConversationShareDialog({
               onClose={sending ? undefined : guard.requestClose}
               className="px-4 pt-3 pb-3 sm:px-6 sm:pt-5"
             />
-            <div
-              className={cn(
-                split
-                  ? "flex min-h-0 flex-1 flex-col sm:flex-row sm:border-t sm:border-secondary"
-                  : "contents",
-              )}
-            >
-              <div
-                className={cn(
-                  "flex min-h-24 flex-1 flex-col",
-                  split ? "sm:min-h-[26rem] sm:basis-1/2 sm:pt-4" : "sm:flex-[0_1_20rem]",
-                )}
-              >
+            {layout.arrange({
+              target: (
                 <ForwardTargetPane
                   query={query}
                   onQueryChange={setQuery}
@@ -308,19 +294,14 @@ export function ConversationShareDialog({
                   failed={failed}
                   error={targets.isError}
                   selected={selected}
-                  selectedLabel={copy.selected}
+                  status={layout.targetStatus?.(selected.size)}
                   onToggle={toggle}
                 />
-              </div>
-              <div
-                className={
-                  split ? "flex flex-col sm:basis-1/2 sm:border-l sm:border-secondary" : "contents"
-                }
-              >
+              ),
+              composer: (
                 <ForwardComposer
-                  summary={summary}
-                  preview={preview}
-                  previewShown={split}
+                  arrives={layout.arrives({ summary, preview })}
+                  className={layout.composerClassName}
                   canSend={picked.length > 0 && !sending}
                   note={note}
                   onNoteChange={setNote}
@@ -346,8 +327,8 @@ export function ConversationShareDialog({
                       : undefined
                   }
                 />
-              </div>
-            </div>
+              ),
+            })}
           </Dialog>
         </Modal>
       </ModalOverlay>

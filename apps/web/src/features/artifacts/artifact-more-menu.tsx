@@ -19,7 +19,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
 import { VersionMenu } from "./artifact-version-menu";
-import { VisibilityMenu, type useArtifactVisibility } from "./use-artifact-visibility";
+import { VisibilityMenu, type ArtifactVisibility } from "./use-artifact-visibility";
 
 export type MoreAction =
   | "find"
@@ -37,13 +37,10 @@ export function ArtifactMoreMenu({
   shownVersion,
   phone,
   fileCount,
-  canChange,
   canDelete,
   canFind,
   following,
   visibility,
-  narrowable,
-  linkAvailable,
   onChooseVersion,
   onAction,
 }: {
@@ -51,13 +48,10 @@ export function ArtifactMoreMenu({
   shownVersion: number;
   phone: boolean;
   fileCount: number;
-  canChange: boolean;
   canDelete: boolean;
   canFind: boolean;
   following: boolean;
-  visibility: Pick<ReturnType<typeof useArtifactVisibility>, "current" | "label" | "request">;
-  narrowable: boolean;
-  linkAvailable: boolean;
+  visibility: ArtifactVisibility;
   onChooseVersion: (version: number) => void;
   onAction: (action: MoreAction) => void;
 }) {
@@ -70,22 +64,22 @@ export function ArtifactMoreMenu({
             <Dropdown.Item id="find" icon={SearchLg} label={m.doc_page_find()} />
           )}
           {phone && <Dropdown.Item id="copy-link" icon={Link01} label={m.doc_copy_link()} />}
-          {linkAvailable && <Dropdown.Item id="embed" icon={Code01} label={m.av_menu_embed()} />}
+          {visibility.linkAvailable && (
+            <Dropdown.Item id="embed" icon={Code01} label={m.av_menu_embed()} />
+          )}
           <Dropdown.Item id="send" icon={Send01} label={m.doc_send_action()} />
-          {canChange && (
+          {visibility.canChange && (
             <SubmenuTrigger>
               <Dropdown.Item id="who" icon={Users01} label={m.av_who_can_see()} />
               <Dropdown.SubmenuPopover className="w-64">
-                <VisibilityMenu
-                  visibility={visibility}
-                  linkAvailable={linkAvailable}
-                  narrowable={narrowable}
-                />
+                <VisibilityMenu visibility={visibility} />
               </Dropdown.SubmenuPopover>
             </SubmenuTrigger>
           )}
           <Dropdown.Separator />
-          {canChange && <Dropdown.Item id="rename" icon={Edit03} label={m.av_menu_rename()} />}
+          {visibility.canChange && (
+            <Dropdown.Item id="rename" icon={Edit03} label={m.av_menu_rename()} />
+          )}
           <SubmenuTrigger>
             <Dropdown.Item id="versions" icon={ClockRewind} label={m.av_versions()} />
             <Dropdown.SubmenuPopover className="w-72">

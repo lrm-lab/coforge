@@ -23,7 +23,8 @@ import {
  * who is viewing, then find, copy link and more; the presence popover lists who is viewing now
  * (you first) and who looked before; the Workspace scope names the Workspace; the gallery's
  * conversation filter opens with a "who can see" group that filters by visibility; the send dialog
- * counts what is selected and previews the artifact. Markdown artifacts only, so it needs no
+ * counts what is selected and previews the artifact; a viewer reached from the gallery goes back to it.
+ * Markdown artifacts only, so it needs no
  * sandbox origin. Opt-in like every `.e2e.ts`:
  *   COFORGE_E2E_WEB_URL=... DATABASE_URL=... bun test ./test/e2e-artifact-viewer-parity.e2e.ts
  * against a Web started with `COFORGE_FEATURE_FLAGS_FILE=/tmp/coforge-flags-docs.json`.
@@ -161,6 +162,24 @@ test("the viewer's own window and header, its presence list, the gallery's visib
       `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Everyone in ${workspaceName}")`,
     );
     await chrome.until(`${text(`Team notes ${tail}`)} && !${text(`Launch plan ${tail}`)}`);
+    await browser("press", "Escape");
+    await chrome.until(`document.querySelector('[role="dialog"]') == null`);
+    await chrome.press(`document.querySelector('main article button[aria-label^="Who can see:"]')`);
+    await chrome.until(
+      `[...document.querySelectorAll('[role="menuitemradio"]')].some((i) => i.textContent.includes("Everyone in ${workspaceName}"))`,
+    );
+    await chrome.closeMenus();
+    await chrome.press(
+      `[...document.querySelectorAll("main a")].find((a) => a.textContent.trim() === "Team notes ${tail}")`,
+    );
+    await browser("wait", "--fn", ready, "--timeout", "30000");
+    expect(await evaluate<string>(`document.querySelector('${header} a').textContent.trim()`)).toBe(
+      "Artifacts",
+    );
+    await chrome.press(`document.querySelector('${header} a')`);
+    await chrome.until(
+      `location.pathname.endsWith("/artifacts") && ${text(`Launch plan ${tail}`)}`,
+    );
 
     await browser("open", pageOf(doc.id));
     await browser("wait", "--fn", ready, "--timeout", "30000");
