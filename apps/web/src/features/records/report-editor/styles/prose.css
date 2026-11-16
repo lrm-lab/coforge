@@ -573,3 +573,36 @@
 .rich-text-editor[contenteditable="false"] p.section-gap-empty {
   min-height: 0;
 }
+
+/* A weekly report's sections while its writer edits it (jing, task #118): each section heading sits
+ * on a light strip, and a section with nothing written yet is an input box that says so, so the
+ * writer sees at once where to type. The box is the room above (`.section-gap`, or the empty
+ * paragraph the caret is in); written text needs no box. A reader sees the plain report. */
+.report-sections .rich-text-editor[contenteditable="true"] h2 {
+  margin-inline: -0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-secondary);
+}
+
+.report-sections .rich-text-editor[contenteditable="true"] .section-gap,
+.report-sections .rich-text-editor[contenteditable="true"] p.section-gap-empty {
+  margin-inline: -0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border-secondary);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-primary);
+}
+
+.report-sections .rich-text-editor[contenteditable="true"] .section-gap::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-placeholder);
+}
+
+.report-sections .rich-text-editor[contenteditable="true"] p.section-gap-empty::before {
+  content: attr(data-section-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--color-text-placeholder);
+}

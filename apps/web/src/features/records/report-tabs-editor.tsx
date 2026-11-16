@@ -495,7 +495,7 @@ export function ReportTabsEditor({
                 key={`${activeTab}:${contentRevision}`}
                 defaultValue={activeContent}
                 placeholder={placeholder}
-                className="min-h-[55vh]"
+                className="report-sections min-h-[55vh]"
                 editable={editable}
                 onUploadFile={onUploadFile}
                 onUpdate={updateMarkdown}
@@ -521,7 +521,7 @@ export function ReportTabsEditor({
               key={`${activeTab}:${contentRevision}`}
               defaultValue={activeContent}
               placeholder={placeholder}
-              className="min-h-[55vh] pb-[45vh]"
+              className="report-sections min-h-[55vh] pb-[45vh]"
               editable={editable}
               onUploadFile={onUploadFile}
               onUpdate={updateMarkdown}

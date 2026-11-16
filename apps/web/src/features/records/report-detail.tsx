@@ -358,8 +358,10 @@ export function ReportDetail({
 
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      {/* A violet wash behind the report's top, 202px tall (jing, task #118): #5D36DC at 10%,
+          fading out; dark mode needs a little more to show on its darker ground. */}
       <div
-        className={`${sideOpen ? "hidden lg:flex" : "flex"} relative min-w-0 flex-1 flex-col overflow-hidden`}
+        className={`${sideOpen ? "hidden lg:flex" : "flex"} relative min-w-0 flex-1 flex-col overflow-hidden bg-[linear-gradient(to_bottom,rgb(93_54_220/0.1),rgb(93_54_220/0)_202px)] bg-no-repeat dark:bg-[linear-gradient(to_bottom,rgb(93_54_220/0.16),rgb(93_54_220/0)_202px)]`}
       >
         <ReportDetailHeader
           report={report}

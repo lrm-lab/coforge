@@ -78,6 +78,7 @@
   "records_report_delete_action": "删除周报",
   "records_report_saving": "保存中…",
   "records_report_body_placeholder": "开始写周报…",
+  "records_section_placeholder": "请输入正文",
   "records_report_send": "发送",
   "records_report_save": "保存",
   "records_report_confirm_send_title": "确认发送？",

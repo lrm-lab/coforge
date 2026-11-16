@@ -37,13 +37,27 @@ test("clicking into an empty section and leaving saves nothing; typing there sav
       room.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
       return true;
     })()`);
+  /** What each box `selector` finds says (its `::before`), when it is drawn with a border. */
+  const boxWords = (selector: string) =>
+    `[...document.querySelectorAll(${selector})].map((box) => getComputedStyle(box).borderTopWidth === "1px" ? getComputedStyle(box, "::before").content : "no box")`;
   try {
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${path}`);
     await browser("wait", "--fn", `${pageHydrated} && ${gaps} === 2`);
+    // The writer's own report draws each room as an input box that says where to write (task #118).
+    expect(await evaluate<string[]>(boxWords(`".ProseMirror .section-gap"`))).toEqual([
+      '"Write here"',
+      '"Write here"',
+    ]);
 
     await pressGap(0);
     await browser("wait", "--fn", `${underFirst} === "P"`);
+    // Clicked into, it is still the box, still saying it until something is typed. (The editor
+    // also keeps an empty paragraph at the end, so the last section's room is one too: the same box.)
+    expect(await evaluate<string[]>(boxWords(`".ProseMirror p.section-gap-empty"`))).toEqual([
+      '"Write here"',
+      '"Write here"',
+    ]);
     expect(await evaluate<boolean>(`document.activeElement?.closest(".ProseMirror") != null`)).toBe(
       true,
     );
@@ -62,6 +76,12 @@ test("clicking into an empty section and leaving saves nothing; typing there sav
     await browser("wait", "--fn", `!document.body.innerText.includes("Saving")`);
     await browser("wait", "1500");
     expect(await saved()).toEqual(["## Work Summary\n\nShipped the gap\n\n## Next Steps"]);
+    // Written, the section is plain text: only the section still unwritten keeps its box.
+    expect(
+      await evaluate<string[]>(
+        boxWords(`".ProseMirror p.section-gap-empty, .ProseMirror .section-gap"`),
+      ),
+    ).toEqual(['"Write here"']);
   } finally {
     await browser("close").catch(() => undefined);
     await remove();

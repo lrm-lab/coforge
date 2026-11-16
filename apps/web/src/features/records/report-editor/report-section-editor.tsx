@@ -2,6 +2,7 @@ import type { Ref } from "react";
 
 import { ContentEditor, type ContentEditorProps, type ContentEditorRef } from "./content-editor";
 import type { UploadResult } from "./types";
+import { m } from "#src/paraglide/messages";
 
 export type ReportSectionEditorProps = {
   defaultValue: string;
@@ -40,6 +41,7 @@ export function ReportSectionEditor({
     showBubbleMenu: editable,
     debounceMs: 150,
     sectionGaps: true,
+    sectionGapPlaceholder: m.records_section_placeholder(),
   };
   return <ContentEditor ref={editorRef} {...props} />;
 }
