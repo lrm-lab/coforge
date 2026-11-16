@@ -11,8 +11,18 @@ export type ImportantUnreadRecord = Pick<ImportantUnreadNoticeStore, "save" | "c
 /** What writing a notice means to the rest of the daemon: put it into the Agent's process, and
  * tell a person when nothing more can be done. Both are the delivery path's own concerns. */
 export type ImportantUnreadReminderPorts = Readonly<{
-  /** Writes the notice into the Agent's process; false when it could not be accepted. */
-  write(agentId: string, notice: ImportantUnreadNotice): boolean;
+  /** Writes the notice into the Agent's process; false when it could not be accepted. `text` is what
+   * `compose` said at this attempt. */
+  write(agentId: string, notice: ImportantUnreadNotice, text?: string): boolean;
+  /** The notice as it reads now, from the Agent's current unread — never a snapshot of the first
+   * attempt, so a retry fifteen minutes later counts what has arrived since. Undefined when there is
+   * nothing to build it from. */
+  compose?(
+    agentId: string,
+    notice: ImportantUnreadNotice,
+    /** What this batch announced, oldest first. */
+    deliveries: readonly ImportantUnreadDelivery[],
+  ): string | undefined;
   /** The retries are used up and the Agent has not read: one error, once per batch. */
   report(agentId: string, notice: ImportantUnreadNotice): void;
 }>;
@@ -26,6 +36,10 @@ export type ImportantUnreadReminderPorts = Readonly<{
 export class ImportantUnreadReminder {
   /** Batches already reported as exhausted, so a sweep does not repeat the error. */
   readonly #reported = new Set<string>();
+  /** The deliveries each batch announced, kept only in memory: they are how a later attempt still
+   * knows which messages it is about. A record taken over after a restart has none, and composes
+   * from the queue alone. */
+  readonly #batches = new Map<string, ImportantUnreadDelivery[]>();
 
   constructor(
     private readonly notices: ImportantUnreadNotices,
@@ -40,6 +54,11 @@ export class ImportantUnreadReminder {
     for (const delivery of deliveries) {
       const notice = this.notices.observe(delivery);
       if (!notice) continue;
+      // One pending notice per Agent, so the batch is the Agent's: a later arrival joins it rather
+      // than starting another, which is what makes a retry count three instead of one.
+      const batch = this.#batches.get(notice.agentId) ?? [];
+      batch.push(delivery);
+      this.#batches.set(notice.agentId, batch);
       this.store.save(notice);
       this.#writeIfDue(notice.agentId);
     }
@@ -49,6 +68,7 @@ export class ImportantUnreadReminder {
   consumed(agentId: string, consumedThroughSequence: number): void {
     if (!this.notices.settle(agentId, consumedThroughSequence)) return;
     this.#reported.delete(agentId);
+    this.#batches.delete(agentId);
     this.store.clear(agentId);
   }
 
@@ -67,7 +87,8 @@ export class ImportantUnreadReminder {
     const notice = this.notices.pending(agentId);
     if (!notice) return;
     if (this.notices.dueForWrite(agentId, this.now())) {
-      if (!this.ports.write(agentId, notice)) return;
+      const text = this.ports.compose?.(agentId, notice, this.#batches.get(agentId) ?? []);
+      if (!this.ports.write(agentId, notice, text)) return;
       const written = this.notices.recordWritten(agentId, this.now());
       if (written) this.store.save(written);
     }

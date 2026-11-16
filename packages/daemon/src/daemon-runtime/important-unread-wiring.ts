@@ -1,4 +1,8 @@
-import { ImportantUnreadNotices, type ImportantUnreadNotice } from "./important-unread-notice";
+import {
+  ImportantUnreadNotices,
+  type ImportantUnreadDelivery,
+  type ImportantUnreadNotice,
+} from "./important-unread-notice";
 import { ImportantUnreadReminder, type ImportantUnreadRecord } from "./important-unread-reminder";
 
 /** What the daemon supplies so an unread batch can be put in front of its Agent: the running
@@ -12,6 +16,13 @@ export type ImportantUnreadWiringPorts = Readonly<{
   unread(agentId: string): readonly { target: string; count: number }[];
   /** One error Activity for a batch whose retries ran out. */
   report(agentId: string, notice: ImportantUnreadNotice): void;
+  /** The batch's own notice as it reads now, composed by the attention index from the Agent's
+   * current unread. Every attempt asks again, so a retry counts what arrived since. */
+  compose?(
+    agentId: string,
+    notice: ImportantUnreadNotice,
+    deliveries: readonly ImportantUnreadDelivery[],
+  ): string | undefined;
 }>;
 
 /**
@@ -43,15 +54,22 @@ export function importantUnreadNoticeText(
 export function composeImportantUnreadReminder(ports: ImportantUnreadWiringPorts) {
   const notices = new ImportantUnreadNotices();
   return new ImportantUnreadReminder(notices, ports.store, {
-    write: (agentId, notice) => {
+    write: (agentId, notice, batch) => {
       const session = ports.session(agentId);
       if (!session?.notify) return false;
-      const text = importantUnreadNoticeText(notice, ports.unread(agentId));
+      // A retry repeats the batch's own words; only a record taken over after a restart, whose
+      // words did not survive, falls back to the standing text.
+      const text = batch ?? importantUnreadNoticeText(notice, ports.unread(agentId));
       // The session queues the text into the Agent's input; a rejection this call cannot see is
       // the delivery layer's to report, so it is not treated as a refusal here.
       void session.notify(text).catch(() => undefined);
       return true;
     },
     report: (agentId, notice) => ports.report(agentId, notice),
+    ...(ports.compose
+      ? {
+          compose: (agentId, notice, deliveries) => ports.compose!(agentId, notice, deliveries),
+        }
+      : {}),
   });
 }

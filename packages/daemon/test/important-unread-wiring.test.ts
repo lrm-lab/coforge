@@ -4,7 +4,11 @@ import {
   importantUnreadNoticeText,
   type ImportantUnreadWiringPorts,
 } from "#src/daemon-runtime/important-unread-wiring";
-import type { ImportantUnreadNotice } from "#src/daemon-runtime/important-unread-notice";
+import {
+  ImportantUnreadNotices,
+  type ImportantUnreadNotice,
+} from "#src/daemon-runtime/important-unread-notice";
+import { ImportantUnreadReminder } from "#src/daemon-runtime/important-unread-reminder";
 
 // The loop decides when to speak; this binds it to the daemon so what it says is a nudge that
 // names where the messages are, and a session that is gone is a refusal (so the retry stays), not
@@ -95,4 +99,48 @@ test("best-effort traffic never reaches the process through this wiring", () => 
   const { reminder, written } = harness();
   reminder.observeDeliveries([{ ...mention(12), mentionsAgent: false }]);
   expect(written).toHaveLength(0);
+});
+
+test("a retry counts what has arrived since, not the first attempt's snapshot", () => {
+  // Fifteen minutes later the queue has moved on: the second write has to describe the unread at
+  // that moment, or the Agent is told about two messages and finds four (raft, #14 seq 48).
+  let clock = 1_000;
+  let unread = 1;
+  const written: string[] = [];
+  const reminder = new ImportantUnreadReminder(
+    new ImportantUnreadNotices(),
+    { save: () => undefined, clear: () => undefined, list: () => [] },
+    {
+      compose: (_agentId, _notice, deliveries) => `Inbox: ${deliveries.length + unread - 1}`,
+      write: (_agentId, _notice, text) => {
+        written.push(text ?? "standing text");
+        return true;
+      },
+      report: () => undefined,
+    },
+    () => clock,
+  );
+  reminder.observeDeliveries([mention(12)]);
+  clock += 60_000;
+  // Two more arrived in the same conversation while the batch waited: the retry merges them.
+  reminder.observeDeliveries([mention(13), mention(14)]);
+  unread = 3;
+  reminder.flushDue();
+  // Each arrival is its own reason to speak, and each write counts everything known by then: no
+  // attempt repeats the snapshot an earlier one took.
+  expect(written).toEqual(["Inbox: 1", "Inbox: 2", "Inbox: 3"]);
+});
+
+test("a record taken over after a restart has no words of its own, so the standing text is used", () => {
+  const { reminder, written } = harness({
+    store: {
+      save: () => undefined,
+      clear: () => undefined,
+      list: () => [notice({ attempts: 1 })],
+    },
+  });
+  reminder.restore();
+  reminder.flushDue();
+  expect(written).toHaveLength(1);
+  expect(written[0]!.text).toContain("Still not read");
 });
