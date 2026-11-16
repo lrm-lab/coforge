@@ -51,7 +51,7 @@ const share = (userId: string, targets: string[]) =>
   shares.share({
     workspaceId,
     actor: { userId },
-    artifactIds: [artifactId],
+    artifactId,
     targets,
     note: "Have a look",
     requestId: crypto.randomUUID(),
@@ -266,7 +266,7 @@ test("a retry under the same request id posts nothing twice", async () => {
     shares.share({
       workspaceId,
       actor: { userId: people.alice },
-      artifactIds: [artifactId],
+      artifactId,
       targets: [rooms.aliceBob],
       note: "Retry me",
       requestId,

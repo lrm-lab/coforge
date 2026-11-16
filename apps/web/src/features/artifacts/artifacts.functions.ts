@@ -122,7 +122,7 @@ export const shareArtifact = createServerFn({ method: "POST" })
     return productionArtifactShares(db, (workspace) => artifactsEnabled(db, workspace)).share({
       workspaceId,
       actor: { userId: user.id },
-      artifactIds: [data.artifactId],
+      artifactId: data.artifactId,
       targets: data.destinations,
       note: data.note || undefined,
       requestId: data.requestId,

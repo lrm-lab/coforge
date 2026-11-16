@@ -8,7 +8,7 @@ test("artifact share posts one live-link message per target with derived keys, t
   const db = {
     workspace: { findUnique: async () => ({ slug: "docs" }) },
     artifact: {
-      findMany: async () => [{ id: ARTIFACT, title: "Launch plan", homeKey: "workspace" }],
+      findFirst: async () => ({ id: ARTIFACT, title: "Launch plan", homeKey: "workspace" }),
     },
     workspaceMembership: { findUnique: async () => ({ userId: "user-1" }) },
     agent: { findFirst: async () => ({ id: "agent-owner" }) },
@@ -18,7 +18,7 @@ test("artifact share posts one live-link message per target with derived keys, t
   const result = await shares.share({
     workspaceId: "workspace-1",
     actor: { userId: "user-1" },
-    artifactIds: [ARTIFACT],
+    artifactId: ARTIFACT,
     targets: ["#launch", "@ada"],
     note: "Please review",
     requestId: "00000000-0000-4000-8000-000000000002",
@@ -40,7 +40,7 @@ test("artifact share refuses a non-member's artifact before sending", async () =
   const db = {
     workspace: { findUnique: async () => ({ slug: "docs" }) },
     artifact: {
-      findMany: async () => [{ id: ARTIFACT, title: "Private", homeKey: "workspace" }],
+      findFirst: async () => ({ id: ARTIFACT, title: "Private", homeKey: "workspace" }),
     },
     // Every member reads every artifact (task #20); a non-member hears NOT_FOUND.
     workspaceMembership: { findUnique: async () => null },
@@ -51,7 +51,7 @@ test("artifact share refuses a non-member's artifact before sending", async () =
     shares.share({
       workspaceId: "workspace-1",
       actor: { userId: "user-1" },
-      artifactIds: [ARTIFACT],
+      artifactId: ARTIFACT,
       targets: ["#launch"],
       requestId: "00000000-0000-4000-8000-000000000002",
       send: async () => {
@@ -69,9 +69,11 @@ test("a home the Workspace hides is not shared", async () => {
   const db = {
     workspace: { findUnique: async () => ({ slug: "docs" }) },
     artifact: {
-      findMany: async () => [
-        { id: ARTIFACT, title: "Hidden home", homeKey: `conversation:${home}` },
-      ],
+      findFirst: async () => ({
+        id: ARTIFACT,
+        title: "Hidden home",
+        homeKey: `conversation:${home}`,
+      }),
     },
     workspaceMembership: { findUnique: async () => ({ userId: "user-1" }) },
     agent: { findFirst: async () => null },
@@ -83,7 +85,7 @@ test("a home the Workspace hides is not shared", async () => {
     shares.share({
       workspaceId: "workspace-1",
       actor: { userId: "user-1" },
-      artifactIds: [ARTIFACT],
+      artifactId: ARTIFACT,
       targets: ["#launch"],
       requestId: "00000000-0000-4000-8000-000000000002",
       send: async ({ body }) => {
@@ -95,7 +97,7 @@ test("a home the Workspace hides is not shared", async () => {
   expect(sent).toHaveLength(0);
 });
 
-test("artifact sharing rejects more than twenty artifacts or targets", async () => {
+test("artifact sharing rejects more than twenty targets", async () => {
   const shares = new ArtifactShares({} as never, async () => true);
   const send = async () => ({ id: "message", sequence: 1 });
   const base = {
@@ -107,14 +109,7 @@ test("artifact sharing rejects more than twenty artifacts or targets", async () 
   await expect(
     shares.share({
       ...base,
-      artifactIds: Array.from({ length: 21 }, () => ARTIFACT),
-      targets: ["#launch"],
-    }),
-  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
-  await expect(
-    shares.share({
-      ...base,
-      artifactIds: [ARTIFACT],
+      artifactId: ARTIFACT,
       targets: Array.from({ length: 21 }, (_, index) => `#launch-${index}`),
     }),
   ).rejects.toMatchObject({ code: "INVALID_INPUT" });

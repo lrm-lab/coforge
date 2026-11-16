@@ -2,8 +2,6 @@ import { z } from "zod";
 
 import { FORWARD_DESTINATIONS_MAX } from "#src/features/conversations/message-forward";
 
-/** How much one artifact share request may carry: the service refuses more. */
-export const ARTIFACT_SHARE_MAX_ARTIFACTS = 20;
 export const ARTIFACT_SHARE_MAX_TARGETS = 20;
 /** The note a share carries above its links. */
 export const ARTIFACT_SHARE_NOTE_MAX_LENGTH = 500;
