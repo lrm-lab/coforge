@@ -16,7 +16,7 @@ import { Select } from "#src/components/base/select/select";
 import { m } from "#src/paraglide/messages";
 import { AgentFastModeField } from "./agent-fast-mode-field";
 import { AgentModelSizeFields } from "./agent-model-size-fields";
-import { initialModelSizes } from "./agent-model-sizes";
+import { initialModelSizes, modelSizesApply } from "./agent-model-sizes";
 import { AgentReasoningField } from "./agent-reasoning-field";
 import { KEYED_MODEL_PROVIDERS, PI_BUILTIN_MODEL_PROVIDERS } from "./agent.schemas";
 import { ModelComboBox } from "./model-combobox";
@@ -118,6 +118,7 @@ export function AgentRuntimeFields({
   const isPi = provider === RUNTIME_PROVIDER.PI;
   const piConfigured = isPi && piProviderChoice === "";
   const piBuiltin = isPi && !piConfigured;
+  const sizesApply = modelSizesApply(provider, piBuiltin ? piProviderChoice : "");
 
   useEffect(() => {
     if (!open) setApiKey("");
@@ -263,6 +264,7 @@ export function AgentRuntimeFields({
     submittedReasoning,
     submittedFastMode,
     sizes,
+    sizesApply,
     initial,
   });
 
@@ -481,12 +483,14 @@ export function AgentRuntimeFields({
         />
       )}
       {fastModeVisible && <AgentFastModeField isSelected={fastMode} onChange={setFastMode} />}
-      <AgentModelSizeFields
-        value={sizes}
-        model={selectedModel}
-        size={controlSize}
-        onChange={setSizes}
-      />
+      {sizesApply && (
+        <AgentModelSizeFields
+          value={sizes}
+          model={selectedModel}
+          size={controlSize}
+          onChange={setSizes}
+        />
+      )}
     </>
   );
 }

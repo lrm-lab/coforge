@@ -46,7 +46,7 @@ export function updateAgentInputFromForm(
 }
 
 /** The two model size fields, as the runtime form submits them: a number, or nothing at all. */
-function sizesFromForm(form: FormData) {
+export function sizesFromForm(form: FormData) {
   const contextWindow = submittedModelSize(String(form.get("contextWindow") ?? ""));
   const maxOutputTokens = submittedModelSize(String(form.get("maxOutputTokens") ?? ""));
   return {

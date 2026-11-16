@@ -1,7 +1,21 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { MAX_MODEL_TOKENS } from "#src/features/computers/computer-model-metadata";
 
 /** The Agent form's two size fields, as the person typed them: empty means "the model's own". */
 export type ModelSizes = Readonly<{ contextWindow: string; maxOutputTokens: string }>;
+
+/**
+ * Whether the two sizes do anything for this pick (task #coforge-designer-team:#124). Only Pi
+ * reads them, and they are asked for where a model list's sizes may be missing or wrong: the
+ * Computer's own configured providers (a custom gateway; `piBuiltinProvider` empty) and OpenRouter.
+ * Anywhere else they are not shown, not saved, and a saved pair is not sent.
+ */
+export function modelSizesApply(runtime: string, piBuiltinProvider: string): boolean {
+  return (
+    runtime === RUNTIME_PROVIDER.PI &&
+    (piBuiltinProvider === "" || piBuiltinProvider === "openrouter")
+  );
+}
 
 /** A saved config's sizes as the fields show them: nothing filled in stays empty. */
 export function initialModelSizes(initial?: {
