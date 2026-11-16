@@ -16,10 +16,6 @@ Read [Cursor ACP behavior](../../../../docs/agents/cursor-acp.md) when changing 
   launch also adds the file to `.git/info/exclude` when the workspace root itself is a
   repository (worktree `commondir` included) — that writes repository metadata. Never send
   the briefing as a first `session/prompt`: that lands it in the conversation.
-- A Memory Agent cannot run Cursor: its per-conversation sessions share one workspace with
-  different briefings, one rules file cannot hold them, and cursor reads every always-on rule.
-  `createAgentSession` refuses `options.conversation`/`memoryControlSession` with
-  `RuntimeMemoryUnsupportedError` (`runtime_memory_unsupported`).
 - Known limit: a base name with several variants at one effort resolves to the first listed —
   `fast=true`/`context=` alternatives of that effort are not reachable through `runtime` alone.
 - Auth is the CLI's own `cursor-agent login`; ACP has no login flow and `authMethods` names

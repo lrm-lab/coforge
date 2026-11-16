@@ -1,46 +1,31 @@
 import { APP_REGISTRATION_REQUEST_MAX_BYTES } from "./app-management";
 import { ARTIFACT_REQUEST_MAX_BYTES, ARTIFACT_UPLOAD_MAX_BYTES } from "./artifacts";
-
-/** Mention delivery (`coforge mention delivery`): what became of each @mention in a message the
- * Agent sent, by the message's full id or short prefix. */
 const MENTION_DELIVERIES_ROUTE = {
   method: "GET",
   path: (messageId: string) =>
     `/api/agent/v1/messages/${encodeURIComponent(messageId)}/mention-deliveries`,
 } as const;
-
-/** `coforge attachment comments`: the root comments on one attachment. Same route under `proxy`,
- * `local` and `cloud`; the attachment's own route above it reads the file. */
 const ATTACHMENT_COMMENTS_ROUTE = {
   method: "GET",
   path: (attachmentId: string) =>
     `/api/agent/v1/attachments/${encodeURIComponent(attachmentId)}/comments`,
 } as const;
-
-/** `coforge user info`: one human or Agent by name. Same route under `proxy`, `local` and `cloud`. */
 const USERS_ROUTE = {
   method: "GET",
   path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
 } as const;
-
-/** `coforge label list`: the Workspace's labels. Same routes under `proxy`, `local` and `cloud`. */
 const LABELS_ROUTE = {
   method: "GET",
   path: "/api/agent/v1/labels",
 } as const;
-/** `coforge label create|rename|update|delete|restore` (task #508). Same route under `proxy`,
- * `local` and `cloud`. */
 const LABEL_WRITE_ROUTE = {
   method: "POST",
   path: "/api/agent/v1/labels",
 } as const;
-/** `coforge thread list` and the unread list of `coforge inbox check`. Same routes under `proxy`, `local` and `cloud`. */
 const INBOX_LIST_ROUTE = {
   method: "GET",
   path: "/api/agent/v1/inbox/conversations",
 } as const;
-/** `coforge task view|reply|follow|unfollow|list --following`: a task's own conversation. Same
- * routes under `proxy`, `local` and `cloud`. */
 const TASK_CONVERSATION_ROUTES = {
   view: { method: "GET", path: "/api/agent/v1/tasks/view" },
   read: { method: "GET", path: "/api/agent/v1/tasks/read" },
@@ -49,23 +34,13 @@ const TASK_CONVERSATION_ROUTES = {
   follow: { method: "POST", path: "/api/agent/v1/tasks/follow" },
   unfollow: { method: "POST", path: "/api/agent/v1/tasks/unfollow" },
 } as const;
-
-/** The Computer asks, when an Agent goes idle, which of its open Tasks to remind it of (task #421).
- * Same route under `proxy`, `local` and `cloud`. */
 const TASK_IDLE_NUDGE_ROUTE = { method: "POST", path: "/api/agent/v1/tasks/idle-nudge" } as const;
-
 const THREAD_LIST_ROUTE = { method: "GET", path: "/api/agent/v1/threads" } as const;
-
-/** `coforge artifact` document and comment operations: one document operation per request (task
- * #385). Same route under `proxy`, `local` and `cloud`. */
 const ARTIFACTS_ROUTE = {
   method: "POST",
   path: "/api/agent/v1/artifacts",
   maxBodyBytes: ARTIFACT_REQUEST_MAX_BYTES,
 } as const;
-
-/** An artifact file's bytes: uploaded by sha256 before a push names them, and downloaded by path
- * (`version` in the query, the current one without). Same routes under `local` and `cloud`. */
 const ARTIFACT_FILE_ROUTES = {
   upload: {
     method: "PUT",
@@ -78,30 +53,19 @@ const ARTIFACT_FILE_ROUTES = {
       `/api/agent/v1/artifacts/${encodeURIComponent(artifact)}/files/${encodeURIComponent(filePath)}`,
   },
 } as const;
-
-/** `coforge mention pending|execute`. Same routes under `proxy`, `local` and `cloud`. */
 const MENTION_ACTIONS_ROUTES = {
   pending: { method: "GET", path: "/api/agent/v1/mention-actions/pending" },
   execute: { method: "POST", path: "/api/agent/v1/mention-actions/execute" },
 } as const;
-
-/** `coforge profile show|update`. Same routes under `proxy`, `local` and `cloud`. */
 const PROFILE_ROUTES = {
   get: { method: "GET", path: "/api/agent/v1/profile" },
   update: { method: "POST", path: "/api/agent/v1/profile" },
 } as const;
-
-/** `coforge app config`: read, or change at a known revision, one of the Agent's own Apps'
- * config. Same routes under `proxy`, `local` and `cloud`. */
 const appConfigPath = (appId: string) => `/api/agent/v1/apps/${encodeURIComponent(appId)}/config`;
 const APP_CONFIG_ROUTES = {
   get: { method: "GET", path: appConfigPath },
   update: { method: "PATCH", path: appConfigPath },
 } as const;
-
-/** `coforge app list|token|marketplace`: the Workspace's apps, a short-lived token for one, and the
- * Marketplace browsed read-only. Same routes
- * under `proxy`, `local` and `cloud`. */
 const APP_ROUTES = {
   list: { method: "GET", path: "/api/agent/v1/apps" },
   marketplace: { method: "GET", path: "/api/agent/v1/apps/marketplace" },
@@ -110,14 +74,9 @@ const APP_ROUTES = {
     path: (appKey: string) => `/api/agent/v1/apps/${encodeURIComponent(appKey)}/token`,
   },
 } as const;
-
-/** `coforge app status|list --owned|rotate-secret`: an Agent managing the apps it registered. One
- * local route carries an `operation`; the cloud has one route for each. The card itself is
- * prepared with `actionPrepare`. */
 const APP_REGISTRATION_LOCAL_ROUTE = {
   method: "POST",
   path: "/api/agent/v1/app-registrations",
-  /** Room for a logo's base64 (`app logo`); the other operations are small. */
   maxBodyBytes: APP_REGISTRATION_REQUEST_MAX_BYTES,
 } as const;
 const ownedAppPath = (clientKey: string, suffix = "") =>
@@ -129,7 +88,6 @@ const APP_REGISTRATION_CLOUD_ROUTES = {
     method: "POST",
     path: (clientKey: string) => ownedAppPath(clientKey, "/rotate-secret"),
   },
-  // The management operations (`app-management.ts`): one route each, named like the operation.
   update: { method: "PATCH", path: (clientKey: string) => ownedAppPath(clientKey) },
   delete: { method: "DELETE", path: (clientKey: string) => ownedAppPath(clientKey) },
   logoSet: { method: "PUT", path: (clientKey: string) => ownedAppPath(clientKey, "/logo") },
@@ -159,8 +117,6 @@ const APP_REGISTRATION_CLOUD_ROUTES = {
     path: (clientKey: string) => ownedAppPath(clientKey, "/unpublish-request"),
   },
 } as const;
-
-/** Resumable attachment uploads. Same routes under `local` and `cloud`. */
 const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
   create: { method: "POST", path: "/api/agent/v1/attachment-upload-sessions" },
   complete: {
@@ -179,31 +135,20 @@ const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
       `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}`,
   },
 } as const;
-
-/** Public Agent API route contract shared by clients and HTTP adapters. */
 export const agentApiRoutes = {
   proxy: {
     workspace: { method: "GET", path: "/api/agent/v1/workspace" },
-    // Local-only, like `version`/`inbox`: the Daemon's update-notice store answers it (`coforge`
-    // tails the notice after a command); it is never a web route.
     computerUpdateNotice: { method: "GET", path: "/api/agent/v1/computer-update-notice" },
     manual: {
       get: { method: "GET", path: "/api/agent/v1/manual" },
       search: { method: "GET", path: "/api/agent/v1/manual/search" },
     },
-    // Local-only: answered entirely by the Daemon's Agent proxy and never forwarded to Web/backend
-    // (`coforge version`).
     version: { method: "GET", path: "/api/agent/v1/version" },
-    // Local-only: the Daemon searches and reads the Agent's own context-view index and never
-    // forwards these queries to Web/backend.
     context: {
       search: { method: "GET", path: "/api/agent/v1/context/search" },
       read: { method: "GET", path: "/api/agent/v1/context/read" },
     },
     messages: { method: "POST", path: "/api/agent/v1/messages" },
-    // Local-only, like `version`: `DaemonRuntime.inbox()` assembles the answer from the Agent's own
-    // state (message attention plus the app inbox) and never forwards it to Web/backend. It also
-    // takes no key argument, unlike the runtime methods that do reach Web.
     inbox: { method: "POST", path: "/api/agent/v1/inbox" },
     reminders: { method: "POST", path: "/api/agent/v1/reminders" },
     tasks: { method: "POST", path: "/api/agent/v1/tasks" },
@@ -215,8 +160,6 @@ export const agentApiRoutes = {
     githubCredentials: { method: "POST", path: "/api/agent/v1/github-credentials" },
     githubCommitTrailers: { method: "POST", path: "/api/agent/v1/github-commit-trailers" },
     channels: { method: "POST", path: "/api/agent/v1/channels" },
-    openviking: { method: "POST", path: "/api/agent/v1/openviking" },
-    memoryDisposition: { method: "POST", path: "/api/agent/v1/memory-dispositions" },
     users: USERS_ROUTE,
     mentionActions: MENTION_ACTIONS_ROUTES,
     mentionDeliveries: MENTION_DELIVERIES_ROUTE,
@@ -239,9 +182,7 @@ export const agentApiRoutes = {
       method: "POST",
       path: "/api/agent/v1/messages",
     },
-    // Local-only, like `version`; see the same entry under `proxy`.
     inbox: { method: "POST", path: "/api/agent/v1/inbox" },
-    // Local-only, like `version`; see the same entries under `proxy.context`.
     context: {
       search: { method: "GET", path: "/api/agent/v1/context/search" },
       read: { method: "GET", path: "/api/agent/v1/context/read" },
@@ -256,13 +197,8 @@ export const agentApiRoutes = {
     githubCredentials: { method: "POST", path: "/api/agent/v1/github-credentials" },
     githubCommitTrailers: { method: "POST", path: "/api/agent/v1/github-commit-trailers" },
     channels: { method: "POST", path: "/api/agent/v1/channels" },
-    openviking: { method: "POST", path: "/api/agent/v1/openviking" },
-    memoryDisposition: { method: "POST", path: "/api/agent/v1/memory-dispositions" },
     attachments: {
       method: "GET",
-      /** Served by Web ahead of the id route: what a client may upload, and whether it uploads
-       * directly. It was reachable before this declaration only because the proxy forwards any
-       * segment after the attachment prefix as an opaque id. */
       capabilities: { method: "GET", path: "/api/agent/v1/attachments/capabilities" },
       path: (attachmentId: string) =>
         `/api/agent/v1/attachments/${encodeURIComponent(attachmentId)}`,
@@ -379,12 +315,9 @@ export const agentApiRoutes = {
     weeklyReportMemory: { method: "POST", path: "/api/agent/v1/weekly-report-memory" },
     githubCredentials: { method: "POST", path: "/api/agent/v1/github-credentials" },
     githubCommitTrailers: { method: "POST", path: "/api/agent/v1/github-commit-trailers" },
-    openviking: { method: "POST", path: "/api/agent/v1/openviking" },
-    memoryDisposition: { method: "POST", path: "/api/agent/v1/memory-dispositions" },
     attachments: {
       method: "GET",
       collectionPath: "/api/agent/v1/attachments",
-      /** Served by Web ahead of the id route; see the same entry under `proxy`. */
       capabilities: { method: "GET", path: "/api/agent/v1/attachments/capabilities" },
       path: (attachmentId: string) =>
         `/api/agent/v1/attachments/${encodeURIComponent(attachmentId)}`,
@@ -428,5 +361,4 @@ export const agentApiRoutes = {
     },
   },
 } as const;
-
 export const workspaceInfoRoute = agentApiRoutes.workspace.info;

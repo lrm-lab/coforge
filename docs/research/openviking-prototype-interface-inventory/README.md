@@ -1,6 +1,6 @@
 # OpenViking prototype public-runtime interface inventory
 
-> **Context 2026-09-22:** Causal Memory is removed ([OpenViking channel memory](../../memory/openviking.md)). The pinned interface inventory and route classification below remain authoritative for the OpenViking gateway; the causal-recall analysis sections are historical.
+> **Context 2026-09-22:** Causal Memory is removed ([OpenViking channel memory](../../memory/team-memory.md)). The pinned interface inventory and route classification below remain authoritative for the OpenViking gateway; the causal-recall analysis sections are historical.
 
 - **Status:** Stage 1 D3 evidence. Inventory findings are not a second architecture source.
 - **Classification:** every route below is **unclassified**. Later G3 work must assign `data-plane | typed-control-only | denied`. Unknown future routes stay denied.

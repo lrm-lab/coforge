@@ -7,7 +7,6 @@ import {
   type DirectConversationPorts,
 } from "./agent-targets.repositories.server";
 import { isAgentPeerDirectKey } from "#src/features/conversations/direct-key";
-import { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { allocateSequence } from "./sequence-allocation.server";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
@@ -43,7 +42,6 @@ export async function sendAgentMessage(
   attachmentIds?: string[],
   threadRootId?: string,
   mentions?: readonly AgentMentionBinding[],
-  memoryHintId?: string,
   /** A channel send may join the channel first: the Agent's membership lands in this send's
    * transaction (with the same `channel.member_added` recording `channel join` makes), so a
    * failed send leaves none. The caller limits it to channels the Agent could join anyway. */
@@ -135,22 +133,6 @@ export async function sendAgentMessage(
     if (self?.systemKind === WORKSPACE_ASSISTANT_KIND)
       reader = await agentChannelReader(ports.db, conversation.workspaceId, agentId);
   }
-  const messageSelect = {
-    id: true,
-    body: true,
-    createdAt: true,
-    sequence: true,
-    // Carried so the browser signal can exclude thread replies from channel unread.
-    threadRootId: true,
-    mentions: { select: { kind: true, actorId: true, handle: true } },
-    deliveries: {
-      select: {
-        deliveryId: true,
-        agentId: true,
-        agent: { select: { computerId: true } },
-      },
-    },
-  } satisfies Prisma.MessageSelect;
   const result = await ports.db.$transaction(async (tx) => {
     if (joining) {
       // Read the archive state inside the transaction, so a channel archived since the send's
@@ -168,31 +150,6 @@ export async function sendAgentMessage(
           user: MESSAGE_SENDER_SELECT.select.user,
         },
       });
-    }
-    let hint;
-    if (memoryHintId) {
-      await tx.$queryRaw`SELECT id FROM memory_hint_records
-      WHERE workspace_id = ${conversation.workspaceId}::uuid AND id = ${memoryHintId}::uuid FOR UPDATE`;
-      hint = await tx.memoryHintRecord.findUniqueOrThrow({
-        where: { workspaceId_id: { workspaceId: conversation.workspaceId, id: memoryHintId } },
-      });
-      if (hint.memoryAgentId !== agentId || hint.conversationId !== conversationId)
-        throw new AgentSendRejectedError(403, "Memory Hint delivery scope mismatch");
-      if (hint.messageId) {
-        const existing = await tx.message.findUniqueOrThrow({
-          where: { id: hint.messageId },
-          select: messageSelect,
-        });
-        return {
-          ...existing,
-          deliveries: existing.deliveries.map((delivery) => ({
-            deliveryId: delivery.deliveryId,
-            agentId: delivery.agentId,
-            computerId: delivery.agent.computerId,
-          })),
-          attachments: [],
-        };
-      }
     }
     if (!sender) throw new AgentSendRejectedError(403, "agent is not a conversation member");
     const sequence = await allocateSequence(tx, conversationId);
@@ -286,8 +243,6 @@ export async function sendAgentMessage(
       : peer
         ? [peer.id]
         : [];
-    if (hint && !recipients.includes(hint.targetAgentId))
-      throw new AgentSendRejectedError(403, "Memory Hint target delivery is missing");
     // Keep the message write flat: nested relation creates make Prisma read the message and each
     // relation back while this transaction holds the conversation's sequence lock. The send
     // already has the mention payload and recipient Agent ids in memory.
@@ -348,17 +303,6 @@ export async function sendAgentMessage(
           JOIN "agents" agent ON agent."id" = inserted."agentId"
           ORDER BY array_position(${recipients}::uuid[], inserted."agentId")`
       : [];
-    if (hint) {
-      const deliveredAt = new Date();
-      await tx.memoryHintRecord.update({
-        where: { id: hint.id },
-        data: {
-          messageId: created.id,
-          deliveredAt,
-          expiresAt: new Date(deliveredAt.getTime() + hint.ttlMilliseconds),
-        },
-      });
-    }
     // A channel mention of someone outside the channel reached nobody; the sending Agent may
     // still act on it. A DM stores every `@handle` as text, so it records nothing. A binding that
     // matched a member but stored no mention — the member left before the in-transaction

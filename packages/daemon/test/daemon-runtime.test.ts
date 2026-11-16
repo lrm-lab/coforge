@@ -77,12 +77,7 @@ import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { ackGate, createDeliveryGateHarness, deliveryGateSession } from "./fixtures/delivery-gate";
 import { createMessageHarness } from "./fixtures/message-harness";
 import { messageRecord } from "./fixtures/message-record";
-
-// macOS tmpdir lives under /var, a symlink; the state store rejects linked ancesto
 const tempRoot = realpathSync(tmpdir());
-/** This process's own root for the Agents' CLI temporary state (see `cli-temp-state.preload.ts`).
- * Without it the stores fall back to the machine-wide `tmpdir()` root, which this file clears
- * before every test, so it refuses to run rather than delete another process's drafts. */
 function cliTempStateRoot(
   variable: "COFORGE_CLI_CONSUMED_SEQ_STATE_DIR" | "COFORGE_CLI_DRAFT_STATE_DIR",
 ) {
@@ -93,17 +88,10 @@ function cliTempStateRoot(
 const userDirectoryName = encodeURIComponent(
   String(process.geteuid?.() ?? userInfo().username),
 ).replaceAll(".", "%2E");
-/** Where the daemon's consumed cursor lands when a test passes no state directory: the temporary
- * state root (`COFORGE_CLI_CONSUMED_SEQ_STATE_DIR ?? tmpdir()`), under CoForge's own directory
- * name. Only a legacy store lives there now: the live cursor is in the per-Agent state database, and
- * a leftover file would be migrated into it. */
 const CONSUMED_SEQ_ROOT = join(
   cliTempStateRoot("COFORGE_CLI_CONSUMED_SEQ_STATE_DIR"),
   `coforge-cli-consumed-seq-${userDirectoryName}`,
 );
-/** Where the daemon's per-Agent send drafts land in tests: the temporary state root
- * (`COFORGE_CLI_DRAFT_STATE_DIR ?? tmpdir()`). Only a legacy store lives there now: the live
- * drafts are in the per-Agent state database, and a leftover file would be migrated into it. */
 const DRAFT_ROOT = join(
   cliTempStateRoot("COFORGE_CLI_DRAFT_STATE_DIR"),
   `coforge-cli-attested-send-${userDirectoryName}`,
@@ -114,27 +102,18 @@ const connection: WorkspaceConfig = {
   workspaceId: "workspace-a",
   workspaceRoot,
 };
-
 afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
-
 const config: AgentRuntimeConfig = {
   provider: "pi",
   model: "default",
   modelProvider: "anthropic",
   reasoning: "balanced",
 };
-
-// The daemon's consumed cursor is durable now, in the per-Agent state database under the daemon
-// state directory — and runtimes in this file that name no state directory share the default one.
-// Left alone, one test's reviewed boundary would reach the next and suppress a delivery its Agent
-// was never shown — correct in production, wrong here. Every test starts from a clean cursor,
-// exactly as it already starts from a fresh runtime.
 beforeEach(async () => {
   await rm(CONSUMED_SEQ_ROOT, { recursive: true, force: true });
   await rm(DRAFT_ROOT, { recursive: true, force: true });
   await rm(".coforge-daemon-state", { recursive: true, force: true });
 });
-
 test("ready and reconnect snapshots report the executable version and observed OS", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -172,7 +151,6 @@ test("ready and reconnect snapshots report the executable version and observed O
     await runtime.stop();
   }
 });
-
 test("startup does not wait for optional Code Agent inventory discovery", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-inventory-delay");
@@ -210,7 +188,6 @@ test("startup does not wait for optional Code Agent inventory discovery", async 
   await runtime.stop();
   expect(outcome).toBe("started");
 });
-
 test("a refused Computer upgrade request reports exactly one failed result with its code instead of being swallowed", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-upgrade-refused");
@@ -242,7 +219,11 @@ test("a refused Computer upgrade request reports exactly one failed result with 
         const rejection = new Error(
           "Computer upgrade operation prior-request is still pending; wait for it to finish before starting another",
         );
-        (rejection as Error & { code?: string }).code = "UPGRADE_OPERATION_PENDING";
+        (
+          rejection as Error & {
+            code?: string;
+          }
+        ).code = "UPGRADE_OPERATION_PENDING";
         throw rejection;
       },
       acknowledgeUpgradeResult: async () => {
@@ -260,15 +241,18 @@ test("a refused Computer upgrade request reports exactly one failed result with 
       status: "failed",
       errorCode: "UPGRADE_OPERATION_PENDING",
     });
-    expect((sentResults[0] as { error: string }).error).toContain("still pending");
-    // A refusal is not a terminal receipt this machine owes an acknowledgement flow to; only
-    // #reportUpgradeResults' recovered-terminal path calls this.
+    expect(
+      (
+        sentResults[0] as {
+          error: string;
+        }
+      ).error,
+    ).toContain("still pending");
     expect(acknowledged).toBe(0);
   } finally {
     await runtime.stop();
   }
 });
-
 test("first ready reports a terminal upgrade result already present in child config", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-upgrade-terminal");
@@ -297,7 +281,7 @@ test("first ready reports a terminal upgrade result already present in child con
     {
       recoveredUpgradeRequestIds: [requestId],
       recoveredUpgradeResults: [
-        { requestId, status: "succeeded", version: "2.0.0", completedAtMs: 2_000 },
+        { requestId, status: "succeeded", version: "2.0.0", completedAtMs: 2000 },
       ],
       acknowledgeUpgradeResult: async (acknowledgedRequestId) => {
         events.push(`ack:${acknowledgedRequestId}`);
@@ -312,7 +296,6 @@ test("first ready reports a terminal upgrade result already present in child con
     await runtime.stop();
   }
 });
-
 test("a duplicate fenced start wakes the managed runtime without replaying recovery context", async () => {
   const stateDirectory = join(tempRoot, `coforge-managed-wake-${crypto.randomUUID()}`);
   const credentials = new InMemoryDaemonCredentialStore();
@@ -405,17 +388,30 @@ test("a duplicate fenced start wakes the managed runtime without replaying recov
     await rm(stateDirectory, { recursive: true, force: true });
   }
 });
-
 test("a Start that meets an already-running process rebinds it: exactly one launch, the next session report/status/activity carry the new scope", async () => {
   const stateDirectory = join(tempRoot, `coforge-rebind-${crypto.randomUUID()}`);
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
   let sessions = 0;
-  const statuses: { status: string; agentId: string }[] = [];
-  const controlResults: { phase: string; requestId: string; launchId?: string; epoch: number }[] =
-    [];
-  const sessionReports: { startRequestId: string; controlEpoch?: number; launchId: string }[] = [];
-  const activities: { launchId: string; clientSeq: number }[] = [];
+  const statuses: {
+    status: string;
+    agentId: string;
+  }[] = [];
+  const controlResults: {
+    phase: string;
+    requestId: string;
+    launchId?: string;
+    epoch: number;
+  }[] = [];
+  const sessionReports: {
+    startRequestId: string;
+    controlEpoch?: number;
+    launchId: string;
+  }[] = [];
+  const activities: {
+    launchId: string;
+    clientSeq: number;
+  }[] = [];
   const runtime = new DaemonRuntime(
     connection,
     () => ({
@@ -482,19 +478,13 @@ test("a Start that meets an already-running process rebinds it: exactly one laun
     const startedBeforeRebind = controlResults.filter((r) => r.phase === "started");
     expect(startedBeforeRebind).toHaveLength(1);
     expect(startedBeforeRebind[0]).toMatchObject({ launchId: "launch-rebind-1", epoch: 1 });
-
-    // A new Start — different requestId, higher epoch, a different (server-supplied) launchId —
-    // meets the already-running process. It must rebind, not spawn a second one.
     await runtime.handleAgentStart({
       ...intent,
       requestId: "rebind-start-2",
       controlEpoch: 2,
       launchId: "launch-rebind-2",
     });
-
-    // No second process was launched.
     expect(sessions).toBe(1);
-
     const started = controlResults.filter((r) => r.phase === "started");
     expect(started).toHaveLength(2);
     expect(started[1]).toMatchObject({
@@ -502,20 +492,13 @@ test("a Start that meets an already-running process rebinds it: exactly one laun
       epoch: 2,
       launchId: "launch-rebind-2",
     });
-
-    // The immediate re-report after the rebind carries the new scope.
     const rebound = sessionReports.at(-1);
     expect(rebound).toMatchObject({
       startRequestId: "rebind-start-2",
       controlEpoch: 2,
       launchId: "launch-rebind-2",
     });
-
-    // `agent:status(active)` was re-sent for the rebind.
     expect(statuses.filter((s) => s.status === "active").length).toBeGreaterThanOrEqual(2);
-
-    // A later Activity for this agent (the "starting" activity from the original launch is
-    // already emitted; anything emitted from here on must carry the new launchId).
     activities.length = 0;
     await runtime.handleAgentActivityProbe({
       protocolMajor: 1,
@@ -531,7 +514,6 @@ test("a Start that meets an already-running process rebinds it: exactly one laun
     await rm(stateDirectory, { recursive: true, force: true });
   }
 });
-
 test("a recreated daemon waits for cloud start and forwards the cloud-selected session", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -597,7 +579,6 @@ test("a recreated daemon waits for cloud start and forwards the cloud-selected s
     await recreated.stop();
   }
 });
-
 test("returned identity is acknowledged before Agent readiness and retired callbacks are rejected", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -666,14 +647,12 @@ test("returned identity is acknowledged before Agent readiness and retired callb
     await runtime.stop();
   }
 });
-
 function agentLaunchConfig(
   agentApiKey: string,
   providerConfig?: AgentRuntimeConfig["providerConfig"],
 ) {
   return { agentApiKey, providerConfig };
 }
-
 async function queueHarness(
   options: {
     credential?: Promise<string>;
@@ -693,7 +672,11 @@ async function queueHarness(
   const exitListeners: (() => void)[] = [];
   let sessions = 0;
   let mints = 0;
-  let readyFactory: (() => { runningAgentIds: string[] }) | undefined;
+  let readyFactory:
+    | (() => {
+        runningAgentIds: string[];
+      })
+    | undefined;
   const runtime = new DaemonRuntime(
     connection,
     () => ({
@@ -715,7 +698,6 @@ async function queueHarness(
             return () => undefined;
           },
           async notify(notice: string) {
-            // A fresh session's MEMORY.md turn is context, not a message notice.
             if (!notice.includes("That is your MEMORY.md as context, not a request"))
               notices.push(notice);
             await options.notify?.(notice);
@@ -765,7 +747,6 @@ async function queueHarness(
     acknowledgements,
     sessions: () => sessions,
     mints: () => mints,
-    /** The Agent's process exits unexpectedly. */
     exit: () => {
       for (const listener of exitListeners.splice(0)) listener();
     },
@@ -786,14 +767,11 @@ async function queueHarness(
       }),
   };
 }
-
 const messageHarness = createMessageHarness({ connection, config });
-
 const recovery = {
   resumeMessages: [],
   unreadSummary: { "@ada": 1 },
 };
-
 test("channel check and notification settings use the bound Agent without replacing its session", async () => {
   const calls: AgentMessageRequest[] = [];
   const harness = await messageHarness(async (request) => {
@@ -846,7 +824,6 @@ test("channel check and notification settings use the bound Agent without replac
     await harness.runtime.stop();
   }
 });
-
 test("resolve, react, and unreact reach the transport with messageId, emoji, and the bound Agent", async () => {
   const calls: AgentMessageRequest[] = [];
   const harness = await messageHarness(async (request) => {
@@ -909,7 +886,6 @@ test("resolve, react, and unreact reach the transport with messageId, emoji, and
     await harness.runtime.stop();
   }
 });
-
 describe("DaemonRuntime", () => {
   test("orders stop completion before replacement start lifecycle", async () => {
     let releaseDispose!: () => void;
@@ -930,7 +906,6 @@ describe("DaemonRuntime", () => {
       reasoning: "balanced",
     };
     await harness.runtime.handleAgentStart(intent);
-
     const stopping = harness.runtime.handleAgentStop({
       protocolMajor: 1,
       requestId: "stop-1",
@@ -942,7 +917,6 @@ describe("DaemonRuntime", () => {
     await Bun.sleep(0);
     expect(harness.sessions()).toBe(1);
     expect(lifecycle).toEqual(["status:active", "activity:starting"]);
-
     releaseDispose();
     await Promise.all([stopping, restarting]);
     expect(harness.sessions()).toBe(2);
@@ -956,7 +930,6 @@ describe("DaemonRuntime", () => {
     ]);
     await harness.runtime.stop();
   });
-
   test("control-starts the replacement after a stop whose dispose failed completes", async () => {
     let releaseDispose!: () => void;
     const disposeGate = new Promise<void>((resolve) => (releaseDispose = resolve));
@@ -977,7 +950,6 @@ describe("DaemonRuntime", () => {
       reasoning: "balanced",
     };
     await harness.runtime.handleAgentStart(intent);
-
     const stopping = harness.runtime.handleAgentStop({
       protocolMajor: 1,
       requestId: "stop-1",
@@ -992,12 +964,13 @@ describe("DaemonRuntime", () => {
     expect(harness.sessions()).toBe(2);
     await harness.runtime.stop();
   });
-
   test("message check drains the events endpoint in one session, honoring the requested limit", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     let launches = 0;
-    const checkRequests: Array<{ limit?: number }> = [];
+    const checkRequests: Array<{
+      limit?: number;
+    }> = [];
     const runtime = new DaemonRuntime(
       connection,
       () => ({
@@ -1089,7 +1062,6 @@ describe("DaemonRuntime", () => {
       method: "agent:v1:message:deliver",
       target: "@ada",
     });
-
     const first = await runtime.agentMessage(
       context,
       { idempotencyKey: "check-1", context, operation: "check", limit: 1 },
@@ -1100,7 +1072,6 @@ describe("DaemonRuntime", () => {
       { idempotencyKey: "check-2", context, operation: "check", limit: 1 },
       `sk_agent_${"a".repeat(43)}`,
     );
-
     expect(first.messages.map(({ id }) => id)).toEqual(["message-5", "message-7"]);
     expect(first.hasMore).toBe(false);
     expect(second.messages).toEqual([]);
@@ -1109,7 +1080,6 @@ describe("DaemonRuntime", () => {
     expect(launches).toBe(1);
     await runtime.stop();
   });
-
   test.each(["@ada", "@ada:12345678"])(
     "resolves a short thread target for a history read that follows a message check in one session",
     async (target) => {
@@ -1117,7 +1087,11 @@ describe("DaemonRuntime", () => {
       const credentials = new InMemoryDaemonCredentialStore();
       await credentials.save(connection.workspaceId, connection.computerId, "token-a");
       let launches = 0;
-      const requests: Array<{ before?: string; around?: string; limit?: number }> = [];
+      const requests: Array<{
+        before?: string;
+        around?: string;
+        limit?: number;
+      }> = [];
       const runtime = new DaemonRuntime(
         connection,
         () => ({
@@ -1211,7 +1185,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     },
   );
-
   test.each(["read", "search"] as const)(
     "a message shown by `message %s` beyond the frontier is announced again only if the Agent did not read it",
     async (operation) => {
@@ -1259,7 +1232,6 @@ describe("DaemonRuntime", () => {
         await runtime.start(connection);
         await runtime.startAgent("agent-a", config);
         const context = runtime.issueAgentContext("agent-a");
-        // Message 7 is shown on its own: around an anchor, or as a search hit.
         await runtime.agentMessage(
           context,
           operation === "read"
@@ -1267,7 +1239,6 @@ describe("DaemonRuntime", () => {
             : { idempotencyKey: "search", context, operation, query: "body" },
           `sk_agent_${"a".repeat(43)}`,
         );
-
         await runtime.handleAgentMessage({
           protocolMajor: 1,
           requestId: "delivery-7",
@@ -1281,9 +1252,6 @@ describe("DaemonRuntime", () => {
           method: "agent:v1:message:deliver",
           target: "@ada",
         });
-
-        // An anchored read showed message 7 in full; a search only previewed it, possibly truncated
-        // and without whether it mentions the Agent, so the delivery still wakes the Agent.
         expect(notices).toHaveLength(operation === "read" ? 0 : 1);
         expect(acknowledgements).toEqual(["delivery-7"]);
       } finally {
@@ -1291,7 +1259,6 @@ describe("DaemonRuntime", () => {
       }
     },
   );
-
   test("uses the full target and short-read position when sending to a short thread target", async () => {
     const rootId = "12345678-1234-4234-8234-123456789abc";
     const fullTarget = `@ada:${rootId}`;
@@ -1313,7 +1280,6 @@ describe("DaemonRuntime", () => {
         attentionCount: 0,
         messageId: request.operation === "send" ? "sent" : undefined,
         messages: request.operation === "read" ? [messageRecord(7, "@ada", fullTarget)] : [],
-        // The read joins what the Agent had read, so the server reports its boundary.
         ...(request.operation === "read" ? { modelSeenUpToSeq: 7 } : {}),
       };
     });
@@ -1348,7 +1314,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("resolves a short channel thread target through its parent channel", async () => {
     const rootId = "abcdef12-1234-4234-8234-123456789abc";
     const fullTarget = `#general:${rootId}`;
@@ -1392,7 +1357,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("reuses a short-target held draft's content when sent with the full target", async () => {
     const rootId = "12345678-1234-4234-8234-123456789abc";
     const fullTarget = `@ada:${rootId}`;
@@ -1460,7 +1424,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("blocks a top-level send after a more recently read thread, saves the draft, and --send-draft resends it unchanged", async () => {
     const rootId = "12345678-1234-4234-8234-123456789abc";
     const sends: AgentMessageRequest[] = [];
@@ -1472,7 +1435,6 @@ describe("DaemonRuntime", () => {
           accepted: true,
           attentionCount: 0,
           messages: [messageRecord(1, "@ada", request.target)],
-          // An unpaged read joins what the Agent had read.
           modelSeenUpToSeq: 1,
         };
       sends.push(request);
@@ -1516,12 +1478,8 @@ describe("DaemonRuntime", () => {
       expect(preflight.code).toBe("THREAD_CONTEXT_TARGET_CONFIRMATION_REQUIRED");
       expect(preflight.message).toContain("Possible thread target mismatch");
       expect(preflight.message).toContain('coforge message send --send-draft --target "@ada"');
-      // The guard saves the outgoing content as a draft before refusing, and reports that back so
-      // the CLI renders `Draft saved: yes`, not `no`.
       expect(preflight.verdict.draftSaved).toBe(true);
       expect(sends).toEqual([]);
-
-      // The saved draft resends unchanged via --send-draft, with no holdToken (there was no hold).
       await harness.runtime.agentMessage(
         harness.context,
         {
@@ -1534,15 +1492,11 @@ describe("DaemonRuntime", () => {
         harness.apiKey,
       );
       expect(sends).toHaveLength(1);
-      // The refusal saved the draft under the refused send's key, and the resend is that same
-      // logical send, not a new one under the resend's own key.
       expect(sends[0]).toMatchObject({
         target: "@ada",
         content: "top-level reply",
         idempotencyKey: "blocked-send",
       });
-
-      // --target-confirmed remains the other bypass, for a fresh (non-draft) send.
       await harness.runtime.agentMessage(
         harness.context,
         {
@@ -1561,14 +1515,9 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   describe("which thread read makes a top-level send ask for confirmation", () => {
     const rootId = "12345678-1234-4234-8234-123456789abc";
     const threadTarget = `@ada:${rootId}`;
-
-    /** A transport whose reads and checks answer with `rowsFor(request)` and whose sends go out.
-     * A read joins what the Agent had read (its newest row is the server's model-seen boundary)
-     * unless `contiguous` says it does not. */
     async function guardHarness(
       rowsFor: (request: AgentMessageRequest) => number[],
       contiguous: (request: AgentMessageRequest) => boolean = () => true,
@@ -1619,7 +1568,6 @@ describe("DaemonRuntime", () => {
         }).catch((error: unknown) => error);
       return { harness, sends, run, sendTopLevel };
     }
-
     test("a thread read that returned no messages does not count", async () => {
       const { harness, sends, run, sendTopLevel } = await guardHarness((request) =>
         request.target === "@ada" ? [7] : [],
@@ -1635,7 +1583,6 @@ describe("DaemonRuntime", () => {
         await harness.runtime.stop();
       }
     });
-
     test("a thread read with --around does not count", async () => {
       const { harness, sends, run, sendTopLevel } = await guardHarness(() => [3]);
       try {
@@ -1652,7 +1599,6 @@ describe("DaemonRuntime", () => {
         await harness.runtime.stop();
       }
     });
-
     test("a paged thread read that returned messages counts", async () => {
       const { harness, sends, run, sendTopLevel } = await guardHarness(() => [3]);
       try {
@@ -1672,10 +1618,7 @@ describe("DaemonRuntime", () => {
         await harness.runtime.stop();
       }
     });
-
     test("a paged thread read the server does not call contiguous does not count", async () => {
-      // A `message read` page with rows and no model-seen boundary records exact sequences only
-      // (`recordConsumedExactSeqs`), never a read (`recordConsumedRead`).
       const { harness, sends, run, sendTopLevel } = await guardHarness(
         () => [3],
         () => false,
@@ -1694,7 +1637,6 @@ describe("DaemonRuntime", () => {
         await harness.runtime.stop();
       }
     });
-
     test("thread messages a check drained do not make a later empty thread read count", async () => {
       const { harness, sends, run, sendTopLevel } = await guardHarness((request) =>
         request.operation === "check" ? [5] : [],
@@ -1709,7 +1651,6 @@ describe("DaemonRuntime", () => {
         await harness.runtime.stop();
       }
     });
-
     test("a held send whose context was withheld does not count", async () => {
       const sends: AgentMessageRequest[] = [];
       const harness = await messageHarness(async (request) => {
@@ -1768,7 +1709,6 @@ describe("DaemonRuntime", () => {
         await harness.runtime.stop();
       }
     });
-
     test("checking the parent after reading a thread still asks, until the parent is read", async () => {
       const { harness, sends, run, sendTopLevel } = await guardHarness((request) =>
         request.target === threadTarget ? [3] : [9],
@@ -1782,7 +1722,6 @@ describe("DaemonRuntime", () => {
           "THREAD_CONTEXT_TARGET_CONFIRMATION_REQUIRED",
         );
         expect(sends).toEqual([]);
-
         await run({ idempotencyKey: "read-parent", operation: "read", target: "@ada" });
         const result = await run({
           idempotencyKey: "top-level-after-parent-read",
@@ -1797,7 +1736,6 @@ describe("DaemonRuntime", () => {
       }
     });
   });
-
   test("a --send-draft resend forwards --anyway instead of refusing it", async () => {
     const rootId = "12345678-1234-4234-8234-123456789abc";
     const sends: AgentMessageRequest[] = [];
@@ -1809,7 +1747,6 @@ describe("DaemonRuntime", () => {
           accepted: true,
           attentionCount: 0,
           messages: [messageRecord(1, "@ada", request.target)],
-          // An unpaged read joins what the Agent had read.
           modelSeenUpToSeq: 1,
         };
       sends.push(request);
@@ -1848,9 +1785,6 @@ describe("DaemonRuntime", () => {
           harness.apiKey,
         )
         .catch(() => undefined);
-
-      // `--send-draft --anyway` is the Agent's explicit decision to send anyway: it forwards the
-      // flag and is never refused (there is no "denied" outcome).
       await harness.runtime.agentMessage(
         harness.context,
         {
@@ -1869,7 +1803,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("the mention-in-content check runs on a --send-draft resend against the effective mentions", async () => {
     const sends: AgentMessageRequest[] = [];
     const harness = await messageHarness(async (request) => {
@@ -1898,7 +1831,6 @@ describe("DaemonRuntime", () => {
         harness.apiKey,
       );
       expect(sends).toHaveLength(1);
-
       const rejected = await harness.runtime
         .agentMessage(
           harness.context,
@@ -1918,13 +1850,11 @@ describe("DaemonRuntime", () => {
       expect((rejected as Error).message).toBe(
         "Structured mention @ghost is not present in the message body.",
       );
-      // No second transport call: the daemon caught this before ever reaching the transport.
       expect(sends).toHaveLength(1);
     } finally {
       await harness.runtime.stop();
     }
   });
-
   test("does not block a top-level send when the parent itself was read more recently than any thread", async () => {
     const rootId = "12345678-1234-4234-8234-123456789abc";
     const sends: AgentMessageRequest[] = [];
@@ -1936,7 +1866,6 @@ describe("DaemonRuntime", () => {
           accepted: true,
           attentionCount: 0,
           messages: [messageRecord(1, "@ada", request.target)],
-          // An unpaged read joins what the Agent had read.
           modelSeenUpToSeq: 1,
         };
       sends.push(request);
@@ -1988,7 +1917,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("forwards attachmentIds and mentions on send; --send-draft resend reuses them unless overridden", async () => {
     const sends: AgentMessageRequest[] = [];
     const mentions = [{ type: "user" as const, id: "actor-1", name: "ada" }];
@@ -2033,7 +1961,6 @@ describe("DaemonRuntime", () => {
         attachmentIds: ["attachment-1", "attachment-2"],
         mentions,
       });
-
       await harness.runtime.agentMessage(
         harness.context,
         {
@@ -2053,7 +1980,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("an explicit --mention on --send-draft replaces the draft's saved mentions", async () => {
     const sends: AgentMessageRequest[] = [];
     const overrideMentions = [{ type: "agent" as const, id: "actor-2", name: "helper" }];
@@ -2110,7 +2036,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a sent message's undelivered mentions are returned to the Agent unchanged", async () => {
     const pendingMentionActions = [
       {
@@ -2154,7 +2079,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("recentUnread from a bypassed hold is returned and advances modelSeen for future sends", async () => {
     const sends: AgentMessageRequest[] = [];
     const harness = await messageHarness(async (request) => {
@@ -2204,7 +2128,6 @@ describe("DaemonRuntime", () => {
         harness.apiKey,
       );
       expect(result.recentUnread?.map((m) => m.id)).toEqual(["message-11"]);
-
       await harness.runtime.agentMessage(
         harness.context,
         {
@@ -2221,7 +2144,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("an empty read clears only attention that existed when the read started", async () => {
     let releaseRead!: () => void;
     const readGate = new Promise<void>((resolve) => (releaseRead = resolve));
@@ -2270,7 +2192,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test.each([
     ["rejected", false, []],
     ["wrong-target", true, [messageRecord(7, "@bea", "@bea")]],
@@ -2307,7 +2228,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("workspace info without a valid Agent API key is the AGENT_API_KEY_MISSING precondition", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -2337,17 +2257,14 @@ describe("DaemonRuntime", () => {
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
     const context = runtime.issueAgentContext("agent-a");
-
     const rejected = await runtime.agentRequests
       .workspaceInfo(context, { idempotencyKey: "r" }, "not-an-agent-key")
       .catch((error: unknown) => error);
-
     expect(rejected).toBeInstanceOf(AgentPreflightError);
     expect((rejected as AgentPreflightError).code).toBe("AGENT_API_KEY_MISSING");
     expect(forwarded).toBe(0);
     await runtime.stop();
   });
-
   test("every forwarded Agent request refuses a local precondition as that precondition, forwarding nothing", async () => {
     const forwardedRequests = [
       "workspaceInfo",
@@ -2360,7 +2277,6 @@ describe("DaemonRuntime", () => {
       "profileUpdate",
       "appConfigGet",
       "appConfigUpdate",
-      "agentOpenviking",
       "mentionPending",
       "mentionExecute",
       "mentionDelivery",
@@ -2416,7 +2332,6 @@ describe("DaemonRuntime", () => {
       const error = await request.call(runtime.agentRequests, ...input).catch((error) => error);
       return error instanceof AgentPreflightError ? error.code : String(error);
     };
-
     for (const name of forwardedRequests) {
       expect([name, await refusal(name, context, {}, "not-an-agent-key")]).toEqual([
         name,
@@ -2435,7 +2350,6 @@ describe("DaemonRuntime", () => {
       ]);
     expect(forwarded).toEqual([]);
   });
-
   test("version answers coforge version's local-only query from the already-running process, without a transport call", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-version");
@@ -2452,9 +2366,6 @@ describe("DaemonRuntime", () => {
     );
     try {
       await runtime.start(connection);
-      // `issueAgentContext` only needs the runtime started, not an actually-launched Agent
-      // process (`#agentIdForContext` reads the same map `#authorizedAgent` checks); `version()`
-      // never touches the Agent runtime itself.
       const context = runtime.issueAgentContext("agent-a");
       const response = await runtime.version(context, {}, `sk_agent_${"a".repeat(43)}`);
       expect(response.ok).toBe(true);
@@ -2466,7 +2377,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("version without a valid Agent API key is the AGENT_API_KEY_MISSING precondition", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-version-invalid");
@@ -2493,7 +2403,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("message check drains multiple event pages, stops when hasMore is false, and clears attention only for returned targets", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -2575,13 +2484,9 @@ describe("DaemonRuntime", () => {
       { idempotencyKey: "check-drain", context, operation: "check", limit: 2 },
       `sk_agent_${"a".repeat(43)}`,
     );
-
     expect(limits).toEqual([2, 2]);
     expect(result.messages.map(({ id }) => id)).toEqual(["message-1", "message-2"]);
     expect(result.hasMore).toBe(false);
-
-    // @ada's attention (sequence 1) is fully drained; @carl's attention was never returned and
-    // stays intact; @bea had no prior attention entry, so recording it seen is a harmless no-op.
     const second = await runtime.agentMessage(
       context,
       { idempotencyKey: "check-after", context, operation: "check" },
@@ -2590,7 +2495,6 @@ describe("DaemonRuntime", () => {
     expect(second.summaries.map((s) => s.target)).toEqual(["@carl"]);
     await runtime.stop();
   });
-
   test("message check forwards --target on every events drain round", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -2639,11 +2543,8 @@ describe("DaemonRuntime", () => {
     expect(targets).toEqual(["@ada"]);
     await runtime.stop();
   });
-
   test("a server-held send stores the draft fields and the resend carries its seenUpToSeq", async () => {
     const stateDirectory = join(tempRoot, `coforge-message-drafts-${crypto.randomUUID()}`);
-    // The Agent has met @ada's conversation before: a cursor is durable only for a target bound to
-    // one, and nothing in this test delivers to or reads @ada.
     await seedCursor(
       "agent-a",
       {
@@ -2733,10 +2634,6 @@ describe("DaemonRuntime", () => {
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
     const context = runtime.issueAgentContext("agent-a");
-    // The scene-setting delivery is to a DIFFERENT target: `@ada` must have nothing pending, or the
-    // daemon takes the hold itself (task #58's local decision) and never asks the server — which is
-    // a different case, covered by "a send the daemon holds locally never reaches the transport".
-    // Here the SERVER's hold comes back, and this test is about what the daemon does with it.
     await runtime.handleAgentMessage({
       protocolMajor: 1,
       requestId: "delivery-request",
@@ -2750,7 +2647,6 @@ describe("DaemonRuntime", () => {
       method: "agent:v1:message:deliver",
       target: "#general",
     });
-
     const held = await runtime.agentMessage(
       context,
       { idempotencyKey: "send-1", context, operation: "send", target: "@ada", content: "reply" },
@@ -2768,7 +2664,6 @@ describe("DaemonRuntime", () => {
     expect(messageRequests).toEqual([
       { idempotencyKey: "send-1", draftReholdCount: 0, seenUpToSeq: undefined },
     ]);
-
     await runtime.stop();
     const recoveredRuntime = new DaemonRuntime(
       connection,
@@ -2814,7 +2709,6 @@ describe("DaemonRuntime", () => {
     await recoveredRuntime.start(connection);
     await recoveredRuntime.startAgent("agent-a", config);
     const recoveredContext = recoveredRuntime.issueAgentContext("agent-a");
-
     const sent = await recoveredRuntime.agentMessage(
       recoveredContext,
       {
@@ -2828,15 +2722,10 @@ describe("DaemonRuntime", () => {
     );
     expect(sent).toMatchObject({ accepted: true, decision: "forward" });
     expect(operations).toEqual(["send", "send"]);
-    // The replayed draft has been held once — that is what makes `continueAnywaySuggested` true —
-    // and it carries the frontier the held notice presented, so the resend is not held again by
-    // the same context.
     expect(messageRequests).toEqual([
       { idempotencyKey: "send-1", draftReholdCount: 0, seenUpToSeq: undefined },
-      // The resend is the same logical send, under the draft's own key.
       { idempotencyKey: "send-1", draftReholdCount: 1, seenUpToSeq: 7 },
     ]);
-
     await expect(
       recoveredRuntime.agentMessage(
         recoveredContext,
@@ -2850,7 +2739,6 @@ describe("DaemonRuntime", () => {
         `sk_agent_${"a".repeat(43)}`,
       ),
     ).rejects.toThrow("No saved draft");
-
     const ordinarySend = await recoveredRuntime.agentMessage(
       recoveredContext,
       {
@@ -2864,11 +2752,6 @@ describe("DaemonRuntime", () => {
     );
     expect(ordinarySend).toMatchObject({ accepted: true, decision: "forward" });
     expect(operations).toEqual(["send", "send", "send"]);
-    // A fresh send from the recovered daemon still accounts for the frontier the held notice
-    // presented: the consumed cursor outlives the process in the state database, so the context
-    // that was already reviewed is not presented — or held — a second time. The draft carried it
-    // within the restart above; the cursor is what carries it for a send that never saw that
-    // draft.
     expect(messageRequests.at(-1)).toEqual({
       idempotencyKey: "send-3",
       draftReholdCount: 0,
@@ -2877,7 +2760,6 @@ describe("DaemonRuntime", () => {
     await recoveredRuntime.stop();
     await rm(stateDirectory, { recursive: true, force: true });
   });
-
   test("a withheld send forwards the mode, redacts bodies locally, and prefers the server's count", async () => {
     const requests: AgentMessageRequest[] = [];
     const harness = await messageHarness(async (request) => {
@@ -2887,9 +2769,6 @@ describe("DaemonRuntime", () => {
         idempotencyKey: request.idempotencyKey,
         accepted: false,
         attentionCount: 3,
-        // An older server that has not adopted the mode may still echo message bodies; the
-        // daemon must redact them locally regardless, and fall back to attentionCount only
-        // when the server omits withheldMessageCount.
         messages: [messageRecord(9, "@ada", "@ada")],
         state: "held",
         decision: "local_hold" as const,
@@ -2915,7 +2794,6 @@ describe("DaemonRuntime", () => {
         freshnessContextMode: "withheld",
         withheldMessageCount: 3,
       });
-
       const withServerCount = await harness.runtime.agentMessage(
         harness.context,
         {
@@ -2933,7 +2811,6 @@ describe("DaemonRuntime", () => {
         freshnessContextMode: "withheld",
         withheldMessageCount: 5,
       });
-
       expect(requests).toHaveLength(2);
       for (const request of requests)
         expect(request).toMatchObject({ operation: "send", freshnessContextMode: "withheld" });
@@ -2941,7 +2818,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("keeps an Agent active without a process, wakes it for a message, and deactivates it", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -2987,19 +2863,16 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
     expect(statuses.map(({ agentId, status }) => ({ agentId, status }))).toEqual([
       { agentId: "agent-a", status: "active" },
     ]);
-
     for (const exit of exits) exit();
     expect(statuses.map(({ agentId, status }) => ({ agentId, status }))).toEqual([
       { agentId: "agent-a", status: "active" },
     ]);
     expect(runtime.agentProcessManager.session("agent-a")).toBeUndefined();
-
     await runtime.handleAgentMessage({
       protocolMajor: 1,
       requestId: "message-request-1",
@@ -3018,15 +2891,11 @@ describe("DaemonRuntime", () => {
       "[CoForge inbox notice:\n@agent 1 new message]",
     ]);
     expect(acknowledgements).toEqual(["delivery-1"]);
-
     await runtime.stopAgent("agent-a");
     expect(statuses.at(-1)?.status).toBe("inactive");
     await runtime.stop();
   });
-
   test("acknowledges a message the Agent has already seen without waking its exited process", async () => {
-    // The Agent reviewed @agent through message 3 before its process exited; the consumed cursor
-    // outlives the process.
     await seedCursor(
       "agent-a",
       {
@@ -3075,13 +2944,11 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
       for (const exit of exits) exit();
       expect(runtime.agentProcessManager.session("agent-a")).toBeUndefined();
-
       await runtime.handleAgentMessage({
         protocolMajor: 1,
         requestId: "message-request-3",
@@ -3095,7 +2962,6 @@ describe("DaemonRuntime", () => {
         method: "agent:v1:message:deliver",
         target: "@agent",
       });
-
       expect(acknowledgements).toEqual(["delivery-3"]);
       expect(launches).toBe(1);
       expect(runtime.agentProcessManager.session("agent-a")).toBeUndefined();
@@ -3103,7 +2969,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("rejects a delivery as no_process when the Agent has no process, no launch, and nothing to relaunch", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -3141,7 +3006,6 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     try {
       await runtime.start(connection);
       await runtime.handleAgentMessage({
@@ -3157,7 +3021,6 @@ describe("DaemonRuntime", () => {
         method: "agent:v1:message:deliver",
         target: "@agent",
       });
-
       expect(rejections).toEqual([
         {
           protocolMajor: 1,
@@ -3177,7 +3040,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("rejects the deliveries a lifted runner hold left queued for an Agent with no process", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -3222,23 +3084,18 @@ describe("DaemonRuntime", () => {
         method: "agent:v1:message:deliver",
         target: "@agent",
       });
-
     try {
       await runtime.start(connection);
       runtime.holdRunners(RUNNER_HOLD_REASONS.WORKSPACE_RESTART);
       await deliver(5);
       runtime.releaseRunners();
       await deliver(6);
-
       expect(rejections).toEqual(["delivery-5", "delivery-6"]);
       expect(acknowledgements).toEqual([]);
     } finally {
       await runtime.stop();
     }
   });
-
-  /** A runtime whose Agent has never launched here, started only through a server Start whose
-   * first `failures` launch attempts fail. */
   async function pendingStartHarness(failures: number) {
     const stateDirectory = join(tempRoot, `coforge-start-buffer-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();
@@ -3335,7 +3192,6 @@ describe("DaemonRuntime", () => {
         }),
     };
   }
-
   test("holds a delivery that arrives while a server Start is being set up, unacknowledged, and presents it once the Agent launches", async () => {
     const h = await pendingStartHarness(0);
     try {
@@ -3343,10 +3199,8 @@ describe("DaemonRuntime", () => {
       await h.deliver(7);
       expect(h.rejections).toEqual([]);
       expect(h.acknowledgements).toEqual([]);
-
       await starting;
       await h.firstAck;
-
       expect(h.acknowledgements).toEqual(["delivery-7"]);
       expect(h.notices.some((notice) => notice.includes("@agent"))).toBe(true);
       expect(h.rejections).toEqual([]);
@@ -3354,7 +3208,6 @@ describe("DaemonRuntime", () => {
       await h.runtime.stop();
     }
   });
-
   test("holds a delivery that arrives during a server Start's launch-retry cooldown until the retry launches", async () => {
     const h = await pendingStartHarness(1);
     try {
@@ -3362,25 +3215,19 @@ describe("DaemonRuntime", () => {
       await h.deliver(8);
       expect(h.rejections).toEqual([]);
       expect(h.acknowledgements).toEqual([]);
-
-      // The first retry fires after the real one-second cooldown.
       await h.firstAck;
-
       expect(h.acknowledgements).toEqual(["delivery-8"]);
       expect(h.rejections).toEqual([]);
     } finally {
       await h.runtime.stop();
     }
   });
-
   test("drops, unacknowledged and unrejected, what a server Start held when it ends without a launch", async () => {
     const h = await pendingStartHarness(Number.POSITIVE_INFINITY);
     try {
       await h.start().catch(() => {});
       await h.deliver(9);
-
       await h.stop();
-
       expect(h.acknowledgements).toEqual([]);
       expect(h.rejections).toEqual([]);
       await h.deliver(10);
@@ -3389,7 +3236,6 @@ describe("DaemonRuntime", () => {
       await h.runtime.stop();
     }
   });
-
   test("acknowledges, rather than rejects, a message an Agent with no process has already seen", async () => {
     await seedCursor(
       "agent-a",
@@ -3429,7 +3275,6 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     try {
       await runtime.start(connection);
       await runtime.handleAgentMessage({
@@ -3445,14 +3290,12 @@ describe("DaemonRuntime", () => {
         method: "agent:v1:message:deliver",
         target: "@agent",
       });
-
       expect(acknowledgements).toEqual(["delivery-3"]);
       expect(rejections).toEqual([]);
     } finally {
       await runtime.stop();
     }
   });
-
   test("another Agent's channel chatter that does not mention an exited Agent wakes it like a person's", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -3497,12 +3340,10 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
       for (const exit of exits) exit();
-
       await runtime.handleAgentMessage({
         protocolMajor: 1,
         requestId: "message-request-chatter",
@@ -3519,7 +3360,6 @@ describe("DaemonRuntime", () => {
         latestSenderHandle: "builder",
         mentionsAgent: false,
       });
-
       expect(acknowledgements).toEqual(["delivery-chatter"]);
       expect(launches).toBe(2);
       expect(notices.filter((notice) => !notice.includes("not a request"))).toHaveLength(1);
@@ -3528,7 +3368,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("messages that arrive while a wake launch is in flight join its single notice, even across a failed launch", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -3555,7 +3394,6 @@ describe("DaemonRuntime", () => {
         provider: "pi",
         createAgentSession: async () => {
           launchAttempts++;
-          // The second launch (the first wake) stays in flight until the test fails it.
           if (launchAttempts === 2)
             await new Promise<never>((_, reject) => {
               failLaunch = reject;
@@ -3610,36 +3448,27 @@ describe("DaemonRuntime", () => {
       method: "agent:v1:message:deliver" as const,
       target: "@agent",
     });
-
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
       for (const exit of [...exits]) exit();
-
       const first = runtime.handleAgentMessage(delivery(1));
       void first.catch(() => {});
       await wakeLaunching;
-      // M2 arrives while that launch is still in flight, then the launch fails.
       const second = runtime.handleAgentMessage(delivery(2));
       void second.catch(() => {});
       failLaunch(new Error("pi: command not found"));
       await expect(first).rejects.toThrow("pi: command not found");
-      // Kept for the next launch, not failed.
       await expect(second).resolves.toBeUndefined();
-      // Both are kept for the next launch, and acknowledged as the daemon keeps them.
       expect(events).toEqual(["ack delivery-1", "ack delivery-2"]);
-
-      // The cooldown itself is under test, so it runs on the real clock.
-      await Bun.sleep(1_100);
+      await Bun.sleep(1100);
       const third = runtime.handleAgentMessage(delivery(3));
       await retryLaunching;
-      // M4 arrives while the launch after the cooldown is still in flight, and that one succeeds.
       await runtime.handleAgentMessage(delivery(4));
       retryLaunch.resolve();
       await third;
       await acknowledged;
       expect(launchAttempts).toBe(3);
-      // M3 and M4 are acknowledged as they join the waiting batch; one notice presents all four.
       expect(events).toEqual([
         "ack delivery-1",
         "ack delivery-2",
@@ -3651,7 +3480,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("a message that arrives while a recovery Start is in flight is not acknowledged by that recovery", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -3717,17 +3545,13 @@ describe("DaemonRuntime", () => {
       method: "agent:v1:message:deliver" as const,
       target: "@agent",
     });
-
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
       for (const exit of [...exits]) exit();
-      // M1's wake launch fails, so M1 waits for the next launch.
       await expect(runtime.handleAgentMessage(delivery(1))).rejects.toThrow(
         "pi: command not found",
       );
-
-      // A Start whose recovery context covers M1 is in flight when M4 arrives.
       const started = runtime.startAgent("agent-a", config, undefined, undefined, {
         resumeMessages: [
           {
@@ -3750,15 +3574,12 @@ describe("DaemonRuntime", () => {
       recoveryLaunch.resolve();
       await started;
       await fourthAcknowledged.promise;
-
-      // The recovery notice covers M1 only; M4 is acknowledged only after a notice of its own.
       const fourthAck = events.indexOf("ack delivery-4");
       expect(events.slice(0, fourthAck).filter((event) => event === "notice")).toHaveLength(2);
     } finally {
       await runtime.stop();
     }
   });
-
   test("a successful Start clears the wake cooldown a failed wake launch left behind", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -3816,7 +3637,6 @@ describe("DaemonRuntime", () => {
       for (const exit of [...exits]) exit();
       exits.clear();
     };
-
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
@@ -3825,8 +3645,6 @@ describe("DaemonRuntime", () => {
       await expect(runtime.handleAgentMessage(delivery(1))).rejects.toThrow(
         "pi: command not found",
       );
-
-      // The configuration is fixed and the Agent is started explicitly, well inside the cooldown.
       broken = false;
       await runtime.startAgent("agent-a", config);
       exitAll();
@@ -3838,7 +3656,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("a message for an Agent whose wake launch just failed waits out the cooldown, then one launch carries every waiting message", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -3903,30 +3720,22 @@ describe("DaemonRuntime", () => {
       method: "agent:v1:message:deliver" as const,
       target: "@agent",
     });
-
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
       for (const exit of exits) exit();
       broken = true;
-
       await expect(runtime.handleAgentMessage(delivery(1))).rejects.toThrow(
         "pi: command not found",
       );
       expect(launchAttempts).toBe(2);
-
-      // Within the first failure's one-second cooldown: no launch. The daemon keeps M2 for the
-      // next launch and acknowledges it on taking it, as it did M1 when that launch failed.
       await runtime.handleAgentMessage(delivery(2));
       expect(launchAttempts).toBe(2);
       expect(acknowledgements).toEqual(["delivery-1", "delivery-2"]);
-
-      // The cooldown runs on the real clock; its end launches without another delivery.
       broken = false;
-      await Bun.sleep(1_300);
+      await Bun.sleep(1300);
       await bothAcknowledged;
       expect(launchAttempts).toBe(3);
-      // One notice for everything that waited; each delivery was acknowledged exactly once.
       expect(notices).toHaveLength(1);
       expect(notices[0]).toContain("@agent 2 new messages");
       expect(acknowledgements).toEqual(["delivery-1", "delivery-2"]);
@@ -3934,7 +3743,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("an inbox purge drops the pending attention of the channels an Agent can no longer read", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4002,7 +3810,6 @@ describe("DaemonRuntime", () => {
         "#team:123e4567-e89b-42d3-a456-426614174000",
         "#teammates",
       ]);
-
       runtime.handleAgentInboxPurge({
         protocolMajor: 1,
         requestId: "purge-1",
@@ -4013,14 +3820,11 @@ describe("DaemonRuntime", () => {
         targets: ["#team"],
         reason: "member_removed",
       });
-
-      // The channel and its thread are gone; other channels, even one sharing its prefix, are not.
       expect(await targets()).toEqual(["#ops", "#teammates"]);
     } finally {
       await runtime.stop();
     }
   });
-
   test("an inbox purge drops waiting deliveries of a lost channel instead of announcing them", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4035,7 +3839,6 @@ describe("DaemonRuntime", () => {
         provider: "pi",
         createAgentSession: async () => {
           launchAttempts++;
-          // The wake launch stays in flight until the test releases it.
           if (launchAttempts === 2) {
             wakeLaunching.resolve();
             await wakeLaunch.promise;
@@ -4091,12 +3894,9 @@ describe("DaemonRuntime", () => {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
       for (const exit of [...exits]) exit();
-
-      // A DM wakes the exited Agent; a #team message waits behind that launch.
       const dm = runtime.handleAgentMessage(delivery(1, "@ada", "conversation-dm"));
       await wakeLaunching.promise;
       const team = runtime.handleAgentMessage(delivery(2, "#team", "conversation-team"));
-
       runtime.handleAgentInboxPurge({
         protocolMajor: 1,
         requestId: "purge-1",
@@ -4107,19 +3907,14 @@ describe("DaemonRuntime", () => {
         targets: ["#team"],
         reason: "left",
       });
-      // Dropped on purpose, so its delivery settles rather than failing.
       await expect(team).resolves.toBeUndefined();
-
       wakeLaunch.resolve();
       await dm;
-      // The #team delivery is acknowledged when the purge drops it, so the server does not bring
-      // it back if the Agent rejoins; only the DM is announced.
       expect(events).toEqual(["ack delivery-2", "notice 1", "ack delivery-1"]);
     } finally {
       await runtime.stop();
     }
   });
-
   test("an inbox purge drops a lost channel's delivery kept for the next launch", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4135,7 +3930,6 @@ describe("DaemonRuntime", () => {
         provider: "pi",
         createAgentSession: async () => {
           launchAttempts++;
-          // The first wake launch stays in flight, then fails.
           if (launchAttempts === 2) {
             failingLaunchStarted.resolve();
             await failingLaunch.promise;
@@ -4192,9 +3986,6 @@ describe("DaemonRuntime", () => {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
       for (const exit of [...exits]) exit();
-
-      // A DM wakes the Agent and a #team message arrives while that launch is in flight; the
-      // launch fails, so both wait in the delivery queue for the next launch.
       const dm = runtime.handleAgentMessage(delivery(1, "@ada", "conversation-dm"));
       void dm.catch(() => {});
       await failingLaunchStarted.promise;
@@ -4202,7 +3993,6 @@ describe("DaemonRuntime", () => {
       failingLaunch.resolve();
       await expect(dm).rejects.toThrow("pi: command not found");
       await team;
-
       runtime.handleAgentInboxPurge({
         protocolMajor: 1,
         requestId: "purge-1",
@@ -4213,9 +4003,6 @@ describe("DaemonRuntime", () => {
         targets: ["#team"],
         reason: "member_removed",
       });
-
-      // Both were acknowledged when the failed launch kept them. The next launch presents what
-      // still waits: the DM, not the purged channel.
       await runtime.startAgent("agent-a", config);
       await acknowledged.promise;
       expect(events).toEqual(["ack delivery-1", "ack delivery-2", "notice 1"]);
@@ -4223,7 +4010,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("reports active Agents inactive before a graceful daemon shutdown", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4252,24 +4038,24 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
     await Bun.sleep(2);
     await runtime.stop();
-
     expect(statuses.map(({ status }) => status)).toEqual(["active", "inactive"]);
     expect(new Set(statuses.map(({ observedAtMs }) => observedAtMs)).size).toBe(1);
     expect(statusAtTransportStop).toBe("inactive");
   });
-
   test("reports runtimes without waiting for catalog discovery, then catalogs in a second update", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const updates: unknown[] = [];
     const secondUpdate = Promise.withResolvers<void>();
     const catalogDiscovery = Promise.withResolvers<{
-      catalogs: { provider: "codex"; models: never[] }[];
+      catalogs: {
+        provider: "codex";
+        models: never[];
+      }[];
       failures: never[];
     }>();
     let catalogDiscoveryStarted = false;
@@ -4293,13 +4079,11 @@ describe("DaemonRuntime", () => {
         runtimes: async () => [{ provider: "codex", version: "0.151.0", displayName: "Codex" }],
         cachedCatalogs: async () => ({ catalogs: [], needsRefresh: true }),
         catalogs: async () => {
-          // Never resolves until the assertion below releases it: proves start() does not wait.
           catalogDiscoveryStarted = true;
           return catalogDiscovery.promise;
         },
       },
     );
-
     await runtime.start(connection);
     await Bun.sleep(0);
     expect(catalogDiscoveryStarted).toBe(true);
@@ -4310,7 +4094,6 @@ describe("DaemonRuntime", () => {
       runtimes: [{ provider: "codex", version: "0.151.0", displayName: "Codex" }],
       catalogs: [],
     });
-
     catalogDiscovery.resolve({ catalogs: [{ provider: "codex", models: [] }], failures: [] });
     await secondUpdate.promise;
     expect(updates).toHaveLength(2);
@@ -4322,7 +4105,6 @@ describe("DaemonRuntime", () => {
     });
     await runtime.stop();
   });
-
   test("skips the background catalog refresh when the cached catalogs are already fresh", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4355,16 +4137,13 @@ describe("DaemonRuntime", () => {
         },
       },
     );
-
     await runtime.start(connection);
-    // Give a scheduled-but-unwanted background task a chance to run before asserting it didn't.
     await Bun.sleep(2);
     expect(catalogDiscoveryCalls).toBe(0);
     expect(updates).toHaveLength(1);
     expect(updates[0]).toMatchObject({ catalogs: [{ provider: "codex", models: [] }] });
     await runtime.stop();
   });
-
   test("a reconnect re-reports Code Agent runtimes, then refreshes stale catalogs", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4379,7 +4158,10 @@ describe("DaemonRuntime", () => {
     };
     const cachedCatalogs = [{ provider: "codex" as const, models: [{ ...model, id: "cached" }] }];
     const liveCatalogs = [{ provider: "codex" as const, models: [{ ...model, id: "live" }] }];
-    const updates: Array<{ requestId: string; [field: string]: unknown }> = [];
+    const updates: Array<{
+      requestId: string;
+      [field: string]: unknown;
+    }> = [];
     const startupReported = Promise.withResolvers<void>();
     const reconnectReported = Promise.withResolvers<void>();
     let reconnect: (() => void) | undefined;
@@ -4416,14 +4198,11 @@ describe("DaemonRuntime", () => {
     );
     try {
       await runtime.start(connection);
-      // Startup reports the same pair (cached, then live); let it settle before reconnecting.
       await startupReported.promise;
       expect(reconnect).toBeDefined();
       catalogDiscoveryRuntimes.length = 0;
-
       reconnect!();
       await reconnectReported.promise;
-
       const reconnectUpdates = updates.slice(2);
       expect(reconnectUpdates).toEqual([
         {
@@ -4449,7 +4228,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test.each(["empty", "unavailable"])(
     "falls back to a current Claude rate-limit observation when direct usage is %s",
     async (reading) => {
@@ -4508,13 +4286,11 @@ describe("DaemonRuntime", () => {
               },
             },
           });
-
         const result = await runtime.scanUsage("claude-code");
         expect(result.status).toBe("available");
         const { collectedAt, ...snapshot } = JSON.parse(
           new TextDecoder().decode(result.snapshotJson),
         );
-        // Stamped when the usage event was observed, not "now" when this later scan reused it.
         expect(typeof collectedAt).toBe("string");
         expect(snapshot).toEqual({
           provider: "claude-code",
@@ -4529,7 +4305,6 @@ describe("DaemonRuntime", () => {
       }
     },
   );
-
   test("an observed usage snapshot keeps the time it was observed, not the later scan time", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4586,8 +4361,6 @@ describe("DaemonRuntime", () => {
             },
           },
         });
-      // The scan itself happens an hour later; the reused snapshot must still report when it was
-      // actually observed, not this later moment.
       setSystemTime(new Date("2026-09-17T01:00:00.000Z"));
       const result = await runtime.scanUsage("claude-code");
       const { collectedAt } = JSON.parse(new TextDecoder().decode(result.snapshotJson));
@@ -4597,7 +4370,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test.each(["parse-failure", "command-failure"])(
     "a signed-in Claude with %s usage is unavailable instead of requiring sign-in",
     async (mode) => {
@@ -4616,8 +4388,6 @@ describe("DaemonRuntime", () => {
         emptyCodeAgentDiscovery,
       );
       try {
-        // Forward to the existing CLI fixture, optionally making just /usage exit unsuccessfully.
-        // Authentication succeeds in both modes; neither outcome establishes expired credentials.
         await Bun.write(
           executable,
           `#!${process.execPath}\nconst mode = await Bun.file(${JSON.stringify(modeFile)}).text();\nconst child = Bun.spawn([process.execPath, ${JSON.stringify(fixture)}, mode, ...Bun.argv.slice(2)], { stdin: "ignore", stdout: "inherit", stderr: "ignore" });\nconst code = await child.exited;\nprocess.exit(mode === "command-failure" && Bun.argv.includes("/usage") ? 1 : code);\n`,
@@ -4631,8 +4401,6 @@ describe("DaemonRuntime", () => {
           status: "unavailable",
           message: "Provider usage is unavailable",
         });
-
-        // A later successful refresh recovers; a genuinely signed-out CLI still requests login.
         await Bun.write(modeFile, "current");
         const available = await runtime.scanUsage("claude-code");
         expect(available.status).toBe("available");
@@ -4652,7 +4420,6 @@ describe("DaemonRuntime", () => {
     },
     6 * USAGE_SCAN_READ_TIMEOUT_MS + DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS,
   );
-
   test("scans Kiro quota and distinguishes an unrepresentable window from expired authentication", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4698,7 +4465,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("does not expose a usage provider exception in the scan response", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4725,14 +4491,12 @@ describe("DaemonRuntime", () => {
       emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
-
     const result = await runtime.scanUsage("codex");
     expect(result).toMatchObject({ status: "error", message: "Usage scan failed" });
     expect(JSON.stringify(result)).not.toContain("secret");
     expect(JSON.stringify(result)).not.toContain("127.0.0.1");
     await runtime.stop();
   });
-
   test("passes the persisted server HTTP URL to the Agent API key client", async () => {
     const configuredConnection = {
       ...connection,
@@ -4740,13 +4504,14 @@ describe("DaemonRuntime", () => {
     };
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "daemon-token");
-    const requests: Array<{ url: string; authorization: string | null }> = [];
+    const requests: Array<{
+      url: string;
+      authorization: string | null;
+    }> = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = Object.assign(
       async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
         const url = String(input);
-        // Other DaemonRuntime instances in this test file may still have a background Code Agent
-        // catalog refresh in flight; only this test's own target host is under test here.
         if (url.startsWith("https://server.example/"))
           requests.push({ url, authorization: new Headers(init?.headers).get("authorization") });
         return Response.json({ apiKey: `sk_agent_${"a".repeat(43)}` });
@@ -4770,7 +4535,6 @@ describe("DaemonRuntime", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
-
     expect(requests).toEqual([
       {
         url: "https://server.example/api/agent-api-keys",
@@ -4778,7 +4542,6 @@ describe("DaemonRuntime", () => {
       },
     ]);
   });
-
   test("shares concurrent starts and starts transport once", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4807,7 +4570,6 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     const first = runtime.start(connection);
     const second = runtime.start(connection);
     expect(second).toBe(first);
@@ -4817,7 +4579,6 @@ describe("DaemonRuntime", () => {
     expect(starts).toBe(1);
     await runtime.stop();
   });
-
   test("starts all ready publications without blocking other Agents on a slow launch", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4886,7 +4647,6 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     const starting = runtime.start(connection);
     try {
       await secondActive;
@@ -4900,7 +4660,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("flushes buffered starts before delivery without losing starts received during flush", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -4986,7 +4745,6 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     const starting = runtime.start(connection);
     try {
       await notifying;
@@ -5002,13 +4760,9 @@ describe("DaemonRuntime", () => {
       });
       releaseNotify();
       await starting;
-      // Live starts received during the initial flush run independently. Wait
-      // for the observable active status, not a timer tick or initial startup.
-      // The fresh session's MEMORY.md turn and the message notice behind it.
       expect(events).toEqual(["start:agent-a", "notify:agent-a", "notify:agent-a"]);
       releaseSecondCredential();
       await secondActive;
-
       expect(events).toEqual([
         "start:agent-a",
         "notify:agent-a",
@@ -5022,7 +4776,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("recreates transport after a failed start", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -5054,14 +4807,12 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     await expect(runtime.start(connection)).rejects.toThrow("start failed");
     await runtime.start(connection);
     expect(starts).toBe(2);
     expect(created).toBe(2);
     await runtime.stop();
   });
-
   test("removes startup listeners and buffered publications when ready fails", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -5101,13 +4852,11 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     await expect(runtime.start(connection)).rejects.toThrow("ready failed");
     expect(unsubscribed).toBe(true);
     expect(listener).toBeUndefined();
     expect(runtime.agentProcessManager.size).toBe(0);
   });
-
   test("releases Agent runtimes when transport stop fails", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -5139,12 +4888,10 @@ describe("DaemonRuntime", () => {
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
-
     await expect(runtime.stop()).rejects.toThrow("stop failed");
     expect(shutdownTransport).toBe(true);
     expect(runtime.agentProcessManager.size).toBe(0);
   });
-
   test("waits for an in-flight start before stopping the transport", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -5177,7 +4924,6 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     const starting = runtime.start(connection);
     const stopping = runtime.stop();
     await entered.promise;
@@ -5186,7 +4932,6 @@ describe("DaemonRuntime", () => {
     await Promise.all([starting, stopping]);
     expect(calls).toEqual(["start", "stop"]);
   });
-
   test("passes the runtime provider config to its provider without interpreting it", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -5219,7 +4964,6 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     await runtime.start(connection);
     await runtime.startAgent("agent-a", {
       provider: "pi",
@@ -5232,7 +4976,6 @@ describe("DaemonRuntime", () => {
         apiKey: "sk-deepseek-secret",
       },
     });
-
     expect(startedCredential).toEqual({
       kind: "coforge",
       providerId: "deepseek",
@@ -5240,7 +4983,6 @@ describe("DaemonRuntime", () => {
     });
     await runtime.stop();
   });
-
   test("fails to start without a credential and can be retried", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     let starts = 0;
@@ -5265,14 +5007,12 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     await expect(runtime.start(connection)).rejects.toThrow("credential is missing");
     await credentials.save(connection.workspaceId, connection.computerId, "retry-token");
     await runtime.start(connection);
     expect(starts).toBe(1);
     await runtime.stop();
   });
-
   test("reports Message received after acceptance and before ACK, once per injection", async () => {
     const entered = Promise.withResolvers<void>();
     const gate = Promise.withResolvers<void>();
@@ -5313,7 +5053,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test.each(["wake", "resume", "summary"])(
     "reports accepted %s recovery only for concrete messages",
     async (kind) => {
@@ -5373,7 +5112,6 @@ describe("DaemonRuntime", () => {
       }
     },
   );
-
   test("late acceptance while stopping does not report Message received", async () => {
     const entered = Promise.withResolvers<void>();
     const gate = Promise.withResolvers<void>();
@@ -5402,7 +5140,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("Activity publication failure does not reject accepted delivery", async () => {
     const harness = await queueHarness({
       activity: (activity) => {
@@ -5419,7 +5156,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("does not ACK rejected notification and accepts redelivery in the same session", async () => {
     let attempts = 0;
     const activities: string[] = [];
@@ -5444,7 +5180,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("shares a concurrent Agent launch and mints one credential", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -5484,7 +5219,6 @@ describe("DaemonRuntime", () => {
     await Promise.all([first, second]);
     await runtime.stop();
   });
-
   const fresh = expect.stringContaining("fresh session.");
   test("a create launch gets recovery without inbox input", async () => {
     const harness = await queueHarness();
@@ -5501,7 +5235,6 @@ describe("DaemonRuntime", () => {
     expect(harness.startupNotices).toEqual([fresh]);
     await harness.runtime.stop();
   });
-
   const resumePrompt = "Stop editing the schema; only the frontend.";
   const resumeIntent = {
     protocolMajor: 1,
@@ -5514,13 +5247,11 @@ describe("DaemonRuntime", () => {
     reasoning: "",
     resumePrompt,
   };
-  /** Resolves with the first notice the Agent's session receives. */
   function firstNotice() {
     let resolve!: (notice: string) => void;
     const notice = new Promise<string>((done) => (resolve = done));
     return { notice, notify: (text: string) => resolve(text) };
   }
-
   test("a resume prompt opens a resumed session's first turn", async () => {
     const first = firstNotice();
     const harness = await queueHarness({ notify: first.notify });
@@ -5535,7 +5266,6 @@ describe("DaemonRuntime", () => {
     expect(harness.notices).toEqual([resumePrompt]);
     await harness.runtime.stop();
   });
-
   test("a resume prompt opens a new session's first turn", async () => {
     const first = firstNotice();
     const harness = await queueHarness({ notify: first.notify });
@@ -5546,7 +5276,6 @@ describe("DaemonRuntime", () => {
     expect(harness.notices[0]).toContain(resumePrompt);
     await harness.runtime.stop();
   });
-
   test("a resume prompt reaches an Agent that is already running", async () => {
     const first = firstNotice();
     const harness = await queueHarness({ notify: first.notify });
@@ -5555,7 +5284,6 @@ describe("DaemonRuntime", () => {
     expect(await first.notice).toBe(resumePrompt);
     await harness.runtime.stop();
   });
-
   const introductionPrompt = "Introduce yourself to Ada in your direct conversation.";
   const introductionIntent = {
     ...resumeIntent,
@@ -5563,7 +5291,6 @@ describe("DaemonRuntime", () => {
     resumePrompt: undefined,
     introductionPrompt,
   };
-
   test("an introduction replaces fresh-session recovery", async () => {
     const harness = await queueHarness();
     try {
@@ -5573,7 +5300,6 @@ describe("DaemonRuntime", () => {
         controlEpoch: 1,
         launchId: "launch-introduction-1",
       });
-      // A delivery arriving after the launch queues behind the introduction.
       await harness.delivery(1);
       expect(harness.notices[0]).toContain(introductionPrompt);
       expect(harness.notices).toHaveLength(2);
@@ -5582,7 +5308,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("an introduction runs before the launch's message recovery, which still runs", async () => {
     const harness = await queueHarness();
     try {
@@ -5598,7 +5323,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a running process is handed one introduction however many Starts carry it", async () => {
     const entered = Promise.withResolvers<void>();
     const gate = Promise.withResolvers<void>();
@@ -5612,7 +5336,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.startAgent("agent-a", config);
       const first = harness.runtime.handleAgentStart(introductionIntent);
       await entered.promise;
-      // A second Start (a config change) arrives while the introduction turn is still pending.
       await harness.runtime.handleAgentStart({ ...introductionIntent, requestId: "second-start" });
       gate.resolve();
       await first;
@@ -5624,7 +5347,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a joining Start replaces fresh recovery with its introduction", async () => {
     const gate = Promise.withResolvers<void>();
     const harness = await queueHarness({ launch: () => gate.promise });
@@ -5642,7 +5364,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a managed Start that rebinds a running process hands it the introduction", async () => {
     const first = firstNotice();
     const harness = await queueHarness({ notify: first.notify });
@@ -5662,7 +5383,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a launch after the process exited or stopped introduces again", async () => {
     const harness = await queueHarness();
     try {
@@ -5683,7 +5403,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("an introduction still queued when the process exits is the next launch's only one", async () => {
     const entered = Promise.withResolvers<void>();
     const gate = Promise.withResolvers<void>();
@@ -5702,14 +5421,12 @@ describe("DaemonRuntime", () => {
     });
     try {
       await harness.runtime.startAgent("agent-a", config);
-      // A delivery holds the queue, so the introduction waits behind it, unsent.
       const delivery = harness.delivery(1);
       void delivery.catch(() => {});
       await entered.promise;
       const introducing = harness.runtime.handleAgentStart(introductionIntent);
       void introducing.catch(() => {});
       harness.exit();
-      // The relaunch's own input queues behind the held delivery too.
       const relaunch = harness.runtime.handleAgentStart(introductionIntent);
       await relaunched.promise;
       gate.resolve();
@@ -5727,7 +5444,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a resume launch opens one recovery startup turn", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent(
@@ -5745,14 +5461,12 @@ describe("DaemonRuntime", () => {
     ]);
     await harness.runtime.stop();
   });
-
   test("a fresh launch opens one startup turn", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent("agent-a", config);
     expect(harness.startupNotices).toEqual([fresh]);
     await harness.runtime.stop();
   });
-
   test("summary-only startup catch-up reads each target once and acts only on directed work", async () => {
     const harness = await queueHarness();
     try {
@@ -5769,7 +5483,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a create launch with a wake message sends only the wake notice", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent(
@@ -5800,7 +5513,6 @@ describe("DaemonRuntime", () => {
     expect(harness.notices[0]).not.toContain("wake only");
     await harness.runtime.stop();
   });
-
   test("a stop that races a create launch sends no notices", async () => {
     let releaseLaunch!: () => void;
     const launchGate = new Promise<void>((resolve) => (releaseLaunch = resolve));
@@ -5823,7 +5535,6 @@ describe("DaemonRuntime", () => {
     expect(harness.notices).toEqual([]);
     await harness.runtime.stop();
   });
-
   test("queues launch recovery before live delivery", async () => {
     let release!: (credential: string) => void;
     const credential = new Promise<string>((resolve) => (release = resolve));
@@ -5853,7 +5564,6 @@ describe("DaemonRuntime", () => {
       launchRecovery,
     );
     const live = harness.delivery(2);
-
     release(`sk_agent_${"a".repeat(43)}`);
     const [started, recovered] = await Promise.all([launch, recoveryForLaunch, live]);
     expect(recovered).toBe(started);
@@ -5864,14 +5574,12 @@ describe("DaemonRuntime", () => {
     expect(harness.sessions()).toBe(1);
     await harness.runtime.stop();
   });
-
   test("ready waits for recovery added to an existing launch", async () => {
     let releaseLaunch!: () => void;
     let releaseRecovery!: () => void;
     const launchGate = new Promise<void>((resolve) => (releaseLaunch = resolve));
     const recoveryGate = new Promise<void>((resolve) => (releaseRecovery = resolve));
     const harness = await queueHarness({ launch: () => launchGate, notify: () => recoveryGate });
-
     const launching = harness.runtime.startAgent("agent-a", config);
     const recovering = harness.runtime.startAgent(
       "agent-a",
@@ -5882,7 +5590,6 @@ describe("DaemonRuntime", () => {
     );
     releaseLaunch();
     const started = await launching;
-
     expect(harness.runningAgentIds()).toEqual([]);
     releaseRecovery();
     const recovered = await recovering;
@@ -5891,7 +5598,6 @@ describe("DaemonRuntime", () => {
     expect(harness.runningAgentIds()).toEqual(["agent-a"]);
     await harness.runtime.stop();
   });
-
   test("ready reports only Agents past recovery and outside stopping", async () => {
     let releaseRecovery!: () => void;
     let releaseDispose!: () => void;
@@ -5919,14 +5625,12 @@ describe("DaemonRuntime", () => {
     releaseRecovery();
     await launching;
     expect(harness.runningAgentIds()).toEqual(["agent-a"]);
-
     const stopping = harness.runtime.stopAgent("agent-a");
     expect(harness.runningAgentIds()).toEqual([]);
     releaseDispose();
     await stopping;
     await harness.runtime.stop();
   });
-
   test("failed launch recovery disposes the runtime and can retry canonical recovery", async () => {
     let notifyAttempts = 0;
     let disposals = 0;
@@ -5959,14 +5663,12 @@ describe("DaemonRuntime", () => {
       ],
       unreadSummary: { "@ada": 1 },
     };
-
     await expect(
       harness.runtime.startAgent("agent-a", config, undefined, "failed-recovery", recoveryContext),
     ).rejects.toThrow("recovery rejected");
     expect(harness.runningAgentIds()).toEqual([]);
     expect(disposals).toBe(1);
     expect(received).toEqual([]);
-
     await harness.runtime.startAgent(
       "agent-a",
       config,
@@ -5975,8 +5677,6 @@ describe("DaemonRuntime", () => {
       recoveryContext,
     );
     expect(harness.sessions()).toBe(2);
-    // The failed attempt never reached its recovery notice: its first turn is the MEMORY.md
-    // context turn, which is what the injected failure rejected.
     expect(harness.notices).toHaveLength(1);
     expect(harness.notices.every((notice) => notice.startsWith("[CoForge inbox notice:"))).toBe(
       true,
@@ -5988,7 +5688,6 @@ describe("DaemonRuntime", () => {
     expect(harness.runningAgentIds()).toEqual(["agent-a"]);
     await harness.runtime.stop();
   });
-
   test("failed launch recovery preserves an explicit stop fence until stop completes", async () => {
     let rejectRecovery!: (error: Error) => void;
     let markRecoveryStarted!: () => void;
@@ -5998,7 +5697,6 @@ describe("DaemonRuntime", () => {
     const disposed = new Promise<void>((resolve) => (markDisposed = resolve));
     const harness = await queueHarness({
       async notify(notice) {
-        // The fresh session's MEMORY.md turn passes; the recovery notice is what holds here.
         if (notice.includes("not a request")) return;
         markRecoveryStarted();
         await recoveryGate;
@@ -6015,7 +5713,6 @@ describe("DaemonRuntime", () => {
       recovery,
     );
     await recoveryStarted;
-
     const startDuringStop = launching.then(
       () => "launch unexpectedly succeeded",
       async () => {
@@ -6031,13 +5728,11 @@ describe("DaemonRuntime", () => {
     rejectRecovery(new Error("recovery rejected"));
     await expect(launching).rejects.toThrow("cancelled");
     await disposed;
-
     expect(await startDuringStop).toContain("stopping");
     await stopping;
     await harness.runtime.startAgent("agent-a", config);
     await harness.runtime.stop();
   });
-
   test("active recovery rebind keeps its runtime and precedes live delivery", async () => {
     let releaseRecovery!: () => void;
     const recoveryGate = new Promise<void>((resolve) => (releaseRecovery = resolve));
@@ -6074,7 +5769,6 @@ describe("DaemonRuntime", () => {
     });
     const live = harness.delivery(4);
     await Bun.sleep(0);
-
     expect(harness.notices).toHaveLength(2);
     expect(harness.notices[0]).toContain("[CoForge inbox notice:");
     expect(harness.notices[0]).toContain("@ada 1 new message");
@@ -6091,11 +5785,9 @@ describe("DaemonRuntime", () => {
     expect(harness.mints()).toBe(1);
     await harness.runtime.stop();
   });
-
   test("active rebind without a wake ignores resume context and continues live delivery", async () => {
     const harness = await queueHarness();
     await harness.runtime.startAgent("agent-a", config);
-
     await Promise.all([
       harness.runtime.startAgent("agent-a", config, undefined, "recovery", recovery),
       harness.delivery(2),
@@ -6105,7 +5797,6 @@ describe("DaemonRuntime", () => {
     expect(harness.acknowledgements).toEqual(["delivery-2"]);
     await harness.runtime.stop();
   });
-
   test.each(["agent", "daemon"])(
     "%s stop waits for creation even after queued recovery is cancelled",
     async (ending) => {
@@ -6149,7 +5840,6 @@ describe("DaemonRuntime", () => {
       }
     },
   );
-
   test("stop completes when a session whose creation was still pending cannot be cleaned up", async () => {
     const creating = Promise.withResolvers<void>();
     const created = Promise.withResolvers<void>();
@@ -6180,7 +5870,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop().catch(() => {});
     }
   });
-
   test("daemon shutdown disposes a session before awaiting its launch recovery notice", async () => {
     const entered = Promise.withResolvers<void>();
     const pending = Promise.withResolvers<void>();
@@ -6214,7 +5903,6 @@ describe("DaemonRuntime", () => {
       await Promise.allSettled([launching, stopping]);
     }
   });
-
   test("stop disposes a session before waiting for its queued notice to settle", async () => {
     const entered = Promise.withResolvers<void>();
     const pending = Promise.withResolvers<void>();
@@ -6246,7 +5934,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("stop cancels a notice even if the provider reports acceptance only after replacement", async () => {
     const entered = Promise.withResolvers<void>();
     const pending = Promise.withResolvers<void>();
@@ -6277,7 +5964,6 @@ describe("DaemonRuntime", () => {
       await harness.runtime.stop();
     }
   });
-
   test("stop cancels current and queued input without acknowledging either", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -6290,7 +5976,6 @@ describe("DaemonRuntime", () => {
     await Bun.sleep(0);
     const stop = harness.runtime.stopAgent("agent-a");
     release();
-
     await expect(current).rejects.toThrow("cancelled");
     await stop;
     await expect(queued).rejects.toThrow("stopping");
@@ -6298,7 +5983,6 @@ describe("DaemonRuntime", () => {
     expect(harness.acknowledgements).toEqual([]);
     await harness.runtime.stop();
   });
-
   test("stopAgent during credential mint cancels that launch and permits a later launch", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6347,12 +6031,10 @@ describe("DaemonRuntime", () => {
     await stopping;
     expect(childStarts).toBe(0);
     expect(revoked).toEqual([cancelledCredential]);
-
     await runtime.startAgent("agent-a", config);
     expect(childStarts).toBe(1);
     await runtime.stop();
   });
-
   test("an old process exit cannot revoke a replacement launch's local proxy token", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6424,7 +6106,6 @@ describe("DaemonRuntime", () => {
     proxyFacade.issue = proxy.issue;
     proxyFacade.revoke = proxy.revoke;
     proxyFacade.close = proxy.close;
-
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
@@ -6432,10 +6113,7 @@ describe("DaemonRuntime", () => {
       await Promise.resolve();
       await expect(runtime.startAgent("agent-a", config)).rejects.toThrow("stopping");
       releaseOldDispose();
-      // Stop's outcome depends only on the local process exiting: the process
-      // exited fine, so the revoke failure above never rejects the Stop itself.
       await expect(stopping).resolves.toBeUndefined();
-
       await runtime.startAgent("agent-a", config);
       const replacementToken = proxyTokens[1]!;
       const request = () =>
@@ -6454,7 +6132,6 @@ describe("DaemonRuntime", () => {
       proxy.close();
     }
   });
-
   test("exports the server-authored launch identity as environment variables, alongside the existing local capabilities", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6496,12 +6173,9 @@ describe("DaemonRuntime", () => {
       undefined,
       emptyCodeAgentDiscovery,
     );
-
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-      // The local capability sockets already carried this way remain, alongside the new
-      // runtime-context variables sourced from the same launch-config identity.
       expect(capturedEnvironment?.COFORGE_AGENT_CONTEXT).toBeTruthy();
       expect(capturedEnvironment).toMatchObject({
         COFORGE_CURRENT_AGENT_ID: "agent-a",
@@ -6519,7 +6193,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("converts a provider error event into a classified runtime_error activity, and a reconnecting event into runtime_reconnecting", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6559,8 +6232,6 @@ describe("DaemonRuntime", () => {
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
-    // The provider reports a raw fact only; the daemon core is the single place
-    // that redacts, caps, and classifies it (agent-runtime/runtime-error-activity.ts).
     listener({ type: "error", message: "provider request failed" });
     listener({ type: "reconnecting", attempt: 2, message: "Reconnecting... 2/5" });
     expect(activities.map(({ detailKind }) => detailKind)).toEqual([
@@ -6581,7 +6252,6 @@ describe("DaemonRuntime", () => {
     });
     await runtime.stop();
   });
-
   test("a failed turn that already reported its own runtime_error keeps that as the one visible reason", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6623,14 +6293,11 @@ describe("DaemonRuntime", () => {
     await runtime.startAgent("agent-a", config);
     listener({ type: "error", message: "turn failed: provider unavailable" });
     listener({ type: "completed", status: "failed" });
-    // Exactly one error-level Activity for the one failed turn: the provider's own reason, not
-    // a second, generic "Agent runtime failed." layered on top of it.
     expect(activities.map(({ detailKind }) => detailKind)).toEqual(["starting", "runtime_error"]);
     expect(activities.filter((activity) => activity.level === "error")).toHaveLength(1);
     expect(activities[1]).toMatchObject({ detail: "turn failed: provider unavailable" });
     await runtime.stop();
   });
-
   test("a failed turn with no error event still reports the generic failure Activity", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6675,7 +6342,6 @@ describe("DaemonRuntime", () => {
     expect(activities[1]).toMatchObject({ detail: "Agent runtime failed." });
     await runtime.stop();
   });
-
   test("reports runtime_crashed with Crashed(...) wording on an unintentional exit that follows an unresolved error", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6722,12 +6388,9 @@ describe("DaemonRuntime", () => {
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
-    // This crash belongs to an established runtime, after its startup turn succeeded.
     listener({ type: "completed", status: "completed" });
     listener({ type: "error", message: "code agent process exited unexpectedly" });
     exit?.();
-    // `AgentSession.onExit` itself carries no exit code/signal; "Crashed" wording can only
-    // describe the last observed error, tracked on the launch since the `error` event above.
     expect(activities.map(({ detailKind }) => detailKind)).toEqual([
       "starting",
       "idle",
@@ -6740,7 +6403,6 @@ describe("DaemonRuntime", () => {
     });
     await runtime.stop();
   });
-
   test("keeps the stopped wording on an unintentional exit with no unresolved error", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6782,12 +6444,10 @@ describe("DaemonRuntime", () => {
     );
     await runtime.start(connection);
     await runtime.startAgent("agent-a", config);
-    // No `error` event preceded this exit, so it is not a crash: it keeps the stopped wording.
     exit?.();
     expect(activities.map(({ detailKind }) => detailKind)).toEqual(["starting", "stopped"]);
     await runtime.stop();
   });
-
   test("publishes a completion Activity with Idle detail for a successful turn", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6841,7 +6501,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("reports a fenced fresh session and an honest notice without exposing unrelated provider errors", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6889,9 +6548,6 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config, "old-session", "cloud-start");
-      // Driver-reported replacement (Claude Code/Codex's own in-driver session recreation, here
-      // simulated on "pi" for test simplicity): exactly one invalidate, sent BEFORE the report
-      // so the server's exact match against the still-stale session can succeed.
       expect(order).toEqual(["invalidate", "report"]);
       expect(invalidations).toHaveLength(1);
       expect(invalidations[0]).toMatchObject({
@@ -6928,7 +6584,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("sends a context-window reading once and de-duplicates an unchanged repeat", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -6968,40 +6623,37 @@ describe("DaemonRuntime", () => {
     );
     try {
       await runtime.start(connection);
-      // Seed the current native session id directly (the 3rd positional argument), the same
-      // way the fenced-session test above does, so this reading is not skipped for want of one.
       await runtime.startAgent("agent-a", config, "known-session");
       listener({
         type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
-        usedTokens: 27_908,
-        windowTokens: 200_000,
+        usedTokens: 27908,
+        windowTokens: 200000,
       });
       listener({
         type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
-        usedTokens: 27_908,
-        windowTokens: 200_000,
+        usedTokens: 27908,
+        windowTokens: 200000,
       });
       expect(readings).toHaveLength(1);
       expect(readings[0]).toMatchObject({
         agentId: "agent-a",
         provider: "pi",
         sessionId: "known-session",
-        usedTokens: 27_908,
-        windowTokens: 200_000,
+        usedTokens: 27908,
+        windowTokens: 200000,
         clientSeq: 1,
       });
       listener({
         type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
-        usedTokens: 40_000,
-        windowTokens: 200_000,
+        usedTokens: 40000,
+        windowTokens: 200000,
       });
       expect(readings).toHaveLength(2);
-      expect(readings[1]).toMatchObject({ usedTokens: 40_000, clientSeq: 2 });
+      expect(readings[1]).toMatchObject({ usedTokens: 40000, clientSeq: 2 });
     } finally {
       await runtime.stop();
     }
   });
-
   test.each(["stop", "exit"] as const)(
     "%s resets context-window readings for a new launch without resetting another Agent",
     async (ending) => {
@@ -7040,8 +6692,8 @@ describe("DaemonRuntime", () => {
       );
       const reading = {
         type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
-        usedTokens: 27_908,
-        windowTokens: 200_000,
+        usedTokens: 27908,
+        windowTokens: 200000,
       } as const;
       try {
         await runtime.start(connection);
@@ -7053,7 +6705,6 @@ describe("DaemonRuntime", () => {
           ["agent-a", "session-a-first"],
           ["agent-b", "session-b"],
         ]);
-
         if (ending === "stop") await runtime.stopAgent("agent-a");
         else sessions.get("agent-a")!.exit();
         await runtime.startAgent("agent-a", config, "session-a-next");
@@ -7064,13 +6715,12 @@ describe("DaemonRuntime", () => {
           ["agent-b", "session-b"],
           ["agent-a", "session-a-next"],
         ]);
-        expect(readings.at(-1)).toMatchObject({ usedTokens: 27_908, windowTokens: 200_000 });
+        expect(readings.at(-1)).toMatchObject({ usedTokens: 27908, windowTokens: 200000 });
       } finally {
         await runtime.stop();
       }
     },
   );
-
   test.each([
     ["delayed", "empty"],
     ["repeated", "empty"],
@@ -7122,15 +6772,14 @@ describe("DaemonRuntime", () => {
       );
       const reading = {
         type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
-        usedTokens: 27_908,
-        windowTokens: 200_000,
+        usedTokens: 27908,
+        windowTokens: 200000,
       } as const;
       try {
         await runtime.start(connection);
         await runtime.startAgent("agent-a", config, "session-first");
         sessions[0]!.emit(reading);
         if (pendingOutput !== "empty") {
-          // Hold the old trajectory's 350ms buffer until its delayed exit flushes it.
           jest.useFakeTimers();
           sessions[0]!.emit({ type: pendingOutput, text: "Old launch output" });
         }
@@ -7144,8 +6793,6 @@ describe("DaemonRuntime", () => {
           "session-next",
         ]);
         expect(activities.map(({ detailKind }) => detailKind)).toEqual(["compacting_context"]);
-
-        // Stop has settled; only the previous Session's exit notification arrives late.
         sessions[0]!.exit();
         sessions[1]!.emit(reading);
         sessions[1]!.emit({ type: "compaction-finished" });
@@ -7165,7 +6812,6 @@ describe("DaemonRuntime", () => {
       }
     },
   );
-
   test("skips a context-window reading while the current native session id is not yet known", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -7205,29 +6851,23 @@ describe("DaemonRuntime", () => {
     );
     try {
       await runtime.start(connection);
-      // No sessionId seeded this time: `reportSessionId` never ran, so the daemon does not yet
-      // know the current native session id.
       await runtime.startAgent("agent-a", config);
       listener({
         type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
         usedTokens: 10,
-        windowTokens: 200_000,
+        windowTokens: 200000,
       });
       expect(readings).toHaveLength(0);
     } finally {
       await runtime.stop();
     }
   });
-
   test.each([
     ["session_missing", "missing"],
     ["provider_replay_rejected", "provider_replay_rejected"],
   ] as const)(
     "reports exactly one session invalidate with the correct reason for a kiro/pi retry (%s)",
     async (code, reason) => {
-      // AgentControl's persisted control record is keyed by stateDirectory, not just agentId;
-      // a dedicated directory (cleaned up below) keeps this test isolated from every other test
-      // in this file and from any other run — the shared default is a real, reused directory.
       const stateDirectory = join(tempRoot, `coforge-retry-invalidate-${crypto.randomUUID()}`);
       const credentials = new InMemoryDaemonCredentialStore();
       await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -7292,7 +6932,6 @@ describe("DaemonRuntime", () => {
       try {
         await runtime.start(connection);
         await runtime.handleAgentStart(intent);
-        // Exactly one launch attempt failed with the recovery error before the fresh retry.
         expect(attempts).toBe(2);
         expect(invalidations).toHaveLength(1);
         expect(invalidations[0]).toMatchObject({ sessionId: "stale-session", reason });
@@ -7301,7 +6940,6 @@ describe("DaemonRuntime", () => {
         expect(
           activities.filter((activity) => activity.detailKind === "runtime_unavailable"),
         ).toHaveLength(1);
-        // The startup turn uses sendMessage; recovery notifications remain separate.
         await Bun.sleep(10);
         expect(notices).toEqual([]);
       } finally {
@@ -7310,7 +6948,6 @@ describe("DaemonRuntime", () => {
       }
     },
   );
-
   test("session_in_use retries without reporting any session invalidate or cold-start Activity", async () => {
     const stateDirectory = join(tempRoot, `coforge-retry-invalidate-busy-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();
@@ -7370,8 +7007,6 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.handleAgentStart(intent);
-      // The retry still happens (fix 1 must make the carried-over `replaced` harmless, not
-      // block the retry) — only the reporting is suppressed.
       expect(attempts).toBe(2);
       expect(invalidations).toHaveLength(0);
       expect(activities.some((activity) => activity.detailKind === "runtime_unavailable")).toBe(
@@ -7382,7 +7017,6 @@ describe("DaemonRuntime", () => {
       await rm(stateDirectory, { recursive: true, force: true });
     }
   });
-
   test("reports a safe launch failure while startup cleanup stays unresolved", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -7421,7 +7055,6 @@ describe("DaemonRuntime", () => {
       emptyCodeAgentDiscovery,
     );
     await runtime.start(connection);
-
     await expect(runtime.startAgent("agent-a", config)).rejects.toThrow(
       "process tree did not exit",
     );
@@ -7438,7 +7071,6 @@ describe("DaemonRuntime", () => {
     expect(credentialRequests).toBe(2);
     await runtime.stop().catch(() => undefined);
   });
-
   test("a stop completes without a runtime_error when process-tree exit cannot be confirmed", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -7489,14 +7121,12 @@ describe("DaemonRuntime", () => {
       model: "default",
       reasoning: "balanced",
     });
-
     await expect(runtime.stopAgent("agent-a")).resolves.toBeUndefined();
     expect(activities.map(({ detailKind }) => detailKind)).not.toContain("runtime_error");
     expect(statuses.at(-1)).toBe("inactive");
     expect(runtime.agentProcessManager.size).toBe(0);
     await runtime.stop().catch(() => undefined);
   });
-
   test("does not publish an old session exit after daemon stop and restart", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -7553,14 +7183,11 @@ describe("DaemonRuntime", () => {
     await runtime.start(connection);
     await runtime.handleAgentStart({ ...intent, requestId: "new-launch" });
     const beforeDelayedExit = activities.length;
-
     for (const listener of oldExitListeners) listener();
-
     expect(activities).toHaveLength(beforeDelayedExit);
     expect(activities.at(-1)?.requestId).toBe("new-launch");
     await runtime.stop();
   });
-
   test("a failed remote revoke at shutdown is attempted once and closes local access first", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -7613,13 +7240,10 @@ describe("DaemonRuntime", () => {
       ),
     ).rejects.toThrow("not running");
     releaseStop();
-    // Revoke stays best-effort at shutdown and is never retried:
-    // the failed revoke above never fails the overall Stop, and a second stop() sends nothing.
     await expect(stopping).resolves.toBeUndefined();
     await runtime.stop();
     expect(attempts).toBe(1);
   });
-
   test("shutdown sends one authenticated revoke per running Agent and always recreates the transport", async () => {
     const configuredConnection = {
       ...connection,
@@ -7632,7 +7256,6 @@ describe("DaemonRuntime", () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = Object.assign(
       async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-        // Background requests from other runtimes must not enter this test's revoke records.
         if (String(input) !== "https://server.example/api/agent-api-keys")
           return new Response(null, { status: 503 });
         if (init?.method === "POST") return Response.json({ apiKey: credential });
@@ -7658,26 +7281,19 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(configuredConnection);
       await runtime.startAgent("agent-a", config);
-      // Neither another host nor another path on this host is an Agent key revocation.
       for (const [url, method] of [
         ["https://unrelated.example/resource", "GET"],
         ["https://server.example/unrelated", "DELETE"],
       ] as const)
         await fetch(url, { method, headers: { authorization: "Bearer unrelated-fixture" } });
-      // Revoke stays best-effort at shutdown: the 503 above never fails the
-      // Stop. It is not retried either, so the second stop() sends nothing and
-      // the transport is recreated regardless of the revoke outcome.
       await expect(runtime.stop()).resolves.toBeUndefined();
       await runtime.stop();
     } finally {
       globalThis.fetch = originalFetch;
     }
-
     expect(revokeAuthorizations).toEqual(["Bearer daemon-token"]);
-    // One transport for start(), one recreated by each of the two stop() calls.
     expect(transportsCreated).toBe(3);
   });
-
   test("keeps App notices separate from Message state and drains them on normalized idle", async () => {
     const stateDirectory = join(tempRoot, `coforge-inbox-runtime-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();
@@ -7814,7 +7430,6 @@ describe("DaemonRuntime", () => {
       await rm(stateDirectory, { recursive: true, force: true });
     }
   });
-
   test("a reminder-triggered restart waits for the shared notice outcome before becoming terminal", async () => {
     const stateDirectory = join(tempRoot, `coforge-reminder-notice-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();
@@ -7891,7 +7506,7 @@ describe("DaemonRuntime", () => {
             title: "Retry me",
             target: "@frank",
             messageId: "123e4567-e89b-42d3-a456-426614174001",
-            fireAt: new Date(Date.now() - 1_000).toISOString(),
+            fireAt: new Date(Date.now() - 1000).toISOString(),
           },
         ],
       });
@@ -7899,7 +7514,6 @@ describe("DaemonRuntime", () => {
       const concurrentDrain = runtime.drainAppInboxNotices("agent-a");
       notify.reject(new Error("notify rejected"));
       await expect(concurrentDrain).rejects.toThrow("notify rejected");
-
       const receipts = (await Bun.file(
         join(
           stateDirectory,
@@ -7908,7 +7522,12 @@ describe("DaemonRuntime", () => {
           "agent-a",
           "receipts.json",
         ),
-      ).json()) as { receipts: Array<{ wakeAccepted: boolean; terminal: boolean }> };
+      ).json()) as {
+        receipts: Array<{
+          wakeAccepted: boolean;
+          terminal: boolean;
+        }>;
+      };
       expect(receipts.receipts[0]).toMatchObject({ wakeAccepted: false, terminal: false });
     } finally {
       notify.resolve();
@@ -7916,14 +7535,13 @@ describe("DaemonRuntime", () => {
       await rm(stateDirectory, { recursive: true, force: true });
     }
   });
-
   test("a reminder that reaches the Agent hours after its due time says it is overdue", async () => {
     const stateDirectory = join(tempRoot, `coforge-reminder-late-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const notified = Promise.withResolvers<void>();
     let receiveReminder!: (sync: import("@lrm/coforge-sdk/internal").ReminderSync) => void;
-    const dueAt = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
+    const dueAt = new Date(Date.now() - 2 * 60 * 60000).toISOString();
     const runtime = new DaemonRuntime(
       connection,
       () => ({
@@ -7958,7 +7576,6 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-      // The Computer was asleep at the due time; the reminder only reaches the daemon now.
       receiveReminder({
         protocolMajor: 1,
         requestId: "reminder-snapshot",
@@ -7980,7 +7597,6 @@ describe("DaemonRuntime", () => {
         ],
       });
       await notified.promise;
-
       const context = runtime.issueAgentContext("agent-a");
       const inbox = await runtime.inbox(context, {
         idempotencyKey: "check-reminder",
@@ -7994,10 +7610,7 @@ describe("DaemonRuntime", () => {
       await rm(stateDirectory, { recursive: true, force: true });
     }
   });
-
   describe("a stop with a reminder fire request in flight", () => {
-    /** A runtime whose cloud never answers the fire request until the test says so, with one
-     * overdue reminder delivered: the fire request is in flight when `start` returns to the test. */
     async function withFireInFlight(
       run: (harness: {
         runtime: DaemonRuntime;
@@ -8058,7 +7671,7 @@ describe("DaemonRuntime", () => {
               title: "Check the build",
               target: "@frank",
               messageId: "123e4567-e89b-42d3-a456-426614174001",
-              fireAt: new Date(Date.now() - 1_000).toISOString(),
+              fireAt: new Date(Date.now() - 1000).toISOString(),
             },
           ],
         });
@@ -8076,7 +7689,6 @@ describe("DaemonRuntime", () => {
         await rm(stateDirectory, { recursive: true, force: true });
       }
     }
-
     test("does not finish until the request has settled, and the late answer changes nothing", async () => {
       await withFireInFlight(async ({ runtime, stateDirectory, answerFire, fireAnswered }) => {
         const stopping = runtime.stop();
@@ -8087,10 +7699,8 @@ describe("DaemonRuntime", () => {
           ),
         ]);
         expect(early).toBe("still stopping");
-
         answerFire();
         await stopping;
-
         expect(fireAnswered()).toBe(true);
         const receipts = (await Bun.file(
           join(
@@ -8100,22 +7710,19 @@ describe("DaemonRuntime", () => {
             "agent-a",
             "receipts.json",
           ),
-        ).json()) as { receipts: Array<Record<string, unknown>> };
-        // The answer arrived after the stop: it neither recorded a result nor woke the Agent. The
-        // receipt keeps the request identity written before the fire, so the next daemon repeats
-        // the same request.
+        ).json()) as {
+          receipts: Array<Record<string, unknown>>;
+        };
         expect(receipts.receipts).toHaveLength(1);
         expect(receipts.receipts[0]).toMatchObject({ attempt: 1, wakeAccepted: false });
         expect(receipts.receipts[0]!.serverResult).toBeUndefined();
       });
     });
-
     test(
       "gives up after the shutdown bound when the request never settles, and says so",
       async () => {
         await withFireInFlight(async ({ runtime, fireAnswered }) => {
           const { records } = await captureDaemonLogs(() => runtime.stop());
-
           expect(fireAnswered()).toBe(false);
           const gaveUp = records.filter(
             (record) => record.properties.event === "daemon_runtime:reminder_settle_timed_out",
@@ -8127,10 +7734,9 @@ describe("DaemonRuntime", () => {
           });
         });
       },
-      DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS + 5_000,
+      DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS + 5000,
     );
   });
-
   test.each(["deleted", "damaged"] as const)(
     "a delivered reminder can still be acknowledged after its local receipt file is %s",
     async (damage) => {
@@ -8178,7 +7784,6 @@ describe("DaemonRuntime", () => {
             receiveReminder(sync),
         };
       };
-
       const notified = Promise.withResolvers<void>();
       const first = createRuntime(() => notified.resolve());
       try {
@@ -8200,7 +7805,7 @@ describe("DaemonRuntime", () => {
               title: "Check the build",
               target: "@frank",
               messageId: "123e4567-e89b-42d3-a456-426614174001",
-              fireAt: new Date(Date.now() - 1_000).toISOString(),
+              fireAt: new Date(Date.now() - 1000).toISOString(),
             },
           ],
         });
@@ -8208,7 +7813,6 @@ describe("DaemonRuntime", () => {
       } finally {
         await first.runtime.stop();
       }
-      // The receipt file is gone or unreadable, while the inbox item survives.
       const receiptFile = join(
         stateDirectory,
         "reminder-receipts",
@@ -8218,10 +7822,8 @@ describe("DaemonRuntime", () => {
       );
       if (damage === "deleted") await rm(receiptFile, { force: true });
       else await Bun.write(receiptFile, "{ not json");
-      // Nothing from the stopped daemon rewrote the file after the damage.
       if (damage === "deleted") expect(await Bun.file(receiptFile).exists()).toBe(false);
       else expect(await Bun.file(receiptFile).text()).toBe("{ not json");
-
       const second = createRuntime(() => {});
       try {
         await second.runtime.start(connection);
@@ -8233,8 +7835,6 @@ describe("DaemonRuntime", () => {
           operation: "check",
         });
         expect(before.entries).toHaveLength(1);
-
-        // A revision the Agent was never shown is still refused.
         expect(
           await second.runtime.reminder(
             context,
@@ -8242,7 +7842,6 @@ describe("DaemonRuntime", () => {
             agentKey,
           ),
         ).toMatchObject({ accepted: false });
-
         expect(
           await second.runtime.reminder(
             context,
@@ -8265,7 +7864,6 @@ describe("DaemonRuntime", () => {
       }
     },
   );
-
   test("projects a long multiline reminder title into the App Inbox without changing its occurrence", async () => {
     const stateDirectory = join(tempRoot, `coforge-reminder-preview-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();
@@ -8324,12 +7922,11 @@ describe("DaemonRuntime", () => {
             title: fullTitle,
             target: "@frank",
             messageId: "123e4567-e89b-42d3-a456-426614174001",
-            fireAt: new Date(Date.now() - 1_000).toISOString(),
+            fireAt: new Date(Date.now() - 1000).toISOString(),
           },
         ],
       });
       await notified.promise;
-
       const context = runtime.issueAgentContext("agent-a");
       const inbox = await runtime.inbox(context, {
         idempotencyKey: "check-reminder",
@@ -8341,9 +7938,7 @@ describe("DaemonRuntime", () => {
       expect(app?.title).not.toMatch(/[\r\n\t]/);
       expect(app?.title).toStartWith("检查 ");
       expect(app?.title).toEndWith("😀");
-      // Due a second ago: on time, whatever the cloud calls the fire.
       expect(app?.summary).toBe("Reminder due");
-
       const acknowledgement = await runtime.reminder(
         context,
         { idempotencyKey: "ack-reminder", context, operation: "ack", reminderId, revision: 1 },
@@ -8362,21 +7957,32 @@ describe("DaemonRuntime", () => {
           "agent-a",
           "receipts.json",
         ),
-      ).json()) as { receipts: Array<{ job: { title: string } }> };
+      ).json()) as {
+        receipts: Array<{
+          job: {
+            title: string;
+          };
+        }>;
+      };
       expect(receipts.receipts[0]?.job.title).toBe(fullTitle);
     } finally {
       await runtime.stop();
       await rm(stateDirectory, { recursive: true, force: true });
     }
   });
-
   test("a revoke failure at Stop is logged once and a reconnect never retries it", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     let reconnect: (() => void) | undefined;
     let revokeAttempts = 0;
-    const statuses: Array<{ agentId: string; status: string }> = [];
-    const activities: Array<{ agentId: string; detailKind: string }> = [];
+    const statuses: Array<{
+      agentId: string;
+      status: string;
+    }> = [];
+    const activities: Array<{
+      agentId: string;
+      detailKind: string;
+    }> = [];
     const runtime = new DaemonRuntime(
       connection,
       () => ({
@@ -8402,7 +8008,6 @@ describe("DaemonRuntime", () => {
           },
           async revokeAgentApiKey() {
             revokeAttempts++;
-            // The server is mid-deploy, same as the s144 incident.
             throw new Error("remote revoke failed");
           },
           sendAgentStatus({ agentId, status }) {
@@ -8421,18 +8026,12 @@ describe("DaemonRuntime", () => {
       await runtime.startAgent("agent-a", config);
       statuses.length = 0;
       activities.length = 0;
-
-      // Stop's outcome depends only on the local process exiting: the process
-      // stops cleanly even though the remote revoke above rejects, so stopAgent resolves.
       await expect(runtime.stopAgent("agent-a")).resolves.toBeUndefined();
       expect(revokeAttempts).toBe(1);
       expect(statuses.at(-1)).toEqual({ agentId: "agent-a", status: "inactive" });
       expect(
         activities.some((activity) => activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.STOPPED),
       ).toBe(true);
-
-      // The daemon never retries a revoke: reconnects leave the failure where it
-      // is, and the server invalidates the key at the Agent's next launch instead.
       reconnect?.();
       await Bun.sleep(0);
       reconnect?.();
@@ -8442,7 +8041,6 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-
   test("a connection the cloud refuses for good stops the running Agents, then reports why", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -8492,16 +8090,13 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-
       refuse?.("workspace_deleted");
-
       expect(await reported.promise).toBe("workspace_deleted");
       expect(events).toEqual(["agent stopped", "refused: workspace_deleted"]);
     } finally {
       await runtime.stop();
     }
   });
-
   test("a reconnect pass never revokes the key a running Agent is still using", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -8542,17 +8137,11 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-
-      // The cloud connection drops and comes back while the Agent keeps running. The pending
-      // revoke pass that runs on reconnect is for keys whose revoke is owed, never for the key
-      // the running Agent's proxy binding still sends with every request.
       reconnect?.();
       await Bun.sleep(0);
       reconnect?.();
       await Bun.sleep(0);
       expect(revokedKeys).toEqual([]);
-
-      // Stopping the Agent is what revokes its key, exactly once.
       await runtime.stopAgent("agent-a");
       await Bun.sleep(0);
       expect(revokedKeys).toEqual([liveKey]);
@@ -8561,10 +8150,7 @@ describe("DaemonRuntime", () => {
     }
     expect(revokedKeys).toEqual([liveKey]);
   });
-
   test("a fenced Start failure logs AgentControl's fixed rejection as a control_code", async () => {
-    // A dedicated stateDirectory keeps this fenced-control record isolated from every other
-    // test's agent-control store, matching the pattern other controlEpoch tests use.
     const stateDirectory = join(
       tempRoot,
       `coforge-start-failure-control-code-${crypto.randomUUID()}`,
@@ -8622,11 +8208,8 @@ describe("DaemonRuntime", () => {
         records.find((record) => record.properties.event === "agent_runtime:start_failed");
       const { records } = await captureDaemonLogs(async (arrived) => {
         await runtime.start(connection);
-        // Same agent, same epoch, different requestId: AgentControl rejects the second one with
-        // the fixed "control_request_mismatch" message once the first has a startResult. Sent
-        // once started: while held, a later start of the same Agent supersedes the earlier one.
         listener?.({ ...base, requestId: "start-2" });
-        const deadline = Date.now() + 5_000;
+        const deadline = Date.now() + 5000;
         while (!findFailure(arrived) && Date.now() < deadline)
           await new Promise((resolve) => setTimeout(resolve, 0));
       });
@@ -8635,8 +8218,6 @@ describe("DaemonRuntime", () => {
         agent_id: "control-code-agent",
         control_code: "control_request_mismatch",
       });
-      // diagnosticErrorCode alone only ever produces the generic "Error" for this rejection;
-      // control_code above is what makes it diagnosable.
       expect(failure?.properties.error_code).toBe("Error");
     } finally {
       await runtime.stop();
@@ -8644,7 +8225,6 @@ describe("DaemonRuntime", () => {
     }
   });
 });
-
 describe("Agent delivery queue", () => {
   function deliveryGateHarness(
     provider: AgentRuntimeConfig["provider"],
@@ -8663,98 +8243,58 @@ describe("Agent delivery queue", () => {
       agentConfig,
     });
   }
-
   test("a busy Kiro-mode Agent is delivered to immediately too, now that Kiro is steer mode", async () => {
-    // Kiro's own AgentSession.notify steers a running turn through its ACP
-    // `_session/steer` extension instead of replacing it — see kiro-agent-adapter.test.ts for
-    // that provider-level behavior. At the daemon level this fake session stands in for any
-    // steer-mode provider, so `shouldHold` for "kiro" now behaves exactly like "pi" below.
     const acks = ackGate(1);
     const { fake, deliver } = await deliveryGateHarness("kiro", acks);
-
     fake.emit({ type: "progress" });
     await deliver(1);
     await acks.done;
     expect(fake.notices).toHaveLength(1);
     expect(acks.acks).toEqual(["delivery-1"]);
   });
-
   test("an idle Kiro-mode Agent still delivers immediately", async () => {
     const acks = ackGate(1);
     const { fake, deliver } = await deliveryGateHarness("kiro", acks);
-
     await deliver(1);
     await acks.done;
     expect(fake.notices).toHaveLength(1);
     expect(acks.acks).toEqual(["delivery-1"]);
   });
-
   test("a busy steer-mode Agent (Pi) is delivered to immediately, unchanged by this queue", async () => {
     const acks = ackGate(1);
     const { fake, deliver } = await deliveryGateHarness("pi", acks);
-
     fake.emit({ type: "progress" });
     await deliver(1);
     await acks.done;
     expect(fake.notices).toHaveLength(1);
     expect(acks.acks).toEqual(["delivery-1"]);
   });
-
-  // The daemon-level queue_until_idle busy-gating race (a delivery decided before the runtime
-  // emits any event) has no live provider to exercise it through DaemonRuntime's public API any
-  // more (Kiro moved to steer — see above); it stays covered at the unit level in
-  // agent-message-attention-index.test.ts ("marks busy synchronously … before the session
-  // accepts it") and agent-delivery-gate.test.ts ("a queue_until_idle mode only holds while
-  // busy", via the new setMode primitive that exists for exactly this).
-
   test("a fallback notice (steer could not deliver it) is held and redelivered once at turn end, without a second ACK", async () => {
-    // A steer-mode provider's own notify() can accept a notice and later
-    // learn it never actually reached the model - Kiro's own ACP `steering_cleared` without a
-    // prior `steering_injected`, or `_session/steer` failing outright (kiro-agent-adapter.test.ts
-    // covers when Kiro itself emits this). At the daemon level, `notice-undelivered` is a plain
-    // AgentRuntimeEvent any provider can raise; this fake session raises it directly to prove the
-    // daemon's own hold-and-redeliver-once-idle side, independent of Kiro's wire protocol.
     const acks = ackGate(1);
     const { fake, deliver } = await deliveryGateHarness("kiro", acks);
-
-    await deliver(1); // ordinary idle delivery, ACKed immediately and unrelated to the fallback
+    await deliver(1);
     await acks.done;
     const delivered = fake.notices.length;
     expect(acks.acks).toEqual(["delivery-1"]);
-
     fake.emit({ type: "notice-undelivered", text: "STEERED-BUT-NEVER-INJECTED" });
-    expect(fake.notices).toHaveLength(delivered); // held, not sent yet
-
+    expect(fake.notices).toHaveLength(delivered);
     fake.emit({ type: "completed", status: "completed" });
     await fake.waitForNotices(delivered + 1);
     expect(fake.notices.at(-1)).toBe("STEERED-BUT-NEVER-INJECTED");
-    // Redelivery is a bare notify(), never routed through AgentMessageAttentionIndex - no new ACK.
     expect(acks.acks).toEqual(["delivery-1"]);
   });
-
   test("a fallback notice survives an unexpected exit and is redelivered exactly once on the next launch", async () => {
     const acks = ackGate(0);
     const { runtime, fake } = await deliveryGateHarness("kiro", acks);
-
     fake.emit({ type: "notice-undelivered", text: "STEERED-BUT-NEVER-INJECTED" });
     expect(fake.notices).toEqual([]);
-
-    fake.exit(); // an unexpected exit while the fallback notice is still held
-
-    // The next launch of the same Agent: a plain start, no recovery context (fallback notices
-    // are never dropped as "covered by recover" - a message-delivery notice might be, but this
-    // in-memory queue cannot tell the two apart, so it always redelivers - see runtime.ts).
+    fake.exit();
     await runtime.startAgent("agent-a", { ...config, provider: "kiro" });
     await fake.waitForNotices(1);
     expect(fake.notices).toEqual(["STEERED-BUT-NEVER-INJECTED"]);
   });
-
   describe("runtime-error delivery backoff and fingerprint fence", () => {
     afterEach(() => jest.useRealTimers());
-
-    /** Raw runtime events and whether each ends a backoff and resets the fence's streak. Kept
-     * literal, not derived from `RUNTIME_ERROR_RECOVERY_EFFECTS`: a wrong entry there must fail
-     * here rather than move the expectation with it. */
     const RECOVERY_EVENTS = [
       ["text", { type: "text-delta", text: "back" }, true, true],
       ["thinking", { type: "thinking-delta", text: "hm" }, true, true],
@@ -8774,45 +8314,32 @@ describe("Agent delivery queue", () => {
     ] as const satisfies ReadonlyArray<
       readonly [kind: string, event: AgentRuntimeEvent, endsBackoff: boolean, resetsFence: boolean]
     >;
-
     const fencedActivities = (
       activities: readonly import("@lrm/coforge-sdk/internal").AgentActivity[],
     ) =>
       activities.filter(
         (activity) => activity.runtimeError?.errorReason === "runtime_error_fenced",
       );
-
-    /** Each runtime_error Activity's errorReason, in order. */
     const runtimeErrorReasons = (
       activities: readonly import("@lrm/coforge-sdk/internal").AgentActivity[],
     ) =>
       activities
         .filter((activity) => activity.detailKind === "runtime_error")
         .map((activity) => activity.runtimeError?.errorReason);
-
     test("a retryable runtime error holds a new delivery and releases it once the backoff elapses", async () => {
       const acks = ackGate(1);
       const { fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
-
       fake.emit({ type: "error", message: "connect ECONNRESET" });
-      // Every provider pairs a mid-turn "error" with that turn's own "completed" outcome; the
-      // explicit hold (not the turn's busy/idle state) is what actually keeps this delivery
-      // queued until the backoff releases it.
       fake.emit({ type: "completed", status: "failed" });
       await deliver(1);
-      expect(fake.notices).toEqual([]); // held behind the backoff, not sent yet
-
-      jest.advanceTimersByTime(10_000 * 1.1 + 1); // base delay plus the maximum jitter
+      expect(fake.notices).toEqual([]);
+      jest.advanceTimersByTime(10000 * 1.1 + 1);
       await fake.waitForNotices(1);
       await acks.done;
       expect(fake.notices).toHaveLength(1);
     });
-
     test("the same error ending every turn never trips the fence, so a later delivery is still notified", async () => {
-      // A Claude Code usage limit fails every turn the same way until it resets. Each turn end
-      // resets the fence's streak (reference behaviour cited at `runtimeErrorRecoverySignal`),
-      // so the Agent is never fenced.
       const acks = ackGate(1);
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
       const { runtime, fake, deliver } = await deliveryGateHarness(
@@ -8828,9 +8355,6 @@ describe("Agent delivery queue", () => {
           fake.emit({ type: "completed", status: "failed" });
         }
         expect(fencedActivities(activities)).toEqual([]);
-
-        // The last turn end also ended the unclassified error's backoff, so nothing holds the
-        // delivery: it is notified before it is acknowledged.
         await deliver(1);
         await acks.done;
         expect(fake.notices).toHaveLength(1);
@@ -8838,7 +8362,6 @@ describe("Agent delivery queue", () => {
         await runtime.stop();
       }
     });
-
     test.each(
       RECOVERY_EVENTS.filter(([, , endsBackoff]) => endsBackoff).map(
         ([kind, event]) => [kind, event] as const,
@@ -8849,20 +8372,16 @@ describe("Agent delivery queue", () => {
         const acks = ackGate(1);
         const { fake, deliver } = await deliveryGateHarness("pi", acks);
         jest.useFakeTimers();
-
-        // A classified error, whose backoff its own turn end leaves holding.
         fake.emit({ type: "error", message: "502 Bad Gateway" });
         fake.emit({ type: "completed", status: "failed" });
         await deliver(1);
         expect(fake.notices).toEqual([]);
-
         fake.emit(progress);
-        await fake.waitForNotices(1); // no timer advanced: the progress released it
+        await fake.waitForNotices(1);
         await acks.done;
         expect(fake.notices).toHaveLength(1);
       },
     );
-
     test.each(
       RECOVERY_EVENTS.filter(([, , endsBackoff]) => !endsBackoff).map(
         ([kind, event]) => [kind, event] as const,
@@ -8873,39 +8392,30 @@ describe("Agent delivery queue", () => {
         const acks = ackGate(1);
         const { fake, deliver } = await deliveryGateHarness("pi", acks);
         jest.useFakeTimers();
-
-        // A classified error, whose turn end leaves its backoff holding.
         fake.emit({ type: "error", message: "502 Bad Gateway" });
         await deliver(1);
-        // Mid-turn, as these arrive (each marks the Agent busy until the turn end).
         fake.emit(between);
         fake.emit({ type: "completed", status: "failed" });
-        // A held delivery is acknowledged without a notice; one not held is notified first.
         await acks.done;
         expect(fake.notices).toEqual([]);
-
-        jest.advanceTimersByTime(10_000 * 1.1 + 1);
+        jest.advanceTimersByTime(10000 * 1.1 + 1);
         await fake.waitForNotices(1);
         expect(fake.notices).toHaveLength(1);
       },
     );
-
     test("output while busy mid-turn ends a backoff, and the held delivery is delivered at that turn's end", async () => {
       const acks = ackGate(1);
       const { fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
-
-      fake.emit({ type: "text-delta", text: "working" }); // the Agent is busy in a turn
+      fake.emit({ type: "text-delta", text: "working" });
       fake.emit({ type: "error", message: "429 Too Many Requests" });
       await deliver(1);
-      await acks.done; // held: acknowledged without a notice
-      fake.emit({ type: "text-delta", text: "back" }); // ends the backoff while still busy
-
+      await acks.done;
+      fake.emit({ type: "text-delta", text: "back" });
       fake.emit({ type: "completed", status: "completed" });
-      await fake.waitForNotices(1); // no timer advanced: the output released it
+      await fake.waitForNotices(1);
       expect(fake.notices).toHaveLength(1);
     });
-
     test.each(
       RECOVERY_EVENTS.map(
         ([kind, event, , resetsFence]) =>
@@ -8917,7 +8427,6 @@ describe("Agent delivery queue", () => {
         activities.push(activity),
       );
       try {
-        // A class the repeat fence still owns: the three transient classes are exempt (task #726).
         fake.emit({ type: "error", message: "HTTP 403" });
         fake.emit({ type: "error", message: "HTTP 403" });
         fake.emit(between);
@@ -8931,7 +8440,6 @@ describe("Agent delivery queue", () => {
         await runtime.stop();
       }
     });
-
     test.each(["failed", "completed", "interrupted"] as const)(
       "a %s turn end between three identical errors resets the fence's streak",
       async (status) => {
@@ -8957,59 +8465,45 @@ describe("Agent delivery queue", () => {
         }
       },
     );
-
     test("a non-retryable runtime error does not hold the next delivery", async () => {
       const acks = ackGate(1);
       const { fake, deliver } = await deliveryGateHarness("pi", acks);
-
       fake.emit({ type: "error", message: "the request timed out after 60000ms" });
       await deliver(1);
       await acks.done;
       expect(fake.notices).toHaveLength(1);
     });
-
     test("output resets the backoff streak, so the next failure starts at the base delay again", async () => {
       const acks = ackGate(2);
       const { fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
-
-      // First streak: fail, let it back off and release on its own.
       fake.emit({ type: "error", message: "connect ECONNRESET" });
       fake.emit({ type: "completed", status: "failed" });
       await deliver(1);
-      jest.advanceTimersByTime(10_000 * 1.1 + 1);
+      jest.advanceTimersByTime(10000 * 1.1 + 1);
       await fake.waitForNotices(1);
-
-      // A turn with output in between resets the streak.
       fake.emit({ type: "text-delta", text: "done" });
       fake.emit({ type: "completed", status: "completed" });
-
-      // A second failure: if the streak had not reset, the second attempt's delay would double
-      // to ~20s and this delivery would still be held after only the base delay elapses.
       fake.emit({ type: "error", message: "connect ECONNRESET" });
       fake.emit({ type: "completed", status: "failed" });
       await deliver(2);
-      jest.advanceTimersByTime(10_000 * 1.1 + 1);
+      jest.advanceTimersByTime(10000 * 1.1 + 1);
       await fake.waitForNotices(2);
       await acks.done;
       expect(fake.notices).toHaveLength(2);
     });
-
     test("a turn end ends the backoff of an unclassified error and flushes what it held", async () => {
       const acks = ackGate(1);
       const { fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
-
       fake.emit({ type: "error", message: "something odd happened" });
       await deliver(1);
-      expect(fake.notices).toEqual([]); // held behind the backoff while the turn runs
+      expect(fake.notices).toEqual([]);
       fake.emit({ type: "completed", status: "failed" });
-
-      await fake.waitForNotices(1); // no timer advanced: the turn end released it
+      await fake.waitForNotices(1);
       await acks.done;
       expect(fake.notices).toHaveLength(1);
     });
-
     test.each([
       ["rate limit", "429 Too Many Requests", "failed"],
       ["provider connection", "connect ECONNRESET", "failed"],
@@ -9021,20 +8515,16 @@ describe("Agent delivery queue", () => {
         const acks = ackGate(1);
         const { fake, deliver } = await deliveryGateHarness("pi", acks);
         jest.useFakeTimers();
-
         fake.emit({ type: "error", message });
         fake.emit({ type: "completed", status });
-        // A held delivery is acknowledged without a notice; one not held is notified first.
         await deliver(1);
         await acks.done;
-        expect(fake.notices).toEqual([]); // still held until its delay elapses
-
-        jest.advanceTimersByTime(10_000 * 1.1 + 1);
+        expect(fake.notices).toEqual([]);
+        jest.advanceTimersByTime(10000 * 1.1 + 1);
         await fake.waitForNotices(1);
         expect(fake.notices).toHaveLength(1);
       },
     );
-
     test.each([
       ["classified", {}, "ProviderApiError", "provider_api_error"],
       [
@@ -9065,8 +8555,6 @@ describe("Agent delivery queue", () => {
         const error = { type: "error", message: "HTTP 403", ...hints } as const;
         jest.useFakeTimers();
         try {
-          // The same failure repeating with no turn end or output in between: the first two
-          // back off, as any retryable failure does.
           fake.emit(error);
           const initial = activities.find((activity) => activity.detailKind === "runtime_error");
           expect(initial).toMatchObject({
@@ -9079,13 +8567,9 @@ describe("Agent delivery queue", () => {
           });
           expect(initial!.runtimeError!.fingerprint).toMatch(/^[0-9a-f]{8}$/);
           fake.emit(error);
-
-          // The third consecutive failure with the same fingerprint trips the fence, taking the
-          // Agent offline: the process ends and the Agent reports inactive.
           activities.length = 0;
           fake.emit(error);
           await fake.disposed;
-
           const fenced = activities.find((activity) => activity.detailKind === "runtime_error");
           expect(fenced).toBeDefined();
           expect(fenced!.runtimeError?.errorReason).toBe("runtime_error_fenced");
@@ -9102,9 +8586,6 @@ describe("Agent delivery queue", () => {
           expect(
             activities.filter((activity) => activity.detailKind === "runtime_error"),
           ).toHaveLength(1);
-
-          // The process is gone: its exit reports nothing further, and a late event from a dead
-          // session is dropped.
           activities.length = 0;
           fake.exit();
           fake.emit(error);
@@ -9114,38 +8595,27 @@ describe("Agent delivery queue", () => {
         }
       },
     );
-
     test("a tripped fence takes the Agent offline: it keeps custody of later deliveries until a fresh start", async () => {
       const acks = ackGate(2);
       const { runtime, fake, deliver, statuses, rejections } = await deliveryGateHarness(
         "pi",
         acks,
       );
-
-      // Three identical failures with no turn end or output in between trip the fence, which
-      // ends the process and reports the Agent inactive (terminal residency, like an
-      // action-required failure).
       for (let attempt = 0; attempt < 3; attempt++)
         fake.emit({ type: "error", message: "something odd happened" });
       await fake.disposed;
       await Bun.sleep(0);
       expect(statuses.at(-1)?.status).toBe("inactive");
-
-      // A later delivery is kept for the next launch: acknowledged, not rejected.
       await deliver(1);
       expect(rejections).toEqual([]);
       expect(statuses.at(-1)?.status).toBe("inactive");
       expect(fake.notices).toEqual([]);
-
-      // A fresh start presents what was kept: the launch's flush notice covers the kept
-      // delivery, and this one arrives as its own notice right after.
       await runtime.startAgent("agent-a", { ...config, provider: "pi" });
       await deliver(2);
       await fake.waitForNotices(2);
       await acks.done;
       expect(fake.notices).toHaveLength(2);
     });
-
     test("the fence trip's Activity is restated, at a higher clientSeq, on a kept delivery", async () => {
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
       const { runtime, fake, deliver, rejections } = await deliveryGateHarness(
@@ -9164,8 +8634,6 @@ describe("Agent delivery queue", () => {
         expect(fenced.detail).toBe(
           `Runtime stopped after 3 repeated runtime errors with the same fingerprint (${fenced.runtimeError?.fingerprint}). Last error: something odd happened Restart after the runtime/tooling issue is fixed.`,
         );
-
-        // The kept delivery restates `inactive` and the fenced Activity at a higher clientSeq.
         const sentBefore = activities.length;
         await deliver(1);
         expect(rejections).toEqual([]);
@@ -9179,29 +8647,22 @@ describe("Agent delivery queue", () => {
         await runtime.stop();
       }
     });
-
     test("an explicit Stop discards the backoff and fence streaks for the next launch", async () => {
       const acks = ackGate(1);
       const { runtime, fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
-
       fake.emit({ type: "error", message: "connect ECONNRESET" });
-      await deliver(1); // held behind an explicit hold, discarded (not released) by Stop below
+      await deliver(1);
       await runtime.stopAgent("agent-a");
-
-      // A fresh launch starts with no inherited hold or backoff state: a delivery on it reaches
-      // the (new) session immediately instead of staying stuck behind the stopped launch's hold.
       await runtime.startAgent("agent-a", { ...config, provider: "pi" });
       await deliver(2);
       await fake.waitForNotices(1);
       await acks.done;
       expect(fake.notices).toHaveLength(1);
     });
-
     test(
       "a runtime stopped mid-backoff lets its process exit without waiting the backoff out",
       async () => {
-        // A release timer left behind would keep the stopped daemon process alive until it fired.
         const startedAt = performance.now();
         const child = Bun.spawn(
           [
@@ -9221,18 +8682,13 @@ describe("Agent delivery queue", () => {
       },
       3 * RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS,
     );
-
     test("a runtime started again after stopping mid-backoff delivers without waiting it out", async () => {
       const acks = ackGate(1);
       const { runtime, fake, deliver } = await deliveryGateHarness("pi", acks);
       jest.useFakeTimers();
-
       fake.emit({ type: "error", message: "connect ECONNRESET" });
       fake.emit({ type: "completed", status: "failed" });
       await runtime.stop();
-
-      // Stopping ended the backoff it would otherwise have waited out; no hold is left behind
-      // without the timer that would have released it.
       await runtime.start(connection);
       await runtime.startAgent("agent-a", { ...config, provider: "pi" });
       await deliver(2);
@@ -9241,10 +8697,8 @@ describe("Agent delivery queue", () => {
       expect(fake.notices).toHaveLength(1);
     });
   });
-
   describe("activity probe with messages the Agent has not read", () => {
     afterEach(() => jest.useRealTimers());
-
     const probe = (runtime: DaemonRuntime, probeId: string) =>
       runtime.handleAgentActivityProbe({
         protocolMajor: 1,
@@ -9254,8 +8708,6 @@ describe("Agent delivery queue", () => {
         agentId: "agent-a",
         probeId,
       });
-
-    /** A launched Agent that was told about one message, ended its turn, and has not read it. */
     async function idleWithUnreadMessage() {
       const acks = ackGate(1);
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
@@ -9268,7 +8720,6 @@ describe("Agent delivery queue", () => {
       expect(activities.at(-1)?.detailKind).toBe(AGENT_ACTIVITY_DETAIL_KIND.IDLE);
       return { ...harness, activities };
     }
-
     test("an idle Agent with an unread message answers Message received", async () => {
       const { runtime, activities } = await idleWithUnreadMessage();
       try {
@@ -9285,7 +8736,6 @@ describe("Agent delivery queue", () => {
         await runtime.stop();
       }
     });
-
     test("that answer is no busy evidence: no busy Agent is reported and no heartbeat follows", async () => {
       const { runtime, activities } = await idleWithUnreadMessage();
       jest.useFakeTimers();
@@ -9301,7 +8751,6 @@ describe("Agent delivery queue", () => {
         await runtime.stop();
       }
     });
-
     test("once the message no longer waits, the probe answers idle again", async () => {
       const { runtime, activities } = await idleWithUnreadMessage();
       try {
@@ -9324,7 +8773,6 @@ describe("Agent delivery queue", () => {
         await runtime.stop();
       }
     });
-
     test("an Agent the fingerprint fence took offline keeps deliveries and stays quiet to a probe", async () => {
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
       const { runtime, fake, deliver, rejections } = await deliveryGateHarness(
@@ -9338,20 +8786,15 @@ describe("Agent delivery queue", () => {
           fake.emit({ type: "error", message: "HTTP 403" });
         await fake.disposed;
         await Bun.sleep(0);
-        // A delivery finds no process: kept for the next launch — acknowledged, not rejected.
         await deliver(1);
         expect(rejections).toEqual([]);
-
-        // A probe gets no busy answer: the fenced launch is stopping, so the publisher mutes it.
         await probe(runtime, "probe-4");
         expect(activities.filter((activity) => activity.probeId === "probe-4")).toEqual([]);
       } finally {
         await runtime.stop();
       }
     });
-
     test.each([
-      // A backoff hold is temporary: the held message is still debt the Agent will be given.
       [
         "a runtime error backoff",
         "connect ECONNRESET",
@@ -9379,8 +8822,7 @@ describe("Agent delivery queue", () => {
         fake.emit({ type: "completed", status: "failed" });
         await deliver(1);
         await acks.done;
-        expect(fake.notices).toEqual([]); // held, not told
-
+        expect(fake.notices).toEqual([]);
         await probe(runtime, "probe-4");
         expect(activities.at(-1)).toMatchObject({
           agentId: "agent-a",
@@ -9392,7 +8834,6 @@ describe("Agent delivery queue", () => {
         await runtime.stop();
       }
     });
-
     test("unread wins over a remembered busy turn, whose heartbeat stays armed", async () => {
       const acks = ackGate(1);
       const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
@@ -9418,13 +8859,11 @@ describe("Agent delivery queue", () => {
         expect(runtime.busyAgents()).toMatchObject([
           { agentId: "agent-a", detailKind: AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED },
         ]);
-
         await probe(runtime, "probe-5");
         expect(activities.at(-1)).toMatchObject({
           detailKind: AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED,
           probeId: "probe-5",
         });
-        // The remembered turn is unchanged and its heartbeat still fires, without the probe id.
         expect(runtime.busyAgents()).toMatchObject([
           { agentId: "agent-a", detailKind: AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED },
         ]);
@@ -9440,57 +8879,8 @@ describe("Agent delivery queue", () => {
         await runtime.stop();
       }
     });
-
-    test("a Memory Agent's observed channel updates are not unread debt; a personal mention is", async () => {
-      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake } = await deliveryGateHarness(
-        "pi",
-        ackGate(0),
-        undefined,
-        (activity) => activities.push(activity),
-        { memoryAgent: true },
-      );
-      // A Memory Agent opens each conversation's session under its control session's identity.
-      Object.assign(fake.session, {
-        readSessionIdentity: async () => ({ sessionId: "session-a", state: "resumable" as const }),
-      });
-      const channelMessage = (sequence: number, mentionsAgent: boolean) =>
-        runtime.handleAgentMessage({
-          protocolMajor: 1,
-          requestId: `request-${sequence}`,
-          messageId: `message-${sequence}`,
-          deliveryId: `delivery-${sequence}`,
-          sequence,
-          workspaceId: connection.workspaceId,
-          conversationId: "conversation-team",
-          agentId: "agent-a",
-          body: `body-${sequence}`,
-          method: "agent:v1:message:deliver",
-          target: "#team",
-          ...(mentionsAgent ? { mentionsAgent: true } : {}),
-        });
-      try {
-        // An ordinary channel update, possibly addressed to another Agent: observed in a batch.
-        await channelMessage(1, false);
-        await probe(runtime, "probe-6");
-        expect(activities.at(-1)).toMatchObject({
-          detailKind: AGENT_ACTIVITY_DETAIL_KIND.IDLE,
-          probeId: "probe-6",
-        });
-
-        await channelMessage(2, true);
-        await probe(runtime, "probe-7");
-        expect(activities.at(-1)).toMatchObject({
-          detailKind: AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED,
-          probeId: "probe-7",
-        });
-      } finally {
-        await runtime.stop();
-      }
-    });
   });
 });
-
 function connectedClient(): CentrifugeWorkspaceClient {
   let connected: (() => void) | undefined;
   return {
@@ -9504,8 +8894,6 @@ function connectedClient(): CentrifugeWorkspaceClient {
     async rpc() {},
   };
 }
-
-/** A Pi runtime connected over `client`. */
 function runtimeOver(
   credentials: InMemoryDaemonCredentialStore,
   client: CentrifugeWorkspaceClient,
@@ -9520,7 +8908,6 @@ function runtimeOver(
     workspaceRoot,
   );
 }
-
 function retryingRuntime(token: string) {
   const attempted = Promise.withResolvers<void>();
   let connectErrors: ((error: unknown) => void) | undefined;
@@ -9542,28 +8929,21 @@ function retryingRuntime(token: string) {
     saveCredential: () => credentials.save(connection.workspaceId, connection.computerId, token),
   };
 }
-
 test("stopping a runtime whose first cloud connect is still retrying ends its start", async () => {
   const { runtime, attempted, saveCredential } = retryingRuntime("token-retrying");
   await saveCredential();
   const start = runtime.start(connection).catch((error: unknown) => error);
   await attempted;
-
   await runtime.stop();
-
   expect(await start).toBeInstanceOf(DaemonConnectionStoppedError);
 });
-
 test("a stop that arrives before the first cloud connect begins still ends it", async () => {
   const { runtime, saveCredential } = retryingRuntime("token-stopped-early");
   await saveCredential();
   const start = runtime.start(connection).catch((error: unknown) => error);
-
   await runtime.stop();
-
   expect(await start).toBeInstanceOf(DaemonConnectionStoppedError);
 });
-
 test("stopping a runtime whose first ready keeps failing ends its start", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-ready-failing");
@@ -9579,12 +8959,9 @@ test("stopping a runtime whose first ready keeps failing ends its start", async 
   const runtime = runtimeOver(credentials, client);
   const start = runtime.start(connection).catch((error: unknown) => error);
   await readyAttempted.promise;
-
   await runtime.stop();
-
   expect(await start).toBeInstanceOf(DaemonConnectionStoppedError);
 });
-
 test("a start that fails after connecting stops that connection instead of leaving it online", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-start-fails");
@@ -9611,12 +8988,9 @@ test("a start that fails after connecting stops that connection instead of leavi
     emptyCodeAgentDiscovery,
     workspaceRoot,
   );
-
   await expect(runtime.start(connection)).rejects.toThrow("ready failed");
-
   expect(calls).toEqual(["start", "ready", "stop"]);
 });
-
 test("a send the daemon holds locally is never issued, and what it showed is then reviewed", async () => {
   const calls: AgentMessageRequest[] = [];
   const harness = await messageHarness(async (request) => {
@@ -9633,7 +9007,6 @@ test("a send the daemon holds locally is never issued, and what it showed is the
     };
   });
   try {
-    // One message the Agent has not been shown for this exact target.
     await harness.deliver(1, "#general");
     const send = {
       idempotencyKey: "send-held-1",
@@ -9647,10 +9020,6 @@ test("a send the daemon holds locally is never issued, and what it showed is the
     expect(held.decision).toBe("local_hold");
     expect(held.reason).toBe("exact_target_pending");
     expect(held.newMessageCount).toBe(1);
-    // The notice shows the message, so the Agent has now reviewed it, which is why the same target
-    // no longer holds this request: the held send itself was still never issued (the point of
-    // deciding locally), and the next attempt is the Agent's own resend rather than something the
-    // freshness gate withheld.
     expect(held.messages.map((message) => message.sequence)).toEqual([1]);
     expect(held.messageId).toBe("");
     expect(calls.filter((call) => call.operation === "send")).toHaveLength(0);
@@ -9665,7 +9034,6 @@ test("a send the daemon holds locally is never issued, and what it showed is the
     await harness.runtime.stop();
   }
 });
-
 test("a held send reports the freshness-decision activity and fact id", async () => {
   const stateDirectory = join(tempRoot, `coforge-freshness-activity-${crypto.randomUUID()}`);
   const credentials = new InMemoryDaemonCredentialStore();
@@ -9690,7 +9058,6 @@ test("a held send reports the freshness-decision activity and fact id", async ()
         sendAgentActivity(activity) {
           activities.push(activity);
         },
-        // A locally decided hold must not reach the transport at all.
         async agentMessage() {
           throw new Error("the daemon must hold this send locally");
         },
@@ -9739,9 +9106,6 @@ test("a held send reports the freshness-decision activity and fact id", async ()
       `sk_agent_${"a".repeat(43)}`,
     );
     expect(held).toMatchObject({ state: "held", decision: "local_hold" });
-
-    // A working status row titled `Send held by freshness check` carrying the target, the count
-    // line and the decision line.
     const frame = activities.find((activity) => activity.detailKind === "freshness_hold");
     expect(frame).toMatchObject({
       detail: "Send held by freshness check",
@@ -9758,15 +9122,12 @@ test("a held send reports the freshness-decision activity and fact id", async ()
         },
       ],
     });
-    // The producer fact id: the `freshness_decision_fact:` prefix plus a full sha256 — computed
-    // here, because this decision never reached the server's code path.
     expect(frame?.producerFactId).toMatch(/^freshness_decision_fact:[0-9a-f]{64}$/);
   } finally {
     await runtime.stop();
     await rm(stateDirectory, { recursive: true, force: true });
   }
 });
-
 test("--send-draft --anyway bypasses the daemon's own hold and reaches the transport", async () => {
   const calls: AgentMessageRequest[] = [];
   const harness = await messageHarness(async (request) => {
@@ -9800,13 +9161,11 @@ test("--send-draft --anyway bypasses the daemon's own hold and reaches the trans
     const sends = calls.filter((call) => call.operation === "send");
     expect(sends).toHaveLength(1);
     expect(sends[0]?.continueAnyway).toBe(true);
-    // A bypass is the one path that still reports what the Agent chose not to review.
     expect(sent.state).toBe("sent");
   } finally {
     await harness.runtime.stop();
   }
 });
-
 test("a locally held send shows the unreviewed window, and a resend after it goes through", async () => {
   const calls: AgentMessageRequest[] = [];
   const harness = await messageHarness(async (request) => {
@@ -9835,11 +9194,8 @@ test("a locally held send shows the unreviewed window, and a resend after it goe
     const held = await harness.runtime.agentMessage(harness.context, send, harness.apiKey);
     expect(held.state).toBe("held");
     expect(held.newMessageCount).toBe(2);
-    // The notice carries what the daemon still holds for this target, a bounded window.
     expect(held.messages.map((message) => message.sequence)).toEqual([1, 2]);
     expect(calls.filter((call) => call.operation === "send")).toHaveLength(0);
-    // Showing that window counts as consuming it, so the Agent's own resend is no longer held by
-    // those messages: it reaches the transport and goes through.
     const resent = await harness.runtime.agentMessage(
       harness.context,
       { ...send, idempotencyKey: "send-window-2", sendDraft: true },
@@ -9851,13 +9207,10 @@ test("a locally held send shows the unreviewed window, and a resend after it goe
     await harness.runtime.stop();
   }
 });
-
 test("a genuinely new send still replaces the target's draft", async () => {
   const calls: AgentMessageRequest[] = [];
   const harness = await messageHarness(async (request) => {
     calls.push(request);
-    // Both the first send and the newer one are held here, so what the resend carries is decided
-    // purely by whose content the target's draft holds.
     return !request.sendDraft
       ? {
           protocolMajor: 1,
@@ -9897,8 +9250,6 @@ test("a genuinely new send still replaces the target's draft", async () => {
       },
       harness.apiKey,
     );
-    // A new send is the newest writer, so its content (and key) replace the draft — the "new send
-    // replaces the stored draft" behaviour, with its replaced-draft warning.
     await harness.runtime.agentMessage(
       harness.context,
       {
@@ -9932,7 +9283,6 @@ test("a genuinely new send still replaces the target's draft", async () => {
     await harness.runtime.stop();
   }
 });
-
 describe("one logical send keeps one idempotency key", () => {
   const sent = (
     request: Pick<AgentMessageRequest, "idempotencyKey">,
@@ -9970,7 +9320,6 @@ describe("one logical send keeps one idempotency key", () => {
     AgentTransportError.preResponseTransport("agent send", new Error("socket closed"));
   const lostMidResponse = () =>
     AgentTransportError.midResponseTransport("agent send", 200, new Error("stream reset"));
-  /** The runtime's draft for `@ada`, read through the same store (and directory) it uses. */
   const draft = async (stateDirectory: string) => {
     const lookup = await new AgentMessageDraftStore(
       AgentStateDb.open(stateDirectory, "agent-a"),
@@ -10008,8 +9357,6 @@ describe("one logical send keeps one idempotency key", () => {
       () => undefined,
       (error) => error,
     );
-  /** A message harness whose sends answer through `respond` and whose reconciliations through
-   * `reconcile`. */
   const harnessWith = (
     respond: (request: AgentMessageRequest) => Promise<AgentMessageTransportResponse>,
     reconcile?: (
@@ -10017,7 +9364,6 @@ describe("one logical send keeps one idempotency key", () => {
     ) => Promise<AgentSendReconciliationResponse>,
     stateDirectory?: string,
   ) => messageHarness(respond, undefined, undefined, undefined, reconcile, stateDirectory);
-
   test("--send-draft after an unknown outcome sends under the original send's key, then clears", async () => {
     const calls: AgentMessageRequest[] = [];
     const harness = await harnessWith(async (request) => {
@@ -10030,9 +9376,7 @@ describe("one logical send keeps one idempotency key", () => {
         AgentTransportError,
       );
       expect((await draft(harness.stateDirectory))?.idempotencyKey).toBe("send-first");
-
       const resent = await send(harness, "send-again", { sendDraft: true });
-
       expect(resent.state).toBe("sent");
       expect(calls.map((call) => [call.idempotencyKey, call.content])).toEqual([
         ["send-first", "reply"],
@@ -10043,7 +9387,6 @@ describe("one logical send keeps one idempotency key", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a held refresh keeps the draft's key, so the resend is the same logical send", async () => {
     const calls: AgentMessageRequest[] = [];
     const harness = await harnessWith(async (request) => {
@@ -10056,18 +9399,13 @@ describe("one logical send keeps one idempotency key", () => {
         idempotencyKey: "send-held",
         reholdCount: 1,
       });
-
       await send(harness, "send-resend", { sendDraft: true });
-
       expect(calls.map((call) => call.idempotencyKey)).toEqual(["send-held", "send-held"]);
     } finally {
       await harness.runtime.stop();
     }
   });
-
   test("an accepted send whose key differs from the draft's leaves the newer draft in place", async () => {
-    // The draft names its own send: a send that finishes after another one replaced the draft
-    // (its answer arriving late) must not consume a draft it no longer owns.
     const answer = deferred<AgentMessageTransportResponse>();
     const issued = deferred<void>();
     const harness = await harnessWith(async (request) => {
@@ -10080,7 +9418,6 @@ describe("one logical send keeps one idempotency key", () => {
       await issued.promise;
       await send(harness, "send-newer", { content: "newer reply" });
       answer.resolve(sent({ idempotencyKey: "send-older" }));
-
       expect((await older).state).toBe("sent");
       expect(await draft(harness.stateDirectory)).toMatchObject({
         content: "newer reply",
@@ -10090,7 +9427,6 @@ describe("one logical send keeps one idempotency key", () => {
       await harness.runtime.stop();
     }
   });
-
   test("--expected-draft-key refuses a draft that now belongs to another send, without a request", async () => {
     const calls: AgentMessageRequest[] = [];
     const harness = await harnessWith(async (request) => {
@@ -10100,11 +9436,9 @@ describe("one logical send keeps one idempotency key", () => {
     try {
       await send(harness, "send-newer", { content: "newer draft" });
       calls.length = 0;
-
       const refused = await failure(
         send(harness, "send-check", { sendDraft: true, expectedDraftKey: "send-older" }),
       );
-
       expect(refused).toBeInstanceOf(AgentPreflightError);
       expect(refused).toMatchObject({
         code: "SAVED_DRAFT_IDENTITY_CHANGED",
@@ -10122,11 +9456,10 @@ describe("one logical send keeps one idempotency key", () => {
       await harness.runtime.stop();
     }
   });
-
   test("an expired draft is not sent: the entry is removed and its body travels once, as details", async () => {
     const calls: AgentMessageRequest[] = [];
     const stateDirectory = join(tempRoot, `coforge-stale-${crypto.randomUUID()}`);
-    const savedAt = Date.now() - AGENT_MESSAGE_DRAFT_TTL_MS - 1_000;
+    const savedAt = Date.now() - AGENT_MESSAGE_DRAFT_TTL_MS - 1000;
     await new AgentMessageDraftStore(
       AgentStateDb.open(stateDirectory, "agent-a"),
       () => savedAt,
@@ -10144,7 +9477,6 @@ describe("one logical send keeps one idempotency key", () => {
     );
     try {
       const expired = await failure(send(harness, "send-late", { sendDraft: true }));
-
       expect(expired).toBeInstanceOf(AgentPreflightError);
       const error = expired as AgentPreflightError;
       expect(error.code).toBe("SEND_DRAFT_EXPIRED");
@@ -10162,10 +9494,9 @@ describe("one logical send keeps one idempotency key", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a send to another target never drops this target's expired draft or its last copy", async () => {
     const stateDirectory = join(tempRoot, `coforge-other-${crypto.randomUUID()}`);
-    const savedAt = Date.now() - AGENT_MESSAGE_DRAFT_TTL_MS - 1_000;
+    const savedAt = Date.now() - AGENT_MESSAGE_DRAFT_TTL_MS - 1000;
     await new AgentMessageDraftStore(
       AgentStateDb.open(stateDirectory, "agent-a"),
       () => savedAt,
@@ -10176,9 +9507,7 @@ describe("one logical send keeps one idempotency key", () => {
     const harness = await harnessWith(async (request) => sent(request), undefined, stateDirectory);
     try {
       await send(harness, "send-bob", { target: "@bob", content: "bob's reply" });
-
       const expired = await failure(send(harness, "send-late", { sendDraft: true }));
-
       expect(expired).toMatchObject({
         code: "SEND_DRAFT_EXPIRED",
         details: { discarded_draft: { content: "ada's reply" } },
@@ -10187,7 +9516,6 @@ describe("one logical send keeps one idempotency key", () => {
       await harness.runtime.stop();
     }
   });
-
   test("the send's log names the key it actually went out under, and so does its answer", async () => {
     const harness = await harnessWith(async (request) =>
       request.sendDraft ? sent(request) : held(request),
@@ -10197,7 +9525,6 @@ describe("one logical send keeps one idempotency key", () => {
       const { result, records } = await captureDaemonLogs(() =>
         send(harness, "send-resend", { sendDraft: true }),
       );
-
       expect(result.idempotencyKey).toBe("send-held");
       const sentRecord = records.find((record) => record.properties.event === "agent.message.sent");
       expect(sentRecord?.properties.request_id).toBe("send-held");
@@ -10205,7 +9532,6 @@ describe("one logical send keeps one idempotency key", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a draft written without a key is no draft to resend", async () => {
     const stateDirectory = join(tempRoot, `coforge-keyless-${crypto.randomUUID()}`);
     await new AgentMessageDraftStore(AgentStateDb.open(stateDirectory, "agent-a")).save("@ada", {
@@ -10230,13 +9556,11 @@ describe("one logical send keeps one idempotency key", () => {
       await harness.runtime.stop();
     }
   });
-
   test("the draft's key outlives a daemon restart", async () => {
     const stateDirectory = join(tempRoot, `coforge-restart-${crypto.randomUUID()}`);
     const first = await harnessWith(async (request) => held(request), undefined, stateDirectory);
     await send(first, "send-held", { content: "held reply" });
     await first.runtime.stop();
-
     const calls: AgentMessageRequest[] = [];
     const second = await harnessWith(
       async (request) => {
@@ -10251,9 +9575,7 @@ describe("one logical send keeps one idempotency key", () => {
         await failure(send(second, "send-a", { sendDraft: true, expectedDraftKey: "send-older" })),
       ).toMatchObject({ code: "SAVED_DRAFT_IDENTITY_CHANGED" });
       expect(calls).toEqual([]);
-
       await send(second, "send-b", { sendDraft: true, expectedDraftKey: "send-held" });
-
       expect(calls.map((call) => [call.idempotencyKey, call.content])).toEqual([
         ["send-held", "held reply"],
       ]);
@@ -10262,7 +9584,6 @@ describe("one logical send keeps one idempotency key", () => {
       await second.runtime.stop();
     }
   });
-
   describe("settling an ambiguous send through the runtime (cases in agent-send-settlement.test.ts)", () => {
     test("a lost response reconciled as committed is the send's success and consumes its draft", async () => {
       const reconciled: AgentSendReconciliationRequest[] = [];
@@ -10285,7 +9606,6 @@ describe("one logical send keeps one idempotency key", () => {
         const { result, records } = await captureDaemonLogs(() =>
           send(harness, "send-lost", { content: "reply" }),
         );
-
         expect(result).toMatchObject({
           accepted: true,
           state: "committed",
@@ -10294,8 +9614,6 @@ describe("one logical send keeps one idempotency key", () => {
         const reconciledLog = records.find(
           (record) => record.properties.event === "agent.message.send_reconciled",
         )?.properties;
-        // The documented outcome vocabulary (docs/observability/structured-logging.md); the
-        // answer itself is its own field.
         expect(reconciledLog).toMatchObject({
           request_id: "send-lost",
           outcome: "ok",
@@ -10319,10 +9637,7 @@ describe("one logical send keeps one idempotency key", () => {
         await harness.runtime.stop();
       }
     });
-
     test("a send's worst case stays within the CLI's budget of daemon requests", async () => {
-      // A short thread target is resolved by one read, then the send is lost, reconciled as
-      // not_found, and its replay lost too: the most requests one `message send` can cost.
       const rootId = "12345678-1234-4234-8234-123456789abc";
       let requests = 0;
       const harness = await harnessWith(
@@ -10352,14 +9667,12 @@ describe("one logical send keeps one idempotency key", () => {
         await harness.runtime.stop();
       }
     });
-
     test("a failed replay is retryable while the runtime's draft still holds the key", async () => {
       const harness = await harnessWith(async () => {
         throw lostBeforeResponse();
       }, notFound);
       try {
         const error = await failure(send(harness, "send-replay", { content: "reply" }));
-
         expect(error).toBeInstanceOf(AgentSendVerdictError);
         expect((error as AgentSendVerdictError).verdict).toMatchObject({
           retryable: true,
@@ -10373,7 +9686,6 @@ describe("one logical send keeps one idempotency key", () => {
         await harness.runtime.stop();
       }
     });
-
     test("a failed replay whose draft another send took over is not retryable", async () => {
       const replay = deferred<AgentMessageTransportResponse>();
       const replayIssued = deferred<void>();
@@ -10392,9 +9704,7 @@ describe("one logical send keeps one idempotency key", () => {
         await replayIssued.promise;
         expect((await send(harness, "send-newer", { content: "newer reply" })).state).toBe("held");
         replay.reject(lostBeforeResponse());
-
         const error = (await older) as AgentSendVerdictError;
-
         expect(error).toBeInstanceOf(AgentSendVerdictError);
         expect(error.verdict).toMatchObject({ retryable: false, draftSaved: false });
         expect(error.verdict.suggestedNextAction).toContain("CANNOT_CONFIRM");
@@ -10408,7 +9718,6 @@ describe("one logical send keeps one idempotency key", () => {
     });
   });
 });
-
 describe("the Agent read boundary (exact seen sequences)", () => {
   type Harness = Awaited<ReturnType<typeof messageHarness>>;
   type Respond = Parameters<typeof messageHarness>[0];
@@ -10433,7 +9742,6 @@ describe("the Agent read boundary (exact seen sequences)", () => {
     messages,
     ...fields,
   });
-  /** A harness whose sends are answered `sent` and recorded; reads and checks go to `respond`. */
   const harnessWithSends = async (respond: Respond) => {
     const sends: AgentMessageRequest[] = [];
     const harness = await messageHarness(async (request) => {
@@ -10456,13 +9764,11 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       { idempotencyKey, context: harness.context, ...fields },
       harness.apiKey,
     );
-
   test("a check and an anchored read record exact sequences; the next send reports those above its frontier", async () => {
     const { harness, sends } = await harnessWithSends(async (request) => {
       if (request.operation === "check")
         return page(request, [messageRecord(6, "@ada", "@ada"), messageRecord(8, "@ada", "@ada")]);
       if (request.around)
-        // An anchored read never joins what the Agent read, whatever boundary comes with it.
         return page(
           request,
           [messageRecord(10, "@ada", "@ada"), messageRecord(11, "@ada", "@ada")],
@@ -10477,14 +9783,12 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await run(harness, "check", { operation: "check" });
       await run(harness, "around", { operation: "read", target: "@ada", around: "abcdef12" });
       await run(harness, "send", { operation: "send", target: "@ada", content: "reply" });
-
       expect(sends).toHaveLength(1);
       expect(sends[0]).toMatchObject({ seenUpToSeq: 4, seenExactSeqs: [6, 8, 10, 11] });
     } finally {
       await harness.runtime.stop();
     }
   });
-
   test("a send reports at most the newest 2500 exact sequences", async () => {
     const shown = Array.from({ length: 2600 }, (_, index) =>
       messageRecord(index + 1, "@ada", "@ada"),
@@ -10493,7 +9797,6 @@ describe("the Agent read boundary (exact seen sequences)", () => {
     try {
       await run(harness, "check", { operation: "check" });
       await run(harness, "send", { operation: "send", target: "@ada", content: "reply" });
-
       const exact = sends[0]?.seenExactSeqs ?? [];
       expect(sends[0]?.seenUpToSeq).toBeUndefined();
       expect(exact).toHaveLength(2500);
@@ -10502,7 +9805,6 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
-
   test("the server's model-seen boundary advances the frontier", async () => {
     const { harness, sends } = await harnessWithSends(async (request) =>
       page(request, [messageRecord(5, "@ada", "@ada")], { modelSeenUpToSeq: 7 }),
@@ -10510,14 +9812,12 @@ describe("the Agent read boundary (exact seen sequences)", () => {
     try {
       await run(harness, "read", { operation: "read", target: "@ada" });
       await run(harness, "send", { operation: "send", target: "@ada", content: "reply" });
-
       expect(sends[0]?.seenUpToSeq).toBe(7);
       expect(sends[0]?.seenExactSeqs).toBeUndefined();
     } finally {
       await harness.runtime.stop();
     }
   });
-
   test("a read without a model-seen boundary moves no frontier: the daemon infers none", async () => {
     const { harness, sends } = await harnessWithSends(async (request) =>
       page(request, [messageRecord(5, "@ada", "@ada")]),
@@ -10525,21 +9825,18 @@ describe("the Agent read boundary (exact seen sequences)", () => {
     try {
       await run(harness, "read", { operation: "read", target: "@ada" });
       await run(harness, "send", { operation: "send", target: "@ada", content: "reply" });
-
       expect(sends[0]?.seenUpToSeq).toBeUndefined();
       expect(sends[0]?.seenExactSeqs).toEqual([5]);
     } finally {
       await harness.runtime.stop();
     }
   });
-
   test("an accepted send whose pending messages were all checked moves the frontier and empties the exact set", async () => {
     const sends: AgentMessageRequest[] = [];
     const harness = await messageHarness(async (request) => {
       if (request.operation === "check")
         return page(request, [messageRecord(6, "@ada", "@ada"), messageRecord(8, "@ada", "@ada")]);
       sends.push(request);
-      // The server found every pending message already seen and advanced the boundary over them.
       return sends.length === 1
         ? {
             ...sent(request),
@@ -10554,7 +9851,6 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await run(harness, "check", { operation: "check" });
       await run(harness, "send", { operation: "send", target: "@ada", content: "one" });
       await run(harness, "send", { operation: "send", target: "@ada", content: "two" });
-
       expect(sends[0]).toMatchObject({ seenExactSeqs: [6, 8] });
       expect(sends[1]?.seenUpToSeq).toBe(8);
       expect(sends[1]?.seenExactSeqs).toBeUndefined();
@@ -10562,7 +9858,6 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a locally held send presents the newest message the Agent has not seen as its boundary", async () => {
     const { harness, sends } = await harnessWithSends(async (request) =>
       request.operation === "check"
@@ -10572,10 +9867,8 @@ describe("the Agent read boundary (exact seen sequences)", () => {
     try {
       await harness.deliver(5, "@ada");
       await harness.deliver(7, "@ada");
-      // A check that showed only message 7 leaves message 5 unseen.
       await run(harness, "check", { operation: "check", target: "@ada" });
       const held = await run(harness, "send", { operation: "send", target: "@ada", content: "x" });
-
       expect(sends).toHaveLength(0);
       expect(held).toMatchObject({ state: "held", decision: "local_hold" });
       expect(held.messages.map(({ sequence }) => sequence)).toEqual([5]);
@@ -10590,7 +9883,6 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
-
   test("a read the server does not call contiguous records exact sequences, not a frontier", async () => {
     const { harness, sends } = await harnessWithSends(async (request) =>
       page(request, [messageRecord(2, "@ada", "@ada"), messageRecord(3, "@ada", "@ada")], {
@@ -10601,14 +9893,12 @@ describe("the Agent read boundary (exact seen sequences)", () => {
     try {
       await run(harness, "older", { operation: "read", target: "@ada", before: "abcdef12" });
       await run(harness, "send", { operation: "send", target: "@ada", content: "reply" });
-
       expect(sends[0]?.seenUpToSeq).toBeUndefined();
       expect(sends[0]?.seenExactSeqs).toEqual([2, 3]);
     } finally {
       await harness.runtime.stop();
     }
   });
-
   test("a held send's frontier replaces the exact sequences it covers in the draft", async () => {
     const sends: AgentMessageRequest[] = [];
     const harness = await messageHarness(async (request) => {
@@ -10633,7 +9923,6 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await run(harness, "check", { operation: "check" });
       await run(harness, "send", { operation: "send", target: "@ada", content: "reply" });
       await run(harness, "resend", { operation: "send", target: "@ada", sendDraft: true });
-
       expect(sends[0]).toMatchObject({ seenExactSeqs: [6] });
       expect(sends[1]?.seenUpToSeq).toBe(8);
       expect(sends[1]?.seenExactSeqs).toBeUndefined();
@@ -10641,7 +9930,6 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
-
   test.each([
     [
       "a read's consumption scope settles a pending notice delivered under another spelling",
@@ -10667,13 +9955,11 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.deliver(5, "@Ada");
       await run(harness, "read", { operation: "read", target: "@ada" });
       const checked = await run(harness, "check", { operation: "check" });
-
       expect(checked.attentionCount).toBe(pending);
     } finally {
       await harness.runtime.stop();
     }
   });
-
   test("a target spelled another way shares the consumed state the server's scope names", async () => {
     const spelled = "#general:0F0E0D0C-0B0A-4908-8706-050403020100";
     const canonical = spelled.toLowerCase();
@@ -10691,19 +9977,18 @@ describe("the Agent read boundary (exact seen sequences)", () => {
     try {
       await run(harness, "read", { operation: "read", target: spelled });
       await run(harness, "send", { operation: "send", target: spelled, content: "reply" });
-
       expect(sends[0]).toMatchObject({ target: canonical, seenUpToSeq: 9 });
     } finally {
       await harness.runtime.stop();
     }
   });
 });
-
 describe("a launch that cannot start says why", () => {
-  /** Starts one Agent whose launch fails the way `fail` says and returns the Activity the failure
-   * produced. `fail.credential` rejects the launch-config request instead of the session. */
   async function failedLaunch(
-    fail: { session?: () => unknown; credential?: () => unknown },
+    fail: {
+      session?: () => unknown;
+      credential?: () => unknown;
+    },
     agentConfig: AgentRuntimeConfig = config,
   ) {
     const credentials = new InMemoryDaemonCredentialStore();
@@ -10745,9 +10030,7 @@ describe("a launch that cannot start says why", () => {
       await runtime.stop();
     }
   }
-
   const logsNextStep = " See `coforge-computer logs` for the cause, then start the Agent again.";
-
   test("a runtime executable the spawner cannot find is reported as runtime_not_found", async () => {
     const activity = await failedLaunch(
       { session: () => new RuntimeExecutableNotFoundError("codex") },
@@ -10762,7 +10045,6 @@ describe("a launch that cannot start says why", () => {
       runtimeError: { errorClass: "LauncherError", errorReason: "runtime_not_found" },
     });
   });
-
   test("any other ENOENT during launch is runtime_spawn_failed, not a missing runtime", async () => {
     const activity = await failedLaunch({
       session: () =>
@@ -10775,7 +10057,6 @@ describe("a launch that cannot start says why", () => {
       runtimeError: { errorClass: "LauncherError", errorReason: "runtime_spawn_failed" },
     });
   });
-
   test("a model the runtime does not offer is reported as model_not_found, naming it", async () => {
     const activity = await failedLaunch({
       session: () => new RuntimeModelNotFoundError("claude-9"),
@@ -10788,7 +10069,6 @@ describe("a launch that cannot start says why", () => {
       runtimeError: { errorClass: "LauncherError", errorReason: "model_not_found" },
     });
   });
-
   test("a model provider setting the runtime cannot use is model_provider_not_configured", async () => {
     const activity = await failedLaunch({
       session: () =>
@@ -10802,7 +10082,6 @@ describe("a launch that cannot start says why", () => {
       runtimeError: { errorClass: "LauncherError", errorReason: "model_provider_not_configured" },
     });
   });
-
   test("an Agent environment variable the runtime cannot use is agent_environment_invalid, naming it", async () => {
     const cause = "NODE_EXTRA_CA_CERTS names /missing/ca.pem, which could not be read: ENOENT";
     const activity = await failedLaunch({ session: () => new AgentEnvironmentError(cause) });
@@ -10812,7 +10091,6 @@ describe("a launch that cannot start says why", () => {
       runtimeError: { errorClass: "LauncherError", errorReason: "agent_environment_invalid" },
     });
   });
-
   test("a runtime CLI below the supported version is reported as runtime_version_too_old", async () => {
     const refusal =
       "Kiro CLI 2.16.0 is unsupported; requires Kiro CLI >= 2.21.2. Upgrade kiro-cli before starting this runtime.";
@@ -10826,7 +10104,6 @@ describe("a launch that cannot start says why", () => {
       runtimeError: { errorClass: "LauncherError", errorReason: "runtime_version_too_old" },
     });
   });
-
   test("a launch the server does not authorize is reported as agent_authorization_failed", async () => {
     const activity = await failedLaunch({
       credential: () => new Error("Agent launch config request failed (403)"),
@@ -10840,7 +10117,6 @@ describe("a launch that cannot start says why", () => {
       runtimeError: { errorClass: "LauncherError", errorReason: "agent_authorization_failed" },
     });
   });
-
   test("every failed launch, woken or managed, is logged with its reason and cause", async () => {
     const { records } = await captureDaemonLogs(() =>
       failedLaunch({ session: () => new RuntimeModelNotFoundError("claude-9") }),
@@ -10855,7 +10131,6 @@ describe("a launch that cannot start says why", () => {
       error_message: "Model claude-9 is not available to this runtime",
     });
   });
-
   test("a message that merely mentions a missing model is not classified as model_not_found", async () => {
     const activity = await failedLaunch({ session: () => new Error("model claude-9 not found") });
     expect(activity).toMatchObject({
@@ -10864,7 +10139,6 @@ describe("a launch that cannot start says why", () => {
     });
   });
 });
-
 test("a daemon that can migrate says so in its ready, and starts no Agent a source migration holds", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-migration");
@@ -10885,7 +10159,6 @@ test("a daemon that can migrate says so in its ready, and starts no Agent a sour
           lease = callback;
           return () => {};
         },
-        // The server never answers, so the run stays in flight while the hold is checked.
         agentMigrationServer: () =>
           ({
             view: (_id: string, signal: AbortSignal) =>
@@ -10912,8 +10185,8 @@ test("a daemon that can migrate says so in its ready, and starts no Agent a sour
       generation: 1,
       role: "source",
       expectedRevision: 0,
-      expiresInMs: 60_000,
-      deadline: Date.now() + 60_000,
+      expiresInMs: 60000,
+      deadline: Date.now() + 60000,
     });
     await expect(runtime.startAgent("moving-agent", config)).rejects.toThrow(
       "moving to another Computer",
@@ -10922,7 +10195,6 @@ test("a daemon that can migrate says so in its ready, and starts no Agent a sour
     await runtime.stop();
   }
 });
-
 test("a daemon advertises App config and asks for each launched Agent's snapshot once per connection", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-app-config");
@@ -10971,7 +10243,6 @@ test("a daemon advertises App config and asks for each launched Agent's snapshot
     await runtime.stopAgent("agent-a");
     await runtime.startAgent("agent-a", config);
     expect(requested).toEqual(["agent-a"]);
-    // A new connection asks again for every running Agent.
     reconnect!();
     await runtime.startAgent("agent-b", config);
     await answered.promise;
@@ -10980,7 +10251,6 @@ test("a daemon advertises App config and asks for each launched Agent's snapshot
     await runtime.stop();
   }
 });
-
 test("an App config the cloud pushes reaches the System Cleaner", async () => {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-app-config");
@@ -11021,8 +10291,8 @@ test("an App config the cloud pushes reaches the System Cleaner", async () => {
             effective: {
               enabled: false,
               thresholdBytes: 8192,
-              activeContextThresholdBytes: 4_000,
-              intervalMs: 900_000,
+              activeContextThresholdBytes: 4000,
+              intervalMs: 900000,
             },
           },
         ],

@@ -1,3 +1,4 @@
+import { targetConfirmationRequiredMessage } from "./target-confirmation-message";
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import type { AgentMessageOperationsPorts } from "./agent-message-ports";
 import { agentSendResponse } from "./agent-send-result";
@@ -25,28 +26,12 @@ import { agentLogScope, checkPendingMessages } from "./agent-message-check";
 import { settleAgentSend } from "./agent-send-settlement";
 import { settleHistoryRead } from "./agent-history-read";
 import { searchPage, searchFields } from "./search-page";
-import {
-  fenceChannelTranscriptForMemory,
-  refuseUnreadMemoryParentRead,
-  targetConfirmationRequiredMessage,
-} from "./memory-channel-transcript";
-
 const logger = getLogger(["coforge", "daemon", "agent-message"]);
-
-/**
- * An Agent's `coforge message` operations over the Agent HTTPS RPC: `check` drains pending
- * events, `send` goes through the local draft, freshness hold, and send settlement, and every
- * other operation is forwarded, with a `read` settling attention. Each one records what it showed
- * the Agent in the attention index.
- */
 export class AgentMessageOperations {
   readonly #ports: AgentMessageOperationsPorts;
-
   constructor(ports: AgentMessageOperationsPorts) {
     this.#ports = ports;
   }
-
-  /** `target` is the request's target, already canonical. */
   handle(
     agentId: string,
     request: LocalAgentMessageRequest,
@@ -60,12 +45,6 @@ export class AgentMessageOperations {
     if (operation === "continue") return this.#continue(agentId, request, agentApiKey);
     return this.#forward(agentId, request, operation, target, agentApiKey);
   }
-
-  /**
-   * The saved draft `--send-draft` re-sends, checked before anything is issued: an expired draft
-   * is discarded and returned as the error's last copy, a missing one is refused, and
-   * `--expected-draft-key` refuses a draft that now belongs to a different logical send.
-   */
   async #draftToResend(
     agentId: string,
     inbox: AgentInboxStateMachine,
@@ -91,9 +70,6 @@ export class AgentMessageOperations {
       );
     return draft;
   }
-
-  /** Draft storage before this invocation issues a send. Never use for a held refresh or cleanup
-   * after transport: those failures cannot establish that nothing was sent. */
   async #prepareDraft<T>(agentId: string, operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -116,8 +92,6 @@ export class AgentMessageOperations {
       );
     }
   }
-
-  /** Sends a body or a held draft, honouring the server's freshness hold decision. */
   async #send(
     agentId: string,
     request: LocalAgentMessageRequest,
@@ -126,18 +100,10 @@ export class AgentMessageOperations {
   ): Promise<AgentMessageResponse> {
     const startedAt = performance.now();
     const inbox = this.#ports.inbox(agentId);
-    // The daemon owns the per-target draft, and the draft names its own send by key: every local
-    // request carries a key the CLI minted for that invocation, so the draft's key alone decides
-    // which accepted send may clear it (`clearIfIdempotencyKeyMatches` below, task #70).
     const draft = request.sendDraft
       ? await this.#draftToResend(agentId, inbox, target, request)
       : undefined;
-    // One logical send keeps one idempotency key. A fresh send's key is this invocation's;
-    // `--send-draft` re-sends under the key the draft was saved with, so a resend after an
-    // unknown outcome can never commit the same message twice.
     const idempotencyKey = draft?.idempotencyKey ?? request.idempotencyKey;
-    // A normal send replaces whatever draft was there; the send reports that (and the hold count
-    // the draft had reached) so the server can compute `continueAnywaySuggested`.
     const priorDraft =
       draft ??
       (request.sendDraft
@@ -150,31 +116,20 @@ export class AgentMessageOperations {
         AGENT_MESSAGE_BODY_REQUIRED_MESSAGE,
         "AGENT_MESSAGE_BODY_REQUIRED",
       );
-    // The boundary a draft already accounted for travels with the next attempt — a
-    // `--send-draft` resend reuses the draft's `seenUpToSeq`, a fresh send inherits the draft it is
-    // replacing, and only when neither has one does the daemon fall back to what this Agent has
-    // consumed for the target.
     const draftSeenUpToSeq = request.sendDraft ? draft?.seenUpToSeq : priorDraft?.seenUpToSeq;
     const modelSeenSequence = this.#ports.attention.modelSeenSequence(agentId, target);
     const seenUpToSeq = draftSeenUpToSeq ?? (modelSeenSequence > 0 ? modelSeenSequence : undefined);
-    // The messages above that frontier the Agent was shown one by one travel with it, so the
-    // server's freshness check does not count them as unreviewed.
     const seenExactSeqs = sendSeenExactSeqs(
       request.sendDraft ? draft?.seenExactSeqs : priorDraft?.seenExactSeqs,
       this.#ports.attention.seenExactSequences(agentId, target),
       seenUpToSeq,
     );
-    // `--send-draft` re-sends the saved draft's attachments/mentions unless the Agent explicitly
-    // supplies new `--mention` values, which replace them (Feature 2's documented override).
     const attachmentIds = request.sendDraft ? draft?.attachmentIds : request.attachmentIds;
     const mentions = request.sendDraft
       ? request.mentions?.length
         ? request.mentions
         : draft?.mentions
       : request.mentions;
-    // The presence check runs against the EFFECTIVE outgoing content on every path, including a
-    // `--send-draft` resend of the daemon-held body (the CLI can only run this check client-side
-    // when it has the body in hand, i.e. never for an unmodified draft resend).
     if (mentions?.length) {
       const present = mentionsInContent(content);
       for (const mention of mentions)
@@ -184,11 +139,6 @@ export class AgentMessageOperations {
             "MENTION_NOT_IN_CONTENT",
           );
     }
-    // Narrow local guard, decided entirely from volatile read-context state, before any transport
-    // call is made: a top-level send whose parent was read less recently than a thread rooted
-    // under it is an easy typo (replying to the channel instead of the thread), and moving a
-    // thread conclusion to the parent channel is uncommon enough to confirm once. `--send-draft`
-    // itself skips this guard (it can only re-target what was already confirmed once, at worst).
     if (
       !request.sendDraft &&
       !request.targetConfirmed &&
@@ -198,8 +148,6 @@ export class AgentMessageOperations {
       if (latestThread) {
         const parentOrder = this.#ports.attention.readOrder(agentId, target);
         if (parentOrder === undefined || parentOrder < latestThread.order) {
-          // The outgoing content is saved as the local draft before refusing, so the documented
-          // recovery is resending that exact draft, not retyping it.
           await this.#prepareDraft(agentId, () =>
             inbox.save(target, {
               content,
@@ -217,18 +165,10 @@ export class AgentMessageOperations {
         }
       }
     }
-    // Persist the draft before transport; a failed save is a local precondition. Keep that
-    // classification separate from failures after transport, whose delivery may be unknown.
     if (!request.sendDraft)
       await this.#prepareDraft(agentId, () =>
         inbox.save(target, { content, attachmentIds, mentions, seenUpToSeq, idempotencyKey }),
       );
-    // The daemon's own freshness decision, taken BEFORE any transport call: a send it holds must
-    // never be issued, because a re-issue of the same request would re-decide it (observed: the
-    // same idempotencyKey held at 00:18:30 and forwarded at 00:19:30 delivered a message the Agent had
-    // been told was held, and the deliberate `--send-draft` resend then duplicated it). A hold
-    // decided here is terminal; the server still gets the request when the daemon forwards, so its
-    // own check remains the race guard for anything that arrived in between.
     const freshness = planAgentInboxFreshness({
       continueAnyway: Boolean(request.continueAnyway),
       modelSeenSequence,
@@ -244,11 +184,6 @@ export class AgentMessageOperations {
               draftReholdCount,
               freshnessContextMode: request.freshnessContextMode,
             },
-            // A held notice shows the newest unreviewed messages. The daemon now has them (its
-            // attention index keeps a bounded window of unreviewed deliveries), so a locally decided
-            // hold carries real previews instead of a bare count — and the shared post-processing
-            // below then marks that window reviewed (`recordModelSeen`): the Agent has been shown
-            // the newest context, so a resend is no longer held by it.
             this.#ports.attention
               .pendingWindow(agentId, target, HELD_CONTEXT_LIMIT)
               .map(({ delivery, receivedAt }) => ({
@@ -259,8 +194,6 @@ export class AgentMessageOperations {
                 senderDescription: delivery.latestSenderDescription ?? "",
                 target,
                 body: delivery.body,
-                // Deliveries carry no message timestamp (only the server knows when a message was
-                // written), so a local preview shows when this daemon received it.
                 createdAt: new Date(receivedAt).toISOString(),
                 attachments: [],
               })),
@@ -299,8 +232,6 @@ export class AgentMessageOperations {
             },
           );
     const held = result.state === "held";
-    // A withheld context was never presented to the Agent, so nothing about it may be recorded
-    // (or kept in the draft) as reviewed.
     const contextWasWithheld =
       request.freshnessContextMode === "withheld" || result.freshnessContextMode === "withheld";
     let continuation: AgentMessageContinuationOffer | undefined;
@@ -309,18 +240,12 @@ export class AgentMessageOperations {
         content,
         attachmentIds,
         mentions,
-        // The held refresh: the same content, one hold later, remembering the frontier the notice
-        // presented so the resend clears the hold.
         reholdCount: draftReholdCount + 1,
         seenUpToSeq: contextWasWithheld ? seenUpToSeq : (result.seenUpToSeq ?? seenUpToSeq),
-        // A presented hold's frontier covers what the draft saw one by one; a withheld one
-        // presented nothing, so the draft keeps them.
         seenExactSeqs: contextWasWithheld ? seenExactSeqs : undefined,
         idempotencyKey,
       };
       await inbox.replace(target, heldDraft);
-      // The held send's open question. Choice `d` is offered only when the server's rehold count
-      // says the same warning blocked this draft before (`continueAnywaySuggested`).
       continuation = await heldSendContinuation(
         inbox,
         target,
@@ -328,16 +253,8 @@ export class AgentMessageOperations {
         result.continueAnywaySuggested === true,
       );
     } else if (result.accepted) {
-      // Only the send whose key the draft holds consumes it, so an older send accepted late
-      // leaves a newer draft alone (task #70).
       await inbox.clearIfIdempotencyKeyMatches(target, idempotencyKey);
     }
-    // The consume effects, one write for the send. A presented hold consumed the frontier its
-    // notice presented (or the shown window's newest for a hold that carries no frontier) and
-    // reviewed the target; a withheld one presented nothing.
-    // A sent send whose server advanced the boundary over messages the Agent had already seen
-    // (`exact_target_pending_already_seen`, `target_first_touch_recent_context_already_seen`)
-    // consumes that boundary in either mode, which is what empties the exact set.
     let presented = 0;
     if (held && !contextWasWithheld) {
       presented = result.seenUpToSeq ?? 0;
@@ -356,9 +273,6 @@ export class AgentMessageOperations {
       through,
       presented > 0 ? { sequence: presented } : undefined,
     );
-    // The freshness-decision activity: one working status row per held send, titled `Send held by
-    // freshness check`, carrying the target, the count line and the decision line(s) as its text.
-    // A held context in `withheld` mode was never presented, so no activity is reported for it.
     if (held && !contextWasWithheld)
       await reportHeldSendFreshnessDecision({
         agentId,
@@ -371,8 +285,6 @@ export class AgentMessageOperations {
     logger.info("Agent sent a message", {
       event: "agent.message.sent",
       ...agentLogScope(this.#ports, agentId, idempotencyKey),
-      // A commit confirmed by reconciliation carries no freshness decision of its own, so it logs
-      // none and says `reconciled` instead.
       ...(result.state === "committed"
         ? { reconciled: true }
         : { freshness_decision: result.decision ?? "forward" }),
@@ -389,9 +301,6 @@ export class AgentMessageOperations {
       continuation,
     });
   }
-
-  /** Answers a held send's continuation; the choices and their atomics live in
-   * `agent-message-continue.ts`. */
   async #continue(
     agentId: string,
     request: LocalAgentMessageRequest,
@@ -405,8 +314,6 @@ export class AgentMessageOperations {
       (operation) => this.#prepareDraft(agentId, operation),
     );
   }
-
-  /** Forwards read/search/mute/unmute/unfollow unchanged; an unpaged read settles attention. */
   async #forward(
     agentId: string,
     request: LocalAgentMessageRequest,
@@ -414,15 +321,8 @@ export class AgentMessageOperations {
     target: string | undefined,
     agentApiKey: string,
   ): Promise<AgentMessageResponse> {
-    // Only an `unread` read looks at what is unread now and, when it finds nothing, settles the
-    // attention the daemon held for the target up to this point; any other read without an anchor
-    // shows the newest page. A Memory Agent's `message_read` has no `unread` argument, and its
-    // increment read of a channel is the unread read.
     const unpaged = operation === "read" && !request.before && !request.after && !request.around;
-    const isMemory = this.#ports.isMemoryAgent?.(agentId);
-    const read = unpaged && isMemory && !request.unread ? { ...request, unread: true } : request;
-    if (unpaged && target?.startsWith("#") && !target.includes(":") && isMemory)
-      refuseUnreadMemoryParentRead(target, this.#ports.attention.check(agentId));
+    const read = request;
     const attentionUpperBound =
       unpaged && read.unread && target
         ? this.#ports.attention.check(agentId).find((item) => item.target === target)
@@ -456,10 +356,7 @@ export class AgentMessageOperations {
             attentionUpperBound,
           })
         : { messages: result.messages, folded: undefined };
-    const messages =
-      this.#ports.isMemoryAgent?.(agentId) && unfolded.length
-        ? fenceChannelTranscriptForMemory(unfolded)
-        : elideForAgent(this.#ports.contexts, agentId, unfolded, operation);
+    const messages = elideForAgent(this.#ports.contexts, agentId, unfolded, operation);
     return {
       idempotencyKey: request.idempotencyKey,
       accepted: result.accepted,

@@ -5,10 +5,7 @@ These rules apply to `src/server/workspaces/`.
 - `deletion.server.ts` (`WorkspaceDeletion`) is the one flow that hard-deletes a
   Workspace. What it removes and when is [Workspace deletion](../../../../../docs/workspace-deletion.md);
   change that page with the flow.
-- The owner and slug refusals happen before the first write. Removing the
-  Workspace's memory (below) is the one step before the message batches, so a
-  refused memory removal leaves every row of the Workspace as it was, though its
-  OpenViking account may already be gone.
+- The owner and slug refusals happen before the first write.
 - Messages go in batches before the final transaction; they are what makes a
   large Workspace slow (one FK trigger per row per referencing table).
 - Lock in the Workspace-deletion order of `server/AGENTS.md` ("Lock order"). Retry only on a PostgreSQL write conflict, through
@@ -18,13 +15,9 @@ These rules apply to `src/server/workspaces/`.
   reference into the Workspace's cascade goes there too, or the delete fails;
   `test/workspace-delete.integration.test.ts` lists every such key and fails on a
   new one.
-- A Workspace with an OpenViking binding, or cleanup left unfinished, has its
-  memory removed first (`WorkspaceMemoryRemoval`, production:
-  `workspaceMemoryRemoval(db)`): the OpenViking account, then the binding, as the
-  one cleanup operation `workspace-deletion`. A failed or already-leased removal
-  refuses the delete with `TEMPORARILY_UNAVAILABLE` and error id
-  `workspace-memory-removal-failed`; a binding found again under the locks does
-  too. The cleanup rows go with the Workspace, settled or not.
+- Native team memory, versions and request/review receipts cascade with the Workspace.
+  Historical restrictive memory cleanup/citation rows are removed locally in the transaction;
+  deletion calls no external memory service.
 - Stored files go after the answer (`WorkspaceFileCleanup`), never awaited by it.
 - A flow that hard-deletes a Workspace calls
   `DaemonCredentialRevocations.recordForWorkspace(tx, workspaceId)` inside its
@@ -51,12 +44,9 @@ These rules apply to `src/server/workspaces/`.
   Workspace, including after a Workspace is created, and binds that User's
   weekly-report assistant to it. A deployment without a cluster still returns
   the Workspace and leaves the assistant unconfigured.
-- `resource-recovery.server.ts` repairs post-commit enrollment resources when the
-  owner opens a Workspace through `loadWorkspaceSwitcher`; existing Memory Agent
-  links, including archived identities, stay intact. A retained Memory Profile
-  prevents reopening from undoing a deliberate Agent deletion. The open also
-  repairs a missing platform-assistant session, but a GET loader never starts
-  the assistant — a missed Start waits for the Daemon's ready recovery.
+- `resource-recovery.server.ts` repairs missing platform-assistant and weekly-report resources
+  when the owner opens a Workspace. A GET loader never starts the assistant; a missed Start
+  waits for the Daemon's ready recovery.
 - Read [`hosts/AGENTS.md`](../hosts/AGENTS.md) when changing the cloud computer service page, its operating-password unlock, or the manager install script (`server-connection`, `cloud-service-access`, `host-bootstrap`).
 
 ## Role capabilities

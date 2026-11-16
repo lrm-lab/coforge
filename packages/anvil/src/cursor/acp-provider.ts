@@ -1,6 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import { RuntimeMemoryUnsupportedError, type CodeAgentProvider } from "#src/contract";
+import { type CodeAgentProvider } from "#src/contract";
 import { createCursorAcpSession } from "./acp-session";
 import type { CursorAcpProviderOptions, CursorAcpRuntimeHost } from "./acp-host";
 import { assertCursorAcpVersionSupported } from "./acp-version";
@@ -27,14 +27,6 @@ export class CursorAcpProvider implements CodeAgentProvider {
   }
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
-    // A Memory Agent opens one session per conversation in a shared workspace, each with its
-    // own briefing — one `.cursor/rules` file cannot hold them all, and cursor reads every
-    // always-on rule in the directory. Refuse before any probe or file write.
-    if (options.conversation || options.memoryControlSession)
-      throw new RuntimeMemoryUnsupportedError(
-        "Cursor cannot run a Memory Agent: its conversation sessions share one workspace, " +
-          "so one .cursor/rules file cannot hold a different briefing for each",
-      );
     if (options.sessionId !== undefined && !options.sessionId.trim())
       throw new Error("Invalid session ID");
     await assertCursorAcpVersionSupported(this.#command, this.#host.versionReader);

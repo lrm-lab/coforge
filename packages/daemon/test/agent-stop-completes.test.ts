@@ -74,7 +74,6 @@ function harness(
     }),
     undefined,
     undefined,
-    undefined,
     settings,
   );
   const start = (name: string) =>

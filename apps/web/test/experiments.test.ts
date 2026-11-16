@@ -30,7 +30,6 @@ test("the registry names each experiment's flag, default and whether a change ne
   expect(EXPERIMENTS.aiWorkbench).toEqual({ flag: null, defaultEnabled: true, reload: false });
   // The Memory Agent's own switch is off until someone turns it on (task #6); the deployment's env
   // flag stays the master one and is not part of this registry.
-  expect(EXPERIMENTS.memoryAgent).toEqual({ flag: null, defaultEnabled: false, reload: true });
 });
 
 test("an experiment without a flag is offered to every Workspace, on until its choice says off", async () => {
@@ -49,7 +48,6 @@ test("an experiment without a flag is offered to every Workspace, on until its c
     { key: "drafts", enabled: false, reload: false },
     { key: "artifacts", enabled: false, reload: false },
     { key: "aiWorkbench", enabled: true, reload: false },
-    { key: "memoryAgent", enabled: false, reload: true },
   ]);
   expect(await experiments.enabled("drafts", { ...workspace, workspaceId: "w2" })).toBeTrue();
   await experiments.set(workspace, "admin", "drafts", true);
@@ -88,7 +86,6 @@ test("every Workspace offers every experiment; an unset one defaults to the regi
     { key: "drafts", enabled: true, reload: false },
     { key: "artifacts", enabled: false, reload: false },
     { key: "aiWorkbench", enabled: true, reload: false },
-    { key: "memoryAgent", enabled: false, reload: true },
   ]);
   expect(await experiments.enabled("taskConversations", workspace)).toBeFalse();
   expect(await experiments.enabled("artifacts", workspace)).toBeFalse();
@@ -134,7 +131,6 @@ test("stored keys the registry no longer knows are ignored", async () => {
     { key: "drafts", enabled: true, reload: false },
     { key: "artifacts", enabled: false, reload: false },
     { key: "aiWorkbench", enabled: true, reload: false },
-    { key: "memoryAgent", enabled: false, reload: true },
   ]);
 });
 

@@ -2,30 +2,16 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { isAppError } from "#src/lib/app-error";
 import { prepareDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
-import { PrismaWorkspaceMemoryCleanupStore } from "#src/server/db/repositories/workspace-memory-cleanup.repositories.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import {
-  createFakeWorkspaceMemoryCleanupRemotes,
-  createWorkspaceMemoryCleanup,
-} from "#src/server/workspace-memory/cleanup.server";
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
 import {
   WorkspaceDeletion,
   type WorkspaceDeletionSignals,
   type WorkspaceFileRemoval,
 } from "#src/server/workspaces/deletion.server";
-
-/**
- * The Workspace a deletion test deletes, and the effects a deletion reaches, recording what they
- * are asked. Shared by `workspace-delete.integration.test.ts` and
- * `workspace-delete-memory.integration.test.ts`.
- *
- * `setup()` needs `CHANNEL_TEST_DATABASE_URL` pointing at local PostgreSQL; the tests skip without it.
- */
 export const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
-
 export async function errorIdOf(promise: Promise<unknown>) {
   try {
     await promise;
@@ -35,16 +21,16 @@ export async function errorIdOf(promise: Promise<unknown>) {
   }
   return undefined;
 }
-
 const silentRealtime: ConversationRealtime = {
   async messageAvailable() {},
   async memberChanged() {},
 };
-
-/** File removal that records what it was asked, and finishes only when released: the delete
- * must answer without waiting for it. */
 export function recordingFileRemoval() {
-  const calls: { workspaceId: string; files: string[]; images: string[] }[] = [];
+  const calls: {
+    workspaceId: string;
+    files: string[];
+    images: string[];
+  }[] = [];
   let release!: () => void;
   const released = new Promise<void>((resolve) => (release = resolve));
   const removal: WorkspaceFileRemoval = {
@@ -55,11 +41,12 @@ export function recordingFileRemoval() {
   };
   return { calls, removal, release };
 }
-
-/** Signals that record who heard of the delete. */
 export function recordingSignals() {
   const deleted: string[] = [];
-  const reconnected: { workspaceId: string; computerIds: string[] }[] = [];
+  const reconnected: {
+    workspaceId: string;
+    computerIds: string[];
+  }[] = [];
   const signals: WorkspaceDeletionSignals = {
     async workspaceDeleted(workspaceId) {
       deleted.push(workspaceId);
@@ -70,29 +57,12 @@ export function recordingSignals() {
   };
   return { deleted, reconnected, signals };
 }
-
-/** A deletion whose effects go nowhere, for tests about the rows. */
 export function quietDeletion(db: PrismaClient) {
   return new WorkspaceDeletion(db, {
     files: recordingFileRemoval().removal,
     signals: recordingSignals().signals,
-    memory: unboundMemory(db).memory,
   });
 }
-
-/** Memory removal over the real cleanup rows whose remotes only record their calls: what a
- * Workspace with no memory must never reach. */
-export function unboundMemory(db: PrismaClient) {
-  const remotes = createFakeWorkspaceMemoryCleanupRemotes();
-  const memory = createWorkspaceMemoryCleanup({
-    store: new PrismaWorkspaceMemoryCleanupStore(db),
-    remotes,
-  });
-  return { remotes, memory };
-}
-
-/** A Workspace in use: an owner, an admin and a member who wrote in a channel, an Agent on a
- * Computer with a live daemon key, and one of everything that hangs off them. */
 export async function setup() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
   const suffix = crypto.randomUUID().slice(0, 8);
@@ -160,16 +130,13 @@ export async function setup() {
       iconContentType: "image/png",
     },
   });
-
   const channels = new PublicChannels(db, undefined, undefined, undefined, silentRealtime);
   const team = await channels.create(workspace.id, member.id, `team-${suffix}`);
   await channels.addMembers(workspace.id, { userId: member.id }, team.id, {
     userIds: [],
     agentIds: [agent.id],
   });
-  // The channel's coordinator names the Agent without cascading (`NO ACTION`).
   await db.conversation.update({ where: { id: team.id }, data: { coordinatorAgentId: agent.id } });
-  // An app the Workspace registered, installed there, with a logo; all of it goes with it.
   const appLogoKey = `workspaces/${workspace.id}/apps/own-app-${suffix}/logos/${crypto.randomUUID()}/original`;
   await db.app.create({
     data: {
@@ -191,7 +158,6 @@ export async function setup() {
   const agentRow = await db.conversationMember.findFirstOrThrow({
     where: { conversationId: team.id, agentId: agent.id },
   });
-  // Membership changes left their records (task #411): write after them.
   const base =
     (await db.message.aggregate({ where: { conversationId: team.id }, _max: { sequence: true } }))
       ._max.sequence ?? 0;
@@ -267,7 +233,7 @@ export async function setup() {
       contentType: "text/plain",
       sizeBytes: 5,
       idempotencyKey: crypto.randomUUID(),
-      expiresAt: new Date(Date.now() + 3_600_000),
+      expiresAt: new Date(Date.now() + 3600000),
     },
   });
   await db.reminder.create({
@@ -278,7 +244,7 @@ export async function setup() {
       title: "ping",
       target: `#team-${suffix}`,
       messageId: written.id,
-      fireAt: new Date(Date.now() + 3_600_000),
+      fireAt: new Date(Date.now() + 3600000),
     },
   });
   const cycle = await db.weeklyReportCycle.create({
@@ -297,7 +263,6 @@ export async function setup() {
   await db.recordNote.create({
     data: { workspaceId: workspace.id, authorId: member.id, title: "note" },
   });
-  // A Memory Offer citing a memory record: the citation names the record with `Restrict`.
   await db.openVikingCitationRecord.create({
     data: {
       workspaceId: workspace.id,
@@ -329,9 +294,7 @@ export async function setup() {
       openvikingCitationId: "cite-1",
     },
   });
-
   const cleanup = async () => {
-    // A Workspace left behind by a failed test keeps its cleanup rows with `Restrict`.
     await db.workspaceMemoryCleanupWork
       .deleteMany({ where: { workspaceId: workspace.id } })
       .catch(() => {});

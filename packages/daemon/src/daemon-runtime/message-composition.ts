@@ -27,22 +27,17 @@ import { AgentInboxCoordinator as InboxCoordinator } from "./agent-inbox-coordin
 import { AgentMessageAttentionIndex as MessageAttention } from "./agent-message-attention-index";
 import { AgentMessageOperations as MessageOperations } from "./agent-message-operations";
 import { MentionDeliveryTracker as MentionDeliveries } from "./mention-delivery-tracker";
-
-/** What the runtime supplies to one Agent's message attention, delivery and inbox state. */
 export type MessageCompositionPorts = {
   connection: Pick<DaemonConfig, "workspaceId" | "computerId">;
   stateDirectory: string;
-  /** The Workspace's current transport, read at send time. */
   transport(): DaemonConnectionClient;
   consumedSeqs: AgentConsumedSeqStore;
   deliveryGate: AgentDeliveryGate;
   runtimeRelease: RuntimeRelease<ActivityLaunch>;
   processManager: AgentProcessManager;
-  /** Built after this group: only a delivery marked busy reaches it, so it is read lazily. */
   launchCustody(): Pick<AgentLaunchCustody, "noteTurnStarted" | "ensureInput">;
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   currentActivityLaunch(agentId: string): ActivityLaunch | undefined;
-  /** One Activity draft, as the runtime builds every other one. */
   activity(
     agentId: string,
     detailKind: AgentActivity["detailKind"],
@@ -51,14 +46,9 @@ export type MessageCompositionPorts = {
     extra?: Partial<ActivityDraft>,
   ): ActivityDraft;
   sync: Pick<AgentFeatureSync, "noticePrefix">;
-  /** The launch identity a tracked mention's envelope must name, while that launch runs. */
-  /** The running process's launch and session, or with `reported` the last ones reported. */
   runningMentionIdentity(agentId: string, reported?: true): RunningMentionIdentity | undefined;
   contexts: AgentContexts;
-  /** The Agent's Memory fence, when it is the Memory Agent. */
-  memoryAgent(agentId: string): unknown;
   reconcileIdleTurn(agentId: string, launch: ActivityLaunch): boolean;
-  /** One launch of a stopped Agent for a held App Inbox item, under the given Session. */
   startAgent(
     agentId: string,
     config: AgentRuntimeConfig,
@@ -67,21 +57,12 @@ export type MessageCompositionPorts = {
   assertRunning(): void;
   agentIdForContext(context: string): string;
 };
-
 export type MessageComposition = {
   mentionDeliveries: MentionDeliveryTracker;
   messageAttention: AgentMessageAttentionIndex;
   inboxCoordinator: AgentInboxCoordinator;
   messageOperations: AgentMessageOperations;
 };
-
-/**
- * Builds one Workspace runtime's Agent message state: tracked @mention deliveries, per-Agent
- * attention (what was notified, held or consumed), the App Inbox coordination a stopped Agent's
- * item needs, and the Agent's own message operations. `DaemonRuntime` supplies the collaborators
- * those ports call; the group is built in one order because attention and deliveries observe each
- * other, and every such reference is lazy.
- */
 export function composeMessages(ports: MessageCompositionPorts): MessageComposition {
   const { connection, transport } = ports;
   let messageAttention!: AgentMessageAttentionIndex;
@@ -96,7 +77,6 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     told: (message) => messageAttention.wasNotified(message),
     process: (agentId) => ports.processManager.session(agentId),
     relaunching: (agentId) => ports.runtimeRelease.isRecovering(agentId),
-    // Only an Agent that can still be relaunched has an identity to keep a mention for.
     remembered: (agentId) =>
       ports.processManager.restartConfig(agentId)
         ? ports.runningMentionIdentity(agentId, true)
@@ -147,9 +127,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         );
         const launch = ports.currentActivityLaunch(agentId);
         if (launch) ports.reconcileIdleTurn(agentId, launch);
-      } catch {
-        // Best-effort observation must not turn accepted input into failed delivery.
-      }
+      } catch {}
     },
     {
       shouldHold: (agentId) => ports.deliveryGate.shouldHold(agentId),
@@ -164,7 +142,6 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         const launch = ports.currentActivityLaunch(agentId);
         if (launch) ports.reconcileIdleTurn(agentId, launch);
       },
-      // Every change of what the Agent has consumed ends in this write: the mentions it settles.
       consumedSeqs: {
         read: (agentId) => ports.consumedSeqs.read(agentId),
         write: (agentId, state) => {
@@ -175,8 +152,6 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       noticePrefix: (agentId) => ports.sync.noticePrefix(agentId),
     },
   );
-  // A new context (a launch, or a finished compaction) drops the previews the model no longer
-  // holds: those messages read as unread again instead of counting as shown (task #424).
   ports.contexts.onNewContext((agentId) => messageAttention.clearPreviewSeen(agentId));
   const inboxCoordinator = new InboxCoordinator({
     workspaceId: connection.workspaceId,
@@ -196,7 +171,6 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
   const messageOperations = new MessageOperations({
     connection: { workspaceId: connection.workspaceId, computerId: connection.computerId },
     attention: messageAttention,
-    isMemoryAgent: (agentId) => Boolean(ports.memoryAgent(agentId)),
     contexts: ports.contexts,
     inbox: (agentId) => inboxCoordinator.agentInbox(agentId),
     appItemsPending: (agentId) => inboxCoordinator.appItemsPending(agentId),
@@ -221,9 +195,6 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
   });
   return { mentionDeliveries, messageAttention, inboxCoordinator, messageOperations };
 }
-
-/** The wire payload of one Agent-message rejection report: the delivery's identity fields plus
- * the reason, under the reject method the server recognizes. */
 export function agentDeliveryRejection(
   message: AgentMessageDelivery,
   reason: AgentDeliveryRejectionReason,

@@ -158,7 +158,6 @@ export class SendDirectMessage {
             input.attachmentIds,
             input.target.split(":")[1],
             input.mentions,
-            undefined,
             isChannel && (sendChannel as { needsJoin?: boolean } | undefined)?.needsJoin === true,
           )
           .catch(async (error: unknown) => {

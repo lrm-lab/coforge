@@ -6,7 +6,6 @@ import {
   AgentSessions,
   type RuntimeSessionReference,
 } from "#src/server/agents/agent-sessions.server";
-
 test("an accepted session report issues the Agent's pending mentions again; a rejected one does not", async () => {
   let reference: RuntimeSessionReference | null = {
     provider: "codex",
@@ -43,17 +42,14 @@ test("an accepted session report issues the Agent's pending mentions again; a re
     daemonInstanceId: "daemon-1",
     launchId: "launch-1",
   };
-
   const rejected = sessions.accept({ ...report, launchId: "stale" });
   await expect(rejected).rejects.toThrow("Agent session report is stale or unauthorized");
-  // The diagnostics name the comparison, never its values.
   await expect(rejected).rejects.toBeInstanceOf(AgentSessionVerifyError);
   await rejected.catch((error: AgentSessionVerifyError) => expect(error.field).toBe("launchId"));
   expect(resent).toEqual([]);
   await sessions.accept(report);
   expect(resent).toEqual([{ workspaceId: "w", computerId: "c", agentId: "a" }]);
 });
-
 test("cloud selection survives recreation and stale launches cannot replace a session", async () => {
   let reference: RuntimeSessionReference | null = null;
   const repository = {
@@ -171,7 +167,6 @@ test("cloud selection survives recreation and stale launches cannot replace a se
     sessions.accept({ ...report, startRequestId: "fresh", sessionId: "explicit-selection" }),
   ).rejects.toThrow();
 });
-
 test("cloud creates a fresh CoForge identity instead of reviving historical defaults after provider change", async () => {
   let reference: RuntimeSessionReference | null = null;
   let daemon = "daemon";
@@ -221,7 +216,6 @@ test("cloud creates a fresh CoForge identity instead of reviving historical defa
     "explicit-fresh",
   );
 });
-
 test("stop never relabels another Computer's provider session as locally resumable", async () => {
   let reference: RuntimeSessionReference | null = {
     provider: "codex",
@@ -258,7 +252,6 @@ test("stop never relabels another Computer's provider session as locally resumab
   });
   expect(selected.sessionId).toBeUndefined();
 });
-
 test.each(["coforge", "pi", "codex", "claude-code"] as const)(
   "a delayed duplicate %s Start preserves an acknowledged empty launch",
   async (provider) => {
@@ -305,7 +298,6 @@ test.each(["coforge", "pi", "codex", "claude-code"] as const)(
     });
   },
 );
-
 test.each(["prepare", "retire"] as const)(
   "a delayed old report cannot overwrite newer %s",
   async (operation) => {
@@ -325,7 +317,6 @@ test.each(["prepare", "retire"] as const)(
     expect(fixture.reference()?.daemonInstanceId).toBe(operation === "prepare" ? "new-daemon" : "");
   },
 );
-
 test.each(["prepare", "retire"] as const)(
   "report winning before %s remains selected history, not an atomic Redis fence",
   async (operation) => {
@@ -335,14 +326,12 @@ test.each(["prepare", "retire"] as const)(
     await gate.entered.promise;
     fixture.setDaemon("new-daemon");
     gate.release.resolve();
-    // The SQL CAS can still win after Redis changed, before a newer SQL selection.
     await report;
     if (operation === "retire") await fixture.sessions.retire("a", "w", "c");
     expect((await fixture.sessions.prepare(fixture.intent)).sessionId).toBe("old-session");
     expect(fixture.reference()?.daemonInstanceId).toBe("new-daemon");
   },
 );
-
 function sessionRace() {
   let reference: RuntimeSessionReference | null = {
     provider: "codex",
@@ -413,34 +402,3 @@ function sessionRace() {
     },
   };
 }
-
-test("cloud selects group sessions from the Workspace Memory identity, preserving ordinary Agents", async () => {
-  for (const memoryAgent of [true, false]) {
-    const sessions = new AgentSessions(
-      {
-        read: async () => ({
-          workspaceId: "w",
-          computerId: "c",
-          provider: "coforge",
-          reference: null,
-          memoryAgent,
-        }),
-        replace: async () => true,
-      },
-      async () => "daemon",
-      { resendForCurrentSession: async () => {} },
-    );
-    const selected = await sessions.prepare({
-      protocolMajor: 1,
-      requestId: "start",
-      workspaceId: "w",
-      computerId: "c",
-      agentId: "a",
-      provider: "coforge",
-      model: "m",
-      reasoning: "",
-      memoryAgent: true,
-    });
-    expect(selected.memoryAgent).toBe(memoryAgent ? true : undefined);
-  }
-});

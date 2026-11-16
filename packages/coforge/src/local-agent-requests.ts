@@ -1,3 +1,4 @@
+import { teamMemoryRequests } from "./team-memory-request";
 import { CliError } from "./cli-error";
 import { memoryRequests } from "./memory-request";
 import { proxyHttpFailure } from "./local-proxy-failure";
@@ -123,6 +124,7 @@ export function localAgentRequests(
   return {
     version: () => versionRequest(proxyEndpoint, context, proxyUrl),
     ...contextRequests(proxyEndpoint, context, proxyUrl),
+    ...teamMemoryRequests(proxyEndpoint, context, proxyUrl),
     ...memoryRequests(proxyEndpoint, context, proxyUrl),
   };
 }

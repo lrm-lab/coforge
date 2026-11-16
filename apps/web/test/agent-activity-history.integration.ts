@@ -223,7 +223,9 @@ test("one member aggregates persisted activity from independent conversations", 
     await db.workspaceMemoryAgent.create({
       data: { workspaceId: workspace.id, agentId: agent.id },
     });
-    expect((await new PrismaAgentSessionRepository(db).read(agent.id))?.memoryAgent).toBe(true);
+    expect((await new PrismaAgentSessionRepository(db).read(agent.id))?.workspaceId).toBe(
+      workspace.id,
+    );
     const groupA = crypto.randomUUID();
     const groupB = crypto.randomUUID();
     const repository = new AgentActivityRepository(db);

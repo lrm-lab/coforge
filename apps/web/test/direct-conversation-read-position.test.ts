@@ -4,13 +4,10 @@ import { PrismaDirectConversationRepository } from "#src/server/db/repositories/
 import { advanceAgentReadPosition } from "#src/server/db/repositories/agent-read-position.repositories.server";
 import { publishConversationReadChangesAfterCommit } from "#src/server/db/repositories/agent-read-groups.repositories.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
-
-/** What `advanceAgentRead` reads beside the cursor. */
 const readAdvanceStores = {
   messageRead: { findFirst: async () => null, create: async () => ({}) },
   conversation: { findUnique: async () => ({ directKey: "user:a|user:b", workspaceId: "w" }) },
 };
-/** The same for a channel: no direct key, so nothing is recorded. */
 const channelReadStores = {
   ...readAdvanceStores,
   conversation: {
@@ -18,9 +15,6 @@ const channelReadStores = {
     findUnique: async () => ({ directKey: null, workspaceId: "w" }),
   },
 };
-
-/** Unread reads and complete latest pages move the Agent's read position monotonically. */
-
 test("an unanchored canonical read advances across a missing sequence", async () => {
   const events: object[] = [];
   const updates: object[] = [];
@@ -59,7 +53,6 @@ test("an unanchored canonical read advances across a missing sequence", async ()
       return { id: "conversation-1" };
     }
   }
-
   await new TestConversationRepository(
     db,
     {},
@@ -69,7 +62,6 @@ test("an unanchored canonical read advances across a missing sequence", async ()
       },
     },
   ).readMessagesPage("workspace-1", "agent-1", "@alice", { unread: true });
-
   expect(updates).toHaveLength(1);
   expect(updates[0]).toMatchObject({ data: { agentReadThroughSequence: 3 } });
   expect(events).toEqual([
@@ -81,7 +73,6 @@ test("an unanchored canonical read advances across a missing sequence", async ()
     },
   ]);
 });
-
 test("a plain latest read advances a User-Agent DM when the full unread page fits", async () => {
   const updates: object[] = [];
   const events: object[] = [];
@@ -105,7 +96,6 @@ test("a plain latest read advances a User-Agent DM when the full unread page fit
           sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
           attachments: [],
           mentions: [],
-          memoryHint: null,
           task: null,
           actionCard: null,
         },
@@ -117,7 +107,6 @@ test("a plain latest read advances a User-Agent DM when the full unread page fit
           sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
           attachments: [],
           mentions: [],
-          memoryHint: null,
           task: null,
           actionCard: null,
         },
@@ -156,7 +145,6 @@ test("a plain latest read advances a User-Agent DM when the full unread page fit
     },
   ]);
 });
-
 test("a plain latest read leaves the cursor when unread messages exceed the page", async () => {
   const updates: object[] = [];
   const db = {
@@ -179,7 +167,6 @@ test("a plain latest read leaves the cursor when unread messages exceed the page
           sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
           attachments: [],
           mentions: [],
-          memoryHint: null,
           task: null,
           actionCard: null,
         })),
@@ -209,7 +196,6 @@ test("a plain latest read leaves the cursor when unread messages exceed the page
   expect(page.modelSeenUpToSeq).toBeNull();
   expect(updates).toEqual([]);
 });
-
 test("a plain latest read advances when only the tail of a full page is unread", async () => {
   const updates: object[] = [];
   const db = {
@@ -232,7 +218,6 @@ test("a plain latest read advances when only the tail of a full page is unread",
           sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
           attachments: [],
           mentions: [],
-          memoryHint: null,
           task: null,
           actionCard: null,
         })),
@@ -261,7 +246,6 @@ test("a plain latest read advances when only the tail of a full page is unread",
   expect(page.modelSeenUpToSeq).toBe(4);
   expect(updates[0]).toMatchObject({ data: { agentReadThroughSequence: 4 } });
 });
-
 test("a plain latest read advances across a sequence gap when the omitted row is already read", async () => {
   const updates: object[] = [];
   const db = {
@@ -284,7 +268,6 @@ test("a plain latest read advances across a sequence gap when the omitted row is
           sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
           attachments: [],
           mentions: [],
-          memoryHint: null,
           task: null,
           actionCard: null,
         })),
@@ -313,7 +296,6 @@ test("a plain latest read advances across a sequence gap when the omitted row is
   expect(page.modelSeenUpToSeq).toBe(6);
   expect(updates[0]).toMatchObject({ data: { agentReadThroughSequence: 6 } });
 });
-
 test("a plain historical read never advances the User-Agent DM cursor", async () => {
   const updates: object[] = [];
   let anchorLookup = true;
@@ -343,7 +325,6 @@ test("a plain historical read never advances the User-Agent DM cursor", async ()
                 },
                 attachments: [],
                 mentions: [],
-                memoryHint: null,
                 task: null,
                 actionCard: null,
               },
@@ -374,7 +355,6 @@ test("a plain historical read never advances the User-Agent DM cursor", async ()
   expect(page.modelSeenUpToSeq).toBe(1);
   expect(updates).toEqual([]);
 });
-
 test("an Agent peer read does not publish a User-Agent DM event", async () => {
   const events: object[] = [];
   const db = {
@@ -407,7 +387,6 @@ test("an Agent peer read does not publish a User-Agent DM event", async () => {
           sender: { agentId: "peer-1", agent: { name: "peer", description: "" }, user: null },
           attachments: [],
           mentions: [],
-          memoryHint: null,
           task: null,
           actionCard: null,
         },
@@ -426,7 +405,6 @@ test("an Agent peer read does not publish a User-Agent DM event", async () => {
   ).readMessagesPage("workspace-1", "agent-1", "@peer~agent", { unread: true });
   expect(events).toEqual([]);
 });
-
 test("an app event session read does not publish a User-Agent DM event", async () => {
   const events: object[] = [];
   const db = {
@@ -445,7 +423,6 @@ test("an app event session read does not publish a User-Agent DM event", async (
           sender: { agentId: null, agent: null, user: { username: "app", description: "" } },
           attachments: [],
           mentions: [],
-          memoryHint: null,
           task: null,
           actionCard: null,
         },
@@ -464,7 +441,6 @@ test("an app event session read does not publish a User-Agent DM event", async (
   ).readMessagesPage("workspace-1", "agent-1", "@app.demo", { unread: true });
   expect(events).toEqual([]);
 });
-
 test("publishes a conversation read position only after the database advances", async () => {
   const events: object[] = [];
   const db = {
@@ -526,7 +502,6 @@ test("publishes a conversation read position only after the database advances", 
     },
   ]);
 });
-
 test("thread reads stay silent while channel reads publish the shared event", async () => {
   const db = {
     conversationMember: { updateMany: async () => ({ count: 1 }) },
@@ -569,7 +544,6 @@ test("thread reads stay silent while channel reads publish the shared event", as
     }),
   ).toBeUndefined();
 });
-
 test("a rolled-back drain does not publish collected Agent read changes", async () => {
   const published: object[] = [];
   await expect(
@@ -584,7 +558,6 @@ test("a rolled-back drain does not publish collected Agent read changes", async 
   ).rejects.toThrow("rollback");
   expect(published).toEqual([]);
 });
-
 test("channel main reads publish while DM thread reads stay silent", async () => {
   const events: object[] = [];
   const db = {
@@ -605,7 +578,6 @@ test("channel main reads publish while DM thread reads stay silent", async () =>
           sender: { agentId: null, agent: null, user: { username: "alice", description: "" } },
           attachments: [],
           mentions: [],
-          memoryHint: null,
           task: null,
           actionCard: null,
         },

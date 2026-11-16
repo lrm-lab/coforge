@@ -33,7 +33,6 @@ import { validateWeeklyReportCollectCommand } from "#src/connection/weekly-repor
 import { validateWeeklyReportKeyPointsCommand } from "#src/connection/weekly-report-key-points";
 import { validateWeeklyReportMemoryCommand } from "#src/connection/weekly-report-memory";
 import { getLogger } from "@logtape/logtape";
-import { admitOpenVikingControl, admitOpenVikingRead } from "./openviking-read-proxy";
 import { parseMessageRequest } from "./agent-proxy-message-request";
 import { TASK_CONVERSATION_PROXY_ROUTES } from "./agent-proxy-task-routes";
 import { APP_PROXY_ROUTES } from "./agent-proxy-app-routes";
@@ -41,14 +40,12 @@ import { ARTIFACT_FILE_PROXY_ROUTES } from "./agent-proxy-artifact-routes";
 import { ATTACHMENT_PROXY_ROUTES } from "./agent-proxy-attachment-routes";
 import { LABEL_PROXY_ROUTES } from "./agent-proxy-label-routes";
 import { LOCAL_QUERY_PROXY_ROUTES } from "./agent-proxy-local-query-routes";
-
 export type AgentProxy = {
   url: string;
   issue(agentId: string, agentApiKey: string): string;
   revoke(token: string): void;
   close(): void;
 };
-
 import type { AgentProxyRuntime } from "./agent-proxy-runtime";
 import {
   defineRoute,
@@ -59,25 +56,16 @@ import {
   type ProxyRoute,
   type TokenBinding,
 } from "./agent-proxy-route";
-
 const LOCAL_PROXY_TOKEN = /^sfp_[A-Za-z0-9_-]{43}$/;
 const MESSAGE_ID_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
 const LOCAL_PROXY_ROUTES = agentApiRoutes.proxy;
 const LOCAL_USER_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.users.path("");
-// Mention delivery is `<prefix><messageId>/mention-deliveries`; the prefix is what the route's
-// own path puts before an empty id.
 const MENTION_DELIVERY_SUFFIX = "/mention-deliveries";
 const LOCAL_MENTION_DELIVERY_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.mentionDeliveries
   .path("")
   .slice(0, -MENTION_DELIVERY_SUFFIX.length);
-/** Covers `WEEKLY_REPORT_MARKDOWN_MAX_CHARS` plus JSON framing. A byte budget, so it is not the
- * same number as that character cap — see `internal/weekly-report-limits.ts`. */
 const WEEKLY_REPORT_COLLECT_MAX_BODY_BYTES = 512 * 1024;
 const logger = getLogger(["coforge", "daemon", "agent-proxy"]);
-
-/** The local Agent proxy's routes. Looking up the runtime method, passing context/key, the missing-
- * handler 404, response wrapping and failure classification are written exactly once, in the
- * dispatcher below — a route entry cannot forget any of them. */
 const ROUTE_TABLE: readonly ProxyRoute[] = [
   defineRoute({
     family: "agent-api/workspace-info",
@@ -308,32 +296,6 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     respond: (result) => Response.json(result, { headers: { "cache-control": "no-store" } }),
   }),
   defineRoute({
-    family: "agent-api/memory-disposition",
-    method: LOCAL_PROXY_ROUTES.memoryDisposition.method,
-    match: exactPath(LOCAL_PROXY_ROUTES.memoryDisposition.path),
-    body: "json-object",
-    handler: "agentMemoryDisposition",
-    parse: ({ fields, binding }) =>
-      binding.memoryFence ? Response.json({ ok: false, error: { code: "unauthorized" } }) : fields,
-  }),
-  defineRoute({
-    family: "agent-api/openviking",
-    method: LOCAL_PROXY_ROUTES.openviking.method,
-    match: exactPath(LOCAL_PROXY_ROUTES.openviking.path),
-    body: "json-object",
-    handler: "agentOpenviking",
-    parse: ({ fields, binding }) => {
-      const admitted =
-        fields.op === "offer" || fields.op === "diagnose"
-          ? admitOpenVikingControl({ body: fields, fence: binding.memoryFence })
-          : admitOpenVikingRead({ body: fields, fence: binding.memoryFence });
-      return admitted.ok
-        ? admitted.command
-        : Response.json(admitted.body, { status: admitted.status });
-    },
-    domainFailure: domain.openvikingDomainFailure,
-  }),
-  defineRoute({
     family: "agent-api/inbox",
     method: LOCAL_PROXY_ROUTES.inbox.method,
     match: exactPath(LOCAL_PROXY_ROUTES.inbox.path),
@@ -351,30 +313,18 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
   }),
   ...TASK_CONVERSATION_PROXY_ROUTES,
 ];
-
-/** One daemon-local HTTP boundary shared by all Agent child processes. */
 export function startAgentProxy(input: {
   onRequest?: (request: { method: string; path: string }) => void;
   runtime: AgentProxyRuntime;
-  /** The daemon's Agent API key registry, read at each request so a key rotated after `issue`
-   * is the one the next request forwards. `issue` registers the key it was given. */
   agentApiKeys?: {
     get(agentId: string): string | undefined;
     set(agentId: string, agentApiKey: string): void;
   };
   port?: number;
 }): AgentProxy {
-  // This is deliberately a daemon-local Proxy token, not a cloud API key.
-  // Its lifetime is bounded by the Agent process registration and it is
-  // revoked when that registration stops. Keeping it stable means a long-idle
-  // Agent can make its first request without receiving a new environment
-  // variable or running a refresh command.
   const contexts = new Map<string, TokenBinding>();
   const agentApiKeys = input.agentApiKeys ?? new Map<string, string>();
   const server = Bun.serve({
-    // Loopback only: Agents reach the proxy at 127.0.0.1 (see `url` below). Bun's default
-    // `0.0.0.0` would expose it to the network and let another local listener bind
-    // 127.0.0.1 on the same port and receive the Agents' requests instead.
     hostname: "127.0.0.1",
     port: input.port ?? 0,
     async fetch(request) {
@@ -385,11 +335,9 @@ export function startAgentProxy(input: {
         method: request.method,
         path: requestUrl.pathname,
       });
-
       const found = findProxyRoute(ROUTE_TABLE, request.method, requestUrl.pathname);
       if (!found) return new Response("not found", { status: 404 });
       const { route, param } = found;
-
       const authorization = request.headers.get("authorization");
       const candidate = authorization?.match(/^Bearer (.+)$/)?.[1];
       const token = candidate && LOCAL_PROXY_TOKEN.test(candidate) ? candidate : undefined;
@@ -397,15 +345,11 @@ export function startAgentProxy(input: {
       if (!registered) return new Response("unauthorized", { status: 401 });
       const binding: TokenBinding = {
         ...registered,
-        memoryFence: input.runtime.memoryFence?.(registered.agentId),
       };
-
-      // `inbox` declares no key parameter; every other runtime method takes all three.
       const handler = input.runtime[route.handler] as
         | ((context: string, request: unknown, agentApiKey: string | undefined) => Promise<unknown>)
         | undefined;
       if (!handler) return new Response("not found", { status: 404 });
-
       let fields: JsonObject = {};
       let redact = false;
       try {
@@ -434,9 +378,6 @@ export function startAgentProxy(input: {
           binding,
         });
         if (parsed instanceof Response) return parsed;
-        // Identity is exclusively the token binding, and the Agent API key the daemon's registry
-        // holds for it right now: neither is ever read from, or serialized into, the child's
-        // request.
         const result = await handler.call(
           input.runtime,
           binding.context,
@@ -451,8 +392,6 @@ export function startAgentProxy(input: {
       } catch (error) {
         const domainFailure = route.domainFailure?.(error);
         if (domainFailure) return domainFailure;
-        // Every other failure is classified: never a bare, unlabeled 502. Reviewer-isolated
-        // requests still get a classified response, but with detail withheld.
         return proxyFailureResponse(error, {
           method: request.method,
           path: requestUrl.pathname,

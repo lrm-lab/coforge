@@ -19,7 +19,6 @@ import {
   recordingFileRemoval,
   recordingSignals,
   setup,
-  unboundMemory,
 } from "./helpers/workspace-deletion-fixture";
 
 /**
@@ -49,7 +48,6 @@ test.skipIf(!connectionString)(
       await new WorkspaceDeletion(db, {
         files: files.removal,
         signals: heard.signals,
-        memory: unboundMemory(db).memory,
       }).delete({ workspaceId: workspace.id, userId: owner.id, confirmSlug: workspace.slug });
 
       expect(await db.workspace.findUnique({ where: { id: workspace.id } })).toBeNull();
@@ -101,7 +99,6 @@ test.skipIf(!connectionString)(
     const deletion = new WorkspaceDeletion(db, {
       files: files.removal,
       signals: heard.signals,
-      memory: unboundMemory(db).memory,
     });
     const stranger = await db.user.create({
       data: {
@@ -174,7 +171,6 @@ test.skipIf(!connectionString)(
       await new WorkspaceDeletion(db, {
         files: { remove: () => Promise.reject(new Error("bucket refused")) },
         signals: failing,
-        memory: unboundMemory(db).memory,
       }).delete({ workspaceId: workspace.id, userId: owner.id, confirmSlug: workspace.slug });
 
       expect(await db.workspace.findUnique({ where: { id: workspace.id } })).toBeNull();

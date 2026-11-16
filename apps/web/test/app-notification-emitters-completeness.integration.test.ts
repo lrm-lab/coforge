@@ -1,52 +1,13 @@
 import { expect, test } from "bun:test";
-
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { createOwnedWorkspace } from "#src/server/db/repositories/workspace-slugs.repositories.server";
-import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
 import { ownerNamingOf, weeklyReportAutoName } from "#src/server/agents/owner-agent-rename.server";
 import { saveProfileAndRenameAssistants } from "#src/server/agents/owner-profile-writes.server";
 import { defineEmitterCases, emitterCase } from "./helpers/app-notification-emitter-cases";
 import { agentIn, channelOf, personIn, unique } from "./helpers/app-notification-emitter-domain";
 import { emitterDatabaseUrl } from "./helpers/app-notification-emitters";
-
-/**
- * The write paths that are easy to miss, against local PostgreSQL: the Workspace Memory Agent
- * joining a channel, the weekly-report assistant's rename, `#general` coming to exist, an Agent
- * administrator removing a person, and a picture removed (see
- * `helpers/app-notification-emitter-cases.ts`). Skipped unless `APP_NOTIFICATIONS_TEST_DATABASE_URL`
- * points at local PostgreSQL.
- */
-
 const environment = defineEmitterCases([
-  emitterCase({
-    type: "channel.member_added",
-    label: "the Workspace Memory Agent joins a new channel",
-    setup: async (env, fixture) => ({ channel: await channelOf(env, fixture), memoryAgentId: "" }),
-    act: async (env, fixture, made) => {
-      await attachDefaultMemoryAgent(env.db, {
-        workspaceId: fixture.workspace.id,
-        conversationId: made.channel.id,
-        actorUserId: fixture.owner.id,
-        now: new Date(),
-        // The Workspace offers the experiment here: this case is about the membership notice, and
-        // the deployment's switch only decides the memory behind the Agent (task #6).
-        gate: { prototypeEnabled: false },
-        workspaceEnabled: true,
-      });
-      made.memoryAgentId = (
-        await env.db.workspaceMemoryAgent.findUniqueOrThrow({
-          where: { workspaceId: fixture.workspace.id },
-        })
-      ).agentId;
-    },
-    data: (_fixture, made) => ({ channel_id: made.channel.id, agent_id: made.memoryAgentId }),
-    refuse: (fixture) => ({
-      table: "conversation_members",
-      column: "workspaceId",
-      value: fixture.workspace.id,
-    }),
-  }),
   emitterCase({
     type: "agent.profile_updated",
     label: "the weekly-report assistant is renamed after its owner",
@@ -55,7 +16,6 @@ const environment = defineEmitterCases([
       await env.db.weeklyReportAssistant.create({
         data: { workspaceId: fixture.workspace.id, userId: fixture.owner.id, agentId: agent.id },
       });
-      // Its name still follows the owner's, so the owner's rename renames it (task #495).
       const owner = await env.db.user.findUniqueOrThrow({
         where: { id: fixture.owner.id },
         select: { displayName: true, preferences: { select: { language: true } } },
@@ -124,9 +84,7 @@ const environment = defineEmitterCases([
     }),
   }),
 ]);
-
 const testWithDatabase = emitterDatabaseUrl ? test : test.skip;
-
 testWithDatabase("a new Workspace tells its apps its #general and the creator in it", async () => {
   const env = environment();
   const slug = env.onSlug();

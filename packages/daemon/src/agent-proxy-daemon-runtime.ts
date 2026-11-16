@@ -5,17 +5,10 @@ import { mentionRuntime } from "#src/agent-proxy-mention-runtime";
 import { conversationRuntime } from "#src/agent-proxy-conversation-runtime";
 import { appRuntime } from "#src/agent-proxy-app-runtime";
 import { workspaceRuntime } from "#src/agent-proxy-workspace-runtime";
-
-/**
- * The `AgentProxyRuntime` the local Agent proxy serves, bound to the Workspace runtime that
- * `runDaemon` may not have started yet: every member resolves it lazily, so a proxy call before
- * `runtime` exists rejects instead of throwing synchronously (every caller awaits inside a try).
- */
 export function daemonAgentProxyRuntime(
   requireRuntime: () => DaemonRuntime,
 ): Required<AgentProxyRuntime> {
   const agentApi = () => requireRuntime().agentRequests;
-  // Every caller awaits inside a try, so a missing runtime surfaces as a rejected call.
   return {
     agentMemory: async (...args) => requireRuntime().agentMemory(...args),
     agentContext: async (...args) => requireRuntime().agentContext(...args),
@@ -26,9 +19,6 @@ export function daemonAgentProxyRuntime(
     inbox: async (...args) => requireRuntime().inbox(...args),
     reminder: async (...args) => requireRuntime().reminder(...args),
     agentTask: async (...args) => requireRuntime().agentTask(...args),
-    agentMemoryDisposition: async (...args) => agentApi().agentMemoryDisposition(...args),
-    agentOpenviking: async (...args) => agentApi().agentOpenviking(...args),
-    memoryFence: (agentId) => requireRuntime().memoryFence(agentId),
     agentChannel: async (...args) => agentApi().agentChannel(...args),
     agentActionPrepare: async (...args) => agentApi().agentActionPrepare(...args),
     agentWeeklyReport: async (...args) => agentApi().agentWeeklyReport(...args),
@@ -42,13 +32,12 @@ export function daemonAgentProxyRuntime(
     computerUpdateNotice: async (...args) => requireRuntime().computerUpdateNotice(...args),
     ...workspaceRuntime(agentApi),
     ...appRuntime(agentApi),
+    agentTeamMemory: async (...args) => agentApi().agentTeamMemory(...args),
     agentArtifact: async (...args) => agentApi().agentArtifact(...args),
     agentArtifactUpload: async (context, request, key) =>
       agentApi().agentArtifact(context, { file: "upload", ...request }, key),
     agentArtifactDownload: async (context, request, key) =>
       agentApi().agentArtifact(context, { file: "download", ...request }, key),
     issueAgentContext: (agentId) => requireRuntime().issueAgentContext(agentId),
-    // Every proxy route must reach the runtime here: an unwired handler is a 404 for the
-    // Agent's CLI, so a new `AgentProxyRuntime` member fails to compile until it is added.
   };
 }

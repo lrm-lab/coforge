@@ -10,23 +10,19 @@ import { consumeAttachToken } from "#src/server/computers/computer-attach.server
 import { ComputerRegistrationError } from "#src/server/computers/registration.server";
 const audit = (detail: Record<string, unknown>) =>
   console.info(JSON.stringify({ event: "computer_credential", ...detail }));
-
-import { bindUnboundMemoryAgentComputer } from "#src/server/workspace-memory/default-memory-agent.server";
 import type { WorkspaceAccess as QueryWorkspaceAccess } from "#src/server/workspaces/query.server";
-
 const workspaceShape = { id: true, slug: true, name: true } as const;
 const mapWorkspace = (value: {
   id: string;
   slug: string;
   name: string;
-}): Workspace & { readonly name: string } => value;
-
+}): Workspace & {
+  readonly name: string;
+} => value;
 export class PrismaWorkspaceAccess implements WorkspaceAccess, QueryWorkspaceAccess {
   constructor(private readonly db: PrismaClient) {}
-  /** By its current or a former slug; the answer always carries the current one. */
   async findAccessibleBySlug(slug: string, principal: AuthenticatedPrincipal) {
     const member = { members: { some: { userId: principal.userId } } };
-    // Nearly every lookup names the current slug: try it alone before the former ones.
     const row =
       (await this.db.workspace.findFirst({ where: { slug, ...member }, select: workspaceShape })) ??
       (await this.db.workspace.findFirst({
@@ -38,7 +34,6 @@ export class PrismaWorkspaceAccess implements WorkspaceAccess, QueryWorkspaceAcc
   async getAccessibleBySlug(slug: string, principal: AuthenticatedPrincipal) {
     return this.findAccessibleBySlug(slug, principal);
   }
-  /** By id, as the one-shot attach's token names its bound workspace (task #417). */
   async findAccessibleById(id: string, principal: AuthenticatedPrincipal) {
     const row = await this.db.workspace.findFirst({
       where: { id, members: { some: { userId: principal.userId } } },
@@ -58,7 +53,6 @@ export class PrismaWorkspaceAccess implements WorkspaceAccess, QueryWorkspaceAcc
     return rows.map(mapWorkspace);
   }
 }
-
 export class PrismaComputerRegistrationRepository implements ComputerRegistrationRepository {
   constructor(private readonly db: PrismaClient) {}
   async register({
@@ -70,12 +64,7 @@ export class PrismaComputerRegistrationRepository implements ComputerRegistratio
     workspace: Workspace;
     request: ComputerRegisterRequest;
   }) {
-    // The audits name the session consumed and the key issued; both wait for the commit, so a
-    // registration that rolls back never leaves a row claiming it happened (task #417).
     const registered = await this.db.$transaction(async (tx) => {
-      // A one-shot attach token is consumed here, inside the registration's own transaction:
-      // the token and the `sk_computer` it buys change hands atomically — a racing second
-      // register finds it gone and a refused register leaves it usable (task #417).
       if (principal.attachSessionId) {
         const consumed = await consumeAttachToken(tx, principal.attachSessionId);
         if (!consumed) throw new ComputerRegistrationError(401, "attach token spent");
@@ -165,7 +154,6 @@ export class PrismaComputerRegistrationRepository implements ComputerRegistratio
         data: { revokedAt: new Date() },
       });
       await tx.daemonApiKey.create({ data: daemonApiKey.record });
-      await bindUnboundMemoryAgentComputer(tx, workspace.id);
       return {
         computerId: computer.id,
         workspaceId: workspace.id,

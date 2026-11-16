@@ -18,7 +18,6 @@ import {
 } from "#src/server/conversations/mentions.server";
 import { channelTarget } from "#src/server/conversations/agent-delivery.server";
 import type { DirectTargetOf, TargetConversation } from "./agent-peer-direct.repositories.server";
-
 const TASK_METADATA_SELECT = {
   select: {
     number: true,
@@ -32,8 +31,6 @@ const TASK_METADATA_SELECT = {
     },
   },
 } satisfies NonNullable<Prisma.MessageInclude["task"]>;
-
-/** State plus choice result so an Agent can read which option was picked, and who settled it. */
 const ACTION_CARD_STATE_SELECT = {
   select: {
     state: true,
@@ -42,8 +39,6 @@ const ACTION_CARD_STATE_SELECT = {
     committedByUser: { select: { username: true } },
   },
 } satisfies NonNullable<Prisma.MessageInclude["actionCard"]>;
-
-/** The snapshots an Agent reads of a forwarded message's originals, in order (`agentForwards`). */
 export const AGENT_FORWARD_SELECT = {
   orderBy: { position: "asc" },
   select: {
@@ -54,10 +49,7 @@ export const AGENT_FORWARD_SELECT = {
     sourceBody: true,
   },
 } satisfies Prisma.Message$forwardsArgs;
-
-/** Message projection sent to an Agent. */
 export const AGENT_MESSAGE_INCLUDE = {
-  memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
   sender: MESSAGE_SENDER_SELECT,
   attachments: { orderBy: { position: "asc" }, omit: { imageWidth: true, imageHeight: true } },
   task: TASK_METADATA_SELECT,
@@ -65,41 +57,26 @@ export const AGENT_MESSAGE_INCLUDE = {
   mentions: MESSAGE_MENTIONS_SELECT,
   forwards: AGENT_FORWARD_SELECT,
   attachmentComment: { select: { attachmentId: true, anchorType: true, anchorData: true } },
-  // The thread's reply count, so a history line can say how many answers a message has.
   _count: { select: { replies: true } },
 } satisfies Prisma.MessageInclude;
-
 export type DirectConversationMessageRow = Prisma.MessageGetPayload<{
   include: typeof AGENT_MESSAGE_INCLUDE;
 }>;
-
-/** A delivery target is the conversation target, suffixed with the thread root when replying. */
 export function deliveryTarget(parent: string, rootId?: string | null) {
   if (!rootId) return parent;
   return `${parent}:${rootId}`;
 }
-
-/**
- * `#channel` for a public channel, otherwise the other side of the direct conversation as the
- * reader sees it (`targetOf`, from `directTargets`; required, so a caller cannot forget it). A
- * conversation with neither a person nor an Agent peer is an App's events.
- */
 export function conversationTarget(
   conversation: TargetConversation,
   targetOf: DirectTargetOf,
 ): string {
-  // A task's discussion: its board and the task, `#channel:#N` (a task is not a thread root).
   if (conversation.taskDiscussionOf)
     return `${conversationTarget(conversation.taskDiscussionOf.conversation, targetOf)}:#${conversation.taskDiscussionOf.number}`;
-  // An attachment's comment discussion: the file's own target (`attachment:<id>`).
   if (conversation.attachmentCommentThread)
     return `attachment:${conversation.attachmentCommentThread.attachmentId}`;
   if (conversation.channelName) return channelTarget(conversation.channelName);
   return targetOf(conversation) ?? `@${undefined}`;
 }
-
-/** The members `conversationTarget` names a direct conversation by: its person, or, between two
- * Agents, both Agents. */
 export const CONVERSATION_TARGET_MEMBERS = {
   where: { OR: [{ userId: { not: null } }, { agentId: { not: null } }] },
   select: {
@@ -108,8 +85,6 @@ export const CONVERSATION_TARGET_MEMBERS = {
   },
   take: 2,
 } satisfies Prisma.Conversation$membersArgs;
-
-/** What `conversationTarget` reads of a conversation, and of the board when it is a task's. */
 export const TARGET_CONVERSATION_SELECT = {
   channelName: true,
   directKey: true,
@@ -124,47 +99,43 @@ export const TARGET_CONVERSATION_SELECT = {
     },
   },
 } satisfies Prisma.ConversationSelect;
-
-/** `AGENT_MESSAGE_INCLUDE` plus what `messageDeliveryTarget` reads from the conversation. */
 export const AGENT_MESSAGE_WITH_TARGET_INCLUDE = {
   ...AGENT_MESSAGE_INCLUDE,
   conversation: { select: TARGET_CONVERSATION_SELECT },
 } satisfies Prisma.MessageInclude;
-
-/** Where a Message is delivered: its conversation's target, with its thread root if it has one. */
 export function messageDeliveryTarget(
   message: {
     threadRootId: string | null;
-    attachmentComment?: { attachmentId: string } | null;
+    attachmentComment?: {
+      attachmentId: string;
+    } | null;
     conversation: TargetConversation;
   },
   targetOf: DirectTargetOf,
 ) {
-  // A comment names its file whatever conversation holds it: its thread root only while it still
-  // lives in a comment conversation — after migration the message's root is the source message,
-  // which is not a comment id and so never an `attachment:<id>:<anchor>` target.
   if (message.attachmentComment)
     return message.conversation.attachmentCommentThread && message.threadRootId
       ? `attachment:${message.attachmentComment.attachmentId}:${message.threadRootId}`
       : `attachment:${message.attachmentComment.attachmentId}`;
   return deliveryTarget(conversationTarget(message.conversation, targetOf), message.threadRootId);
 }
-
-/** The comment's anchor as the wire sends it: `{type, data}` from its two stored columns, or
- * undefined for a whole-file comment or a shape the SDK does not accept. */
 function commentAnchor(
-  comment: { anchorType: string | null; anchorData: unknown } | null | undefined,
+  comment:
+    | {
+        anchorType: string | null;
+        anchorData: unknown;
+      }
+    | null
+    | undefined,
 ) {
   if (comment?.anchorType === null || comment?.anchorType === undefined) return undefined;
   const anchor = { type: comment.anchorType, data: comment.anchorData };
   return isAttachmentCommentAnchor(anchor) ? anchor : undefined;
 }
-
 export function toAgentMessage(
   row: Pick<DirectConversationMessageRow, "id" | "sequence" | "body" | "createdAt"> & {
     sender: Parameters<typeof agentMessageSender>[0];
     task: Parameters<typeof messageTask>[0];
-    /** With which original of a forward of several each is a copy of. */
     attachments: (AttachmentMetadata & ForwardCopy)[];
     attachmentComment?: {
       attachmentId: string;
@@ -175,12 +146,15 @@ export function toAgentMessage(
       state: string;
       kind?: string | null;
       result?: unknown;
-      committedByUser?: { username: string } | null;
+      committedByUser?: {
+        username: string;
+      } | null;
     } | null;
     forwards?: StoredAgentForward[];
-    memoryHint?: { id: string; targetAgentId: string; deliveredAt: Date | null } | null;
     mentions?: MessageMentionRef[];
-    _count?: { replies: number };
+    _count?: {
+      replies: number;
+    };
   },
   target: string,
   readerAgentId?: string,
@@ -208,17 +182,12 @@ export function toAgentMessage(
     ),
     createdAt: row.createdAt,
     target,
-    // Which original a copy is of reaches the Agent as `forwardedMessages[].attachments`, not here.
     attachments: row.attachments.map(({ forwardPosition: _, ...attachment }) => attachment),
     ...(row._count?.replies ? { replyCount: row._count.replies } : {}),
     ...(task ? { task } : {}),
     ...(anchor ? { attachmentCommentAnchor: anchor } : {}),
-    ...(row.memoryHint?.deliveredAt && row.memoryHint.targetAgentId === readerAgentId
-      ? { memoryHint: { hint_id: row.memoryHint.id, tool: "memory_disposition" as const } }
-      : {}),
   };
 }
-
 function taskStatus(value: string): TaskStatus {
   switch (value) {
     case "todo":
@@ -231,7 +200,6 @@ function taskStatus(value: string): TaskStatus {
       throw new Error("invalid persisted Task status");
   }
 }
-
 function messageTask(
   task: {
     deletedAt?: Date | null;
@@ -239,12 +207,15 @@ function messageTask(
     status: string;
     owner: {
       user: HumanNames | null;
-      agent: { name: string; displayName: string; deletedAt: Date | null } | null;
+      agent: {
+        name: string;
+        displayName: string;
+        deletedAt: Date | null;
+      } | null;
     } | null;
   } | null,
 ): MessageTaskMetadata | undefined {
   if (!task) return undefined;
-  // A marked Task is deleted to the reader (task #512): the Agent-side metadata says so.
   if (task.deletedAt)
     return { deleted: true, number: task.number, status: taskStatus(task.status) };
   const agent = task.owner?.agent;
@@ -259,19 +230,12 @@ function messageTask(
           owner: {
             displayName,
             handle,
-            // A deleted Agent keeps the Task; the reading Agent must not take it for a live owner.
             ...(agent?.deletedAt ? { deleted: true } : {}),
           },
         }
       : {}),
   };
 }
-
-/**
- * The messages around `anchorSequence` in `scope`, oldest first: the anchor, and as many before and
- * after it as `limit` allows (the anchor takes one of the `limit` places, the earlier side takes
- * the smaller half). Reports whether either side had more.
- */
 export async function readWindowAround(
   db: Pick<PrismaClient, "message">,
   scope: Prisma.MessageWhereInput,
@@ -309,9 +273,6 @@ export async function readWindowAround(
     hasNewer: afterRows.length > afterCount,
   };
 }
-
-/** The newest `limit` messages of `scope`, oldest first, and whether older ones remain (none are
- * newer). */
 export async function readLatestWindow(
   db: Pick<PrismaClient, "message">,
   scope: Prisma.MessageWhereInput,
@@ -330,17 +291,14 @@ export async function readLatestWindow(
     ...(rows.length > limit ? { sequenceBeforePage: rows.at(-1)?.sequence } : {}),
   };
 }
-
-/**
- * Where the Agent's read position stood before a read and where it moved to, for the reads that
- * move it from the position: an unread read reports both and whether more remain, and a plain
- * latest read reports where it started so the CLI can describe a complete-page advance or what
- * lies newer.
- */
 export function readPositionReport(
   unread: boolean | undefined,
   isHistoryRead: boolean,
-  read: { readThrough: number; modelSeenUpToSeq?: number | null; hasMore?: boolean },
+  read: {
+    readThrough: number;
+    modelSeenUpToSeq?: number | null;
+    hasMore?: boolean;
+  },
 ) {
   if (unread)
     return {

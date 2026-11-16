@@ -61,22 +61,15 @@ export async function enrollGeneralChannel(db: Prisma.TransactionClient, workspa
   });
   // A private Agent is never an active channel member, #general included; making it public
   // enrolls it again (see `PrismaChangeAgentVisibilityStore`).
-  const memoryAgent = await db.workspaceMemoryAgent.findUnique({
-    where: { workspaceId },
-    select: { agentId: true },
+  const agents = await db.agent.findMany({
+    where: {
+      workspaceId,
+      visibility: AGENT_VISIBILITY.PUBLIC,
+      ...ACTIVE_AGENT_WHERE,
+      ...ROSTER_AGENT_WHERE,
+    },
+    select: { id: true },
   });
-  // An app's bot is in no channel until a person adds it: it posts only where it was added.
-  const agents = (
-    await db.agent.findMany({
-      where: {
-        workspaceId,
-        visibility: AGENT_VISIBILITY.PUBLIC,
-        ...ACTIVE_AGENT_WHERE,
-        ...ROSTER_AGENT_WHERE,
-      },
-      select: { id: true },
-    })
-  ).filter((agent) => agent.id !== memoryAgent?.agentId);
   const enrolledAgents = await db.conversationMember.createManyAndReturn({
     data: agents.map(({ id: agentId }) => ({
       workspaceId,

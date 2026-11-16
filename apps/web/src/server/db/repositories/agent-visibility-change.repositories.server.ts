@@ -56,13 +56,6 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
         select: { id: true },
       });
       if (assistant) throw new AppError("ACCESS_DENIED");
-      if (input.visibility === AGENT_VISIBILITY.PRIVATE) {
-        const memoryAgent = await tx.workspaceMemoryAgent.findUnique({
-          where: { workspaceId: input.workspaceId },
-          select: { agentId: true },
-        });
-        if (memoryAgent?.agentId === input.agentId) throw new AppError("CONFLICT");
-      }
       const updated = await tx.agent.updateMany({
         where: {
           id: input.agentId,

@@ -1,4 +1,3 @@
-import { isMemoryAgentToolProfile, type MemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
 import type {
   RuntimeProvider,
   RuntimeErrorAction,
@@ -7,11 +6,7 @@ import type {
   AgentActivityDetailKind,
   AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
-
 export type AgentActivityLevel = "info" | "warning" | "error";
-/** What a provider task lifecycle event is, closed vocabulary: `command` is a background
- * shell/command task, `agent` a delegated subagent or teammate, `other` anything else (a
- * Monitor watch, say). The daemon core alone decides which kinds earn an Activity row. */
 export type AgentSubagentTaskKind = "command" | "agent" | "other";
 export type AgentActivity = Readonly<{
   detailKind: AgentActivityDetailKind;
@@ -24,68 +19,49 @@ export type AgentActivity = Readonly<{
     errorReason: string;
     fingerprint: string;
     requiredAction?: RuntimeErrorAction;
-    /** What the provider itself said, redacted, on a failure that took the Agent offline. */
     providerMessage?: string;
   }>;
 }>;
-
 export type AgentRuntimeProviderConfig =
-  | Readonly<{ kind: "default" }>
-  | Readonly<{ kind: "coforge"; providerId: string; apiKey?: string }>;
+  | Readonly<{
+      kind: "default";
+    }>
+  | Readonly<{
+      kind: "coforge";
+      providerId: string;
+      apiKey?: string;
+    }>;
 export type AgentRuntimeConfig = Readonly<{
   provider: RuntimeProvider;
   model: string;
   modelProvider?: string;
   reasoning: string;
   providerConfig?: AgentRuntimeProviderConfig;
-  /** An explicitly fenced tool profile supplied by the versioned Agent start intent. */
-  toolProfile?: MemoryAgentToolProfile;
-  memoryAgent?: boolean;
-  /** Whether this launch asked the runtime for its Fast service tier. Applied by the adapters
-   * that support it (Claude Code, Codex); every other runtime ignores it. */
   fastMode?: boolean;
-  /** The context window and maximum output a person filled in on the Agent's form, when they did:
-   * they win over the runtime's own model entry, which fills whatever is left absent. The Pi
-   * runtime follows `contextWindow` for its compaction window (task #30). */
   contextWindow?: number;
   maxOutputTokens?: number;
   envVars?: Readonly<Record<string, string>>;
 }>;
-/** Plan-usage window status (task #50): `limit_reached` once the window's ratio hits 1.0,
- * `parse_unavailable` when the provider reported a window whose ratio could not be read (then
- * `usedPercent`/`resetsAt` are omitted). Replaces the old `"available" | "rate-limited"`
- * vocabulary. */
 export type UsageWindowStatus = "ok" | "limit_reached" | "parse_unavailable";
-/** Account-level health for a usage scan (task #50). A snapshot is only emitted for a readable
- * scan, so readers carry `ok`/`rate_limited`; the rest name the scan-level outcomes already
- * carried by the scan status. */
 export type UsageHealth = "ok" | "rate_limited" | "reauth_required" | "unsupported" | "error";
 export type UsageWindow = Readonly<{
-  /** Stable window id derived from the window's label:
-   * `w<index>_<first 12 hex of sha256(label)>`. */
   id?: string;
   usedPercent?: number;
   status?: UsageWindowStatus;
   windowDurationMinutes: number;
-  /** ISO instant; omitted only for a `parse_unavailable` window with no readable reset. */
   resetsAt?: string;
 }>;
-/** One bucket as the provider returned it. `remainingFraction` is the official share left.
- * `usedPercent`, `status`, and `windowDurationMinutes` are derived beside it and do not replace it. */
 export type UsageOfficialBucket = Readonly<{
   id?: string;
   name?: string;
   description?: string;
-  /** Official window key, such as `5h` or `weekly`. */
   window?: string;
-  /** Official remaining fraction, from 0 to 1. */
   remainingFraction?: number;
   usedPercent?: number;
   status?: UsageWindowStatus;
   windowDurationMinutes?: number;
   resetsAt?: string;
 }>;
-/** One official quota group. Older Computers omit `officialGroups` and send only the two windows. */
 export type UsageOfficialGroup = Readonly<{
   name?: string;
   description?: string;
@@ -96,110 +72,117 @@ export type UsageSnapshot = Readonly<{
   planType?: string;
   primary?: UsageWindow;
   secondary?: UsageWindow;
-  /** Every official group the provider returned. Present beside `primary` and `secondary`,
-   * which stay so an older Web can still read the two-window summary. */
   officialGroups?: readonly UsageOfficialGroup[];
-  /** The provider's own note above those groups, such as Antigravity's `command.data.description`.
-   * Omitted when the provider sent none. */
   officialDescription?: string;
-  /** Codex reports booleans, plus `balance` only when that version's schema sends the string.
-   * This is not Kiro's `creditUsage` amounts. */
-  credits?: Readonly<{ hasCredits: boolean; unlimited: boolean; balance?: string }>;
-  /** Included credits consumed, included limit, and separately billed overage. */
-  creditUsage?: Readonly<{ used: number; limit: number; overage: number }>;
-  /** Rate-limit reset credits the signed-in account can still spend: a whole number from 0 to
-   * 999. Codex only, and absent when the runtime does not report it. */
+  credits?: Readonly<{
+    hasCredits: boolean;
+    unlimited: boolean;
+    balance?: string;
+  }>;
+  creditUsage?: Readonly<{
+    used: number;
+    limit: number;
+    overage: number;
+  }>;
   resetCreditsAvailable?: number;
-  /** When this snapshot was actually observed (ISO instant) — stamped centrally by
-   * `DaemonRuntime.scanUsage`, never by an individual provider reader, so a snapshot reused from
-   * a passively observed usage event carries the time it was observed rather than "now". Older
-   * Computers omit it. */
   collectedAt?: string;
-  /** The signed-in account, masked before it ever leaves the Computer (e.g.
-   * `fra****n@example.com`) — never the raw address. Populated only for a provider whose existing
-   * usage/auth read already reports it. */
   accountLabel?: string;
-  /** Account-level health: `rate_limited` once any reported window is at its limit, `ok`
-   * otherwise. Readers that cannot tell leave it unset. */
   health?: UsageHealth;
 }>;
 export type AgentSessionIdentity = Readonly<{
   sessionId: string;
   state: "empty" | "resumable" | "unknown";
 }>;
-/** How a launch injects the commit co-author trailer hook into the Agent's git:
- * `config-hook` for git >= 2.54's config-based hooks, `hooks-path` for an older git pointed at the
- * Daemon's forwarding shim directory. */
 export type AgentGitHookPlan =
-  | { readonly kind: "config-hook" }
-  | { readonly kind: "hooks-path"; readonly hooksDir: string };
+  | {
+      readonly kind: "config-hook";
+    }
+  | {
+      readonly kind: "hooks-path";
+      readonly hooksDir: string;
+    };
 type AgentSessionCommonOptions = Readonly<{
   agentId?: string;
   runtimeId?: string;
   agentWorkspaceDirectory: string;
   conversation?: AgentConversationScope;
-  /** Lifecycle-only Memory session; never consumes conversational work. */
-  memoryControlSession?: boolean;
   instructions: string;
   sessionId?: string;
   sessionMode?: "create" | "resume";
-  /** Daemon-owned directory for captured Pi/Builtin request logs. */
   contextViewRequestLogDirectory?: string;
-  /** Acknowledged cloud persistence of the provider's actual session identity. */
   onSessionId?(sessionId: string, replacedSessionId?: string): Promise<void>;
   runtime?: AgentRuntimeConfig;
   environment?: Readonly<Record<string, string>>;
-  /** Resolved once per launch by the Daemon; every process the session spawns reuses it. */
   gitHooks?: AgentGitHookPlan;
 }>;
 export type AgentSessionOptions = AgentSessionCommonOptions;
-export type AgentConversationScope = Readonly<{ conversationId: string; target: string }>;
-export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope } & (
-  | { type: "activity"; activity: AgentActivity }
-  | { type: "usage"; snapshot: UsageSnapshot }
-  // A provider-observed context-window reading, distinct from the plan-usage
-  // `usage` event above. Claude Code reports this at the top-level `result` record; a
-  // provider with no such signal never emits it.
-  | { type: "context-usage"; usedTokens: number; windowTokens: number; occurredAt?: string }
-  | { type: "text-delta" | "thinking-delta"; text: string; subagent?: ActivitySubagent }
-  | { type: "session"; identity: AgentSessionIdentity }
+export type AgentConversationScope = Readonly<{
+  conversationId: string;
+  target: string;
+}>;
+export type AgentRuntimeEvent = {
+  readonly conversation?: AgentConversationScope;
+} & (
+  | {
+      type: "activity";
+      activity: AgentActivity;
+    }
+  | {
+      type: "usage";
+      snapshot: UsageSnapshot;
+    }
+  | {
+      type: "context-usage";
+      usedTokens: number;
+      windowTokens: number;
+      occurredAt?: string;
+    }
+  | {
+      type: "text-delta" | "thinking-delta";
+      text: string;
+      subagent?: ActivitySubagent;
+    }
+  | {
+      type: "session";
+      identity: AgentSessionIdentity;
+    }
   | {
       type: "tool-start";
       id: string;
       name: string;
-      /** The provider's raw tool arguments; the daemon core alone decides what Activity this is. */
       input?: unknown;
       subagent?: ActivitySubagent;
-      /** The provider-reported event time; falls back to observation time if omitted. */
       occurredAt?: string;
     }
-  | { type: "tool-output"; id: string; text: string }
-  // The Agent's own message send, seen while the model is still streaming the tool call's
-  // arguments: `id` is the call's id (the `tool-start` that follows names the same one) and
-  // `target` the send's `--target`, already closed. At most one per call; a provider that only
-  // reports a finished call never emits it, and the daemon core still announces that call from
-  // its `tool-start`.
-  | { type: "reply-intent"; id: string; target: string }
-  // A `reply-intent` call the model abandoned: its message ended (a new message or turn began)
-  // without the call ever starting. A call that did start ends with its `tool-end`.
-  | { type: "reply-intent-retracted"; id: string }
+  | {
+      type: "tool-output";
+      id: string;
+      text: string;
+    }
+  | {
+      type: "reply-intent";
+      id: string;
+      target: string;
+    }
+  | {
+      type: "reply-intent-retracted";
+      id: string;
+    }
   | {
       type: "tool-end";
       id: string;
       isError: boolean;
-      /** A command tool's exit code, when the provider reports one. */
       exitCode?: number;
-      /** How long the call ran, when the provider measures it; otherwise the daemon times it. */
       durationMs?: number;
     }
-  | { type: "completed"; status: "completed" | "interrupted" | "failed" }
-  // Normalized signals a provider reports; the daemon core (not the provider) decides what
-  // Activity, if any, each one becomes - see daemon-runtime/runtime.ts and
-  // agent-runtime/phase-tracker.ts.
-  | { type: "compaction-started"; occurredAt?: string }
-  // A finished compaction's own token numbers, when the runtime reports them (Pi's
-  // `CompactionResult`: `tokensBefore` and its `estimatedTokensAfter`): the daemon logs these
-  // instead of guessing, and takes `windowTokens` from the runtime's model when it knows it.
+  | {
+      type: "completed";
+      status: "completed" | "interrupted" | "failed";
+    }
+  | {
+      type: "compaction-started";
+      occurredAt?: string;
+    }
   | {
       type: "compaction-finished";
       occurredAt?: string;
@@ -207,18 +190,11 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       tokensAfter?: number;
       windowTokens?: number;
     }
-  // The service tier the runtime itself reports for this launch (Claude Code's per-turn
-  // `fast_mode_state`, normalized by the adapter into the closed vocabulary). A raw observation:
-  // the daemon core alone decides whether to report it and whether a mismatch with what the
-  // launch requested deserves an Activity. A provider that cannot observe it never emits it.
-  // `reason` is the runtime's own explanation when it reports one (Claude Code's
-  // `fast_mode_disabled_reason`), left uninterpreted.
-  | { type: "service-tier"; state: AgentServiceTierObserved; reason?: string }
-  // Only providers that can observe an aborted compaction report this; a provider with no such
-  // signal never emits it. `interruptedBy` separates the two endings a runtime folds into one:
-  // `aborted` is something stopping it (a turn interrupt, a stop, a restart), `failed` is its own
-  // attempt failing — the daemon counts only failures. `reason` is the runtime's own word for why
-  // it compacted and `errorMessage` the text it gave for the failure, both left uninterpreted.
+  | {
+      type: "service-tier";
+      state: AgentServiceTierObserved;
+      reason?: string;
+    }
   | {
       type: "compaction-interrupted";
       occurredAt?: string;
@@ -226,16 +202,14 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       reason?: string;
       errorMessage?: string;
     }
-  // A provider's review mode entered or exited, relayed the same way as compaction: the daemon
-  // core alone decides what Activity each one becomes.
-  | { type: "review-started"; occurredAt?: string }
-  | { type: "review-finished"; occurredAt?: string }
-  // A provider task's lifecycle (Claude Code's `task_*` system messages for a subagent, a
-  // background command or a Monitor watch, never an ambient task): started, still working, or a
-  // notification, terminal when it carries `taskStatus`. The task can outlive the turn that
-  // started it; the daemon core counts the ones outstanding by `taskId`. `subagentType` and
-  // `parentToolUseId` are raw provider facts; the daemon core alone formats the row and decides
-  // whether it is shown.
+  | {
+      type: "review-started";
+      occurredAt?: string;
+    }
+  | {
+      type: "review-finished";
+      occurredAt?: string;
+    }
   | {
       type: "subagent-progress";
       phase: "started" | "progress" | "notification";
@@ -246,40 +220,19 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       parentToolUseId?: string;
       occurredAt?: string;
     }
-  // Content-free "the provider is alive" signal (e.g. a partial stream frame with no
-  // renderable text, or a turn/message lifecycle notification that carries no content).
-  | { type: "progress"; source?: string; occurredAt?: string }
-  /**
-   * A provider-observed runtime failure, reported as raw facts only: the provider
-   * never formats, truncates, or classifies this for display — the daemon core
-   * owns all of that (single conversion in agent-runtime/runtime-error-activity.ts).
-   * `providerErrorCode`/`providerErrorClass` are optional provider-native hints
-   * (e.g. a JSON-RPC error code, a turn error's `code` field); `providerErrorReason`
-   * is an optional stable category the provider already distinguishes (e.g. Codex's
-   * "turn_failed" for a turn ending in failure, as opposed to a mid-stream RPC
-   * error) — omit any of the three when the provider has no such fact. `retryable`
-   * reflects a provider's own "will retry" signal, if it has one.
-   *
-   * `providerLimit`, unlike those free-form hints, is a normalized fact from a closed vocabulary:
-   * a provider sets it only when it knows the failure is a usage or rate limit. `quota_exhausted`
-   * is the account's balance or plan quota running out — terminal unless `resetsAt` (ISO) names a
-   * recovery time. `window_limit` is a rolling time window's usage cap (a five-hour, daily or
-   * weekly window) running out — always retryable: the daemon waits until `resetsAt` when known
-   * and backs off when it is not, because the window lifts on its own. `transient_rate_limit`
-   * is a short throttle. That is why the daemon's retry policy may honor it.
-   */
+  | {
+      type: "progress";
+      source?: string;
+      occurredAt?: string;
+    }
   | {
       type: "error";
       message: string;
       retryable?: boolean;
       providerErrorCode?: string;
       providerErrorClass?: string;
-      /** Explicit provider HTTP response status; never inferred by an adapter. */
       httpStatus?: number;
       providerErrorReason?: string;
-      /** The failure proves the stored native Session cannot be continued (the provider rejected
-       * its replay): the daemon may invalidate it and cold-start a fresh one. Set only from the
-       * provider's own explicit signal, never inferred outside the adapter. */
       sessionRecovery?: "provider_replay_rejected";
       providerLimit?: {
         kind: "quota_exhausted" | "window_limit" | "transient_rate_limit";
@@ -287,8 +240,6 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       };
       occurredAt?: string;
     }
-  /** The provider is reconnecting or retrying a request after a transient failure.
-   * Native backoff facts are optional; the daemon owns their display wording. */
   | {
       type: "reconnecting";
       attempt?: number;
@@ -296,23 +247,12 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       delayMs?: number;
       message?: string;
     }
-  /**
-   * A steer-mode provider accepted a notice into the live turn (`notify` resolved), but later
-   * learned it never actually reached the model — a native steer request the provider's own
-   * turn-boundary protocol failed to admit, or a queued one its native buffer discarded before
-   * injecting. `text` is the exact notice text `notify` was given; the daemon core is the only
-   * one that decides whether and how to redeliver it (the daemon-owned delivery queue) —
-   * the provider does not retry on its own and does not know about ACK/attention state.
-   * `deliveryIds` echoes the ones `notify` was given for this notice, unchanged, if any.
-   */
-  | { type: "notice-undelivered"; text: string; deliveryIds?: readonly string[] }
+  | {
+      type: "notice-undelivered";
+      text: string;
+      deliveryIds?: readonly string[];
+    }
 );
-
-/** Workspace Memory identity and explicitly fenced eval Memory share conversation routing. */
-export function isMemoryAgentRuntime(config: AgentRuntimeConfig | undefined): boolean {
-  return config?.memoryAgent === true || isMemoryAgentToolProfile(config?.toolProfile);
-}
-
 export type {
   AgentNoticeOptions,
   AgentSession,

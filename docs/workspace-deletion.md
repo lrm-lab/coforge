@@ -10,36 +10,11 @@ the dialog says it cannot be undone. This page states what goes and when. The co
 
 - Only the owner, and only with the Workspace's exact slug. Anyone else is refused; a Workspace
   already deleted (from another tab) answers "not found" and the page leaves it.
-- Workspace memory that cannot be removed refuses the delete with "The Workspace's memory could
-  not be deleted. Try again in a moment." (`TEMPORARILY_UNAVAILABLE`, error id
-  `workspace-memory-removal-failed`), and the Workspace stays whole. See the next section.
+## Workspace memory
 
-## Workspace memory: first, before any row
-
-A Workspace with an OpenViking binding, or with cleanup an earlier press left unfinished, has its
-memory removed before anything else goes, so none of it outlives the Workspace:
-
-1. The OpenViking account the binding names is deleted through the typed cleanup channel (a
-   `404` counts as already gone).
-2. The binding is removed, and the identities mapped under it with it.
-
-This is one cleanup operation per Workspace (`workspace-deletion`, two targets, one lease of 30 s
-each), so pressing Delete again resumes where a failed press stopped. A press is refused, with
-the error above, when OpenViking fails or another press still holds the lease; the real cause is
-in the log (`workspace_deletion:memory_removal_failed`), never in the answer.
-
-- The Web process holds no OpenViking root credential, so the account delete has no admin
-  identity to act as and a binding cannot be removed: the press is refused, and the log line
-  `workspace_memory_cleanup:openviking_unconfigured` (cause `admin credential not wired`) says
-  why. A Workspace with no binding needs none and makes no OpenViking call. Production has no
-  binding today, because its memory provisioner is not the real one. When real account
-  provisioning ships, where the credential lives is a security-boundary decision, and the same
-  credential serves both provisioning and this delete.
-- A binding that appears after its removal (memory provisioned again meanwhile) is found again
-  under the locks below and refuses the delete the same way; the next press runs the removal
-  again.
-- The cleanup's own rows name the Workspace with `Restrict`, so the final transaction deletes
-  them, settled or not.
+Native team entries, versions, review state and receipts are removed by workspace foreign-key
+cascades in the final transaction. Historical cleanup/citation rows with restrictive foreign keys
+are removed locally first. Workspace deletion makes no external memory-service call.
 
 ## Database rows: during the request
 

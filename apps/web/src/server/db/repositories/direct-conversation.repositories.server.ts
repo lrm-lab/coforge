@@ -394,7 +394,6 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     attachmentIds?: string[],
     threadRootId?: string,
     mentions?: readonly AgentMentionBinding[],
-    memoryHintId?: string,
     joinChannel?: boolean,
   ) {
     return sendAgentMessage(
@@ -405,7 +404,6 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       attachmentIds,
       threadRootId,
       mentions,
-      memoryHintId,
       joinChannel,
     );
   }

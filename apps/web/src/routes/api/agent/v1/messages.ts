@@ -11,16 +11,12 @@ import type { AgentHistoryResponse, AgentMessage, AgentSendResponse } from "@lrm
 import {
   UUID_LIKE_PATTERN,
   isAttachmentMessageTarget,
-  isChannelMessageTarget,
   isValidMentionSelectorArray,
   isSeenExactSeqs,
-  MEMORY_OFFER_REQUIRED_MESSAGE,
   CREDENTIAL_SOLICITATION_CODE,
   CREDENTIAL_SOLICITATION_MESSAGE,
   solicitsCredentialsInChat,
 } from "@lrm/coforge-sdk/internal";
-import { createPrismaMemoryAgentDirectory } from "#src/server/workspace-memory/memory-agent-http.server";
-import { explicitMemoryQuestionRequiresOffer } from "#src/server/workspace-memory/explicit-memory-answer";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import {
@@ -55,10 +51,10 @@ import {
   agentIdempotencyKeyFromQuery,
   readAgentJsonBody,
 } from "#src/server/agents/agent-http-routes.server";
-
-export type AgentMessagesGetPrincipal = { workspaceId: string; agentId: string };
-
-/** Parses a sequence-window query param, throwing on a non-integer value. */
+export type AgentMessagesGetPrincipal = {
+  workspaceId: string;
+  agentId: string;
+};
 function parseSequenceParam(
   query: URLSearchParams,
   key: "fromSequence" | "throughSequence",
@@ -69,8 +65,6 @@ function parseSequenceParam(
   if (!Number.isInteger(value)) throw new Error(`invalid ${key}`);
   return value;
 }
-
-/** Read-only history route; `query` belongs to the dedicated search route. */
 export async function handleAgentMessagesGet(
   request: Request,
   principal: AgentMessagesGetPrincipal,
@@ -99,8 +93,6 @@ export async function handleAgentMessagesGet(
         { error: "unread cannot be combined with before, after, around or fromSequence" },
         { status: 400 },
       );
-    // A window start is a read from a sequence, an anchor a read around a message: together they
-    // would page across a range the anchor alone does not describe.
     if (fromSequence !== undefined && (before || after || around))
       return Response.json(
         { error: "fromSequence cannot be combined with before, after or around" },
@@ -144,35 +136,24 @@ export async function handleAgentMessagesGet(
     );
   }
 }
-
 const UUID_PATTERN = UUID_LIKE_PATTERN;
 const ATTACHMENT_IDS_MAX_LENGTH = 10;
-
-/** Shape-only validation for `attachmentIds`: an array of at most 10 unique UUIDs. Deeper
- * per-id ownership/existence checks happen in the repository's own send transaction. */
 function isValidAttachmentIdsArray(value: unknown): value is string[] {
   if (!Array.isArray(value) || value.length > ATTACHMENT_IDS_MAX_LENGTH) return false;
   if (!value.every((id) => typeof id === "string" && UUID_PATTERN.test(id))) return false;
   return new Set(value).size === value.length;
 }
-
-export type AgentMessagesPostPrincipal = { workspaceId: string; agentId: string };
-
-/** The in-flight duplicate: this key's first request is still working. */
+export type AgentMessagesPostPrincipal = {
+  workspaceId: string;
+  agentId: string;
+};
 const inProgress = (error: MessageRequestInProgressError) =>
   errorResponse("MESSAGE_REQUEST_IN_PROGRESS", error.message, 409, true);
-
-/**
- * The `reconcileOnly` send: whether this key already committed, answered from the request record
- * alone. It needs only the target and the key, and never sends or holds.
- */
 async function handleAgentSendReconciliation(
   body: Record<string, unknown>,
   principal: AgentMessagesPostPrincipal,
   requestRecords: MessageRequestRecords,
 ): Promise<Response> {
-  // The key alone identifies the send's record, but the `reconcileOnly` contract carries the
-  // target too, so a request without one is malformed.
   if (
     typeof body.target !== "string" ||
     !body.target ||
@@ -206,20 +187,12 @@ async function handleAgentSendReconciliation(
     throw error;
   }
 }
-
-/** Send-route body handling; extracted from the route so it can be tested with fakes. */
 export async function handleAgentMessagesPost(
   request: Request,
   principal: AgentMessagesPostPrincipal,
   dependencies: Parameters<typeof executeAgentSendMessageWithPolicy>[0] & {
     requestRecords: MessageRequestRecords;
     attachmentMessages?: ReturnType<typeof createAgentAttachmentMessages>;
-    memoryOfferRequired?: (input: {
-      workspaceId: string;
-      agentId: string;
-      target: string;
-    }) => Promise<boolean>;
-    /** After a stored agent message: weekly-report body edits write the report. */
     onMessageSent?: (input: { messageId: string; target: string; body: string }) => Promise<void>;
   },
 ): Promise<Response> {
@@ -238,7 +211,6 @@ export async function handleAgentMessagesPost(
     !body.content
   )
     return Response.json({ error: "target and content are required" }, { status: 400 });
-  // Refuse before anything is stored: secrets belong in page:fill / desktop:takeover, not chat.
   if (solicitsCredentialsInChat(body.content))
     return errorResponse(CREDENTIAL_SOLICITATION_CODE, CREDENTIAL_SOLICITATION_MESSAGE, 400, false);
   const freshnessContextMode = body.freshnessContextMode;
@@ -254,30 +226,14 @@ export async function handleAgentMessagesPost(
     return Response.json({ error: "invalid mentions" }, { status: 400 });
   if (body.seenExactSeqs !== undefined && !isSeenExactSeqs(body.seenExactSeqs))
     return Response.json({ error: "invalid seenExactSeqs" }, { status: 400 });
-  // `idempotencyKey` is this request's idempotency key (task #58 ④), and our only one: a request
-  // must not be deduplicable under two spellings, so `requestId` is not read. A
-  // declared-but-unused `continue` field needs no handling here — this handler only reads what it
-  // acts on (the force-send flag is `continueAnyway`).
   const idempotencyKey =
     typeof body.idempotencyKey === "string" && body.idempotencyKey
       ? body.idempotencyKey
       : crypto.randomUUID();
-  // An explicit @memory question must be answered with a Memory Offer, not a plain channel send.
-  const channelTarget = body.target.split(":")[0] ?? body.target;
-  if (dependencies.memoryOfferRequired && isChannelMessageTarget(channelTarget)) {
-    const offerRequired = await dependencies.memoryOfferRequired({
-      workspaceId: principal.workspaceId,
-      agentId: principal.agentId,
-      target: channelTarget,
-    });
-    if (offerRequired) return textResponse(MEMORY_OFFER_REQUIRED_MESSAGE, { status: 400 });
-  }
   try {
     const attachment = isAttachmentMessageTarget(body.target)
       ? dependencies.attachmentMessages
       : undefined;
-    // Attachment comments have no ordinary delivery/freshness stream. Their authorized
-    // history read owns cursor advancement; retain only the shared send receipt protocol.
     const sendDependencies = attachment
       ? { repository: {}, sender: attachment, requestRecords: dependencies.requestRecords }
       : dependencies;
@@ -309,9 +265,7 @@ export async function handleAgentMessagesPost(
           target: body.target,
           body: body.content,
         });
-      } catch {
-        // The message is already stored. A body-edit that did not write still shows Insert.
-      }
+      } catch {}
     }
     return Response.json(mapSendResult(idempotencyKey, result));
   } catch (error) {
@@ -319,22 +273,11 @@ export async function handleAgentMessagesPost(
       const refusal = attachmentMessageRefusal(error);
       if (refusal) return refusal;
     }
-    // The send-specific rejections and the named AppError codes below are mapped here; anything
-    // else (e.g. getAgentChannel's ACCESS_DENIED for a non-member) propagates unchanged.
     if (error instanceof AgentSendRejectedError)
       return Response.json({ error: error.message }, { status: error.status });
-    // The same key's first request is still working: a duplicate, never a second message. Mapped
-    // here because the send keeps its own retryable refusal shape rather than the boundary's
-    // generic one.
     if (error instanceof MessageRequestInProgressError) return inProgress(error);
-    // An archived channel refuses posting (AppError("CONFLICT") from PublicChannels.send /
-    // sendAgentMessage); reported the same way the rest of this route family reports a plain
-    // text failure.
     if (isAppErrorCode(error, "CONFLICT"))
       return textResponse("channel is archived", { status: 409 });
-    // A private Agent's direct conversation stays scoped to its own creator: a stable
-    // code with an explanation, the same rule this route already follows for the other named
-    // failures above, rather than a bare 500.
     if (isAppErrorCode(error, "AGENT_DM_RESTRICTED"))
       return errorResponse(
         error.code,
@@ -349,16 +292,10 @@ export async function handleAgentMessagesPost(
     throw error;
   }
 }
-
-/**
- * What one Agent send runs on, built per request. Its repository keeps the channel it resolves, so
- * the Memory Offer check, the freshness check and the send itself look the channel up once.
- */
 export function agentMessagesPostDependencies(db: PrismaClient) {
   const repository = new PrismaDirectConversationRepository(db, { oneRequest: true });
   const centrifugo = createCentrifugoServerApi();
   const requestRecords = getMessageRequestIdempotency();
-  const directory = createPrismaMemoryAgentDirectory(db);
   return {
     repository,
     requestRecords,
@@ -367,29 +304,6 @@ export function agentMessagesPostDependencies(db: PrismaClient) {
       requestRecords,
       attachmentCommentNotices(db, centrifugo),
     ),
-    memoryOfferRequired: async ({
-      workspaceId,
-      agentId,
-      target,
-    }: {
-      workspaceId: string;
-      agentId: string;
-      target: string;
-    }) => {
-      try {
-        // The send path's channel: the offer check covers a channel the send would join too.
-        const conversation = await repository.getAgentSendChannel(workspaceId, agentId, target);
-        return explicitMemoryQuestionRequiresOffer(
-          db,
-          { workspaceId, agentId, conversationId: conversation.id },
-          (currentWorkspaceId, currentAgentId) =>
-            directory.isDesignated(currentWorkspaceId, currentAgentId),
-        );
-      } catch (error) {
-        if (isAppErrorCode(error, "ACCESS_DENIED", "INVALID_INPUT")) return false;
-        throw error;
-      }
-    },
     sender: new SendDirectMessage(
       repository,
       requestRecords,
@@ -400,7 +314,6 @@ export function agentMessagesPostDependencies(db: PrismaClient) {
     ),
   };
 }
-
 export const Route = createFileRoute("/api/agent/v1/messages")({
   server: {
     middleware: [agentAuthMiddleware],

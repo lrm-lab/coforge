@@ -3,13 +3,9 @@ import { AgentMessageDeliverySchema } from "#src/internal/gen/coforge/rpc/v1/wor
 import { safeUint64 } from "./agent-observation-codec";
 import { assertUint } from "./codec";
 import { AGENT_MESSAGE_METHOD } from "./index";
-import { memoryHintMessage, readMemoryHint } from "./memory-hint";
 import { mentionDeliveryEnvelopeMessage, readMentionDeliveryEnvelope } from "./mention-delivery";
 import { assertValidMessageSender, isValidMessageSender } from "./message-sender";
-
-/** One message the server delivers to an Agent's daemon (`AgentMessageDelivery`). */
 export type AgentMessageDelivery = {
-  memoryHint?: import("#src/agent/memory-disposition").MemoryHintDelivery;
   protocolMajor: number;
   requestId: string;
   messageId: string;
@@ -24,39 +20,21 @@ export type AgentMessageDelivery = {
   latestSenderKind?: import("./message-sender").MessageSenderKind;
   latestSenderHandle?: string;
   latestSenderDescription?: string;
-  /** True when this delivery personally @mentioned the recipient Agent. */
   mentionsAgent?: boolean;
-  /** True when the recipient Agent was notified of this message without being a channel member. */
   nonMemberMention?: boolean;
-  /** Present when this delivery starts an isolated Task execution session. */
   taskExecutionSessionId?: string;
-  /** Present on a tracked @mention delivery; an ACK echoes it once the mention is drained. */
   mentionDelivery?: import("./mention-delivery").MentionDeliveryEnvelope;
-  /** When the server created the message, in epoch milliseconds: not when the daemon received
-   * it, which differs for a message replayed after a reconnect. Absent from an older server. */
   createdAtMs?: number;
-  /** The Workspace's features as of this delivery; absent from an older server. A session
-   * launched with another value restarts before it takes the input. A feature the server does
-   * not name is unknown, not off. */
-  features?: { taskConversations?: boolean; artifacts?: boolean; agentContextView?: boolean };
-  /** Why this delivery reached the Agent: "mentioned" or "subscribed" on a target it was not
-   * subscribed to, and "choice" or "expired" for the Agent's own action card that someone answered
-   * or declined ("choice") or that expired ("expired") — an event about a message the Agent
-   * wrote, not new text to read. A new
-   * event-shaped reason belongs with those two and must be added to `isCardEvent` in the daemon's
-   * attention index, which is what exempts it from the read-state check. Absent on ordinary
-   * deliveries and from an older server. */
+  features?: {
+    taskConversations?: boolean;
+    artifacts?: boolean;
+    agentContextView?: boolean;
+  };
   reason?: string;
-  /** The message's attachment count. A delivery with one or more is never read in full from a
-   * preview. Absent from a server that predates it: the daemon then treats it as unknown. */
   attachmentCount?: number;
-  /** "app" when the message is an App event rather than a person's or an Agent's text. Absent
-   * from a server that predates it. */
   source?: "app";
 };
-
 export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Array {
-  // Protobuf omits an empty string, and the daemon rejects a delivery with no request_id.
   if (!value.requestId?.trim()) throw new Error("agent message delivery requires requestId");
   assertUint(value.sequence, Number.MAX_SAFE_INTEGER, "Agent message sequence");
   if (value.createdAtMs !== undefined)
@@ -71,7 +49,6 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
     assertUint(value.attachmentCount, 0xffffffff, "Agent message attachment count");
   if (value.source !== undefined && value.source !== "app")
     throw new Error("agent message delivery source must be app");
-
   return toBinary(
     AgentMessageDeliverySchema,
     create(AgentMessageDeliverySchema, {
@@ -93,7 +70,6 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
       nonMemberMention: value.nonMemberMention,
       taskExecutionSessionId: value.taskExecutionSessionId ?? "",
       mentionDelivery: mentionDeliveryEnvelopeMessage(value.mentionDelivery),
-      memoryHint: memoryHintMessage(value.memoryHint),
       createdAtMs: value.createdAtMs === undefined ? undefined : BigInt(value.createdAtMs),
       taskConversations: value.features?.taskConversations,
       artifacts: value.features?.artifacts,
@@ -144,7 +120,6 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
       ? { taskExecutionSessionId: value.taskExecutionSessionId }
       : {}),
     ...(mentionDelivery ? { mentionDelivery } : {}),
-    ...(value.memoryHint ? { memoryHint: readMemoryHint(value.memoryHint) } : {}),
     ...(value.createdAtMs !== undefined
       ? { createdAtMs: safeUint64(value.createdAtMs, "Agent message creation time") }
       : {}),

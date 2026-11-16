@@ -1,3 +1,4 @@
+import { MemoryAgentRuntimeStateStore } from "../persistence/memory-agent-runtime-state-store";
 import type {
   AgentControlResult,
   AgentControlScope,
@@ -12,71 +13,43 @@ import { AgentControlOpTiming } from "#src/agent-runtime/agent-control-timing";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
-import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
 import type { DaemonConfig } from "./runtime";
 import type { AgentStopRegistry } from "./agent-stop-registry";
 import { recoveryOf, runtimeConfigOf, type AgentRecoveryContext } from "./runtime-launch-intent";
 import type { LaunchRequest } from "./runtime-launch-types";
 import { connectionSessionInvalidate } from "./session-invalidate-activity";
-
-/** A live Agent process's Session handle, as the control seam reads it. */
 export type ControlSessionHandle = {
   readSessionIdentity?(): Promise<SessionIdentity | undefined>;
 };
-
-/** What the runtime supplies to one Agent's control and Session state. */
 export type AgentControlCompositionPorts = {
   connection: DaemonConfig;
   runtimeInstanceId: string;
-  /** Whether this Agent currently has a live process. */
   running(agentId: string): boolean;
-  /** The Agent's live process Session, read before a stop releases it. */
   session(agentId: string): ControlSessionHandle | undefined;
   stopAgent(agentId: string): Promise<void>;
-  /** One launch under the given identity, with the Session, Activity and exit callbacks it owns. */
   startAgent(
     agentId: string,
     config: AgentRuntimeConfig,
     recovery: AgentRecoveryContext | undefined,
     request: LaunchRequest,
   ): Promise<AgentRuntime>;
-  /** The launch in flight for this Agent, whoever started it: its settling, never its outcome,
-   * is what a managed Start waits for. */
   launchInFlight(agentId: string): Promise<unknown> | undefined;
-  /** Rebinds an already-running process to a newer control scope. */
   rebind(intent: AgentStartIntent, launchId: string): Promise<SessionIdentity | undefined>;
-  /** Forgets the Session reference of a launch that starts over under a fresh session. */
   stops: Pick<AgentStopRegistry, "forgetSession">;
-  /** Drops the debt a cold start owed the Agent's next launch, once a Stop is accepted. */
   dropOwedRecovery(agentId: string): void;
-  /** A Start that was pending for this Agent no longer is. */
   startSettled(agentId: string): void;
-  /** Sends the stale-session report this Agent's control decision produced. */
   sendSessionInvalidate(message: ReturnType<typeof connectionSessionInvalidate>): void;
   reportSession(report: AgentSessionReport): Promise<void>;
   sendControlResult(result: AgentControlResult): Promise<void>;
-  /** Whether the server's ready reply accepts the `accepted` control phase; an older server
-   * never does, and this daemon must then never send the phase it would reject. */
   agentControlAccepted(): boolean;
 };
-
 export type AgentControlComposition = {
   agentSessions: AgentSessions;
   agentControl: AgentControl;
 };
-
-/**
- * Builds one Workspace runtime's Agent control and Session state: the control records, the
- * `agent:session` report each accepted snapshot produces, and the ports through which control
- * launches, stops, wakes and rebinds Agents. `DaemonRuntime` keeps the collaborators those ports
- * call and hands them in here.
- */
 export function composeAgentControl(ports: AgentControlCompositionPorts): AgentControlComposition {
   const { connection, runtimeInstanceId } = ports;
   const state = new AgentRuntimeState(
-    // Control state lives only in this process: the server
-    // re-dispatches what should still be running after a restart, so a persisted record could
-    // only outlive the writer it was waiting on.
     new MemoryAgentRuntimeStateStore(connection.workspaceRoot, connection.workspaceId),
   );
   const agentSessions = new AgentSessions(state, async (snapshot) => {
@@ -97,7 +70,6 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
     });
   });
   const opTiming = new AgentControlOpTiming(runtimeInstanceId);
-  /** A Start's wake message, introduction and resume prompt, handed to the process that runs. */
   const deliverStartInput = async (intent: AgentStartIntent): Promise<void> => {
     await ports.startAgent(
       intent.agentId,
@@ -111,8 +83,6 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
       },
     );
   };
-  /** Whether the process a launch the daemon began brought up may be rebound to this Start: not
-   * when it runs another native Session than the Start names, which no rebind keeps. */
   const keepsStartSession = async (intent: AgentStartIntent): Promise<boolean> => {
     if (!intent.sessionId) return true;
     const running = await ports.session(intent.agentId)?.readSessionIdentity?.();
@@ -127,20 +97,14 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
       await ports.stopAgent(agentId);
       return session?.readSessionIdentity?.();
     },
-    // A Stop passed every fence and is about to end the Agent's process.
     stopAccepted: (agentId) => ports.dropOwedRecovery(agentId),
     launch: async (intent, launchId, replacedSessionId, invalidateReason) => {
-      // A managed attempt holds the Agent's control mutex, so a launch already in flight is one
-      // the daemon began itself (a wake, a relaunch after a stall) or an unfenced start. The
-      // server's Start wins over it and never inherits its outcome, success or failure.
       for (
         let inFlight = ports.launchInFlight(intent.agentId);
         inFlight;
         inFlight = ports.launchInFlight(intent.agentId)
       )
         await inFlight.catch(() => {});
-      // AgentControl found nothing running before this attempt, so a process running now is one
-      // that launch brought up: adopt it under this Start's scope, as `rebindRunning` does.
       if (ports.running(intent.agentId) && (await keepsStartSession(intent))) {
         const identity = await ports.rebind(intent, launchId);
         if (carriesStartInput(intent)) await deliverStartInput(intent);
@@ -169,10 +133,6 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
     wake: deliverStartInput,
     rebind: (intent, launchId) => ports.rebind(intent, launchId),
     startSettled: (agentId) => ports.startSettled(agentId),
-    // `launchId` is always present here (minted synchronously by `AgentControl.start()` before
-    // this call); the wire message and the retry's cold-start Activity (`#launchAgent`'s
-    // `request.invalidateReason` narration) both follow that same, effectively-unconditional
-    // signal — there is no longer a separate controlEpoch gate.
     invalidateSession: (intent, launchId, sessionId, reason) => {
       ports.sendSessionInvalidate(
         connectionSessionInvalidate(connection, runtimeInstanceId, {
@@ -192,10 +152,6 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
       }
     },
   });
-  // The `accepted` acknowledgement goes out ahead of the serialized `state.run` queue, once per
-  // command, and only while the server has confirmed it takes the phase (task #584). It is
-  // fire-and-forget like the other best-effort reports: the operation's own result is what the
-  // server's state machine waits on.
   const accepted = (scope: AgentControlScope) => {
     if (!ports.agentControlAccepted()) return;
     const result: AgentControlResult = { ...scope, phase: "accepted", sequence: 1 };
@@ -204,8 +160,6 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
       .catch(() => {})
       .finally(() => opTiming.resultSent(result));
   };
-  // Time each fenced operation from its AgentControl entry to its result send (task #584).
-  // The wrapped methods keep `this` bound to the real instance, so its private state is intact.
   const { start, stop, resetWorkspace } = agentControl;
   agentControl.start = (intent) => {
     opTiming.received("start", intent.agentId, intent.requestId);

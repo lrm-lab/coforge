@@ -375,24 +375,6 @@ test("an effort no variant carries fails the launch", async () => {
   }
 });
 
-test("a Memory Agent session is refused with its reason before any probe or file write", async () => {
-  const f = await fixture();
-  try {
-    const error = await f.provider
-      .createAgentSession({ ...options(f.cwd), conversation: { target: "dm:@someone" } } as never)
-      .then(
-        () => undefined,
-        (e) => e,
-      );
-    expect((error as { code?: string })?.code).toBe("runtime_memory_unsupported");
-    // No version probe spawn and no `.cursor/rules` written.
-    expect(await f.requests()).toEqual([]);
-    expect(existsSync(join(f.cwd, ".cursor"))).toBe(false);
-  } finally {
-    await f.cleanup();
-  }
-});
-
 test("an interrupt ends the turn interrupted without a session/cancel call", async () => {
   const f = await fixture({ CURSOR_ACP_FIXTURE_HANG: "1" });
   try {

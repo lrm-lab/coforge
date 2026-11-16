@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package coforge.rpc.v1;
 
-import "coforge/rpc/v1/memory_hint.proto";
-
 message LocalRpcRequest {
   string method = 1;
   bytes payload = 2;
@@ -30,7 +28,8 @@ message AgentMessageRecord {
   LocalMessageTaskMetadata task = 10;
   // Present when the sender knows whether this message personally @mentioned the reading Agent.
   optional bool mentions_agent = 11;
-  MemoryHintDelivery memory_hint = 12;
+  reserved 12;
+  reserved "memory_hint";
   // Where an attachment comment points, when this message is one: the anchor
   // {type, data} object as JSON. Absent for ordinary messages.
   optional string attachment_comment_anchor_json = 13;

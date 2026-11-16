@@ -18,7 +18,7 @@
 整个上下文。冷却间隔由 provider 声明：Claude Code 60 分钟，Codex 30 分钟（这台 Mac 上 35 分钟内
 缓存几乎全中，OpenAI 默认缓存至少 30 分钟；Raft 1.0.53 虽把 codex 列进同一机制，但只读 Claude
 的会话记录）。未声明的 provider 仍是 60 分钟。只有实现了 `readSessionResumeFacts` 的 provider
-会被回收；seam 给不出的任何事实都按恢复处理。Memory Agent 不参与。
+会被回收；seam 给不出的任何事实都按恢复处理。
 
 - **停止**：`daemon-runtime/cold-idle-sweep.ts` 每个 sweep 周期（默认 10 分钟）检查一次运行中的
   Agent。Daemon 自身状态的每个空闲条件都成立（没有 live turn、排队投递或输入、未结算 mention、未结束的工具调用、
@@ -56,7 +56,7 @@
 | `COFORGE_WAKE_RECYCLE_SWEEP_MS`           | `600000`                      | sweep 周期；只读 Daemon 自身环境                                                 |
 | `COFORGE_WAKE_RECYCLE_PANEL_TOKENS`       | `8000`                        | provider 简报的 token 预算                                                       |
 
-这两段的 token 预算不属于回收：每个 fresh session（首次启动、provider 丢失 session 后的重建、`create`、Memory Agent 的每个新 conversation）和每次上下文压缩完成后都按同样的份额注入——`MEMORY.md` 3000 token（`STARTUP_MEMORY_BUDGET_TOKENS`）、`notes/active-context.md` 1000 token（`STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS`），两份份额不互相借。
+这两段的 token 预算不属于回收：每个 fresh session（首次启动、provider 丢失 session 后的重建、`create`）和每次上下文压缩完成后都按同样的份额注入——`MEMORY.md` 3000 token（`STARTUP_MEMORY_BUDGET_TOKENS`）、`notes/active-context.md` 1000 token（`STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS`），两份份额不互相借。
 
 除 sweep 周期外，Agent 自己的 runtime 环境变量覆盖 Daemon 的环境，两者都覆盖 provider 声明的冷却间隔；空值在两级都视为未设置，无法解析的值回落为默认。
 

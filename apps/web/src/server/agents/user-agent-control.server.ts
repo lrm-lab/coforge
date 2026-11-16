@@ -11,10 +11,7 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
 import { createAgentIntroduction } from "#src/server/db/repositories/agent-introduction.repositories.server";
-import {
-  PrismaAgentSessionRepository,
-  createAgentSessions,
-} from "#src/server/db/repositories/agent-session.repositories.server";
+import { createAgentSessions } from "#src/server/db/repositories/agent-session.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { AgentTurnInterrupt } from "./agent-turn-interrupt.server";
@@ -82,7 +79,6 @@ export function userAgentConfigApply(db: PrismaClient) {
   return new AgentConfigApply(
     createAgentConfigPush(createCentrifugoServerApi()),
     new PrismaAgentControlStore(db),
-    new PrismaAgentSessionRepository(db),
   );
 }
 

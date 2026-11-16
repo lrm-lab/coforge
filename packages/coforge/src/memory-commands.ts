@@ -1,12 +1,29 @@
 import {
+  parseTeamMemoryArgs,
+  runTeamMemoryCommand,
+  type TeamMemoryInvocation,
+} from "./team-memory-commands";
+import {
   decodeLocalMemoryCommand,
   type LocalMemoryCommand,
   type LocalMemoryResult,
 } from "@lrm/coforge-sdk/agent";
 
-export type MemoryInvocation = { command: "memory"; request: LocalMemoryCommand; json: boolean };
+export type MemoryInvocation =
+  | { command: "memory"; scope?: "local"; request: LocalMemoryCommand; json: boolean }
+  | TeamMemoryInvocation;
 
 export function parseMemoryArgs(args: readonly string[]): MemoryInvocation {
+  const scopeAt = args.indexOf("--scope");
+  if (scopeAt !== -1) {
+    const scope = args[scopeAt + 1];
+    if (scope !== "team" && scope !== "local")
+      throw new Error("memory scope must be local or team");
+    const rest = [...args.slice(0, scopeAt), ...args.slice(scopeAt + 2)];
+    if (rest.includes("--scope")) throw new Error("repeated memory scope");
+    if (scope === "team") return parseTeamMemoryArgs(rest);
+    args = rest;
+  }
   const operation = args[0];
   const row: Record<string, unknown> = { operation };
   let json = false;
@@ -32,8 +49,12 @@ export function parseMemoryArgs(args: readonly string[]): MemoryInvocation {
 
 export async function runMemoryCommand(
   invocation: MemoryInvocation,
-  transport: { memory?(request: LocalMemoryCommand): Promise<LocalMemoryResult> },
+  transport: {
+    memory?(request: LocalMemoryCommand): Promise<LocalMemoryResult>;
+    teamMemory?: Parameters<typeof runTeamMemoryCommand>[1]["teamMemory"];
+  },
 ): Promise<string> {
+  if (invocation.scope === "team") return runTeamMemoryCommand(invocation, transport);
   if (!transport.memory) throw new Error("Local memory requires an updated Computer");
   const result = await transport.memory(invocation.request);
   if (invocation.json) return JSON.stringify(result);

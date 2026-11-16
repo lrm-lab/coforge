@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { AgentSession, AgentRuntimeConfig } from "@coforge/agent";
-
 function sessionSpy() {
   const exitListeners = new Set<() => void>();
   return {
@@ -22,16 +21,13 @@ function sessionSpy() {
     },
   } satisfies AgentSession;
 }
-
 const config: AgentRuntimeConfig = {
   provider: "pi",
   model: "default",
   reasoning: "balanced",
 };
 const testWorkspaceRoot = join(tmpdir(), `coforge-agent-manager-${crypto.randomUUID()}`);
-
 afterAll(() => rm(testWorkspaceRoot, { recursive: true, force: true }));
-
 test("replacing the restart runtime swaps the pushed fields and keeps the launch's own", async () => {
   const manager = new AgentProcessManager(() => ({
     provider: "pi",
@@ -45,7 +41,6 @@ test("replacing the restart runtime swaps the pushed fields and keeps the launch
     modelProvider: "anthropic",
     fastMode: true,
     providerConfig: { kind: "coforge", providerId: "old" },
-    toolProfile: "openviking-memory",
     envVars: { KEEP: "yes" },
   };
   try {
@@ -62,14 +57,12 @@ test("replacing the restart runtime swaps the pushed fields and keeps the launch
       modelProvider: "",
       reasoning: "high",
     });
-    // The remembered config describes the next launch; the frozen live runtime is untouched.
     expect(manager.restartConfig("agent-1")).toEqual({
       config: {
         provider: "pi",
         model: "new-model",
         modelProvider: "",
         reasoning: "high",
-        toolProfile: "openviking-memory",
         envVars: { KEEP: "yes" },
       },
       sessionId: "session-1",
@@ -77,27 +70,24 @@ test("replacing the restart runtime swaps the pushed fields and keeps the launch
     });
     expect("fastMode" in manager.restartConfig("agent-1")!.config).toBe(false);
     expect("providerConfig" in manager.restartConfig("agent-1")!.config).toBe(false);
-    // A push that names no size leaves the model's own entry in charge, not the launch's number.
     expect("contextWindow" in manager.restartConfig("agent-1")!.config).toBe(false);
     expect("maxOutputTokens" in manager.restartConfig("agent-1")!.config).toBe(false);
-    // A push that does name them replaces them (task #30).
     manager.replaceRestartRuntime("agent-1", {
       provider: "pi",
       model: "new-model",
       reasoning: "high",
-      contextWindow: 200_000,
-      maxOutputTokens: 64_000,
+      contextWindow: 200000,
+      maxOutputTokens: 64000,
     });
     expect(manager.restartConfig("agent-1")!.config).toMatchObject({
-      contextWindow: 200_000,
-      maxOutputTokens: 64_000,
+      contextWindow: 200000,
+      maxOutputTokens: 64000,
     });
     expect(manager.runtime("agent-1")).toBe(runtime);
     expect(runtime?.config.model).toBe("default");
   } finally {
     await manager.stop("agent-1");
   }
-  // With nothing to replace it does nothing.
   manager.replaceRestartRuntime("agent-1", { provider: "pi", model: "x", reasoning: "high" });
   expect(manager.restartConfig("agent-1")).toBeUndefined();
 });

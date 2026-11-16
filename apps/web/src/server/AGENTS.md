@@ -1,5 +1,6 @@
-- `server/team-memory/` — Agent-selected Workspace knowledge, revision review, version history and atomic reconciliation in PostgreSQL.
 # Server modules
+
+- `server/team-memory/` — Agent-selected Workspace knowledge, revision review, version history and atomic reconciliation in PostgreSQL.
 
 The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENTS.md#module-map). Each line names a directory under `src/` and its single responsibility. Update it before adding or reorganizing a module.
 
@@ -43,7 +44,6 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/notifications/` — Web Push and in-page notification delivery (its egress check is `server/egress/`), and a person's account notification settings (pause, quiet hours, preview, sound, a phone's wait while the computer is in use, the device list and test).
 
 - `server/onboarding/` — `OnboardingWizard`: the first-sign-in wizard's state, assistant configuration (while it has never run) and completion (role saved, `onboardingPendingSince` cleared, assistant started).
-- `server/openviking/` — OpenViking account, user and ACL provisioning, the deny-by-default route catalog, its policy gateway and private runtime client, and Memory Agent read shaping (see Workspace memory modules in `apps/web/AGENTS.md`).
 - `server/pi-chat/` — User/Workspace-authorized native Pi commands (started, then their reply read by request id), scoped RPC reply chunks and private live feedback over the existing Daemon connection.
 - `server/profiles/` — user avatars.
 - `server/projects/` — project settings, images, and repository file download.
@@ -55,8 +55,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/tasks/` — the message-backed TaskBoard, the shape a Task command must have, the Tasks page's overview reads, its Task view, history records, and notice wording.
 - `server/usage-limits/` — provider usage-limit events: the Activity-observation hook that opens and merges them on quota reports, the sweep that closes them (reset passed, recovered, agents gone, aged out), the owner/admin-only list and seen/dismiss use cases, and the `usage.limit.changed.v1` push to owner/admin channels.
 - `server/whats-new/` — what a person has dismissed of "What's new" (stored on their preferences) and which entries are still pending for them in a Workspace.
-- `server/workspace-memory/` — memory profiles, grounded offers, task-requested or Memory-initiated four-role diagnosis (`memory-diagnosis-scope.server.ts` binds visible Task evidence), target-only Hint receipts and source ACL checks.
-- `server/workspaces/` — Workspace catalog (name, icon and URL, with the former slugs that keep naming a Workspace), selection, enrollment, member roles, member directory, join links, admitting a member (`admitWorkspaceMember`, the one step a join link takes), who welcomes new members (`workspace-onboarding`, `member-welcome`), one submitted server connection per Workspace, deleting a Workspace, removing its memory first and its stored files after, and going out of a Workspace (leaving or deleting it) to the next one.
+- `server/workspaces/` — Workspace catalog (name, icon and URL, with the former slugs that keep naming a Workspace), selection, enrollment, member roles, member directory, join links, admitting a member (`admitWorkspaceMember`, the one step a join link takes), who welcomes new members (`workspace-onboarding`, `member-welcome`), one submitted server connection per Workspace, deleting a Workspace, cascading native memory and removing stored files afterwards, and going out of a Workspace (leaving or deleting it) to the next one.
 
 - Web-owned short-lived Redis state — the Agent and Computer status keys and the app-notification presence sorted set (`coforge:presence-expiry:v1`) — is rebuildable and non-authoritative (Frank approved 2026-10-23).
 

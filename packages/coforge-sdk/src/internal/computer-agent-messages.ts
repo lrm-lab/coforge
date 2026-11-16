@@ -1,6 +1,3 @@
-// Computer and Agent request, intent, and delivery message types of the daemon RPC.
-
-import type { MemoryAgentToolProfile } from "../agent/memory-tool-fences";
 import type { AgentMessageDelivery } from "./agent-message-delivery";
 import type { RuntimeProvider } from "./runtime-provider";
 import type {
@@ -15,12 +12,6 @@ import type {
   COMPUTER_UPGRADE_RESULT_MESSAGE_TYPE,
   DaemonRuntimeMessageType,
 } from "./index";
-
-/** Why an installed runtime cannot be used: its CLI read a version the gate refuses
- * (`version_unsupported`), could not start at all (`start_failed`), or ran but printed nothing
- * that reads as a version (`probe_failed`). `unknown` is a reason a newer daemon reported that
- * this build does not name — the runtime is still unusable, never offered. A runtime without a
- * code is usable. */
 export type RuntimeUnavailableCode =
   | "version_unsupported"
   | "start_failed"
@@ -30,9 +21,7 @@ export type RuntimeMetadata = {
   provider: RuntimeProvider;
   version: string;
   displayName: string;
-  /** Set only when the runtime is installed but cannot be used; never selectable then. */
   unavailableCode?: RuntimeUnavailableCode;
-  /** The redacted first stderr line the CLI printed, verbatim; never a sentence we wrote. */
   diagnostic?: string;
 };
 export type CodeAgentModelMetadata = {
@@ -40,12 +29,9 @@ export type CodeAgentModelMetadata = {
   displayName: string;
   description: string;
   modelProvider: string;
-  /** Absent while the runtime has not yet read this model's levels (Devin's sweep). */
   reasoningEfforts?: string[];
   defaultReasoning: string;
   recommended: boolean;
-  /** What the provider's model list reports for this model; absent when it reports nothing, which
-   * the Agent form leaves blank rather than guessing. A value typed in the form wins (task #30). */
   contextWindow?: number;
   maxOutputTokens?: number;
 };
@@ -73,7 +59,6 @@ export type ComputerRegisterResponse = {
   computerId: string;
   workspaceId: string;
   daemonApiKey: string;
-  /** The attached Workspace's slug, for a one-shot attach that never named one (task #417). */
   workspaceSlug?: string;
 };
 export type ComputerCandidate = {
@@ -111,14 +96,12 @@ export type DaemonRuntimeReadyRequest = {
   recoveredRestartRequestIds?: string[];
   recoveredUpgradeRequestIds?: string[];
   capabilities?: string[];
-  /** The locally persisted release selector, when this Computer supports channel-aware upgrades. */
   releaseChannel?: string;
-  appliedAgentConfigs?: Array<{ agentId: string; revision: number }>;
+  appliedAgentConfigs?: Array<{
+    agentId: string;
+    revision: number;
+  }>;
 };
-
-/** The server's answer to a daemon's ready: the release feed's newest Computer version, so a
- * daemon on an older Computer can say so; and whether this server takes the `accepted` Agent
- * control phase. Both absent from an older server's empty reply. */
 export type DaemonRuntimeReadyResponse = {
   latestComputerVersion?: string;
   agentControlAccepted?: boolean;
@@ -137,11 +120,9 @@ export type ComputerUpgradeIntent = {
   computerId: string;
   target: "latest";
   expectedVersion?: string;
-  /** Optional channel selector; absent keeps the legacy compiled-feed behavior. */
   releaseChannel?: string;
   messageType?: typeof COMPUTER_UPGRADE_MESSAGE_TYPE;
 };
-/** One Computer upgrade operation's terminal report, from the Daemon to the server. */
 export type ComputerUpgradeResult = {
   protocolMajor: number;
   requestId: string;
@@ -151,8 +132,6 @@ export type ComputerUpgradeResult = {
   completedAtMs: number;
   version?: string;
   error?: string;
-  /** See `UPGRADE_ERROR_CODE`. May be a well-formed code this SDK build does not know the name
-   * of yet - the shape is validated, the vocabulary membership is not. */
   errorCode?: string;
   messageType?: typeof COMPUTER_UPGRADE_RESULT_MESSAGE_TYPE;
 };
@@ -178,20 +157,14 @@ export type DaemonRuntimeUsageScanResponse = DaemonRuntimeUsageScanRequest & {
   message?: string;
   snapshotJson?: Uint8Array;
 };
-/** Server -> daemon, on the daemon control channel like the usage scan: re-run Code Agent
- * model-catalog discovery on demand so the browser's model selector can pick up a provider config
- * change without a daemon restart. */
 export type DaemonRuntimeProviderModelRefreshRequest = {
   protocolMajor: number;
   requestId: string;
   workspaceId: string;
   computerId: string;
-  /** The runtime the user asked about; absent re-probes every provider (runtime rescan). */
   provider?: RuntimeProvider;
   messageType?: DaemonRuntimeMessageType;
 };
-/** One provider's terminal outcome for a requested model refresh. `code`/`diagnostic` name the
- * failure only on `error`; `catalog` is the fresh model list on `refreshed`. */
 export type ProviderModelRefreshResult = {
   provider: RuntimeProvider;
   status: "refreshed" | "error";
@@ -199,8 +172,6 @@ export type ProviderModelRefreshResult = {
   diagnostic?: string;
   catalog?: CodeAgentModelCatalog;
 };
-/** Daemon -> server. Every provider the request covered gets its own entry; a failed provider
- * does not change the others' outcome. */
 export type DaemonRuntimeProviderModelRefreshResponse = Omit<
   DaemonRuntimeProviderModelRefreshRequest,
   "provider"
@@ -208,7 +179,6 @@ export type DaemonRuntimeProviderModelRefreshResponse = Omit<
   accepted: boolean;
   results: ProviderModelRefreshResult[];
 };
-/** Server -> daemon. Read one Command Code model's effort choices after the user selects it. */
 export type DaemonRuntimeCommandCodeEffortReadRequest = {
   protocolMajor: number;
   requestId: string;
@@ -217,7 +187,6 @@ export type DaemonRuntimeCommandCodeEffortReadRequest = {
   modelId: string;
   messageType?: DaemonRuntimeMessageType;
 };
-/** Daemon -> server. `status` is `ready` or `failed`. `efforts` never includes `default`. */
 export type DaemonRuntimeCommandCodeEffortReadResponse = {
   protocolMajor: number;
   requestId: string;
@@ -242,32 +211,16 @@ export type AgentStartIntent = {
   sessionMode?: "create" | "resume";
   previousLaunchId?: string;
   controlEpoch?: number;
-  /** The server-minted launchId for this control operation's start step; required
-   * whenever `controlEpoch` is set (every managed start). */
   launchId?: string;
-  /** Fenced Agent runtime profile. Unknown values are rejected by the codec. */
-  toolProfile?: MemoryAgentToolProfile;
-  memoryAgent?: boolean;
   providerConfig?: AgentRuntimeProviderConfig;
   wakeMessage?: AgentRecoveryMessage;
   resumeMessages?: AgentRecoveryMessage[];
   unreadSummary?: Readonly<Record<string, number>>;
   unreadConversationIds?: Readonly<Record<string, string>>;
-  /** Text the Agent's first turn opens with, in place of message recovery: the guidance a user
-   * gives when resuming Agents they stopped. Never carried together with `wakeMessage`,
-   * `resumeMessages` or `unreadSummary`. */
   resumePrompt?: string;
-  /** Server-written text for an Agent that has not yet introduced itself to its creator: the
-   * launch's first turn, in place of the empty-launch starter. Carried on every start until the
-   * server records the introduction, and may accompany recovery and `resumePrompt`. */
   introductionPrompt?: string;
-  /** Whether this launch asks the runtime for its Fast service tier. Absent means the ordinary
-   * tier; an older daemon that never heard of it ignores it. */
   fastMode?: boolean;
-  /** The Agent's config revision this Start launches with; absent from an older server. */
   agentConfigRevision?: number;
-  /** What the Agent's form asks for, when a person filled it in: the runtime's own model entry
-   * decides when absent, and the launch's compaction window follows `contextWindow` (task #30). */
   contextWindow?: number;
   maxOutputTokens?: number;
 };
@@ -281,7 +234,6 @@ export type AgentStopIntent = {
   controlEpoch?: number;
   messageType?: typeof AGENT_STOP_MESSAGE_TYPE;
 };
-/** Versioned server-to-daemon liveness probe; the daemon answers with an AgentActivity. */
 export type AgentActivityProbe = {
   protocolMajor: number;
   requestId: string;
@@ -290,8 +242,6 @@ export type AgentActivityProbe = {
   agentId: string;
   probeId: string;
 };
-/** Versioned server-to-daemon notice that an Agent can no longer read these channels (and their
- * threads); the daemon drops, and acknowledges, its local state for them. One-way. */
 export type AgentInboxPurge = {
   protocolMajor: number;
   requestId: string;
@@ -303,7 +253,6 @@ export type AgentInboxPurge = {
   reason: AgentInboxPurgeReason;
 };
 export type AgentRecoveryMessage = {
-  memoryHint?: import("#src/agent/memory-disposition").MemoryHintDelivery;
   messageId: string;
   deliveryId: string;
   conversationId: string;
@@ -313,16 +262,16 @@ export type AgentRecoveryMessage = {
   latestSenderHandle: string;
   latestSenderDescription: string;
   body: string;
-  /** True when the Agent is not in the channel and was notified of this one message. */
   nonMemberMention?: boolean;
-  /** When the server created the message, in epoch milliseconds; unset from an older server. */
   createdAtMs?: number;
 };
 export type AgentMessageDeliveryAck = Omit<
   AgentMessageDelivery,
   "body" | "conversationId" | "createdAtMs" | "method" | "requestId"
-> & { method: typeof AGENT_MESSAGE_ACK_METHOD; requestId: string };
-/** Versioned daemon-to-server rejection of a delivery: never an ACK, so the delivery stays unread. */
+> & {
+  method: typeof AGENT_MESSAGE_ACK_METHOD;
+  requestId: string;
+};
 export type AgentMessageDeliveryRejection = Omit<AgentMessageDeliveryAck, "method"> & {
   method: typeof AGENT_MESSAGE_REJECT_METHOD;
   reason: AgentDeliveryRejectionReason;

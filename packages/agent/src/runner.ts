@@ -3,26 +3,9 @@ import {
   createAgentSessionFromServices,
   createAgentSessionServices,
   createBashTool,
-  defineTool,
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import {
-  agentApiRoutes,
-  CHANNEL_ARGUMENT_EXAMPLES,
-  decodeOpenVikingAgentCommand,
-  decodeOpenVikingAgentResponse,
-  formatOpenVikingMissingArgumentsError,
-  isMemoryAgentToolProfile,
-  listMissingOpenVikingFields,
-  OPENVIKING_AGENT_PROTOCOL,
-  toolsForMemoryFence,
-  type MemoryAgentToolProfile,
-  type OpenVikingAgentCommand,
-  type OpenVikingAgentOperation,
-} from "@lrm/coforge-sdk/agent";
-import type { AgentConversationScope } from "./contract";
-import { Type } from "typebox";
 import { join, resolve } from "node:path";
 import { readdir, readFile } from "node:fs/promises";
 import {
@@ -43,345 +26,10 @@ export {
   evalDisablesHostPiInjection,
   resourceLoaderOptionsForSession,
 } from "./session-resource-loader";
-
-import { memoryFenceOpenVikingTools } from "./memory-fence-openviking-tools";
-import { AgentProxyError } from "./agent-proxy-error";
-import { MemoryAgentTurnBudget } from "./memory-agent-turn";
-export { MemoryAgentTurnBudget } from "./memory-agent-turn";
-
 import { installChannelTurnPolicy } from "./channel-turn-policy";
-
-import { createMemoryDispositionTool } from "./memory-disposition-tool";
 import { modelWithSizes } from "./model-size-override";
 import { contextViewRequestLogFields } from "./session-context-view-log";
 import type { CreateSessionOptions } from "./session-options";
-
-export type MemoryAgentProxy = {
-  post(path: string, body: unknown): Promise<unknown>;
-};
-
-type ProxyToolResult = {
-  content: Array<{ type: "text"; text: string }>;
-  details: Record<string, never>;
-};
-
-function localProxyUrl(path: string, env?: Readonly<Record<string, string | undefined>>): string {
-  const endpoint = env?.COFORGE_AGENT_PROXY_URL ?? Bun.env.COFORGE_AGENT_PROXY_URL;
-  const token = env?.COFORGE_AGENT_CONTEXT ?? Bun.env.COFORGE_AGENT_CONTEXT;
-  if (!endpoint || !token) throw new Error("CoForge Agent proxy is not configured");
-  return new URL(path, endpoint).toString();
-}
-
-function proxyContextToken(env?: Readonly<Record<string, string | undefined>>): string {
-  const token = env?.COFORGE_AGENT_CONTEXT ?? Bun.env.COFORGE_AGENT_CONTEXT;
-  if (!token) throw new Error("CoForge Agent proxy is not configured");
-  return token;
-}
-
-async function postLocalProxy(
-  path: string,
-  body: unknown,
-  env?: Readonly<Record<string, string | undefined>>,
-): Promise<unknown> {
-  const response = await fetch(localProxyUrl(path, env), {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${proxyContextToken(env)}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json().catch(() => undefined);
-  if (!response.ok) throw new AgentProxyError(response.status, payload);
-  return payload;
-}
-
-function toolResult(value: unknown): ProxyToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(value) }], details: {} };
-}
-
-function defaultMemoryProxy(env?: Readonly<Record<string, string | undefined>>): MemoryAgentProxy {
-  // The session environment, not the process env: Pi sessions run in the
-  // Daemon process, so a second Agent's launch would otherwise overwrite
-  // Bun.env.COFORGE_AGENT_CONTEXT and route this Agent's proxy calls — and
-  // its fence binding — to the other Agent.
-  return { post: (path, body) => postLocalProxy(path, body, env) };
-}
-
-/**
- * A bare "viking://" root is the model's shorthand for "everywhere"; the
- * server schema requires a real target, so omit it rather than burn a read.
- * Numeric strings arrive already coerced by Pi's schema validation.
- */
-function normalizeFenceToolParams<P extends Record<string, unknown>>(params: P): P {
-  const normalized = { ...params };
-  if (typeof normalized.targetUri === "string" && /^viking:\/\/\s*$/.test(normalized.targetUri)) {
-    delete (normalized as Record<string, unknown>).targetUri;
-  }
-  return normalized;
-}
-
-const FENCE_ARGUMENTS_SENTENCE = "所有参数必须放进 arguments JSON，不能空对象。";
-
-function isEmptyToolArguments(args: unknown): boolean {
-  if (args == null) return true;
-  if (typeof args !== "object" || Array.isArray(args)) return true;
-  return Object.keys(args).length === 0;
-}
-
-function formatChannelMissingArguments(
-  toolName: string,
-  missing: readonly string[],
-  example: string,
-): string {
-  const alias =
-    toolName === "send_channel_message" ? " The body field name is content, not message." : "";
-  return `invalid ${toolName} arguments: missing ${missing.join(", ")}. Example: ${example}.${alias}`;
-}
-
-/** Rejects empty arguments before schema validation and fills missing content. */
-function prepareFenceArguments(input: {
-  args: unknown;
-  emptyError?: string;
-  aliasMessage?: boolean;
-}): Record<string, unknown> {
-  if (input.emptyError && isEmptyToolArguments(input.args)) throw new Error(input.emptyError);
-  const record =
-    input.args && typeof input.args === "object" && !Array.isArray(input.args)
-      ? { ...(input.args as Record<string, unknown>) }
-      : {};
-  if (input.aliasMessage && record.content == null && typeof record.message === "string")
-    record.content = record.message;
-  if (input.aliasMessage) delete record.message;
-  return normalizeFenceToolParams(record);
-}
-
-function openVikingEmptyArgumentsError(op: OpenVikingAgentOperation): string {
-  return formatOpenVikingMissingArgumentsError(
-    op,
-    listMissingOpenVikingFields({ protocol: OPENVIKING_AGENT_PROTOCOL, op }),
-  );
-}
-
-function withFenceArgumentSentence(description: string): string {
-  return `${description} ${FENCE_ARGUMENTS_SENTENCE}`;
-}
-
-/** The only model-callable tools available under a Memory Agent fence. */
-export function createMemoryFenceTools(
-  profile: MemoryAgentToolProfile,
-  budget: MemoryAgentTurnBudget,
-  proxy: MemoryAgentProxy = defaultMemoryProxy(),
-  options: {
-    memoryOfferOnly?: boolean;
-    conversation?: AgentConversationScope;
-    controlSession?: boolean;
-  } = {},
-) {
-  if (options.controlSession) return [];
-  const openvikingTool = <Params extends Record<string, unknown>>(
-    name: string,
-    label: string,
-    description: string,
-    op: OpenVikingAgentCommand["op"],
-    parameters: Parameters<typeof Type.Object>[0],
-  ) =>
-    defineTool({
-      name,
-      label,
-      description: withFenceArgumentSentence(description),
-      parameters: Type.Object(parameters),
-      prepareArguments: (args) =>
-        prepareFenceArguments({
-          args,
-          emptyError: openVikingEmptyArgumentsError(op),
-        }) as never,
-      execute: async (_toolCallId, params, signal) => {
-        signal?.throwIfAborted();
-        // Decode throws before consume, so an empty or invalid ov_* call does not
-        // spend the triggering message's read budget and never reaches OpenViking.
-        const command = decodeOpenVikingAgentCommand({
-          protocol: OPENVIKING_AGENT_PROTOCOL,
-          op,
-          ...normalizeFenceToolParams(params as Params),
-        });
-        const settle = budget.consume(command);
-        let decoded;
-        try {
-          decoded = decodeOpenVikingAgentResponse(
-            command.op,
-            await proxy.post(agentApiRoutes.proxy.openviking.path, command),
-          );
-          settle?.(
-            decoded.op === "offer" &&
-              decoded.operationId === command.operationId &&
-              decoded.published &&
-              decoded.messageId
-              ? { phase: "published", messageId: decoded.messageId }
-              : undefined,
-          );
-        } catch (error) {
-          settle?.(
-            error instanceof AgentProxyError && error.operationId === command.operationId
-              ? error.publication
-              : undefined,
-          );
-          throw error;
-        }
-        // Poll inside the native tool, avoiding a model turn for every status check.
-        for (
-          let poll = 0;
-          poll < 10 && decoded.op === "diagnose" && decoded.status === "running";
-          poll++
-        ) {
-          await Bun.sleep(5000);
-          signal?.throwIfAborted();
-          decoded = decodeOpenVikingAgentResponse(
-            command.op,
-            await proxy.post(agentApiRoutes.proxy.openviking.path, command),
-          );
-        }
-        const result = toolResult(budget.discoveryView(decoded));
-        const feedback = budget.retrievalFeedback(decoded);
-        if (feedback) result.content.push({ type: "text", text: feedback });
-        return result;
-      },
-    });
-
-  const messageTool = (
-    name: string,
-    label: string,
-    description: string,
-    operation: "check" | "read" | "send",
-    parameters: Parameters<typeof Type.Object>[0],
-  ) =>
-    defineTool({
-      name,
-      label,
-      description: name === "message_check" ? description : withFenceArgumentSentence(description),
-      parameters: Type.Object(parameters),
-      prepareArguments: (args) =>
-        prepareFenceArguments({
-          args,
-          emptyError:
-            name === "message_read"
-              ? formatChannelMissingArguments(
-                  name,
-                  ["target"],
-                  CHANNEL_ARGUMENT_EXAMPLES.message_read,
-                )
-              : name === "send_channel_message"
-                ? formatChannelMissingArguments(
-                    name,
-                    ["target", "content"],
-                    CHANNEL_ARGUMENT_EXAMPLES.send_channel_message,
-                  )
-                : undefined,
-          aliasMessage: name === "send_channel_message",
-        }) as never,
-      execute: async (_toolCallId, params) => {
-        // The post-merge message contract keys a request by `idempotencyKey`
-        // (`requestId` is not read anywhere: daemon parseMessageRequest and the web
-        // send route both reject its absence as 400). `message` is an alias of
-        // `content` only when content was omitted.
-        const raw = { ...(params as Record<string, unknown>) };
-        if (options.conversation) {
-          const parent = options.conversation.target.split(":")[0]!;
-          raw.target ??= parent;
-          if (typeof raw.target !== "string" || raw.target.split(":")[0] !== parent)
-            throw new Error("Memory messages must stay within this conversation");
-        }
-        if (operation === "send" && raw.content == null && typeof raw.message === "string")
-          raw.content = raw.message;
-        if (operation === "send") delete raw.message;
-        const request: Record<string, unknown> = {
-          idempotencyKey: crypto.randomUUID(),
-          operation,
-          ...raw,
-        };
-        if (
-          operation === "send" &&
-          typeof request.target === "string" &&
-          !request.target.startsWith("#")
-        )
-          throw new Error("send_channel_message only sends to a public channel");
-        return toolResult(await proxy.post(agentApiRoutes.proxy.messages.path, request));
-      },
-    });
-
-  const openvikingByName = memoryFenceOpenVikingTools(openvikingTool);
-
-  const fenced = toolsForMemoryFence(profile).map((name) => {
-    const tool = openvikingByName[name];
-    if (!tool) throw new Error(`unsupported Memory Agent tool: ${name}`);
-    return tool;
-  });
-
-  return [
-    ...fenced,
-    messageTool(
-      "message_check",
-      "Check messages",
-      "Check pending CoForge messages without shell or network access.",
-      "check",
-      {
-        target: Type.Optional(
-          Type.String({
-            description: "Optional. Exact target from this conversation or its threads.",
-          }),
-        ),
-      },
-    ),
-    messageTool(
-      "message_read",
-      "Read messages",
-      "Read messages at the exact target in the inbox notice. A parent channel and its threads have independent read cursors: reading #channel does not read #channel:root-message-id. When a Task reply is in a thread, read that full thread target before concluding there is no new request or deciding whether diagnosis is useful.",
-      "read",
-      {
-        target: Type.String({
-          description:
-            "Required. Exact target from the inbox notice, including the full :root-message-id for a thread. Do not replace a thread target with its parent channel.",
-        }),
-        before: Type.Optional(
-          Type.String({ description: "Optional. Read messages before this message id." }),
-        ),
-        after: Type.Optional(
-          Type.String({ description: "Optional. Read messages after this message id." }),
-        ),
-        around: Type.Optional(
-          Type.String({ description: "Optional. Read messages around this message id." }),
-        ),
-        limit: Type.Optional(
-          Type.Integer({
-            minimum: 1,
-            maximum: 100,
-            description: "Optional. Integer from 1 to 100. Example: 20.",
-          }),
-        ),
-      },
-    ),
-    ...(options.memoryOfferOnly
-      ? []
-      : [
-          messageTool(
-            "send_channel_message",
-            "Send channel message",
-            "Send a visible public-channel message through CoForge. This cannot answer an explicit @memory question; use memory_offer. The body field name is content, not message.",
-            "send",
-            {
-              target: Type.String({
-                description: "Required. Public channel target starting with #. Example: #general.",
-              }),
-              content: Type.String({
-                description:
-                  "Required. Message body. The field name is content, not message. Example: the deploy rolled back.",
-              }),
-            },
-          ),
-        ]),
-  ];
-}
-
 export const createRuntime: CreateAgentSessionRuntimeFactory = async ({
   cwd,
   agentDir,
@@ -405,7 +53,6 @@ export const createRuntime: CreateAgentSessionRuntimeFactory = async ({
     diagnostics: services.diagnostics,
   };
 };
-
 export async function createSession(options: CreateSessionOptions) {
   const cwd = options.cwd;
   const environment = options.environment
@@ -448,8 +95,6 @@ export async function createSession(options: CreateSessionOptions) {
         options.modelProvider ? [options.modelProvider] : undefined,
       );
     } catch (refreshError) {
-      // A timed-out/network-failed provider refresh must not surface as an opaque SDK
-      // TimeoutError (the old error_code "23"): classify it with launch trace evidence.
       throw classifyPiLaunchFailure(
         modelRuntime,
         options.modelProvider,
@@ -458,16 +103,12 @@ export async function createSession(options: CreateSessionOptions) {
       );
     }
   }
-  const memoryFence = isMemoryAgentToolProfile(options.toolProfile)
-    ? options.toolProfile
-    : undefined;
   const services = await createAgentSessionServices({
     cwd,
     agentDir,
     modelRuntime,
     resourceLoaderOptions: resourceLoaderOptionsForSession({
       instructions: options.instructions,
-      memoryFence: Boolean(memoryFence) || Boolean(options.memoryControlSession),
       disableHostPiInjection:
         evalDisablesHostPiInjection(options.environment) || evalDisablesHostPiInjection(),
     }),
@@ -488,25 +129,12 @@ export async function createSession(options: CreateSessionOptions) {
       options.model,
       PI_MODEL_UNAVAILABLE,
     );
-  // The form's sizes, when a person filled them in, win over the runtime's model entry (task #30).
   const launchModel = model && modelWithSizes(model, options);
   const extensionDefinesBash = services.resourceLoader
     .getExtensions()
     .extensions.some((extension) => extension.tools.has("bash"));
-  const memoryBudget = memoryFence ? new MemoryAgentTurnBudget() : undefined;
-  const memoryTools =
-    memoryFence && memoryBudget
-      ? createMemoryFenceTools(memoryFence, memoryBudget, defaultMemoryProxy(environment), {
-          memoryOfferOnly: options.memoryOfferOnly,
-          conversation: options.conversation,
-          controlSession: options.memoryControlSession,
-        })
-      : [];
   const customTools = [
-    ...(options.environment &&
-    !extensionDefinesBash &&
-    !memoryBudget &&
-    !options.memoryControlSession
+    ...(options.environment && !extensionDefinesBash
       ? [
           createBashTool(cwd, {
             shellPath: services.settingsManager.getShellPath(),
@@ -533,7 +161,6 @@ export async function createSession(options: CreateSessionOptions) {
               ])
                 delete childEnv[key];
               Object.assign(childEnv, environment);
-              // Pi resolves current metadata before the hook, including absent values.
               for (const key of [
                 "PI_SESSION_ID",
                 "PI_SESSION_FILE",
@@ -549,23 +176,13 @@ export async function createSession(options: CreateSessionOptions) {
           }),
         ]
       : []),
-    ...memoryTools,
-    ...(!memoryFence ? [createMemoryDispositionTool(defaultMemoryProxy(environment))] : []),
   ];
   const created = await createAgentSessionFromServices({
     services,
     sessionManager,
     ...(launchModel ? { model: launchModel } : {}),
     ...(options.reasoning ? { thinkingLevel: options.reasoning as never } : {}),
-    ...(memoryBudget || options.memoryControlSession
-      ? {
-          noTools: "all" as const,
-          tools: memoryTools.map((tool) => tool.name),
-          customTools: memoryTools,
-        }
-      : customTools.length > 0
-        ? { customTools }
-        : {}),
+    ...(customTools.length > 0 ? { customTools } : {}),
   });
   const removeChannelTurnPolicy = installChannelTurnPolicy(created.session, {
     settleMessageSends:
@@ -575,7 +192,6 @@ export async function createSession(options: CreateSessionOptions) {
     ...created,
     services,
     replacedSessionId,
-    resetMemoryBudget: memoryBudget ? () => memoryBudget.reset() : undefined,
     get sessionId() {
       return sessionManager.getSessionId();
     },
@@ -593,7 +209,6 @@ export async function createSession(options: CreateSessionOptions) {
     },
   };
 }
-
 async function sessionManagerFor(
   cwd: string,
   sessionDir: string,
@@ -620,8 +235,6 @@ async function sessionManagerFor(
     replacedSessionId,
   };
 }
-
-/** Scoped Pi-format lookup that preserves I/O and malformed-header failures. */
 export async function findSessionFile(
   sessionDir: string,
   sessionId: string,
@@ -629,7 +242,6 @@ export async function findSessionFile(
   const workspace = await prepareAgentSessionDirectory(resolve(sessionDir, ".."), sessionDir);
   return findSessionFileForWorkspace(workspace, sessionDir, sessionId);
 }
-
 async function findSessionFileForWorkspace(
   workspace: string,
   sessionDir: string,
@@ -637,8 +249,6 @@ async function findSessionFileForWorkspace(
 ): Promise<string | undefined> {
   if (!/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(sessionId))
     throw new Error("Invalid session ID");
-  // SDK list() hides read failures. Inspect scoped headers directly, including
-  // renamed files, so a missing filename is not mistaken for missing history.
   const files = await readdir(sessionDir).catch((error: unknown) => {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
     throw error;
@@ -657,8 +267,6 @@ async function findSessionFileForWorkspace(
   }
   return match;
 }
-
-/** Resolve Pi's exact persisted identity without its CLI prefix/global fallback. */
 export async function resolveAgentSessionFile(cwd: string, sessionDir: string, sessionId: string) {
   const workspace = await prepareAgentSessionDirectory(cwd, sessionDir);
   const existing = await findSessionFileForWorkspace(workspace, sessionDir, sessionId);

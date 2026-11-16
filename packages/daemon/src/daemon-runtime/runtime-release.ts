@@ -1,5 +1,4 @@
 import { getLogger } from "@logtape/logtape";
-import { isMemoryAgentRuntime } from "@coforge/agent";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
   thrownMessage,
@@ -34,133 +33,80 @@ import {
   unattendedResumePrompt,
   type ProviderProgress,
 } from "./stalled-recovery";
-
 export type { StalledRuntime } from "./runtime-release-stalled";
-
 const logger = getLogger(["coforge", "daemon", "runtime"]);
-
-/** What ending a live runtime needs of the Agent's current launch. */
 export type ReleasableLaunch = {
-  /** Mutes the launch's Activity down to its final frames. */
   stopping: boolean;
-  /** When the provider last reported anything; cleared when ending fails, so the launch is never
-   * judged again. */
   progress?: ProviderProgress;
   toolCalls?: ToolCallLedger;
   backgroundTasks?: OutstandingBackgroundTasks;
 };
-
-/** What a wake relaunches from: the remembered restart config, and the first turn to give it. */
-export type WakeRestart = AgentRestartConfig & Readonly<{ resumePrompt?: string }>;
-
-/** The launch a wake asks for: the session to resume and, when there is one, its first turn. */
+export type WakeRestart = AgentRestartConfig &
+  Readonly<{
+    resumePrompt?: string;
+  }>;
 export function wakeRequest(restart: WakeRestart): LaunchRequest {
   return {
     sessionId: restart.sessionId,
     ...(restart.resumePrompt !== undefined ? { resumePrompt: restart.resumePrompt } : {}),
   };
 }
-
 export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
-  /** The Agent's current launch. */
   launch(agentId: string): L | undefined;
   runtime(agentId: string): AgentRuntime | undefined;
   restartConfig(agentId: string): AgentRestartConfig | undefined;
-  /** The Agent's last busy Activity and its launch, while it has one. */
   lastBusy(agentId: string): BusyActivity<L> | undefined;
-  /** How long the Agent's oldest queued delivery has waited, if any is queued. */
   queuedForMs(agentId: string): number | undefined;
-  /** Why the Agent's deliveries are explicitly held right now, if they are. */
   explicitHold?(agentId: string): DeliveryHoldReason | undefined;
-  /** The Agent's deliveries wait for its provider credential: no reason to wake it for them. */
   credentialHeld?(agentId: string): boolean;
-  /** When the Agent's process last accepted an inbox notice, as wall time; undefined when none
-   * was accepted. Compared with the turn's start, never aged. */
   noticeAcceptedAt?(agentId: string): number | undefined;
-  /** How long ago it did, in awake time: the clock for the frozen-after-notice judgment (task
-   * #318). */
   noticeAcceptedForMs?(agentId: string): number | undefined;
-  /** How long ago the Agent last did anything a checked read or an operation counts as, in awake
-   * time. Provider output's clock is the launch's progress, not this. */
   lastAgentActionForMs?(agentId: string): number | undefined;
-  /** The session reported to the cloud can be resumed by a relaunch. */
   resumable(agentId: string): boolean;
-  /** The native session this runtime last reported. */
   sessionId(agentId: string): string | undefined;
-  /** An explicit Stop is under way, so nothing may relaunch. */
   isStopping(agentId: string): boolean;
-  /** The idle evidence only the runtime holds. */
   daemonIdleFacts(agentId: string): DaemonIdleFacts;
-  /** Messages, app-item notices or tracked mentions kept for the Agent's next launch. */
   hasParkedWork(agentId: string): boolean;
-  /** The runtime stayed up: presents what was kept as it would at a turn's end. */
   flushParked(agentId: string): void;
-  /** Takes the deliveries kept for the Agent's next launch, for a launch that tells of them itself. */
   takeParked(agentId: string): readonly AgentMessageDelivery[];
-  /** Launches the Agent again from its remembered restart config. */
   wake(agentId: string, restart: WakeRestart): Promise<unknown>;
-  /** Publishes an Activity for `launch`, its draft built from the rest as `activityDraft` does. */
   publish(
     agentId: string,
     launch: L,
     detailKind: string,
     level: "info" | "error",
     text: string,
-    extra?: Readonly<{ runtimeError?: AgentActivityRuntimeError }>,
+    extra?: Readonly<{
+      runtimeError?: AgentActivityRuntimeError;
+    }>,
   ): void;
-  /** The process has gone for a restart that is coming: keeps the tracked mentions it had not
-   * settled for the next launch, and says, per target, how many the old session's unread count
-   * includes. `freshSession` says the next launch starts a new session. */
   carryMentions(agentId: string, freshSession: boolean): ReadonlyMap<string, number>;
-  /** The process did not go: the restart is off. */
   abortMentionCarry(agentId: string): void;
-  /** Ends the process but keeps what a later wake needs. */
   release(agentId: string, timeoutMs: number): Promise<void>;
 }>;
-
-/**
- * Ends an Agent's live process without a stopped/crashed Activity, so the Agent stays active and
- * wakeable: a stalled provider restarted for a waiting message, or a cold idle runtime stopped by
- * the sweep. While one is under way, arriving messages wait for the next launch.
- */
 export class RuntimeRelease<L extends ReleasableLaunch> {
   readonly #ports: RuntimeReleasePorts<L>;
   readonly #recovering = new Set<string>();
   readonly #replacements = new StalledReplacements();
-
   constructor(ports: RuntimeReleasePorts<L>) {
     this.#ports = ports;
   }
-
-  /** Whether the Agent's runtime is being ended; messages meanwhile wait for the relaunch. */
   isRecovering(agentId: string): boolean {
     return this.#recovering.has(agentId);
   }
-
-  /** What a stalled-provider restart works on, or undefined when this Agent's runtime is not
-   * stalled (`stalled-recovery.ts`). */
   stalled(agentId: string): StalledRuntime<L> | undefined {
     return stalledRuntime(this.#ports, agentId);
   }
-
-  /**
-   * Restarts a stalled provider for the message(s) now waiting for it, as the reference client
-   * does: announce it, end the stalled process without a stopped/crashed Activity, then wake the
-   * Agent on the same launch, resuming the session it last reported. Messages meanwhile wait for
-   * the relaunch.
-   */
-
   async recoverStalled(
     agentId: string,
     stalled: StalledRuntime<L>,
-    options: Readonly<{ unattended?: boolean }> = {},
+    options: Readonly<{
+      unattended?: boolean;
+    }> = {},
   ): Promise<void> {
     const { launch, session, restart, basis } = stalled;
     logStalledRecovery(agentId, basis);
-    // A background command or subagent may be what the turn waits on: never killed for this.
     if (options.unattended && (launch.backgroundTasks?.count ?? 0) > 0) return;
-    // Every automatic replacement counts in one run, a message waiting or not (task #14): a turn
-    // that hangs again after every restart is not helped by another one (task #404).
     const admission = this.#replacements.admit(agentId, launch, launch.progress?.lastCompletedAtMs);
     if (admission === "held") return;
     if (admission === "limit")
@@ -178,9 +124,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
         this.#ports.lastBusy(agentId)?.activity.detail,
       );
     }
-    // Before the process goes: why it is going, so the page explains the restart instead of only
-    // showing one, and offers the scoped stop while the turn is still the current one (task #41).
-    // The restart's own line follows as info; this one is the reason a reader can act on.
     this.#ports.publish(
       agentId,
       launch,
@@ -195,10 +138,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       stalledRuntimePlan(restart, agentId, basis, resumePrompt),
     );
   }
-
-  /** Restarts a live runtime so its next launch reads fresh launch config (a feature changed).
-   * Whatever waits for the launch, the delivery that revealed the change included, is presented
-   * by it. */
   canRestartForFreshConfig(agentId: string): boolean {
     return Boolean(
       this.#ports.launch(agentId) &&
@@ -206,7 +145,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       this.#ports.restartConfig(agentId),
     );
   }
-
   async restartForFreshConfig(agentId: string): Promise<void> {
     const launch = this.#ports.launch(agentId);
     const session = this.#ports.runtime(agentId)?.session;
@@ -214,8 +152,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     if (!launch || !session || !restart) return;
     await this.#endAndWake(agentId, launch, session, freshConfigRuntimePlan(restart));
   }
-
-  /** The Agent as the cold idle sweep judges it: the daemon's own evidence that it is idle. */
   coldIdleAgent(agentId: string): ColdIdleAgent | undefined {
     const runtime = this.#ports.runtime(agentId);
     if (!runtime) return undefined;
@@ -223,7 +159,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     const facts = this.#ports.daemonIdleFacts(agentId);
     const busyReason = idleBlocker({
       ...facts,
-      memoryAgent: isMemoryAgentRuntime(runtime.config),
       launched: launch?.progress !== undefined && launch.toolCalls !== undefined,
       hasLiveTurn: runtime.session.hasLiveTurn,
       openToolCall: launch?.toolCalls?.hasOpenToolCall ?? false,
@@ -240,9 +175,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       lastEventAtMs: launch?.progress?.lastEventAtMs,
     };
   }
-
-  /** Ends a cold idle runtime. A message that arrives meanwhile waits for a launch, which this
-   * then performs: the Agent is never left with a delivery and no process. */
   async stopColdIdle(stop: ColdIdleStop): Promise<void> {
     const { agentId } = stop;
     const launch = this.#ports.launch(agentId);
@@ -251,10 +183,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     if (!launch || !session || !restart) return;
     await this.#endAndWake(agentId, launch, session, coldIdleRuntimePlan(restart, stop));
   }
-
-  /** Ends an idle runtime so its next launch reads a pushed configuration. The Agent is judged
-   * again here by the cold idle sweep's guards; one that is no longer idle is left running.
-   * A message that arrives meanwhile waits for the launch, as for a cold idle stop. */
   async stopForConfigApply(agentId: string): Promise<"stopped" | "busy" | "failed"> {
     const agent = this.coldIdleAgent(agentId);
     if (!agent || agent.busyReason !== undefined) return "busy";
@@ -265,10 +193,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     const ended = await this.#endAndWake(agentId, launch, session, configApplyRuntimePlan(restart));
     return ended ? "stopped" : "failed";
   }
-
-  /** Ends the runtime, then wakes the Agent on its remembered restart config, resuming the
-   * session it last reported. A relaunch that fails reports its own launch error; the waiting
-   * messages stay queued, acknowledged, for the Agent's next launch. */
   async #endAndWake(
     agentId: string,
     launch: L,
@@ -296,15 +220,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       if (plan.wake.awaited) await woken;
     });
   }
-
-  /** Ends a live runtime so a fresh Session replaces its stored one. Messages arriving meanwhile
-   * wait for the relaunch, and `replace` receives them, taken out of the queue: it starts the
-   * relaunch in the same turn of the event loop, and that launch must tell of them itself, because
-   * a recovery launch discards whatever waits. True only when `replace` ran: a runner hold,
-   * a migration or a running background task, a process that would not exit, a Stop that won, or a
-   * newer launch that took the Agent over (`launch` is no longer current) all leave the Session as
-   * it was. `replace` is also told, per target, how many tracked mentions the fresh session is
-   * told on their own, so its unread count leaves them out. */
   async endAndReplace(
     agentId: string,
     plan: RuntimeEndPlan,
@@ -316,15 +231,11 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     const launch = this.#ports.launch(agentId);
     const session = this.#ports.runtime(agentId)?.session;
     if (!launch || !session) return false;
-    // Work the restart would cut off waits for the next rejected turn: a runner hold or a
-    // migration owns the Agent, and a background task is still running.
     const facts = this.#ports.daemonIdleFacts(agentId);
     if (facts.runnerHold || facts.migrating || (launch.backgroundTasks?.count ?? 0) > 0)
       return false;
     let replaced = false;
     await this.#endThen(agentId, launch, session, plan, true, (_, join, carried) => {
-      // A Start made while the process was ending owns the Agent now; replacing under it would
-      // invalidate a Session it is using.
       if (this.#ports.launch(agentId) !== launch) return;
       join();
       replace(this.#ports.takeParked(agentId), carried);
@@ -332,11 +243,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     });
     return replaced;
   }
-
-  /** The order every restart of a live runtime keeps: messages wait while it ends, a Stop that
-   * arrived meanwhile wins, and the config read after the end, not before, is current.
-   * `proceed` runs once the runtime is gone, and calls `join` at the point from which a message
-   * joins the new launch as any other does. False when the process would not exit. */
   async #endThen(
     agentId: string,
     launch: L,
@@ -361,10 +267,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       this.#recovering.delete(agentId);
     }
   }
-
-  /** The tracked mentions kept for the next launch (see `carryMentions`), or undefined, with an
-   * error Activity, when the process will not exit. Once is enough: that launch is never judged
-   * again. */
   async #end(
     agentId: string,
     launch: L,
@@ -372,25 +274,19 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     plan: RuntimeEndPlan,
     freshSession: boolean,
   ): Promise<ReadonlyMap<string, number> | undefined> {
-    // Before `stopping`, which mutes everything but stopped/interrupted/error Activity.
     if (plan.announce)
       this.#ports.publish(agentId, launch, plan.announce.detailKind, "info", plan.announce.text);
     plan.log?.();
     launch.stopping = true;
     try {
-      // Disposing can reject notices still waiting for provider acceptance; while this restart is
-      // under way the tracker leaves such a mention for the next launch instead of refusing it.
       await this.#ports.release(agentId, STALLED_RECOVERY_EXIT_TIMEOUT_MS);
       return this.#ports.carryMentions(agentId, freshSession);
     } catch (error) {
       this.#ports.abortMentionCarry(agentId);
       if (!plan.keepProgress) launch.progress = undefined;
-      // A process that is still running gets its Activity back.
       const stillRunning = this.#ports.runtime(agentId)?.session === session;
       if (stillRunning) {
         launch.stopping = false;
-        // What arrived meanwhile was kept for a launch that is not coming. It goes to this
-        // process, so the runtime must stop reading as ending first, or it is kept again.
         this.#recovering.delete(agentId);
         this.#ports.flushParked(agentId);
       }
@@ -411,5 +307,3 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     }
   }
 }
-
-/** Milliseconds since `atMs`, or undefined for a clock that never fired. */

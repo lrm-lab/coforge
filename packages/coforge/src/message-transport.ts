@@ -1,3 +1,4 @@
+import type { TeamMemoryCommand, TeamMemoryResult } from "@lrm/coforge-sdk/agent";
 import type {
   AgentAppConfigPatch,
   AgentAppConfigResponse,
@@ -55,6 +56,7 @@ type ArtifactCalls = Pick<
 
 export type MessageTransport = LabelTransport &
   ArtifactCalls & {
+    teamMemory?(request: TeamMemoryCommand): Promise<TeamMemoryResult>;
     memory?(request: LocalMemoryCommand): Promise<LocalMemoryResult>;
     check(target?: string): Promise<MessageCheckResult>;
     read(target: string, options?: MessageReadOptions): Promise<unknown>;

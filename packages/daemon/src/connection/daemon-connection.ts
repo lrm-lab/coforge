@@ -1,3 +1,4 @@
+import { forwardAgentRequest } from "./agent-forwarded-routes";
 import type {
   DaemonConnectionConfig,
   DaemonConnectionClient,
@@ -19,7 +20,6 @@ import {
   defaultCentrifugeWorkspaceClientFactory,
 } from "./centrifuge-workspace-client";
 import { daemonConnectHeaders } from "./daemon-connect-headers";
-
 import {
   encodeAgentReplyIntent,
   type AgentReplyIntent,
@@ -141,14 +141,12 @@ import {
   type AgentMigrationCancel,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
-
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import {
   decodeAppRegistrationNotice,
   type AppRegistrationNotice,
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
 import { controlPayloadShape } from "./control-payload";
-
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
@@ -192,7 +190,6 @@ import {
   type ConnectOutage,
 } from "./connection-retry";
 import { acceptLifecycleRequest, sendUpgradeResultOnce } from "#src/connection/upgrade-result-send";
-
 export { COMPUTER_STATUS_REFRESH_MS } from "./daemon-status-refresh";
 import { DaemonStatusRefresh } from "./daemon-status-refresh";
 const logger = getLogger(["coforge", "daemon", "connection"]);
@@ -246,7 +243,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
   readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
   readonly #queries = new DaemonQueries((method, bytes) => this.#rpc(method, bytes));
-
   protected get daemonQueries() {
     return this.#queries;
   }
@@ -277,46 +273,26 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   readonly #reconnect = new ListenerSlot<() => void>();
   readonly #inboundQuiet = new InboundQuietness(() => this.#nowMs());
   readonly #latestComputerVersion = new ListenerSlot<(version: string) => void>();
-  /** The last ready reply's `agentControlAccepted`: whether this server takes the `accepted`
-   * Agent control phase. Cleared by every ready that does not confirm it, so an old server's
-   * empty reply can never leave a stale `true` behind. */
   #agentControlAccepted = false;
   readonly #connectionRefused = new ListenerSlot<(reason: DaemonConnectRejectionReason) => void>();
-  /** Set only while `start` waits for the first connection; rejecting it ends that `start`. */
   #failPendingStart: ((error: Error) => void) | undefined;
-  /** The current run of failed connect attempts, first connect included; cleared once the
-   * connection is up. `resumes` counts only the daemon's own reconnects after a give-up. */
   #outage: ConnectOutage | undefined;
-  /** When ready was last accepted on the current connection; see `STABLE_CONNECTION_MS`. */
   #stableSinceMs: number | undefined;
-  /** Why the latest connect attempt failed, since the connection last came up. */
   #connectFailure: string | undefined;
-  /** Why the latest ready failed, while it is being retried. */
   #readyFailure: string | undefined;
-  /** Connects the client again after it gave up; see `#resumeAfterGiveUp`. */
   #resumeTimer: unknown;
-  /** Publications received between a ready request and its acknowledgement, in arrival order. */
   #readyPublications = new ReadyPublicationHold();
   #readyRequestFactory: (() => DaemonRuntimeReadyRequest) | undefined;
   #readyRecoveryClient: CentrifugeWorkspaceClient | undefined;
   #readyRetryTimer: unknown;
   #readyRetryAttempts = 0;
-  /** Settles the first `ready`; set only while it waits for the cloud to accept it. */
   #firstReady: ReturnType<typeof Promise.withResolvers<void>> | undefined;
-  /** When the current run of ready failures began, so a log line can say how long this machine has
-   * been connected without a recovered Workspace. Cleared the moment ready succeeds. */
   #readyFailingSinceMs: number | undefined;
   readonly #pendingActivity = new Map<string, AgentActivity>();
   readonly #supersededActivityLaunches = new Map<string, Set<string>>();
-  /** Latest-per-agent, like `#pendingActivity`. */
   readonly #pendingSessionInvalidate = new Map<string, AgentSessionInvalidate>();
   readonly #latestObservedLaunchByAgent = new Map<string, string>();
-  /** True once an old server's "unknown RPC method" rejection of `agent:session:invalidate` has
-   * been logged; suppresses repeats for the rest of this connection's lifetime (fix for a log
-   * line that used to repeat on every rejected attempt). */
   #loggedUnknownSessionInvalidateMethod = false;
-  /** Latest-per-agent per-launch observations (a context-window reading, the applied service
-   * tier): buffered while disconnected, flushed on reconnect, never retried or surfaced. */
   readonly #observations = new AgentObservationPublisher({
     contextUsage: AGENT_CONTEXT_USAGE_METHOD,
     serviceTier: AGENT_SERVICE_TIER_METHOD,
@@ -337,7 +313,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     timing: () => this.timing,
   });
   #statusRpcQueue = Promise.resolve();
-
   constructor(
     private readonly endpoint: string,
     private readonly clientFactory: CentrifugeWorkspaceClientFactory = defaultCentrifugeWorkspaceClientFactory,
@@ -354,7 +329,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     super();
     if (!endpoint) throw new Error("cloud endpoint not configured");
   }
-
   async start(_token: string, config: DaemonConnectionConfig): Promise<void> {
     this.#token = _token;
     this.#serverHttpUrl = config.serverHttpUrl ?? "";
@@ -372,13 +346,9 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     const scope = { workspace_id: config.workspaceId, computer_id: config.computerId };
     client.on("publication", ({ channel, data }) => {
       if (client !== this.#client || channel !== daemonChannel) return;
-      // Before any decoding: a frame this Daemon cannot act on still proves the link carries
-      // traffic, and the liveness window must not mistake an undecodable frame for silence.
       this.#inboundQuiet.markInbound();
       this.#handleAgentPublication(data, config);
     });
-    // centrifuge-js emits `disconnected` only once it has stopped reconnecting; while it retries
-    // it reports `connecting` instead.
     client.on("disconnected", (context) => {
       const link = this.#link;
       if (link?.client !== client) return;
@@ -386,12 +356,10 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       this.#cancelReadyRecovery();
       const refusal = context ? daemonConnectRejectionReason(context) : undefined;
       if (!refusal) {
-        // A disconnect this connection asked for is followed by whatever connect it wanted.
         if (context?.code !== disconnectedCodes.disconnectCalled)
           this.#resumeAfterGiveUp(client, scope, context);
         return;
       }
-      // The client does not reconnect after a terminal disconnect code.
       logger.error("The cloud refused this Workspace connection for good", {
         event: "daemon_connection:refused",
         ...scope,
@@ -409,8 +377,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         const link = this.#link;
         if (link?.client !== client) return;
         this.#failPendingStart = undefined;
-        // A connection that proved stable ended its outage even if it came back without an error
-        // in between: whatever fails on this new connection begins a new one.
         this.#endOutageIfStable(this.#nowMs());
         this.#connectFailure = undefined;
         const reconnect = this.#hasConnected;
@@ -424,7 +390,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
           outcome: "ok",
         });
         reportDaemonOnline(client, config);
-        // Invalidate before Activity on reconnect.
         this.#flushPendingSessionInvalidate(client);
         this.#flushPendingActivity(client);
         this.#observations.flush(client);
@@ -442,9 +407,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       client.on("error", ({ type, error }) => {
         if (client !== this.#client) return;
         const details = { ...scope, error_type: type, error_code: diagnosticErrorCode(error) };
-        // A failed attempt the client retries with its own backoff, first connect included: a
-        // temporary connect error (the connect proxy failing, or answering non-200) or a
-        // transport that closed before it opened.
         if (type === "connect" || type === "transport")
           this.#recordConnectFailure(`${type} error ${error.code}: ${error.message}`, {
             ...details,
@@ -474,21 +436,15 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         if (onAbort) signal?.removeEventListener("abort", onAbort);
       });
   }
-
-  /** A failure after a connection that proved stable begins a new outage; after any other
-   * connection it continues the one before. */
   #endOutageIfStable(now: number): void {
     if (this.#stableSinceMs !== undefined && now - this.#stableSinceMs >= STABLE_CONNECTION_MS)
       this.#outage = undefined;
     this.#stableSinceMs = undefined;
   }
-
-  /** Logs one failed connect attempt; a run of them escalates to an error naming the outage. */
   #recordConnectFailure(failure: string, details: Record<string, unknown>): ConnectOutage {
     const now = this.#nowMs();
     this.#endOutageIfStable(now);
     this.#connectFailure = failure;
-    // The connection itself is what fails now; a ready failure from before no longer describes it.
     this.#readyFailure = undefined;
     const outage = (this.#outage ??= { failures: 0, sinceMs: now, resumes: 0 });
     outage.failures += 1;
@@ -506,14 +462,16 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     else logger.warning("Daemon cloud connection attempt failed; retrying", properties);
     return outage;
   }
-
-  /** Resumes after recoverable connection failures. */
   #resumeAfterGiveUp(
     client: CentrifugeWorkspaceClient,
     scope: Record<string, unknown>,
-    disconnect: { code: number; reason: string } | undefined,
+    disconnect:
+      | {
+          code: number;
+          reason: string;
+        }
+      | undefined,
   ): void {
-    // Before reading `resumes`: after a stable connection this drop begins a new outage.
     this.#endOutageIfStable(this.#nowMs());
     const resumes = this.#outage?.resumes ?? 0;
     const delayMs = Math.min(RESUME_CONNECT_MAX_MS, RESUME_CONNECT_MS * 2 ** resumes);
@@ -532,22 +490,16 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       if (client === this.#client) client.connect();
     }, delayMs);
   }
-
-  /** Why the latest connect attempt failed, while the connection is not up; `undefined` once it
-   * is. Remote text: a caller that prints it must make it terminal-safe. */
   connectFailure(): string | undefined {
     return this.#readyFailure ?? this.#connectFailure;
   }
-
   #cancelResume(): void {
     if (this.#resumeTimer !== undefined) this.timing.cancel(this.#resumeTimer);
     this.#resumeTimer = undefined;
   }
-
   onAgentStart(callback: (intent: AgentStartIntent) => void): () => void {
     return this.#agentStart.set(callback);
   }
-
   onAgentStop(callback: (intent: AgentStopIntent) => void): () => void {
     return this.#agentStop.set(callback);
   }
@@ -560,85 +512,66 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   onAgentActivityProbe(callback: (probe: AgentActivityProbe) => void): () => void {
     return this.#agentActivityProbe.set(callback);
   }
-
   onAgentInboxPurge(callback: (purge: AgentInboxPurge) => void): () => void {
     return this.#agentInboxPurge.set(callback);
   }
-
   onAgentMessage(callback: (message: AgentMessageDelivery) => void): () => void {
     return this.#agentMessage.set(callback);
   }
-
   onAgentWorkspaceReset(callback: (request: AgentWorkspaceResetRequest) => void): () => void {
     return this.#agentWorkspaceReset.set(callback);
   }
-
   onRuntimeAuth(callback: (intent: RuntimeAuthIntent) => void): () => void {
     return this.#runtimeAuthIntent.set(callback);
   }
-
   onReminderSync(callback: (sync: ReminderSync) => void): () => void {
     return this.#reminderSync.set(callback);
   }
-
   onAppConfigSync(callback: (sync: AppConfigSync) => void): () => void {
     return this.#serverPublications.onAppConfigSync(callback);
   }
-
   onAgentServerFeatures(callback: (features: AgentServerFeatures) => void): () => void {
     return this.#serverPublications.onAgentServerFeatures(callback);
   }
-
   onAgentConfigSync(callback: (sync: AgentConfigSync) => void): () => void {
     return this.#serverPublications.onAgentConfigSync(callback);
   }
-
   onAppRegistrationNotice(callback: (notice: AppRegistrationNotice) => void): () => void {
     return this.#appRegistrationNotice.set(callback);
   }
-
   onAgentMigrationLease(callback: (lease: ReceivedAgentMigrationLease) => void): () => void {
     return this.#agentMigrationLease.set(callback);
   }
-
   onAgentMigrationCancel(callback: (cancel: AgentMigrationCancel) => void): () => void {
     return this.#agentMigrationCancel.set(callback);
   }
-
   onUsageScan(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void {
     return this.#providerPublications.onUsageScan(callback);
   }
-
   onResetCreditConsume(
     callback: (request: DaemonRuntimeResetCreditConsumeRequest) => Promise<void>,
   ): () => void {
     return this.#providerPublications.onResetCreditConsume(callback);
   }
-
   onProviderModelRefresh(
     callback: (request: DaemonRuntimeProviderModelRefreshRequest) => Promise<void>,
   ): () => void {
     return this.#providerPublications.onProviderModelRefresh(callback);
   }
-
   onCommandCodeEffortRead(
     callback: (request: DaemonRuntimeCommandCodeEffortReadRequest) => Promise<void>,
   ): () => void {
     return this.#providerPublications.onCommandCodeEffortRead(callback);
   }
-
   onReconnect(callback: () => void): () => void {
     return this.#reconnect.set(callback);
   }
-
   onLatestComputerVersion(callback: (version: string) => void): () => void {
     return this.#latestComputerVersion.set(callback);
   }
-
   onConnectionRefused(callback: (reason: DaemonConnectRejectionReason) => void): () => void {
     return this.#connectionRefused.set(callback);
   }
-
   sendAgentActivity(activity: AgentActivity): void {
     const pending = this.#pendingActivity.get(activity.agentId);
     if (this.#supersededActivityLaunches.get(activity.agentId)?.has(activity.launchId)) return;
@@ -655,19 +588,13 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     }
     publishAgentActivity(this.#client, activity.workspaceId, encodeAgentActivity(activity));
   }
-
   sendAgentReplyIntent(frame: AgentReplyIntent): void {
     const client = this.#activeClient();
     if (client) publishAgentActivity(client, frame.workspaceId, encodeAgentReplyIntent(frame));
   }
-
-  /** Fire-and-forget; never awaited by a caller and never fails a launch. */
   sendSessionInvalidate(message: AgentSessionInvalidate): void {
     if (this.#supersededActivityLaunches.get(message.agentId)?.has(message.launchId)) return;
     if (!this.#connected || !this.#client) {
-      // Refuse to queue a new invalidate whose launch is already known stale — never learned
-      // from Activity or from an invalidate itself, only from another outbound message that
-      // carries launch identity (`#observeLaunchIdentity`).
       const observed = this.#latestObservedLaunchByAgent.get(message.agentId);
       if (observed !== undefined && observed !== message.launchId) return;
       this.#pendingSessionInvalidate.set(message.agentId, message);
@@ -675,43 +602,30 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     }
     this.#publishSessionInvalidate(this.#client, message);
   }
-
-  /** Fire-and-forget; never awaited by a caller and never fails a turn. */
   sendAgentContextUsage(message: AgentContextUsage): void {
     this.#observations.sendContextUsage(message, this.#activeClient());
   }
-
-  /** Fire-and-forget; never awaited by a caller and never fails a turn. */
   sendAgentServiceTier(message: AgentServiceTier): void {
     this.#observations.sendServiceTier(message, this.#activeClient());
   }
-
   sendAgentContextViewAvailability(message: AgentContextViewAvailability): void {
     this.#observations.sendContextViewAvailability(message, this.#activeClient());
   }
-
   async postAgentContextViewResult(result: AgentContextViewResult, agentApiKey?: string) {
     return postAgentContextViewResult(this.#serverHttpUrl, this.#token, result, agentApiKey);
   }
-
   #activeClient(): CentrifugeWorkspaceClient | undefined {
     return this.#connected ? this.#client : undefined;
   }
-
   sendAgentStatus(status: AgentStatus): void {
     this.#latestStatuses.set(status.agentId, status);
     if (this.#connected && this.#client) this.#queueAgentStatus(this.#client, status);
   }
-
-  /** Records launch identity from non-Activity outbound messages. */
   #observeLaunchIdentity(agentId: string, launchId: string): void {
     this.#latestObservedLaunchByAgent.set(agentId, launchId);
     const pending = this.#pendingSessionInvalidate.get(agentId);
     if (pending && pending.launchId !== launchId) this.#pendingSessionInvalidate.delete(agentId);
   }
-
-  /** Puts an encoded Activity-channel frame (an observation or a reply intent) on the Workspace's
-   * channel. It is an observation: failure must not block Agent work or be retried. */
   #flushPendingActivity(client: CentrifugeWorkspaceClient): void {
     if (!client.publish) return;
     const pending = [...this.#pendingActivity.values()];
@@ -720,21 +634,14 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     for (const activity of pending)
       publishAgentActivity(client, activity.workspaceId, encodeAgentActivity(activity));
   }
-
   #publishSessionInvalidate(
     client: CentrifugeWorkspaceClient,
     message: AgentSessionInvalidate,
   ): void {
-    // An observation, not a command: a rejection (including an old server that does not
-    // recognize this RPC) is logged, never retried or surfaced to the caller.
     void client
       .rpc(AGENT_SESSION_INVALIDATE_METHOD, encodeAgentSessionInvalidate(message))
       .catch((error) => {
         const errorCode = diagnosticErrorCode(error);
-        // An old server that has never heard of this RPC rejects every attempt the same way for
-        // as long as this process talks to it; logging that fact once per connection lifetime is
-        // enough. Any other rejection (a genuine, potentially transient failure) still logs every
-        // time, like the sibling `agent_session:report_failed`.
         const unknownMethod = errorCode === "404";
         if (unknownMethod && this.#loggedUnknownSessionInvalidateMethod) return;
         if (unknownMethod) this.#loggedUnknownSessionInvalidateMethod = true;
@@ -751,7 +658,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         });
       });
   }
-
   #flushPendingSessionInvalidate(client: CentrifugeWorkspaceClient): void {
     const pending = [...this.#pendingSessionInvalidate.values()];
     this.#pendingSessionInvalidate.clear();
@@ -760,7 +666,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       this.#publishSessionInvalidate(client, message);
     }
   }
-
   #queueAgentStatus(client: CentrifugeWorkspaceClient, status: AgentStatus): void {
     this.#statusRpcQueue = this.#statusRpcQueue
       .then(async () => {
@@ -769,7 +674,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       })
       .catch(() => {});
   }
-
   #nowMs(): number {
     return this.timing.now ? this.timing.now() : Date.now();
   }
@@ -780,39 +684,29 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   #assertServerHttp(): void {
     if (!this.#serverHttpUrl) throw new Error("daemon connection HTTP endpoint is not configured");
   }
-
   #requireClient(): CentrifugeWorkspaceClient {
     const client = this.#connected ? this.#link?.client : undefined;
     if (!client) throw new Error("daemon connection is not connected");
     return client;
   }
-
-  /** Sends one RPC over the connected client and returns its raw reply. */
   #rpc(method: string, data: Uint8Array): Promise<unknown> {
     return this.#requireClient().rpc(method, data);
   }
-
   sendAgentDeliveryAck(ack: AgentMessageDeliveryAck): Promise<void> {
     return this.#notices.sendDeliveryAck(ack);
   }
-
   sendAgentDeliveryRejection(rejection: AgentMessageDeliveryRejection): Promise<void> {
     return this.#notices.sendDeliveryRejection(rejection);
   }
-
   sendAgentMentionDeliveryTransition(report: AgentMentionDeliveryTransition): Promise<void> {
     return this.#notices.sendMentionDeliveryTransition(report);
   }
-
   sendAgentMentionDeliveryTerminalError(report: AgentMentionDeliveryTerminalError): Promise<void> {
     return this.#notices.sendMentionDeliveryTerminalError(report);
   }
-
   sendAgentCredentialRestored(report: AgentCredentialRestored): Promise<void> {
     return this.#notices.sendCredentialRestored(report);
   }
-
-  /** The server's Agent migration route, over HTTPS with this daemon's API key. */
   agentMigrationServer(): AgentMigrationServer {
     return new AgentMigrationHttpClient({
       endpoint: () =>
@@ -820,26 +714,21 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       daemonApiKey: () => this.#token,
     });
   }
-
-  /** Credentials for one Agent-scoped HTTP call: the Agent's own key plus the daemon key. */
   #agentKeys(agentApiKey: string) {
     return { agentApiKey, daemonApiKey: this.#token };
   }
-
   async agentMessage(
     request: AgentMessageRequest,
     agentApiKey: string,
   ): Promise<AgentMessageTransportResponse> {
     return agentMessage(this.#agentMessagePorts(), request, agentApiKey);
   }
-
   async reconcileAgentSend(
     request: AgentSendReconciliationRequest,
     agentApiKey: string,
   ): Promise<AgentSendReconciliationResponse> {
     return reconcileAgentSend(this.#agentMessagePorts(), request, agentApiKey);
   }
-
   #agentMessagePorts(): AgentMessagePorts {
     return {
       assertConnected: () => this.#assertServerHttp(),
@@ -848,7 +737,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       client: this.agentMessageHttpClient,
     };
   }
-
   async workspaceInfo(
     request: WorkspaceInfoRequest,
     agentApiKey: string,
@@ -871,17 +759,14 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   async agentReminder(request: AgentReminderOperationRequest, agentApiKey: string) {
     return agentReminder(this.#agentMessagePorts(), request, agentApiKey);
   }
-
   async fireReminder(request: ReminderFireRequest): Promise<ReminderFireResponse> {
     const reply = await this.#rpc(REMINDER_FIRE_METHOD, encodeReminderFireRequest(request));
     return decodeReminderFireResponse(rpcData(reply));
   }
-
   async requestSnapshot(request: ReminderSnapshotRequest): Promise<ReminderSync> {
     const reply = await this.#rpc(REMINDER_SNAPSHOT_METHOD, encodeReminderSnapshotRequest(request));
     return decodeReminderSync(rpcData(reply));
   }
-
   async requestAppConfigSnapshot(request: AppConfigSnapshotRequest): Promise<AppConfigSync> {
     const reply = await this.#rpc(
       APP_CONFIG_SNAPSHOT_METHOD,
@@ -914,7 +799,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       }) ||
       routePublication(data, decodeAgentMigrationLease, (lease) => {
         if (!ownsDaemon(lease)) return false;
-        // The lease runs from its arrival here, so no clock is compared with the server's.
         this.#readyPublications.deliver(this.#agentMigrationLease, {
           ...lease,
           deadline: Date.now() + lease.expiresInMs,
@@ -971,7 +855,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         return true;
       });
     if (handled) return;
-    // Agent publications are the common case and must decode as exactly one intent kind.
     const decoders = [
       {
         kind: "agent_message",
@@ -1005,7 +888,10 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         },
       },
     ];
-    const rejections: { kind: string; error: unknown }[] = [];
+    const rejections: {
+      kind: string;
+      error: unknown;
+    }[] = [];
     for (const { kind, decode } of decoders) {
       try {
         decode();
@@ -1014,43 +900,28 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         rejections.push({ kind, error });
       }
     }
-    // Invalid publications are rejected at the protocol boundary and never reach the runtime.
     logger.warning("Rejected invalid Daemon control publication", {
       event: "daemon_control:rejected",
       workspace_id: workspaceId,
       computer_id: computerId,
       payload_bytes: data.byteLength,
-      // Every decoder's own account, not just the last one's: each refuses for its own reason,
-      // and reporting only the final attempt named a cause that belonged to a frame kind this
-      // publication may never have been. An Agent that never woke leaves nothing else behind.
       rejections: rejections
         .map(({ kind, error }) => `${kind}: ${thrownMessage(error)}`)
         .join("; "),
-      // The fields the payload carries, never their values, so a frame no decoder accepted can
-      // still be matched against a schema without putting message text in the log.
       payload_shape: controlPayloadShape(data),
       error_code: diagnosticErrorCode(rejections.at(-1)?.error),
       outcome: "rejected",
     });
   }
-
   async sendAgentControlResult(result: AgentControlResult) {
     await this.#rpc(AGENT_CONTROL_RESULT_METHOD, encodeAgentControlResult(result));
   }
-
-  /** Whether the server's last ready reply accepts the `accepted` control phase. */
   agentControlAccepted(): boolean {
     return this.#agentControlAccepted;
   }
   async sendAgentTurnInterruptResult(result: AgentTurnInterruptResult) {
     await this.#rpc(AGENT_TURN_INTERRUPT_RESULT_METHOD, encodeAgentTurnInterruptResult(result));
   }
-
-  /**
-   * Reports one upgrade operation's terminal result. Returns whether this call was the one that
-   * put it on the wire; a replay of an already reported operation is dropped, and a failed send
-   * stays replayable, matching the dedupe discipline of the other lifecycle results.
-   */
   async sendUpgradeResult(result: ComputerUpgradeResult): Promise<boolean> {
     return sendUpgradeResultOnce(
       (method, payload) => this.#rpc(method, payload),
@@ -1058,13 +929,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       result,
     );
   }
-
-  /**
-   * Tells the server why this daemon is going down on purpose. Awaited, unlike the other
-   * observations, because the connection closes right after it; bounded by
-   * `DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS`, never retried, and a daemon that is not connected sends
-   * nothing. Never throws: a notice that did not arrive must not fail the shutdown.
-   */
   async sendShutdownNotice(notice: DaemonRuntimeShutdown): Promise<void> {
     const fields = {
       event: "daemon_connection:shutdown_notice",
@@ -1112,15 +976,12 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       this.timing.cancel(timer);
     }
   }
-
   sendUsageScanResult(response: DaemonRuntimeUsageScanResponse): Promise<void> {
     return this.#providerPublications.sendUsageScanResult(response).then(() => undefined);
   }
-
   sendResetCreditConsumeResult(response: DaemonRuntimeResetCreditConsumeResponse): Promise<void> {
     return this.#providerPublications.sendResetCreditConsumeResult(response).then(() => undefined);
   }
-
   sendProviderModelRefreshResult(
     response: DaemonRuntimeProviderModelRefreshResponse,
   ): Promise<void> {
@@ -1128,7 +989,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       .sendProviderModelRefreshResult(response)
       .then(() => undefined);
   }
-
   sendCommandCodeEffortReadResult(
     response: DaemonRuntimeCommandCodeEffortReadResponse,
   ): Promise<void> {
@@ -1136,13 +996,10 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       .sendCommandCodeEffortReadResult(response)
       .then(() => undefined);
   }
-
   async ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void> {
     const client = this.#requireClient();
     signal?.throwIfAborted();
     this.#readyPublications.hold();
-    // The first ready takes the reconnect path: a failure is retried with the same backoff and
-    // escalation instead of failing the start and leaving the Workspace connected but dead.
     this.#readyRequestFactory = createRequest;
     const firstReady = Promise.withResolvers<void>();
     this.#firstReady = firstReady;
@@ -1155,8 +1012,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       signal?.removeEventListener("abort", onAbort);
     }
   }
-
-  /** Gives up a first ready still retrying: its recovery stops and `ready` rejects. */
   #failFirstReady(error: unknown): void {
     if (!this.#firstReady) return;
     this.#cancelReadyRecovery();
@@ -1164,31 +1019,24 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     this.#firstReady = undefined;
     firstReady?.reject(error);
   }
-
   updateCodeAgents(request: DaemonRuntimeCodeAgentsUpdateRequest): Promise<void> {
     return sendCodeAgentsUpdate((m, d) => this.#rpc(m, d), request);
   }
-
   reportRuntimeAuthLogin(report: RuntimeAuthLoginReport): Promise<void> {
     return sendRuntimeAuthLogin((m, d) => this.#rpc(m, d), report);
   }
-
   reportRuntimeAuthLogout(report: RuntimeAuthLogoutReport): Promise<void> {
     return sendRuntimeAuthLogout((m, d) => this.#rpc(m, d), report);
   }
-
   reportRuntimeAuthStatus(report: RuntimeAuthStatusReport): Promise<void> {
     return sendRuntimeAuthStatus((m, d) => this.#rpc(m, d), report);
   }
-
   sendMachineDiskStatus(report: MachineStatusReport): Promise<void> {
     return this.#notices.sendMachineDiskStatus(report);
   }
-
   sendMachineMemoryStatus(report: MachineStatusReport): Promise<void> {
     return this.#notices.sendMachineMemoryStatus(report);
   }
-
   async reportAgentSession(report: AgentSessionReport): Promise<void> {
     await reportAgentSessionWithRetry(
       {
@@ -1200,7 +1048,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       report,
     );
   }
-
   #startReadyRecovery(
     client: CentrifugeWorkspaceClient,
     createRequest: () => DaemonRuntimeReadyRequest,
@@ -1210,7 +1057,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     this.#readyRecoveryClient = client;
     void this.#attemptReadyRecovery(client, createRequest);
   }
-
   async #attemptReadyRecovery(
     client: CentrifugeWorkspaceClient,
     createRequest: () => DaemonRuntimeReadyRequest,
@@ -1235,7 +1081,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       );
     } catch (error) {
       if (!recovering()) return;
-      // Doubles per failed attempt so an outage is not hammered once a second per daemon.
       const delayMs = Math.min(
         RECONNECT_READY_RETRY_MAX_MS,
         RECONNECT_READY_RETRY_MS * 2 ** this.#readyRetryAttempts,
@@ -1248,15 +1093,11 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         event: "daemon_ready:retry_scheduled",
         ...scope,
         error_code: diagnosticErrorCode(error),
-        // Which step of the server's ready the failure came from, when it said so. Named here so
-        // the failing machine's own log explains itself instead of requiring server logs.
         ...(stage ? { server_stage: stage } : {}),
         retry_delay_ms: delayMs,
         attempt: this.#readyRetryAttempts,
         failing_for_ms: Date.now() - this.#readyFailingSinceMs,
       };
-      // Retrying forever at WARN hid a 13-hour outage on 2026-09-18: the connection stayed up, so
-      // nothing looked wrong, while no Agent on the machine could be reached.
       if (escalates(this.#readyRetryAttempts, READY_RETRY_ESCALATE_AFTER))
         logger.error(
           "Daemon ready keeps failing: this Computer is connected but its Workspace is not recovered, so its Agents cannot be reached",
@@ -1288,7 +1129,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       this.#reconnect.current?.();
       return;
     }
-    // The runtime's own start reports what a reconnect would; this is not a reconnect.
     this.#firstReady = undefined;
     logger.info("Daemon ready completed", {
       event: "daemon_ready:completed",
@@ -1298,21 +1138,14 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     });
     firstReady.resolve();
   }
-
-  /** Stops the retry under way. The failure count is kept: a reconnect continues it, so a
-   * connection that keeps dropping still backs off and escalates. */
   #cancelReadyRecovery(): void {
     if (this.#readyRetryTimer !== undefined) this.timing.cancel(this.#readyRetryTimer);
     this.#readyRetryTimer = undefined;
     this.#readyRecoveryClient = undefined;
   }
-
-  /** How many publications wait behind a pending ready handshake: what a start held at ready is
-   * waiting for. */
   heldPublicationCount(): number {
     return this.#readyPublications.size();
   }
-
   async stop(): Promise<void> {
     const client = this.#client;
     this.#failPendingStart?.(new DaemonConnectionStoppedError());
