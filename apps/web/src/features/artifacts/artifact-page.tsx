@@ -98,7 +98,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
       const event = decodeArtifactVersionPublishedEvent(data);
       if (event?.artifactId !== artifactId) return;
       // Taken in quietly: nothing says who changed it (Frank, 11-05).
-      void refreshArtifact(queryClient, artifactId);
+      void refreshArtifact(queryClient, artifactId, homeId ?? null);
     },
   });
 
@@ -207,7 +207,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         title={title}
         onDelete={async () => {
           await deleteArtifact({ data: { artifactId } });
-          void refreshArtifact(queryClient, artifactId);
+          void refreshArtifact(queryClient, artifactId, homeId ?? null);
           backHome();
         }}
       />

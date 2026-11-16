@@ -62,12 +62,18 @@ export const artifactLinkSharingQuery = (artifactId: string) =>
     queryFn: () => loadArtifactLinkSharing({ data: { artifactId } }),
   });
 
-/** After an artifact changed: its read, its cards and its home's list. */
-export function refreshArtifact(queryClient: QueryClient, artifactId: string): Promise<void> {
+/** After an artifact changed: its read, its cards and its home's list — only that home's, so a
+ * version published in one conversation does not refetch every open Files tab (`homeId` is the
+ * home conversation's id, `null` for a Workspace artifact, which no list shows). */
+export function refreshArtifact(
+  queryClient: QueryClient,
+  artifactId: string,
+  homeId: string | null,
+): Promise<void> {
   return queryClient.invalidateQueries({
     predicate: ({ queryKey: [root, kind, id] }) => {
       if (root !== ARTIFACTS_KEY[0]) return false;
-      if (kind === "list") return true;
+      if (kind === "list") return id === homeId;
       return id === artifactId && (kind === "card" || kind === "document");
     },
   });
