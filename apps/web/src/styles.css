@@ -534,3 +534,13 @@ html[data-drag-cursor] [data-drop-blocked] * {
     translate: none !important;
   }
 }
+
+::highlight(artifact-comment-focus) {
+  background-color: var(--color-bg-warning-secondary);
+  color: var(--color-text-primary);
+}
+
+::highlight(artifact-comment-draft) {
+  background-color: var(--color-bg-warning-primary);
+  color: var(--color-text-primary);
+}

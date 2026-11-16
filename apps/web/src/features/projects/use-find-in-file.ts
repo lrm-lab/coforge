@@ -1,19 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { setCssHighlight, supportsCssHighlights } from "#src/lib/css-highlight";
 import { findMatches, type FindMatch } from "./find-in-text";
 import { planRangeForOffsets } from "./find-range-plan";
 
 const FIND_DEBOUNCE_MS = 120;
 const FIND_HIGHLIGHT = "pfv-find";
 const FIND_ACTIVE_HIGHLIGHT = "pfv-find-active";
-
-function supportsFindHighlighting(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof Highlight !== "undefined" &&
-    typeof CSS !== "undefined" &&
-    Boolean(CSS.highlights)
-  );
-}
 
 export interface UseFindInFileOptions {
   /** The raw file text `findMatches` searches; `null` when there's nothing to search (no preview). */
@@ -52,7 +44,7 @@ export interface UseFindInFile {
  * markdown file to its source tab first).
  */
 export function useFindInFile({ text, codeRootRef, enabled }: UseFindInFileOptions): UseFindInFile {
-  const findSupported = useMemo(() => supportsFindHighlighting(), []);
+  const findSupported = useMemo(() => supportsCssHighlights(), []);
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -88,7 +80,7 @@ export function useFindInFile({ text, codeRootRef, enabled }: UseFindInFileOptio
     if (!findSupported) return;
     const codeRoot = codeRootRef.current;
     if (!codeRoot || matches.length === 0) {
-      CSS.highlights.delete(FIND_HIGHLIGHT);
+      setCssHighlight(FIND_HIGHLIGHT, []);
       return;
     }
     // Small result sets are cheaper to look up directly than to index the entire file.
@@ -109,10 +101,9 @@ export function useFindInFile({ text, codeRootRef, enabled }: UseFindInFileOptio
       const range = rangeForMatch(line, match);
       if (range) ranges.push(range);
     }
-    if (ranges.length > 0) CSS.highlights.set(FIND_HIGHLIGHT, new Highlight(...ranges));
-    else CSS.highlights.delete(FIND_HIGHLIGHT);
+    setCssHighlight(FIND_HIGHLIGHT, ranges);
     return () => {
-      CSS.highlights.delete(FIND_HIGHLIGHT);
+      setCssHighlight(FIND_HIGHLIGHT, []);
     };
   }, [matches, findSupported, codeRootRef]);
 
@@ -121,16 +112,16 @@ export function useFindInFile({ text, codeRootRef, enabled }: UseFindInFileOptio
     const codeRoot = codeRootRef.current;
     const match = matches[activeMatchIndex];
     if (!codeRoot || !match) {
-      CSS.highlights.delete(FIND_ACTIVE_HIGHLIGHT);
+      setCssHighlight(FIND_ACTIVE_HIGHLIGHT, []);
       return;
     }
     const found = rowForLineElement(codeRoot.querySelector(`[data-line="${match.line}"]`));
     if (!found) {
-      CSS.highlights.delete(FIND_ACTIVE_HIGHLIGHT);
+      setCssHighlight(FIND_ACTIVE_HIGHLIGHT, []);
       return;
     }
     const range = buildRangeForMatch(found.code, match.start, match.end);
-    if (range) CSS.highlights.set(FIND_ACTIVE_HIGHLIGHT, new Highlight(range));
+    setCssHighlight(FIND_ACTIVE_HIGHLIGHT, range ? [range] : []);
     // `content-visibility: auto` chunks report an estimated intrinsic size
     // until they're actually laid out; scrolling to them can settle at a
     // slightly wrong offset the first time, so nudge again once the browser
@@ -139,7 +130,7 @@ export function useFindInFile({ text, codeRootRef, enabled }: UseFindInFileOptio
     const frame = requestAnimationFrame(() => found.row.scrollIntoView({ block: "center" }));
     return () => {
       cancelAnimationFrame(frame);
-      CSS.highlights.delete(FIND_ACTIVE_HIGHLIGHT);
+      setCssHighlight(FIND_ACTIVE_HIGHLIGHT, []);
     };
   }, [matches, activeMatchIndex, findSupported, codeRootRef]);
 

@@ -153,3 +153,14 @@ at most) and `@` mentions. A person's comment notifies Agents exactly as an Agen
 composer says before sending whom it will tell. A person's comment naming someone who cannot see
 the artifact is refused; an Agent's mention of one is only reported as not told. Only the author
 edits or deletes a comment; a deleted comment with replies leaves a placeholder.
+
+A person anchors a comment on the Web by selecting text in a Markdown file (a `text` anchor:
+`quote` with up to 64 characters of `prefix` and `suffix`), or by clicking a line number in a code
+file or a CSV file and shift-clicking to extend (a `lines` anchor: physical file lines, the same as
+an Agent's `lines`; a CSV row's number is the line its record starts on, so the header is line 1 and
+a quoted cell spanning lines advances the count, and `\n`, `\r\n` and a lone `\r` each end one line). The anchor names the file and the version being
+viewed. A viewer whose version no longer contains the quote sees "the source changed", and one whose
+version lacks the file sees "not in this version"; the server stores the anchor as sent and never
+re-finds a quote. An HTML page's text
+cannot be selected for a comment: the page runs in its own frame and only the element picker
+(not yet built) will anchor into it.

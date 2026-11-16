@@ -266,5 +266,23 @@
   "av_cm_err_send": "评论没有发出，请再试一次。",
   "av_cm_mention_people": "成员",
   "av_cm_mention_agents": "Agent",
-  "av_cm_anchor_quote": "“{quote}”"
+  "av_cm_anchor_quote": "“{quote}”",
+  "av_cm_anchor_changed": "原文已改动",
+  "av_cm_anchor_missing": "此版本中没有",
+  "av_cm_add_comment": "评论",
+  "av_cm_selection_label": "评论所选内容",
+  "av_cm_anchor_cancel": "取消",
+  "av_cm_margin_label": "文档旁的评论",
+  "av_cm_marker": "{name} 的评论",
+  "av_cm_marker_replies": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} 条回复",
+        "countPlural=other": "{count} 条回复"
+      }
+    }
+  ],
+  "av_cm_select_line": "选择第 {line} 行"
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { ChevronDown, ChevronRight, XClose } from "@untitledui/icons";
 
@@ -11,36 +11,70 @@ import {
   ArtifactCommentComposer,
   useKnownMentionables,
   type CommentReplyTarget,
+  type ComposerTarget,
 } from "./artifact-comment-composer";
-import { useArtifactComments } from "./artifact-comment-queries";
+import type { useArtifactComments } from "./artifact-comment-queries";
 import { ArtifactSidePanel } from "./artifact-side-panel";
 import { CommentThreadView, type CommentContext } from "./artifact-comment-thread";
-import { groupThreads, type CommentThread } from "./artifact-comment-threads";
+import { useArtifactCommenting, useCommentPlaces, useCommentRequests } from "./artifact-commenting";
+import { orderAnchored, type CommentGroups, type CommentThread } from "./artifact-comment-threads";
+import { useFlash } from "./use-flash";
 
 export function ArtifactCommentPanel({
   artifactId,
   shownVersion,
   openPath,
   focusRequest,
+  list,
+  groups,
   onClose,
 }: {
   artifactId: string;
   shownVersion: number;
   openPath: string | null;
   focusRequest: number;
+  list: ReturnType<typeof useArtifactComments>;
+  groups: CommentGroups;
   onClose: () => void;
 }) {
-  const { query, comments } = useArtifactComments(artifactId);
+  const { entryPath, filePaths } = useArtifactCommenting();
+  const { focus, consumeFocus } = useCommentRequests();
+  const places = useCommentPlaces();
+  const { query, comments } = list;
   const known = useKnownMentionables(artifactId);
   const plainMentions = useMemo(() => plainMentionsByHandle(known), [known]);
   const [replyTo, setReplyTo] = useState<CommentReplyTarget | null>(null);
   const [fileDismissed, setFileDismissed] = useState<string | null>(null);
   const [resolvedOpen, setResolvedOpen] = useState(false);
-  const groups = useMemo(() => groupThreads(comments), [comments]);
-  const context: CommentContext = { artifactId, plainMentions, onReply: setReplyTo };
-  const empty =
-    groups.whole.length === 0 && groups.files.length === 0 && groups.resolved.length === 0;
-  const target = openPath !== null && fileDismissed !== openPath ? openPath : null;
+  const [flashId, flashThread] = useFlash<string>();
+  const listElement = useRef<HTMLDivElement>(null);
+  const anchored = useMemo(
+    () => orderAnchored(groups.anchored, [entryPath, ...filePaths], places?.byId),
+    [groups.anchored, entryPath, filePaths, places],
+  );
+  const context: CommentContext = { artifactId, plainMentions, flashId, onReply: setReplyTo };
+  const empty = groups.whole.length === 0 && anchored.length === 0 && groups.resolved.length === 0;
+  useEffect(() => {
+    if (focus === null) return;
+    const thread = listElement.current?.querySelector(
+      `[data-comment-thread="${CSS.escape(focus)}"]`,
+    );
+    if (!thread) return;
+    consumeFocus();
+    thread.scrollIntoView({ block: "nearest" });
+    flashThread(focus);
+  }, [focus, groups, consumeFocus, flashThread]);
+  const filePath = openPath !== null && fileDismissed !== openPath ? openPath : null;
+  const composerTarget: ComposerTarget = replyTo
+    ? { kind: "reply", ...replyTo, onCancel: () => setReplyTo(null) }
+    : filePath !== null
+      ? {
+          kind: "file",
+          version: shownVersion,
+          path: filePath,
+          onClear: () => setFileDismissed(openPath),
+        }
+      : { kind: "panel", version: shownVersion };
 
   return (
     <ArtifactSidePanel label={m.av_cm_title()} onClose={onClose}>
@@ -56,7 +90,11 @@ export function ArtifactCommentPanel({
           onClick={onClose}
         />
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-live="polite">
+      <div
+        ref={listElement}
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
+        aria-live="polite"
+      >
         {query.isPending ? (
           <div aria-busy="true" className="space-y-3">
             <Skeleton className="h-16 w-full" />
@@ -96,15 +134,7 @@ export function ArtifactCommentPanel({
             {groups.whole.length > 0 && (
               <ThreadGroup title={m.av_cm_group_whole()} threads={groups.whole} context={context} />
             )}
-            {groups.files.map((file) => (
-              <ThreadGroup
-                key={file.path}
-                title={file.path}
-                threads={file.threads}
-                context={context}
-                hideAnchor
-              />
-            ))}
+            {anchored.length > 0 && <ThreadGroup threads={anchored} context={context} />}
             {groups.resolved.length > 0 && (
               <section>
                 <AriaButton
@@ -133,12 +163,9 @@ export function ArtifactCommentPanel({
       </div>
       <ArtifactCommentComposer
         artifactId={artifactId}
-        version={shownVersion}
-        path={target}
-        replyTo={replyTo}
+        target={composerTarget}
         focusRequest={focusRequest}
-        onClearPath={() => setFileDismissed(openPath)}
-        onCancelReply={() => setReplyTo(null)}
+        onPosted={() => setReplyTo(null)}
       />
     </ArtifactSidePanel>
   );
@@ -148,24 +175,17 @@ function ThreadGroup({
   title,
   threads,
   context,
-  hideAnchor,
 }: {
-  title: string;
+  title?: string;
   threads: readonly CommentThread[];
   context: CommentContext;
-  hideAnchor?: boolean;
 }) {
   return (
     <section>
-      <h3 className="mb-2 truncate text-xs font-semibold text-tertiary">{title}</h3>
+      {title && <h3 className="mb-2 truncate text-xs font-semibold text-tertiary">{title}</h3>}
       <ul className="flex flex-col gap-2">
         {threads.map((thread) => (
-          <CommentThreadView
-            key={thread.root.id}
-            thread={thread}
-            context={context}
-            hideAnchor={hideAnchor}
-          />
+          <CommentThreadView key={thread.root.id} thread={thread} context={context} />
         ))}
       </ul>
     </section>

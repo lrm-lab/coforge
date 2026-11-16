@@ -1,7 +1,13 @@
+import { Button as AriaButton } from "react-aria-components";
+
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { CommentAnchor } from "./artifact-comment-inputs";
+import { anchorStatus, useArtifactCommenting, useCommentPlaces } from "./artifact-commenting";
 
-function anchorDescription(anchor: CommentAnchor | null): { place?: string; quote?: string } {
+export type AnchorDescription = { place?: string; quote?: string };
+
+export function describeAnchor(anchor: CommentAnchor | null): AnchorDescription {
   if (!anchor) return {};
   const { data } = anchor;
   if (anchor.type === "lines") {
@@ -25,23 +31,44 @@ function anchorDescription(anchor: CommentAnchor | null): { place?: string; quot
 }
 
 export function CommentAnchorLine({
+  commentId,
   path,
   anchor,
 }: {
+  commentId: string;
   path: string | null;
   anchor: CommentAnchor | null;
 }) {
-  const { place, quote } = anchorDescription(anchor);
-  if (path === null && !place && !quote) return null;
+  const commenting = useArtifactCommenting();
+  const places = useCommentPlaces();
+  if (path === null) return null;
+  const { place, quote } = describeAnchor(anchor);
+  const status = anchorStatus(commenting, places, commentId, path);
   return (
-    <p className="min-w-0 text-xs text-tertiary [overflow-wrap:anywhere]">
-      {path !== null && (
-        <span className="font-medium text-secondary">{m.av_cm_in_file({ path })}</span>
+    <AriaButton
+      data-comment-anchor=""
+      data-anchor-status={status}
+      isDisabled={status === "missing"}
+      className={cn(
+        "min-w-0 text-left text-xs text-tertiary [overflow-wrap:anywhere]",
+        "rounded-sm outline-focus-ring focus-visible:outline-2",
+        status !== "missing" && "cursor-pointer hover:text-secondary",
       )}
-      {place && <span>{path !== null ? ` · ${place}` : place}</span>}
+      onPress={() => commenting.revealThread({ path, anchor })}
+    >
+      <span>
+        <span className="font-medium text-secondary">{m.av_cm_in_file({ path })}</span>
+        {place && ` · ${place}`}
+        {status === "changed" && (
+          <span className="text-warning-primary"> · {m.av_cm_anchor_changed()}</span>
+        )}
+        {status === "missing" && (
+          <span className="text-warning-primary"> · {m.av_cm_anchor_missing()}</span>
+        )}
+      </span>
       {quote && (
         <span className="line-clamp-2 block italic">{m.av_cm_anchor_quote({ quote })}</span>
       )}
-    </p>
+    </AriaButton>
   );
 }

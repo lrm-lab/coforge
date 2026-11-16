@@ -53,3 +53,6 @@ Comments on artifacts are written for Agents (the Agent API's `comments`, `comme
   through `announceArtifactComments`; clients fetch just those comments. Person image bytes are
   cleaned once, at upload (`storeCleanImage`), and only the clean bytes are stored; posting reads
   their size and dimensions and stores nothing. An Agent's image is cleaned and stored at post.
+- A person's anchor (`text` from a selection, `lines` from line or row numbers) arrives through the
+  same `commentDraftInput` as an Agent's and is stored as sent, with the viewed version; the server
+  never re-finds a quote, the viewing client does.

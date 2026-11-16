@@ -268,5 +268,23 @@
   "av_cm_err_send": "The comment wasn't sent. Try again.",
   "av_cm_mention_people": "People",
   "av_cm_mention_agents": "Agents",
-  "av_cm_anchor_quote": "“{quote}”"
+  "av_cm_anchor_quote": "“{quote}”",
+  "av_cm_anchor_changed": "The source changed",
+  "av_cm_anchor_missing": "Not in this version",
+  "av_cm_add_comment": "Comment",
+  "av_cm_selection_label": "Comment on the selection",
+  "av_cm_anchor_cancel": "Cancel",
+  "av_cm_margin_label": "Comments beside the document",
+  "av_cm_marker": "{name}'s comment",
+  "av_cm_marker_replies": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} reply",
+        "countPlural=other": "{count} replies"
+      }
+    }
+  ],
+  "av_cm_select_line": "Select line {line}"
 }

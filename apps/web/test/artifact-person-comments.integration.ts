@@ -45,6 +45,28 @@ test("a person comments on the whole artifact and on a file, and an Agent reads 
   });
 });
 
+test("a person anchors a comment to a text quote or a line range, and an anchor needs a file", async () => {
+  const artifact = await f.make("Anchors");
+  const quote = {
+    type: "text" as const,
+    data: { quote: "two", prefix: "one\n", suffix: "\nthree" },
+  };
+  const lines = { type: "lines" as const, data: { start: 2, end: 3 } };
+  await post(artifact, "On the quote.", { path: "plan.md", anchor: quote });
+  await post(artifact, "On the lines.", { path: "plan.md", anchor: lines });
+  const page = await list(artifact);
+  expect(page.comments.map((comment) => ("deleted" in comment ? null : comment.anchor))).toEqual([
+    quote,
+    lines,
+  ]);
+  await expect(post(artifact, "No file.", { anchor: quote })).rejects.toMatchObject({
+    errorId: "artifact-comment-anchor",
+  });
+  expect(() =>
+    draft("Backwards.", { path: "plan.md", anchor: { type: "lines", data: { start: 3, end: 2 } } }),
+  ).toThrow();
+});
+
 test("a reply joins its thread, a retry with the same key stores once, and a reply to a deleted comment is refused", async () => {
   const artifact = await f.make("Replies");
   const root = await post(artifact, "Root.");

@@ -1,8 +1,20 @@
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
+export type CsvRecord = { cells: string[]; line: number; endLine: number };
+
+export function parseCsv(text: string): CsvRecord[] {
+  const records: CsvRecord[] = [];
+  let cells: string[] = [];
   let field = "";
   let quoted = false;
+  let fieldOpened = false;
+  let line = 1;
+  let startLine = 1;
+  const finish = () => {
+    cells.push(field);
+    records.push({ cells, line: startLine, endLine: line });
+    cells = [];
+    field = "";
+    fieldOpened = false;
+  };
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index]!;
     if (quoted) {
@@ -10,22 +22,24 @@ export function parseCsv(text: string): string[][] {
         field += '"';
         index += 1;
       } else if (char === '"') quoted = false;
-      else field += char;
-    } else if (char === '"') quoted = true;
-    else if (char === ",") {
-      row.push(field);
+      else {
+        field += char;
+        if (char === "\n" || (char === "\r" && text[index + 1] !== "\n")) line += 1;
+      }
+    } else if (char === '"') {
+      quoted = true;
+      fieldOpened = true;
+    } else if (char === ",") {
+      cells.push(field);
       field = "";
     } else if (char === "\n" || char === "\r") {
-      if (char === "\r" && text[index + 1] === "\n") index += 1;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
+      const crlf = char === "\r" && text[index + 1] === "\n";
+      if (crlf) index += 1;
+      finish();
+      line += 1;
+      startLine = line;
     } else field += char;
   }
-  if (field !== "" || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows;
+  if (field !== "" || fieldOpened || cells.length > 0) finish();
+  return records;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image01, XClose } from "@untitledui/icons";
 import { ARTIFACT_COMMENT_IMAGES_MAX, COMMENT_BODY_MAX } from "@lrm/coforge-sdk/agent";
@@ -29,12 +29,18 @@ import { useDebouncedValue } from "#src/lib/use-debounced-value";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { postArtifactComment, previewArtifactCommentAudience } from "./artifact-comments.functions";
-import { COMMENT_MENTIONS_MAX } from "./artifact-comment-inputs";
+import { COMMENT_MENTIONS_MAX, type CommentAnchor } from "./artifact-comment-inputs";
 import { uploadCommentImage } from "./artifact-comment-images";
 import { artifactMentionCandidatesQuery, syncOwnComments } from "./artifact-comment-queries";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 
 export type CommentReplyTarget = { id: string; name: string };
+
+export type ComposerTarget =
+  | { kind: "panel"; version: number }
+  | { kind: "file"; version: number; path: string; onClear: () => void }
+  | { kind: "reply"; id: string; name: string; onCancel: () => void }
+  | { kind: "anchor"; version: number; path: string; anchor: CommentAnchor; header: ReactNode };
 
 type Attachment = {
   key: string;
@@ -75,22 +81,25 @@ export function useKnownMentionables(artifactId: string) {
   return useMentionables(artifactId).known;
 }
 
+const placement = (target: ComposerTarget) => {
+  if (target.kind === "reply") return { replyTo: target.id };
+  if (target.kind === "anchor") return { path: target.path, anchor: target.anchor };
+  if (target.kind === "file") return { path: target.path };
+  return {};
+};
+
 export function ArtifactCommentComposer({
   artifactId,
-  version,
-  path,
-  replyTo,
+  target,
   focusRequest,
-  onClearPath,
-  onCancelReply,
+  className,
+  onPosted,
 }: {
   artifactId: string;
-  version: number;
-  path: string | null;
-  replyTo: CommentReplyTarget | null;
+  target: ComposerTarget;
   focusRequest: number;
-  onClearPath: () => void;
-  onCancelReply: () => void;
+  className?: string;
+  onPosted: () => void;
 }) {
   const queryClient = useQueryClient();
   const workspaceSlug = useWorkspaceSlug();
@@ -118,9 +127,10 @@ export function ArtifactCommentComposer({
   useEffect(() => {
     if (focusRequest > 0) completion.textareaRef.current?.focus();
   }, [focusRequest, completion.textareaRef]);
+  const replyId = target.kind === "reply" ? target.id : null;
   useEffect(() => {
-    if (replyTo) completion.textareaRef.current?.focus();
-  }, [replyTo, completion.textareaRef]);
+    if (replyId !== null) completion.textareaRef.current?.focus();
+  }, [replyId, completion.textareaRef]);
 
   const wire = useMemo(() => rewriteMentionPins(body, pins), [body, pins]);
   const tooLong = wire.body.length > COMMENT_BODY_MAX;
@@ -198,17 +208,18 @@ export function ArtifactCommentComposer({
     setFailure(null);
     const comment = {
       body: wire.body,
-      ...(replyTo ? { replyTo: replyTo.id } : path ? { path } : {}),
+      ...placement(target),
       ...(ready.length ? { images: ready } : {}),
     };
-    const signature = JSON.stringify([comment, replyTo ? null : version]);
+    const version = target.kind === "reply" ? undefined : target.version;
+    const signature = JSON.stringify([comment, version ?? null]);
     if (attempt.current.signature !== signature)
       attempt.current = { signature, key: crypto.randomUUID() };
     try {
       const { id } = await postArtifactComment({
         data: {
           artifactId,
-          ...(replyTo ? {} : { version }),
+          ...(version === undefined ? {} : { version }),
           comment: { ...comment, idempotencyKey: attempt.current.key },
         },
       });
@@ -216,7 +227,7 @@ export function ArtifactCommentComposer({
       setBody("");
       setPins([]);
       setAttachments([]);
-      onCancelReply();
+      onPosted();
       await syncOwnComments(queryClient, artifactId, "posted", [id]);
     } catch (error) {
       setFailure(sendFailure(error));
@@ -239,23 +250,25 @@ export function ArtifactCommentComposer({
 
   return (
     <form
-      className="shrink-0 space-y-1.5 border-t border-secondary px-3 pt-2 pb-3"
+      className={cn("shrink-0 space-y-1.5 border-t border-secondary px-3 pt-2 pb-3", className)}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
-      {replyTo ? (
+      {target.kind === "reply" ? (
         <ComposerChip
-          label={m.av_cm_replying_to({ name: replyTo.name })}
-          onRemove={onCancelReply}
+          label={m.av_cm_replying_to({ name: target.name })}
+          onRemove={target.onCancel}
           removeLabel={m.av_cm_cancel_reply()}
         />
+      ) : target.kind === "anchor" ? (
+        target.header
       ) : (
-        path && (
+        target.kind === "file" && (
           <ComposerChip
-            label={m.av_cm_on_file({ path })}
-            onRemove={onClearPath}
+            label={m.av_cm_on_file({ path: target.path })}
+            onRemove={target.onClear}
             removeLabel={m.av_cm_clear_target()}
           />
         )
@@ -266,7 +279,9 @@ export function ArtifactCommentComposer({
           value={body}
           onValueChange={changeBody}
           label={m.av_cm_field_label()}
-          placeholder={replyTo ? m.av_cm_reply_placeholder() : m.av_cm_placeholder()}
+          placeholder={
+            target.kind === "reply" ? m.av_cm_reply_placeholder() : m.av_cm_placeholder()
+          }
           onSubmit={() => void submit()}
           sendDisabled={cannotSend}
           isReadOnly={sending}

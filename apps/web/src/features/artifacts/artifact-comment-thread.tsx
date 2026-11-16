@@ -16,7 +16,6 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useAppToast } from "#src/components/ui/toast";
-import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import type { ChipMention } from "#src/features/conversations/message-reference-chips";
 import { MessageBody } from "#src/features/conversations/message-body";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -31,6 +30,7 @@ import {
 import { commentImageUrl } from "./artifact-comment-images";
 import { syncOwnComments, type ArtifactCommentView } from "./artifact-comment-queries";
 import { CommentAnchorLine } from "./artifact-comment-anchor";
+import { CommentAuthorAvatar } from "./artifact-comment-avatar";
 import type { CommentThread } from "./artifact-comment-threads";
 import type { CommentReplyTarget } from "./artifact-comment-composer";
 
@@ -41,6 +41,7 @@ const isLive = (comment: ArtifactCommentView): comment is Live => !("deleted" in
 export type CommentContext = {
   artifactId: string;
   plainMentions: Map<string, ChipMention> | undefined;
+  flashId: string | null;
   onReply: (target: CommentReplyTarget) => void;
 };
 
@@ -83,17 +84,20 @@ function useCommentActions(artifactId: string) {
 export function CommentThreadView({
   thread,
   context,
-  hideAnchor = false,
 }: {
   thread: CommentThread;
   context: CommentContext;
-  hideAnchor?: boolean;
 }) {
   const actions = useCommentActions(context.artifactId);
   return (
     <li
       data-comment-thread={thread.root.id}
-      className="overflow-hidden rounded-lg border border-secondary bg-primary"
+      className={cn(
+        "overflow-hidden rounded-lg border bg-primary transition-shadow",
+        context.flashId === thread.root.id
+          ? "border-utility-yellow-300 ring-2 ring-utility-yellow-200"
+          : "border-secondary",
+      )}
     >
       <ul className="divide-y divide-secondary">
         {[thread.root, ...thread.replies].map((comment) => (
@@ -101,7 +105,6 @@ export function CommentThreadView({
             <CommentRow
               comment={comment}
               isRoot={comment.id === thread.root.id}
-              hideAnchor={hideAnchor}
               context={context}
               actions={actions}
             />
@@ -123,13 +126,11 @@ type RowAction = {
 function CommentRow({
   comment,
   isRoot,
-  hideAnchor,
   context,
   actions,
 }: {
   comment: ArtifactCommentView;
   isRoot: boolean;
-  hideAnchor: boolean;
   context: CommentContext;
   actions: ReturnType<typeof useCommentActions>;
 }) {
@@ -185,14 +186,7 @@ function CommentRow({
       data-comment-id={comment.id}
       className="group/comment relative flex gap-2.5 px-3 py-2.5 hover:bg-primary_hover"
     >
-      <ActorAvatar
-        presence={false}
-        size="sm"
-        name={author.name}
-        {...(author.kind === "agent"
-          ? { agentId: comment.authorId ?? undefined }
-          : { userId: comment.authorId ?? undefined })}
-      />
+      <CommentAuthorAvatar comment={comment} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <header className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-1.5 pr-16">
           <span className="min-w-0 truncate text-sm font-semibold text-primary">{author.name}</span>
@@ -207,7 +201,9 @@ function CommentRow({
             {m.av_cm_version({ version: comment.version })}
           </span>
         </header>
-        {isRoot && !hideAnchor && <CommentAnchorLine path={comment.path} anchor={comment.anchor} />}
+        {isRoot && (
+          <CommentAnchorLine commentId={comment.id} path={comment.path} anchor={comment.anchor} />
+        )}
         {editing ? (
           <CommentEditor
             initial={comment.body}

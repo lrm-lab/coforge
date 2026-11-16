@@ -354,7 +354,11 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
           icon={GripVertical}
         />
         {showMermaidDiagram && (
-          <div contentEditable={false} className="mermaid-diagram-preview p-3">
+          <div
+            contentEditable={false}
+            data-anchor-chrome=""
+            className="mermaid-diagram-preview p-3"
+          >
             <MermaidDiagram ref={mermaidRef} chart={debouncedChart} showToolbar={false} />
           </div>
         )}
@@ -363,7 +367,7 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
             // CSS-hidden when toggled off so the `<pre>` below stays mounted —
             // unmounting either side would either lose ProseMirror bindings
             // (source) or thrash iframe.srcDoc (preview).
-            <div contentEditable={false} className="p-3">
+            <div contentEditable={false} data-anchor-chrome="" className="p-3">
               <CodeBlockIframe
                 html={debouncedHtml}
                 title="HTML preview"
@@ -373,6 +377,7 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
           )}
         <div
           contentEditable={false}
+          data-anchor-chrome=""
           className={cn(
             "absolute top-2 right-2 z-10 opacity-0 transition-opacity group-hover/code:opacity-100 focus-within:opacity-100",
             toolbarPinned && "opacity-100",

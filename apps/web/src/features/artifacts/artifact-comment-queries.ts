@@ -38,13 +38,14 @@ const byTime = (left: ArtifactCommentView, right: ArtifactCommentView) =>
   new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime() ||
   left.id.localeCompare(right.id);
 
-export function useArtifactComments(artifactId: string) {
+export function useArtifactComments(artifactId: string, enabled = true) {
   const query = useInfiniteQuery({
     queryKey: artifactCommentsKey(artifactId),
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) => loadArtifactComments({ data: { artifactId, before: pageParam } }),
     getNextPageParam: (page) => page.before,
     staleTime: 30_000,
+    enabled,
   });
   const comments = useMemo(() => {
     const seen = new Map<string, ArtifactCommentView>();
