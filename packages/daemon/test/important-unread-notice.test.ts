@@ -23,15 +23,18 @@ test("best-effort traffic never creates a state", () => {
   expect(notices.dueForWrite("agent-a")).toBe(false);
 });
 
-test("a new batch is due at once, and the same batch is not written again while it stands", () => {
+test("a delivery is due at once, and a written batch stands until another arrives", () => {
   const notices = new ImportantUnreadNotices();
   const first = notices.observe(mention);
   expect(first).toMatchObject({ key: "seq:10", attempts: 0 });
   expect(notices.dueForWrite("agent-a", 1_000)).toBe(true);
   notices.recordWritten("agent-a", 1_000);
-  // Second thoughts about the same delivery change nothing: the batch identity already covers it.
-  expect(notices.observe({ ...mention, sequence: 9 })).toBeUndefined();
-  expect(notices.dueForWrite("agent-a", 1_000)).toBe(false);
+  // Another conversation's sequence can be behind this one, and it is still something to say: it
+  // joins the batch and the batch is due at once, whatever its place in the order.
+  const joined = notices.observe({ ...mention, sequence: 9 });
+  expect(joined?.key).toBe("seq:10");
+  expect(joined?.attempts).toBe(0);
+  expect(notices.dueForWrite("agent-a", 1_000)).toBe(true);
 });
 
 test("a second important message in the same conversation merges instead of adding a notice", () => {

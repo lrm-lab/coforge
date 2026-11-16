@@ -5,6 +5,7 @@ import {
   type ImportantUnreadWiringPorts,
 } from "#src/daemon-runtime/important-unread-wiring";
 import {
+  IMPORTANT_UNREAD_RETRY_DELAYS_MS,
   ImportantUnreadNotices,
   type ImportantUnreadNotice,
 } from "#src/daemon-runtime/important-unread-notice";
@@ -79,9 +80,10 @@ test("a retry outliving the index's own count still says where to look", () => {
   expect(importantUnreadNoticeText(notice(), [])).toContain("#coforge-backend (1)");
 });
 
-test("an important delivery is written into the running session, and recorded", () => {
+test("an important delivery is written into the running session, and recorded", async () => {
   const { reminder, written, saved } = harness();
-  reminder.observeDeliveries([mention(12)]);
+  // The write reports its verdict on a promise, so the acceptance is awaited before the record.
+  await reminder.observeDeliveries([mention(12)]);
   expect(written).toHaveLength(1);
   expect(written[0]!.text).toContain("#coforge-backend");
   expect(saved.at(-1)).toMatchObject({ key: "seq:12", attempts: 1 });
@@ -112,9 +114,11 @@ test("a retry counts what has arrived since, not the first attempt's snapshot", 
     new ImportantUnreadNotices(),
     { save: () => undefined, clear: () => undefined, list: () => [] },
     {
-      compose: (_agentId, _notice, deliveries) => `Inbox: ${deliveries.length + unread - 1}`,
-      write: (_agentId, _notice, text) => {
-        written.push(text ?? "standing text");
+      compose: (_agentId, _notice, deliveries) => ({
+        text: `Inbox: ${deliveries.length + unread - 1}`,
+      }),
+      write: (_agentId, _notice, attempt) => {
+        written.push(attempt?.text ?? "standing text");
         return true;
       },
       report: () => undefined,
@@ -122,14 +126,15 @@ test("a retry counts what has arrived since, not the first attempt's snapshot", 
     () => clock,
   );
   reminder.observeDeliveries([mention(12)]);
-  clock += 60_000;
-  // Two more arrived in the same conversation while the batch waited: the retry merges them.
-  reminder.observeDeliveries([mention(13), mention(14)]);
+  // A check meanwhile found three messages unread, so the retry has to say three: the number is a
+  // fact of the moment it is written, never the one the first attempt carried.
+  clock += IMPORTANT_UNREAD_RETRY_DELAYS_MS[0];
   unread = 3;
   reminder.flushDue();
-  // Each arrival is its own reason to speak, and each write counts everything known by then: no
-  // attempt repeats the snapshot an earlier one took.
-  expect(written).toEqual(["Inbox: 1", "Inbox: 2", "Inbox: 3"]);
+  expect(written).toEqual(["Inbox: 1", "Inbox: 3"]);
+  // Each arrival is its own reason to speak, counted together with what the batch already holds.
+  reminder.observeDeliveries([mention(13)]);
+  expect(written).toEqual(["Inbox: 1", "Inbox: 3", "Inbox: 4"]);
 });
 
 test("a record taken over after a restart has no words of its own, so the standing text is used", () => {
@@ -156,7 +161,7 @@ test("only the deliveries a notice shows are kept, so a busy conversation cannot
     {
       compose: (_agentId, _notice, deliveries) => {
         seen.push(deliveries.length);
-        return "notice";
+        return { text: "notice" };
       },
       write: () => true,
       report: () => undefined,

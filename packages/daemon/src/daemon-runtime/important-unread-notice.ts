@@ -55,21 +55,24 @@ export class ImportantUnreadNotices {
   readonly #notices = new Map<string, ImportantUnreadNotice>();
 
   /**
-   * Folds one delivery in. Returns the notice when the Agent has something new to be told — a new
-   * batch identity — and undefined when this delivery changes nothing (best-effort traffic, or a
-   * sequence the batch already covers).
+   * Folds one delivery in. Returns the batch when the Agent has something to hear — a delivery the
+   * loop is now responsible for — and undefined for best-effort traffic.
+   *
+   * Every reliable delivery is something to say, whatever its sequence: sequences count within a
+   * conversation, so a message from another conversation can arrive behind the batch's highest, and
+   * a delivery this state swallowed is a notice nobody writes — the loop is the reliable tier's
+   * only writer (task #14). It joins the batch, and the batch is due again from that moment.
    */
   observe(delivery: ImportantUnreadDelivery): ImportantUnreadNotice | undefined {
     if (deliveryImportance(delivery) !== DELIVERY_IMPORTANCE.RELIABLE) return undefined;
     const current = this.#notices.get(delivery.agentId);
-    if (current && delivery.sequence <= current.highestSequence) return undefined;
-    const highestSequence = delivery.sequence;
+    const highestSequence = Math.max(current?.highestSequence ?? 0, delivery.sequence);
     const next: ImportantUnreadNotice = {
       agentId: delivery.agentId,
       key: `seq:${highestSequence}`,
       highestSequence,
       conversations: merge(current?.conversations ?? [], delivery),
-      // A new identity is a new thing to say: its own attempts start from zero.
+      // A new thing to say: its own attempts start from zero, and no earlier schedule stands.
       attempts: 0,
     };
     this.#notices.set(delivery.agentId, next);

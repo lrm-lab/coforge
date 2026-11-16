@@ -7,7 +7,7 @@ import type {
 import type { AgentConversationScope } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { NoticeActionClocks } from "./notice-action-clocks";
-import { writeDeliveryNotice } from "./delivery-notice-writer";
+import { type AgentDeliveryQueue, writeDeliveryNotice } from "./delivery-notice-writer";
 import { rememberDelivery } from "./delivery-generation-memory";
 import {
   AGENT_MESSAGE_ACK_METHOD,
@@ -91,15 +91,13 @@ export class AgentMessageAttentionIndex {
       agentId: string,
       conversation?: AgentConversationScope,
     ) => void = () => {},
-    readonly hold: {
-      shouldHold(agentId: string): boolean;
-      enqueue(agentId: string, message: AgentMessageDelivery): void;
-      busy(agentId: string): void;
-      noticeSettled?(agentId: string): void;
-      queued?(agentId: string): readonly AgentMessageDelivery[];
-      consumedSeqs?: AgentConsumedSeqPort;
-      noticePrefix?(agentId: string): string;
-    } = { shouldHold: () => false, enqueue: () => {}, busy: () => {} },
+    /** Daemon-owned delivery queue and synchronous busy marker; private, so nothing that holds the
+     * index can reach the deliveries waiting in it. The notice path borrows it (`AgentDeliveryQueue`). */
+    private readonly hold: AgentDeliveryQueue = {
+      shouldHold: () => false,
+      enqueue: () => {},
+      busy: () => {},
+    },
   ) {
     this.#workspaceId = workspaceId;
     this.#runtimes = runtimes;
