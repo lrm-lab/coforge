@@ -114,7 +114,7 @@ export function contextRequests(
   };
 }
 
-export function localReadonlyRequests(
+export function localAgentRequests(
   proxyEndpoint: (path: string) => URL,
   context: string,
   proxyUrl: string,

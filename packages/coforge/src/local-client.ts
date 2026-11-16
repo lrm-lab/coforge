@@ -42,7 +42,7 @@ import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
 import { refuseCredentialSolicitationIfNeeded } from "./send-credential-gate";
 import { proxyHttpFailure, proxyTransportFailure } from "./local-proxy-failure";
-import { computerUpdateNoticeRequest, localReadonlyRequests } from "./local-agent-requests";
+import { computerUpdateNoticeRequest, localAgentRequests } from "./local-agent-requests";
 import {
   envelopeRequest,
   operationFailedCode,
@@ -258,7 +258,7 @@ export function connectLocal(
         { query, intent, reason },
         decodeAgentManualSearchResponse,
       ),
-    ...localReadonlyRequests(proxyEndpoint, context, proxyUrl),
+    ...localAgentRequests(proxyEndpoint, context, proxyUrl),
     computerUpdateNotice: (): Promise<{ ok: true; notice: string | null }> =>
       computerUpdateNoticeRequest(proxyEndpoint, context, proxyUrl),
     ...profileRequests(proxyEndpoint, context, proxyUrl),
