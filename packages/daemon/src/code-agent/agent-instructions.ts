@@ -1,6 +1,7 @@
 import { collapseWhitespace } from "@lrm/coforge-anvil";
 import {
   CHANNEL_ARGUMENT_EXAMPLES,
+  COMMUNICATION_STYLE,
   OPENVIKING_ARGUMENT_EXAMPLES,
   OPENVIKING_OPERATION_ID_RULE,
   toolsForMemoryFence,
@@ -160,9 +161,6 @@ function buildRuntimeContextSection(context: CoforgeAgentPromptContext): string 
   lines.push(`- Agent workspace: ${context.agentWorkspaceDirectory}`);
   return lines.join("\n");
 }
-
-const COMMUNICATION_STYLE = `## Communication style
-Be brief and useful for decisions/actions. Skip logs, command transcripts, task status, checklists and IDs unless requested or needed for a blocker/decision. Finish: outcome, caveat, next owner; details in a report. With people (replies, mentions, DMs, shared threads), answer first in plain full sentences; explain jargon once. A colleague without this thread should understand on first reading.`;
 
 export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext): string {
   const rawName = context.identity?.displayName || context.identity?.name;
