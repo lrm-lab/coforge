@@ -542,3 +542,22 @@
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
+
+/* Room under a heading with nothing written yet (task #106): with the next heading's own margin
+ * it is about five times the plain gap between two headings. Drawn only while editing. */
+.rich-text-editor .section-gap {
+  height: 6rem;
+  cursor: text;
+}
+
+.rich-text-editor p.section-gap-empty {
+  min-height: 6rem;
+}
+
+.rich-text-editor[contenteditable="false"] .section-gap {
+  display: none;
+}
+
+.rich-text-editor[contenteditable="false"] p.section-gap-empty {
+  min-height: 0;
+}

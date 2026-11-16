@@ -6,6 +6,7 @@ import type { RefObject } from "react";
 import StarterKit from "@tiptap/starter-kit";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Placeholder from "@tiptap/extension-placeholder";
+import { SectionGap } from "./section-gap";
 import { sharedLowlight } from "#src/features/records/report-editor/lowlight";
 import Link from "@tiptap/extension-link";
 import Typography from "@tiptap/extension-typography";
@@ -132,6 +133,8 @@ export interface EditorExtensionsOptions {
   enableSlashCommands?: boolean;
   slashCommandMode?: "block";
   enableTextStyles?: boolean;
+  /** Room to write under a heading with nothing under it (a weekly report's sections). */
+  sectionGaps?: boolean;
 }
 
 export function createEditorExtensions(options: EditorExtensionsOptions): AnyExtension[] {
@@ -225,6 +228,7 @@ export function createEditorExtensions(options: EditorExtensionsOptions): AnyExt
     }),
     Typography,
     Placeholder.configure({ placeholder: placeholderText }),
+    ...(options.sectionGaps ? [SectionGap] : []),
     createMarkdownPasteExtension(),
     createBlurShortcutExtension(),
     createFileUploadExtension(onUploadFileRef, {
