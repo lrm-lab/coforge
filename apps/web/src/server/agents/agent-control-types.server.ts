@@ -120,6 +120,16 @@ export const agentControlStateSchema = z
 export type AgentControlState = AgentControlScope &
   Omit<z.infer<typeof agentControlStateSchema>, "updatedAtMs" | keyof AgentControlScope>;
 
+/** Compile-time (task #18 review): every `AgentControlScope` field must be in the persisted
+ * schema with a type the scope accepts. An SDK scope addition the schema does not carry fails
+ * the `Pick` itself; a schema field that stops satisfying the scope fails the check — either
+ * way the drift is a build error, not a silently unstored field. */
+type ScopeFieldsPersisted =
+  Pick<z.infer<typeof agentControlStateSchema>, keyof AgentControlScope> extends AgentControlScope
+    ? true
+    : false;
+export const agentControlScopePersisted: ScopeFieldsPersisted = true;
+
 export type AgentControlAgent = {
   id: string;
   workspaceId: string;
