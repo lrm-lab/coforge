@@ -1,5 +1,5 @@
 import { externalRefusalOf } from "./external/refusal";
-import { isAgentCredential } from "./agent-credential";
+import { isAgentCredential, isExternalCredential } from "./agent-credential";
 import {
   decodeAgentReminderOperationResponse,
   decodeLocalReminderRequest,
@@ -31,22 +31,23 @@ export async function reminderRequest(
     encodeLocalReminderRequest({ ...fields, idempotencyKey, context } as LocalReminderRequest),
   );
   const { context: _implicitContext, ...body } = validated;
+  const isExternal = isExternalCredential(context);
   let response: Response;
   try {
     response = await fetch(proxyEndpoint(agentApiRoutes.proxy.reminders.path), {
       method: agentApiRoutes.local.reminders.method,
       headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
       body: JSON.stringify(body),
+      ...(isExternal ? { redirect: "error" as const } : {}),
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
     throw new Error("agent reminder request failed (network or timeout)");
   }
   if (!response.ok) {
-    const refusal = externalRefusalOf(
-      response.status,
-      await response.json().catch(() => undefined),
-    );
+    const refusal = isExternal
+      ? externalRefusalOf(response.status, await response.json().catch(() => undefined))
+      : undefined;
     if (refusal) throw refusal;
     throw new Error(`agent reminder request failed (${response.status})`);
   }

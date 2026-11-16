@@ -35,6 +35,10 @@ export async function resolveAgentTransport(
       suggestedNextAction:
         "Run `coforge agent login --server <url> --workspace <slug> --agent <name>` first.",
     });
+  if (env.COFORGE_AGENT_PROXY_URL || env.COFORGE_AGENT_CONTEXT)
+    process.stderr.write(
+      `Using external profile "${profileSlug}" (ignoring daemon proxy environment).\n`,
+    );
   return {
     mode: "external",
     socketPath: "",

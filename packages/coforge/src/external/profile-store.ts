@@ -180,6 +180,14 @@ export function profileStore(env: Record<string, string | undefined>) {
     pathOf: (slug: string) => directoryOf(slug),
     credentialPathOf: (slug: string) => join(directoryOf(slug), CREDENTIAL_FILE),
     readProfile: (slug: string) => readJson(slug, CREDENTIAL_FILE, isProfile),
+    readProfileIgnoreCorrupt: async (slug: string): Promise<AgentProfile | undefined> => {
+      try {
+        return await readJson(slug, CREDENTIAL_FILE, isProfile);
+      } catch (error) {
+        if (error instanceof CliError && error.code === "PROFILE_CORRUPT") return undefined;
+        throw error;
+      }
+    },
     writeProfile: (slug: string, profile: AgentProfile) =>
       writePrivate(slug, CREDENTIAL_FILE, `${JSON.stringify(profile, null, 2)}\n`),
     removeProfile: (slug: string) => remove(slug, CREDENTIAL_FILE),

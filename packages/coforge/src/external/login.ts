@@ -22,8 +22,8 @@ export type LoginDeps = {
   sleep: (milliseconds: number) => Promise<void>;
   stdout: (text: string) => void;
   machine: MachineIdentity;
-  /** Called with the verification URI when a person at a terminal may open it with Enter. */
-  offerBrowser?: (verificationUri: string) => void;
+  /** Called with the verification URI and profile server URL when a terminal user may open it. */
+  offerBrowser?: (verificationUri: string, serverUrl: string) => void;
 };
 
 export type LoginInvocation =
@@ -172,7 +172,7 @@ async function finish(
   pending: PendingLogin,
   key: IssuedKey,
 ): Promise<void> {
-  const previous = await deps.store.readProfile(slug);
+  const previous = await deps.store.readProfileIgnoreCorrupt(slug);
   await deps.store.writeProfile(slug, {
     schemaVersion: 1,
     serverUrl: pending.serverUrl,
@@ -210,7 +210,7 @@ export async function runAgentLogin(
 ): Promise<void> {
   if (invocation.resume) return resume(profileSlug, deps);
   const slug = profileSlug ?? defaultProfileSlug(invocation.workspace, invocation.agent);
-  const existing = await deps.store.readProfile(slug);
+  const existing = await deps.store.readProfileIgnoreCorrupt(slug);
   if (existing) {
     if (!sameAgent(existing, invocation.server, invocation.workspace, invocation.agent))
       throw alreadyExists(slug, existing);
@@ -246,7 +246,7 @@ export async function runAgentLogin(
     return;
   }
   deps.stdout(`${pendingLines(pending, now).join("\n")}\nWaiting for approval...\n`);
-  if (!invocation.noBrowser) deps.offerBrowser?.(pending.verificationUri);
+  if (!invocation.noBrowser) deps.offerBrowser?.(pending.verificationUri, pending.serverUrl);
   await wait(deps, slug, pending);
 }
 
@@ -278,7 +278,7 @@ async function resume(profileSlug: string | undefined, deps: LoginDeps): Promise
       suggestedNextAction:
         "Run `coforge agent login --server <url> --workspace <slug> --agent <name>`.",
     });
-  const existing = await deps.store.readProfile(slug);
+  const existing = await deps.store.readProfileIgnoreCorrupt(slug);
   if (existing && !sameAgent(existing, pending.serverUrl, pending.workspace, pending.agent))
     throw alreadyExists(slug, existing);
   deps.stdout(`${pendingLines(pending, deps.now()).join("\n")}\nWaiting for approval...\n`);

@@ -37,6 +37,7 @@ export async function probeContext(
   try {
     response = await fetchFn(serverUrlOf(profile.serverUrl, "/api/agent/v1/context"), {
       headers: { authorization: `Bearer ${profile.apiKey}` },
+      redirect: "error",
       signal: AbortSignal.timeout(10_000),
     });
   } catch {

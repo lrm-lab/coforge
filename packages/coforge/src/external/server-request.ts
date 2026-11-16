@@ -39,6 +39,7 @@ export async function serverRequest(
         ...(hasBody ? { "content-type": "application/json" } : {}),
       },
       ...(hasBody ? { body: JSON.stringify(request.body) } : {}),
+      redirect: "error",
       signal: AbortSignal.timeout(request.timeoutMs ?? 10_000),
     });
   } catch {

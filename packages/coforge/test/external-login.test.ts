@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { safeVerificationUrl } from "../src/external/agent-cli";
 import { parseAgentLoginArgs, runAgentLogin, type LoginDeps } from "../src/external/login";
 import {
   DEVICE_CODE,
@@ -251,6 +252,32 @@ test("a profile bound to another Agent is never overwritten", async () => {
   });
   expect(s.requests).toEqual([]);
   expect((await home.store.readProfile("acme-builder"))?.agentName).toBe("other");
+});
+
+test("corrupt credential.json does not block login or lose the newly issued key", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const dir = join(home.home, "profiles", "acme-builder");
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "credential.json"), "{not-json", "utf8");
+  const s = setup(grantThen([json(issued)]));
+  await runAgentLogin(login, undefined, s.deps);
+  expect(s.text()).toContain("state: authorized");
+  expect((await home.store.readProfile("acme-builder"))?.apiKey).toBe(NEW_KEY);
+});
+
+test("safeVerificationUrl requires same origin and safe scheme", () => {
+  expect(
+    safeVerificationUrl("https://coforge.example/device?code=ABCD", "https://coforge.example")
+      ?.href,
+  ).toBe("https://coforge.example/device?code=ABCD");
+  expect(
+    safeVerificationUrl("http://127.0.0.1:3000/device?code=ABCD", "http://127.0.0.1:3000")?.href,
+  ).toBe("http://127.0.0.1:3000/device?code=ABCD");
+  expect(
+    safeVerificationUrl("https://evil.example/device", "https://coforge.example"),
+  ).toBeUndefined();
+  expect(safeVerificationUrl("file:///etc/passwd", "https://coforge.example")).toBeUndefined();
+  expect(safeVerificationUrl("javascript:alert(1)", "https://coforge.example")).toBeUndefined();
 });
 
 test("a revoked credential is replaced and the old key is self-revoked after the new one is saved", async () => {

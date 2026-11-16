@@ -83,8 +83,19 @@ export async function runAgentLogout(
     });
   const { store } = deps;
   const slug = await targetProfile(store, selected);
-  const profile = slug === undefined ? undefined : await store.readProfile(slug);
-  if (slug === undefined || !profile) return "state: not_logged_in";
+  if (slug === undefined) return "state: not_logged_in";
+  let profile: Awaited<ReturnType<typeof store.readProfile>>;
+  try {
+    profile = await store.readProfile(slug);
+  } catch (error) {
+    if (error instanceof CliError && error.code === "PROFILE_CORRUPT") {
+      await store.removeProfile(slug);
+      await store.removeCursor(slug);
+      return `state: logged_out\nProfile: ${slug}\nKey: corrupt local credential removed.`;
+    }
+    throw error;
+  }
+  if (!profile) return "state: not_logged_in";
   const outcome = await revokeSelf(deps.fetch, profile.serverUrl, profile.apiKey);
   if (outcome.state === "failed")
     throw new CliError({

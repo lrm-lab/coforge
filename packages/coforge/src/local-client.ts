@@ -1,5 +1,11 @@
 import { manualRequest } from "./manual-request";
-import { isAgentCredential } from "./agent-credential";
+import { isAgentCredential, isExternalCredential } from "./agent-credential";
+import {
+  weeklyReportCollectRequest,
+  weeklyReportKeyPointsRequest,
+  weeklyReportMemoryRequest,
+  weeklyReportRequest,
+} from "./weekly-report-request";
 import { appConfigRequests } from "#src/app-config-request";
 import { artifactTransport } from "#src/artifact-file-transport";
 import {
@@ -11,7 +17,6 @@ import {
   type TaskResult,
   type WorkspaceInfoResponse,
   type WeeklyReportCommand,
-  type WeeklyReportResponse,
 } from "@lrm/coforge-sdk/internal";
 import type { ActionPrepareResult, ReminderTransportRequest } from "../index";
 import {
@@ -74,6 +79,14 @@ export function connectLocal(
   proxyUrl = Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
   conversationTarget = Bun.env.COFORGE_AGENT_CONVERSATION_TARGET,
 ) {
+  const external = isExternalCredential(context);
+  const httpFailure = (
+    operation: string,
+    status: number,
+    body: Parameters<typeof proxyHttpFailure>[2],
+    target: string | undefined,
+    idempotent = false,
+  ) => proxyHttpFailure(operation, status, body, target, { idempotent, external });
   const proxyEndpoint = (path: string) => {
     const endpoint = new URL(proxyUrl);
     endpoint.pathname = path;
@@ -127,7 +140,7 @@ export function connectLocal(
     }
     if (!response.ok) {
       const errorBody = await readProxyErrorBody(response);
-      const failure = proxyHttpFailure(operation, response.status, errorBody, target);
+      const failure = httpFailure(operation, response.status, errorBody, target);
       if (
         options?.freshnessContextMode === "withheld" &&
         errorBody.json?.proxy?.failure_class !== "local_precondition"
@@ -200,13 +213,14 @@ export function connectLocal(
       if (!response.ok) throw new Error(`workspace info request failed (${response.status})`);
       return (await response.json()) as WorkspaceInfoResponse;
     },
-    weeklyReport: (command: WeeklyReportCommand) => callWeeklyReport(command),
+    weeklyReport: (command: WeeklyReportCommand) =>
+      weeklyReportRequest(proxyEndpoint, context, proxyUrl, command),
     weeklyReportCollect: (command: import("../index").WeeklyReportCollectCommand) =>
-      callWeeklyReportCollect(command),
+      weeklyReportCollectRequest(proxyEndpoint, context, proxyUrl, command),
     weeklyReportKeyPoints: (command: import("../index").WeeklyReportKeyPointsCommand) =>
-      callWeeklyReportKeyPoints(command),
+      weeklyReportKeyPointsRequest(proxyEndpoint, context, proxyUrl, command),
     weeklyReportMemory: (command: import("../index").WeeklyReportMemoryCommand) =>
-      callWeeklyReportMemory(command),
+      weeklyReportMemoryRequest(proxyEndpoint, context, proxyUrl, command),
     // A failure is the proxy's typed error (the cloud's status, reason, code and the correlation
     // id), so `git push` says why instead of only the proxy's own status. Fetching a credential
     // changes nothing, so a 5xx or transport failure is retryable (`github-credential.ts`).
@@ -224,12 +238,12 @@ export function connectLocal(
         throw proxyTransportFailure("github-credential", undefined, { idempotent: true });
       }
       if (!response.ok)
-        throw proxyHttpFailure(
+        throw httpFailure(
           "github-credential",
           response.status,
           await readProxyErrorBody(response),
           undefined,
-          { idempotent: true },
+          true,
         );
       return decodeGitHubCredentialResponse(await response.json());
     },
@@ -650,7 +664,7 @@ export function connectLocal(
           retryable: false,
           proxy: { upstreamStatus: response.status },
         });
-      throw proxyHttpFailure(command.operation, response.status, errorBody, command.target);
+      throw httpFailure(command.operation, response.status, errorBody, command.target);
     }
     return (await response.json()) as TaskResult;
   }
@@ -734,86 +748,7 @@ export function connectLocal(
       });
     }
     if (!response.ok)
-      throw proxyHttpFailure(
-        "prepare",
-        response.status,
-        await readProxyErrorBody(response),
-        target,
-      );
+      throw httpFailure("prepare", response.status, await readProxyErrorBody(response), target);
     return (await response.json()) as ActionPrepareResult;
-  }
-
-  async function callWeeklyReport(command: WeeklyReportCommand) {
-    if (!context || !isAgentCredential(context))
-      throw new Error("coforge agent context is invalid");
-    if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
-    const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.weeklyReports.path), {
-      method: agentApiRoutes.proxy.weeklyReports.method,
-      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
-      body: JSON.stringify(command),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok)
-      throw new Error(
-        `agent weekly-report request failed (${response.status}): ${await response.text()}`,
-      );
-    return (await response.json()) as WeeklyReportResponse;
-  }
-
-  async function callWeeklyReportCollect(
-    command: import("../index").WeeklyReportCollectCommand,
-  ): Promise<import("../index").WeeklyReportCollectResult> {
-    if (!context || !isAgentCredential(context))
-      throw new Error("coforge agent context is invalid");
-    if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
-    const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.weeklyReportCollect.path), {
-      method: agentApiRoutes.proxy.weeklyReportCollect.method,
-      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
-      body: JSON.stringify(command),
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!response.ok)
-      throw new Error(
-        `agent weekly-report-collect request failed (${response.status}): ${await response.text()}`,
-      );
-    return (await response.json()) as import("../index").WeeklyReportCollectResult;
-  }
-
-  async function callWeeklyReportKeyPoints(
-    command: import("../index").WeeklyReportKeyPointsCommand,
-  ): Promise<import("../index").WeeklyReportKeyPointsResult> {
-    if (!context || !isAgentCredential(context))
-      throw new Error("coforge agent context is invalid");
-    if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
-    const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.weeklyReportKeyPoints.path), {
-      method: agentApiRoutes.proxy.weeklyReportKeyPoints.method,
-      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
-      body: JSON.stringify(command),
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!response.ok)
-      throw new Error(
-        `agent weekly-report-key-points request failed (${response.status}): ${await response.text()}`,
-      );
-    return (await response.json()) as import("../index").WeeklyReportKeyPointsResult;
-  }
-
-  async function callWeeklyReportMemory(
-    command: import("../index").WeeklyReportMemoryCommand,
-  ): Promise<import("../index").WeeklyReportMemoryResult> {
-    if (!context || !isAgentCredential(context))
-      throw new Error("coforge agent context is invalid");
-    if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
-    const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.weeklyReportMemory.path), {
-      method: agentApiRoutes.proxy.weeklyReportMemory.method,
-      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
-      body: JSON.stringify(command),
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!response.ok)
-      throw new Error(
-        `agent weekly-report-memory request failed (${response.status}): ${await response.text()}`,
-      );
-    return (await response.json()) as import("../index").WeeklyReportMemoryResult;
   }
 }

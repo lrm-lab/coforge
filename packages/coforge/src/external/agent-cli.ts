@@ -13,13 +13,30 @@ export function isAgentSubcommand(args: readonly string[]): boolean {
   );
 }
 
-async function openBrowser(uri: string): Promise<void> {
+export function safeVerificationUrl(uri: string, serverUrl: string): URL | undefined {
+  let parsed: URL;
+  let expected: URL;
+  try {
+    parsed = new URL(uri);
+    expected = new URL(serverUrl);
+  } catch {
+    return undefined;
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  const allowedScheme = parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback);
+  if (!allowedScheme || parsed.origin !== expected.origin) return undefined;
+  return parsed;
+}
+
+async function openBrowser(uri: string, serverUrl: string): Promise<void> {
+  const safe = safeVerificationUrl(uri, serverUrl);
+  if (!safe) return;
   const command =
     process.platform === "darwin"
-      ? ["open", uri]
+      ? ["open", safe.href]
       : process.platform === "win32"
-        ? ["cmd", "/c", "start", "", uri]
-        : ["xdg-open", uri];
+        ? ["rundll32.exe", "url.dll,FileProtocolHandler", safe.href]
+        : ["xdg-open", safe.href];
   try {
     const child = Bun.spawn(command, { stdout: "ignore", stderr: "ignore" });
     await child.exited;
@@ -29,10 +46,10 @@ async function openBrowser(uri: string): Promise<void> {
 }
 
 /** On a terminal, Enter opens the verification page; anywhere else nothing waits on input. */
-function enterOpensBrowser(uri: string): () => void {
+function enterOpensBrowser(uri: string, serverUrl: string): () => void {
   if (!process.stdin.isTTY || !process.stdout.isTTY) return () => {};
   process.stdout.write("Press Enter to open the page in your browser.\n");
-  const onData = () => void openBrowser(uri);
+  const onData = () => void openBrowser(uri, serverUrl);
   process.stdin.once("data", onData);
   return () => {
     process.stdin.off("data", onData);
@@ -64,8 +81,8 @@ export async function runAgentSubcommand(
           os: `${platform()} ${release()}`,
           clientName: `coforge-cli ${COFORGE_CLI_VERSION}`,
         },
-        offerBrowser: (uri) => {
-          dispose = enterOpensBrowser(uri);
+        offerBrowser: (uri, serverUrl) => {
+          dispose = enterOpensBrowser(uri, serverUrl);
         },
       });
     } finally {
