@@ -81,6 +81,8 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
     },
     (job: ReminderJob, occurrence: { late: boolean }) =>
       ports.acceptReminderDue(job, occurrence.late),
+    // The default clock and randomness; only the snapshot ask comes from the runtime.
+    undefined,
     undefined,
     (agentId) => ports.requestReminderSnapshot(agentId),
   );

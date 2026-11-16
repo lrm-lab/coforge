@@ -279,12 +279,12 @@ export class DaemonRuntime {
     isStopping: (agentId) => this.#stopState.stopping(agentId),
     release: this.#runtimeRelease,
   });
-  /** Re-reads model catalogs whose on-disk key changed: an update, a sign-in or a sign-out. */
+  /** Re-reads model catalogs whose on-disk key changed. */
   readonly #catalogFreshnessSweep = new CatalogFreshnessSweep({
     transport: () => (this.#startup.started && !this.#stopping ? this.#transport : undefined),
     recheck: (transport) => this.#codeAgentInventory.recheckCatalogs(transport),
   });
-  /** The OS version the ready report carries; read once, off the ready path. */
+  /** The OS version the ready report carries. */
   readonly #operatingSystem = new OperatingSystemInfo();
   /** Reports this machine's disk and memory while the connection is up. */
   readonly #machineStatus = runtimeMachineStatus({
@@ -1046,6 +1046,7 @@ export class DaemonRuntime {
       env: () => this.#env(),
       readyRunningAgentIds: () => this.#readyRunningAgentIds(),
       launchingAgentIds: this.#agentLaunches.keys(),
+      signal: this.#shutdown.stopSignal,
     };
   }
 

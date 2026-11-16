@@ -8,12 +8,8 @@ import {
   type ReminderJob,
   type ReminderSync,
 } from "@lrm/coforge-sdk/internal";
-import {
-  ReminderScheduler,
-  type ReminderClock,
-  type ReminderReceipt,
-  type ReminderReceiptStore,
-} from "#src/agent-reminder/reminder-scheduler";
+import type { ReminderReceipt, ReminderReceiptStore } from "#src/agent-reminder/reminder-receipt";
+import { ReminderScheduler, type ReminderClock } from "#src/agent-reminder/reminder-scheduler";
 import { DaemonConnection } from "#src/connection/daemon-connection";
 import type { DaemonConnectionTiming } from "#src/connection/daemon-connection-timing";
 import { captureDaemonLogs } from "./log-capture";

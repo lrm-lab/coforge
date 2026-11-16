@@ -60,7 +60,7 @@ export class ReminderScheduler {
     private readonly wake: (job: ReminderJob, occurrence: { late: boolean }) => Promise<boolean>,
     private readonly clock: ReminderClock = defaultClock,
     private readonly random: () => number = Math.random,
-    /** Asks for the Agent's snapshot; the requester it is given coalesces the asks. */
+    /** Asks for the Agent's snapshot on every unsynchronised upsert; the requester coalesces. */
     private readonly requestSnapshot?: (agentId: string) => void,
   ) {
     this.#ledger = new ReminderReceiptLedger(store, clock);
@@ -81,9 +81,9 @@ export class ReminderScheduler {
         return;
       }
       // Nothing has synchronised this Agent yet: keep the change, and ask for the snapshot that
-      // installs it, instead of dropping it.
+      // installs it, on every such change — the requester is what coalesces the asks.
       if (!this.#mirror.authorized(sync.agentId)) {
-        if (this.#unsynced.remember(sync)) this.requestSnapshot?.(sync.agentId);
+        this.requestSnapshot?.(this.#unsynced.remember(sync));
         return;
       }
       this.#applyChange(sync);
