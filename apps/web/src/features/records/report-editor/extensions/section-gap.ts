@@ -67,9 +67,14 @@ const sectionGapKey = new PluginKey("sectionGap");
  * writing. The room is drawn, not written: the report's text stays the headings until someone
  * types, so opening a report does not change it. Only while editing.
  */
-export const SectionGap = Extension.create({
+export const SectionGap = Extension.create<{ placeholder: string }>({
   name: "sectionGap",
+  addOptions() {
+    return { placeholder: "" };
+  },
   addProseMirrorPlugins() {
+    // What the room says until someone writes in it (a weekly report draws it as an input box).
+    const { placeholder } = this.options;
     return [
       new Plugin({
         key: sectionGapKey,
@@ -96,6 +101,7 @@ export const SectionGap = Extension.create({
                   (view) => {
                     const room = document.createElement("div");
                     room.className = "section-gap";
+                    room.dataset.placeholder = placeholder;
                     room.setAttribute("aria-hidden", "true");
                     room.contentEditable = "false";
                     room.addEventListener("mousedown", (event) => {
@@ -109,7 +115,10 @@ export const SectionGap = Extension.create({
                 ),
               ),
               ...empty.map(({ from, to }) =>
-                Decoration.node(from, to, { class: "section-gap-empty" }),
+                Decoration.node(from, to, {
+                  class: "section-gap-empty",
+                  "data-section-placeholder": placeholder,
+                }),
               ),
             ]);
           },

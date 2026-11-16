@@ -135,6 +135,8 @@ export interface EditorExtensionsOptions {
   enableTextStyles?: boolean;
   /** Room to write under a heading with nothing under it (a weekly report's sections). */
   sectionGaps?: boolean;
+  /** What an unwritten section's room says. */
+  sectionGapPlaceholder?: string;
 }
 
 export function createEditorExtensions(options: EditorExtensionsOptions): AnyExtension[] {
@@ -228,7 +230,9 @@ export function createEditorExtensions(options: EditorExtensionsOptions): AnyExt
     }),
     Typography,
     Placeholder.configure({ placeholder: placeholderText }),
-    ...(options.sectionGaps ? [SectionGap] : []),
+    ...(options.sectionGaps
+      ? [SectionGap.configure({ placeholder: options.sectionGapPlaceholder ?? "" })]
+      : []),
     createMarkdownPasteExtension(),
     createBlurShortcutExtension(),
     createFileUploadExtension(onUploadFileRef, {

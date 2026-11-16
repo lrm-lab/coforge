@@ -49,6 +49,8 @@ export type ContentEditorProps = {
   placeholder?: string;
   /** Room to write under a heading with nothing under it yet (`SectionGap`). */
   sectionGaps?: boolean;
+  /** What an unwritten section's room says (`SectionGap`). */
+  sectionGapPlaceholder?: string;
   className?: string;
   debounceMs?: number;
   editable?: boolean;
@@ -78,6 +80,7 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
       onBlur,
       placeholder: placeholderText = "",
       sectionGaps = false,
+      sectionGapPlaceholder,
       className,
       debounceMs = 300,
       editable = true,
@@ -127,8 +130,9 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
           slashCommandMode: "block",
           enableTextStyles: true,
           sectionGaps,
+          sectionGapPlaceholder,
         }),
-      [placeholderText, sectionGaps],
+      [placeholderText, sectionGaps, sectionGapPlaceholder],
     );
 
     const initialMarkdown = useMemo(() => preprocessMarkdown(defaultValue), [defaultValue]);
