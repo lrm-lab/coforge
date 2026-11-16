@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 
@@ -17,6 +18,7 @@ import {
   type HostedConversationTarget,
 } from "#src/features/conversations/conversation-page-search";
 import { useListEntryHistory } from "#src/features/conversations/list-entry-history";
+import { conversationOpenQuery } from "#src/features/conversations/conversation-open-query";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { ACTIVITY_LIST_BESIDE_FROM } from "#src/features/inbox/activity-conversation-pane";
 import { ActivityInboxPending } from "#src/features/inbox/activity-inbox-pending";
@@ -119,8 +121,19 @@ function ActivityPage() {
   // any other open replaces the entry. Only the list's view carries over: the previous
   // conversation's tab, board view, thread, Task popup and Agent profile close with it, and a
   // thread card opens its thread alone (`thread:` in `open`), without the conversation.
+  const queryClient = useQueryClient();
   const onOpen = useCallback(
     (next: HostedConversationTarget) => {
+      // The row says where unread starts as of now. A read of the open the page holds from before
+      // (an earlier visit, the router's read ahead while the pointer rested on the row, either
+      // possibly before this round's messages came) may say otherwise: mark it stale, so the open
+      // reads again and, until that lands, goes by the row's (`useConversationOpenRead`, task #102).
+      if (next.unreadFrom)
+        void queryClient.invalidateQueries({
+          queryKey: conversationOpenQuery(next.id).queryKey,
+          exact: true,
+          refetchType: "none",
+        });
       void navigate({
         search: (previous) => ({
           filter: previous.filter,
@@ -136,7 +149,7 @@ function ActivityPage() {
         replace: !listHistory.openOverList(),
       });
     },
-    [navigate, listHistory],
+    [navigate, listHistory, queryClient],
   );
   // Closing the conversation (its back arrow below `lg`, a thread's close) returns to the list,
   // closing everything the conversation had open: back to the list's entry when the conversation

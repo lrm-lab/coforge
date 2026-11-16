@@ -32,7 +32,11 @@ export function useConversationOpenRead(
       });
     };
   }, [queryClient, conversationId, rootId, enabled]);
-  if (read.isSuccess) return { status: "success", firstUnread: read.data.firstUnread };
+  // A read marked stale and being read again (an Activity row opening with where unread starts,
+  // task #102) is not this open's until the new one lands: the open goes by the opener's
+  // meanwhile, and the read cursor waits. An open already settled keeps what it froze.
+  if (read.isSuccess && !(read.isStale && read.isFetching))
+    return { status: "success", firstUnread: read.data.firstUnread };
   return { status: read.isError ? "error" : "pending" };
 }
 
