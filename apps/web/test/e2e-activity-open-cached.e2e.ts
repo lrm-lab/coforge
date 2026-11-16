@@ -207,6 +207,22 @@ test("a channel opened from Activity round after round shows each round's divide
         async () =>
           (await db.conversationMember.findUniqueOrThrow({ where: { id: channel.viewer.id } }))
             .readThroughSequence === sequence,
+      ).catch(async (error: unknown) => {
+        console.log(
+          `round ${round}: not read through`,
+          (await db.conversationMember.findUniqueOrThrow({ where: { id: channel.viewer.id } }))
+            .readThroughSequence,
+          sequence,
+          await evaluate<string>(`JSON.stringify(${firstPictureSeen(channel.channelId)})`),
+          await evaluate<string>(
+            `JSON.stringify({ focus: document.hasFocus(), visible: document.visibilityState })`,
+          ),
+        );
+        throw error;
+      });
+      console.log(
+        `round ${round}: read through`,
+        await evaluate<string>(`JSON.stringify(${firstPictureSeen(channel.channelId)})`),
       );
       await browser("wait", "--fn", dividerBetween(before, burst[0]!));
       before = burst.at(-1)!;
