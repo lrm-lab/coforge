@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 import {
@@ -60,6 +61,7 @@ export function ProjectFileView({
   text,
   githubUrl,
   downloadUrl,
+  barLeading,
 }: {
   path: string;
   name: string;
@@ -70,6 +72,10 @@ export function ProjectFileView({
   githubUrl?: string;
   /** Omitted for entries that can't be downloaded (symlinks, submodules). */
   downloadUrl?: string;
+  /** A control before the file name, such as a way back to the list it was opened from. The bar
+   * then leaves out the line count and size, so the name and the actions share one line in a
+   * narrow panel. */
+  barLeading?: ReactNode;
 }) {
   const isMarkdown = MARKDOWN_EXTENSIONS.has(getFileExtension(name));
   const [tab, setTab] = useState<"preview" | "source">("preview");
@@ -208,13 +214,19 @@ export function ProjectFileView({
       className={cn("flex min-h-0 flex-1 flex-col", zen && ZEN_LAYER)}
       {...keyboardProps}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-secondary px-4 py-2">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3 border-b border-secondary py-2",
+          barLeading ? "px-3" : "px-4",
+        )}
+      >
         <div className="flex min-w-0 items-center gap-2">
+          {barLeading}
           <span className="flex min-w-0 items-baseline">
             <span className="min-w-0 truncate text-sm text-tertiary">{dir}</span>
             <span className="shrink-0 text-sm font-medium text-primary">{name}</span>
           </span>
-          {metaText !== "" && (
+          {metaText !== "" && !barLeading && (
             <span className="shrink-0 text-xs text-tertiary tabular-nums">{metaText}</span>
           )}
         </div>

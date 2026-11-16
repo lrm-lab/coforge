@@ -10,9 +10,11 @@ import type { AgentWorkspaceFileEntry } from "@lrm/coforge-sdk/internal";
 
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import { cn } from "#src/lib/utils";
 import { PanelMessage } from "./panel-message";
 import { AgentTabEmpty } from "./agent-tab-empty";
+import { workspaceEntryTime } from "./agent-workspace-entry-time";
 
 export type DirState =
   | { status: "loading" }
@@ -136,6 +138,10 @@ function WorkspaceTree({
   onExpandedChange: (next: Set<string>) => void;
   onSelectFile: (path: string) => void;
 }) {
+  // Read once per render: a refresh or an expansion re-renders the rows and moves their times on.
+  const now = new Date();
+  const locale = getLocale();
+
   function toggleExpandPath(path: string) {
     const next = new Set(expanded);
     if (next.has(path)) next.delete(path);
@@ -169,6 +175,7 @@ function WorkspaceTree({
     const { entry, path } = row;
     const isDir = entry.type === "dir";
     const isCurrent = !isDir && selected === path;
+    const time = workspaceEntryTime(entry, now, locale);
 
     return (
       <TreeItem
@@ -210,12 +217,20 @@ function WorkspaceTree({
               )}
               <span
                 className={cn(
-                  "min-w-0 flex-1 truncate py-1.5 text-sm text-primary",
+                  "min-w-0 flex-1 py-1.5 text-sm wrap-anywhere text-primary",
                   isCurrent && "font-medium",
                 )}
               >
                 {entry.name}
               </span>
+              {time && (
+                <time
+                  dateTime={new Date(entry.modifiedAtMs).toISOString()}
+                  className="shrink-0 text-xs text-tertiary tabular-nums"
+                >
+                  {time}
+                </time>
+              )}
             </div>
           )}
         </TreeItemContent>

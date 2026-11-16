@@ -21,5 +21,6 @@
   "agent_workspace_reload": "Reload page",
   "agent_workspace_back": "Back",
   "agent_workspace_select_file": "Select a file to preview.",
-  "agent_workspace_empty_description": "Files the Agent writes in its working directory show up here — try asking it to “save today's decisions as notes.md”."
+  "agent_workspace_empty_description": "Files the Agent writes in its working directory show up here — try asking it to “save today's decisions as notes.md”.",
+  "agent_workspace_more": "More"
 }
