@@ -1,9 +1,9 @@
 import { recordComputerAgentTransition } from "#src/server/app-notifications/computer-events.server";
 import { z } from "zod";
-import { RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { FINISHED_AGENT_MIGRATION_STATES } from "#src/server/agent-migrations/agent-migrations.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
+import { agentControlStateSchema } from "#src/server/agents/agent-control-types.server";
 import type {
   AgentControlAgent,
   AgentControlState,
@@ -12,55 +12,13 @@ import type {
 import { settlePendingNotLaunched } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 
-const stateSchema = z
-  .object({
-    version: z.literal(1),
-    protocolMajor: z.literal(1),
-    requestId: z.string().min(1),
-    workspaceId: z.string().min(1),
-    computerId: z.string().min(1),
-    agentId: z.string().min(1),
-    provider: z.enum(RUNTIME_PROVIDER_VALUES),
-    epoch: z
-      .number()
-      .int()
-      .positive()
-      .max(2 ** 31 - 1),
-    action: z.enum(["start", "stop", "restart", "reset-session", "full-reset"]),
-    phase: z.enum([
-      "stopping",
-      "stopped",
-      "clearing",
-      "workspace-reset",
-      "starting",
-      "completed",
-      "failed",
-    ]),
-    configRevision: z.string(),
-    launchId: z.string().optional(),
-    launchIdentityBound: z.boolean().optional(),
-    recovered: z.boolean().optional(),
-    identity: z
-      .object({ sessionId: z.string(), state: z.enum(["empty", "resumable", "unknown"]) })
-      .optional(),
-    controlSequence: z.number().int().nonnegative(),
-    sessionSequence: z.number().int().nonnegative(),
-    errorCode: z.string().optional(),
-    failedAtMs: z.number().int().nonnegative().optional(),
-    /** Legacy field, since removed (latest command wins, no abandonment).
-     * Accepted here only so a row persisted before this change still parses; ignored by every
-     * reader and never written by `controlState()` below, since `AgentControlState` no longer
-     * has this field at the TypeScript level. */
-    updatedAtMs: z.number().nonnegative().optional(),
-  })
-  .strict();
-
 /** The clean shape written to `controlState` and handed to the rest of the application —
  * `identity` lives in the Session table, and any legacy `updatedAtMs` a parsed row carried is
- * dropped by construction (`stateSchema.parse` output is spread into `AgentControlState`, which
- * has no such field, so pulling only the named keys below can never reintroduce it). */
+ * dropped by construction (`agentControlStateSchema.parse` output is spread into
+ * `AgentControlState`, which has no such field, so pulling only the named keys below can never
+ * reintroduce it). */
 function controlState(state: AgentControlState) {
-  const { identity: _identity, ...control } = stateSchema.parse(state);
+  const { identity: _identity, ...control } = agentControlStateSchema.parse(state);
   return control;
 }
 
@@ -103,7 +61,7 @@ export class PrismaAgentControlStore implements AgentControlStore {
       !agent.computer?.workspaces.some((w) => w.workspaceId === agent.workspaceId)
     )
       return undefined;
-    // `updatedAtMs` (legacy, ignored, never written — see `stateSchema`) is dropped here so it
+    // `updatedAtMs` (legacy, ignored, never written — see `agentControlStateSchema`) is dropped here so it
     // never reaches `AgentControlState`/the rest of the application, even for a row persisted
     // before the field was removed. `storedControlState` below keeps the raw, unstripped
     // JSON for `replace()`'s compare-and-swap predicate, so a legacy row's extra key does not
@@ -111,7 +69,9 @@ export class PrismaAgentControlStore implements AgentControlStore {
     const state =
       agent.controlState === null
         ? null
-        : (({ updatedAtMs: _updatedAtMs, ...rest }) => rest)(stateSchema.parse(agent.controlState));
+        : (({ updatedAtMs: _updatedAtMs, ...rest }) => rest)(
+            agentControlStateSchema.parse(agent.controlState),
+          );
     const session = agent.currentSession;
     if (session && (session.agentId !== agent.id || session.workspaceId !== agent.workspaceId))
       throw new Error("Agent Session association is invalid");
@@ -155,7 +115,7 @@ export class PrismaAgentControlStore implements AgentControlStore {
     state: AgentControlState,
     options?: { clearSession?: boolean; stoppedAt?: Date | null },
   ) {
-    const checked = stateSchema.parse(state);
+    const checked = agentControlStateSchema.parse(state);
     return this.db.$transaction(async (tx) => {
       // Lock Agent first, then read its related Session in a fresh READ COMMITTED
       // statement. A joined UPDATE predicate can otherwise observe an old Session.

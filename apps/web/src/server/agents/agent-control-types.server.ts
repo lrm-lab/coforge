@@ -1,7 +1,9 @@
-import type {
-  AgentControlScope,
-  AgentStartIntent,
-  SessionIdentity,
+import { z } from "zod";
+import {
+  RUNTIME_PROVIDER_VALUES,
+  type AgentControlScope,
+  type AgentStartIntent,
+  type SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig } from "./agent-runtime-config.server";
 import type { AgentIntroductionFacts } from "./agent-introduction.server";
@@ -68,32 +70,55 @@ export const EXECUTE_CAPABILITY: Record<AgentControlAction, AgentControlCapabili
   "full-reset": "resetAgentWorkspace",
 };
 
-export type AgentControlState = AgentControlScope & {
-  version: 1;
-  action: AgentControlAction;
-  phase:
-    | "stopping"
-    | "stopped"
-    | "clearing"
-    | "workspace-reset"
-    | "starting"
-    | "completed"
-    | "failed";
-  configRevision: string;
-  identity?: SessionIdentity;
-  launchId?: string;
-  /** True after this launch has bound its first provider-native identity. */
-  launchIdentityBound?: boolean;
-  recovered?: boolean;
-  controlSequence: number;
-  sessionSequence: number;
-  errorCode?: string;
-  failedAtMs?: number;
-  /** Consecutive automatic starts that ended in the same failure. An Agent that cannot start
-   * must not be retried every window for a day: at `AUTOMATIC_START_STREAK_LIMIT` the automatic
-   * retries stop and only a person's Start may try again (Raft 1.0.69 item 12, task #25). */
-  failedStreak?: number;
-};
+/** The one definition of a persisted control state: `AgentControlState` is inferred from it, so
+ * a field added to the type cannot be missing here (task #18: `failedStreak` was, and every
+ * failed result died on the strict parse). `updatedAtMs` stays schema-only — accepted so a row
+ * persisted before its removal still parses, never part of the application type. */
+export const agentControlStateSchema = z
+  .object({
+    version: z.literal(1),
+    protocolMajor: z.literal(1),
+    requestId: z.string().min(1),
+    workspaceId: z.string().min(1),
+    computerId: z.string().min(1),
+    agentId: z.string().min(1),
+    provider: z.enum(RUNTIME_PROVIDER_VALUES),
+    epoch: z
+      .number()
+      .int()
+      .positive()
+      .max(2 ** 31 - 1),
+    action: z.enum(["start", "stop", "restart", "reset-session", "full-reset"]),
+    phase: z.enum([
+      "stopping",
+      "stopped",
+      "clearing",
+      "workspace-reset",
+      "starting",
+      "completed",
+      "failed",
+    ]),
+    configRevision: z.string(),
+    launchId: z.string().optional(),
+    launchIdentityBound: z.boolean().optional(),
+    recovered: z.boolean().optional(),
+    identity: z
+      .object({ sessionId: z.string(), state: z.enum(["empty", "resumable", "unknown"]) })
+      .optional(),
+    controlSequence: z.number().int().nonnegative(),
+    sessionSequence: z.number().int().nonnegative(),
+    errorCode: z.string().optional(),
+    failedAtMs: z.number().int().nonnegative().optional(),
+    /** Consecutive automatic starts that ended in the same failure: at
+     * `AUTOMATIC_START_STREAK_LIMIT` the automatic retries stop and only a person's Start may
+     * try again (Raft 1.0.69 item 12, task #25). */
+    failedStreak: z.number().int().nonnegative().optional(),
+    updatedAtMs: z.number().nonnegative().optional(),
+  })
+  .strict();
+
+export type AgentControlState = AgentControlScope &
+  Omit<z.infer<typeof agentControlStateSchema>, "updatedAtMs" | keyof AgentControlScope>;
 
 export type AgentControlAgent = {
   id: string;
