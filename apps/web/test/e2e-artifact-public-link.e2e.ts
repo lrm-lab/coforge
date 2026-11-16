@@ -10,7 +10,7 @@ import { PrismaExperimentsRepository } from "#src/server/experiments/experiments
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * A public link from an artifact's Share (task #646, #20): the switch beside the Workspace row,
+ * A public link from an artifact's Share (task #646): the switch in the dialog,
  * the link it gives opening with no session, and off killing that link, for a
  * document and a web page. What the page shows inside its frame is on another origin, so only
  * its screenshot checks it.
@@ -88,9 +88,7 @@ test("an artifact's Share: a public link on and off", async () => {
     await browser("open", pageOf(id));
     await until(`${pageHydrated} && ${share} != null`);
     await press(share);
-    await until(
-      `document.querySelector('[role="dialog"]')?.textContent.includes("Everyone in the Workspace")`,
-    );
+    await until(`document.querySelector('[role="dialog"]')?.textContent.includes("Copy link")`);
   };
   /** Turns the link on and off from the open dialog, proving the link serves and then dies. */
   const roundTrip = async (id: string, shot?: string) => {
@@ -104,7 +102,7 @@ test("an artifact's Share: a public link on and off", async () => {
     expect(open.status).toBe(302);
     expect(open.headers.get("set-cookie")).toBeNull();
     expect(open.headers.get("location")).toContain("/page/");
-    // The dialog keeps its one row — every member reads it — with no level to pick (task #20).
+    // The dialog has no level to pick.
     expect(
       await evaluate<boolean>(
         `document.querySelectorAll('[role="dialog"] input[type="radio"]').length === 0`,

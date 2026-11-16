@@ -81,6 +81,15 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
     },
   });
+  const linAgent = await db.agent.create({
+    data: {
+      workspaceId,
+      name: `e2e-page-lin-bot-${tail}`,
+      displayName: "Lin's bot",
+      ownerId: lin.id,
+      runtimeConfig: {},
+    },
+  });
   // Lin's private channel, which the viewer is not in.
   const closed = await db.conversation.create({
     data: {
@@ -88,10 +97,11 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       channelName: `e2e-closed-${tail}`,
       description: "",
       visibility: "private",
-      members: { create: [{ userId: lin.id }, { agentId: agent.id }] },
+      members: { create: [{ userId: lin.id }, { agentId: linAgent.id }] },
     },
   });
   const bot = agentWrites(services, workspaceId, agent.id);
+  const linBot = agentWrites(services, workspaceId, linAgent.id);
   const settled = () =>
     browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
   const shoot = async (shot: string) => {
@@ -212,12 +222,23 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser("open", pageOf(crypto.randomUUID()));
     await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
     await shoot("3-unavailable");
-    // Every member reads every artifact (task #20): the private channel's document opens read
-    // only — the conversation is not the reader's to open, so the way back is the Workspace.
-    const secret = await bot.create({
+    // A private channel's document is not the reader's to open: the same page, saying so.
+    const secret = await linBot.create({
       conversationId: closed.id,
       title: "Salaries",
       files: { "salaries.md": `Private (run ${tail}).` },
+    });
+    await browser("open", pageOf(secret.id));
+    await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
+    expect(await evaluate<boolean>(`document.querySelector("main .ProseMirror") == null`)).toBe(
+      true,
+    );
+    // Moved to the Workspace by its author Agent, whose owner reads it: it opens read only, and
+    // the way back is a link to the Workspace, not a button.
+    await services.visibility.moveToWorkspace({
+      workspaceId,
+      artifactId: secret.id,
+      agentId: linAgent.id,
     });
     await browser("open", pageOf(secret.id));
     await browser(
@@ -225,7 +246,6 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       "--fn",
       `${pageHydrated} && document.querySelector('main .ProseMirror[contenteditable="false"]') != null`,
     );
-    // The way back is a link to the Workspace, not a button.
     expect(
       await evaluate<boolean>(
         `[...document.querySelectorAll("main a")].some((a) => a.textContent.includes("Back to the Workspace"))`,
@@ -369,6 +389,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, closed.id] } } })
       .catch(() => undefined);
+    await db.agent.delete({ where: { id: linAgent.id } }).catch(() => undefined);
     await db.workspaceMembership.deleteMany({ where: { userId: lin.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: lin.id } }).catch(() => undefined);
     await experiments.write(workspaceId, "artifacts", before).catch(() => undefined);
