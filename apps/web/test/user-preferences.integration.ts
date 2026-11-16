@@ -33,6 +33,12 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
 
     expect(await preferences.set(user.id, "Asia/Tokyo")).toBe("Asia/Tokyo");
     expect(await preferences.setBrowserNotificationsEnabled(user.id, true)).toBeTrue();
+    // The retired column remains for compatibility, but its historical value is no longer read.
+    await db.userPreference.update({
+      where: { userId: user.id },
+      data: { conversationOpenMode: "newest-unread" },
+    });
+
     expect(await preferences.getBrowserNotificationsEnabled(user.id)).toBeTrue();
     expect(await preferences.read(user.id)).toEqual({
       timeZone: "Asia/Tokyo",
@@ -56,7 +62,7 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
   }
 });
 
-test("preferences are removed with their user", async () => {
+test("preferences are removed with their user and legacy values stay constrained", async () => {
   const db = database();
   const user = await db.user.create({
     data: {
@@ -65,6 +71,13 @@ test("preferences are removed with their user", async () => {
     },
   });
   try {
+    const insert = (mode: string) =>
+      db.$executeRaw`INSERT INTO "user_preferences" ("userId", "conversationOpenMode", "updatedAt")
+        VALUES (${user.id}::uuid, ${mode}, now())`;
+    await expect(Promise.resolve(insert("sideways"))).rejects.toThrow(
+      "user_preferences_conversationOpenMode_check",
+    );
+    expect(await insert("newest-read")).toBe(1);
     await expect(
       Promise.resolve(
         db.$executeRaw`UPDATE "user_preferences" SET "timeFormat" = '25h' WHERE "userId" = ${user.id}::uuid`,

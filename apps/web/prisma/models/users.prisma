@@ -91,6 +91,9 @@ model UserPreference {
   user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   timeZone                    String?
   browserNotificationsEnabled Boolean?
+  /// Retired open-mode preference; nothing reads it. Kept for rollout compatibility and
+  /// dropped by a later migration.
+  conversationOpenMode        String?
   /// Clock display: 12h or 24h. NULL follows the display language. Display only.
   timeFormat                  String?
   /// Interface language ("en" or "zh-CN"); NULL means the code's default. The server renders
