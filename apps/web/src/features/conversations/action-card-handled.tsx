@@ -13,6 +13,7 @@ import {
   type ToolActionCardView,
 } from "./action-card-labels";
 import { NamesWithFaces } from "./action-card-object";
+import { ChannelPlace } from "./channel-name";
 import { cardActor } from "./action-card-actor";
 
 /** What a handled card made: its words and, where the thing has an id, where it opens. */
@@ -26,8 +27,15 @@ type Outcome = {
 function outcomeOf(view: ToolActionCardView): Outcome | undefined {
   switch (view.kind) {
     case "channel:create":
+      // The channel as the card showed it, its group avatar before its name with no `#` (Frank,
+      // 11-10, task #55), so the person sees the same channel once it is made (task #35). One
+      // never made has no members and reads its name alone.
       return {
-        text: `#${view.name}`,
+        text: view.result ? (
+          <ChannelPlace id={view.result.channelId} name={view.name} visibility={view.visibility} />
+        ) : (
+          view.name
+        ),
         target: view.result ? { kind: "channel", channelId: view.result.channelId } : undefined,
       };
     case "agent:create":
@@ -44,7 +52,11 @@ function outcomeOf(view: ToolActionCardView): Outcome | undefined {
         ...view.agents.map((person) => ({ ...person, kind: "agent" as const })),
       ];
       const people = view.result ? proposed.filter((person) => kept.has(person.id)) : proposed;
-      const channel = `#${view.channel.displayName}`;
+      const channel = view.channel.id ? (
+        <ChannelPlace id={view.channel.id} name={view.channel.displayName} />
+      ) : (
+        view.channel.displayName
+      );
       return {
         text: people.length ? (
           <>

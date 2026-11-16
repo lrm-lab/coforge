@@ -182,7 +182,7 @@ test("an action card commits in one press and closes to one line", async () => {
 
     // Create, Add and Dismiss each close their card to one line. Each is pressed once the one
     // before has closed: a card closing moves the ones below it, under a click on its way.
-    const link = `[...${message(createCard.messageId)}.querySelectorAll("a")].find((el) => el.textContent === ${JSON.stringify(`#${launch}`)})`;
+    const link = `[...${message(createCard.messageId)}.querySelectorAll("a")].find((el) => el.querySelector("[data-channel-name]")?.textContent === ${JSON.stringify(launch)})`;
     await press(createCard.messageId, "Create");
     await browser("wait", "--fn", `${link} !== undefined`);
     await press(addCard.messageId, "Add");
@@ -203,8 +203,11 @@ test("an action card commits in one press and closes to one line", async () => {
         where: { conversationId: channel.id, agentId: helper.id },
       }),
     ).toBe(1);
-    expect(await text(createCard.messageId)).toContain(`Created channel #${launch}`);
-    expect(await text(addCard.messageId)).toContain(`Added members Release Helper → ${target}`);
+    // The made channel goes by its face and bare name, as the card showed it (task #35).
+    expect(await text(createCard.messageId)).toContain(`Created channel ${launch}`);
+    expect(await text(addCard.messageId)).toContain(
+      `Added members Release Helper → ${channel.channelName}`,
+    );
     expect(await text(agentCard.messageId)).toContain("Cancelled");
     // The viewer's own commit is not followed by their name.
     expect(await text(createCard.messageId)).not.toContain(DEV_BROWSER_USER.name);
