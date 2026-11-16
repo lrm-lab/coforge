@@ -41,6 +41,10 @@ export function useHistoryResize({
     const history = historyRef.current;
     if (!history) return;
     const observer = new ResizeObserver(() => {
+      // A hidden pane (the other one in full screen, a covered conversation) has no box: its
+      // zero size is no news of where the reader stands, and read as one it would put them "at the
+      // latest" and pin them there once shown. The browser keeps the offset while it is hidden.
+      if (history.clientHeight === 0) return;
       if (pendingOpenMessageIdRef.current) {
         applyOpenPosition();
         return;
