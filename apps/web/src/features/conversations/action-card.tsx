@@ -322,6 +322,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
           open
           onOpenChange={setDialogOpen}
           defaultName={view.name}
+          visibility={view.visibility}
           initialMembers={{ humans: view.initialHumans, agents: view.initialAgents }}
           onCreate={async (name, memberUserIds, memberAgentIds) => {
             await commitChannelCreate({

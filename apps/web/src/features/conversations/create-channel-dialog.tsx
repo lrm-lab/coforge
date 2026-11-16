@@ -76,6 +76,9 @@ type CreateChannelDialogProps = {
   minMembers?: number;
   /** Offers making the channel private; an Agent's card has decided that already. */
   offersPrivate?: boolean;
+  /** What an Agent's card decided, which the dialog shows and does not offer to change: a private
+   * card's channel is not described as one everyone can read (task #35). */
+  visibility?: ChannelVisibility;
 };
 
 export function CreateChannelDialog({
@@ -88,6 +91,7 @@ export function CreateChannelDialog({
   memberPicker = false,
   minMembers = 0,
   offersPrivate = false,
+  visibility,
 }: CreateChannelDialogProps) {
   const directory = useWorkspaceDirectory({ enabled: memberPicker && open });
   const candidates = useMemo(
@@ -112,6 +116,7 @@ export function CreateChannelDialog({
     initialMembers,
     minMembers,
     offersPrivate,
+    visibility,
     candidates,
     directory,
     busy,
@@ -159,6 +164,7 @@ type CreateChannelFormProps = Pick<
   | "initialMembers"
   | "minMembers"
   | "offersPrivate"
+  | "visibility"
 > & {
   memberPicker: boolean;
   candidates: GroupChatCandidate[];
@@ -178,6 +184,7 @@ function CreateChannelForm({
   initialMembers,
   minMembers = 0,
   offersPrivate = false,
+  visibility,
   memberPicker,
   candidates,
   directory,
@@ -187,7 +194,8 @@ function CreateChannelForm({
 }: CreateChannelFormProps) {
   const controlSize = useDialogControlSize();
   const [name, setName] = useState(defaultName);
-  const [makePrivate, setMakePrivate] = useState(false);
+  const startsPrivate = visibility === CHANNEL_VISIBILITY.PRIVATE;
+  const [makePrivate, setMakePrivate] = useState(startsPrivate);
   const [startingKeys] = useState(() => initialKeys(initialMembers));
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(startingKeys);
   const [search, setSearch] = useState("");
@@ -207,7 +215,7 @@ function CreateChannelForm({
   const dirty =
     created === null &&
     (name !== defaultName ||
-      makePrivate ||
+      makePrivate !== startsPrivate ||
       selectedKeys.size !== startingKeys.size ||
       [...selectedKeys].some((key) => !startingKeys.has(key)));
   useReportDirty(dirty, onDirtyChange);
@@ -313,11 +321,17 @@ function CreateChannelForm({
         <Heading slot="title" className="pr-8 text-lg font-semibold text-primary">
           {m.channel_create()}
         </Heading>
-        {/* What a public channel is; a private one is not that. */}
-        {!makePrivate && (
+        {/* What a public channel is, or a private one the card decided on. */}
+        {!makePrivate ? (
           <Text slot="description" className="mt-2 block text-sm text-tertiary">
             {m.channel_public_description()}
           </Text>
+        ) : (
+          !offersPrivate && (
+            <Text slot="description" className="mt-2 block text-sm text-tertiary">
+              {m.channel_private_description()}
+            </Text>
+          )
         )}
         <form onSubmit={(event) => void submit(event)} className="mt-5 flex flex-col gap-2">
           {nameField}
