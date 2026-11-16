@@ -24,8 +24,7 @@ import type {
   PrismaMentionDeliveryRepository,
   TrackedMentionState,
 } from "#src/server/db/repositories/mention-delivery.repositories.server";
-import { pendingDeliveryPublication } from "./agent-delivery.server";
-import { deliveryNoticeViews } from "./agent-delivery-notice.server";
+import { deliveryPublications, deliveryResendViews } from "./agent-delivery-notice.server";
 import { deliveryFeatures } from "./agent-delivery-features.server";
 import { currentIdentity, envelopeFor, wakeable } from "./mention-identity.server";
 import { errorType } from "#src/server/errors/error-type.server";
@@ -395,39 +394,20 @@ export class MentionDeliveryReports {
     ).filter((delivery) => !skip.has(delivery.deliveryId));
     // One features read covers the whole re-send; a per-delivery read asked the same Workspace
     // the same question N times.
-    const [features, notices] = await Promise.all([
-      deliveries.length ? this.features(scope.workspaceId) : undefined,
-      // A re-send says what the first one said about the message's notice kind and its Task, so a
-      // delivery replayed after a reconnect still ranks where it did the first time.
-      deliveryNoticeViews(scope.workspaceId, deliveries),
-    ]);
+    const [features, notices] = await deliveryResendViews(scope.workspaceId, deliveries, () =>
+      this.features(scope.workspaceId),
+    );
     // One Centrifugo `batch` call for every delivery. Its parallel publications to one channel
     // keep no order between them — the per-item `publish` loop it replaces had none either.
     // A delivery its encoder refuses fails alone, as `AgentDeliveryPublisher` reports it; the
     // rest still go to Centrifugo in the batch.
-    const entries = deliveries.map(
-      (
-        delivery,
-      ):
-        | { publication: { channel: string; data: Uint8Array }; refused?: never }
-        | { publication?: never; refused: PromiseRejectedResult } => {
-        try {
-          return {
-            publication: pendingDeliveryPublication(
-              scope,
-              delivery,
-              features,
-              tracked.has(delivery.deliveryId)
-                ? { mentionDelivery: tracked.get(delivery.deliveryId) }
-                : undefined,
-              notices.get(delivery.messageId),
-            ),
-          };
-        } catch (reason) {
-          return { refused: { status: "rejected", reason } };
-        }
-      },
-    );
+    const entries = deliveryPublications({
+      scope,
+      deliveries,
+      features,
+      notices,
+      tracked,
+    });
     const settled = (
       await this.publisher.publishBatch(entries.flatMap((entry) => entry.publication ?? []))
     ).values();

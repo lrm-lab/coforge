@@ -1,4 +1,8 @@
 import { getDatabaseClient } from "#src/server/db/client.server";
+import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
+import type { PendingAgentDelivery } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { deliveryFeatures } from "./agent-delivery-features.server";
+import { pendingDeliveryPublication } from "./agent-delivery.server";
 
 /** What a delivery's own rows can say about it, which its envelope otherwise cannot: the
  * message's system notice kind, and whether its conversation is a Task's discussion. */
@@ -70,4 +74,57 @@ export function noticeViewIndex(
       views.set(delivery.messageId, { ...views.get(delivery.messageId), taskDiscussion });
   }
   return views;
+}
+
+/** One delivery ready to publish, or the failure that stopped it. */
+export type DeliveryPublicationEntry =
+  | { publication: { channel: string; data: Uint8Array }; refused?: never }
+  | { publication?: never; refused: PromiseRejectedResult };
+
+/**
+ * Turns the deliveries of one re-send into publications. A delivery its encoder refuses fails alone
+ * — the rest still go out — and a tracked mention travels with its envelope, so a replay says what
+ * the first send said about both the message's notice and its mention.
+ */
+export function deliveryPublications(input: {
+  scope: { workspaceId: string; computerId: string; agentId: string };
+  deliveries: readonly PendingAgentDelivery[];
+  features: Awaited<ReturnType<typeof deliveryFeatures>>;
+  notices: Map<string, DeliveryNoticeView>;
+  tracked: Map<string, MentionDeliveryEnvelope | undefined>;
+}): DeliveryPublicationEntry[] {
+  return input.deliveries.map((delivery) => {
+    try {
+      return {
+        publication: pendingDeliveryPublication(
+          input.scope,
+          delivery,
+          input.features,
+          input.tracked.has(delivery.deliveryId)
+            ? { mentionDelivery: input.tracked.get(delivery.deliveryId) }
+            : undefined,
+          input.notices.get(delivery.messageId),
+        ),
+      };
+    } catch (reason) {
+      return { refused: { status: "rejected", reason } };
+    }
+  });
+}
+
+/**
+ * What a re-send needs beside the deliveries themselves: the Workspace's delivery features and each
+ * message's notice facts. Read together because the caller needs both before it can build one
+ * publication, and the features read is skipped when there is nothing to send.
+ */
+export async function deliveryResendViews<Features>(
+  workspaceId: string,
+  deliveries: readonly { messageId: string; conversationId: string }[],
+  features: () => Promise<Features | undefined>,
+): Promise<readonly [Features | undefined, Map<string, DeliveryNoticeView>]> {
+  const [resolved, notices] = await Promise.all([
+    deliveries.length ? features() : undefined,
+    deliveryNoticeViews(workspaceId, deliveries),
+  ]);
+  return [resolved, notices] as const;
 }
