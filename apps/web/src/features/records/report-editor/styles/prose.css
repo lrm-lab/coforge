@@ -544,14 +544,26 @@
 }
 
 /* Room under a heading with nothing written yet (task #106): with the next heading's own margin
- * it is about five times the plain gap between two headings. Drawn only while editing. */
+ * it is about five times the plain gap between two headings on a phone. A wide page is taller
+ * too, so the same room would read as an ordinary gap there; it gets more. Drawn only while
+ * editing. */
+.rich-text-editor {
+  --section-gap: 6rem;
+}
+
+@media (width >= 48rem) {
+  .rich-text-editor {
+    --section-gap: 10rem;
+  }
+}
+
 .rich-text-editor .section-gap {
-  height: 6rem;
+  height: var(--section-gap);
   cursor: text;
 }
 
 .rich-text-editor p.section-gap-empty {
-  min-height: 6rem;
+  min-height: var(--section-gap);
 }
 
 .rich-text-editor[contenteditable="false"] .section-gap {
