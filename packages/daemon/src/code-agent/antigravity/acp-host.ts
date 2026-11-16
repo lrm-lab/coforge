@@ -1,4 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { join } from "node:path";
 import {
   withoutSshSessionVariables,
   type AntigravityAcpRuntimeHost,
@@ -21,6 +22,15 @@ export const antigravityAcpRuntimeHost: AntigravityAcpRuntimeHost = {
   versionReader: readVersionOutput,
   catalogCommandRunner: runCatalogCommand,
   readUsageEnvironment: () => Bun.env,
+  readUsageAuthStatus: async () => {
+    const home = Bun.env.HOME ?? Bun.env.USERPROFILE;
+    if (!home) return false;
+    const gemini = join(home, ".gemini");
+    const account = await Bun.file(join(gemini, "google_account_id"))
+      .text()
+      .catch(() => "");
+    return Boolean(account.trim()) || (await Bun.file(join(gemini, "oauth_creds.json")).exists());
+  },
   stderrHint: (lines) => {
     const hint = lines.map(scrubStderrHint).join("\n").trim();
     if (hint)

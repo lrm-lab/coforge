@@ -6,13 +6,14 @@ import { UsageUnavailableError, UsageUnsupportedError } from "@lrm/coforge-anvil
 
 const fixture = [process.execPath, join(import.meta.dir, "fixtures/grok-usage-fixture.ts")];
 const billing = (config: Record<string, unknown>) => ({ subscription_tier: "pro", config });
-const read = (value: unknown, error?: unknown) =>
+const read = (value: unknown, error?: unknown, authMethod?: string) =>
   readGrokUsage(
     process.cwd(),
     {
       command: fixture,
       environment: {
         COFORGE_GROK_BILLING: JSON.stringify(value),
+        ...(authMethod ? { COFORGE_GROK_AUTH_METHOD: authMethod } : {}),
         ...(error ? { COFORGE_GROK_USAGE_ERROR: JSON.stringify(error) } : {}),
       },
     },
@@ -25,6 +26,11 @@ test("derives usage and reports pay-as-you-go", async () => {
   );
   expect(snapshot?.primary?.usedPercent).toBe(75);
   expect(snapshot?.secondary).toMatchObject({ usedPercent: 25 });
+});
+
+test("does not authenticate during a background usage scan", async () => {
+  const snapshot = await read(billing({ used: 15, monthlyLimit: 20 }), undefined, "oauth");
+  expect(snapshot?.primary?.usedPercent).toBe(75);
 });
 
 test("pay-as-you-go falls back to legacy overage when onDemandUsed is omitted", async () => {

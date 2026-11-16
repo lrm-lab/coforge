@@ -9,15 +9,10 @@ import {
   type UsageWindow,
 } from "#src/contract";
 import { asRecord } from "#src/json-record";
-
 import { withoutSshSessionVariables } from "./ssh-environment";
 
-/** How long `agy -p /usage` may run when the caller sets no deadline. It answers from the
- * account's quota without starting a turn or spending quota (agy 1.1.11 changelog), but still
- * fetches over the network. */
+/** Retained for callers that display the provider's normal usage-read budget. */
 export const ANTIGRAVITY_USAGE_TIMEOUT_MS = 15_000;
-
-const SIGNED_OUT = /sign(?:ed)?[ -]?in|log(?:ged)?[ -]?in|auth/iu;
 
 const WINDOW_MINUTES: Readonly<Record<string, number>> = { "5h": 300, weekly: 10_080 };
 
@@ -32,12 +27,9 @@ type QuotaBucket = {
 type QuotaGroup = { name: string; description?: string; buckets: QuotaBucket[] };
 
 /**
- * Reads the account's quota with `agy -p /usage --output-format json`. Every returned group and
- * bucket is kept on `officialGroups`, including a group that has only a weekly bucket. The
- * provider's own `command.data.description` is kept as `officialDescription`. `primary` and
- * `secondary` stay the tightest group's 5-hour and weekly windows so an older Web still has its
- * two slots. A group name is not a plan, so `planType` stays unset. The response has no pacing
- * field, so none is derived.
+ * Reads quota through an ACP-provided reader when available. Otherwise it first checks the shared
+ * credential store without spawning, then uses headless `agy -p /usage` with browser-launching
+ * environment disabled. An absent/invalid login answers unavailable rather than entering OAuth.
  */
 export async function readAntigravityUsage(
   workingDirectory: string,
@@ -46,27 +38,53 @@ export async function readAntigravityUsage(
     environment?: Readonly<Record<string, string | undefined>>;
     timeoutMs?: number;
   } = {},
-  host: Pick<AntigravityAcpRuntimeHost, "catalogCommandRunner" | "readUsageEnvironment">,
+  host: Pick<
+    AntigravityAcpRuntimeHost,
+    "catalogCommandRunner" | "readUsageEnvironment" | "readUsageAuthStatus" | "readAcpUsage"
+  >,
 ): Promise<UsageSnapshot> {
-  const { output, exitCode } = await host.catalogCommandRunner(
-    [...(options.command ?? ["agy"]), "-p", "/usage", "--output-format", "json"],
-    workingDirectory,
-    withoutSshSessionVariables(options.environment ?? host.readUsageEnvironment()),
-    options.timeoutMs ?? ANTIGRAVITY_USAGE_TIMEOUT_MS,
-  );
-  // A local wrapper may print a banner before the JSON answer; the answer starts at the first
-  // line that opens an object and runs to the end.
+  if (host.readAcpUsage) {
+    try {
+      return await host.readAcpUsage({
+        workingDirectory,
+        timeoutMs: options.timeoutMs ?? ANTIGRAVITY_USAGE_TIMEOUT_MS,
+        command: options.command,
+        environment: options.environment,
+      });
+    } catch (error) {
+      if (error instanceof UsageUnavailableError || error instanceof UsageUnsupportedError)
+        throw error;
+      throw new UsageUnavailableError();
+    }
+  }
+  if (!host.readUsageAuthStatus || !(await host.readUsageAuthStatus()))
+    throw new UsageUnavailableError();
+  try {
+    const { output } = await host.catalogCommandRunner(
+      [...(options.command ?? ["agy"]), "-p", "/usage", "--output-format", "json"],
+      workingDirectory,
+      {
+        ...withoutSshSessionVariables(options.environment ?? host.readUsageEnvironment()),
+        CI: "1",
+        TERM: "dumb",
+        BROWSER: "false",
+        AGY_NO_BROWSER: "1",
+      },
+      options.timeoutMs ?? ANTIGRAVITY_USAGE_TIMEOUT_MS,
+    );
+    return parseAntigravityUsage(output);
+  } catch (error) {
+    if (error instanceof UsageUnsupportedError) throw error;
+    throw new UsageUnavailableError();
+  }
+}
+
+/** Parses the official `/usage` JSON returned by an ACP-aware test or host adapter. */
+export function parseAntigravityUsage(output: string): UsageSnapshot {
   const start = output.startsWith("{") ? 0 : output.indexOf("\n{") + 1;
   const answer = asRecord(parseJson(output.slice(start)));
-  if (!answer) {
-    if (SIGNED_OUT.test(output)) throw new UsageUnavailableError();
-    throw new Error(`agy /usage exited ${exitCode} without a JSON answer`);
-  }
-  if (answer.status !== "SUCCESS") {
-    const error = typeof answer.error === "string" ? answer.error : "";
-    if (SIGNED_OUT.test(error)) throw new UsageUnavailableError();
-    throw new Error(`agy /usage failed: ${error || String(answer.status)}`);
-  }
+  if (!answer) throw new Error("Antigravity ACP returned no JSON usage answer");
+  if (answer.status !== "SUCCESS") throw new UsageUnavailableError();
   const data = asRecord(asRecord(answer.command)?.data);
   const groups = quotaGroups(data?.groups);
   const officialDescription = text(data?.description);
@@ -78,9 +96,7 @@ export async function readAntigravityUsage(
   const primary = group && usageWindow(group, "5h");
   const secondary = group && usageWindow(group, "weekly");
   const officialGroups = groups.map(officialGroup);
-  if (officialGroups.length === 0 || officialGroups.every((item) => item.buckets.length === 0)) {
-    throw new UsageUnsupportedError();
-  }
+  if (officialGroups.length === 0) throw new UsageUnsupportedError();
   const exhausted = groups.some((item) => item.buckets.some((bucket) => bucket.remaining <= 0));
   return {
     provider: RUNTIME_PROVIDER.ANTIGRAVITY,

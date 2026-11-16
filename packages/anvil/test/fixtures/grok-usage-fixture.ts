@@ -10,7 +10,11 @@
       const request = JSON.parse(line);
       if (request.method === "initialize") {
         process.stdout.write(
-          `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { protocolVersion: 1, authMethods: [] } })}\n`,
+          `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { protocolVersion: 1, authMethods: env.COFORGE_GROK_AUTH_METHOD ? [{ id: env.COFORGE_GROK_AUTH_METHOD }] : [] } })}\n`,
+        );
+      } else if (request.method === "authenticate") {
+        process.stdout.write(
+          `${JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: "interactive authentication is disabled in this fixture" } })}\n`,
         );
       } else if (request.method === "_x.ai/billing") {
         if (env.COFORGE_GROK_USAGE_ERROR)
