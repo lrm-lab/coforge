@@ -7,6 +7,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
+import { artifactChrome, artifactViewerReady } from "./helpers/artifact-chrome";
 import {
   browserSession,
   devBrowserWorkspace,
@@ -15,11 +16,13 @@ import {
 } from "./helpers/browser-e2e";
 
 /**
- * An artifact's Share and who it is seen by: its home's readers read it, and its page's way back
- * is that conversation; one of a private channel the viewer is not in is "Can't open this" until
- * its author Agent moves it to the Workspace, when it opens read only with the Workspace as the
- * way back. Share opens for what the viewer reads (in a Workspace where the viewer is a member
- * only, an artifact they did not make may show the link switch disabled).
+ * Who can open an artifact and how it widens: its home's readers read it and its page's way back
+ * is that conversation; the who-can-see pill and the ⋯ "Who can see" submenu offer the home, the
+ * Workspace and, where link sharing is available, anyone with the link; narrowing to the home
+ * says who loses access first. An artifact of a private channel the viewer is not in is "Can't
+ * open this" until its author Agent moves it to the Workspace, when it opens with the Workspace as
+ * the way back. A member who neither owns the author Agent nor administers the Workspace sees who
+ * can see it but cannot change it.
  *
  * Opt-in like the other browser E2Es: real local Web with the `artifacts` experiment switched
  * on per Workspace (it has no flag). Its texts carry the run's tail, since bytes are stored once
@@ -28,9 +31,11 @@ import {
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/artifact-share");
 
-test("an artifact's Share: who can see it", async () => {
+test("an artifact's who-can-see: the home, the Workspace, and who loses access", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser, evaluate } = browserSession(browserPath, `artifact-share-${process.pid}`);
+  const session = browserSession(browserPath, `artifact-share-${process.pid}`);
+  const { browser, evaluate } = session;
+  const chrome = artifactChrome(session);
   const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
@@ -50,6 +55,7 @@ test("an artifact's Share: who can see it", async () => {
       workspaceId,
       channelName: `e2e-share-${tail}`,
       description: "",
+      visibility: "private",
       members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
     },
   });
@@ -95,23 +101,7 @@ test("an artifact's Share: who can see it", async () => {
     await settled();
     await browser("screenshot", join(artifacts, `${shot}.png`));
   };
-  const until = async (expression: string) => {
-    for (let i = 0; i < 100; i++) {
-      if (await evaluate<boolean>(expression)) return;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    throw new Error(`Timed out waiting for ${expression}`);
-  };
-  /** A real click, which a dialog's trigger needs to keep its focus (a scripted one is virtual). */
-  const press = async (selector: string) => {
-    await evaluate(`(${selector}.setAttribute("data-press", ""), true)`);
-    await browser("click", "[data-press]");
-    await evaluate(`(document.querySelector("[data-press]")?.removeAttribute("data-press"), true)`);
-  };
-  const share = `[...document.querySelectorAll("main header button")].find((b) => b.textContent.trim() === "Share")`;
-  const dialog = `document.querySelector('[role="dialog"]')`;
-  const shareOpen = `${dialog}?.textContent.includes("Copy link")`;
-  const viewer = `${pageHydrated} && document.querySelector("main .ProseMirror") != null`;
+  const viewer = artifactViewerReady;
   const text = (needle: string) => `document.body.textContent.includes(${JSON.stringify(needle)})`;
   const pageOf = (id: string) => `${origin}/en/w/${workspace.slug}/artifacts/${id}`;
   try {
@@ -126,21 +116,50 @@ test("an artifact's Share: who can see it", async () => {
       files: { "plan.md": `Plan (run ${tail}).` },
     });
 
-    // From the home the viewer is in: the way back is the channel, and Share has no level to pick.
+    // From the home the viewer is in: the way back is the channel, and the pill names it.
     await browser("open", pageOf(plan.id));
     await browser("wait", "--fn", viewer);
     expect(
       await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
     ).toEndWith(`/channel/${channel.id}`);
-    await press(share);
-    await until(shareOpen);
+    await chrome.untilPillScope(`#e2e-share-${tail}`);
+    expect(await chrome.pillChangeable()).toBe(true);
+    await chrome.press(`document.querySelector('main header button[aria-label^="Who can see:"]')`);
+    await chrome.until(`document.querySelector('[role="menuitemradio"]') != null`);
+    expect(await chrome.selectedScope()).toBe(`#e2e-share-${tail}`);
     expect(
-      await evaluate<boolean>(
-        `document.querySelectorAll('[role="dialog"] input[type="radio"]').length === 0`,
+      await evaluate<string[]>(
+        `[...document.querySelectorAll('[role="menuitemradio"]')].map((i) => i.textContent.trim())`,
       ),
-    ).toBe(true);
-    await shoot("1-share-channel-home");
-    await browser("press", "Escape");
+    ).toEqual([`#e2e-share-${tail}`, "Everyone in the Workspace", "Anyone with the link"]);
+    await shoot("1-pill-menu");
+    await chrome.closeMenus();
+
+    // Widening to the Workspace needs no confirmation; the pill and the Workspace's readers follow.
+    await chrome.chooseFromPill("Everyone in the Workspace");
+    await chrome.untilPillScope("Everyone in the Workspace");
+    expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).toBe(
+      "workspace",
+    );
+    await shoot("2-widened");
+
+    // Narrowing says who loses access, and changes nothing until confirmed.
+    await chrome.chooseFromMore("This conversation");
+    await chrome.until(
+      `/\\d+ people and \\d+ Agents will lose access/.test(document.body.textContent)`,
+    );
+    const loss = /(\d+) people and (\d+) Agents will lose access/.exec(await chrome.dialogText());
+    expect(Number(loss?.[1])).toBeGreaterThanOrEqual(1);
+    expect(await chrome.dialogText()).toContain("Limit to This conversation?");
+    await shoot("3-narrowing");
+    expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).toBe(
+      "workspace",
+    );
+    await chrome.confirmDialog("Limit access");
+    await chrome.untilPillScope(`#e2e-share-${tail}`);
+    expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).not.toBe(
+      "workspace",
+    );
 
     // From a private channel the viewer is not in: not theirs to open.
     const leads = await linBot.create({
@@ -153,7 +172,7 @@ test("an artifact's Share: who can see it", async () => {
     expect(await evaluate<boolean>(`document.querySelector("main .ProseMirror") == null`)).toBe(
       true,
     );
-    await shoot("2-closed-home-unavailable");
+    await shoot("2b-closed-home-unavailable");
 
     // Moved to the Workspace by its author Agent (its owner reads it): it opens read only, and
     // the way back is the Workspace.
@@ -170,13 +189,11 @@ test("an artifact's Share: who can see it", async () => {
     expect(await evaluate<string>(`document.querySelector("main header a").textContent`)).toBe(
       "Back to the Workspace",
     );
-    await shoot("3-workspace-read");
-    await press(share);
-    await until(shareOpen);
-    await browser("press", "Escape");
+    await chrome.untilPillScope("Everyone in the Workspace");
+    await shoot("4-workspace-read");
 
-    // A member only, of an artifact they did not make: where a public link exists its switch is
-    // disabled for them; where none does, Share still says who reads it.
+    // A member only, of an artifact they did not make: the pill says who can see it and changes
+    // nothing, and the ⋯ menu offers no Who can see and no Rename.
     await experiments.write(other.id, "artifacts", true);
     const noorChannel = await db.conversation.create({
       data: {
@@ -206,15 +223,15 @@ test("an artifact's Share: who can see it", async () => {
     });
     await browser("open", `${origin}/en/w/${other.slug}/artifacts/${brief.id}`);
     await browser("wait", "--fn", viewer);
-    await press(share);
-    await until(shareOpen);
-    expect(
-      await evaluate<boolean>(
-        `(() => { const s = document.querySelector('[role="dialog"] input[role="switch"]'); return s == null || s.disabled; })()`,
-      ),
-    ).toBe(true);
-    await shoot("4-member-share");
-    await browser("press", "Escape");
+    await chrome.untilPillScope(`#e2e-share-noor-${tail}`);
+    expect(await chrome.pillChangeable()).toBe(false);
+    await chrome.openMore();
+    const items = await chrome.moreItems();
+    expect(items).toContain("Send to…");
+    expect(items).not.toContain("Who can see");
+    expect(items).not.toContain("Rename");
+    await shoot("5-member-chrome");
+    await chrome.closeMenus();
   } finally {
     await browser("close").catch(() => undefined);
     await db.artifact

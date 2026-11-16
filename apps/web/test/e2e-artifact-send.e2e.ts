@@ -85,6 +85,15 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
       members: { create: [{ userId: noor.id }, { agentId: agent.id }] },
     },
   });
+  const quiet = await db.conversation.create({
+    data: {
+      workspaceId,
+      channelName: `e2e-send-quiet-${tail}`,
+      description: "",
+      visibility: "private",
+      members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
+    },
+  });
   const shoot = async (shot: string) => {
     await browser(
       "wait",
@@ -131,6 +140,7 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
       artifactId,
       targets: [target.id],
       requestId: crypto.randomUUID(),
+      unseen: "send",
       send: ({ target: conversationId, idempotencyKey, body }) =>
         postUserMessage(
           {
@@ -206,17 +216,64 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     await waitFor(`document.querySelector('article[aria-label*="Launch plan"] a') !== null`);
     await shoot("2-channel-cards");
 
+    // From a private home, to a channel with a recipient who cannot read it: held, nothing is
+    // posted, and the three ways on are named.
+    const notes = await bot.create({
+      conversationId: quiet.id,
+      title: "Board notes",
+      files: { "notes.md": `Notes (run ${tail}).` },
+    });
+    const posted = (id: string) =>
+      db.message.count({ where: { conversationId: target.id, body: { contains: id } } });
+    const sendFromHeld = async (id: string, way: string) => {
+      await browser("set", "viewport", "1280", "860");
+      await browser("open", `${origin}/en/w/${workspace.slug}/artifacts/${id}`);
+      await openSend();
+      await pick(`#e2e-send-to-${tail}`);
+      await press(`document.querySelector('[role="dialog"] button[aria-label="Send to 1"]')`);
+      await waitFor(
+        `document.querySelector('[role="dialog"] [role="alert"]')?.textContent.includes("can't see this artifact")`,
+      );
+      expect(await posted(id)).toBe(0);
+      const ways = await evaluate<string[]>(
+        `[...document.querySelectorAll('[role="dialog"] [role="alert"] ~ div button')].map((b) => b.textContent.trim())`,
+      );
+      expect(ways).toContain("Make it visible to the Workspace");
+      expect(ways).toContain("Send anyway");
+      await shoot(`3-held-${way}`);
+      await press(byLabel(way));
+      await waitFor(`document.querySelector('[role="dialog"]') === null`);
+      expect(await posted(id)).toBe(1);
+    };
+    const byLabel = (label: string) =>
+      `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
+    await sendFromHeld(notes.id, "Send anyway");
+    expect((await db.artifact.findUniqueOrThrow({ where: { id: notes.id } })).access).not.toBe(
+      "workspace",
+    );
+    const roster = await bot.create({
+      conversationId: quiet.id,
+      title: "Roster",
+      files: { "roster.md": `Roster (run ${tail}).` },
+    });
+    await sendFromHeld(roster.id, "Make it visible to the Workspace");
+    expect((await db.artifact.findUniqueOrThrow({ where: { id: roster.id } })).access).toBe(
+      "workspace",
+    );
+
     // A phone: one sheet, the destinations over the note and the send button.
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}/en/w/${workspace.slug}/artifacts/${plan.id}`);
     await openSend();
     await pick(`#e2e-send-home-${tail}`);
     await waitFor(`document.querySelector('[role="dialog"] textarea')?.offsetParent != null`);
-    await shoot("3-phone-sheet");
+    await shoot("4-phone-sheet");
   } finally {
     await browser("close").catch(() => {});
     await experiments.write(workspaceId, "artifacts", before);
-    await db.conversation.deleteMany({ where: { id: { in: [home.id, target.id, closed.id] } } });
+    await db.conversation.deleteMany({
+      where: { id: { in: [home.id, target.id, closed.id, quiet.id] } },
+    });
     await db.agent.deleteMany({ where: { id: agent.id } });
     await db.workspaceMembership.deleteMany({ where: { userId: noor.id } });
     await db.user.deleteMany({ where: { id: noor.id } });

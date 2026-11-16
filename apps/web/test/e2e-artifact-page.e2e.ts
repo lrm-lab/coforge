@@ -6,6 +6,8 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
+import { artifactChrome } from "./helpers/artifact-chrome";
+import { versionChromeSteps } from "./helpers/artifact-version-steps";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
@@ -18,20 +20,22 @@ import {
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
- * An artifact's own page (task #514), which people only view: a web page's preview from its artifact's own origin, with no versions shown
- * (Frank, 11-05), Open in new tab on the sandbox's link (and a link that cannot be had, said so),
- * a new version an Agent saves while the page shows taken in quietly (Share is
- * `e2e-artifact-share`); one page for an artifact that is not there and one that is not the
- * reader's; a `?doc=` link opening it beside the chat (Frank, 11-05); a document's text, kept
- * when a refresh fails and gone when the artifact is deleted; and a first read that fails, with
- * Try again.
+ * An artifact's own page, which people only view: a web page's preview from its artifact's own
+ * origin with its version chip and switcher; the live "published vN" banner with View latest
+ * when an Agent saves while the page shows (the page keeps the version it shows until then);
+ * "Viewing vN" with Back to latest; the files panel; rename, which only who manages its sharing
+ * sees; one page for an artifact that is not there and one that is not the reader's, which opens
+ * read only once moved to the Workspace; a `?doc=` link opening it beside the chat; a document's
+ * text, kept when a refresh fails and gone when the artifact is deleted; and a first read that
+ * fails, with Try again.
  *
  * Opt-in like the other browser E2Es: real local Web started with the flag file that offers
  * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too), with
  * `COFORGE_ARTIFACT_SANDBOX_ORIGIN` on another host of the same server
- * (`http://localhost:<port>` beside `127.0.0.1`) and a `COFORGE_SESSION_SECRET`, which signs the
- * sandbox's links. Its texts carry the run's tail, since bytes are stored once per Workspace by
- * their hash. Screenshots go under `.amp/e2e/artifact-page/`.
+ * (`http://localhost:<port>` beside `127.0.0.1`), a `COFORGE_SESSION_SECRET`, which signs the
+ * sandbox's links, and a Centrifugo the Web is reachable from (`COFORGE_E2E_CENTRIFUGO_URL`),
+ * which carries the banner. Its texts carry the run's tail, since bytes are stored once per
+ * Workspace by their hash. Screenshots go under `.amp/e2e/artifact-page/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -62,14 +66,27 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
   });
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser, evaluate } = browserSession(browserPath, `artifact-page-${process.pid}`);
+  const session = browserSession(browserPath, `artifact-page-${process.pid}`);
+  const { browser, evaluate } = session;
+  const chrome = artifactChrome(session);
   const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const before = (await experiments.read(workspaceId)).artifacts;
+  const devRole = (
+    await db.workspaceMembership.findFirstOrThrow({
+      where: { workspaceId, userId: DEV_BROWSER_USER.id },
+    })
+  ).role;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
-  const agent = await db.agent.findFirstOrThrow({
-    where: { workspaceId, deletedAt: null, visibility: "public", weeklyReportAssistant: null },
+  const agent = await db.agent.create({
+    data: {
+      workspaceId,
+      name: `e2e-page-${tail}`,
+      displayName: "Scribe",
+      ownerId: DEV_BROWSER_USER.id,
+      runtimeConfig: {},
+    },
   });
   const lin = await db.user.create({ data: { username: `lin-p-${tail}`, displayName: "Lin Xia" } });
   await db.workspaceMembership.create({ data: { workspaceId, userId: lin.id } });
@@ -159,8 +176,8 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
         `document.getElementById(document.querySelector("main").getAttribute("aria-labelledby")).textContent`,
       ),
     ).toBe("Signup funnel");
-    // No version and no save state: a web page is not edited here.
-    expect(await evaluate<boolean>(text("Version"))).toBe(false);
+    // Its version is on a chip, and a web page is not edited here.
+    expect(await chrome.versionChipText()).toBe("v2");
     expect(await evaluate<boolean>(text("Saved"))).toBe(false);
     await shoot("1-web-preview");
     const dark = (on: boolean) =>
@@ -180,43 +197,18 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       ),
     ).toBe(false);
 
-    // The Agent saves a new version while the page shows: it shows it, saying nothing.
-    await bot.push(web.id, 2, { "index.html": html("Signups v3") });
-    // Polled here: agent-browser's own wait does not come back on this page (its frame is on
-    // another origin) while the new frame is already there.
-    await until(
-      `document.querySelector("main iframe") != null && document.querySelector("main iframe").src !== ${JSON.stringify(frame)}`,
-    );
-    expect(await evaluate<boolean>(text("published"))).toBe(false);
-    await shoot("2b-web-new-version");
-
-    // Open in new tab: the sandbox's link, in a tab cut off from this one.
-    await press(`document.querySelector('main header button[aria-label="More actions"]')`);
-    const openItem = `[...document.querySelectorAll('[role="menuitem"]')].find((i) => i.textContent.includes("Open in new tab"))`;
-    await browser("wait", "--fn", `${openItem} != null`);
-    await click(openItem);
-    let tabs = "";
-    const pageHost = `a-${web.id}.${new URL(sandboxOrigin).host}`;
-    for (let i = 0; i < 50 && !tabs.includes(pageHost); i++) {
-      await new Promise((r) => setTimeout(r, 100));
-      tabs = await browser("tab", "list");
-    }
-    expect(tabs).toContain(pageHost);
-    // Back to the app's tab: the first one, whose id is the session's first (`t1`).
-    const appTab = /\b(t\d+)\b[^\n]*127\.0\.0\.1/.exec(tabs)?.[1];
-    expect(appTab).toBeDefined();
-    await browser("tab", appTab!);
-
-    // A link that cannot be had: the tab closes, and the page says so.
-    refusing = true;
-    await press(`document.querySelector('main header button[aria-label="More actions"]')`);
-    await browser("wait", "--fn", `${openItem} != null`);
-    await click(openItem);
-    // The tab it opened closes again; the session goes back to the app's.
-    await new Promise((r) => setTimeout(r, 1500));
-    await browser("tab", appTab!);
-    await until(text("Couldn't open the page in a new tab"));
-    refusing = false;
+    await versionChromeSteps({
+      session,
+      chrome,
+      until,
+      shoot,
+      publish: () => bot.push(web.id, 2, { "index.html": html("Signups v3") }),
+      publisher: agent.displayName,
+      frame,
+      renameTo: `Signup funnel ${tail}`,
+      currentVersion: async () =>
+        (await db.artifact.findUniqueOrThrow({ where: { id: web.id } })).currentVersion,
+    });
 
     // Not there, and not the reader's: one page, saying the same.
     await browser("open", pageOf(crypto.randomUUID()));
@@ -251,6 +243,26 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
         `[...document.querySelectorAll("main a")].some((a) => a.textContent.includes("Back to the Workspace"))`,
       ),
     ).toBe(true);
+    // A member who does not manage its sharing sees no Rename and no Who can see.
+    await db.workspaceMembership.updateMany({
+      where: { workspaceId, userId: DEV_BROWSER_USER.id },
+      data: { role: "member" },
+    });
+    await browser("open", pageOf(secret.id));
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.querySelector("main .ProseMirror") != null`,
+    );
+    await chrome.openMore();
+    expect(await chrome.moreItems()).not.toContain("Rename");
+    expect(await chrome.moreItems()).not.toContain("Who can see");
+    expect(await chrome.pillChangeable()).toBe(false);
+    await chrome.closeMenus();
+    await db.workspaceMembership.updateMany({
+      where: { workspaceId, userId: DEV_BROWSER_USER.id },
+      data: { role: devRole },
+    });
     // A `?doc=` link into that conversation opens the artifact's own page the same way.
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${closed.id}?doc=${secret.id}`);
     await browser(
@@ -296,7 +308,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector('section[aria-label="Artifact"] iframe') != null && document.querySelector('article[aria-label="Web page: Signup funnel"]') != null`,
+      `${pageHydrated} && document.querySelector('section[aria-label="Artifact"] iframe') != null && document.querySelector('article[aria-label="Web page: Signup funnel ${tail}"]') != null`,
     );
     await shoot("7-web-beside-chat");
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
@@ -332,9 +344,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     expect(
       await evaluate<boolean>(`document.querySelector('main [contenteditable="true"]') == null`),
     ).toBe(true);
-    expect(
-      await evaluate<string>(`document.querySelector("main header h1").nextSibling.textContent`),
-    ).toBe("v2");
+    expect(await chrome.versionChipText()).toBe("v2");
     refusing = true;
     // The page reads the document again when its tab comes back (TanStack Query hears
     // `visibilitychange` on window: https://tanstack.com/query/v5/docs/reference/focusManager).
@@ -379,6 +389,9 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
   } finally {
     refusing = false;
     refusingFor = null;
+    await db.workspaceMembership
+      .updateMany({ where: { workspaceId, userId: DEV_BROWSER_USER.id }, data: { role: devRole } })
+      .catch(() => undefined);
     await browser("close").catch(() => undefined);
     proxy.stop();
     await db.artifact
@@ -389,7 +402,9 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, closed.id] } } })
       .catch(() => undefined);
-    await db.agent.delete({ where: { id: linAgent.id } }).catch(() => undefined);
+    await db.agent
+      .deleteMany({ where: { id: { in: [agent.id, linAgent.id] } } })
+      .catch(() => undefined);
     await db.workspaceMembership.deleteMany({ where: { userId: lin.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: lin.id } }).catch(() => undefined);
     await experiments.write(workspaceId, "artifacts", before).catch(() => undefined);

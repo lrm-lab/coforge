@@ -119,7 +119,9 @@ export function useArtifactVisibility({
       confirmLabel={confirmLabel}
       errorMessage={m.av_vis_failed()}
       onConfirm={async () => {
-        if (confirming) await apply(confirming);
+        if (!confirming) return;
+        await apply(confirming);
+        setConfirming(null);
       }}
     />
   );

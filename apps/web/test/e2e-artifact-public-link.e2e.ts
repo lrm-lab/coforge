@@ -7,24 +7,33 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import { artifactPageOrigin } from "#src/server/artifacts/artifact-sandbox-config.server";
+import { artifactChrome, artifactChromeReady } from "./helpers/artifact-chrome";
+import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
 /**
- * A public link from an artifact's Share (task #646): the switch in the dialog,
- * the link it gives opening with no session, and off killing that link, for a
- * document and a web page. What the page shows inside its frame is on another origin, so only
- * its screenshot checks it.
+ * Anyone with the link, from the who-can-see pill (task #646): choosing it asks first, the link
+ * it gives opens with no session and serves the page's own content, and choosing a narrower level
+ * asks again and ends that link, for a document and a web page. The link is read from the
+ * database, since the page never shows it; a signed-out visitor is a browser session of its own.
+ * What a web page shows inside its frame is on another origin, so its content is read from the
+ * response the visitor gets.
  *
  * Opt-in like `e2e-artifact-page`: real local Web with `COFORGE_ARTIFACT_SANDBOX_ORIGIN` on
  * another host of the same server and a `COFORGE_SESSION_SECRET`. Screenshots go under
  * `.amp/e2e/artifact-public-link/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
+const sandboxOrigin = Bun.env.COFORGE_ARTIFACT_SANDBOX_ORIGIN;
+if (!sandboxOrigin) throw new Error("COFORGE_ARTIFACT_SANDBOX_ORIGIN is required");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/artifact-public-link");
 
-test("an artifact's Share: a public link on and off", async () => {
+test("an artifact's public link: turned on from the pill, served to a visitor, turned off", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser, evaluate } = browserSession(browserPath, `artifact-link-${process.pid}`);
+  const session = browserSession(browserPath, `artifact-link-${process.pid}`);
+  const { browser, evaluate } = session;
+  const chrome = artifactChrome(session);
+  const visitor = browserSession(browserPath, `artifact-link-visitor-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
@@ -51,18 +60,6 @@ test("an artifact's Share: a public link on and off", async () => {
       members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
     },
   });
-  const until = async (expression: string) => {
-    for (let i = 0; i < 100; i++) {
-      if (await evaluate<boolean>(expression)) return;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    throw new Error(`Timed out waiting for ${expression}`);
-  };
-  const press = async (selector: string) => {
-    await evaluate(`(${selector}.setAttribute("data-press", ""), true)`);
-    await browser("click", "[data-press]");
-    await evaluate(`(document.querySelector("[data-press]")?.removeAttribute("data-press"), true)`);
-  };
   const settled = () =>
     browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
   const shots = async (name: string) => {
@@ -75,51 +72,36 @@ test("an artifact's Share: a public link on and off", async () => {
     await evaluate(`(document.documentElement.classList.remove("dark-mode"), true)`);
     await browser("wait", "300");
   };
-  const share = `[...document.querySelectorAll("main header button")].find((b) => b.textContent.trim() === "Share" || b.getAttribute("aria-label") === "Share")`;
-  const toggle = `document.querySelector('[role="dialog"] input[role="switch"]')`;
-  const switchLabel = `${toggle}?.closest("label")`;
-  const linkText = `[...document.querySelectorAll('[role="dialog"] p')].find((p) => p.textContent.includes("/p/"))?.textContent`;
   const pageOf = (id: string) => `${origin}/en/w/${workspace.slug}/artifacts/${id}`;
-  const close = () =>
-    press(
-      `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Done")`,
-    );
-  const openShare = async (id: string) => {
-    await browser("open", pageOf(id));
-    await until(`${pageHydrated} && ${share} != null`);
-    await press(share);
-    await until(`document.querySelector('[role="dialog"]')?.textContent.includes("Copy link")`);
+  const liveLink = async (id: string) => {
+    const live = await db.artifactPublicLink.findFirst({
+      where: { artifactId: id, revokedAt: null },
+      select: { token: true },
+    });
+    return live ? `${artifactPageOrigin(sandboxOrigin, id)}/p/${live.token}` : null;
   };
-  /** Turns the link on and off from the open dialog, proving the link serves and then dies. */
-  const roundTrip = async (id: string, shot?: string) => {
-    await until(`${toggle} != null`);
-    if (shot) await shots(`${shot}-off`);
-    await press(switchLabel);
-    await until(`${linkText} != null`);
-    if (shot) await shots(`${shot}-on`);
-    const url = await evaluate<string>(linkText);
-    const open = await fetch(url, { redirect: "manual" });
-    expect(open.status).toBe(302);
-    expect(open.headers.get("set-cookie")).toBeNull();
-    expect(open.headers.get("location")).toContain("/page/");
-    // The dialog has no level to pick.
-    expect(
-      await evaluate<boolean>(
-        `document.querySelectorAll('[role="dialog"] input[type="radio"]').length === 0`,
-      ),
-    ).toBe(true);
-    if (shot) {
-      await browser("open", url);
-      await browser("wait", "1500");
-      await browser("screenshot", join(artifacts, `${shot}-public-page.png`));
-    }
-    // Read back after a reload: the page knows the link, and Share shows it.
-    await openShare(id);
-    await until(`${linkText} === ${JSON.stringify(url)}`);
-    await press(switchLabel);
-    await until(`${linkText} == null && !${toggle}.disabled`);
-    expect((await fetch(url, { redirect: "manual" })).status).toBe(404);
-    return url;
+  const turnOn = async (id: string) => {
+    await browser("open", pageOf(id));
+    await browser("wait", "--fn", artifactChromeReady);
+    await chrome.chooseFromPill("Anyone with the link");
+    await chrome.until(`document.body.textContent.includes("Turn on link sharing?")`);
+    expect(await chrome.dialogText()).toContain(
+      "Anyone with the link can open it without signing in.",
+    );
+    await shots("link-on-confirm");
+    expect(await liveLink(id)).toBeNull();
+    await chrome.confirmDialog("Turn on link sharing");
+    await chrome.untilPillScope("Anyone with the link");
+    const url = await liveLink(id);
+    expect(url).not.toBeNull();
+    return url!;
+  };
+  const turnOff = async () => {
+    await chrome.chooseFromPill("Everyone in the Workspace");
+    await chrome.until(`document.body.textContent.includes("Turn off link sharing?")`);
+    expect(await chrome.dialogText()).toContain("The public link will stop working.");
+    await chrome.confirmDialog("Turn off link sharing");
+    await chrome.untilPillScope("Everyone in the Workspace");
   };
   try {
     await experiments.write(workspaceId, "artifacts", true);
@@ -147,36 +129,78 @@ test("an artifact's Share: a public link on and off", async () => {
       files: { "index.html": `<!doctype html><html><body><h1>Signups ${tail}</h1></body></html>` },
     });
 
-    await openShare(doc.id);
-    const first = await roundTrip(doc.id, "desktop");
-    // On again: a new link, never the old one.
-    await press(switchLabel);
-    await until(`${linkText} != null`);
-    expect(await evaluate<string>(linkText)).not.toBe(first);
-    await press(switchLabel);
-    await until(`${linkText} == null && !${toggle}.disabled`);
-    await close();
+    const visit = async (url: string, content: string) => {
+      await visitor.browser("open", url);
+      await visitor.browser(
+        "wait",
+        "--fn",
+        `document.body.textContent.includes(${JSON.stringify(content)})`,
+        "--timeout",
+        "20000",
+      );
+      await visitor.browser(
+        "screenshot",
+        join(artifacts, `visitor-${content.slice(0, 8).trim()}.png`),
+      );
+    };
+    const gone = async (url: string) => {
+      expect((await fetch(url, { redirect: "manual" })).status).toBe(404);
+    };
 
-    await openShare(web.id);
-    await roundTrip(web.id, "web");
-    await close();
-
-    // A phone: the link wraps inside the dialog, never past it.
-    await browser("set", "viewport", "390", "844");
-    await openShare(doc.id);
-    await until(`${toggle} != null`);
-    await press(switchLabel);
-    await until(`${linkText} != null`);
-    await shots("phone-on");
+    const docUrl = await turnOn(doc.id);
+    const served = await fetch(docUrl, { redirect: "manual" });
+    expect(served.status).toBe(302);
+    expect(served.headers.get("set-cookie")).toBeNull();
+    expect(served.headers.get("location")).toContain("/page/");
+    await shots("doc-on");
+    await visit(docUrl, `We open signups on Monday (run ${tail}).`);
     expect(
-      await evaluate<boolean>(
-        `(() => { const d = document.querySelector('[role="dialog"]'); return d.scrollWidth <= d.clientWidth; })()`,
+      await visitor.evaluate<boolean>(
+        `document.body.textContent.includes("Roll back if signups fail")`,
       ),
     ).toBe(true);
-    await press(switchLabel);
-    await until(`${linkText} == null`);
+    await turnOff();
+    await gone(docUrl);
+    expect(await liveLink(doc.id)).toBeNull();
+    await visitor.browser("open", docUrl);
+    expect(
+      await visitor.evaluate<boolean>(
+        `document.body.textContent.includes("We open signups on Monday")`,
+      ),
+    ).toBe(false);
+    await shots("doc-off");
+
+    // On again: a new link, never the old one.
+    const again = await turnOn(doc.id);
+    expect(again).not.toBe(docUrl);
+    await gone(docUrl);
+    await turnOff();
+    await gone(again);
+
+    const webUrl = await turnOn(web.id);
+    await visit(webUrl, `Signups ${tail}`);
+    await shots("web-on");
+    await turnOff();
+    await gone(webUrl);
+
+    // A phone: the confirmation fits the screen.
+    await browser("set", "viewport", "390", "844");
+    await browser("open", pageOf(doc.id));
+    await browser("wait", "--fn", artifactChromeReady);
+    await chrome.chooseFromPill("Anyone with the link");
+    await chrome.until(`document.body.textContent.includes("Turn on link sharing?")`);
+    await shots("phone-confirm");
+    expect(
+      await evaluate<boolean>(
+        `(() => { const d = [...document.querySelectorAll('[role="alertdialog"], [role="dialog"]')].at(-1); return d.scrollWidth <= d.clientWidth; })()`,
+      ),
+    ).toBe(true);
+    await chrome.confirmDialog("Turn on link sharing");
+    await chrome.untilPillScope("Anyone with the link");
+    await turnOff();
   } finally {
     await browser("close").catch(() => undefined);
+    await visitor.browser("close").catch(() => undefined);
     await db.artifact
       .deleteMany({ where: { homeKey: `conversation:${channel.id}` } })
       .catch(() => undefined);
