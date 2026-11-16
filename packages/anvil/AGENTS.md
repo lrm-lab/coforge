@@ -3,7 +3,7 @@
 `@lrm/coforge-anvil` owns provider-neutral Agent contracts, runtime adapters and their shared execution machinery. Keep it independent of daemon orchestration and platform implementations.
 
 - The root entry exposes provider-neutral contracts, errors, projections and tools only. Import each native runtime from its named subpath (the `exports` map in `package.json`) and shared process/session implementations from `/execution`. Never re-export these implementations from the root or import them into neutral modules.
-- Public contracts and exports belong here; daemon imports them by package name. Never import daemon modules, including through relative paths or aliases. `scripts/ci/anvil-boundary.test.ts` checks this direction.
+- Public contracts and exports belong here; daemon imports them by package name. `scripts/ci/anvil-boundary.test.ts` checks that Anvil imports no daemon module.
 - OS process trees and executable discovery are ports. The daemon supplies implementations explicitly; Anvil must not construct a platform default, read Workspace configuration, discover executables or read PATH.
 - The host supplies environment composition through each provider runtime host's `buildEnvironment`. Preserve when it runs and each provider's sanitization and overrides; Anvil never assembles the daemon's launch environment.
 - Agent instructions, assigned Skills, Git hooks, runtime inventory and caches stay with the host. Adapters consume the prepared session options; they do not coordinate those policies.

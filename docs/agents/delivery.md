@@ -80,7 +80,8 @@ another platform, or when the scan fails, no worktree is removed.
 
 Use concise English Conventional Commit messages: `<type>(optional-scope): imperative summary` (for
 example, `docs: refine delivery guarantees`). Commit as the person running the Agent, in their own
-GitHub identity; never as another person, an Agent name or an Agent email.
+GitHub identity; never as another person, an Agent name or an Agent email. The commit-msg hook and CI reject a
+title that is not a Conventional Commit.
 
 ## Claim the task
 

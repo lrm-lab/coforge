@@ -34,8 +34,8 @@ These rules apply to `src/routes/`.
   not pass a `page` discriminator into `AppShell` to select page content.
 - Keep route files focused on URL ownership and route lifecycle. Put reusable
   business UI and data modules under the owning `src/features/<domain>/`.
-- Do not edit the generated `src/routeTree.gen.ts`; regenerate it after
-  adding, moving, or deleting route files.
+- Regenerate the generated `src/routeTree.gen.ts` after adding, moving, or deleting route
+  files; a Claude Code hook denies a hand edit.
 - Do not export route components as additional public symbols. In a
   `.lazy.tsx` route file, use `getRouteApi()` rather than importing `Route`.
 - Raw routes under `api/` and OAuth callbacks are thin adapters: parse the

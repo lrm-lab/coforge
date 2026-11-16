@@ -15,6 +15,6 @@ These rules apply to `apps/web/prisma/`. App-wide database rules are in
 - Declare every partial index in the model (`@@index`/`@@unique` with
   `where:`, the `partialIndexes` preview feature). One that exists only in
   migration SQL is drift: `prisma migrate diff` generates a `DROP INDEX` for it.
-- A new `migrations/*/migration.sql` ends with exactly one newline, like any
-  other changed file (`apps/web/AGENTS.md`). Delete the blank line only:
-  `prisma migrate diff` compares statements, not whitespace (#1111, #1191).
+- A trailing blank line in a new `migration.sql` fails `git diff --check` like in any
+  other file (`apps/web/AGENTS.md`); delete the blank line only, since
+  `prisma migrate diff` compares statements, not whitespace.

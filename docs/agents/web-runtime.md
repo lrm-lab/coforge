@@ -34,8 +34,8 @@ connections through `openRedisClient`, never `new RedisClient`), so the process 
 
 ## The trailing blank line
 
-CI's `Plan checks` job runs `git diff --check` over the whole diff, and one trailing blank line fails
-the entire run. No package `check` looks for it, so the local checks stay green while the run goes
-red. Deleting a file's last member strands the blank line that preceded it, so a deletion trips this
+`git diff --check` runs over the whole diff in the pre-push hook (`scripts/ci/diff-check.ts`),
+in `mise run check`'s local gate and in CI's `Plan checks` job, and one trailing blank line fails
+the run. Deleting a file's last member strands the blank line that preceded it, so a deletion trips this
 as easily as an addition. Reproduce what CI sees before pushing with
 `git diff --check origin/main...HEAD`.

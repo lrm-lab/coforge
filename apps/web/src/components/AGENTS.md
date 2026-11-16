@@ -13,10 +13,9 @@ primitives and the lint-exemption policy.
 - CoForge color tokens remain authoritative. The `.untitled-ui` class scopes
   the official components' semantic theme mapping, including their portaled
   popovers.
-- Native button leaves are allowed only in the shared Button/Select/Tooltip
-  adapters that implement React Aria render semantics; feature code uses
-  components.
-- An official Tooltip `title` prop is not a native HTML `title` attribute.
+- Native button, select and `title` leaves live only in the shared adapters that implement
+  React Aria render semantics (the `coforge/no-native-*` oxlint rules fail them elsewhere);
+  an official Tooltip `title` prop is not a native HTML `title` attribute.
 - English buttons, labels and Tooltip titles use sentence case: only the first word is
   capitalized; product terms (Agent, Computer, Workspace, AI Workbench) and brand names keep
   their own spelling. Change the message source, never CSS.
