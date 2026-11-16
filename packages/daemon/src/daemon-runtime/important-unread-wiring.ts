@@ -1,9 +1,9 @@
+import { ImportantUnreadNotices, type ImportantUnreadNotice } from "./important-unread-notice";
 import {
-  ImportantUnreadNotices,
-  type ImportantUnreadDelivery,
-  type ImportantUnreadNotice,
-} from "./important-unread-notice";
-import { ImportantUnreadReminder, type ImportantUnreadRecord } from "./important-unread-reminder";
+  ImportantUnreadReminder,
+  type ImportantUnreadBatchDelivery,
+  type ImportantUnreadRecord,
+} from "./important-unread-reminder";
 
 /** What the daemon supplies so an unread batch can be put in front of its Agent: the running
  * session, what the attention index still counts as unread, and the one error a batch nobody read
@@ -21,7 +21,7 @@ export type ImportantUnreadWiringPorts = Readonly<{
   compose?(
     agentId: string,
     notice: ImportantUnreadNotice,
-    deliveries: readonly ImportantUnreadDelivery[],
+    deliveries: readonly ImportantUnreadBatchDelivery[],
   ): string | undefined;
 }>;
 

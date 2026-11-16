@@ -1,3 +1,4 @@
+import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { inboxPreviewLimit } from "./inbox-preview";
 import type { ImportantUnreadNoticeStore } from "#src/persistence/important-unread-notice-store";
 import {
@@ -5,6 +6,11 @@ import {
   ImportantUnreadNotices,
   type ImportantUnreadNotice,
 } from "./important-unread-notice";
+
+/** One delivery as the loop keeps it: the reduced facts the state machine needs, plus — when it
+ * comes from the delivery path — the message itself, which is what a notice previews. */
+export type ImportantUnreadBatchDelivery = ImportantUnreadDelivery &
+  Partial<Omit<AgentMessageDelivery, keyof ImportantUnreadDelivery>>;
 
 /** The slice of the record this loop needs: keeping what a restart reads, and what it finds. */
 export type ImportantUnreadRecord = Pick<ImportantUnreadNoticeStore, "save" | "clear" | "list">;
@@ -22,7 +28,7 @@ export type ImportantUnreadReminderPorts = Readonly<{
     agentId: string,
     notice: ImportantUnreadNotice,
     /** What this batch announced, oldest first. */
-    deliveries: readonly ImportantUnreadDelivery[],
+    deliveries: readonly ImportantUnreadBatchDelivery[],
   ): string | undefined;
   /** The retries are used up and the Agent has not read: one error, once per batch. */
   report(agentId: string, notice: ImportantUnreadNotice): void;
@@ -41,7 +47,7 @@ export class ImportantUnreadReminder {
    * knows which messages it is about. Only the ones a notice actually shows are kept — the count of
    * the rest is in the state — so a conversation that never stops cannot grow this without bound.
    * A record taken over after a restart has none, and composes from the queue alone. */
-  readonly #batches = new Map<string, ImportantUnreadDelivery[]>();
+  readonly #batches = new Map<string, ImportantUnreadBatchDelivery[]>();
 
   constructor(
     private readonly notices: ImportantUnreadNotices,
@@ -52,7 +58,7 @@ export class ImportantUnreadReminder {
 
   /** Folds new deliveries in and writes what they made due. Best-effort traffic is ignored by
    * the state itself, so callers need not pre-filter. */
-  observeDeliveries(deliveries: readonly ImportantUnreadDelivery[]): void {
+  observeDeliveries(deliveries: readonly ImportantUnreadBatchDelivery[]): void {
     for (const delivery of deliveries) {
       const notice = this.notices.observe(delivery);
       if (!notice) continue;

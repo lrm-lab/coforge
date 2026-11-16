@@ -1,6 +1,7 @@
 import { AGENT_ACTIVITY_DETAIL_KIND, type AgentActivity } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
+import { composeDeliveryNotice } from "./delivery-notice";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { AgentContexts } from "./agent-contexts";
@@ -175,6 +176,29 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     store: new ImportantUnreadNoticeStore(() => ports.stateDirectory),
     session: (agentId) => ports.processManager.session(agentId),
     unread: (agentId) => messageAttention.unreadDeliveries(agentId),
+    // Every attempt asks for the notice again: the batch's own messages plus whatever waits in the
+    // queue now, so a retry counts what arrived meanwhile instead of repeating a stale snapshot.
+    compose: (agentId, _notice, deliveries) => {
+      const announced = deliveries.filter(
+        (delivery): delivery is AgentMessageDelivery & { target: string } =>
+          delivery.messageId !== undefined && delivery.target !== undefined,
+      );
+      const message = announced[0];
+      if (!message) return undefined;
+      const memory = Boolean(ports.memoryAgent(agentId));
+      const queued = ports.deliveryGate.pending(agentId);
+      return composeDeliveryNotice({
+        message,
+        announced,
+        queued: memory
+          ? queued.filter((item) => item.conversationId === message.conversationId)
+          : queued,
+        memory,
+        prefix: ports.sync.noticePrefix(agentId),
+        previewedInFull: (target, sequence) =>
+          messageAttention.previewSeen.has(agentId, target, sequence),
+      }).notice;
+    },
     report: (agentId, notice) => {
       const launch = ports.currentActivityLaunch(agentId);
       if (!launch) return;
