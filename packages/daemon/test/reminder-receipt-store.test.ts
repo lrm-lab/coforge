@@ -143,12 +143,18 @@ test("a receipt whose retries ran out round-trips its exhausted record, and olde
       exhaustedAt: 1_788_868_924_000,
     },
   };
-  await store.write("agent-a", [older, exhausted]);
-  expect(await store.read("agent-a")).toEqual([older, exhausted]);
+  const stillRetrying: ReminderReceipt = {
+    ...exhausted,
+    reminderId: "123e4567-e89b-42d3-a456-426614174003",
+    job: { ...exhausted.job, reminderId: "123e4567-e89b-42d3-a456-426614174003" },
+    terminal: false,
+  };
+  await store.write("agent-a", [older, exhausted, stillRetrying]);
+  expect(await store.read("agent-a")).toEqual([older, exhausted, stillRetrying]);
   expect((await store.read("agent-a"))[0]).not.toHaveProperty("retryExhausted");
 });
 
-test("receipt persistence rejects a malformed or non-terminal exhausted record", async () => {
+test("receipt persistence rejects a malformed exhausted record", async () => {
   const directory = join(tmpdir(), `coforge-reminder-receipts-${crypto.randomUUID()}`);
   directories.push(directory);
   const store = new FileReminderReceiptStore(directory, "workspace-a", "computer-a");
@@ -161,7 +167,6 @@ test("receipt persistence rejects a malformed or non-terminal exhausted record",
   } as const;
   const exhausted = { ...storedReceipt(), terminal: true, retryExhausted };
   for (const corrupt of [
-    { ...exhausted, terminal: false },
     { ...exhausted, retryExhausted: { ...retryExhausted, code: "SOMETHING_ELSE" } },
     { ...exhausted, retryExhausted: { ...retryExhausted, stage: "persistence" } },
     { ...exhausted, retryExhausted: { ...retryExhausted, attempts: -1 } },

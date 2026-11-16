@@ -176,10 +176,10 @@ test("a rejected wake waits for each backoff and exhausts the bounded attempt bu
   expect(wakes).toBe(7);
   expect(store.receipts[0]).toMatchObject({
     attempt: 8,
-    terminal: true,
+    terminal: false,
     retryExhausted: { stage: "wake", attempts: 8 },
   });
-  expect(clock.timers).toHaveLength(0);
+  expect(clock.timers).toHaveLength(1);
 });
 
 test("a premature delay beyond one budget rearms a fresh authoritative occurrence", async () => {
@@ -293,7 +293,7 @@ test("a fire request that keeps failing records why its retries ran out", async 
   });
   expect(fires).toBe(8);
   expect(store.receipts[0]).toMatchObject({
-    terminal: true,
+    terminal: false,
     wakeAccepted: false,
     retryExhausted: {
       code: "REMINDER_DELIVERY_RETRY_EXHAUSTED",
@@ -304,7 +304,7 @@ test("a fire request that keeps failing records why its retries ran out", async 
     },
   });
   expect(store.receipts[0]?.serverResult).toBeUndefined();
-  expect(clock.timers).toHaveLength(0);
+  expect(clock.timers).toHaveLength(1);
   const exhausted = exhaustedLogs(records);
   expect(exhausted).toHaveLength(1);
   expect(exhausted[0]!.level).toBe("error");
@@ -350,7 +350,7 @@ test("a wake that keeps failing after the cloud fired records the wake step and 
     serverResult: "accepted",
     serverFired: true,
     wakeAccepted: false,
-    terminal: true,
+    terminal: false,
     retryExhausted: {
       code: "REMINDER_DELIVERY_RETRY_EXHAUSTED",
       stage: "wake",
@@ -403,7 +403,7 @@ test("a fire the cloud accepts on the last attempt leaves no attempt to wake and
     serverResult: "accepted",
     serverFired: true,
     wakeAccepted: false,
-    terminal: true,
+    terminal: false,
     retryExhausted: { stage: "wake", attempts: 8 },
   });
   const exhausted = exhaustedLogs(records);
@@ -446,7 +446,7 @@ test("a fire deferred to its deadline runs out of time before its attempts do", 
   });
   expect(fires).toBe(1);
   expect(store.receipts[0]).toMatchObject({
-    terminal: true,
+    terminal: false,
     retryExhausted: {
       code: "REMINDER_DELIVERY_RETRY_EXHAUSTED",
       stage: "fire",

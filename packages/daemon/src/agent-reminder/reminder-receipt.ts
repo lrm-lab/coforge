@@ -47,6 +47,18 @@ export interface ReminderReceiptStore {
   write(agentId: string, receipts: readonly ReminderReceipt[]): Promise<void>;
 }
 
+export const cloudFired = (receipt: ReminderReceipt) =>
+  receipt.serverResult === "accepted" && receipt.serverFired === true;
+
+const owesWork = (receipt: ReminderReceipt): boolean =>
+  receipt.retryExhausted !== undefined &&
+  !receipt.consumed &&
+  !receipt.wakeAccepted &&
+  receipt.serverResult !== "obsolete";
+
+export const withOwedWorkReopened = (receipt: ReminderReceipt): ReminderReceipt =>
+  receipt.terminal && owesWork(receipt) ? { ...receipt, terminal: false } : receipt;
+
 export function receiptKey(agentId: string, reminderId: string, version: number) {
   return `${agentId}:${reminderId}:${version}`;
 }

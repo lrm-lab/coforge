@@ -1,6 +1,11 @@
 import { getLogger } from "@logtape/logtape";
 import type { ReminderClock } from "./reminder-clock";
-import { receiptKey, type ReminderReceipt, type ReminderReceiptStore } from "./reminder-receipt";
+import {
+  receiptKey,
+  withOwedWorkReopened,
+  type ReminderReceipt,
+  type ReminderReceiptStore,
+} from "./reminder-receipt";
 
 const logger = getLogger(["coforge", "daemon", "reminder"]);
 
@@ -28,8 +33,8 @@ export class ReminderReceiptLedger {
     this.#receipts.delete(key);
   }
 
-  read(agentId: string): Promise<ReminderReceipt[]> {
-    return this.store.read(agentId);
+  async read(agentId: string): Promise<ReminderReceipt[]> {
+    return (await this.store.read(agentId)).map(withOwedWorkReopened);
   }
 
   write(agentId: string, receipts: readonly ReminderReceipt[]): Promise<void> {
@@ -38,7 +43,7 @@ export class ReminderReceiptLedger {
 
   async fresh(key: string, agentId: string): Promise<ReminderReceipt | undefined> {
     try {
-      const disk = (await this.store.read(agentId)).find(
+      const disk = (await this.read(agentId)).find(
         (r) => receiptKey(agentId, r.reminderId, r.version) === key,
       );
       if (disk) this.#receipts.set(key, disk);
@@ -49,7 +54,7 @@ export class ReminderReceiptLedger {
   }
 
   async saveMerged(receipt: ReminderReceipt): Promise<ReminderReceipt> {
-    const receipts = await this.store.read(receipt.agentId);
+    const receipts = await this.read(receipt.agentId);
     const index = receipts.findIndex(
       (r) => r.reminderId === receipt.reminderId && r.version === receipt.version,
     );
@@ -76,15 +81,17 @@ export class ReminderReceiptLedger {
   async deleteReceipt(receipt: ReminderReceipt): Promise<boolean> {
     const key = receiptKey(receipt.agentId, receipt.reminderId, receipt.version);
     try {
-      const receipts = (await this.store.read(receipt.agentId)).filter(
+      const receipts = (await this.read(receipt.agentId)).filter(
         (item) => item.reminderId !== receipt.reminderId || item.version !== receipt.version,
       );
       await this.store.write(receipt.agentId, receipts);
       this.#receipts.delete(key);
       return true;
     } catch (error) {
-      logger.error("Premature reminder receipt deletion failed", {
+      logger.error("Reminder receipt deletion failed", {
         error,
+        event: "reminder.receipt_delete_failed",
+        outcome: "failed",
         agent_id: receipt.agentId,
       });
       return false;

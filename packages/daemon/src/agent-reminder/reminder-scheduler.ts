@@ -7,6 +7,7 @@ import {
   logExhausted,
   logFireFailed,
   logWakeFailed,
+  cloudFired,
   receiptKey,
   RETRY_EXHAUSTED_CODE,
   type ReminderReceipt,
@@ -14,7 +15,14 @@ import {
   type ReminderRetryStage,
 } from "./reminder-receipt";
 import { ReminderReceiptLedger } from "./reminder-receipt-ledger";
-import { MAX_ATTEMPTS, RETRY_BUDGET_MS, retryBackoff } from "./reminder-retry-policy";
+import {
+  budgetSpent,
+  MAX_ATTEMPTS,
+  RETRY_BUDGET_MS,
+  retryBackoff,
+  retryDelay,
+  retryHorizon,
+} from "./reminder-retry-policy";
 import { ReminderTimers } from "./reminder-timers";
 import { ReminderWork } from "./reminder-work";
 import { assertCorrelated, assertSyncScope } from "./reminder-wire-checks";
@@ -49,6 +57,7 @@ export class ReminderScheduler {
     private readonly fire: (request: ReminderFireRequest) => Promise<ReminderFireResponse>,
     private readonly wake: (job: ReminderJob, occurrence: { late: boolean }) => Promise<boolean>,
     private readonly clock: ReminderClock = defaultClock,
+    private readonly random: () => number = Math.random,
   ) {
     this.#ledger = new ReminderReceiptLedger(store, clock);
     this.#scheduleTimers = new ReminderTimers(clock, () => this.#running);
@@ -100,6 +109,7 @@ export class ReminderScheduler {
       if (!receipt || receipt.serverResult !== "accepted" || !receipt.serverFired) return false;
       receipt.consumed = true;
       receipt.terminal = true;
+      delete receipt.retryExhausted;
       if (receipts) {
         if (!stored) receipts.push(receipt);
         await this.#ledger.write(agentId, receipts);
@@ -212,6 +222,10 @@ export class ReminderScheduler {
       };
     }
     this.#ledger.remember(key, receipt);
+    if (receipt.retryExhausted && this.clock.now() < receipt.nextAt) {
+      this.#armReceipt(receipt);
+      return;
+    }
     await this.#persistOrRetry(receipt, true);
   }
 
@@ -238,12 +252,14 @@ export class ReminderScheduler {
         agent_id: receipt.agentId,
       });
       if (!this.#running) return false;
-      if (failures >= MAX_ATTEMPTS || this.clock.now() >= receipt.deadline) {
-        // The store is what keeps failing, so this outcome can only be logged, not recorded.
+      const givesUp =
+        !receipt.retryExhausted &&
+        (failures >= MAX_ATTEMPTS || this.clock.now() >= receipt.deadline);
+      // The store is what keeps failing, so this outcome can only be logged, not recorded.
+      if (givesUp || failures === MAX_ATTEMPTS)
         logExhausted(receipt, "persistence", error, failures);
-        return false;
-      }
-      receipt.nextAt = Math.min(receipt.deadline, this.clock.now() + retryBackoff(failures));
+      if (givesUp) return false;
+      receipt.nextAt = Math.min(retryHorizon(receipt), this.clock.now() + retryBackoff(failures));
       this.#armReceipt(receipt, receipt.nextAt, false, afterFailure);
       return false;
     }
@@ -252,11 +268,16 @@ export class ReminderScheduler {
   #startEffect(receipt: ReminderReceipt): void {
     const key = this.#receiptKey(receipt.agentId, receipt.reminderId, receipt.version);
     if (!this.#running || this.#inFlight.has(key)) return;
-    if (receipt.attempt >= MAX_ATTEMPTS || this.clock.now() >= receipt.deadline) {
-      this.#exhaust(receipt);
-      return;
+    if (!receipt.retryExhausted) {
+      if (budgetSpent(receipt, this.clock.now())) {
+        this.#exhaust(receipt);
+        return;
+      }
+      receipt.attempt++;
+    } else if (cloudFired(receipt)) {
+      receipt.attempt++;
+      receipt.retryExhausted.attempts = receipt.attempt;
     }
-    receipt.attempt++;
     this.#lastFailures.delete(key);
     this.#inFlight.add(key);
     const generation = this.#generation;
@@ -272,8 +293,7 @@ export class ReminderScheduler {
           if (!this.#running || generation !== this.#generation) return;
           const current = this.#ledger.known(key);
           if (!current || current.consumed || current.terminal) return;
-          if (current.serverResult === "accepted" && current.serverFired)
-            await this.#runWake(key, current, generation);
+          if (cloudFired(current)) await this.#runWake(key, current, generation);
           else readyToWake = await this.#runFire(key, current, generation);
         })
         .finally(() => {
@@ -282,8 +302,8 @@ export class ReminderScheduler {
           if (
             readyToWake &&
             this.#running &&
-            current?.serverResult === "accepted" &&
-            current.serverFired &&
+            current &&
+            cloudFired(current) &&
             !current.consumed &&
             !current.terminal
           )
@@ -335,6 +355,7 @@ export class ReminderScheduler {
         }
       } else {
         current.terminal = true;
+        delete current.retryExhausted;
         await this.#persistOrRetry(current, false);
       }
       return false;
@@ -357,18 +378,35 @@ export class ReminderScheduler {
       const current = await this.#ledger.fresh(key, receipt.agentId);
       if (!current || current.consumed || current.terminal) return;
       current.wakeAccepted = accepted;
-      if (accepted) current.terminal = true;
+      if (accepted) {
+        current.terminal = true;
+        delete current.retryExhausted;
+      } else if (current.retryExhausted) {
+        this.#retry(current);
+        return;
+      }
       await this.#persistOrRetry(current, accepted ? false : "retry");
     });
   }
 
   #retry(receipt: ReminderReceipt): void {
-    if (receipt.attempt >= MAX_ATTEMPTS || this.clock.now() >= receipt.deadline) {
+    if (!receipt.retryExhausted && budgetSpent(receipt, this.clock.now())) {
       this.#exhaust(receipt);
       return;
     }
-    receipt.nextAt = Math.min(receipt.deadline, this.clock.now() + retryBackoff(receipt.attempt));
-    this.#armReceipt(receipt, receipt.nextAt);
+    receipt.nextAt = Math.min(
+      retryHorizon(receipt),
+      this.clock.now() + retryDelay(receipt, this.random),
+    );
+    if (!receipt.retryExhausted) {
+      this.#armReceipt(receipt, receipt.nextAt);
+      return;
+    }
+    this.#work.track(
+      this.#work.serial(receipt.agentId, async () => {
+        if (await this.#persistOrRetry(receipt, false, "retry")) this.#armReceipt(receipt);
+      }),
+    );
   }
 
   /** Ends a receipt whose attempts or deadline ran out, recording and logging the step that failed. */
@@ -376,9 +414,7 @@ export class ReminderScheduler {
     if (receipt.terminal) return;
     const key = this.#receiptKey(receipt.agentId, receipt.reminderId, receipt.version);
     // Once the cloud has accepted and fired, only the local wake remains to succeed.
-    const stage: ReminderRetryStage =
-      receipt.serverResult === "accepted" && receipt.serverFired ? "wake" : "fire";
-    receipt.terminal = true;
+    const stage: ReminderRetryStage = cloudFired(receipt) ? "wake" : "fire";
     receipt.retryExhausted = {
       code: RETRY_EXHAUSTED_CODE,
       stage,
@@ -388,9 +424,7 @@ export class ReminderScheduler {
     };
     logExhausted(receipt, stage, this.#lastFailures.get(key));
     this.#lastFailures.delete(key);
-    this.#work.track(
-      this.#work.serial(receipt.agentId, () => this.#persistOrRetry(receipt, false)),
-    );
+    this.#retry(receipt);
   }
 
   #armReceipt(
@@ -401,7 +435,7 @@ export class ReminderScheduler {
   ): void {
     if (!this.#running || receipt.consumed || receipt.terminal) return;
     const key = this.#receiptKey(receipt.agentId, receipt.reminderId, receipt.version);
-    const nextAt = Math.min(receipt.deadline, at);
+    const nextAt = Math.min(retryHorizon(receipt), at);
     receipt.nextAt = nextAt;
     this.#receiptTimers.arm(key, nextAt, () => {
       if (this.clock.now() < receipt.nextAt)

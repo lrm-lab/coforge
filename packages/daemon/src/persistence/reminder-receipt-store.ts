@@ -82,8 +82,7 @@ function receipt(value: unknown, workspaceId: string, computerId: string, agentI
     (item.serverCatchup !== undefined && typeof item.serverCatchup !== "boolean") ||
     (item.wakeAccepted === true && item.terminal !== true) ||
     (item.consumed === true && item.terminal !== true) ||
-    !retryExhaustedIsValid(item.retryExhausted) ||
-    (item.retryExhausted !== undefined && item.terminal !== true)
+    !retryExhaustedIsValid(item.retryExhausted)
   )
     throw new Error("reminder receipts are corrupt");
   const validated = structuredClone(value) as ReminderReceipt;

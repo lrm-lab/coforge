@@ -11,3 +11,7 @@ Rules for `src/agent-reminder/`. They extend `packages/daemon/AGENTS.md`.
   Work it cannot cancel (a fire request, a receipt write) keeps running, and the
   runtime's `stop` awaits `awaitIdle()` under a bound. Every path that arms a
   timer checks `#running` first, including one reached after an `await`.
+- Exhausted retries are recorded once but are not terminal. A fire the cloud never
+  accepted reconciles every ~5 minutes (jittered, same request id, `attempt`
+  unchanged); a wake after the cloud fired retries every 60 seconds. Only a cloud
+  decline, a consumed receipt or an accepted wake ends a receipt.
