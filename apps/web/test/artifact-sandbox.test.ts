@@ -129,7 +129,7 @@ describe("the sandbox origin's configuration", () => {
 describe("a sandbox ticket", () => {
   const grant = { w: "w1", a: "a1", v: 3, u: "u1", o: APP };
 
-  test("reads back what was signed; its files open for 30 minutes, the wrapper for 5", () => {
+  test("reads back what was signed; its files open for 10 minutes, the wrapper for 5", () => {
     const { ticket, expiresAt } = signSandboxTicket(grant, SECRET, NOW);
     expect(expiresAt.getTime()).toBe(NOW.getTime() + SANDBOX_TICKET_TTL_SECONDS * 1000);
     expect(readSandboxTicket(ticket, SECRET, NOW)).toMatchObject({

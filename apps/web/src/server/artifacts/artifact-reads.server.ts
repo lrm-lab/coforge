@@ -244,14 +244,15 @@ export class ArtifactReads {
 
   /** One file of a pinned version with no reader: the sandbox's subresources come under a
    * signed ticket that already proved its reader may read the artifact, so this asks only that
-   * the artifact is live in the workspace and the version has the file — never who asks and
-   * never the experiment again (task #25). */
+   * the experiment is on, the artifact is live in the workspace and the version has the file —
+   * never who asks (task #25). */
   async fileInVersion(input: {
     workspaceId: string;
     artifactId: string;
     version: number;
     path: string;
   }) {
+    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     return this.db.artifactFile.findFirst({
       where: {
         artifactId: input.artifactId,

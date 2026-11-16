@@ -35,9 +35,10 @@ export type SandboxTicket = {
  * of the page stops working soon after; the pane asks for a new one each time it shows a page. */
 export const SANDBOX_TICKET_TTL_SECONDS = 5 * 60;
 
-/** How long the files under a link keep opening, once it was made: a reading session's worth, for
- * a lazy image or a click to another page of the artifact. One constant for every file. */
-export const SANDBOX_FILE_TTL_SECONDS = 30 * 60;
+/** How long the files under a link keep opening, once it was made: long enough for a lazy image
+ * or a click to another page of the artifact soon after it loaded, short enough that a copied
+ * file URL stops working while the reader is still looking at it. One constant for every file. */
+export const SANDBOX_FILE_TTL_SECONDS = 10 * 60;
 
 export function signSandboxTicket(
   input: Omit<SandboxTicket, "iat" | "exp">,

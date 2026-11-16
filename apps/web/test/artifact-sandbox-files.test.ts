@@ -232,7 +232,7 @@ describe("a file that is not html", () => {
       );
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
       // A signed link pins one version, so its files do not change under it.
-      expect(response.headers.get("cache-control")).toBe("private, max-age=1800, immutable");
+      expect(response.headers.get("cache-control")).toBe("private, max-age=600, immutable");
       expect(response.headers.get("referrer-policy")).toBe("no-referrer");
       expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
       expect(response.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
@@ -376,16 +376,16 @@ describe("what a ticket reaches", () => {
     expect((await service.serve(frame(url, "other.html"))).status).toBe(404);
   });
 
-  test("a file opens for 30 minutes after the link was made; the wrapper for 5", async () => {
-    expect(SANDBOX_FILE_TTL_SECONDS).toBe(30 * 60);
+  test("a file opens for 10 minutes after the link was made; the wrapper for 5", async () => {
+    expect(SANDBOX_FILE_TTL_SECONDS).toBe(10 * 60);
     expect(SANDBOX_TICKET_TTL_SECONDS).toBe(5 * 60);
     const { service, url, at } = await opened();
     at(SANDBOX_TICKET_TTL_SECONDS * 1000);
     expect((await service.serve(new Request(url))).status).toBe(403);
-    at(29 * 60 * 1000);
+    at(9 * 60 * 1000);
     expect((await service.serve(sub(url, "img/a.png", "image"))).status).toBe(200);
     expect((await service.serve(frame(url, "other.html", "cross-site"))).status).toBe(200);
-    at(30 * 60 * 1000);
+    at(10 * 60 * 1000);
     const late = await service.serve(sub(url, "img/a.png", "image"));
     expect(late.status).toBe(403);
     expect(await late.text()).toContain("expired");
