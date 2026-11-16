@@ -20,7 +20,7 @@ Before editing files for a substantial task:
 
 - Put project documentation under `docs/`. The root `README.md` is the documentation index: every document or topic directory under `docs/`, each app or package `AGENTS.md`, and every package or directory `README.md` is linked from it with one line saying what it covers. A nested `AGENTS.md` is linked from the README or an ancestor `AGENTS.md`; `docs-index` checks the `docs/` entries and the `AGENTS.md` links.
 - Use progressive disclosure: a document is an overview plus links to smaller topic files, split into a directory before it grows (`markdown-lines` and `markdown-links` enforce the 200-line limit and valid links).
-- An `AGENTS.md` holds rules an agent cannot infer from the code: commands, conventions, boundaries, and gotchas. Do not write function-by-function descriptions, implementation walkthroughs, change history, or "historical status" notes; the code, its comments, and its tests carry those.
+- An `AGENTS.md` holds rules an agent cannot infer from the code: commands, conventions, boundaries, and gotchas. Do not write function-by-function descriptions, implementation walkthroughs, change history, or "historical status" notes; the code and its tests carry those.
 - Place instructions next to the code they govern. A rule that applies only to one directory belongs in that directory's `AGENTS.md`, which agents load only when they work there. Put long, occasionally needed procedures in a skill under `.agents/skills/` with its details in linked reference files.
 - A change that alters documented behavior, a rule, or a command updates the document that states it in the same CR. Delete statements that are no longer true instead of annotating them.
 
@@ -28,6 +28,7 @@ Before editing files for a substantial task:
 
 Read [module design](docs/agents/module-design.md) when adding a feature or module, writing imports, naming, logging, or keeping the module map.
 - Keep domain and protocol packages independent of UI frameworks, database clients, transport servers, and concrete Agent providers.
+- Good code explains itself: write no code comments, and carry intent in names, types and tests. When you work in a file, delete every comment it can do without; keep only tool directives such as approved suppressions and pragmas.
 
 ## Decision gates
 
