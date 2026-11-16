@@ -74,7 +74,7 @@ export function actionCardEditable(view: ToolActionCardView): boolean {
 /** What the handled line says was done, in gray before its result. A card closed without being
  * done names the action itself, so its title stands in for the past tense. */
 export function actionCardHandledVerb(view: ToolActionCardView): string {
-  if (view.state === "cancelled") return actionCardTitle(view);
+  if (view.state === "cancelled" || view.state === "expired") return actionCardTitle(view);
   switch (view.kind) {
     case "page:fill":
       return m.action_card_page_fill_done();
