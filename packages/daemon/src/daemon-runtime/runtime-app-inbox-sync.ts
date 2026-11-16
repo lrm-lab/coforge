@@ -43,14 +43,35 @@ export function requestAppConfigSnapshot(ports: RuntimeAppInboxSyncPorts, agentI
   );
 }
 
+/** Asks once per start and per connection for the Agent's reminders. Both ways this can end
+ * without a snapshot — the connection has no such method, or the ask fails — used to be silent, and
+ * a Daemon whose reminders never arrived looked exactly like a Daemon with none (2026-11-16: three
+ * days of an Agent's reminders never firing, no line anywhere). Neither is an error to retry here:
+ * the next start or the next connection asks again, and that is what the line says. */
 export async function requestReminderSnapshot(
   ports: RuntimeAppInboxSyncPorts,
   agentId: string,
 ): Promise<void> {
   const transport = ports.transport();
-  if (!transport.requestSnapshot) return;
-  const sync: ReminderSync = await transport.requestSnapshot({ ...ports.env(), agentId });
-  await ports.reminders.apply(sync);
+  if (!transport.requestSnapshot) {
+    logger.warn("This connection cannot ask for an Agent's reminders", {
+      event: "reminder_snapshot:unavailable",
+      agent_id: agentId,
+      outcome: "skipped",
+    });
+    return;
+  }
+  try {
+    const sync: ReminderSync = await transport.requestSnapshot({ ...ports.env(), agentId });
+    await ports.reminders.apply(sync);
+  } catch (error) {
+    logger.warn("Asking for an Agent's reminders failed; the next connection asks again", {
+      event: "reminder_snapshot:failed",
+      agent_id: agentId,
+      error_code: diagnosticErrorName(error),
+      outcome: "failed",
+    });
+  }
 }
 
 export function inbox(
