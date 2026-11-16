@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { ArrowLeft, Copy01, Eye, EyeOff, RefreshCw01 } from "@untitledui/icons";
+import { useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, Copy01, DotsHorizontal, Eye, EyeOff, RefreshCw01 } from "@untitledui/icons";
 import type {
   AgentWorkspaceFileEntry,
   AgentWorkspaceFileReadResult,
@@ -7,11 +7,11 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { useResizeObserver } from "#src/hooks/use-resize-observer";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { cn } from "#src/lib/utils";
-import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { FilePane, loadProjectFileView, type FileState } from "./agent-workspace-file-pane";
 import { TreeRoot, type DirState } from "./agent-workspace-tree";
 
@@ -83,6 +83,8 @@ export function AgentWorkspaceTab({
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
   const dirSeq = useRef<Record<string, number>>({});
   const fileSeq = useRef(0);
+  const fileStateRef = useRef(fileState);
+  fileStateRef.current = fileState;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   useResizeObserver({
@@ -99,34 +101,38 @@ export function AgentWorkspaceTab({
   }, []);
 
   const loadDir = useCallback(
-    async (dirPath: string, hidden: boolean) => {
+    async (dirPath: string, hidden: boolean, quiet = false) => {
       const seq = (dirSeq.current[dirPath] ?? 0) + 1;
       dirSeq.current[dirPath] = seq;
-      setDirState(dirPath, { status: "loading" });
+      // A quiet reload (the reader coming back to the window) keeps what is listed on screen
+      // while it reads, and keeps it too if the read fails: only a list that changed redraws.
+      const keep = quiet && cacheRef.current[dirPath]?.status === "ready";
+      if (!keep) setDirState(dirPath, { status: "loading" });
       try {
         const response = await onListDir(dirPath, hidden);
         if (dirSeq.current[dirPath] !== seq) return;
         if (response.status !== "ready") {
-          setDirState(dirPath, { status: response.status });
+          if (!keep) setDirState(dirPath, { status: response.status });
           return;
         }
         if (response.result.status !== "ok") {
-          setDirState(dirPath, { status: response.result.status });
+          if (!keep) setDirState(dirPath, { status: response.result.status });
           return;
         }
         if (dirPath === "") setRootPath(response.result.rootPath);
         setDirState(dirPath, { status: "ready", entries: sortedEntries(response.result.entries) });
       } catch {
-        if (dirSeq.current[dirPath] === seq) setDirState(dirPath, { status: "error" });
+        if (dirSeq.current[dirPath] === seq && !keep) setDirState(dirPath, { status: "error" });
       }
     },
     [onListDir, setDirState],
   );
 
   const loadFile = useCallback(
-    async (path: string) => {
+    async (path: string, quiet = false) => {
       const seq = ++fileSeq.current;
-      setFileState({ status: "loading", path });
+      const keep = quiet && fileStateRef.current?.status === "ready";
+      if (!keep) setFileState({ status: "loading", path });
       // Fetch the viewer's code alongside the file rather than after it arrives. A failed load
       // is reported when the viewer renders, so this early request drops its own error.
       void loadProjectFileView().catch(() => undefined);
@@ -134,16 +140,16 @@ export function AgentWorkspaceTab({
         const response = await onReadFile(path);
         if (fileSeq.current !== seq) return;
         if (response.status !== "ready") {
-          setFileState({ status: response.status, path });
+          if (!keep) setFileState({ status: response.status, path });
           return;
         }
         if (response.result.status === "ok") {
           setFileState({ status: "ready", path, result: response.result });
-        } else {
+        } else if (!keep) {
           setFileState({ status: response.result.status, path });
         }
       } catch {
-        if (fileSeq.current === seq) setFileState({ status: "error", path });
+        if (fileSeq.current === seq && !keep) setFileState({ status: "error", path });
       }
     },
     [onReadFile],
@@ -162,11 +168,29 @@ export function AgentWorkspaceTab({
     writeHiddenPreference(agentId, next);
   }
 
+  // Reads everything on screen again without blanking it: the list, every open folder and the
+  // open file.
   function refresh() {
-    void loadDir("", includeHidden);
-    for (const dir of expanded) void loadDir(dir, includeHidden);
-    if (selected) void loadFile(selected);
+    void loadDir("", includeHidden, true);
+    for (const dir of expanded) void loadDir(dir, includeHidden, true);
+    if (selected) void loadFile(selected, true);
   }
+
+  // The Agent keeps writing while the reader is elsewhere, so coming back to the window reads
+  // again (there is no push for file changes). The menu keeps a Refresh for staying put.
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState === "visible") refreshRef.current();
+    };
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+    return () => {
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+    };
+  }, []);
 
   // Single entry point for every expansion change, whether it comes from the tree's own
   // chevron toggle (a full next set) or a row click on a directory (one path flipped below).
@@ -192,50 +216,49 @@ export function AgentWorkspaceTab({
   const showSplit = containerWidth >= SPLIT_BREAKPOINT_PX;
   const narrowShowingFile = !showSplit && selected !== undefined;
 
+  const menu = (
+    <WorkspaceMenu
+      includeHidden={includeHidden}
+      canCopyPath={rootPath !== undefined}
+      onRefresh={refresh}
+      onToggleHidden={toggleHidden}
+      onCopyPath={() => void copyPath()}
+    />
+  );
+  const tree = (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <TreeRoot
+        state={rootState}
+        cache={cacheRef.current}
+        expanded={expanded}
+        selected={selected}
+        onExpandedChange={applyExpanded}
+        onSelectFile={selectFile}
+        onRetry={() => loadDir("", includeHidden)}
+      />
+    </div>
+  );
+
+  // One bar above the content, never a stack of them: the list's bar holds only its menu, and an
+  // open file's bar (the viewer's own) carries the way back on a narrow panel.
   return (
     <div ref={containerRef} className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      {/* One line: the path truncates, so the copy button must not wrap below it. `flex-wrap`
-       * would send the button to a second line as soon as the path's full width exceeds the row. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-secondary px-5 py-3">
-        <span className="min-w-0 truncate font-mono text-xs text-tertiary">{rootPath ?? " "}</span>
-        {rootPath && (
-          <ButtonUtility
-            icon={Copy01}
-            size="xs"
-            color="tertiary"
-            className="shrink-0"
-            tooltip={m.agent_workspace_copy_path()}
-            onClick={() => void copyPath()}
-          />
-        )}
-      </div>
-
-      {!showSplit && (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-secondary px-5 py-2.5">
-          <p className={SECTION_CAPTION_CLASS}>{m.agent_workspace_section()}</p>
-          <HiddenAndRefreshButtons
-            includeHidden={includeHidden}
-            onToggleHidden={toggleHidden}
-            onRefresh={refresh}
-          />
-        </div>
-      )}
-
       {narrowShowingFile ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-center gap-1.5 border-b border-secondary px-3 py-2">
-            <ButtonUtility
-              icon={ArrowLeft}
-              size="xs"
-              color="tertiary"
-              tooltip={m.agent_workspace_back()}
-              onClick={() => setSelected(undefined)}
-            />
-            <span className="min-w-0 truncate font-mono text-xs text-tertiary">{selected}</span>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <FilePane state={fileState} onRetry={() => selected && loadFile(selected)} />
-          </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <FilePane
+            state={fileState}
+            onRetry={() => selected && loadFile(selected)}
+            leading={
+              <ButtonUtility
+                icon={ArrowLeft}
+                size="xs"
+                color="tertiary"
+                className="shrink-0"
+                tooltip={m.agent_workspace_back()}
+                onClick={() => setSelected(undefined)}
+              />
+            }
+          />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -245,27 +268,8 @@ export function AgentWorkspaceTab({
               showSplit ? "w-72 shrink-0 border-r border-secondary" : "min-h-0 flex-1",
             )}
           >
-            {showSplit && (
-              <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-3 pb-2">
-                <p className={SECTION_CAPTION_CLASS}>{m.agent_workspace_section()}</p>
-                <HiddenAndRefreshButtons
-                  includeHidden={includeHidden}
-                  onToggleHidden={toggleHidden}
-                  onRefresh={refresh}
-                />
-              </div>
-            )}
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <TreeRoot
-                state={rootState}
-                cache={cacheRef.current}
-                expanded={expanded}
-                selected={selected}
-                onExpandedChange={applyExpanded}
-                onSelectFile={selectFile}
-                onRetry={() => loadDir("", includeHidden)}
-              />
-            </div>
+            <ListBar>{menu}</ListBar>
+            {tree}
           </div>
           {showSplit && (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -284,35 +288,60 @@ export function AgentWorkspaceTab({
   );
 }
 
-function HiddenAndRefreshButtons({
+/** The list's bar: as tall as an open file's bar, so going in and out of a file does not shift
+ * the content. */
+function ListBar({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-12 shrink-0 items-center justify-end border-b border-secondary px-3 py-2">
+      {children}
+    </div>
+  );
+}
+
+/** What the list does besides opening files, all used now and then, so they wait behind one
+ * button instead of each holding a place on screen. */
+function WorkspaceMenu({
   includeHidden,
-  onToggleHidden,
+  canCopyPath,
   onRefresh,
+  onToggleHidden,
+  onCopyPath,
 }: {
   includeHidden: boolean;
-  onToggleHidden: () => void;
+  canCopyPath: boolean;
   onRefresh: () => void;
+  onToggleHidden: () => void;
+  onCopyPath: () => void;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-1">
+    <Dropdown.Root>
       <ButtonUtility
-        icon={includeHidden ? Eye : EyeOff}
+        icon={DotsHorizontal}
         size="xs"
         color="tertiary"
-        tooltip={
-          includeHidden
-            ? m.agent_workspace_hidden_files_shown()
-            : m.agent_workspace_hidden_files_hidden()
-        }
-        onClick={onToggleHidden}
+        tooltip={m.agent_workspace_more()}
       />
-      <ButtonUtility
-        icon={RefreshCw01}
-        size="xs"
-        color="tertiary"
-        tooltip={m.agent_workspace_refresh()}
-        onClick={onRefresh}
-      />
-    </div>
+      <Dropdown.Popover placement="bottom end">
+        <Dropdown.Menu
+          aria-label={m.agent_workspace_more()}
+          disabledKeys={canCopyPath ? [] : ["copy"]}
+          onAction={(key) =>
+            key === "refresh" ? onRefresh() : key === "hidden" ? onToggleHidden() : onCopyPath()
+          }
+        >
+          <Dropdown.Item id="refresh" icon={RefreshCw01} label={m.agent_workspace_refresh()} />
+          <Dropdown.Item
+            id="hidden"
+            icon={includeHidden ? EyeOff : Eye}
+            label={
+              includeHidden
+                ? m.agent_workspace_hidden_files_shown()
+                : m.agent_workspace_hidden_files_hidden()
+            }
+          />
+          <Dropdown.Item id="copy" icon={Copy01} label={m.agent_workspace_copy_path()} />
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
   );
 }

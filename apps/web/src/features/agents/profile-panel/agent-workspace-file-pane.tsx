@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { CatchBoundary } from "@tanstack/react-router";
 import type { AgentWorkspaceFileReadResult } from "@lrm/coforge-sdk/internal";
 
@@ -38,15 +38,21 @@ export type FileState =
 export function FilePane({
   state,
   onRetry,
+  leading,
 }: {
   state: FileState | undefined;
   onRetry: () => void;
+  /** A control before the file name in the pane's one bar (the narrow panel's way back). */
+  leading?: ReactNode;
 }) {
   if (!state || state.status === "loading") {
     const name = state?.path.split("/").pop() ?? "";
-    return <ProjectFileViewSkeleton name={name} />;
+    return <ProjectFileViewSkeleton name={name} leading={leading} />;
   }
   const name = state.path.split("/").pop() ?? state.path;
+  // Every state but the text viewer (which draws its own bar) gets the same one-line bar, so the
+  // way back sits in one place whatever the file turned out to be.
+  const bar = leading ? <FileBar leading={leading} name={name} /> : null;
 
   if (state.status === "ready") {
     // An image read carries its bytes rather than text (the daemon sniffs the format), so it goes
@@ -56,7 +62,10 @@ export function FilePane({
     return (
       <CatchBoundary getResetKey={() => state.path} errorComponent={FilePreviewError}>
         {imageSource ? (
-          <WorkspaceImagePreview name={name} url={imageSource} />
+          <>
+            {bar}
+            <WorkspaceImagePreview name={name} url={imageSource} />
+          </>
         ) : (
           <Suspense fallback={<ProjectFileViewSkeleton name={name} />}>
             <ProjectFileView
@@ -66,18 +75,43 @@ export function FilePane({
               byteSize={state.result.sizeBytes}
               text={state.result.text}
               githubUrl={undefined}
+              barLeading={leading}
             />
           </Suspense>
         )}
       </CatchBoundary>
     );
   }
-  if (state.status === "offline") return <EmptyFileState text={m.agent_workspace_offline()} />;
-  if (state.status === "timeout")
+  return (
+    <>
+      {bar}
+      <FileStateMessage status={state.status} onRetry={onRetry} />
+    </>
+  );
+}
+
+function FileStateMessage({
+  status,
+  onRetry,
+}: {
+  status: Exclude<FileState["status"], "loading" | "ready">;
+  onRetry: () => void;
+}) {
+  if (status === "offline") return <EmptyFileState text={m.agent_workspace_offline()} />;
+  if (status === "timeout")
     return <EmptyFileState text={m.agent_workspace_timeout()} onRetry={onRetry} />;
-  if (state.status === "binary") return <EmptyFileState text={m.agent_workspace_binary()} />;
-  if (state.status === "too_large") return <EmptyFileState text={m.agent_workspace_too_large()} />;
+  if (status === "binary") return <EmptyFileState text={m.agent_workspace_binary()} />;
+  if (status === "too_large") return <EmptyFileState text={m.agent_workspace_too_large()} />;
   return <EmptyFileState text={m.agent_workspace_file_error()} onRetry={onRetry} />;
+}
+
+function FileBar({ leading, name }: { leading: ReactNode; name: string }) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-3 py-2">
+      {leading}
+      <span className="min-w-0 text-sm font-medium wrap-anywhere text-primary">{name}</span>
+    </div>
+  );
 }
 
 function WorkspaceImagePreview({ name, url }: { name: string; url: string }) {

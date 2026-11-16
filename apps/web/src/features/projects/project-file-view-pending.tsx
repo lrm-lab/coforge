@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
@@ -20,11 +22,17 @@ const SKELETON_BAR_WIDTHS = [
   "w-2/5",
 ];
 
-export function ProjectFileViewSkeleton({ name }: { name: string }) {
+export function ProjectFileViewSkeleton({ name, leading }: { name: string; leading?: ReactNode }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col" aria-busy="true">
       <span className="sr-only">{m.project_tree_loading()}</span>
-      <div className="flex items-center gap-2 border-b border-secondary px-4 py-2">
+      <div
+        className={cn(
+          "flex items-center gap-2 border-b border-secondary py-2",
+          leading ? "px-3" : "px-4",
+        )}
+      >
+        {leading}
         <span className="min-w-0 truncate text-sm font-medium text-primary">{name}</span>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-hidden px-4 py-4">
