@@ -58,6 +58,18 @@ test("the proxy hands an artifact operation to the runtime and answers the cloud
   expect(calls).toEqual([push as AgentArtifactRequest]);
 });
 
+test("the proxy hands move and delete to the runtime", async () => {
+  const calls: AgentArtifactRequest[] = [];
+  const { token, url } = proxyWith(async (request) => {
+    calls.push(request);
+    return Response.json({ ok: true });
+  });
+  const move = { operation: "move", artifact: "a1", to: "workspace" };
+  const remove = { operation: "delete", artifact: "a1" };
+  for (const body of [move, remove]) expect((await fetch(url, post(token, body))).status).toBe(200);
+  expect(calls).toEqual([move, remove] as AgentArtifactRequest[]);
+});
+
 test("the proxy refuses an operation outside the contract", async () => {
   const { token, url } = proxyWith(async () => {
     throw new Error("should not be called");
@@ -66,7 +78,8 @@ test("the proxy refuses an operation outside the contract", async () => {
     { operation: "push", artifact: "a1", baseVersion: 2, idempotencyKey: "k", exactBase: true },
     { operation: "push", artifact: "a1", baseVersion: 2, idempotencyKey: "k", text: "x" },
     { operation: "history", artifact: "a1" },
-    { operation: "delete", artifact: "a1" },
+    { operation: "delete" },
+    { operation: "move", artifact: "a1" },
     { operation: "read" },
   ])
     expect((await fetch(url, post(token, body))).status).toBe(400);
