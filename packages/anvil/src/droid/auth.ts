@@ -190,6 +190,10 @@ export class DroidRuntimeAuthAdapter implements RuntimeAuthAdapter {
       try {
         return await this.#doctorWith(selector, cwd, timeoutMs);
       } catch (error) {
+        // A timeout says the CLI is slow, not that it refused the spelling: trying the older one
+        // would wait out the budget a second time, so a status read could take twice as long as
+        // the caller allowed. Only a fast failure moves on to the next spelling.
+        if (/timed out/i.test(error instanceof Error ? error.message : "")) throw error;
         firstError ??= error;
       }
     }

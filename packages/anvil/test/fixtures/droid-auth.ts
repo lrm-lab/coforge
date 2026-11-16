@@ -28,6 +28,16 @@ if (args.includes("--version")) {
  * instead, refusing anything else the way commander does (task #...): the flag rename is what made
  * a logged-in Agent look signed out. */
 const legacySelector = Bun.env.DROID_AUTH_FIXTURE_LEGACY === "1";
+/** How many times `doctor` was asked, and with what, so a test can prove a fallback did not run. */
+const callsPath = join(directory, "doctor-calls.log");
+if (args.includes("doctor")) {
+  writeFileSync(callsPath, `${args.join(" ")}\n`, { flag: "a" });
+}
+/** A CLI that hangs rather than refusing the flag: the slow case a retry must not double. */
+if (Bun.env.DROID_AUTH_FIXTURE_HANG_ON_CHECKS === "1" && args.includes("--checks")) {
+  await Bun.sleep(3_000);
+  process.exit(1);
+}
 
 if (legacySelector && args.includes("doctor") && args.includes("--checks")) {
   console.error("error: unknown option '--checks' (Did you mean --certs?)");
