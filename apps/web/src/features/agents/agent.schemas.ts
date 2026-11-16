@@ -158,6 +158,13 @@ export const updateAgentInputSchema = z
   .superRefine(validateRuntimeKey);
 export type UpdateAgentInput = z.infer<typeof updateAgentInputSchema>;
 
+export const updateExternalAgentProfileInputSchema = z.object({
+  agentId: z.uuid(),
+  displayName: displayNameSchema,
+  description: z.string().trim().max(AGENT_PROFILE_DESCRIPTION_MAX_LENGTH).optional(),
+});
+export type UpdateExternalAgentProfileInput = z.infer<typeof updateExternalAgentProfileInputSchema>;
+
 export const agentIdSchema = z.uuid();
 /** Any Server Function that only needs an authorized Agent id shares this shape rather than
  * repeating the object literal. */

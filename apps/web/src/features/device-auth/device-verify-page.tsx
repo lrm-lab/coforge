@@ -14,6 +14,7 @@ import {
   InputOTPSeparator,
   InputOTPSlot,
 } from "#src/components/ui/input-otp";
+import type { ExternalGrantDetails } from "#src/server/auth/device-auth-external-agent.server";
 import { m } from "#src/paraglide/messages";
 import { formatUserCode, USER_CODE_LENGTH } from "./device-code-format";
 import {
@@ -25,7 +26,7 @@ import {
 
 type Stage =
   | { name: "entry" }
-  | { name: "confirm"; code: string }
+  | { name: "confirm"; code: string; grant?: ExternalGrantDetails }
   | { name: "approved" }
   | { name: "denied" };
 
@@ -40,6 +41,10 @@ function problemMessage(state: DeviceCodeState): string | null {
   if (state === "expired") return m.device_verify_expired();
   if (state === "settled") return m.device_verify_settled();
   if (state === "unavailable") return m.device_verify_unavailable();
+  if (state === "not_authorized") return m.device_verify_not_authorized();
+  if (state === "agent_not_external") return m.device_verify_agent_not_external();
+  if (state === "agent_unavailable") return m.device_verify_agent_unavailable();
+  if (state === "credential_limit") return m.device_verify_credential_limit();
   return null;
 }
 
@@ -61,7 +66,7 @@ export function DeviceVerifyPage({
     setProblem(null);
     try {
       const result = await checkDeviceCode({ data: { userCode: value } });
-      if (result.state === "ok") setStage({ name: "confirm", code: value });
+      if (result.state === "ok") setStage({ name: "confirm", code: value, grant: result.grant });
       else setProblem(problemMessage(result.state));
     } finally {
       setBusy(false);
@@ -178,26 +183,29 @@ export function DeviceVerifyPage({
                 </Button>
               </div>
             ) : (
-              <div className="mt-8 flex gap-3">
-                <Button
-                  type="button"
-                  color="secondary"
-                  size="lg"
-                  className="flex-1"
-                  isDisabled={busy}
-                  onPress={() => settle(false)}
-                >
-                  {m.device_verify_deny()}
-                </Button>
-                <Button
-                  type="button"
-                  size="lg"
-                  className="flex-1"
-                  isDisabled={busy}
-                  onPress={() => settle(true)}
-                >
-                  {m.device_verify_approve()}
-                </Button>
+              <div className="mt-6 space-y-6">
+                {stage.grant ? <ExternalGrantSummary grant={stage.grant} /> : null}
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    color="secondary"
+                    size="lg"
+                    className="flex-1"
+                    isDisabled={busy}
+                    onPress={() => settle(false)}
+                  >
+                    {m.device_verify_deny()}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="flex-1"
+                    isDisabled={busy}
+                    onPress={() => settle(true)}
+                  >
+                    {m.device_verify_approve()}
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -208,6 +216,38 @@ export function DeviceVerifyPage({
         )}
       </div>
     </main>
+  );
+}
+
+function ExternalGrantSummary({ grant }: { grant: ExternalGrantDetails }) {
+  const machineLabel = grant.machine.machineName || grant.machine.hostname || "—";
+  const rows = [
+    { label: m.device_verify_external_machine_label(), value: machineLabel },
+    ...(grant.machine.os
+      ? [{ label: m.device_verify_external_os_label(), value: grant.machine.os }]
+      : []),
+    ...(grant.machine.clientName
+      ? [{ label: m.device_verify_external_client_label(), value: grant.machine.clientName }]
+      : []),
+  ];
+  return (
+    <div className="rounded-xl border border-secondary bg-secondary_subtle p-4 text-sm">
+      <p className="font-medium text-primary">
+        {m.device_verify_external_target({
+          agent: grant.agent.name,
+          workspace: grant.workspace.name || grant.workspace.slug,
+        })}
+      </p>
+      <p className="mt-2 text-xs text-tertiary">{m.device_verify_external_machine()}</p>
+      <dl className="mt-2 space-y-1.5">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-baseline justify-between gap-4">
+            <dt className="text-xs text-tertiary">{row.label}</dt>
+            <dd className="min-w-0 truncate font-mono text-xs text-primary">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 
