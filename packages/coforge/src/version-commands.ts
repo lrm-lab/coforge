@@ -26,14 +26,15 @@ export function formatVersionInfo(info: VersionInfo): string {
 
 export async function runVersion(
   invocation: VersionInvocation,
-  transport: Pick<MessageTransport, "version">,
+  transport: Pick<MessageTransport, "version" | "external">,
 ): Promise<string> {
-  if (!transport.version) throw new Error("Version transport is unavailable");
-  const response = await transport.version();
+  if (!transport.external && !transport.version)
+    throw new Error("Version transport is unavailable");
+  const response = transport.external ? undefined : await transport.version!();
   const info = {
     cli: COFORGE_CLI_VERSION,
-    daemon: response.daemonVersion,
-    ...(response.computerVersion ? { computer: response.computerVersion } : {}),
+    daemon: response?.daemonVersion,
+    ...(response?.computerVersion ? { computer: response.computerVersion } : {}),
   };
   if (invocation.json) return JSON.stringify({ ok: true, data: info });
   return formatVersionInfo(info);

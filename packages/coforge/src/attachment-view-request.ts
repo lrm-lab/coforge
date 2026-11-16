@@ -1,3 +1,4 @@
+import { isAgentCredential } from "./agent-credential";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import { CliError } from "./cli-error";
 
@@ -8,7 +9,7 @@ export async function attachmentViewRequest(
   attachmentId: string,
 ): Promise<{ bytes: Uint8Array; fileName?: string }> {
   if (!context) throw new Error("coforge agent context is not configured");
-  if (!/^sfp_[A-Za-z0-9_-]{43}$/.test(context)) throw new Error("coforge agent context is invalid");
+  if (!isAgentCredential(context)) throw new Error("coforge agent context is invalid");
   if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
   const endpoint = new URL(proxyUrl);
   endpoint.pathname = agentApiRoutes.local.attachments.path(attachmentId);

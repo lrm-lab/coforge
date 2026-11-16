@@ -17,8 +17,15 @@ import { COFORGE_CLI_VERSION } from "./version";
 import { cliUsage } from "./usage";
 import { commandHelp } from "./command-help";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
+import { isAgentSubcommand, runAgentSubcommand } from "./external/agent-cli";
+import { connectExternal } from "./external/direct-transport";
+import { selectProfile } from "./external/profile-select";
+import { profileStore } from "./external/profile-store";
+import { daemonOnlyError } from "./external/refusal";
+import { resolveAgentTransport } from "./external/resolve-transport";
 
-export async function runAgentCli(args: readonly string[]): Promise<void> {
+export async function runAgentCli(argv: readonly string[]): Promise<void> {
+  let args = argv;
   // `coforge --version`/`-V` reports only the CLI carrier, unlike `coforge version`, which also
   // queries the live daemon for its own and the Computer's version.
   if (args[0] === "--version" || args[0] === "-V") {
@@ -34,12 +41,28 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
     return;
   }
 
-  const transport = connectLocal(
-    Bun.env.COFORGE_DAEMON_SOCKET ?? "",
-    Bun.env.COFORGE_AGENT_CONTEXT ?? "",
-    Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
-  );
+  let transport: ReturnType<typeof connectLocal> | undefined;
+  let external: ReturnType<typeof connectExternal> | undefined;
   try {
+    const selection = selectProfile(args, Bun.env);
+    args = selection.args;
+    if (isAgentSubcommand(args) && !args.includes("--help")) {
+      await runAgentSubcommand(args, selection.slug, Bun.env);
+      return;
+    }
+    const store = profileStore(Bun.env);
+    const target = await resolveAgentTransport(Bun.env, selection.slug, store);
+    if (target.mode === "external") {
+      external = connectExternal(
+        {
+          slug: target.profileSlug,
+          path: store.pathOf(target.profileSlug),
+          profile: target.profile,
+        },
+        store,
+      );
+      transport = external.transport;
+    } else transport = connectLocal(target.socketPath, target.context, target.proxyUrl);
     // The app commands own their output and exit code, so neither goes through `run` (`app
     // token` also owns the program's stdio). `app config` alone stays with `run`. `--help`
     // keeps `run`'s help lookup — anything after `--` is the token program's, not ours.
@@ -53,11 +76,10 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
         process.stdout.write(`${help}\n`);
         return;
       }
-      const context = Bun.env.COFORGE_AGENT_CONTEXT ?? "";
-      const proxyUrl = Bun.env.COFORGE_AGENT_PROXY_URL ?? "";
+      const { context, proxyUrl } = target;
       const invocation = parseAppArgs(args.slice(1));
       if (isAppRegistrationInvocation(invocation)) {
-        const transport = connectLocal(Bun.env.COFORGE_DAEMON_SOCKET ?? "", context, proxyUrl);
+        const transport = connectLocal(target.socketPath, context, proxyUrl);
         process.exitCode = await runAppRegistrationCommand(
           invocation,
           {
@@ -67,7 +89,7 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
           { stdout: (text) => process.stdout.write(text) },
         );
       } else if (isAppManagementInvocation(invocation)) {
-        const transport = connectLocal(Bun.env.COFORGE_DAEMON_SOCKET ?? "", context, proxyUrl);
+        const transport = connectLocal(target.socketPath, context, proxyUrl);
         process.exitCode = await runAppManagementCommand(
           invocation,
           {
@@ -85,6 +107,8 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
       return;
     }
     if (args[0] === "github" && args[1] === "credential") {
+      if (external)
+        throw daemonOnlyError("The GitHub credential helper needs the Computer's daemon.");
       const output = await runGitHubCredentialHelper(
         args[2],
         await Bun.stdin.text(),
@@ -94,6 +118,8 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
       return;
     }
     if (args[0] === "github" && args[1] === "gh") {
+      if (external)
+        throw daemonOnlyError("The GitHub credential helper needs the Computer's daemon.");
       process.exitCode = await runGitHubCli(args.slice(2), transport.githubCredential);
       return;
     }
@@ -111,9 +137,10 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
     const result = await run(args, transport);
     if (typeof result === "string") console.log(result);
     else if (result !== undefined) console.log(JSON.stringify(result));
+    await external?.commit();
     // The once-a-day Computer-update line rides the output tail: the daemon dedups, this side
     // only decides whether a line may follow — never for `--json`, never from an error below.
-    const notice = await updateNoticeLine(transport, args);
+    const notice = transport && !external ? await updateNoticeLine(transport, args) : undefined;
     if (notice) console.error(notice);
   } catch (error) {
     if (error instanceof CliError) {
@@ -121,7 +148,7 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
       console.error(renderCliError(error));
     } else console.error(thrownMessage(error));
     process.exitCode = error instanceof CliError ? (error.exitCode ?? 1) : 1;
-    const notice = await updateNoticeLine(transport, args);
+    const notice = transport && !external ? await updateNoticeLine(transport, args) : undefined;
     if (notice) console.error(notice);
   }
 }

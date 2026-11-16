@@ -17,7 +17,8 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { formatManualGet, formatManualSearchResults } from "#src/manual-format";
 import { formatProfile } from "#src/user-format";
-import { runWhoami } from "#src/whoami";
+import { managedPromptUnavailable, runWhoami } from "#src/whoami";
+import { runExternalWhoami } from "#src/external/whoami-external";
 import type { MessageTransport } from "#src/message-transport";
 import { runContextCommand } from "#src/context-commands";
 import { runAttachmentComments } from "#src/attachment-comments";
@@ -83,6 +84,8 @@ export async function run(args: readonly string[], transport: MessageTransport):
   }
   const invocation = parseArgs(args);
   if (invocation.command === "whoami") {
+    if (transport.external) return runExternalWhoami(transport.external, invocation);
+    if (invocation.prompt) throw managedPromptUnavailable();
     return runWhoami(
       transport.profileShow && (() => transport.profileShow!()),
       invocation.json === true,

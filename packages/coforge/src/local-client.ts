@@ -1,4 +1,5 @@
 import { manualRequest } from "./manual-request";
+import { isAgentCredential } from "./agent-credential";
 import { appConfigRequests } from "#src/app-config-request";
 import { artifactTransport } from "#src/artifact-file-transport";
 import {
@@ -102,7 +103,7 @@ export function connectLocal(
         throw preIssuanceError(operation, "Memory messages must stay within this conversation");
     }
     if (!context) throw preIssuanceError(operation, "coforge agent context is not configured");
-    if (!/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    if (!isAgentCredential(context))
       throw preIssuanceError(operation, "coforge agent context is invalid");
     const idempotencyKey = crypto.randomUUID();
     if (!proxyUrl) throw preIssuanceError(operation, "coforge agent proxy is not configured");
@@ -188,7 +189,7 @@ export function connectLocal(
     channel: (command: Omit<ChannelCommand, "idempotencyKey">) => callChannel(command),
     actionPrepare: (target: string, action: ActionCardAction) => callActionPrepare(target, action),
     workspaceInfo: async (): Promise<import("../index").WorkspaceInfoResult> => {
-      if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+      if (!context || !isAgentCredential(context))
         throw new Error("coforge agent context is invalid");
       if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
       const response = await fetch(proxyEndpoint(agentApiRoutes.workspace.info.path), {
@@ -316,7 +317,7 @@ export function connectLocal(
     directUploadEnabled: boolean;
     directUploadThresholdBytes: number;
   } | null> {
-    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    if (!context || !isAgentCredential(context))
       throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
     const endpoint = new URL(proxyUrl);
@@ -400,8 +401,7 @@ export function connectLocal(
     mimeType?: string;
   }): Promise<AttachmentUploadResult> {
     if (!context) throw new Error("coforge agent context is not configured");
-    if (!/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
-      throw new Error("coforge agent context is invalid");
+    if (!isAgentCredential(context)) throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
     const file = Bun.file(input.path);
     const sizeBytes = file.size;
@@ -627,7 +627,7 @@ export function connectLocal(
   }
 
   async function callTask(command: TaskCommand) {
-    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    if (!context || !isAgentCredential(context))
       throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
     let response: Response;
@@ -656,7 +656,7 @@ export function connectLocal(
   }
 
   async function callChannel(command: Omit<ChannelCommand, "idempotencyKey">) {
-    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    if (!context || !isAgentCredential(context))
       throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
     const idempotencyKey = crypto.randomUUID();
@@ -715,7 +715,7 @@ export function connectLocal(
     target: string,
     action: ActionCardAction,
   ): Promise<ActionPrepareResult> {
-    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    if (!context || !isAgentCredential(context))
       throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
     let response: Response;
@@ -744,7 +744,7 @@ export function connectLocal(
   }
 
   async function callWeeklyReport(command: WeeklyReportCommand) {
-    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    if (!context || !isAgentCredential(context))
       throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
     const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.weeklyReports.path), {
@@ -763,7 +763,7 @@ export function connectLocal(
   async function callWeeklyReportCollect(
     command: import("../index").WeeklyReportCollectCommand,
   ): Promise<import("../index").WeeklyReportCollectResult> {
-    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    if (!context || !isAgentCredential(context))
       throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
     const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.weeklyReportCollect.path), {
@@ -782,7 +782,7 @@ export function connectLocal(
   async function callWeeklyReportKeyPoints(
     command: import("../index").WeeklyReportKeyPointsCommand,
   ): Promise<import("../index").WeeklyReportKeyPointsResult> {
-    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    if (!context || !isAgentCredential(context))
       throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
     const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.weeklyReportKeyPoints.path), {
@@ -801,7 +801,7 @@ export function connectLocal(
   async function callWeeklyReportMemory(
     command: import("../index").WeeklyReportMemoryCommand,
   ): Promise<import("../index").WeeklyReportMemoryResult> {
-    if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
+    if (!context || !isAgentCredential(context))
       throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
     const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.weeklyReportMemory.path), {

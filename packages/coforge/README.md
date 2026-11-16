@@ -14,6 +14,8 @@ The command reference lives in [`docs/agent-cli/`](../../docs/agent-cli/README.m
 | `index.ts`                                  | Argument parsing, the `MessageTransport` port, and the commands that return a result to print  |
 | `src/local-client.ts`                       | The `MessageTransport` over the daemon's local Agent proxy                                     |
 | `src/proxy-request.ts`                      | The preflight and the `{ ok: false, errorCode, error }` request every proxied call shares      |
+| `src/external/`                             | External Agents: profile store and selection, device-code login, direct server transport       |
+| `src/agent-credential.ts`                   | The one grammar of an Agent credential (`sfp_` daemon token, `sk_ext_` external key)           |
 | `src/cli-error.ts`                          | The typed CLI failure and its rendering                                                        |
 | `src/refusal-guidance.ts`                   | What a server refusal means for the Agent's next step                                          |
 | `src/app-config.ts`                         | `app config`: read or change one of the Agent's own Apps' config                               |

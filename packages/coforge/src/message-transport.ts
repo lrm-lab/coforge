@@ -1,4 +1,5 @@
 import type { TeamMemoryCommand, TeamMemoryResult } from "@lrm/coforge-sdk/agent";
+import type { ExternalSession } from "#src/external/profile-store";
 import type {
   AgentAppConfigPatch,
   AgentAppConfigResponse,
@@ -91,6 +92,8 @@ export type MessageTransport = LabelTransport &
     resolve?(messageId: string): Promise<unknown>;
     react?(messageId: string, emoji: string, remove?: boolean): Promise<unknown>;
     inboxCheck?(): Promise<unknown>;
+    /** Set when the commands run as an external Agent, straight against the server. */
+    external?: ExternalSession;
     inboxList?: InboxTransport["inboxList"];
     setChannelMuted?(target: string, muted: boolean): Promise<unknown>;
     reminder?(request: ReminderTransportRequest): Promise<ReminderResponse>;
