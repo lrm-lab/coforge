@@ -10,13 +10,12 @@ type ModelSizeField = {
   label: () => string;
   help: () => string;
   reported: number | undefined;
-  reportedHelp: (params: { tokens: string }) => string;
 };
 
 /**
  * The Agent form's model size fields (task #30). Empty is a real answer, not a missing one: the
- * model's own entry then decides, and the hint says which size that is. A person who fills one in
- * wins over the model list, which is why the help text says "leave empty" rather than pre-filling.
+ * model's own entry then decides, and the placeholder shows which size that is — saying it again in
+ * the hint would be the same fact twice. A person who fills one in wins over the model list.
  */
 export function AgentModelSizeFields({
   value,
@@ -36,14 +35,12 @@ export function AgentModelSizeFields({
       label: m.agent_form_context_window,
       help: m.agent_form_context_window_help,
       reported: model?.contextWindow,
-      reportedHelp: m.agent_form_context_window_model,
     },
     {
       name: "maxOutputTokens",
       label: m.agent_form_max_output,
       help: m.agent_form_max_output_help,
       reported: model?.maxOutputTokens,
-      reportedHelp: m.agent_form_max_output_model,
     },
   ];
   return (
@@ -61,13 +58,7 @@ export function AgentModelSizeFields({
             value={value[field.name]}
             onChange={(next) => onChange({ ...value, [field.name]: next })}
             isInvalid={invalid}
-            hint={
-              invalid
-                ? m.agent_form_model_size_error()
-                : field.reported === undefined
-                  ? field.help()
-                  : `${field.help()} ${field.reportedHelp({ tokens: reported ?? "" })}`
-            }
+            hint={invalid ? m.agent_form_model_size_error() : field.help()}
             placeholder={reported}
           />
         );
