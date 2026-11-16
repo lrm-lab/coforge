@@ -82,6 +82,7 @@ model Workspace {
   appAgentInboundGrants  AppAgentInboundGrant[]
   appAgentInboundRequests AppAgentInboundRequest[]
   appAgentEvents         AppAgentEvent[]
+  systemAgentEvents      SystemAgentEvent[]
 
   @@map("workspaces")
 }

@@ -15,6 +15,8 @@ export type CommentedArtifact = {
   id: string;
   homeKey: string;
   access: string;
+  name: string;
+  title: string;
   currentVersion: number;
   authorAgentId: string | null;
 };
@@ -36,6 +38,8 @@ export async function requireReadableArtifact(
       id: true,
       homeKey: true,
       access: true,
+      name: true,
+      title: true,
       currentVersion: true,
       authorAgentId: true,
     },

@@ -7,8 +7,8 @@ import {
 } from "./artifact-comments";
 
 /**
- * `coforge artifact list|read|push|move|delete|comments|comment|review|resolve|reopen`, plus
- * `pull` and `download` over the file routes (task #385): an Agent's artifacts, one operation per
+ * `coforge artifact list|read|push|move|delete|comments|comment|review|resolve|reopen|follow|unfollow`,
+ * plus `pull` and `download` over the file routes (task #385): an Agent's artifacts, one operation per
  * request on `POST /api/agent/v1/artifacts`. An artifact is a versioned set of files with an
  * entry file, and its type is that file's; an Agent changes its files only by `push`. The server
  * checks the `artifacts` experiment and who can see the artifact for every operation.
@@ -93,7 +93,9 @@ export type AgentArtifactRequest =
     }
   | { operation: "delete"; artifact: string }
   | { operation: "resolve"; artifact: string; comment: string; note?: string }
-  | { operation: "reopen"; artifact: string; comment: string };
+  | { operation: "reopen"; artifact: string; comment: string }
+  | { operation: "follow"; artifact: string }
+  | { operation: "unfollow"; artifact: string };
 
 /** What a field of a request is on the wire: a string, a whole non-negative number, a boolean, a
  * list of strings, a manifest of files (`{ path, sha256 }`), an anchor (`{ type, data }`) or a
@@ -120,7 +122,7 @@ const FIELD_CHECKS: Record<FieldKind, (value: unknown) => boolean> = {
 type OperationShape = {
   fields: Record<string, FieldKind>;
   required: readonly string[];
-  /** Changes nothing: a failure on the way is safe to run again. */
+  /** A failure on the way is safe to run again: it changes nothing, or sets a state a repeat leaves as it is. */
   readOnly?: true;
   /** Held up while others commented on what it touches since the Agent last read comments. */
   gatedByComments?: true;
@@ -211,6 +213,8 @@ const OPERATIONS = {
     required: ["artifact", "comment"],
     commentWrite: true,
   },
+  follow: { fields: { artifact: "string" }, required: ["artifact"], readOnly: true },
+  unfollow: { fields: { artifact: "string" }, required: ["artifact"], readOnly: true },
 } as const satisfies Record<AgentArtifactRequest["operation"], OperationShape>;
 
 /** What an operation does, for a client that reports its failures: whether it only reads, whether

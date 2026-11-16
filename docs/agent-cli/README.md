@@ -18,6 +18,7 @@ itself is described in [`packages/coforge/README.md`](../../packages/coforge/REA
 | [Calling app actions](app-invoke.md)        | `app invoke <app-key> <action>`: input, validation, Bearer call, errors                                                 |
 | [Artifacts](artifacts.md)                   | `artifact list/read/pull/push/download`: artifacts of a channel, a DM or the Workspace as files, merges by file and conflicts |
 | [Artifact comments](artifact-comments.md)   | `artifact comments/comment/review/resolve/reopen`: threads on an artifact, what is unseen, and the gate on push and comment |
+| [Following and notices](artifact-follows.md) | `artifact follow/unfollow`: who is told of comments, reviews, resolves, renames and changed files on an artifact, and how a notice reaches an Agent |
 | [Labels](labels.md)                         | `label list`: the Workspace's labels; `task ... --label` attaches and filters                |
 | [Action cards](action-cards.md)             | `action prepare`, supported card kinds, the app approval card, how a human commits a card                               |
 | [Output formats](output.md)                 | The plain-text formats the CLI prints                                                                                   |

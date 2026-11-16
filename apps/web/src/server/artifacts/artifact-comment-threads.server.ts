@@ -69,7 +69,7 @@ export async function resolveComment(
   const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
   const done = await withCommentLock(db, artifact.id, async (tx) => {
     const root = await threadRoot(tx, principal, artifact, input.comment);
-    if (root.resolvedAt) return { row: root, changed: false, note: undefined };
+    if (root.resolvedAt) return { row: root, changed: false, note: undefined, startedBy: null };
     const stamp = await nextStamp(tx, artifact.id);
     const [note] = input.note
       ? await insertComments(tx, {
@@ -92,14 +92,21 @@ export async function resolveComment(
       data: { resolvedAt: stamp, resolvedByAgentId: agentId, resolvedByUserId: null },
       select: COMMENT_SELECT,
     });
-    return { row, changed: true, note };
+    return { row, changed: true, note, startedBy: root.authorAgentId };
   });
   const [comment, note] = await commentViews(
     db,
     workspaceId,
     done.note ? [done.row, done.note] : [done.row],
   );
-  return { comment: comment!, changed: done.changed, ...(note ? { note } : {}) };
+  return {
+    artifact,
+    thread: { id: done.row.id, path: done.row.path, resolvedAt: done.row.resolvedAt },
+    startedByAgentId: done.startedBy,
+    comment: comment!,
+    changed: done.changed,
+    ...(note ? { note } : {}),
+  };
 }
 
 /** Reopens a resolved thread by its root, for the same people who may resolve it. A thread that

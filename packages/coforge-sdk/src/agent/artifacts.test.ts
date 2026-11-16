@@ -209,6 +209,11 @@ test("the comment operations take exactly their own fields, nested ones included
     artifact: "a1",
     comment: "c1",
   });
+  for (const operation of ["follow", "unfollow"] as const)
+    expect(decodeAgentArtifactRequest({ operation, artifact: "a1" })).toEqual({
+      operation,
+      artifact: "a1",
+    });
 });
 
 test("a comment request with a stray, missing or mistyped field is refused", () => {
@@ -227,6 +232,8 @@ test("a comment request with a stray, missing or mistyped field is refused", () 
     { operation: "comments", artifact: "a1", all: "yes" },
     { operation: "comments", artifact: "a1", exact: true },
     { operation: "resolve", artifact: "a1" },
+    { operation: "follow" },
+    { operation: "unfollow", artifact: "a1", comment: "c1" },
     { operation: "reopen", artifact: "a1", comment: "c1", note: "no note here" },
     { operation: "review", artifact: "a1", idempotencyKey: "k" },
     { operation: "review", artifact: "a1", idempotencyKey: "k", comments: "x" },
@@ -262,4 +269,10 @@ test("each operation says whether it reads, is held up by unseen comments, or wr
   for (const operation of ["comment", "review", "resolve", "reopen"] as const)
     expect(traits(operation)).toMatchObject({ readOnly: false, commentWrite: true });
   expect(traits("push")).toMatchObject({ readOnly: false, commentWrite: false });
+  for (const operation of ["follow", "unfollow"] as const)
+    expect(traits(operation)).toEqual({
+      readOnly: true,
+      gatedByComments: false,
+      commentWrite: false,
+    });
 });

@@ -1,4 +1,5 @@
 import { shellWord } from "#src/artifact-directory";
+import { formatTelling, type TellingAnswer } from "#src/artifact-follow-format";
 import { plural } from "#src/plural";
 import {
   foldUntrustedLine,
@@ -11,7 +12,7 @@ import {
 
 type Actor = { kind: "user" | "agent"; name: string };
 
-export type CommentAnswer = {
+export type CommentAnswer = TellingAnswer & {
   id: string;
   author: Actor;
   version: number;
@@ -29,11 +30,18 @@ export type CommentAnswer = {
 type ReviewAnswer = { id: string; author: Actor; version: number; body: string | null };
 
 /** The answer to `review`: the review and its comments, in the order written. */
-export type PostedReviewAnswer = { review: ReviewAnswer; comments: CommentAnswer[] };
+export type PostedReviewAnswer = TellingAnswer & {
+  review: ReviewAnswer;
+  comments: CommentAnswer[];
+};
 
 /** The answer to `resolve` and `reopen`: the thread's first comment, whether anything changed, and
  * the note posted before it closed. */
-export type ResolvedAnswer = { comment: CommentAnswer; changed: boolean; note?: CommentAnswer };
+export type ResolvedAnswer = TellingAnswer & {
+  comment: CommentAnswer;
+  changed: boolean;
+  note?: CommentAnswer;
+};
 
 export type CommentsAnswer = {
   view: "unseen" | "all";
@@ -163,26 +171,33 @@ function nextPage(request: CommentsRequest, answer: CommentsAnswer): string {
 const whereOrArtifact = (comment: CommentAnswer) =>
   whereOf(comment.path, comment.anchor) || "the whole artifact";
 
-export function formatPostedComment(comment: CommentAnswer): string {
+export function formatPostedComment(comment: CommentAnswer, artifact: string): string {
   const thread = comment.replyTo ? ` as a reply in ${commentId(comment.replyTo)}` : "";
-  return `Posted ${commentId(comment.id)}${thread} on ${whereOrArtifact(comment)} (version ${comment.version}).`;
+  return [
+    `Posted ${commentId(comment.id)}${thread} on ${whereOrArtifact(comment)} (version ${comment.version}).`,
+    ...formatTelling(artifact, comment),
+  ].join("\n");
 }
 
-export function formatPostedReview(answer: PostedReviewAnswer): string {
+export function formatPostedReview(answer: PostedReviewAnswer, artifact: string): string {
   return [
     `Posted review ${answer.review.id} with ${plural(answer.comments.length, "comment")} (version ${answer.review.version}).`,
     ...answer.comments.map(
       (comment) => `  ${commentId(comment.id)} on ${whereOrArtifact(comment)}`,
     ),
+    ...formatTelling(artifact, answer),
   ].join("\n");
 }
 
-export function formatResolved(answer: ResolvedAnswer): string {
+export function formatResolved(answer: ResolvedAnswer, artifact: string): string {
   const id = commentId(answer.comment.id);
   if (!answer.changed) return `The thread ${id} was already resolved: nothing changed.`;
-  return answer.note
-    ? `Posted your note ${commentId(answer.note.id)}, then resolved the thread ${id}.`
-    : `Resolved the thread ${id}.`;
+  return [
+    answer.note
+      ? `Posted your note ${commentId(answer.note.id)}, then resolved the thread ${id}.`
+      : `Resolved the thread ${id}.`,
+    ...formatTelling(artifact, answer),
+  ].join("\n");
 }
 
 export function formatReopened(answer: ResolvedAnswer): string {

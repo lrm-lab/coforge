@@ -96,6 +96,8 @@ test("the proxy passes the comment operations, nested fields included, and refus
     },
     { operation: "resolve", artifact: "a1", comment: "c1", note: "Fixed" },
     { operation: "reopen", artifact: "a1", comment: "c1" },
+    { operation: "follow", artifact: "a1" },
+    { operation: "unfollow", artifact: "a1" },
   ];
   for (const body of bodies) expect((await fetch(url, post(token, body))).status).toBe(200);
   expect(calls).toEqual(bodies as AgentArtifactRequest[]);

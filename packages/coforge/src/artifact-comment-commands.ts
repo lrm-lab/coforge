@@ -44,11 +44,11 @@ export async function runArtifactComment(
     case "comments":
       return formatComments(result as CommentsAnswer, draft);
     case "comment":
-      return formatPostedComment(result as CommentAnswer);
+      return formatPostedComment(result as CommentAnswer, draft.artifact);
     case "review":
-      return formatPostedReview(result as PostedReviewAnswer);
+      return formatPostedReview(result as PostedReviewAnswer, draft.artifact);
     case "resolve":
-      return formatResolved(result as ResolvedAnswer);
+      return formatResolved(result as ResolvedAnswer, draft.artifact);
     case "reopen":
       return formatReopened(result as ResolvedAnswer);
   }

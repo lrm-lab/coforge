@@ -5,10 +5,12 @@ import {
   type AgentDeliveryPush,
 } from "#src/server/conversations/agent-delivery.server";
 import { PrismaAgentEventStore } from "#src/server/db/repositories/app-agent-event.repositories.server";
+import { PrismaSystemAgentEventStore } from "#src/server/db/repositories/system-agent-event.repositories.server";
 import { PrismaAppAgentInboundStore } from "#src/server/db/repositories/app-agent-inbound.repositories.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { AgentEvents } from "./agent-events.server";
 import { AppAgentInbound } from "./app-agent-inbound.server";
+import { SystemAgentEvents } from "./system-agent-events.server";
 
 const enabled = (workspace: { workspaceId: string; workspaceSlug: string }) =>
   isFeatureEnabled("app-agent-events", workspace);
@@ -48,4 +50,16 @@ export function createAgentEvents(
   return new AgentEvents(new PrismaAgentEventStore(db), async (workspaceId, delivery) => {
     await push()?.(workspaceId, delivery);
   });
+}
+
+export function createSystemAgentEvents(
+  db: PrismaClient,
+  { push = centrifugoPush }: { push?: AgentEventPush } = {},
+) {
+  return new SystemAgentEvents(
+    new PrismaSystemAgentEventStore(db),
+    async (workspaceId, delivery) => {
+      await push()?.(workspaceId, delivery);
+    },
+  );
 }

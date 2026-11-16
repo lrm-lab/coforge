@@ -14,6 +14,8 @@ import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-co
 import type { ArtifactActor } from "./artifact-access.server";
 import type { ArtifactMessageCard } from "./artifact-reads.server";
 import { ArtifactShares } from "./artifact-shares.server";
+import type { ArtifactNoticePort } from "./artifact-notice-port.server";
+import { createSystemAgentEvents } from "#src/server/app-agent-events/app-agent-events-composition.server";
 export type { ArtifactMessageCard } from "./artifact-reads.server";
 
 /** The artifact services of production: bytes in the private file bucket, each new version
@@ -29,6 +31,21 @@ export function productionArtifacts(db: PrismaClient) {
     documents: new ArtifactDocuments(db, artifacts, blobs),
     visibility: artifacts.visibility,
     publicLinks: new ArtifactPublicLinks(db),
+  };
+}
+
+export function productionArtifactNotices(db: PrismaClient): ArtifactNoticePort {
+  const events = createSystemAgentEvents(db);
+  return {
+    deliver: ({ workspaceId, agentId, key, content }) =>
+      events.deliver({
+        source: "system.artifacts",
+        sourceName: "CoForge artifacts",
+        workspaceId,
+        agentId,
+        key,
+        message: content,
+      }),
   };
 }
 

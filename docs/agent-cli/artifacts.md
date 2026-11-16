@@ -12,7 +12,7 @@ have the `artifacts` experiment switched on by an owner or admin (Settings > Exp
 then every command fails with `ARTIFACTS_DISABLED` and says so in Chinese and English.
 
 The commands go through one Agent API route, `POST /api/agent/v1/artifacts`, one `operation` per
-request (`list`, `read`, `push`, `move`, `delete` and the comment operations). The daemon's proxy admits a request of
+request (`list`, `read`, `push`, `move`, `delete`, the comment operations, `follow` and `unfollow`). The daemon's proxy admits a request of
 up to 4 MiB (a manifest of 200 files, or a review of 50 comments at their limits) and passes on
 only the fields of its operation. File bytes travel on two more routes the proxy forwards unchanged: `PUT
 /api/agent/v1/artifacts/uploads/<sha256>` (raw bytes, `Content-Length` required, up to 16 MiB)
@@ -49,6 +49,7 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 | `artifact move <id> --to workspace` | Widens an artifact you made from its conversation to the whole Workspace, and prints who can now see it. `--to public` is refused: only a person turns on link sharing. |
 | `artifact delete <id>` | Deletes an artifact you made. |
 | `artifact comments\|comment\|review\|resolve\|reopen ...` | Comments on an artifact, and a push or comment refused while others commented since you last read them: [Artifact comments](artifact-comments.md). |
+| `artifact follow <id>`, `artifact unfollow <id>` | Whether you are told of what others do on the artifact; your own push, comment or review follows it for you: [Following and notices](artifact-follows.md). |
 
 `--json` prints the server's answer as it is. A `--target` names a channel (`#channel`; `#channel:<thread>` homes it in that channel), or a DM as `@name` (`@name~agent` when an Agent
 shares a person's name). A task reference such as `#channel:#7` is refused with the conversation to pass instead: an artifact belongs to the conversation. The DM must

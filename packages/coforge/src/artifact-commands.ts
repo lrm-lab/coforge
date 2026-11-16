@@ -32,9 +32,10 @@ import {
   type ArtifactMovedAnswer,
   type ArtifactReadAnswer,
 } from "#src/artifact-format";
+import { formatFollow, type FollowAnswer } from "#src/artifact-follow-format";
 
 /**
- * `coforge artifact list|read|pull|push|download|move|delete|comments|comment|review|resolve|reopen`
+ * `coforge artifact list|read|pull|push|download|move|delete|comments|comment|review|resolve|reopen|follow|unfollow`
  * (task #385): an Agent's artifacts. An artifact is a versioned set of files; an Agent changes one only
  * by `pull` and `push` of a directory (`artifact-directory-commands.ts`), and the server merges a
  * push over an older version with what others pushed since, by file.
@@ -46,7 +47,10 @@ export type ArtifactInvocation =
 
 export type ArtifactRequestInvocation = {
   command: "artifact";
-  request: Extract<AgentArtifactRequest, { operation: "list" | "read" | "move" | "delete" }>;
+  request: Extract<
+    AgentArtifactRequest,
+    { operation: "list" | "read" | "move" | "delete" | "follow" | "unfollow" }
+  >;
   /** `read --files`: list every file of the version, not the first few. */
   allFiles?: boolean;
   /** `read --output`: where the entry file's text goes, instead of stdout. */
@@ -68,9 +72,11 @@ const OPERATIONS = [
   "move",
   "delete",
   ...COMMENT_OPERATIONS,
+  "follow",
+  "unfollow",
 ] as const;
 type Operation = (typeof OPERATIONS)[number];
-type RequestOperation = "list" | "read" | "move" | "delete";
+type RequestOperation = "list" | "read" | "move" | "delete" | "follow" | "unfollow";
 
 /** Each request operation's flags. */
 const FLAGS: Record<RequestOperation, FlagSpec> = {
@@ -78,6 +84,8 @@ const FLAGS: Record<RequestOperation, FlagSpec> = {
   read: { text: ["--output"], count: ["--version"], bool: ["--files"], positionals: 1 },
   move: { text: ["--to"], positionals: 1 },
   delete: { positionals: 1 },
+  follow: { positionals: 1 },
+  unfollow: { positionals: 1 },
 };
 
 const LINK_SHARING_TARGETS = ["public", "anyone-with-link"];
@@ -115,6 +123,13 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
     throw invalidArgument(command, "Name the artifact: its id, as push printed it");
   const options = json ? { json: true as const } : {};
   switch (operation as RequestOperation) {
+    case "follow":
+    case "unfollow":
+      return {
+        command: "artifact",
+        request: { operation: operation as "follow" | "unfollow", artifact: artifact! },
+        ...options,
+      };
     case "list":
       return {
         command: "artifact",
@@ -182,6 +197,9 @@ export async function runArtifact(
         ].join(" ");
       return formatArtifactList(result as never, more);
     }
+    case "follow":
+    case "unfollow":
+      return json ? result : formatFollow(result as FollowAnswer);
     case "read": {
       const read = result as ArtifactReadAnswer;
       if (invocation.output !== undefined) await writeFile(invocation.output, read.text);

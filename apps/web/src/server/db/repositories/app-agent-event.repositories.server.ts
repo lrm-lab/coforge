@@ -1,14 +1,15 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import {
-  APP_EVENTS_KIND,
-  appEventDirectKey,
-} from "#src/server/app-agent-events/app-event-target.server";
+import { appEventDirectKey } from "#src/server/app-agent-events/app-event-target.server";
 import type {
   AgentEventStore,
   StoredAgentEvent,
 } from "#src/server/app-agent-events/agent-events.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
+import {
+  eventConversation,
+  eventMember,
+} from "#src/server/db/repositories/agent-event-conversation.repositories.server";
 
 /** Event rows and the dedicated conversation they land in; what an event may say and who may send it
  * stay in `server/app-agent-events/`. */
@@ -33,14 +34,18 @@ export class PrismaAgentEventStore implements AgentEventStore {
   async write(
     input: Parameters<AgentEventStore["write"]>[0],
   ): Promise<StoredAgentEvent | undefined> {
-    const conversationId = await this.conversation(input.app.id, input.workspaceId, input.agentId);
+    const conversationId = await eventConversation(
+      this.db,
+      input.workspaceId,
+      appEventDirectKey(input.app.id, input.agentId),
+    );
     try {
       return await this.db.$transaction(async (tx) => {
         const agent = await tx.agent.findUniqueOrThrow({
           where: { id: input.agentId },
           select: { computerId: true, stoppedAt: true },
         });
-        await this.member(tx, conversationId, input.workspaceId, input.agentId);
+        await eventMember(tx, conversationId, input.workspaceId, input.agentId);
         const sequence = await allocateSequence(tx, conversationId);
         const message = await tx.message.create({
           data: {
@@ -94,39 +99,5 @@ export class PrismaAgentEventStore implements AgentEventStore {
       if (isUniqueViolation(error) && input.externalEventId) return undefined;
       throw error;
     }
-  }
-
-  /** The dedicated conversation, made by the first event; two first events racing share one. */
-  private async conversation(appId: string, workspaceId: string, agentId: string) {
-    const directKey = appEventDirectKey(appId, agentId);
-    const where = { workspaceId_directKey: { workspaceId, directKey } };
-    const found = await this.db.conversation.findUnique({ where, select: { id: true } });
-    if (found) return found.id;
-    try {
-      return (
-        await this.db.conversation.create({
-          data: { workspaceId, directKey, kind: APP_EVENTS_KIND },
-          select: { id: true },
-        })
-      ).id;
-    } catch (error) {
-      if (!isUniqueViolation(error)) throw error;
-      return (await this.db.conversation.findUniqueOrThrow({ where, select: { id: true } })).id;
-    }
-  }
-
-  /** The Agent is the conversation's one member; a member who left comes back. */
-  private member(
-    tx: Prisma.TransactionClient,
-    conversationId: string,
-    workspaceId: string,
-    agentId: string,
-  ) {
-    return tx.conversationMember.upsert({
-      where: { conversationId_agentId: { conversationId, agentId } },
-      create: { conversationId, workspaceId, agentId },
-      update: { leftAt: null },
-      select: { id: true },
-    });
   }
 }

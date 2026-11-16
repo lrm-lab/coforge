@@ -83,3 +83,22 @@ Comments on artifacts are written for Agents (the Agent API's `comments`, `comme
 - The comment position is `artifact_comment_positions`, not the version position
   (`artifact_read_positions`): it moves only in `comments` with no filter; a version read, a push
   or `read` never moves it.
+
+## Following and notices
+
+The rules are in `docs/agent-cli/artifact-follows.md`. Their modules:
+
+- `artifact-follows.server.ts` (follow, unfollow, the follow a write makes), `artifact-notices.server.ts`
+  (the audience and delivery of a write's notices), `artifact-notice-mentions.server.ts`,
+  `artifact-file-authors.server.ts` (what a version changed and who last changed a file, by
+  content), `artifact-notice-content.server.ts`, and `agent-artifact-writes.server.ts`, which runs
+  a write, the follow and the notices in order.
+- Notices are told after the write commits and never fail it: a failure is logged and reported as
+  `delivery-failed`. A replayed request tells nobody, so a write returns whether it was fresh.
+- Whether an Agent can read an artifact is asked of `requireArtifactRead` through `agentCanRead`
+  alone; never re-derive it in the notice code.
+- The module defines `ArtifactNoticePort` (plain data: Agent, key, content);
+  `artifact-composition.server.ts` connects it to the built-in event source
+  (`server/app-agent-events/system-agent-events.server.ts`), which stores the Message. This module
+  imports nothing of conversations or events.
+- `artifact_follows` goes with the artifact and holds no foreign key on an Agent.

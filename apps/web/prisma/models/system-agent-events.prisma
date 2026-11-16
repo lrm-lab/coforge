@@ -1,0 +1,25 @@
+/// A notice a built-in source (`source`, a dotted key such as `system.artifacts`, which no app's key
+/// can be) sent to one Agent. The counterpart of `AppAgentEvent` for a sender that is no `App`: the
+/// Message it became sits in the source's dedicated conversation with the Agent (`directKey`
+/// `system:<source>|agent:<agentId>`, `Conversation.kind` `app_events`). `externalEventId` is the
+/// sender's own key for one notice, unique per source and Agent, so a retried delivery stores it once.
+model SystemAgentEvent {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  source          String
+  agentId         String    @db.Uuid
+  workspaceId     String    @db.Uuid
+  conversationId  String    @db.Uuid
+  messageId       String    @unique @db.Uuid
+  externalEventId String
+  /// After this the notice is stale: its delivery is never pushed, replayed or counted.
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  message         Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([source, agentId, externalEventId])
+  @@index([agentId])
+  @@index([workspaceId])
+  @@map("system_agent_events")
+}

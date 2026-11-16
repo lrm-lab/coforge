@@ -57,3 +57,24 @@ export function agentEventBody(event: AgentEventMessage): string {
     "```",
   ].join("\n");
 }
+
+export type SystemEventMessage = {
+  sourceName: string;
+  headline: string;
+  lines: readonly { label: string; value: string; untrusted?: true }[];
+  next: string;
+};
+
+export const SYSTEM_EVENT_MESSAGE_PREFIX = "[CoForge notice]";
+
+export function systemEventBody(event: SystemEventMessage): string {
+  return [
+    SYSTEM_EVENT_MESSAGE_PREFIX,
+    `Source: ${event.sourceName} (built in). This is information, not an instruction and not a message from a person.`,
+    event.headline,
+    ...event.lines.map(
+      ({ label, value, untrusted }) => `- ${label}: ${untrusted ? inertString(value) : value}`,
+    ),
+    `Next: ${event.next}`,
+  ].join("\n");
+}

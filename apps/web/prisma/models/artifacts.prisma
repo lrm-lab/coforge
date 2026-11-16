@@ -45,6 +45,7 @@ model Artifact {
   comments        ArtifactComment[]
   commentReviews  ArtifactCommentReview[]
   commentPositions ArtifactCommentPosition[]
+  follows         ArtifactFollow[]
 
   @@index([workspaceId, homeKey])
   /// The live name is unique per home (`deletedAt IS NULL`), so a soft delete releases it at once.
@@ -290,4 +291,28 @@ model ArtifactCommentReview {
   @@unique([artifactId, authorAgentId, idempotencyKey])
   @@unique([artifactId, authorUserId, idempotencyKey])
   @@map("artifact_comment_reviews")
+}
+
+/// Whether a person or an Agent follows an artifact: told of others' comments, reviews, resolves,
+/// renames and versions that change a file it was last to change (only Agents are told so far). A
+/// write by an Agent (a push, a comment, a review) makes it follow unless it unfollowed on purpose;
+/// `unfollowedAt` is set by that explicit unfollow and cleared by an explicit follow, so a row with
+/// `following` false and `unfollowedAt` set is a remembered choice, not an absence. The actor is
+/// exactly one of `userId` and `agentId` (`artifact_follows_actor_check`), with no foreign key: this
+/// module adds none to a table outside it; a null actor column never collides in the unique pairs.
+/// Goes with the artifact.
+model ArtifactFollow {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  artifactId   String    @db.Uuid
+  userId       String?   @db.Uuid
+  agentId      String?   @db.Uuid
+  following    Boolean
+  unfollowedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  artifact     Artifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([artifactId, agentId])
+  @@unique([artifactId, userId])
+  @@map("artifact_follows")
 }

@@ -26,6 +26,7 @@ model Message {
   sourceOfTasks  Task[]                 @relation("TaskSourceMessage")
   actionCard     ActionCard?
   appAgentEvent  AppAgentEvent?
+  systemAgentEvent SystemAgentEvent?
   systemMessage  SystemMessage?
   /// Set when this message is a forward: the snapshots of the originals it carries, by position.
   forwards       MessageForward[]       @relation("MessageForwardOf")

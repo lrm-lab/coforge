@@ -7,6 +7,7 @@ import { Artifacts } from "#src/server/artifacts/artifacts.server";
 import { StoredArtifactBlobs } from "#src/server/artifacts/artifact-blobs.server";
 import { ArtifactDocuments } from "#src/server/artifacts/artifact-documents.server";
 import { LocalFileStorage } from "#src/server/files/file-storage.server";
+import { productionArtifactNotices } from "#src/server/artifacts/artifact-composition.server";
 import { handleAgentArtifactPost } from "#src/routes/api/agent/v1/artifacts";
 
 /**
@@ -89,6 +90,15 @@ export async function commentsFixture(prefix: string) {
     { agentId: agents.writer },
   ]);
 
+  const deliveredNotices = productionArtifactNotices(db);
+  const noticeDelivery = { down: false };
+  const notices = {
+    deliver: (notice: Parameters<typeof deliveredNotices.deliver>[0]) => {
+      if (noticeDelivery.down) return Promise.reject(new Error("notices are down"));
+      return deliveredNotices.deliver(notice);
+    },
+  };
+
   async function post(agentId: string, body: unknown) {
     const response = await handleAgentArtifactPost(
       new Request("http://local/api/agent/v1/artifacts", {
@@ -96,7 +106,7 @@ export async function commentsFixture(prefix: string) {
         body: JSON.stringify(body),
       }),
       { workspaceId, agentId },
-      { db, documents, enabled: async () => true },
+      { db, documents, enabled: async () => true, notices },
     );
     return { status: response.status, body: (await response.json()) as Record<string, any> };
   }
@@ -200,6 +210,16 @@ export async function commentsFixture(prefix: string) {
     throw new Error("no request is waiting on an advisory lock");
   }
 
+  /** The notices an Agent was sent, oldest first: each Message body in its dedicated conversation. */
+  async function noticesOf(agentId: string) {
+    const rows = await db.systemAgentEvent.findMany({
+      where: { agentId },
+      orderBy: { createdAt: "asc" },
+      select: { source: true, externalEventId: true, message: { select: { body: true } } },
+    });
+    return rows.map((row) => ({ ...row, body: row.message.body }));
+  }
+
   async function cleanup() {
     await db.workspace.delete({ where: { id: workspaceId } }).catch(() => undefined);
     await db.user.deleteMany({ where: { id: { in: [alice, bob] } } });
@@ -223,6 +243,9 @@ export async function commentsFixture(prefix: string) {
     pushText,
     pushFiles,
     waitForLockWaiter,
+    notices,
+    noticeDelivery,
+    noticesOf,
     cleanup,
   };
 }

@@ -39,14 +39,14 @@ export async function postComment(db: PrismaClient, principal: Principal, input:
   const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
   const { artifact: _artifact, idempotencyKey, ...draft } = input;
   const requestHash = payloadHash({ operation: "comment", ...draft });
-  const row = await withCommentLock(db, artifact.id, async (tx) => {
+  const { row, fresh } = await withCommentLock(db, artifact.id, async (tx) => {
     const replay = await tx.artifactComment.findFirst({
       where: { artifactId: artifact.id, authorAgentId: agentId, idempotencyKey },
       select: { ...COMMENT_SELECT, requestHash: true },
     });
     if (replay) {
       if (replay.requestHash !== requestHash) throw idempotencyMismatch();
-      return replay;
+      return { row: replay, fresh: false };
     }
     const [prepared] = await prepareComments(tx, artifact.id, [draft], {
       version: input.version,
@@ -65,9 +65,9 @@ export async function postComment(db: PrismaClient, principal: Principal, input:
       requestHash,
     });
     if (prepared!.rootId) await reopenThreads(tx, [prepared!.rootId]);
-    return inserted!;
+    return { row: inserted!, fresh: true };
   });
-  return commentView(db, workspaceId, row);
+  return { artifact, fresh, comment: await commentView(db, workspaceId, row) };
 }
 
 /**
@@ -93,7 +93,7 @@ export async function postReview(db: PrismaClient, principal: Principal, input: 
         orderBy: [...COMMENT_ORDER],
         select: COMMENT_SELECT,
       });
-      return { review: replay, rows };
+      return { review: replay, rows, fresh: false };
     }
     const prepared = await prepareComments(tx, artifact.id, input.comments, {
       version: input.version,
@@ -127,7 +127,11 @@ export async function postReview(db: PrismaClient, principal: Principal, input: 
     });
     const roots = new Set(prepared.flatMap((entry) => entry.rootId ?? []));
     if (roots.size) await reopenThreads(tx, [...roots]);
-    return { review, rows };
+    return { review, rows, fresh: true };
   });
-  return reviewViews(db, workspaceId, written.review, written.rows);
+  return {
+    artifact,
+    fresh: written.fresh,
+    ...(await reviewViews(db, workspaceId, written.review, written.rows)),
+  };
 }

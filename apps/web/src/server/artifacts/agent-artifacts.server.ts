@@ -12,8 +12,16 @@ import {
 } from "#src/server/conversations/channel-read-access.server";
 import { artifactsDisabled } from "./artifact-access.server";
 import { listComments, unseenCommentSummary } from "./artifact-comment-reads.server";
-import { reopenComment, resolveComment } from "./artifact-comment-threads.server";
-import { postComment, postReview } from "./artifact-comments.server";
+import { reopenComment } from "./artifact-comment-threads.server";
+import { followArtifact, unfollowArtifact } from "./artifact-follows.server";
+import type { ArtifactNoticePort } from "./artifact-notice-port.server";
+import {
+  commentOnArtifact,
+  followedByCreate,
+  followedByPush,
+  reviewArtifact,
+  resolveArtifactThread,
+} from "./agent-artifact-writes.server";
 import { ARTIFACT_FILE_LIMIT } from "./artifact-files.server";
 import { noteReadPosition, readWithPosition } from "./artifact-read-positions.server";
 import type { FileManifest } from "./artifact-manifest.server";
@@ -27,6 +35,7 @@ export type AgentArtifactServices = {
     "create" | "list" | "listPage" | "load" | "push" | "missingBytes" | "remove" | "moveToWorkspace"
   >;
   enabled: (workspaceId: string) => Promise<boolean>;
+  notices?: ArtifactNoticePort | undefined;
 };
 
 const { id, version, baseVersion, title, description, note, label } = artifactInputs;
@@ -86,6 +95,8 @@ const RULES = {
   move: z.object({ artifact: id, to: z.string().max(40) }),
   delete: z.object({ artifact: id }),
   ...commentInputs,
+  follow: z.object({ artifact: id }),
+  unfollow: z.object({ artifact: id }),
 } satisfies Record<AgentArtifactRequest["operation"], z.ZodType>;
 
 /**
@@ -115,6 +126,7 @@ export async function runAgentArtifactOperation(
     });
   }
   const scope = { workspaceId, actor: { agentId } };
+  const writes = { db: services.db, notices: services.notices };
   switch (request.operation) {
     case "list": {
       const { target, after, ...page } = parsed.data as z.infer<typeof RULES.list>;
@@ -180,7 +192,7 @@ export async function runAgentArtifactOperation(
         // The Agent has seen what it made: version 1, which a replayed create is also.
         if (created.currentVersion > 0)
           await noteReadPosition(services.db, { artifactId: created.id, agentId, version: 1 });
-        return created;
+        return { ...created, ...(await followedByCreate(writes, principal, created)) };
       }
       const {
         artifact,
@@ -192,7 +204,7 @@ export async function runAgentArtifactOperation(
       const fileManifest = manifestOf({ files, delete: deleted, entry });
       // The Agent has seen what it published; a merged push's answer says what was merged. The
       // position write runs beside the preview refresh, before the announcement.
-      return services.documents.push(
+      const saved = await services.documents.push(
         scope,
         {
           artifactId: artifact,
@@ -204,6 +216,10 @@ export async function runAgentArtifactOperation(
             noteReadPosition(services.db, { artifactId: artifact, agentId, version: number }),
         },
       );
+      return {
+        ...saved,
+        ...(await followedByPush(writes, principal, artifact, saved, input.note)),
+      };
     }
     case "move": {
       const input = parsed.data as z.infer<typeof RULES.move>;
@@ -235,13 +251,25 @@ export async function runAgentArtifactOperation(
     case "comments":
       return listComments(services.db, principal, parsed.data as z.infer<typeof RULES.comments>);
     case "comment":
-      return postComment(services.db, principal, parsed.data as z.infer<typeof RULES.comment>);
+      return commentOnArtifact(writes, principal, parsed.data as z.infer<typeof RULES.comment>);
     case "review":
-      return postReview(services.db, principal, parsed.data as z.infer<typeof RULES.review>);
+      return reviewArtifact(writes, principal, parsed.data as z.infer<typeof RULES.review>);
     case "resolve":
-      return resolveComment(services.db, principal, parsed.data as z.infer<typeof RULES.resolve>);
+      return resolveArtifactThread(writes, principal, parsed.data as z.infer<typeof RULES.resolve>);
     case "reopen":
       return reopenComment(services.db, principal, parsed.data as z.infer<typeof RULES.reopen>);
+    case "follow":
+      return followArtifact(
+        services.db,
+        principal,
+        (parsed.data as z.infer<typeof RULES.follow>).artifact,
+      );
+    case "unfollow":
+      return unfollowArtifact(
+        services.db,
+        principal,
+        (parsed.data as z.infer<typeof RULES.unfollow>).artifact,
+      );
   }
 }
 

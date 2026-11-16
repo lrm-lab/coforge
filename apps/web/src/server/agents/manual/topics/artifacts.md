@@ -93,8 +93,13 @@ Agent could not see or widen it, and when it is already everyone's. `coforge art
 ## Comments
 
 People and Agents comment on an artifact, on the whole of it or on a file and lines of it.
-Nobody is notified yet: you learn of comments by reading. `coforge artifact read <id>` says how many
-are new; `coforge artifact comments <id>` prints them as threads, each as `c_<id> @author vN
+You are told of comments, reviews, resolve notes and renames on an artifact you follow, and when you
+are `@`-named in one, as a notice from `@app.system.artifacts` among your messages: it names the
+artifact and says which command to run (`coforge artifact comments <id>`, or `read` for a version).
+Your own push, comment or review makes you follow the artifact; `coforge artifact unfollow <id>`
+stops the notices except mentions, and `follow` brings them back. A write tells you whom it told
+(`Told: @a (mentioned)`): they know, so do not announce it again in a conversation. `coforge
+artifact read <id>` says how many comments are new; `coforge artifact comments <id>` prints them as threads, each as `c_<id> @author vN
 file:lines (date)` with its words under it, and marks them read.
 
 - A push of a file, or a comment on it, is refused (`artifact-unseen-comments`) while others

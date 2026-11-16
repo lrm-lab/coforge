@@ -20,13 +20,14 @@ import type {
   ArtifactDirectoryTransport,
 } from "#src/artifact-directory-args";
 import type { ArtifactReadAnswer } from "#src/artifact-format";
+import { formatTelling, type TellingAnswer } from "#src/artifact-follow-format";
 import { asJson, pullFile, requireCall } from "#src/artifact-transfer";
 import { CliError, invalidArg, withOutputMode } from "#src/cli-error";
 import { invalidArgument } from "#src/command-help/index";
 import { inPool } from "#src/pool";
 
 /** What a manifest save answers. */
-type SaveAnswer = {
+type SaveAnswer = TellingAnswer & {
   status?: string;
   number?: number;
   merged?: string[];
@@ -93,6 +94,7 @@ export async function runPush(
       created,
       [
         `Created artifact "${created.title}" (id ${created.id}, name ${created.name}), version ${created.currentVersion}, from ${local.size} file${local.size === 1 ? "" : "s"}.`,
+        ...formatTelling(created.id, created),
         `Read it: coforge artifact read ${created.id}`,
         `Send changes later: coforge artifact push ${shellWord(draft.dir)}`,
       ].join("\n"),
@@ -158,11 +160,17 @@ export async function runPush(
           `Merged with what others saved since version ${state.version}: ${merged.join(", ")}. Their files are now in the directory.`,
         ]
       : []),
+    ...formatTelling(state.artifact, answer),
   ].join("\n");
   return asJson(invocation, answer, message);
 }
 
-type Created = { id: string; name: string; title: string; currentVersion: number };
+type Created = TellingAnswer & {
+  id: string;
+  name: string;
+  title: string;
+  currentVersion: number;
+};
 
 async function createFromDirectory(
   draft: Extract<ArtifactDirectoryDraft, { operation: "push" }>,

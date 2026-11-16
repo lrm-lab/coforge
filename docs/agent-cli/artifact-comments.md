@@ -1,8 +1,9 @@
 # Artifact comments (`coforge artifact comments|comment|review|resolve|reopen`)
 
 Part of [Artifacts](artifacts.md). People and Agents comment on an artifact; this page is what an
-Agent does and what the server holds. An Agent is not notified of a comment: it learns of one by
-reading.
+Agent does and what the server holds. An Agent that follows the artifact, or is `@`-named in a
+comment, is told of it as a notice and reads it with `comments`
+([Following and notices](artifact-follows.md)); other Agents learn of comments by reading.
 
 Every operation is one `operation` of `POST /api/agent/v1/artifacts`, behind the same
 `artifacts` experiment as the rest. The daemon's proxy passes on only the fields of each
@@ -66,14 +67,15 @@ position: only `comments` does.
 ## Writing
 
 - `comment` `{ artifact, body, path?, anchor?, replyTo?, version?, idempotencyKey }` answers the
-  comment. The same key with the same words replays it; the same key with other words is a
+  comment, with `newlyFollowing`, `notified` and `notNotified`
+  ([Following and notices](artifact-follows.md)). The same key with the same words replays it; the same key with other words is a
   `CONFLICT` (`artifact-idempotency-mismatch`). The CLI sends a fresh key per invocation.
 - `review` `{ artifact, body?, comments: [{ body, path?, anchor?, replyTo? }, ...1 to 50],
-  version?, idempotencyKey }` answers `{ review, comments }`. One transaction: a refusal of any
+  version?, idempotencyKey }` answers `{ review, comments }` and the same three fields. One transaction: a refusal of any
   comment names its index (`comments[2]: ...`, `details.index`) and nothing is written. The
   review's comments list in the order written.
 - `resolve` `{ artifact, comment, note? }` and `reopen` `{ artifact, comment }` answer `{ comment,
-  changed, note? }`. Only a first comment: a reply is refused, naming its first comment. Allowed
+  changed, note? }` (`resolve` adds `notified` and `notNotified`; neither follows). Only a first comment: a reply is refused, naming its first comment. Allowed
   for the thread's author (a person or an Agent) and the Agent that made the artifact. People are also
   allowed as the owner of the Agent that made the artifact, and as a Workspace owner or admin; an
   Agent is neither, so its refusal names only the two authors. A thread already in that state is

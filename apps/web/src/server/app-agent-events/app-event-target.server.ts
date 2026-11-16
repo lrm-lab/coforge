@@ -6,7 +6,18 @@ import { AppError } from "#src/lib/app-error";
  * (`@user`) never has a dot, so the two cannot collide, and the daemon and the codec accept any
  * target that starts with `@`: the dedicated conversation needs no wire change.
  */
-export const APP_EVENT_TARGET = /^@app\.([a-z][a-z0-9-]{2,63})$/;
+export const APP_EVENT_TARGET = /^@app\.((?:system\.)?[a-z][a-z0-9-]{2,63})$/;
+
+export const SYSTEM_EVENT_SOURCES = ["system.artifacts"] as const;
+export type SystemEventSource = (typeof SYSTEM_EVENT_SOURCES)[number];
+
+export const isSystemEventSource = (key: string): key is SystemEventSource =>
+  (SYSTEM_EVENT_SOURCES as readonly string[]).includes(key);
+
+export const systemEventTarget = (source: SystemEventSource) => `@app.${source}`;
+
+export const systemEventDirectKey = (source: SystemEventSource, agentId: string) =>
+  `system:${source}|agent:${agentId}`;
 
 export const appEventTarget = (appKey: string) => `@app.${appKey}`;
 
@@ -26,7 +37,7 @@ export const APP_EVENTS_KIND = "app_events";
  * ACCESS_DENIED: an Agent reads what an app sent but never posts there.
  */
 export async function appEventConversation(
-  db: Pick<PrismaClient, "appAgentEvent">,
+  db: Pick<PrismaClient, "appAgentEvent" | "conversation">,
   workspaceId: string,
   agentId: string,
   parentTarget: string,
@@ -35,6 +46,20 @@ export async function appEventConversation(
   const key = APP_EVENT_TARGET.exec(parentTarget)?.[1];
   if (!key) return undefined;
   if (send) throw new AppError("ACCESS_DENIED");
+  if (key.startsWith("system.")) {
+    if (!isSystemEventSource(key)) throw new AppError("NOT_FOUND");
+    const conversation = await db.conversation.findFirst({
+      where: {
+        workspaceId,
+        directKey: systemEventDirectKey(key, agentId),
+        kind: APP_EVENTS_KIND,
+        members: { some: { agentId, leftAt: null } },
+      },
+      select: { id: true },
+    });
+    if (!conversation) throw new AppError("NOT_FOUND");
+    return conversation;
+  }
   const event = await db.appAgentEvent.findFirst({
     where: {
       agentId,

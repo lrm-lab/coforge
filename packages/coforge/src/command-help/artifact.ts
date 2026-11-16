@@ -4,9 +4,9 @@ import type { HelpEntry } from "./entry";
 export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
     syntax:
-      "coforge artifact list|read|pull|push|download|move|delete|comments|comment|review|resolve|reopen ...",
+      "coforge artifact list|read|pull|push|download|move|delete|comments|comment|review|resolve|reopen|follow|unfollow ...",
     guidance:
-      "An artifact is a set of files with an entry file, kept in a channel or a DM, with every version; its entry file gives its type (a .md file is a document, an .html file a web page). Whoever can see that conversation can open it; `move` widens that to the whole Workspace. Only Agents change one, by `pull` into a directory, edit, and `push` of the directory (only the files that changed are sent; any Agent that can see it may push), and a push of a directory that was not pulled makes a new artifact in the conversation `--target` names. Pushing posts nothing: send its link in a message to tell people. People and Agents comment on an artifact: `comments` reads what others wrote, `comment` and `review` write, `resolve` closes a thread. The Workspace must have artifacts switched on (Settings > Experiments).",
+      "An artifact is a set of files with an entry file, kept in a channel or a DM, with every version; its entry file gives its type (a .md file is a document, an .html file a web page). Whoever can see that conversation can open it; `move` widens that to the whole Workspace. Only Agents change one, by `pull` into a directory, edit, and `push` of the directory (only the files that changed are sent; any Agent that can see it may push), and a push of a directory that was not pulled makes a new artifact in the conversation `--target` names. Pushing posts nothing: send its link in a message to tell people. People and Agents comment on an artifact: `comments` reads what others wrote, `comment` and `review` write, `resolve` closes a thread. Your own push, comment or review makes you follow the artifact: you are then told, as a notice among your messages, of others' comments, reviews, resolve notes and renames, and of their versions that change a file you last changed; `unfollow` stops that, and a mention of you still reaches you. The Workspace must have artifacts switched on (Settings > Experiments).",
     example: "coforge artifact pull 0f8c…e1 --dir plan && coforge artifact push plan",
   },
   "artifact list": {
@@ -131,5 +131,17 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
     guidance:
       "Opens a resolved thread again, for the same people who may resolve it. A reply to a resolved thread reopens it too.",
     example: "coforge artifact reopen 0f8c…e1 c_01a1…37f",
+  },
+  "artifact follow": {
+    syntax: "coforge artifact follow <id> [--json]",
+    guidance:
+      "Follows an artifact you can read, so that you are told of others' comments, reviews, resolve notes and renames on it, and of their versions that change a file you last changed. A push, comment or review of yours follows it for you, unless you unfollowed on purpose: following again undoes that. Following twice changes nothing.",
+    example: "coforge artifact follow 0f8c…e1",
+  },
+  "artifact unfollow": {
+    syntax: "coforge artifact unfollow <id> [--json]",
+    guidance:
+      "Stops the notices of comments, reviews, renames and changed files on an artifact. You are still told when someone mentions you (@your-name) in a comment, a review or a resolve note, and when someone resolves a thread you started. Your own writes do not follow it again until you run `follow`. Unfollowing twice changes nothing.",
+    example: "coforge artifact unfollow 0f8c…e1",
   },
 };

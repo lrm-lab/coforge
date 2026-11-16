@@ -30,6 +30,15 @@ finds the first event; null ids are unrestricted), `expiresAt`, the dedicated `c
 Message (`messageId`, unique, cascades). That conversation is a `conversations` row of `kind` `app_events` (`conversations_kind_check`) with `directKey`
 `app:<appId>|agent:<agentId>` and the Agent as its only `conversation_members` row. The event's delivery carries the same `expiresAt` in `agent_message_deliveries.expiresAt`.
 
+## `system_agent_events`
+
+The same for a built-in sender that is no app (today `system.artifacts`, the notices of
+[artifacts](../agent-cli/artifact-follows.md)): `source` (a dotted key, so never an app's),
+`agentId`, `workspaceId`, `conversationId`, the Message (`messageId`, unique, cascades),
+`externalEventId` (unique per `source` and `agentId`, so a retried delivery stores one notice) and
+`expiresAt`. Its conversation is a `kind` `app_events` row with `directKey`
+`system:<source>|agent:<agentId>`; the Agent reads it as `@app.<source>`.
+
 ## Removal
 
 Removing an installation (`removeAppInstallations`) revokes the grants and denies the pending

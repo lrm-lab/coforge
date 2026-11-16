@@ -10,10 +10,13 @@ import {
   type AgentArtifactServices,
 } from "#src/server/artifacts/agent-artifacts.server";
 import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
-import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
+import {
+  productionArtifactNotices,
+  productionArtifacts,
+} from "#src/server/artifacts/artifact-composition.server";
 
 /**
- * `coforge artifact list|read|push|comments|comment|review|resolve|reopen` (task #385): one
+ * `coforge artifact list|read|push|comments|comment|review|resolve|reopen|follow|unfollow` (task #385): one
  * operation per request, as JSON. A body that is not one known operation with exactly its own
  * fields is `INVALID_INPUT`, so a save's internal options can never be sent; every refusal is the
  * Agent API's (`code`, and the `errorId` in `error`).
@@ -41,6 +44,7 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
           db,
           documents: productionArtifacts(db).documents,
           enabled: (workspaceId) => artifactsEnabled(db, workspaceId),
+          notices: productionArtifactNotices(db),
         }),
     },
   },
