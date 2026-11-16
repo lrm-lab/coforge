@@ -75,7 +75,7 @@ export class AgentMessageAttentionIndex {
   readonly #conversationTargets = new Map<string, Map<string, Set<string>>>();
   readonly #attentionConversation = new Map<string, Map<string, string>>();
   readonly #pendingSequences = new Map<string, Map<string, Set<number>>>();
-  readonly #previewSeen = new PreviewSeen();
+  readonly previewSeen = new PreviewSeen();
   readonly #pendingWindow = new Map<string, Map<string, PendingWindowEntry[]>>();
   readonly #consumedSeqs?: AgentConsumedSeqPort;
   readonly #workspaceId: string;
@@ -85,7 +85,7 @@ export class AgentMessageAttentionIndex {
     attention: this.#attention,
     pendingSequences: this.#pendingSequences,
     pendingWindow: this.#pendingWindow,
-    previewSeen: this.#previewSeen,
+    previewSeen: this.previewSeen,
   });
   constructor(
     workspaceId: string,
@@ -191,7 +191,7 @@ export class AgentMessageAttentionIndex {
     this.bindConversation(agentId, message.target, message.conversationId);
     return (
       this.hasSeen(agentId, message.target, message.sequence) ||
-      this.#previewSeen.has(agentId, message.target, message.sequence)
+      this.previewSeen.has(agentId, message.target, message.sequence)
     );
   }
   wasNotified(message: AgentMessageDelivery): boolean {
@@ -328,7 +328,7 @@ export class AgentMessageAttentionIndex {
       queued,
       prefix: this.hold.noticePrefix?.(message.agentId) ?? "",
       previewedInFull: (target, sequence) =>
-        this.#previewSeen.has(message.agentId, target, sequence),
+        this.previewSeen.has(message.agentId, target, sequence),
     });
     const notification = Promise.resolve()
       .then(() => {
@@ -348,7 +348,7 @@ export class AgentMessageAttentionIndex {
       .then(() => {
         if (this.#generations.get(message.agentId) === generation) {
           markNotified(generation, [message]);
-          this.#previewSeen.record(message.agentId, view.whole);
+          this.previewSeen.record(message.agentId, view.whole);
           this.noticeActionClocks.noteNoticeAccepted(message.agentId);
           this.messageReceived(message.agentId);
         }
@@ -493,7 +493,7 @@ export class AgentMessageAttentionIndex {
   }
   seenExactSequences(agentId: string, target: string): readonly number[] {
     return (
-      this.#previewSeen.mergeExact(
+      this.previewSeen.mergeExact(
         agentId,
         target,
         this.#consumedState(agentId).targets.get(target)?.exactSeqs,
@@ -504,11 +504,11 @@ export class AgentMessageAttentionIndex {
   hasExactSeen(agentId: string, target: string): boolean {
     return (
       (this.#consumedState(agentId).targets.get(target)?.exactSeqs?.length ?? 0) > 0 ||
-      (this.#previewSeen.recorded(agentId, target)?.size ?? 0) > 0
+      (this.previewSeen.recorded(agentId, target)?.size ?? 0) > 0
     );
   }
   clearPreviewSeen(agentId: string): void {
-    this.#previewSeen.clear(agentId);
+    this.previewSeen.clear(agentId);
   }
   resolveTarget(agentId: string, target: string): string {
     return this.#consumedState(agentId).aliases.get(target) ?? target;
