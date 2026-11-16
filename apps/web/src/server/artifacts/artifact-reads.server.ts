@@ -169,6 +169,8 @@ export class ArtifactReads {
       canChange: canManageArtifactPublicLinkWithRole(reader, viewer.role, {
         authorAgentOwnerId: ownerId ?? null,
       }),
+      // The same owner id lets a caller apply the delete rule's owner branch with no lookup.
+      authorAgentOwnerId: ownerId ?? null,
       // A reader the home's rule kept out learns no home detail at all: not even whether it
       // was a channel or a DM (task #20). The page needs no kind without a home to return to.
       homeKind: homeRead ? homeKind : "workspace",
@@ -185,13 +187,13 @@ export class ArtifactReads {
     reader: ArtifactActor;
     version?: number;
   }) {
-    const { viewer, ...artifact } = await this.artifact(
+    const { viewer, authorAgentOwnerId, ...artifact } = await this.artifact(
       input.workspaceId,
       input.artifactId,
       input.reader,
     );
     const number = input.version ?? artifact.currentVersion;
-    if (number <= 0) return { artifact, version: null, files: [], viewer };
+    if (number <= 0) return { artifact, version: null, files: [], viewer, authorAgentOwnerId };
     const version = await this.db.artifactVersion.findUnique({
       where: { artifactId_number: { artifactId: artifact.id, number } },
       select: {
@@ -212,7 +214,7 @@ export class ArtifactReads {
       select: { path: true, sha256: true, sizeBytes: true, kind: true },
       orderBy: { path: "asc" },
     });
-    return { artifact, version, files, viewer };
+    return { artifact, version, files, viewer, authorAgentOwnerId };
   }
 
   /** One file of a version (the current one by default), or null when the version has no file at

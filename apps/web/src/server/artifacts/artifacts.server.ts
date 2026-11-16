@@ -396,8 +396,8 @@ export class Artifacts {
     return saved;
   }
 
-  /** Soft-deletes the artifact (its name is free again at once); a Workspace owner or admin, among
-   * those who can read it. An Agent deletes only its own. */
+  /** Soft-deletes the artifact (its name is free again at once); a Workspace owner or admin or
+   * the authoring Agent's owner, among those who can read it. An Agent deletes only its own. */
   async delete(input: { workspaceId: string; artifactId: string; actor: ArtifactActor }) {
     const artifact = await this.live(input.workspaceId, input.artifactId);
     await requireArtifactWrite(this.db, input.workspaceId, input.actor, artifact, "read");
