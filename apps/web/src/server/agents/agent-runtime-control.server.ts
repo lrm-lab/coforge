@@ -130,9 +130,23 @@ export class WorkspaceAgentRecovery {
     const control = this.control;
     if (control) {
       const listedIds = new Set(agents.map((agent) => agent.id));
+      const deleted = await this.agents.listDeletedForComputer(workspaceId, computerId);
+      const deletedIds = new Set(deleted.map((agent) => agent.id));
+      await Promise.all(
+        deleted
+          .filter((agent) => runningAgents.has(agent.id))
+          .map((agent) =>
+            control
+              .publishStop(
+                { agentId: agent.id, workspaceId, requestId: crypto.randomUUID() },
+                agent.ownerId,
+              )
+              .catch(() => {}),
+          ),
+      );
       await Promise.all(
         [...runningAgents]
-          .filter((agentId) => !listedIds.has(agentId))
+          .filter((agentId) => !listedIds.has(agentId) && !deletedIds.has(agentId))
           .map((agentId) => this.#stopStaleRuntime(workspaceId, computerId, agentId)),
       );
     }

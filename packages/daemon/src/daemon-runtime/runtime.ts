@@ -18,7 +18,7 @@ import {
   launchEventObserver,
   handleAgentStart,
   handleAgentStop,
-  handleAgentStopIntent,
+  handleAgentStaleRuntimeStop,
   controlIntentPorts,
   handleAgentTurnInterrupt,
   handleAgentWorkspaceReset,
@@ -745,7 +745,9 @@ export class DaemonRuntime {
       isStopping: () => this.#stopping,
       publications: {
         startAgent: (intent) => this.handleAgentStart(intent),
-        stopAgent: (intent) => handleAgentStopIntent(this.#controlIntentPorts(), intent),
+        stopAgent: (intent) => this.handleAgentStop(intent),
+        staleRuntimeStop: (intent) =>
+          handleAgentStaleRuntimeStop(this.#controlIntentPorts(), intent),
         applyAgentConfigSync: (sync) => this.handleAgentConfig(sync),
         interruptAgent: (intent) => this.handleAgentTurnInterrupt(intent),
         probeAgent: (probe) => this.handleAgentActivityProbe(probe),
@@ -1092,8 +1094,6 @@ export class DaemonRuntime {
     };
   }
 
-  /**
-   * The one-line delegate; the path's contract lives on `rebindAgent` in agent-rebind.ts. */
   async #rebindAgent(
     intent: AgentStartIntent,
     launchId: string,

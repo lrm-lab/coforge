@@ -3,6 +3,7 @@ import type { AgentControlAccess } from "./agent-control-access.server";
 import type { AgentControlEvents } from "./agent-control-events.server";
 import {
   agentControlRevision,
+  agentControlStateSchema,
   current,
   operationFence,
   type AgentControlAction,
@@ -126,4 +127,13 @@ export class AgentControlOperations {
       throw new Error("Agent control could not begin after 3 compare-and-swap attempts");
     return this.begin(refreshed, action, requestId, attempt + 1, stoppedAt, carryFailedStreak);
   }
+}
+
+export function advanceControlEpochForComputerMove(
+  value: unknown,
+  computerId: string,
+): AgentControlState | undefined {
+  const parsed = agentControlStateSchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  return { ...parsed.data, computerId, epoch: parsed.data.epoch + 1 };
 }

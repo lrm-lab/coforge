@@ -7,18 +7,16 @@ import {
   type AgentServerFeatures,
   type AppConfigSync,
   type AgentStaleRuntimeStop,
-  type AgentStopIntent,
 } from "@lrm/coforge-sdk/internal";
 import { ListenerSlot } from "./listener-slot";
 import { ReadyPublicationHold } from "./ready-publication-hold";
-
-export type AgentStopPublication = AgentStopIntent | AgentStaleRuntimeStop;
 
 /** Binary server publications that share ready buffering but do not target one Agent. */
 export class ServerPublications {
   readonly appConfig = new ListenerSlot<(sync: AppConfigSync) => void>();
   readonly features = new ListenerSlot<(sync: AgentServerFeatures) => void>();
   readonly agentConfig = new ListenerSlot<(sync: AgentConfigSync) => void>();
+  readonly staleRuntimeStop = new ListenerSlot<(intent: AgentStaleRuntimeStop) => void>();
 
   onAppConfigSync(callback: (sync: AppConfigSync) => void): () => void {
     return this.appConfig.set(callback);
@@ -32,23 +30,27 @@ export class ServerPublications {
     return this.agentConfig.set(callback);
   }
 
+  onAgentStaleRuntimeStop(callback: (intent: AgentStaleRuntimeStop) => void): () => void {
+    return this.staleRuntimeStop.set(callback);
+  }
+
   clear(): void {
     this.appConfig.clear();
     this.features.clear();
     this.agentConfig.clear();
+    this.staleRuntimeStop.clear();
   }
 
   route(
     data: Uint8Array,
     scope: { workspaceId: string; computerId: string },
     ready: ReadyPublicationHold,
-    staleStop?: ListenerSlot<(intent: AgentStopPublication) => void>,
   ): boolean {
     try {
       const stop = decodeAgentStaleRuntimeStop(data);
       if (stop.workspaceId !== scope.workspaceId || stop.computerId !== scope.computerId)
         return false;
-      if (staleStop) ready.deliver(staleStop, stop, "stale-runtime-stop");
+      ready.deliver(this.staleRuntimeStop, stop, "stale-runtime-stop");
       return true;
     } catch {
       // Try the next publication kind.

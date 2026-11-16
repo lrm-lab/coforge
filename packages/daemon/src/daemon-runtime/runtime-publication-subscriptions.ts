@@ -38,7 +38,8 @@ export type RuntimePublicationSubscriptionPorts = {
   workspaceId: string;
   computerId: string;
   startAgent: (intent: AgentStartIntent) => Promise<unknown>;
-  stopAgent: (intent: AgentStopIntent | AgentStaleRuntimeStop) => Promise<unknown>;
+  stopAgent: (intent: AgentStopIntent) => Promise<unknown>;
+  staleRuntimeStop?: (intent: AgentStaleRuntimeStop) => Promise<unknown>;
   /** Optional so a runtime or test without config sync keeps working. */
   applyAgentConfigSync?: (sync: AgentConfigSync) => Promise<unknown>;
   interruptAgent: (intent: AgentTurnInterruptIntent) => Promise<unknown>;
@@ -114,26 +115,26 @@ export class RuntimePublicationSubscriptions {
     );
     subscribe(
       transport.onAgentStop?.(
-        receive(latest("stop"), async (intent: AgentStopIntent | AgentStaleRuntimeStop) => {
-          if (!("messageType" in intent)) {
-            try {
-              await this.ports.stopAgent(intent as AgentStopIntent);
-            } catch (error) {
-              logger.warning("Stale runtime stop failed", {
-                event: "agent_stale_runtime_stop:failed",
-                agent_id: intent.agentId,
-                control_epoch: intent.controlEpoch,
-                error_code: diagnosticErrorCode(error),
-                outcome: "failed",
-              });
-            }
-            return;
+        receive(
+          latest("stop"),
+          failure("stop", (intent: AgentStopIntent) => this.ports.stopAgent(intent)),
+        ),
+      ),
+    );
+    subscribe(
+      transport.onAgentStaleRuntimeStop?.(
+        receive(latest("stale-runtime-stop"), async (intent: AgentStaleRuntimeStop) => {
+          try {
+            await this.ports.staleRuntimeStop?.(intent);
+          } catch (error) {
+            logger.warning("Stale runtime stop failed", {
+              event: "agent_stale_runtime_stop:failed",
+              agent_id: intent.agentId,
+              control_epoch: intent.controlEpoch,
+              error_code: diagnosticErrorCode(error),
+              outcome: "failed",
+            });
           }
-          await this.ports
-            .stopAgent(intent)
-            .catch((error) =>
-              logAgentOperationFailure(this.ports.computerId, "stop", intent, error),
-            );
         }),
       ),
     );

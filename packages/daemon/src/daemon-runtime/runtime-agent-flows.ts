@@ -271,15 +271,6 @@ export async function handleAgentStaleRuntimeStop(
   await ports.staleRuntimeStop(intent.agentId, intent.controlEpoch);
 }
 
-export function handleAgentStopIntent(
-  ports: AgentControlIntentPorts,
-  intent: AgentStopIntent | AgentStaleRuntimeStop,
-): Promise<void> {
-  return "messageType" in intent
-    ? handleAgentStop(ports, intent)
-    : handleAgentStaleRuntimeStop(ports, intent as AgentStaleRuntimeStop);
-}
-
 /** A server workspace reset: only for this runtime's own, started, not-stopping scope. */
 export async function handleAgentWorkspaceReset(
   ports: AgentControlIntentPorts,
