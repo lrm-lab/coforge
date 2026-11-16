@@ -52,8 +52,8 @@ export function withMemoryRecovery(session: AgentSession, directory: string): Ag
   session.sendMessage = wrap(session.sendMessage);
   if (session.notify) session.notify = wrap(session.notify);
   const dispose = session.dispose;
-  session.dispose = async () => {
-    await dispose.call(session);
+  session.dispose = async (...args) => {
+    await dispose.call(session, ...args);
     unsubscribe();
     offExit();
   };

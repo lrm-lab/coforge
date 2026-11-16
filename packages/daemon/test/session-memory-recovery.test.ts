@@ -15,6 +15,7 @@ test("compaction alone starts no turn; memory rides once with the next real inpu
   roots.push(root);
   await writeFile(join(root, "MEMORY.md"), "Domain already purchased: coforgeusercontent.com");
   const inputs: string[] = [];
+  const cutoffs: (number | undefined)[] = [];
   const listeners = new Set<(event: AgentRuntimeEvent) => void>();
   const original: AgentSession = {
     sendMessage: async (text) => {
@@ -31,7 +32,9 @@ test("compaction alone starts no turn; memory rides once with the next real inpu
     },
     onExit: () => () => {},
     interrupt: async () => {},
-    dispose: async () => {},
+    dispose: async (options) => {
+      cutoffs.push(options?.cutoffAtMs);
+    },
   };
   const session = withMemoryRecovery(original, root);
   expect(session).toBe(original);
@@ -44,6 +47,7 @@ test("compaction alone starts no turn; memory rides once with the next real inpu
   const thanks = session.notify!("Thanks");
   expect(inputs[1]).toBe("Thanks");
   await thanks;
-  await session.dispose();
+  await session.dispose({ cutoffAtMs: 1234 });
+  expect(cutoffs).toEqual([1234]);
   expect(listeners.size).toBe(0);
 });
