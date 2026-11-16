@@ -1,112 +1,137 @@
-import { Button as AriaButton } from "react-aria-components";
+import { useState } from "react";
 
-import { Button } from "#src/components/base/buttons/button";
 import { formatMonthDayTime } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
-import { useCardDock, useQuestionDrafts } from "./question-card-host";
-import {
-  answerText,
-  dockQuestions,
-  givenAnswers,
-  isMine,
-  type AskingView,
-} from "./question-card-model";
+import { useQuestionCards } from "./question-card-host";
+import { cardQuestions, givenAnswers, isMine, type AskingView } from "./question-card-model";
+import { QuestionAsk } from "./question-card-ask";
+import { QuestionOptions } from "./question-card-options";
+import { QuestionPager } from "./question-card-pager";
 import { cardStatus } from "./question-card-status";
+import { AnswerSummary, UnansweredQuestions } from "./question-card-summary";
 import { useSettleInPlace } from "./settle-in-place";
 
-export function QuestionCard({ card }: { card: AskingView }) {
-  const dock = useCardDock();
-  const view = dock?.viewOf(card) ?? card;
-  const [drafts] = useQuestionDrafts(view);
+export function QuestionCard({ card, asker }: { card: AskingView; asker: string }) {
+  const cards = useQuestionCards();
+  const view = cards?.viewOf(card) ?? card;
+  const [handledHere, setHandledHere] = useState(false);
+  const [tab, setTab] = useState(0);
+  const [kbd, setKbd] = useState(false);
+  const { box, settles, heldHeight } = useSettleInPlace(view, handledHere);
   const timeFormat = useTimeFormat();
   const timeZone = useTimeZone();
   const pending = view.state === "pending";
   const answered = view.state === "executed";
-  const off = !pending && !answered;
-  const mine = isMine(view);
-  const inDock = dock?.openId === view.messageId;
-  const openable = Boolean(dock) && pending;
-  const questions = dockQuestions(view);
-  const shown = answered ? givenAnswers(view) : pending ? drafts : {};
-  const status = cardStatus(view, { mine });
-  const due =
-    pending && view.deadline
-      ? m.question_card_due({
-          time: formatMonthDayTime(view.deadline, timeZone, getLocale(), timeFormat),
-        })
-      : undefined;
-  const answerable = openable && mine;
-  const { box, heldHeight } = useSettleInPlace(view);
+  const questions = cardQuestions(view);
+  const several = questions.length > 1;
+  const time = (iso: string) => formatMonthDayTime(iso, timeZone, getLocale(), timeFormat);
+  const status = cardStatus(view, { mine: isMine(view), time });
+
+  let body;
+  if (pending)
+    body = (
+      <QuestionAsk
+        view={view}
+        asker={asker}
+        status={status}
+        due={view.deadline ? m.question_card_due({ time: time(view.deadline) }) : undefined}
+        tab={tab}
+        setTab={setTab}
+        kbd={kbd}
+        setKbd={setKbd}
+        onHandled={() => setHandledHere(true)}
+      />
+    );
+  else {
+    const answers = answered ? givenAnswers(view) : {};
+    const statusLine = status && (
+      <span data-question-status="" className="flex min-w-0 flex-wrap items-center gap-x-1.5">
+        {status}
+      </span>
+    );
+    if (settles) {
+      const question = questions[Math.min(tab, questions.length - 1)]!;
+      body = (
+        <>
+          <p
+            data-question-prompt=""
+            className={cn(
+              "px-3 pt-2 pb-1.5 text-sm wrap-anywhere",
+              several ? "font-medium" : "font-semibold",
+              answered ? "text-primary" : "text-tertiary",
+            )}
+          >
+            {question.prompt}
+          </p>
+          <QuestionOptions
+            key={question.id}
+            id={`${view.messageId}-q${tab}`}
+            question={question}
+            draft={answers[question.id]}
+            mode={answered ? "answered" : "off"}
+          />
+          <div className="mt-auto flex min-h-10 flex-wrap items-center gap-x-3 pt-1 pl-3 text-xs text-quaternary max-sm:min-h-13">
+            {several && <QuestionPager tab={tab} total={questions.length} onTurn={setTab} />}
+            {statusLine}
+          </div>
+        </>
+      );
+    } else
+      body = (
+        <>
+          {!several && (
+            <p
+              data-question-prompt=""
+              className={cn(
+                "px-3 pt-2 pb-1.5 text-sm font-semibold wrap-anywhere",
+                answered ? "text-primary" : "text-tertiary",
+              )}
+            >
+              {questions[0]!.prompt}
+            </p>
+          )}
+          {answered ? (
+            <AnswerSummary questions={questions} answers={answers} showPrompt={several} />
+          ) : (
+            several && <UnansweredQuestions questions={questions} />
+          )}
+          {statusLine && (
+            <div className="flex min-h-10 items-center px-3 py-2 text-xs text-quaternary">
+              {statusLine}
+            </div>
+          )}
+        </>
+      );
+  }
+
   return (
     <div
       ref={box}
       style={heldHeight ? { minHeight: heldHeight } : undefined}
       data-question-card={view.state}
+      data-question-card-view={pending || settles ? "full" : "compact"}
+      data-message={view.messageId}
+      data-question-at={pending && several ? tab : undefined}
+      data-question-keys={pending && kbd ? "" : undefined}
       data-no-row-tap
       className={cn(
-        "mt-1 flex max-w-md flex-col rounded-xl border bg-primary p-1 transition-[border-color,box-shadow] duration-150 max-sm:max-w-none",
-        inDock ? "border-primary ring-3 ring-secondary" : "border-secondary",
+        "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary p-1 max-sm:max-w-none",
+        pending && "focus-within:border-primary",
       )}
     >
-      {questions.map((question, index) => {
-        const text = off
-          ? ""
-          : answerText(question, shown[question.id]).join(m.question_card_answer_separator());
-        const skipped = answered && !text;
-        return (
-          <AriaButton
-            key={question.id}
-            data-question-row={question.id}
-            isDisabled={!openable}
-            aria-label={text ? `${question.prompt}: ${text}` : question.prompt}
-            onPress={() => dock?.open(view.messageId, index)}
-            className="flex h-7 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-left text-sm outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 disabled:cursor-default disabled:hover:bg-transparent"
-          >
-            <span
-              className={cn("min-w-0 flex-1 truncate", off ? "text-quaternary" : "text-secondary")}
-            >
-              {question.prompt}
-            </span>
-            {(text || skipped) && (
-              <span
-                className={cn(
-                  "max-w-[45%] min-w-0 shrink truncate",
-                  skipped
-                    ? "text-quaternary"
-                    : pending
-                      ? "text-tertiary"
-                      : "font-medium text-primary",
-                )}
-              >
-                {text || m.question_card_skipped()}
-              </span>
-            )}
-          </AriaButton>
-        );
-      })}
-      {(answerable || status) && (
-        <div className="flex h-9 items-center gap-2 pr-1 pl-3 text-xs text-tertiary">
-          <span className="min-w-0 flex-1 truncate">
-            {answerable ? due : status}
-            {!answerable && due && ` · ${due}`}
-          </span>
-          {answerable && (
-            <Button
-              data-question-card-answer=""
-              size="sm"
-              color="secondary"
-              className={cn(inDock && "invisible")}
-              onPress={() => dock!.open(view.messageId)}
-            >
-              {m.question_card_answer()}
-            </Button>
-          )}
-        </div>
+      {several && view.kind === "questions" && view.prompt && (
+        <p
+          data-question-title=""
+          className="px-3 pt-2 text-sm font-semibold wrap-anywhere text-primary"
+        >
+          {view.prompt}
+        </p>
       )}
+      {body}
     </div>
   );
 }

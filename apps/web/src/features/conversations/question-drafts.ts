@@ -1,6 +1,6 @@
 /**
  * A question card's half-given answers, kept on this device only (Frank, 11-12: local for now,
- * synced across devices later): the dock can be closed, the channel left, the page reloaded, and
+ * synced across devices later): the card can scroll away, the channel be left, the page reloaded, and
  * the answers are still there. One `localStorage` entry per card, `coforge.question-draft:<message
  * id>`, holding `{ at, drafts }`; a card that is answered, declined or expired drops its entry, and
  * an entry older than the longest a card waits is cleared on the first read of a page's life.

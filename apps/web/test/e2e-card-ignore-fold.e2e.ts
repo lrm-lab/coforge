@@ -13,16 +13,18 @@ import {
 
 /**
  * Task #85 (Frank, 11-12): not answering a choice or questions card is a decline, asked once. The
- * dock's "Don't answer" opens a confirm popover over the dock; Escape and Cancel go back with
- * nothing sent; the confirm tells the Agent, turns the dock to its receipt, and the card in the
- * stream goes gray (`cancelled`, "You didn't answer") at the height it had, with no way to take it
- * back. On a desktop the button is in the dock's top bar, on a phone at the sheet's foot.
+ * card's quiet "Don't answer" opens a small confirm popover ("Don't answer this question?" for one
+ * question, "Don't answer these N questions?" for several; Chinese too); Escape and "Keep
+ * answering" go back with nothing sent; "Don't answer" tells the Agent and the card in the stream
+ * goes gray (`cancelled`, "You didn't answer") at the height it had, the message below it not
+ * moving, with no way to take it back. On a phone the popover fits the screen; no sheet or dock
+ * appears.
  *
  * The file keeps the name of the old ignore-and-undo fold; that fold (a card closing over a
  * transition and a 5-second Undo) no longer exists.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The Agent, channel and
- * cards are seeded per run and removed after it. Confirm and receipt frames, desktop and phone,
+ * cards are seeded per run and removed after it. Confirm and declined frames, desktop and phone,
  * are written under `.amp/e2e/card-ignore-fold/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
@@ -74,8 +76,15 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
   const choice = await message(1, `Which plan ${tail}`);
   const questions = await message(2, `Two questions ${tail}`);
   const phoneChoice = await message(3, `Which plan on a phone ${tail}`);
-  await message(4, "A message under the cards.");
-  await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 4 } });
+  const zhChoice = await message(4, `Which plan in Chinese ${tail}`);
+  const under = await message(5, "A message under the cards.");
+  await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 5 } });
+  /** The message below each card, whose top must not move when the card is declined. */
+  const below: Record<string, string> = {
+    [choice.id]: questions.id,
+    [questions.id]: phoneChoice.id,
+    [phoneChoice.id]: zhChoice.id,
+  };
   const options = (names: string[]) => names.map((label, index) => ({ id: `o${index}`, label }));
   const choicePayload = (prompt: string) => ({
     type: "choice",
@@ -127,73 +136,89 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
         payload: choicePayload("Which plan should a phone ship first?"),
         preparedByAgentId: agent.id,
       },
+      {
+        messageId: zhChoice.id,
+        conversationId: channel.id,
+        workspaceId,
+        kind: "choice",
+        payload: choicePayload("Which plan should Chinese ship first?"),
+        preparedByAgentId: agent.id,
+      },
     ],
   });
 
   const card = (id: string) =>
     `document.querySelector('[data-message-id="${id}"] [data-question-card]')`;
-  const dock = "[data-question-dock]";
   const state = (id: string) => `${card(id)}?.dataset.questionCard`;
-  /** The decline button the viewport shows: the top bar's on a desktop, the foot's on a phone. */
-  const visibleDecline = `[...document.querySelectorAll("${dock} [data-dock-decline]")].find((button) => button.getClientRects().length > 0)`;
-  const popover = `[...document.querySelectorAll("h2")].some((heading) => heading.textContent === "Don't answer?")`;
+  const decline = (id: string) => `[data-message-id="${id}"] [data-question-decline]`;
+  const dialogWith = (title: string) =>
+    `[...document.querySelectorAll('[role="dialog"]')].find((dialog) => dialog.textContent.includes(${JSON.stringify(title)}))`;
   const stored = (id: string) => db.actionCard.findUniqueOrThrow({ where: { messageId: id } });
-  const press = async (expression: string) => {
-    await evaluate(`(${expression}.setAttribute("data-e2e-press", ""), true)`);
-    await browser("click", "[data-e2e-press]");
-    await evaluate(
-      `(document.querySelector("[data-e2e-press]")?.removeAttribute("data-e2e-press"), true)`,
-    );
-  };
-  const open = async (waiting: string) => {
-    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
+  const open = async (waiting: string, locale = "en") => {
+    await browser("open", `${origin}/${locale}/w/${workspace.slug}/channel/${channel.id}`);
     await waitFor(`${state(waiting)} === "pending" && ${pageHydrated}`, 60_000);
   };
-  const openDock = async (id: string) => {
-    await press(`document.querySelector('[data-message-id="${id}"] [data-question-card-answer]')`);
-    await waitFor(`document.querySelector('${dock} [data-dock="answering"]') !== null`);
-  };
-  /** Asks to decline, backs out two ways (Escape, Cancel), asks again and confirms. */
-  const decline = async (id: string, shot: string) => {
-    await press(visibleDecline);
-    await waitFor(popover);
-    await browser("press", "Escape");
-    await waitFor(
-      `!(${popover}) && document.querySelector('${dock} [data-dock="answering"]') !== null`,
+  /** The card's height, where the message below it starts, how faded its prompt reads and its words. */
+  const look = (id: string) =>
+    evaluate<{ height: number; below: number; gray: string; text: string }>(`(() => {
+      const el = ${card(id)};
+      const prompt = el.querySelector("[data-question-prompt]") ?? el;
+      let opacity = 1;
+      for (let up = prompt; up; up = up.parentElement) {
+        opacity *= Number(getComputedStyle(up).opacity);
+        if (up === el) break;
+      }
+      const next = document.querySelector('[data-message-id="${below[id] ?? under.id}"]');
+      return {
+        height: el.getBoundingClientRect().height,
+        below: next.getBoundingClientRect().top,
+        gray: getComputedStyle(prompt).color + " / " + opacity,
+        text: el.textContent,
+      };
+    })()`);
+  /** Asks to decline, backs out two ways (Escape, Keep answering), asks again and confirms. */
+  const declineOnce = async (id: string, title: string, shot: string) => {
+    await browser("click", decline(id));
+    await waitFor(`${dialogWith(title)} !== undefined`);
+    expect(await evaluate<string>(`${dialogWith(title)}.textContent`)).toContain(
+      `Decline Agent ${tail} will be told you declined, and you can't answer later.`,
     );
-    expect((await stored(id)).state).toBe("pending");
-
-    await press(visibleDecline);
-    await waitFor(popover);
-    await clickText('[role="dialog"] button', "Cancel");
-    await waitFor(`!(${popover})`);
+    await browser("press", "Escape");
+    await waitFor(`${dialogWith(title)} === undefined`);
     expect((await stored(id)).state).toBe("pending");
     expect(await evaluate<string>(state(id))).toBe("pending");
 
-    await press(visibleDecline);
-    await waitFor(popover);
+    await browser("click", decline(id));
+    await waitFor(`${dialogWith(title)} !== undefined`);
+    await clickText('[role="dialog"] button', "Keep answering");
+    await waitFor(`${dialogWith(title)} === undefined`);
+    expect((await stored(id)).state).toBe("pending");
+    expect(await evaluate<string>(state(id))).toBe("pending");
+
+    await browser("click", decline(id));
+    await waitFor(`${dialogWith(title)} !== undefined`);
     await browser("screenshot", join(artifacts, `${shot}-confirm.png`));
     await clickText('[role="dialog"] button', "Don't answer");
-    await waitFor(
-      `${state(id)} === "cancelled" && document.querySelector('${dock} [data-dock-receipt]') !== null`,
-    );
+    await waitFor(`${state(id)} === "cancelled"`);
     const declined = await stored(id);
     expect(declined.state).toBe("cancelled");
     expect(declined.committedByUserId).toBe(DEV_BROWSER_USER.id);
     await browser("screenshot", join(artifacts, `${shot}-declined.png`));
   };
-  /** The card's height, its first line's colour and its words. */
-  const look = (id: string) =>
-    evaluate<{ height: number; color: string; text: string; answerable: boolean }>(`(() => {
-      const el = ${card(id)};
-      const prompt = el.querySelector("[data-question-row] span");
-      return {
-        height: el.getBoundingClientRect().height,
-        color: getComputedStyle(prompt).color,
-        text: el.textContent,
-        answerable: el.querySelector("[data-question-card-answer]") !== null,
-      };
-    })()`);
+  /** After a decline: gray at the height it had, the message below not moved, saying it was the
+   * viewer's own decline, with nothing left to press and nothing to undo. */
+  const expectDeclined = async (id: string, before: Awaited<ReturnType<typeof look>>) => {
+    const after = await look(id);
+    expect(after.height).toBe(before.height);
+    expect(after.below).toBe(before.below);
+    expect(after.gray).not.toBe(before.gray);
+    expect(after.text).toContain("You didn't answer");
+    expect(
+      await evaluate<boolean>(
+        `${card(id)}.querySelector("[data-question-send], [data-question-next], [data-question-decline], [data-question-other-input]") === null && document.querySelector("[data-ignore-undo]") === null`,
+      ),
+    ).toBe(true);
+  };
 
   try {
     await mkdir(artifacts, { recursive: true });
@@ -201,67 +226,57 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
     await open(choice.id);
     await evaluate(`(${card(choice.id)}.scrollIntoView({ block: "start" }), true)`);
 
-    // A choice card on a desktop: the decline is in the dock's top bar, the only one in sight.
+    // A choice card on a desktop: every waiting card has its own "Don't answer", the composer is
+    // still there, and nothing else takes its place.
     const choiceBefore = await look(choice.id);
-    expect(choiceBefore.answerable).toBe(true);
-    await openDock(choice.id);
     expect(
       await evaluate<boolean>(
-        `[...document.querySelectorAll("${dock} [data-dock-decline]")].filter((button) => button.getClientRects().length > 0).length === 1`,
+        `document.querySelectorAll("[data-question-decline]").length === 4 && document.querySelector("[data-composer]").getClientRects().length > 0`,
       ),
     ).toBe(true);
-    await decline(choice.id, "desktop-choice");
-    // Gray in the stream at the height it had, saying it was the viewer's own decline, with
-    // nothing left to press and nothing to undo.
-    const choiceAfter = await look(choice.id);
-    expect(choiceAfter.height).toBe(choiceBefore.height);
-    expect(choiceAfter.color).not.toBe(choiceBefore.color);
-    expect(choiceAfter.text).toContain("You didn't answer");
-    expect(choiceAfter.answerable).toBe(false);
-    expect(await evaluate<boolean>(`document.querySelector("[data-ignore-undo]") === null`)).toBe(
-      true,
-    );
-    expect(
-      await evaluate<boolean>(
-        `document.querySelector('${dock} [data-dock-receipt]').textContent.includes("You didn't answer")`,
-      ),
-    ).toBe(true);
+    await declineOnce(choice.id, "Don't answer this question?", "desktop-choice");
+    await expectDeclined(choice.id, choiceBefore);
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
     await browser("screenshot", join(artifacts, "desktop-choice-declined-dark.png"));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
 
-    // The receipt's next card is the questions card waiting below; it is declined the same way.
-    await clickText(`${dock} button`, "Next");
-    await waitFor(
-      `document.querySelector('${dock} [data-dock="answering"] [data-dock-tab]') !== null`,
-    );
+    // The questions card waiting below is declined the same way, its popover naming the count.
+    await evaluate(`(${card(questions.id)}.scrollIntoView({ block: "start" }), true)`);
     const questionsBefore = await look(questions.id);
-    await decline(questions.id, "desktop-questions");
-    const questionsAfter = await look(questions.id);
-    expect(questionsAfter.height).toBe(questionsBefore.height);
-    expect(questionsAfter.color).not.toBe(questionsBefore.color);
-    expect(questionsAfter.text).toContain("You didn't answer");
-    // Escape closes the dock even when focus has left it, as a refresh of the stream or a click
-    // elsewhere leaves it (task #109).
-    await evaluate(`(document.activeElement?.blur(), document.activeElement === document.body)`);
-    await browser("press", "Escape");
-    await waitFor(`document.querySelector('${dock}') === null`);
+    await declineOnce(questions.id, "Don't answer these 2 questions?", "desktop-questions");
+    await expectDeclined(questions.id, questionsBefore);
 
-    // A phone: the decline sits at the sheet's foot, the top bar's is hidden.
+    // In Chinese the popover speaks Chinese, and "继续回答" goes back with nothing sent.
+    await open(zhChoice.id, "zh-CN");
+    await evaluate(`(${card(zhChoice.id)}.scrollIntoView({ block: "start" }), true)`);
+    await browser("click", decline(zhChoice.id));
+    await waitFor(`${dialogWith("不回答这个问题？")} !== undefined`);
+    const zhDialog = await evaluate<{ text: string; buttons: string[] }>(
+      `({ text: ${dialogWith("不回答这个问题？")}.textContent, buttons: [...${dialogWith("不回答这个问题？")}.querySelectorAll("button")].map((button) => button.textContent.trim()) })`,
+    );
+    expect(zhDialog.text).toContain(`Decline Agent ${tail} 会收到你不回答的消息，之后不能再答。`);
+    expect(zhDialog.buttons).toEqual(["继续回答", "不回答"]);
+    await clickText('[role="dialog"] button', "继续回答");
+    await waitFor(`${dialogWith("不回答这个问题？")} === undefined`);
+    expect((await stored(zhChoice.id)).state).toBe("pending");
+
+    // A phone: the same "Don't answer" in the card, a popover that fits the screen, no sheet.
     await browser("set", "viewport", "390", "844");
     await open(phoneChoice.id);
-    await openDock(phoneChoice.id);
+    await evaluate(`(${card(phoneChoice.id)}.scrollIntoView({ block: "start" }), true)`);
+    const phoneBefore = await look(phoneChoice.id);
+    await browser("click", decline(phoneChoice.id));
+    await waitFor(`${dialogWith("Don't answer this question?")} !== undefined`);
     expect(
       await evaluate<boolean>(`(() => {
-        const [top, foot] = [...document.querySelectorAll("${dock} [data-dock-decline]")];
-        return document.querySelector("${dock}").getAttribute("role") === "dialog"
-          && top.getClientRects().length === 0 && foot.getClientRects().length > 0;
+        const box = ${dialogWith("Don't answer this question?")}.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth + 0.5;
       })()`),
     ).toBe(true);
-    await decline(phoneChoice.id, "phone-choice");
-    expect(
-      await evaluate<boolean>(`${card(phoneChoice.id)}.textContent.includes("You didn't answer")`),
-    ).toBe(true);
+    await browser("press", "Escape");
+    await waitFor(`${dialogWith("Don't answer this question?")} === undefined`);
+    await declineOnce(phoneChoice.id, "Don't answer this question?", "phone-choice");
+    await expectDeclined(phoneChoice.id, phoneBefore);
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);

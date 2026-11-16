@@ -60,7 +60,6 @@
   "action_card_rename": "Rename…",
   "action_card_refused": "This can't be done as the card has it.",
   "action_card_questions_recommended": "Recommended",
-  "action_card_questions_next": "Next",
   "action_card_ignore_row": "Don't answer: {prompt}",
   "action_card_unknown": "This card needs a newer version of CoForge to show."
 }

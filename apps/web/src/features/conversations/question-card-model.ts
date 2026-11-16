@@ -4,9 +4,9 @@ import type { ActionCardView } from "#src/server/conversations/action-cards.serv
 
 export type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
 export type QuestionsView = Extract<ActionCardView, { kind: "questions" }>;
-/** A card the dock answers: an Agent's one question (`choice`) or several (`questions`). */
+/** A question card: an Agent's one question (`choice`) or several (`questions`). */
 export type AskingView = ChoiceView | QuestionsView;
-export type DockQuestion = QuestionsView["questions"][number];
+export type CardQuestion = QuestionsView["questions"][number];
 
 /** One question's answer as it is being given: the options ticked, and the person's own words. */
 export type Draft = { selection: string[]; text: string };
@@ -15,12 +15,12 @@ export type Drafts = Record<string, Draft>;
 /** One question's answer, as `commitQuestionsActionCard` takes it. */
 export type QuestionsAnswer = { questionId: string; selection: string[]; text?: string };
 
-/** What the dock sends for a card: the server's own shape for each kind. */
+/** What a card sends: the server's own shape for each kind. */
 type Submission =
   | { kind: "choice"; optionId: string; text?: string }
   | { kind: "questions"; answers: QuestionsAnswer[] };
 
-/** The id a choice card's one question goes by in the dock and its kept drafts. */
+/** The id a choice card's one question goes by in the card and its kept drafts. */
 const CHOICE_QUESTION_ID = "choice";
 
 export function isAskingView(view: ActionCardView | undefined): view is AskingView {
@@ -33,8 +33,8 @@ export function isMine(view: AskingView) {
   return view.state === "pending" ? view.canCommit : Boolean(view.asked?.isViewer);
 }
 
-/** The card's questions as the dock asks them; a choice card is one single-pick question. */
-export function dockQuestions(view: AskingView): DockQuestion[] {
+/** The card's questions as it asks them; a choice card is one single-pick question. */
+export function cardQuestions(view: AskingView): CardQuestion[] {
   if (view.kind === "questions") return view.questions;
   return [
     {
@@ -57,7 +57,7 @@ export function answered(draft: Draft | undefined): boolean {
 
 /** Kept drafts as the card asks now: a question, option or own-words row it no longer has is
  * dropped, so an answer is never sent for something the person cannot see. */
-export function fitDrafts(questions: DockQuestion[], drafts: Drafts): Drafts {
+export function fitDrafts(questions: CardQuestion[], drafts: Drafts): Drafts {
   const fitted: Drafts = {};
   for (const question of questions) {
     const draft = drafts[question.id];
@@ -71,7 +71,7 @@ export function fitDrafts(questions: DockQuestion[], drafts: Drafts): Drafts {
 }
 
 /** An answer as words: the labels ticked, in the order ticked, then the person's own. */
-export function answerText(question: DockQuestion, draft: Draft | undefined): string[] {
+export function answerText(question: CardQuestion, draft: Draft | undefined): string[] {
   if (!draft) return [];
   const labels = draft.selection.flatMap((id) => {
     const option = question.options.find((candidate) => candidate.id === id);
@@ -84,7 +84,7 @@ export function answerText(question: DockQuestion, draft: Draft | undefined): st
 /** The answers to send, or nothing when no question is answered. A question left unanswered is
  * left out; the server records it skipped. */
 export function submission(view: AskingView, drafts: Drafts): Submission | undefined {
-  const answers = dockQuestions(view).flatMap((question): QuestionsAnswer[] => {
+  const answers = cardQuestions(view).flatMap((question): QuestionsAnswer[] => {
     const draft = drafts[question.id];
     if (!answered(draft)) return [];
     const text = draft!.text.trim();
@@ -127,15 +127,4 @@ export function givenAnswers(view: AskingView): Drafts {
       },
     ]),
   );
-}
-
-/** After `answeredId` is sent, the card to offer next: the first still waiting below it in the
- * stream, else the latest still waiting. */
-export function nextWaiting(
-  waitingIds: readonly string[],
-  streamIds: readonly string[],
-  answeredId: string,
-): string | undefined {
-  const below = streamIds.slice(streamIds.indexOf(answeredId) + 1);
-  return below.find((id) => waitingIds.includes(id)) ?? waitingIds.at(-1);
 }

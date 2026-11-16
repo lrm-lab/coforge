@@ -9,8 +9,9 @@ import { browserSession, cpuThrottle, localBrowserE2e, pageHydrated } from "./he
 /**
  * Activity's "Waiting on you" section (task #413): a choice card that asks the viewer heads the
  * All view, one that asks someone else does not appear, a row's "Don't answer" declines its card
- * after a confirm and takes it off the list, and answering another from the conversation the row
- * opens (the card's Answer opens the dock, an option and Send answer it) takes it off the list.
+ * after a confirm popover ("Don't answer this question?", Keep answering / Don't answer) and takes
+ * it off the list, and answering another from the conversation the row opens (a click on an option
+ * of the card in the stream answers it, no dock) takes it off the list.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent and
  * peer and all the cards are seeded per run and removed after it. Screenshots are written under
@@ -113,9 +114,9 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
   const section = `document.querySelector('ol[aria-label="Waiting on you"]')`;
   const listed = (prompt: string) =>
     `(${section}?.textContent ?? "").includes(${JSON.stringify(prompt)})`;
-  // The card's Answer, the button a press lands on.
-  const pick = `[data-message-id="${mineId}"] [data-question-card-answer]`;
-  const dock = "[data-question-dock]";
+  // The card's first option, the row a press lands on once the card shows.
+  const pick = `[data-message-id="${mineId}"] [data-question-option="a"]`;
+  const confirming = `[...document.querySelectorAll('[role="dialog"]')].some((dialog) => dialog.textContent.includes("Don't answer this question?"))`;
   let throttle: Awaited<ReturnType<typeof cpuThrottle>> | undefined;
   try {
     await mkdir(artifacts, { recursive: true });
@@ -167,29 +168,17 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     // to the button itself.
     const declining = `[...${section}.querySelectorAll(":scope > li")].find((row) => row.textContent.includes(${JSON.stringify(older[0])}))`;
     await evaluate(`(${declining}.querySelector("[data-decline]").click(), true)`);
-    await browser(
-      "wait",
-      "--fn",
-      `[...document.querySelectorAll("h2")].some((heading) => heading.textContent === "Don't answer?")`,
-    );
+    await browser("wait", "--fn", confirming);
     await browser("screenshot", join(artifacts, "decline-confirm.png"));
-    // Cancel goes back with nothing sent.
-    await clickText('[role="dialog"] button', "Cancel");
-    await browser(
-      "wait",
-      "--fn",
-      `![...document.querySelectorAll("h2")].some((heading) => heading.textContent === "Don't answer?")`,
-    );
+    // Keep answering goes back with nothing sent.
+    await clickText('[role="dialog"] button', "Keep answering");
+    await browser("wait", "--fn", `!(${confirming})`);
     expect(await evaluate<boolean>(listed(older[0]!))).toBe(true);
     expect(
       (await db.actionCard.findUniqueOrThrow({ where: { messageId: olderIds[0]! } })).state,
     ).toBe("pending");
     await evaluate(`(${declining}.querySelector("[data-decline]").click(), true)`);
-    await browser(
-      "wait",
-      "--fn",
-      `[...document.querySelectorAll("h2")].some((heading) => heading.textContent === "Don't answer?")`,
-    );
+    await browser("wait", "--fn", confirming);
     await clickText('[role="dialog"] button', "Don't answer");
     await browser("wait", "--fn", `!${listed(older[0]!)}`);
     expect(await evaluate<number>(shownRows)).toBe(3);
@@ -202,7 +191,7 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     await browser("screenshot", join(artifacts, "declined.png"));
 
     // The row opens the conversation at the card, which the viewer answers there. Nothing may move
-    // the card once its Answer shows (task #72): the notification banner over the composer used to
+    // the card once its options show (task #72): the notification banner over the composer used to
     // arrive a beat later, shrink the pane and, the pane following its latest message, carry the
     // card up by the banner's height under the press, which then landed on another row. On a
     // slowed CPU, as on a busy phone, that beat is long enough to press into.
@@ -215,17 +204,19 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     await browser("wait", "--fn", "window.__pickTops.length >= 90");
     const tops = await evaluate<number[]>("window.__pickTops");
     expect(new Set(tops).size).toBe(1);
+    // The first option, Red, answers it at once: no dock, no Send, and the composer stays.
     await browser("click", pick);
     await throttle.set(1);
-    // The dock opens in the composer's place; the first option, Red, then Send answer it.
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('${dock} [data-dock="answering"]') !== null`,
+      `document.querySelector('[data-message-id="${mineId}"] [data-question-card]')?.dataset.questionCard === "executed"`,
     );
-    await browser("click", `${dock} [data-dock-page-current] [role="option"]:first-child`);
-    await browser("click", `${dock} [data-dock-submit]`);
-    await browser("wait", "--fn", `document.querySelector('${dock} [data-dock-receipt]') !== null`);
+    expect(
+      await evaluate<boolean>(
+        `document.querySelector("[data-composer]").getClientRects().length > 0`,
+      ),
+    ).toBe(true);
     await browser("wait", "--fn", `!${listed(mine)}`);
     await browser("screenshot", join(artifacts, "answered.png"));
     const answered = await db.actionCard.findUniqueOrThrow({ where: { messageId: mineId } });

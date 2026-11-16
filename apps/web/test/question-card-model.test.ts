@@ -3,10 +3,9 @@ import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
 import {
   answerText,
-  dockQuestions,
+  cardQuestions,
   fitDrafts,
   givenAnswers,
-  nextWaiting,
   submission,
   type ChoiceView,
   type QuestionsView,
@@ -48,9 +47,9 @@ const questions: QuestionsView = {
   ],
 };
 
-describe("one dock answers both kinds (Frank, 11-12: choice cards use the dock too)", () => {
+describe("one card answers both kinds", () => {
   test("a choice card is one single-pick question, under its own prompt", () => {
-    expect(dockQuestions(choice)).toEqual([
+    expect(cardQuestions(choice)).toEqual([
       {
         id: "choice",
         prompt: "Ship it?",
@@ -59,7 +58,7 @@ describe("one dock answers both kinds (Frank, 11-12: choice cards use the dock t
         other: { label: "Something else" },
       },
     ]);
-    expect(dockQuestions(questions)).toBe(questions.questions);
+    expect(cardQuestions(questions)).toBe(questions.questions);
   });
 
   test("a choice card sends its one pick, or the person's own words", () => {
@@ -88,7 +87,7 @@ describe("one dock answers both kinds (Frank, 11-12: choice cards use the dock t
 
 test("kept answers the card no longer offers are left behind", () => {
   expect(
-    fitDrafts(dockQuestions(questions), {
+    fitDrafts(cardQuestions(questions), {
       one: { selection: ["a", "gone"], text: "mine" },
       many: { selection: ["y"], text: "words nobody asked for" },
       dropped: { selection: ["a"], text: "" },
@@ -100,14 +99,14 @@ test("kept answers the card no longer offers are left behind", () => {
 });
 
 test("an answer reads as its labels, then the person's own words", () => {
-  const [, many] = dockQuestions(questions);
+  const [, many] = cardQuestions(questions);
   expect(answerText(many!, { selection: ["y", "x"], text: "" })).toEqual(["Y", "X"]);
   expect(answerText(many!, undefined)).toEqual([]);
-  const [one] = dockQuestions(questions);
+  const [one] = cardQuestions(questions);
   expect(answerText(one!, { selection: [], text: " mine " })).toEqual(["mine"]);
 });
 
-describe("the answers a card was given, to show on its receipt and in the stream", () => {
+describe("the answers a card was given, to show in the stream", () => {
   test("a choice card's pick, or words", () => {
     expect(
       givenAnswers({ ...choice, state: "executed", result: { optionId: "no", label: "No" } }),
@@ -138,14 +137,5 @@ describe("the answers a card was given, to show on its receipt and in the stream
         },
       }),
     ).toEqual({ one: { selection: [], text: "mine" } });
-  });
-});
-
-describe("after a card is answered, the dock offers the next one waiting", () => {
-  const waiting = ["a", "b", "c"];
-  test("the next one below it, else the latest still waiting", () => {
-    expect(nextWaiting(waiting, ["a", "x", "b", "c"], "x")).toBe("b");
-    expect(nextWaiting(waiting, ["a", "b", "c", "x"], "x")).toBe("c");
-    expect(nextWaiting([], ["x"], "x")).toBeUndefined();
   });
 });

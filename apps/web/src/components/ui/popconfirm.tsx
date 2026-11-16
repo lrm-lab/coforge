@@ -22,6 +22,8 @@ export function Popconfirm({
   errorMessage,
   onConfirm,
   placement = "bottom",
+  cancelLabel,
+  tone = "destructive",
   isDisabled = false,
   fallbackFocus,
   children,
@@ -38,6 +40,8 @@ export function Popconfirm({
   /** Performs the change; throws when it is refused. The popover closes when it succeeds. */
   onConfirm: () => Promise<void>;
   placement?: PopoverProps["placement"];
+  cancelLabel?: string;
+  tone?: "destructive" | "final";
   /** The change does not apply now: the child stays the same element, with its own `onPress`, but
    * pressing it never opens the popover. One trigger across both states keeps its keyboard focus. */
   isDisabled?: boolean;
@@ -103,12 +107,12 @@ export function Popconfirm({
               )}
               <DialogActions>
                 <DialogCancel isDisabled={pending} onPress={close}>
-                  {m.controls_cancel()}
+                  {cancelLabel ?? m.controls_cancel()}
                 </DialogCancel>
                 {/* Enter confirms, as in every dialog (task #101). */}
                 <DialogAction
                   autoFocus
-                  color="primary-destructive"
+                  color={tone === "final" ? "primary" : "primary-destructive"}
                   isLoading={pending}
                   showTextWhileLoading
                   onPress={() => {

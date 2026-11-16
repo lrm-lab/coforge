@@ -7,15 +7,16 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * A choice card seen by someone it does not ask (task #413): the stream card names whom it waits
- * on and has no Answer; its row opens the dock to look through, where the options are listed with
- * nothing to tick, type, send or decline. Closed some other way it goes gray and says why:
- * Withdrawn when it is not the asked person who closed it, "<name> didn't answer" when they did.
- * The viewer is the Agent's owner and an ordinary Workspace member here.
+ * A choice card seen by someone it does not ask (task #413): the card in the stream names whom it
+ * waits on in its footer and is read-only, the options listed with nothing to tick, type, send or
+ * decline, and a click on one picks nothing. Closed some other way, read when it is mounted later
+ * (compact), it goes gray and says why: Withdrawn when it is not the asked person who closed it,
+ * "<name> didn't answer" when they did. The viewer is the Agent's owner and an ordinary Workspace
+ * member here.
  *
- * The redesign has no control to withdraw a card from the stream or the dock (the old Dismiss
- * button); only the asked person closes one, by declining, which `e2e-card-ignore-fold.e2e.ts`
- * covers. The closed states are seeded straight into the database.
+ * The redesign has no control to withdraw a card from the stream (the old Dismiss button); only
+ * the asked person closes one, by declining, which `e2e-card-ignore-fold.e2e.ts` covers. The
+ * closed states are seeded straight into the database.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The Workspace, channel,
  * Agent, asked peer and card are seeded per run and removed after it. Screenshots are written
@@ -104,8 +105,9 @@ test("someone else's choice card names whom it waits on and offers nothing to an
   });
   const card = `document.querySelector('[data-message-id="${message.id}"] [data-question-card]')`;
   const cardText = `(${card}?.textContent ?? "")`;
-  const dock = `document.querySelector("section[data-question-dock]")`;
   const page = `${origin}/en/w/${workspace.slug}/channel/${channel.id}`;
+  const optionSel = (id: string) =>
+    `[data-message-id="${message.id}"] [data-question-option="${id}"]`;
   try {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
@@ -115,36 +117,30 @@ test("someone else's choice card names whom it waits on and offers nothing to an
       "--fn",
       `${card}?.dataset.questionCard === "pending" && ${cardText}.includes("Waiting on Asked Peer") && ${pageHydrated}`,
     );
-    // Not the asked person: the question is there to open, and no Answer to press.
+    // Not the asked person: the question and its options are there to read, and nothing to answer
+    // with or decline.
     expect(await evaluate<string>(cardText)).toContain(prompt);
-    expect(
-      await evaluate<boolean>(`${card}.querySelector("[data-question-card-answer]") === null`),
-    ).toBe(true);
-    await browser("screenshot", join(artifacts, "waiting.png"));
-
-    // The row opens the dock to look through: the options listed, nothing to answer with.
-    await browser("click", `[data-message-id="${message.id}"] [data-question-row="choice"]`);
-    await browser("wait", "--fn", `${dock}?.querySelector('[data-dock="viewing"]') != null`);
+    expect(await evaluate<string>(`${card}.dataset.questionCardView`)).toBe("full");
     expect(
       await evaluate<string[]>(
-        `[...${dock}.querySelectorAll('[data-dock-page-current] [role="option"]')].map((option) => option.textContent.trim())`,
+        `[...${card}.querySelectorAll("[data-question-option]")].map((option) => option.textContent.trim())`,
       ),
     ).toEqual(["Red", "Blue"]);
     expect(
       await evaluate<boolean>(
-        `["[data-dock-submit]", "[data-dock-other]", "[data-dock-decline]"].every((selector) => ${dock}.querySelector(selector) === null)`,
+        `${card}.querySelector("[data-question-send], [data-question-next], [data-question-other-input], [data-question-decline]") === null`,
       ),
     ).toBe(true);
+    await browser("screenshot", join(artifacts, "waiting.png"));
+
     // A press on an option picks nothing, and nothing is sent.
-    await browser("click", `section[data-question-dock] [role="option"]:first-child`);
+    await browser("click", optionSel("a"));
     expect(
       await evaluate<boolean>(
-        `[...${dock}.querySelectorAll('[role="option"]')].every((option) => option.getAttribute("aria-selected") === "false")`,
+        `[...${card}.querySelectorAll("[data-question-option]")].every((option) => option.getAttribute("aria-selected") !== "true")`,
       ),
     ).toBe(true);
     await browser("screenshot", join(artifacts, "looking.png"));
-    await browser("press", "Escape");
-    await browser("wait", "--fn", `${dock} === null`);
     expect(
       (await db.actionCard.findUniqueOrThrow({ where: { messageId: message.id } })).state,
     ).toBe("pending");
@@ -157,7 +153,9 @@ test("someone else's choice card names whom it waits on and offers nothing to an
       "--fn",
       `${card}?.dataset.questionCard === "cancelled" && ${cardText}.includes("Withdrawn") && ${pageHydrated}`,
     );
+    expect(await evaluate<string>(`${card}.dataset.questionCardView`)).toBe("compact");
     expect(await evaluate<boolean>(`${cardText}.includes("Waiting on")`)).toBe(false);
+    expect(await evaluate<boolean>(`${cardText}.includes(${JSON.stringify(prompt)})`)).toBe(true);
     await browser("screenshot", join(artifacts, "withdrawn.png"));
 
     // Declined by the asked person, it names them.

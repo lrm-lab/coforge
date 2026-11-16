@@ -10,18 +10,26 @@ import {
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import {
+  FOCUS_COMPOSER,
+  IN_COMPOSER,
+  postCard,
+  seedQuestionChannel,
+} from "./helpers/question-card-e2e";
 
 /**
- * A choice card's last row is the asked person's own answer (task #447): in the dock the row is
- * itself an input ("Your own answer…"), Enter sends the words, and the card closes to one line, the
- * question with the words beside it (task #449). A blank Enter sends nothing. Anyone but the asked
- * person looks through the options in a dock with no such row; a card whose Agent turned the row
- * off has none either. An option's number picks it from the keyboard, Enter sends it, and the
- * receipt offers the next card waiting on the viewer. Someone else's answer, a decline and an
- * expiry each read on the stream card.
+ * A choice card's last row is the asked person's own answer (task #447), answered inside the card
+ * in the stream: the row is itself an input ("Your own answer…"), Enter sends the words, and the
+ * card keeps its height with the words in the row, the message below it not moving. A blank Enter
+ * sends nothing. A click on an option of a choice card sends it at once; so does its number, or
+ * Enter on the highlighted row (the first arrow key only shows the highlight). Alt+↓ and Alt+↑
+ * walk the waiting cards from the keyboard, starting at the composer, which is never hidden.
+ * Anyone but the asked person sees the options with no such row and nothing to tick; a card whose
+ * Agent turned the row off has none either. Someone else's answer, a decline and an expiry each
+ * read on the card when it is mounted later, compact.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent, a
- * second member and five cards are seeded per run and removed after it. Screenshots (light, dark,
+ * second member and seven cards are seeded per run and removed after it. Screenshots (light, dark,
  * Chinese, a phone, answered, someone else's card) are written under `.amp/e2e/choice-card-other/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
@@ -32,194 +40,203 @@ test("the asked person answers a choice card in its own last row", async () => {
   const { browser, evaluate } = browserSession(browserPath, `choice-other-${process.pid}`);
   const suffix = `${process.pid}-${Date.now()}`;
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const peer = await db.user.create({
-    data: { username: `e2e-other-peer-${suffix}`, displayName: "Asked Peer" },
+  const seeded = await seedQuestionChannel(db, workspaceId, {
+    peer: `e2e-other-peer-${suffix}`,
+    agent: `e2e-other-agent-${suffix}`,
+    agentDisplayName: "Asking Agent",
+    channel: `e2e-other-${suffix}`,
   });
-  await db.workspaceMembership.create({ data: { workspaceId, userId: peer.id } });
-  const agent = await db.agent.create({
-    data: {
-      workspaceId,
-      name: `e2e-other-agent-${suffix}`,
-      displayName: "Asking Agent",
-      ownerId: DEV_BROWSER_USER.id,
-      runtimeConfig: {
-        runtime: "pi",
-        provider: { kind: "default" },
-        model: "",
-        modelProvider: "",
-        reasoning: "",
-      },
-    },
-  });
-  const channel = await db.conversation.create({
-    data: {
-      workspaceId,
-      channelName: `e2e-other-${suffix}`,
-      description: "",
-      members: {
-        create: [{ userId: DEV_BROWSER_USER.id }, { userId: peer.id }, { agentId: agent.id }],
-      },
-    },
-    include: { members: true },
-  });
-  const agentMember = channel.members.find((member) => member.agentId === agent.id)!;
+  const { peer, agent, channel, agentMember } = seeded;
   let sequence = 0;
   /** A choice card from the Agent, asking `to`, with its own-answer row unless `withOther` is
    * false (the Agent turned it off). */
   const ask = async (prompt: string, to: string, withOther = true) => {
     sequence += 1;
-    const message = await db.message.create({
-      data: {
-        workspaceId,
-        conversationId: channel.id,
-        sequence,
-        senderMemberId: agentMember.id,
-        body: `${prompt} (1. Red; 2. Blue)`,
+    return postCard(db, workspaceId, seeded, {
+      sequence,
+      body: `${prompt} (1. Red; 2. Blue)`,
+      kind: "choice",
+      payload: {
+        type: "choice",
+        prompt,
+        options: [
+          { id: "red", label: "Red" },
+          { id: "blue", label: "Blue" },
+        ],
+        to,
+        ...(withOther && { other: {} }),
       },
     });
-    await db.actionCard.create({
-      data: {
-        messageId: message.id,
-        conversationId: channel.id,
-        workspaceId,
-        kind: "choice",
-        payload: {
-          type: "choice",
-          prompt,
-          options: [
-            { id: "red", label: "Red" },
-            { id: "blue", label: "Blue" },
-          ],
-          to,
-          ...(withOther && { other: {} }),
-        },
-        preparedByAgentId: agent.id,
-      },
-    });
-    return message.id;
   };
   const answered = await ask(`Which shade? ${suffix}`, DEV_BROWSER_USER.id);
   const others = await ask(`Which one, peer? ${suffix}`, peer.id);
   const keyed = await ask(`Which key? ${suffix}`, DEV_BROWSER_USER.id);
   const closed = await ask(`Red or blue only? ${suffix}`, DEV_BROWSER_USER.id, false);
-  // The latest, so a phone's stream still has it on screen.
+  const clicked = await ask(`Which tone? ${suffix}`, DEV_BROWSER_USER.id);
   const shown = await ask(`Which colour? ${suffix}`, DEV_BROWSER_USER.id);
+  // The message after the last card, so a card answered there has something below it to hold still.
+  sequence += 1;
+  const trailing = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: channel.id,
+      sequence,
+      senderMemberId: agentMember.id,
+      body: `The message under the cards ${suffix}`,
+    },
+  });
   await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: sequence } });
+  /** The message below each card, whose top must not move when the card is answered. */
+  const below: Record<string, string> = {
+    [answered]: others,
+    [others]: keyed,
+    [keyed]: closed,
+    [closed]: clicked,
+    [clicked]: shown,
+    [shown]: trailing.id,
+  };
 
   const card = (id: string) => `[data-message-id="${id}"] [data-question-card]`;
-  const row = (id: string) => `[data-message-id="${id}"] [data-question-row="choice"]`;
-  const dock = "[data-question-dock]";
-  const input = `${dock} [data-dock-other]`;
-  const cardText = (id: string) => `(document.querySelector('${card(id)}')?.textContent ?? "")`;
+  const cardNode = (id: string) => `document.querySelector('${card(id)}')`;
+  const optionSel = (id: string, option: string) =>
+    `[data-message-id="${id}"] [data-question-option="${option}"]`;
+  const input = (id: string) => `[data-message-id="${id}"] input[data-question-other-input]`;
+  const cardText = (id: string) => `(${cardNode(id)}?.textContent ?? "")`;
+  const stateIs = (id: string, state: string) =>
+    `${cardNode(id)}?.dataset.questionCard === "${state}"`;
   const page = (locale: string) => `${origin}/${locale}/w/${workspace.slug}/channel/${channel.id}`;
-  /** The card the dock is on: its options' ids start with the message's. */
-  const dockOn = (id: string) =>
-    `document.querySelector('${dock} [data-dock-page-current] [role="option"]')?.id.startsWith("${id}") === true`;
+  const top = (id: string) =>
+    evaluate<number>(
+      `document.querySelector('[data-message-id="${id}"]').getBoundingClientRect().top`,
+    );
+  const height = (id: string) => evaluate<number>(`${cardNode(id)}.getBoundingClientRect().height`);
+  const optionTexts = (id: string) =>
+    evaluate<string[]>(
+      `[...${cardNode(id)}.querySelectorAll("[data-question-option]")].map((option) => [...option.childNodes].filter((node) => node.nodeName !== "KBD").map((node) => node.textContent).join("").trim())`,
+    );
+  const nothingTicked = (id: string) =>
+    evaluate<boolean>(
+      `[...${cardNode(id)}.querySelectorAll("[data-question-option]")].every((option) => option.getAttribute("aria-selected") !== "true")`,
+    );
+  const inComposer = IN_COMPOSER;
+  const focusComposer = FOCUS_COMPOSER;
+  /** The message id of the card whose options list holds the focus, or null. */
+  const focusedCard = () =>
+    evaluate<string | null>(
+      `document.activeElement?.closest("[data-question-options]")?.closest("[data-message-id]")?.dataset.messageId ?? null`,
+    );
   const open = async (locale = "en") => {
     await browser("open", page(locale));
-    await browser(
+    await browser("wait", "--fn", `${cardNode(shown)} !== null && ${pageHydrated}`);
+  };
+  /** Waits for the card to take its Answer view: a reload paints the conversation's stored copy
+   * first and the server's read replaces it (cache-persistence/AGENTS.md), so a card the copy
+   * holds as closed gets its options only once that read lands (task #109). */
+  const waitingCard = (id: string) =>
+    browser(
       "wait",
       "--fn",
-      `document.querySelector('${card(shown)}') !== null && ${pageHydrated}`,
+      `${stateIs(id, "pending")} && ${cardNode(id)}.querySelector("[data-question-option]") !== null`,
     );
-  };
-  const openDock = async (id: string) => {
-    // A reload paints the conversation's stored copy first and the server's read replaces it
-    // (cache-persistence/AGENTS.md): a card the copy holds as closed gets its Answer only once
-    // that read lands, so wait for the button, not just the card (task #109).
-    const answer = `[data-message-id="${id}"] [data-question-card-answer]`;
-    await browser("wait", "--fn", `document.querySelector('${answer}') !== null`);
-    await browser("click", answer);
-    await browser(
-      "wait",
-      "--fn",
-      `document.querySelector('${dock} [data-dock="answering"]') !== null && ${dockOn(id)}`,
-    );
-  };
   const stateOf = async (id: string) =>
     (await db.actionCard.findUniqueOrThrow({ where: { messageId: id } })).state;
+  /** Runs `act` and checks the card kept its height and the message below it did not move. */
+  const settlesInPlace = async (id: string, act: () => Promise<void>) => {
+    await evaluate(`(${cardNode(id)}.scrollIntoView({ block: "start" }), true)`);
+    const [before, heightBefore] = [await top(below[id]!), await height(id)];
+    await act();
+    expect(await top(below[id]!)).toBe(before);
+    expect(await height(id)).toBe(heightBefore);
+  };
+  /** Alt+↓ from the composer, then on, until the waiting card `id` has the focus. */
+  const focusCard = async (id: string) => {
+    await evaluate(focusComposer);
+    for (let guard = 0; guard < 6; guard += 1) {
+      await browser("press", "Alt+ArrowDown");
+      await browser(
+        "wait",
+        "--fn",
+        `document.activeElement?.closest("[data-question-options]") != null`,
+      );
+      if ((await focusedCard()) === id) return;
+    }
+    throw new Error(`Alt+ArrowDown never reached the card ${id}`);
+  };
   try {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
     await open();
-    // Someone else's card waits on them by name, with no Answer to press; its row opens a dock to
-    // look through, with the options and nothing to type in or send.
+    await waitingCard(shown);
+    // Someone else's card waits on them by name, with the options and nothing to type in, send
+    // or tick; a click on a row picks nothing.
     expect(await evaluate<string>(cardText(others))).toContain("Waiting on Asked Peer");
+    expect(await optionTexts(others)).toEqual(["Red", "Blue"]);
     expect(
       await evaluate<boolean>(
-        `document.querySelector('${card(others)} [data-question-card-answer]') === null`,
+        `${cardNode(others)}.querySelector("[data-question-other-input], [data-question-send], [data-question-decline]") === null`,
       ),
     ).toBe(true);
-    await browser("click", row(others));
-    await browser(
-      "wait",
-      "--fn",
-      `document.querySelector('${dock} [data-dock="viewing"]') !== null`,
-    );
-    expect(
-      await evaluate<string[]>(
-        `[...document.querySelectorAll('${dock} [data-dock-page-current] [role="option"]')].map((option) => option.textContent.trim())`,
-      ),
-    ).toEqual(["Red", "Blue"]);
-    expect(
-      await evaluate<boolean>(
-        `document.querySelector('${input}') === null && document.querySelector('${dock} [data-dock-submit]') === null`,
-      ),
-    ).toBe(true);
-    await browser("press", "Escape");
-    await browser("wait", "--fn", `document.querySelector('${dock}') === null`);
+    await browser("click", optionSel(others, "red"));
+    expect(await nothingTicked(others)).toBe(true);
+    expect(await stateOf(others)).toBe("pending");
 
-    // Without the own-words row, the asked person picks from the options alone, and the card waits.
-    await openDock(closed);
-    expect(await evaluate<boolean>(`document.querySelector('${input}') === null`)).toBe(true);
+    // Without the own-words row, the asked person picks from the options alone.
     expect(
-      await evaluate<number>(
-        `document.querySelectorAll('${dock} [data-dock-page-current] [role="option"]').length`,
+      await evaluate<boolean>(
+        `${cardNode(closed)}.querySelector("[data-question-other]") === null`,
       ),
-    ).toBe(2);
-    await browser("press", "Escape");
-    await browser("wait", "--fn", `document.querySelector('${dock}') === null`);
+    ).toBe(true);
+    expect(await optionTexts(closed)).toEqual(["Red", "Blue"]);
     expect(await stateOf(closed)).toBe("pending");
 
-    // With it, the row after the options is an input named by its placeholder.
-    await openDock(shown);
+    // With it, the row after the options is an input named by its placeholder. The composer is
+    // still there.
     expect(
       await evaluate<[string | null, string | null]>(
-        `(() => { const el = document.querySelector('${input}'); return [el.getAttribute("aria-label"), el.getAttribute("placeholder")]; })()`,
+        `(() => { const el = document.querySelector('${input(shown)}'); return [el.getAttribute("aria-label"), el.getAttribute("placeholder")]; })()`,
       ),
     ).toEqual(["Your own answer…", "Your own answer…"]);
+    expect(
+      await evaluate<boolean>(
+        `document.querySelector("[data-composer]").getClientRects().length > 0`,
+      ),
+    ).toBe(true);
+    await evaluate(`(${cardNode(shown)}.scrollIntoView({ block: "center" }), true)`);
     await browser("screenshot", join(artifacts, "light.png"));
-    await browser("press", "Escape");
-    await browser("wait", "--fn", `document.querySelector('${dock}') === null`);
 
     // A blank Enter sends nothing.
-    await openDock(answered);
-    await browser("click", input);
+    await browser("click", input(answered));
     await browser("press", "Enter");
-    // Nothing is sent: no request fails (the server refuses a blank answer, and the dock would say
-    // so), the row is still there to type in, and the card still waits.
+    // Nothing is sent: no request fails (the server refuses a blank answer, and the card would say
+    // so), the row is still there to type in, and the card still waits. Absence is only proved by
+    // giving a send time to show up.
     await Bun.sleep(1_000);
     expect(
       await evaluate<boolean>(
-        `document.querySelector('${dock} [role="alert"]') === null && document.querySelector('${input}') !== null`,
+        `${cardNode(answered)}.querySelector('[role="alert"]') === null && document.querySelector('${input(answered)}') !== null`,
       ),
     ).toBe(true);
     expect(await stateOf(answered)).toBe("pending");
 
-    // The words, then Enter: the dock turns to its receipt, and the card closes to the question
-    // with the words beside it.
-    await browser("fill", input, "  Teal, but darker  ");
-    await browser("press", "Enter");
-    await browser("wait", "--fn", `document.querySelector('${dock} [data-dock-receipt]') !== null`);
+    // The words show a Send; Enter in the row sends them. The card keeps its height with the words
+    // in the row, and the message below does not move.
+    await browser("fill", input(answered), "  Teal, but darker  ");
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('${card(answered)}')?.dataset.questionCard === "executed" && ${cardText(answered)}.includes("Teal, but darker")`,
+      `${cardNode(answered)}.querySelector("[data-question-send]") !== null`,
     );
-    expect(await evaluate<boolean>(`${cardText(answered)}.includes("Red")`)).toBe(false);
+    await settlesInPlace(answered, async () => {
+      await browser("press", "Enter");
+      await browser("wait", "--fn", stateIs(answered, "executed"));
+    });
+    expect(await evaluate<string>(`${cardNode(answered)}.dataset.questionCardView`)).toBe("full");
+    expect(await evaluate<boolean>(`${cardText(answered)}.includes("Teal, but darker")`)).toBe(
+      true,
+    );
     expect(
       await evaluate<boolean>(
-        `document.querySelector('${dock} [data-dock-receipt]').textContent.includes("Teal, but darker")`,
+        `${cardNode(answered)}.querySelector('[data-question-option="red"]').getAttribute("aria-selected") !== "true" && ${cardNode(answered)}.querySelector("[data-question-send]") === null`,
       ),
     ).toBe(true);
     const stored = await db.actionCard.findUniqueOrThrow({ where: { messageId: answered } });
@@ -227,50 +244,90 @@ test("the asked person answers a choice card in its own last row", async () => {
     expect(stored.result).toMatchObject({ optionId: "_other", text: "Teal, but darker" });
     await browser("screenshot", join(artifacts, "answered.png"));
 
-    // From the keyboard: Enter on the receipt goes on to the next card waiting on the viewer (the
-    // peer's is skipped); a number picks its option and Enter sends it.
-    await browser("press", "Enter");
+    // From the keyboard, Alt+↓ walks the waiting cards from the composer (the peer's is not one
+    // of them) and Alt+↑ goes back; the first arrow key only shows the highlight, a number picks
+    // its option and a choice card sends it at once.
+    const waiting = new Set([keyed, closed, clicked, shown]);
+    await evaluate(focusComposer);
+    expect(await evaluate<boolean>(inComposer)).toBe(true);
+    await browser("press", "Alt+ArrowDown");
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('${dock} [data-dock="answering"]') !== null && ${dockOn(keyed)}`,
+      `document.activeElement?.closest("[data-question-options]") != null`,
     );
-    await browser("press", "2");
+    const first = await focusedCard();
+    expect(waiting.has(first!)).toBe(true);
+    await browser("press", "Alt+ArrowDown");
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('${dock} [data-dock-page-current] [role="option"][aria-selected="true"]')?.textContent.startsWith("Blue") === true`,
+      `document.activeElement?.closest("[data-message-id]")?.dataset.messageId !== "${first}"`,
+    );
+    const second = await focusedCard();
+    expect(waiting.has(second!)).toBe(true);
+    await browser("press", "Alt+ArrowUp");
+    await browser(
+      "wait",
+      "--fn",
+      `document.activeElement?.closest("[data-message-id]")?.dataset.messageId === "${first}"`,
+    );
+    await focusCard(keyed);
+    await browser("press", "ArrowDown");
+    await browser(
+      "wait",
+      "--fn",
+      `${cardNode(keyed)}.hasAttribute("data-question-keys") && ${cardNode(keyed)}.querySelector("[data-question-option][data-hi]") !== null`,
     );
     await browser("screenshot", join(artifacts, "keyboard.png"));
-    await browser("press", "Enter");
-    await browser("wait", "--fn", `document.querySelector('${dock} [data-dock-receipt]') !== null`);
+    await settlesInPlace(keyed, async () => {
+      await browser("press", "2");
+      await browser("wait", "--fn", stateIs(keyed, "executed"));
+    });
     expect(
       (await db.actionCard.findUniqueOrThrow({ where: { messageId: keyed } })).result,
-    ).toMatchObject({
-      optionId: "blue",
-    });
-    await browser("wait", "--fn", `${cardText(keyed)}.includes("Blue")`);
+    ).toMatchObject({ optionId: "blue" });
+    expect(
+      await evaluate<boolean>(
+        `${cardNode(keyed)}.querySelector('[data-question-option="blue"]').getAttribute("aria-selected") === "true" && ${cardNode(keyed)}.querySelector('[data-question-option="red"]').getAttribute("aria-selected") !== "true"`,
+      ),
+    ).toBe(true);
     await browser("screenshot", join(artifacts, "keyboard-picked.png"));
 
-    // The receipt's next card is the one left below it, picked with the pointer and sent.
-    await browser("press", "Enter");
+    // Enter takes the highlighted option and sends it, on a card without the own-words row.
+    await focusCard(closed);
+    await browser("press", "ArrowDown");
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('${dock} [data-dock="answering"]') !== null && ${dockOn(closed)}`,
+      `${cardNode(closed)}.querySelector("[data-question-option][data-hi]") !== null`,
     );
-    await browser("click", `${dock} [data-dock-page-current] [role="option"]:first-child`);
-    await browser("click", `${dock} [data-dock-submit]`);
-    await browser("wait", "--fn", `document.querySelector('${dock} [data-dock-receipt]') !== null`);
+    await browser("press", "ArrowDown");
+    await browser(
+      "wait",
+      "--fn",
+      `${cardNode(closed)}.querySelector("[data-question-option][data-hi]") !== null`,
+    );
+    const highlighted = await evaluate<string>(
+      `${cardNode(closed)}.querySelector("[data-question-option][data-hi]").dataset.questionOption`,
+    );
+    await browser("press", "Enter");
+    await browser("wait", "--fn", stateIs(closed, "executed"));
     expect(
       (await db.actionCard.findUniqueOrThrow({ where: { messageId: closed } })).result,
-    ).toMatchObject({
-      optionId: "red",
-    });
-    await browser("press", "Escape");
-    await browser("wait", "--fn", `document.querySelector('${dock}') === null`);
+    ).toMatchObject({ optionId: highlighted });
 
-    // Someone else's answer sits beside its question, with who gave it by face and name.
+    // A click on an option sends it at once, with no Send to press.
+    await settlesInPlace(clicked, async () => {
+      await browser("click", optionSel(clicked, "red"));
+      await browser("wait", "--fn", stateIs(clicked, "executed"));
+    });
+    expect(
+      (await db.actionCard.findUniqueOrThrow({ where: { messageId: clicked } })).result,
+    ).toMatchObject({ optionId: "red" });
+
+    // Someone else's answer sits beside its question, with who gave it by face and name, once the
+    // card is mounted later (compact).
     await db.actionCard.update({
       where: { messageId: others },
       data: {
@@ -281,44 +338,51 @@ test("the asked person answers a choice card in its own last row", async () => {
       },
     });
     await open();
-    await browser(
-      "wait",
-      "--fn",
-      `document.querySelector('${card(others)}')?.dataset.questionCard === "executed"`,
-    );
+    await browser("wait", "--fn", stateIs(others, "executed"));
     expect(
-      await evaluate<[string, string, boolean]>(`(() => {
-        const el = document.querySelector('${card(others)}');
-        const asked = el.querySelector("[data-question-row]").textContent;
-        const status = el.lastElementChild.textContent;
-        return [asked, status, el.lastElementChild.querySelector("[data-avatar]") !== null];
+      await evaluate<[string, string, string, boolean]>(`(() => {
+        const el = ${cardNode(others)};
+        return [
+          el.dataset.questionCardView,
+          el.querySelector('[data-question-answer="choice"]').textContent,
+          el.querySelector("[data-question-status]").textContent,
+          el.querySelector("[data-avatar]") !== null,
+        ];
       })()`),
-    ).toEqual([`Which one, peer? ${suffix}Red`, "Asked Peer", true]);
+    ).toEqual([
+      "compact",
+      expect.stringContaining("Red"),
+      expect.stringContaining("Asked Peer"),
+      true,
+    ]);
+    expect(await evaluate<string>(cardText(others))).toContain(`Which one, peer? ${suffix}`);
     await browser("screenshot", join(artifacts, "answered-by-peer.png"));
 
-    // A phone: the dock is a sheet, the own-words row fits in it, and the page does not scroll
-    // sideways.
+    // A phone: the same card, the own-words row fits in it, every row is at least 44 px tall, and
+    // the page does not scroll sideways. No sheet takes the card's place.
     await browser("set", "viewport", "390", "844");
     await open();
+    await waitingCard(shown);
     expect(
       await evaluate<boolean>(
         `document.documentElement.scrollWidth <= document.documentElement.clientWidth`,
       ),
     ).toBe(true);
-    await openDock(shown);
+    await evaluate(`(${cardNode(shown)}.scrollIntoView({ block: "center" }), true)`);
     expect(
       await evaluate<boolean>(`(() => {
-        const sheet = document.querySelector('${dock}').getBoundingClientRect();
-        const own = document.querySelector('${input}').getBoundingClientRect();
-        return document.querySelector('${dock}').getAttribute("role") === "dialog"
-          && own.left >= sheet.left && own.right <= sheet.right
+        const box = ${cardNode(shown)}.getBoundingClientRect();
+        const own = document.querySelector('${input(shown)}').getBoundingClientRect();
+        const rows = [...${cardNode(shown)}.querySelectorAll("[data-question-option]")];
+        return own.left >= box.left && own.right <= box.right
+          && rows.every((row) => row.getBoundingClientRect().height >= 44)
           && document.documentElement.scrollWidth <= document.documentElement.clientWidth;
       })()`),
     ).toBe(true);
     await browser("screenshot", join(artifacts, "phone.png"));
     await browser("set", "viewport", "1440", "900");
 
-    // Closed without an answer, the card goes gray and says why; declined by the person asked, it
+    // Closed without an answer, the card is gray and says why; declined by the person asked, it
     // names them (task #94).
     await db.actionCard.update({ where: { messageId: shown }, data: { state: "expired" } });
     await db.actionCard.update({
@@ -339,12 +403,13 @@ test("the asked person answers a choice card in its own last row", async () => {
     await db.actionCard.update({ where: { messageId: shown }, data: { state: "pending" } });
 
     await open("zh-CN");
-    await openDock(shown);
+    await waitingCard(shown);
     expect(
       await evaluate<string | null>(
-        `document.querySelector('${input}').getAttribute("placeholder")`,
+        `document.querySelector('${input(shown)}').getAttribute("placeholder")`,
       ),
     ).toBe("自己写…");
+    await evaluate(`(${cardNode(shown)}.scrollIntoView({ block: "center" }), true)`);
     await browser("screenshot", join(artifacts, "zh.png"));
 
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);

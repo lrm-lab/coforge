@@ -5,9 +5,9 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { cancelActionCard } from "#src/features/conversations/action-cards.functions";
-import { Popconfirm } from "#src/components/ui/popconfirm";
 import { choiceNumber } from "#src/features/conversations/choice-number";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
+import { DeclineQuestion } from "#src/features/conversations/question-card-decline";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
@@ -100,15 +100,12 @@ export function WaitingChoiceRow({
         </span>
       </Link>
       {/* Not answering tells the Agent and cannot be taken back (Frank, 11-12): asked once,
-          where it was pressed. */}
-      <Popconfirm
-        title={m.dock_decline_title()}
-        description={m.dock_decline_body({ name: card.preparedBy.name })}
-        confirmLabel={m.dock_decline()}
-        pendingLabel={m.dock_sending()}
-        errorMessage={m.dock_send_failed()}
+          where it was pressed, in the words the card's own decline uses. */}
+      <DeclineQuestion
+        asker={card.preparedBy.name}
+        questions={card.questions?.length ?? 1}
         placement="bottom end"
-        onConfirm={async () => {
+        onDecline={async () => {
           try {
             await cancel({ data: { messageId: card.messageId } });
           } catch (cause) {
@@ -126,9 +123,9 @@ export function WaitingChoiceRow({
           aria-label={m.action_card_ignore_row({ prompt: card.prompt })}
           className="absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100 [@media(hover:none)]:hidden"
         >
-          {m.dock_decline()}
+          {m.question_card_decline()}
         </Button>
-      </Popconfirm>
+      </DeclineQuestion>
     </li>
   );
 }

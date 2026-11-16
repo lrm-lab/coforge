@@ -14,11 +14,11 @@ import {
 
 /**
  * A choice card with text as long as the server allows (task #449): a long question, long options,
- * one of them an unbroken URL, and long answers. In the stream a card is one line per question,
- * cut with an ellipsis, and never runs past the message column or makes the page scroll sideways.
- * In the dock every word stays on screen: the question and the options wrap, nothing is cut, an
- * option's number stays at its row's end, the own-words row takes the longest answer, and the
- * receipt after sending carries it within the dock's width. On a desktop and on a phone, where the dock is a sheet.
+ * one of them an unbroken URL, and long answers. The card answers in the stream, so every word
+ * stays on screen there: the question and the options wrap, nothing is cut, an option's number
+ * stays at its row's end, the own-words row takes the longest answer, and neither the card nor
+ * the page scrolls sideways. Answered and read again, the compact card carries the long answer
+ * and whom it came from within the message column. On a desktop and on a phone.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent, a
  * second member and the cards are seeded per run and removed after it. Screenshots are written
@@ -164,7 +164,6 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
   await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: sequence } });
 
   const card = (id: string) => `[data-message-id="${id}"] [data-question-card]`;
-  const dock = "[data-question-dock]";
   const open = async (waiting: string) => {
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
     await browser(
@@ -173,18 +172,17 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
       `document.querySelector('${card(waiting)}[data-question-card="pending"]') !== null && ${pageHydrated}`,
     );
   };
-  /** The cards in the stream: each inside its message column, nothing past it (a cut line ends in
-   * an ellipsis on purpose), the page not scrolling sideways, one line to a question. */
+  /** The cards in the stream: each inside its message column, nothing past it (a line a card cuts
+   * on purpose is left out), and the page not scrolling sideways. */
   const measureStream = () =>
-    evaluate<{ fits: boolean; overflowing: string[]; tall: string[]; texts: string[] }>(`(() => {
+    evaluate<{ fits: boolean; overflowing: string[]; texts: string[] }>(`(() => {
       const ids = ${JSON.stringify([answeredByPeer, ownWords, forPeer, forMe.desktop, forMe.phone])};
       const cards = ids.map((id) => document.querySelector('[data-message-id="' + id + '"] [data-question-card]'));
       const overflowing = [];
-      const tall = [];
       for (const el of cards) {
         const column = el.parentElement.getBoundingClientRect();
         if (el.getBoundingClientRect().right > column.right + 0.5) overflowing.push("card past column");
-        for (const node of el.querySelectorAll("span, button, time")) {
+        for (const node of el.querySelectorAll("p, span, button, time")) {
           // Inside a line cut on purpose, a name's own box runs on, clipped by the line.
           let clipped = false;
           for (let up = node.parentElement; up && up !== el; up = up.parentElement)
@@ -192,19 +190,16 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
           if (!clipped && node.getBoundingClientRect().right > column.right + 0.5)
             overflowing.push("past column: " + node.textContent.slice(0, 30));
         }
-        for (const row of el.querySelectorAll("[data-question-row]"))
-          if (row.getBoundingClientRect().height > 30) tall.push(row.textContent.slice(0, 30));
       }
       return {
         fits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
         overflowing,
-        tall,
         texts: cards.map((el) => el.textContent),
       };
     })()`);
-  /** The dock: nothing cut or past its edge, no sideways scroll inside it, the question whole,
-   * and where each option's number sits against its row's right edge. */
-  const measureDock = () =>
+  /** The waiting card `id`: nothing cut or past its edge, no sideways scroll inside it, the
+   * question whole, and where each option's number sits against its row's right edge. */
+  const measureCard = (id: string) =>
     evaluate<{
       overflowing: string[];
       scrollsSideways: boolean;
@@ -212,7 +207,7 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
       numbersAtEnd: boolean;
       options: string[];
     }>(`(() => {
-      const root = document.querySelector('${dock}');
+      const root = document.querySelector('${card(id)}');
       const edge = root.getBoundingClientRect().right;
       const overflowing = [];
       for (const node of root.querySelectorAll("p, span, div[role=option]")) {
@@ -220,15 +215,14 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
         if (node.scrollWidth > node.clientWidth + 1 && getComputedStyle(node).overflowX !== "visible")
           overflowing.push("cut: " + node.textContent.slice(0, 30));
         if (node.getBoundingClientRect().right > edge + 0.5)
-          overflowing.push("past dock: " + node.textContent.slice(0, 30));
+          overflowing.push("past card: " + node.textContent.slice(0, 30));
       }
-      const body = root.querySelector("[data-dock-page-current]").parentElement.parentElement;
-      const title = root.querySelector("[data-dock-page-current] > p");
-      const rows = [...root.querySelectorAll('[data-dock-page-current] [role="option"]')];
+      const title = root.querySelector("[data-question-prompt]");
+      const rows = [...root.querySelectorAll("[data-question-option], [data-question-other]")];
       return {
         overflowing,
-        scrollsSideways: body.scrollWidth > body.clientWidth + 1,
-        titleWhole: title.textContent === ${JSON.stringify(QUESTION)} && title.scrollHeight <= title.clientHeight + 1,
+        scrollsSideways: root.scrollWidth > root.clientWidth + 1,
+        titleWhole: title.textContent === ${JSON.stringify(QUESTION)} && title.scrollHeight <= title.clientHeight + 1 && title.scrollWidth <= title.clientWidth + 1,
         numbersAtEnd: rows.every((row) => {
           const kbd = row.querySelector("kbd");
           return !kbd || kbd.getClientRects().length === 0 || row.getBoundingClientRect().right - kbd.getBoundingClientRect().right < 16;
@@ -248,7 +242,6 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
       const stream = await measureStream();
       expect(stream.fits).toBe(true);
       expect(stream.overflowing).toEqual([]);
-      expect(stream.tall).toEqual([]);
       // Every word is in the card, however it is cut on screen: the question, the answer and who
       // gave it, and the viewer's own words.
       const [peerLine, ownLine, peerCard] = stream.texts;
@@ -262,14 +255,11 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
       );
       await browser("screenshot", join(artifacts, `${name}-stream.png`));
 
-      // Answering opens the dock: the whole question and every option, wrapped.
-      await browser("click", `[data-message-id="${mine}"] [data-question-card-answer]`);
-      await browser(
-        "wait",
-        "--fn",
-        `document.querySelector('${dock} [data-dock="answering"]') !== null`,
+      // The card to answer holds the whole question and every option, wrapped, on screen.
+      await evaluate(
+        `document.querySelector('${card(mine)}').scrollIntoView({ block: "start" }) ?? true`,
       );
-      const answering = await measureDock();
+      const answering = await measureCard(mine);
       expect(answering.overflowing).toEqual([]);
       expect(answering.scrollsSideways).toBe(false);
       expect(answering.titleWhole).toBe(true);
@@ -277,61 +267,63 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
       expect(answering.options.length).toBe(OPTIONS.length + 1);
       for (const [index, option] of OPTIONS.entries())
         expect(answering.options[index]).toContain(option);
-      await browser("screenshot", join(artifacts, `${name}-dock.png`));
+      await browser("screenshot", join(artifacts, `${name}-card.png`));
       await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
-      await browser("screenshot", join(artifacts, `${name}-dock-dark.png`));
+      await browser("screenshot", join(artifacts, `${name}-card-dark.png`));
       await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
 
-      // A long answer typed into the own-words row scrolls inside it, the row staying in the dock.
-      await browser("fill", `${dock} [data-dock-other]`, OWN_ANSWER);
+      // A long answer typed into the own-words row scrolls inside it, the row staying in the card.
+      const input = `${card(mine)} input[data-question-other-input]`;
+      await browser("fill", input, OWN_ANSWER);
+      await browser(
+        "wait",
+        "--fn",
+        `document.querySelector('${card(mine)} button[data-question-send]') !== null`,
+      );
       expect(
         await evaluate<boolean>(`(() => {
-          const input = document.querySelector('${dock} [data-dock-other]');
-          const row = input.closest('[role="option"]');
+          const input = document.querySelector('${input}');
+          const row = input.closest("[data-question-other]");
           return input.value === ${JSON.stringify(OWN_ANSWER)}
             && input.getBoundingClientRect().right <= row.getBoundingClientRect().right
-            && row.getBoundingClientRect().right <= document.querySelector('${dock}').getBoundingClientRect().right;
+            && row.getBoundingClientRect().right <= document.querySelector('${card(mine)}').getBoundingClientRect().right;
         })()`),
       ).toBe(true);
       await browser("screenshot", join(artifacts, `${name}-typing.png`));
 
-      // Sent, the receipt holds the answer; the stream card shows it beside its question.
-      await browser("click", `${dock} [data-dock-submit]`);
-      await browser(
-        "wait",
-        "--fn",
-        `document.querySelector('${dock} [data-dock-receipt]') !== null`,
-      );
-      const receipt = await evaluate<{ sideways: boolean; text: string }>(`(() => {
-        const receipt = document.querySelector('${dock} [data-dock-receipt]');
-        const answer = [...receipt.querySelectorAll("span")].find((el) => el.textContent === ${JSON.stringify(OWN_ANSWER)});
-        const body = receipt.children[1];
-        return {
-          sideways: body.scrollWidth > body.clientWidth + 1,
-          text: answer.textContent,
-        };
-      })()`);
-      expect(receipt.text).toBe(OWN_ANSWER);
-      expect(receipt.sideways).toBe(false);
-      // The receipt clamps an answer to three lines (`line-clamp-3`), so its words are in the
-      // page but not all on screen; that is not asserted here.
-      await browser("screenshot", join(artifacts, `${name}-receipt.png`));
-      await browser("press", "Escape");
-      await browser("wait", "--fn", `document.querySelector('${dock}') === null`);
+      // Sent, the card settles in place, nothing past its edge.
+      await browser("click", `${card(mine)} button[data-question-send]`);
       await browser(
         "wait",
         "--fn",
         `document.querySelector('${card(mine)}[data-question-card="executed"]') !== null`,
       );
       expect(
-        await evaluate<boolean>(
-          `document.querySelector('${card(mine)}').textContent.includes(${JSON.stringify(OWN_ANSWER)})`,
-        ),
+        await evaluate<boolean>(`(() => {
+          const el = document.querySelector('${card(mine)}');
+          return el.scrollWidth <= el.clientWidth + 1
+            && el.getBoundingClientRect().right <= el.parentElement.getBoundingClientRect().right + 0.5
+            && document.documentElement.scrollWidth <= document.documentElement.clientWidth;
+        })()`),
       ).toBe(true);
       const stored = await db.actionCard.findUniqueOrThrow({ where: { messageId: mine } });
       expect(stored.state).toBe("executed");
       expect(stored.result).toMatchObject({ optionId: "_other", text: OWN_ANSWER });
+
+      // Read again, the compact card carries the whole answer on its answer line, within the column.
+      await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
+      await browser(
+        "wait",
+        "--fn",
+        `document.querySelector('${card(mine)}[data-question-card="executed"]') !== null && ${pageHydrated}`,
+      );
+      expect(
+        await evaluate<string>(
+          `document.querySelector('${card(mine)} [data-question-answer="choice"]').textContent`,
+        ),
+      ).toContain(OWN_ANSWER);
       expect((await measureStream()).overflowing).toEqual([]);
+      await browser("screenshot", join(artifacts, `${name}-answered.png`));
     }
   } finally {
     await browser("close").catch(() => undefined);

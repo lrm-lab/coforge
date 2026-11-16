@@ -17,20 +17,29 @@ function withPerson(
 }
 
 /**
- * The few words a question card adds to what it shows (Frank, 11-12: as few as can be). Answers
- * in dark beside their questions show it was answered, so someone else's answered card shows only
- * whose they are, by face; a waiting card names whom it waits on; a gray one says why. Nothing on
- * the viewer's own card, whose Answer says the rest.
+ * The few words a question card adds to what it shows (Frank, 11-12: as few as can be): when it
+ * was answered, after whose face when it is someone else's; whom a waiting card waits on; why a
+ * gray one is gray. Nothing on the viewer's own waiting card, whose buttons say the rest.
  */
-export function cardStatus(view: AskingView, { mine }: { mine: boolean }): ReactNode {
+export function cardStatus(
+  view: AskingView,
+  { mine, time }: { mine: boolean; time: (iso: string) => string },
+): ReactNode {
   const asked = view.asked;
   switch (view.state) {
     case "pending":
       if (mine) return null;
       return asked ? withPerson(m.question_card_waiting_on, asked) : m.question_card_waiting();
-    case "executed":
-      // The answers beside the questions show it was answered; the head names only someone else.
-      return mine || !asked ? null : <ActorName actor={cardActor(asked)} />;
+    case "executed": {
+      const at = view.committedAt && m.question_card_answered_at({ time: time(view.committedAt) });
+      if (mine || !asked) return at || null;
+      return (
+        <>
+          <ActorName actor={cardActor(asked)} />
+          {at}
+        </>
+      );
+    }
     case "expired":
       return m.action_card_expired();
     case "cancelled":

@@ -36,7 +36,7 @@ import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { ConversationStreamPlaceholder } from "./conversation-stream-placeholder";
 import { ThreadRepliesMarker } from "./thread-replies-marker";
 import { ThreadRootMessage } from "./thread-root-message";
-import { QuestionDockHost } from "./question-card-host";
+import { QuestionCardsHost } from "./question-card-host";
 
 export function ConversationPane({
   conversation,
@@ -260,13 +260,13 @@ export function ConversationPane({
     });
 
   // The cards a thread asks include its root's, shown above the replies.
-  const dockMessages = useMemo(
+  const cardMessages = useMemo(
     () => (root ? [root, ...visibleMessages] : visibleMessages),
     [root, visibleMessages],
   );
 
   return (
-    <QuestionDockHost messages={dockMessages} paneRef={paneRef} historyRef={historyRef}>
+    <QuestionCardsHost messages={cardMessages} paneRef={paneRef}>
       <div ref={paneRef} data-conversation-pane className="flex min-h-0 flex-1 flex-col">
         {inTaskPopup ? null : root ? (
           <ThreadPaneHeader
@@ -418,6 +418,6 @@ export function ConversationPane({
           hostRef={composerHost.composerRef}
         />
       </div>
-    </QuestionDockHost>
+    </QuestionCardsHost>
   );
 }

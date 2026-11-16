@@ -9,8 +9,6 @@ import { MessageComposer } from "./message-composer";
 import { useSelectionIn } from "./message-selection";
 import { MessageSelectionBar } from "./message-selection-bar";
 import { useRecentConversationHandles } from "./use-recent-conversation-handles";
-import { QuestionDockPanel } from "./question-dock";
-import { useCardDock } from "./question-card-host";
 
 type ComposerProps = ComponentProps<typeof MessageComposer>;
 
@@ -66,17 +64,12 @@ export function ConversationComposerFooter({
   // Select mode's bar takes the composer's place in the stream; the composer stays mounted, with
   // its draft, under it.
   const selecting = useSelectionIn(conversation.conversationId) !== null && !root;
-  // A card being answered takes the composer's place too (Frank, 11-12), on a desktop: on a phone
-  // the dock is a sheet over the stream and the composer stays under it.
-  const dockOpen = Boolean(useCardDock()?.openId);
-  const answering = !selecting && dockOpen;
   return (
     <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
       {!narrow && <ConversationUpdateNotice conversation={conversation} />}
       {!readOnlyNotice && !narrow && !selecting && <NotificationActivationBanner />}
       {selecting && <MessageSelectionBar conversationId={conversation.conversationId} />}
-      {!selecting && <QuestionDockPanel />}
-      <div className={selecting ? "hidden" : answering ? "contents sm:hidden" : "contents"}>
+      <div className={selecting ? "hidden" : "contents"}>
         {readOnlyNotice ?? (
           <MessageComposer
             conversationId={conversation.conversationId}

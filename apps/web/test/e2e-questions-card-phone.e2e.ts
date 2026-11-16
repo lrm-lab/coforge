@@ -18,11 +18,14 @@ async function shot(
 import { devBrowserWorkspace } from "./helpers/browser-e2e";
 
 /**
- * Task #560 (Frank, 11-05, on his phone): a questions card on a phone. Someone else's card names
- * whom it waits on in its last line, and its row opens the dock as a bottom sheet to look through,
- * where a long recommended option wraps in the row's width; the viewer's own card is answered in
- * the sheet by touch (an option, Next, the review, Send) and ends as the receipt and an answered
- * card. Neither the page nor the sheet scrolls sideways, at 390 and at the narrowest phone, 320.
+ * Task #560 (Frank, 11-05, on his phone): a questions card on a phone, answered in the stream by
+ * touch with no bottom sheet. Someone else's card names whom it waits on, shows its options
+ * (a long recommended one wraps in the row's width, nothing ticked, a tap picks nothing) and its
+ * pager turns; the viewer's own card is answered by touch inside itself (an option, which turns to
+ * the next question, a tick on the many-pick one, Send) and ends as a summary of its answers.
+ * Every option row is at least 44 px tall, a tap on the card never opens the message's action
+ * sheet, and neither the page nor the card scrolls sideways, at 390 and at the narrowest phone,
+ * 320.
  *
  * Opt-in like the other browser E2Es: the real local Web and a headless Chrome as a touch phone.
  * The people, Agent, channel and cards are seeded per run and removed after it. Frames are written
@@ -33,7 +36,7 @@ const origin = Bun.env.COFORGE_E2E_WEB_URL;
 const databaseUrl = Bun.env.DATABASE_URL;
 const chrome = chromePath();
 
-test("a questions card on a phone: looked through or answered in a sheet, nothing scrolls sideways", async () => {
+test("a questions card on a phone: looked through or answered in the stream, nothing scrolls sideways", async () => {
   if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
     throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
   if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
@@ -143,7 +146,9 @@ test("a questions card on a phone: looked through or answered in a sheet, nothin
   let page!: Awaited<ReturnType<typeof browser.open>>;
   const card = (id: string) =>
     `document.querySelector('[data-message-id="${id}"] [data-question-card]')`;
-  const sheet = `document.querySelector('[data-question-dock]')`;
+  const scoped = (id: string, selector: string) => `[data-message-id="${id}"] ${selector}`;
+  const onQuestion = (id: string, index: number) =>
+    `${card(id)}?.dataset.questionAt === "${index}"`;
   const url = `${origin}/en/w/${workspace.slug}/channel/${channel.id}`;
   /** A tap as a finger makes it, at the middle of the element `selector` finds. */
   const tap = async (selector: string) => {
@@ -158,141 +163,117 @@ test("a questions card on a phone: looked through or answered in a sheet, nothin
     await page.command("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [at] });
     await page.command("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   };
-  /** A tap on the sheet's button whose text or name is `text`. */
-  const tapButton = async (text: string) => {
-    await page.evaluate(
-      `([...${sheet}.querySelectorAll("button")].find((button) => button.textContent.trim() === ${JSON.stringify(text)} || button.getAttribute("aria-label") === ${JSON.stringify(text)}).setAttribute("data-e2e-tap", ""), true)`,
-    );
-    await tap("[data-e2e-tap]");
-    await page.evaluate(
-      `document.querySelector("[data-e2e-tap]")?.removeAttribute("data-e2e-tap")`,
-    );
-  };
-  const inSheet = (expression: string) =>
-    until(() => page.evaluate<boolean>(`${sheet} != null && (${expression})`));
-  const option = (index: number) =>
-    `[data-question-dock] [data-dock-page-current] [role="option"]:nth-child(${index})`;
-  /** The page and the sheet stay inside the phone's width, the long recommended option wraps in
-   * its row (all of it on screen, its tag after it), and the header names the channel without a
-   * `#`. */
-  const expectSheetFits = async (width: string) => {
-    // The sheet has come up from the bottom edge.
-    await until(() =>
-      page.evaluate<boolean>(`Math.abs(${sheet}.getBoundingClientRect().bottom - innerHeight) < 2`),
-    );
+  const wait = (expression: string) =>
+    until(() => page.evaluate<boolean>(`Boolean(${expression})`));
+  /** No sheet anywhere: not the old dock, not a message's action sheet. */
+  const noSheet = () =>
+    page.evaluate<boolean>(`document.querySelector("[data-message-actions-popover]") === null`);
+  /** The page and the card of `id` stay inside the phone's width, every option row of the current
+   * question is at least 44 px tall, the long recommended option wraps in its row (all of it on
+   * screen, its tag after it), and the header names the channel without a `#`. */
+  const expectCardFits = async (id: string, width: string) => {
     const fit = await page.evaluate<{
       pageFits: boolean;
-      sheetInside: boolean;
-      bottomAligned: boolean;
+      cardInside: boolean;
       sideways: boolean;
+      shortest: number;
       wrapped: boolean;
       tag: boolean;
       header: string;
     }>(`(() => {
-      const sheet = ${sheet};
-      const box = sheet.getBoundingClientRect();
-      const row = sheet.querySelector('[data-dock-page-current] [role="option"]');
-      const title = [...row.querySelectorAll("span")].find((el) => el.textContent.startsWith(${JSON.stringify(LONG_OPTION)}));
-      const body = sheet.querySelector("[data-dock-page-current]").parentElement.parentElement;
+      const card = ${card(id)};
+      const box = card.getBoundingClientRect();
+      const rows = [...card.querySelectorAll("[data-question-option]")];
+      const row = card.querySelector('[data-question-option="r0"]');
       return {
         pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-        sheetInside: box.left >= 0 && box.right <= innerWidth + 0.5,
-        bottomAligned: Math.abs(box.bottom - innerHeight) < 2,
-        sideways: body.scrollWidth > body.clientWidth + 1,
-        wrapped: title.scrollWidth <= title.clientWidth + 1 && title.getBoundingClientRect().right <= row.getBoundingClientRect().right,
-        tag: title.textContent.includes("Recommended"),
+        cardInside: box.left >= 0 && box.right <= innerWidth + 0.5,
+        sideways: card.scrollWidth > card.clientWidth + 1,
+        shortest: Math.min(...rows.map((option) => option.getBoundingClientRect().height)),
+        wrapped: row.scrollWidth <= row.clientWidth + 1 && [...row.querySelectorAll("*")].every((el) => el.getBoundingClientRect().right <= row.getBoundingClientRect().right + 0.5),
+        tag: row.textContent.includes(${JSON.stringify(LONG_OPTION)}) && row.textContent.includes("Recommended"),
         header: document.querySelector("[data-channel-name]").textContent,
       };
     })()`);
     expect(fit.pageFits, width).toBe(true);
-    expect(fit.sheetInside, width).toBe(true);
-    expect(fit.bottomAligned, width).toBe(true);
+    expect(fit.cardInside, width).toBe(true);
     expect(fit.sideways, width).toBe(false);
+    expect(fit.shortest, width).toBeGreaterThanOrEqual(44);
     expect(fit.wrapped, width).toBe(true);
     expect(fit.tag, width).toBe(true);
     expect(fit.header.startsWith("#"), width).toBe(false);
   };
-  /** Someone else's card: it names whom it waits on, and its row opens a sheet to look through. */
+  /** Someone else's card: it names whom it waits on, shows its options with nothing ticked, and
+   * its pager turns; there is no sheet to open. */
   const lookThrough = async (width: string) => {
     await until(
       () => page.evaluate<boolean>(`${card(asking.id)}?.dataset.questionCard === "pending"`),
       60_000,
     );
     expect(await page.evaluate<boolean>(`matchMedia("(pointer: coarse)").matches`)).toBe(true);
-    const waiting = await page.evaluate<{ text: string; width: number; answer: boolean }>(`(() => {
+    const waiting = await page.evaluate<{
+      text: string;
+      right: number;
+      answerable: boolean;
+    }>(`(() => {
       const el = ${card(asking.id)};
-      return { text: el.textContent, width: el.getBoundingClientRect().right, answer: el.querySelector("[data-question-card-answer]") !== null };
+      return {
+        text: el.textContent,
+        right: el.getBoundingClientRect().right,
+        answerable: el.querySelector("[data-question-send], [data-question-other-input]") !== null,
+      };
     })()`);
     expect(waiting.text, width).toContain("Waiting on Raft QA");
-    expect(waiting.answer, width).toBe(false);
-    expect(waiting.width, width).toBeLessThanOrEqual(Number(width));
-    await tap(`[data-message-id="${asking.id}"] [data-question-row="region"]`);
-    await inSheet(
-      `${sheet}.getAttribute("role") === "dialog" && ${sheet}.querySelector('[data-dock="viewing"]') != null`,
-    );
-    await expectSheetFits(width);
-    // Nothing to pick, send or decline in a card that is not the viewer's.
+    expect(waiting.answerable, width).toBe(false);
+    expect(waiting.right, width).toBeLessThanOrEqual(Number(width));
+    await expectCardFits(asking.id, width);
+    await shot(page, `look-through-${width}`);
+    // A tap on an option picks nothing; the pager turns to the next question and back.
+    await tap(scoped(asking.id, '[data-question-option="r1"]'));
     expect(
       await page.evaluate<boolean>(
-        `["[data-dock-submit]", "[data-dock-other]", "[data-dock-decline]"].every((selector) => ${sheet}.querySelector(selector) === null)`,
+        `[...${card(asking.id)}.querySelectorAll("[data-question-option]")].every((option) => option.getAttribute("aria-selected") !== "true")`,
       ),
+      width,
     ).toBe(true);
-    await shot(page, `look-through-${width}`);
-    await tapButton("Close");
-    await until(() =>
-      page.evaluate<boolean>(`document.querySelector('[data-question-dock]') == null`),
+    await tap(scoped(asking.id, 'button[data-question-page="next"]'));
+    await wait(onQuestion(asking.id, 1));
+    await tap(scoped(asking.id, 'button[data-question-page="prev"]'));
+    await wait(onQuestion(asking.id, 0));
+    expect(await noSheet(), width).toBe(true);
+    expect(await page.evaluate<string>(`${card(asking.id)}.dataset.questionCard`), width).toBe(
+      "pending",
     );
   };
   try {
     page = await browser.open(url, { phone: { width: 390, height: 844 } });
     await lookThrough("390");
 
-    // The viewer's own card, answered by touch: Answer opens the sheet, an option is ticked, and
-    // Next turns on; the review lists each question's answer, and Send ends in the receipt.
-    await tap(`[data-message-id="${mine.id}"] [data-question-card-answer]`);
-    await inSheet(`${sheet}.querySelector('[data-dock="answering"]') != null`);
+    // The viewer's own card, answered by touch where it stands: a tap on the first question's
+    // option ticks it and turns to the next question by itself, the many-pick question takes two
+    // ticks, and Send ends in the summary.
+    await until(
+      () => page.evaluate<boolean>(`${card(mine.id)}?.dataset.questionCard === "pending"`),
+      60_000,
+    );
+    await expectCardFits(mine.id, "390 own");
+    await tap(scoped(mine.id, '[data-question-option="r1"]'));
+    await wait(onQuestion(mine.id, 1));
+    expect(await noSheet()).toBe(true);
+    await tap(scoped(mine.id, '[data-question-option="c0"]'));
+    await tap(scoped(mine.id, '[data-question-option="c1"]'));
+    await wait(
+      `${card(mine.id)}.querySelector('[data-question-option="c0"]').getAttribute("aria-selected") === "true" && ${card(mine.id)}.querySelector('[data-question-option="c1"]').getAttribute("aria-selected") === "true"`,
+    );
     expect(
-      await page.evaluate<boolean>(
-        `${sheet}.getAttribute("role") === "dialog" && ${sheet}.querySelectorAll("[data-dock-decline]").length === 2`,
+      await page.evaluate<number>(
+        `Math.min(...[...${card(mine.id)}.querySelectorAll("[data-question-option]")].map((option) => option.getBoundingClientRect().height))`,
       ),
-    ).toBe(true);
-    await tap(option(2));
-    await inSheet(
-      `document.querySelector('${option(2)}').getAttribute("aria-selected") === "true"`,
-    );
-    await tapButton("Next");
-    await inSheet(
-      `${sheet}.querySelector('[data-dock-tab="1"]').getAttribute("aria-current") === "step"`,
-    );
-    await tap(option(1));
-    await tap(option(2));
-    await inSheet(
-      `document.querySelector('${option(1)}').getAttribute("aria-selected") === "true" && document.querySelector('${option(2)}').getAttribute("aria-selected") === "true"`,
-    );
+    ).toBeGreaterThanOrEqual(44);
     await shot(page, "answering-many");
-    await tapButton("Next");
-    await inSheet(
-      `${sheet}.querySelector('[data-dock-tab="2"]').getAttribute("aria-current") === "step"`,
-    );
-    expect(
-      await page.evaluate<string[][]>(
-        `[...${sheet}.querySelectorAll('[data-dock-page-current] [role="option"]')].map((row) => [...row.children].map((el) => el.textContent.trim()))`,
-      ),
-    ).toEqual([
-      ["Which deploy region should we target?", "US West"],
-      ["Which pre-release checks should run?", "Unit tests, End-to-end tests"],
-    ]);
-    await shot(page, "review");
-    await tap("[data-question-dock] [data-dock-submit]");
-    await inSheet(`${sheet}.querySelector("[data-dock-receipt]") != null`);
-    await shot(page, "receipt");
-    await tapButton("Done");
-    await until(() =>
-      page.evaluate<boolean>(`document.querySelector('[data-question-dock]') == null`),
-    );
-    await until(() =>
-      page.evaluate<boolean>(`${card(mine.id)}?.dataset.questionCard === "executed"`),
-    );
+    await tap(scoped(mine.id, "button[data-question-send]"));
+    await wait(`${card(mine.id)}?.dataset.questionCard === "executed"`);
+    expect(await noSheet()).toBe(true);
     const sent = await db.actionCard.findUniqueOrThrow({ where: { messageId: mine.id } });
     expect(sent.state).toBe("executed");
     const answers = (
@@ -304,9 +285,24 @@ test("a questions card on a phone: looked through or answered in a sheet, nothin
       ["region", ["r1"]],
       ["checks", ["c0", "c1"]],
     ]);
-    expect(await page.evaluate<string>(`${card(mine.id)}.textContent`)).toContain(
-      "Unit tests, End-to-end tests",
+    // The card settled in place: the page it was sent from keeps its picks marked, the pager
+    // turns back to the first question's.
+    const chosen = () =>
+      page.evaluate<string[]>(
+        `[...${card(mine.id)}.querySelectorAll("[data-question-option][data-chosen]")].map((row) => row.dataset.questionOption)`,
+      );
+    expect(await chosen()).toEqual(["c0", "c1"]);
+    await tap(scoped(mine.id, 'button[data-question-page="prev"]'));
+    await wait(
+      `${card(mine.id)}.querySelector("[data-question-pager]").textContent.includes("1 / 2")`,
     );
+    expect(await chosen()).toEqual(["r1"]);
+    expect(
+      await page.evaluate<boolean>(
+        `document.documentElement.scrollWidth <= document.documentElement.clientWidth`,
+      ),
+    ).toBe(true);
+    await shot(page, "answered");
 
     // The narrowest phone: the same, at 320.
     await page.close();

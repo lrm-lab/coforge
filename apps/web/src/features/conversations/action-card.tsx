@@ -53,7 +53,8 @@ const KNOWN_KINDS: Record<ActionCardView["kind"], true> = {
   questions: true,
 };
 
-export function ActionCard({ card }: { card: ActionCardView }) {
+/** `asker` is who posted the card, whom a question card's decline tells. */
+export function ActionCard({ card, asker }: { card: ActionCardView; asker: string }) {
   if (!Object.hasOwn(KNOWN_KINDS, card.kind))
     return (
       <p
@@ -63,7 +64,8 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         {m.action_card_unknown()}
       </p>
     );
-  if (card.kind === "choice" || card.kind === "questions") return <QuestionCard card={card} />;
+  if (card.kind === "choice" || card.kind === "questions")
+    return <QuestionCard card={card} asker={asker} />;
   return <KnownActionCard card={card} />;
 }
 

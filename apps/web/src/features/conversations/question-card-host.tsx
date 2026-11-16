@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -13,7 +12,6 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { WAITING_CHOICE_CARDS_KEY } from "#src/features/inbox/activity-inbox-queries";
@@ -24,13 +22,10 @@ import {
   commitQuestionsActionCard,
   loadActionCardStates,
 } from "./action-cards.functions";
-import { firstPick } from "./question-card-keys";
 import {
-  dockQuestions,
+  cardQuestions,
   fitDrafts,
   isAskingView,
-  isMine,
-  nextWaiting,
   submission,
   type AskingView,
   type Drafts,
@@ -42,91 +37,37 @@ import {
   subscribeQuestionDrafts,
   writeQuestionDrafts,
 } from "./question-drafts";
-import { focusDraftEnd } from "./composer-field";
-import { useDockKeepsCardInView } from "./use-dock-scroll";
 
-/** What the dock shows of the message a card came in: who asked, and when. */
-export type DockMessage = {
-  id: string;
-  senderName: string;
-  senderAgentId?: string;
-  senderUserId?: string;
-  senderAvatarUrl?: string | null;
-  createdAt: Date | string;
-  actionCard?: ActionCardView;
-};
+type CardMessage = { id: string; actionCard?: ActionCardView };
 
-export type DockCard = { message: DockMessage; view: AskingView };
-
-/** Where the dock stands: the card, its question (or review), and the row the keys stand on. */
-type DockPlace = { messageId: string; tab: number; hi: number; byKey: boolean };
-
-type QuestionDock = {
-  place: DockPlace | null;
-  /** The pane's question cards, in stream order, each as the dock last read it. */
-  cards: DockCard[];
-  /** The cards waiting on the viewer's answer. */
-  waiting: DockCard[];
-  /** After a card was sent from the dock: the one to offer next. */
-  next: DockCard | undefined;
-  open: (messageId: string, tab?: number) => void;
-  close: () => void;
-  setView: (tab: number, hi: number) => void;
-  switchBy: (by: 1 | -1) => void;
-  /** The card as the dock last read it, newer than the message's while the message has not
-   * caught up. */
+type QuestionCards = {
   viewOf: (view: AskingView) => AskingView;
-  submit: (card: DockCard, drafts: Drafts) => Promise<void>;
-  decline: (card: DockCard) => Promise<void>;
+  submit: (view: AskingView, drafts: Drafts) => Promise<void>;
+  decline: (view: AskingView) => Promise<void>;
+  focusWaiting: (by: 1 | -1, fromId?: string) => boolean;
 };
 
-const QuestionDockContext = createContext<QuestionDock | null>(null);
+const QuestionCardsContext = createContext<QuestionCards | null>(null);
 
-/** What a stream card needs of the dock, apart from the rest so that moving inside the dock (each
- * arrow key, each hover) does not draw every card in the pane again. */
-type CardDock = {
-  /** The card open in the dock, if any. */
-  openId: string | null;
-  open: QuestionDock["open"];
-  viewOf: QuestionDock["viewOf"];
-};
-
-const CardDockContext = createContext<CardDock | null>(null);
-
-/** The dock as a stream card (or the composer) sees it; null outside a conversation pane. */
-export function useCardDock() {
-  return useContext(CardDockContext);
+export function useQuestionCards() {
+  return useContext(QuestionCardsContext);
 }
 
-/** The docks open on the page, in the order they opened: a bare Escape closes the last. */
-const openDocks: object[] = [];
-
-/** The pane's answer dock (Frank, 11-12); null outside a conversation pane. */
-export function useQuestionDock() {
-  return useContext(QuestionDockContext);
+function cardKeysTarget(root: ParentNode | null | undefined, messageId: string) {
+  return root?.querySelector<HTMLElement>(
+    `[data-question-card][data-message="${CSS.escape(messageId)}"] [data-question-options]`,
+  );
 }
 
-/**
- * One answering surface per conversation pane (Frank, 11-12): a card in the stream is a summary,
- * and its questions are answered in the dock, which takes the composer's place. The host owns
- * which card is open, sends the answers or the decline, and holds each card as it last read it, so
- * the stream card and the dock show the same state before the stream's own refresh comes.
- */
-export function QuestionDockHost({
+export function QuestionCardsHost({
   messages,
   paneRef,
-  historyRef,
   children,
 }: {
-  /** The pane's messages in stream order (a thread's root first). */
-  messages: readonly DockMessage[];
+  messages: readonly CardMessage[];
   paneRef: RefObject<HTMLElement | null>;
-  historyRef: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {
-  const [place, setPlace] = useState<DockPlace | null>(null);
-  // Views read after the dock acted, each kept only while its message still carries the card it
-  // was read over: the stream's next refresh replaces the message, and with it this.
   const [fresh, setFresh] = useState<
     ReadonlyMap<string, { base: ActionCardView; view: AskingView }>
   >(new Map());
@@ -135,118 +76,7 @@ export function QuestionDockHost({
   const commitChoice = useServerFn(commitChoiceActionCard);
   const commitQuestions = useServerFn(commitQuestionsActionCard);
   const cancel = useServerFn(cancelActionCard);
-  const desktop = useBreakpoint("sm");
-  // Whether the person's last input was a key: a dock opened from the keyboard shows where the
-  // arrow keys stand at once; one opened by a pointer waits for the first arrow key.
-  const byKey = useRef(false);
-  useEffect(() => {
-    const onKey = () => (byKey.current = true);
-    const onPointer = () => (byKey.current = false);
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("pointerdown", onPointer, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("pointerdown", onPointer, true);
-    };
-  }, []);
 
-  const cards = useMemo(
-    () =>
-      messages.flatMap((message): DockCard[] => {
-        const base = message.actionCard;
-        if (!isAskingView(base)) return [];
-        const kept = fresh.get(message.id);
-        return [{ message, view: kept?.base === base ? kept.view : base }];
-      }),
-    [messages, fresh],
-  );
-  const waiting = useMemo(
-    () => cards.filter((card) => card.view.state === "pending" && card.view.canCommit),
-    [cards],
-  );
-  // Someone else's card, looked through, leaves the dock when it stops waiting.
-  const current = place
-    ? cards.find(
-        (card) =>
-          card.message.id === place.messageId &&
-          (card.view.state === "pending" || isMine(card.view)),
-      )
-    : undefined;
-  const next = useMemo(() => {
-    if (!current || current.view.state === "pending") return undefined;
-    const id = nextWaiting(
-      waiting.map((card) => card.message.id),
-      cards.map((card) => card.message.id),
-      current.message.id,
-    );
-    return waiting.find((card) => card.message.id === id);
-  }, [current, waiting, cards]);
-  useDockKeepsCardInView(historyRef, desktop ? place?.messageId : undefined, current?.view.state);
-
-  const open = useLatestCallback((messageId: string, tab?: number) => {
-    const card = cards.find((candidate) => candidate.message.id === messageId);
-    if (!card) return;
-    const questions = dockQuestions(card.view);
-    const to = Math.min(tab ?? 0, questions.length - 1);
-    const drafts = readQuestionDrafts(messageId);
-    setPlace({
-      messageId,
-      tab: to,
-      hi: firstPick({ questions, drafts }, to),
-      byKey: byKey.current,
-    });
-  });
-  const close = useLatestCallback(() => {
-    setPlace(null);
-    // Focus left with the dock goes back to the composer, and focus elsewhere stays; a phone has no
-    // keys, and focusing the composer there raises the keyboard.
-    if (window.matchMedia("(pointer: fine)").matches)
-      requestAnimationFrame(() => {
-        if (document.activeElement && document.activeElement !== document.body) return;
-        focusDraftEnd(
-          paneRef.current?.querySelector<HTMLTextAreaElement>("[data-composer]") ?? null,
-        );
-      });
-  });
-  // Escape closes an open dock wherever focus is in this pane, or, when focus is nowhere, the dock
-  // opened last (task #109; a channel's and a thread's can be open at once): the dock's own views
-  // handle it first, but a refresh that swaps the view, or a click on the stream, takes focus off
-  // them, and Escape must not then do nothing. A popover or menu that used the key marked it
-  // handled; nothing else on the page closes on a bare Escape.
-  const isOpen = place !== null;
-  useEffect(() => {
-    if (!isOpen) return;
-    const self = {};
-    openDocks.push(self);
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      const at = event.target;
-      const nowhere = at === document.body || at === document.documentElement;
-      const inPane = at instanceof Node && paneRef.current?.contains(at);
-      if (!inPane && !(nowhere && openDocks.at(-1) === self)) return;
-      event.preventDefault();
-      close();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      openDocks.splice(openDocks.indexOf(self), 1);
-    };
-  }, [isOpen, close, paneRef]);
-  // The card left the pane (an older page dropped, the message deleted) or the dock: so does it.
-  useEffect(() => {
-    if (place && !current) close();
-  }, [place, current, close]);
-  const setView = useLatestCallback((tab: number, hi: number) =>
-    setPlace((at) => (!at || (at.tab === tab && at.hi === hi) ? at : { ...at, tab, hi })),
-  );
-  const switchBy = useLatestCallback((by: 1 | -1) => {
-    if (!waiting.length) return;
-    const at = waiting.findIndex((card) => card.message.id === place?.messageId);
-    if (at < 0) return open(waiting[by > 0 ? 0 : waiting.length - 1]!.message.id);
-    if (waiting.length > 1) open(waiting[(at + by + waiting.length) % waiting.length]!.message.id);
-  });
-  // Made again when a view is read, so the cards that use it draw again.
   const viewOf = useCallback(
     (view: AskingView) => {
       const kept = fresh.get(view.messageId);
@@ -255,81 +85,92 @@ export function QuestionDockHost({
     [fresh],
   );
 
-  /** Reads the card again after acting on it, and shows it as the server now has it. */
-  async function reread(card: DockCard) {
-    const states = await refresh({ data: { messageIds: [card.message.id] } });
-    const view = states[card.message.id] as ActionCardView | undefined;
-    const base = card.message.actionCard;
-    if (!isAskingView(view) || !base) return;
-    setFresh((all) => new Map(all).set(card.message.id, { base, view }));
-    if (view.state !== "pending") dropQuestionDrafts(card.message.id);
+  const focusWaiting = useLatestCallback((by: 1 | -1, fromId?: string) => {
+    const waiting = messages.flatMap((message) => {
+      const base = message.actionCard;
+      if (!isAskingView(base)) return [];
+      const view = viewOf(base);
+      return view.state === "pending" && view.canCommit ? [message.id] : [];
+    });
+    if (!waiting.length) return false;
+    const at = fromId ? waiting.indexOf(fromId) : -1;
+    const id =
+      at < 0
+        ? waiting[by > 0 ? 0 : waiting.length - 1]!
+        : waiting[(at + by + waiting.length) % waiting.length]!;
+    const target = cardKeysTarget(paneRef.current, id);
+    if (!target) return false;
+    target.focus({ preventScroll: true });
+    target.closest("[data-question-card]")?.scrollIntoView({ block: "nearest" });
+    return true;
+  });
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !event.altKey || event.metaKey || event.ctrlKey) return;
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const at = event.target;
+      if (!(at instanceof HTMLElement) || !paneRef.current?.contains(at)) return;
+      if (at.closest("[data-question-card]")) return;
+      const down = event.key === "ArrowDown";
+      if (at instanceof HTMLTextAreaElement || at instanceof HTMLInputElement) {
+        const caret = down ? at.value.length : 0;
+        if (at.selectionStart !== caret || at.selectionEnd !== caret) return;
+      }
+      if (focusWaiting(down ? 1 : -1)) event.preventDefault();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [focusWaiting, paneRef]);
+
+  async function reread(view: AskingView) {
+    const messageId = view.messageId;
+    const states = await refresh({ data: { messageIds: [messageId] } });
+    const next = states[messageId] as ActionCardView | undefined;
+    const base = messages.find((message) => message.id === messageId)?.actionCard;
+    if (!isAskingView(next) || !base) return;
+    setFresh((all) => new Map(all).set(messageId, { base, view: next }));
+    if (next.state !== "pending") dropQuestionDrafts(messageId);
   }
 
-  const submit = useLatestCallback(async (card: DockCard, drafts: Drafts) => {
-    const sent = submission(card.view, fitDrafts(dockQuestions(card.view), drafts));
+  async function settle(view: AskingView, act: () => Promise<unknown>) {
+    try {
+      await act();
+    } catch (cause) {
+      if (isAppErrorCode(cause, "CONFLICT")) await reread(view).catch(() => {});
+      throw cause;
+    }
+    void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
+    await reread(view).catch(() => {});
+  }
+
+  const submit = useLatestCallback(async (view: AskingView, drafts: Drafts) => {
+    const sent = submission(view, fitDrafts(cardQuestions(view), drafts));
     if (!sent) return;
-    try {
-      if (sent.kind === "choice")
-        await commitChoice({
-          data: { messageId: card.message.id, optionId: sent.optionId, text: sent.text },
-        });
-      else await commitQuestions({ data: { messageId: card.message.id, answers: sent.answers } });
-    } catch (cause) {
-      // Someone else's change (answered elsewhere, expired): show the card as it now is.
-      if (isAppErrorCode(cause, "CONFLICT")) await reread(card).catch(() => {});
-      throw cause;
-    }
-    // Answered, it no longer waits on the viewer in Activity.
-    void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
-    await reread(card).catch(() => {});
+    const messageId = view.messageId;
+    await settle(view, () =>
+      sent.kind === "choice"
+        ? commitChoice({ data: { messageId, optionId: sent.optionId, text: sent.text } })
+        : commitQuestions({ data: { messageId, answers: sent.answers } }),
+    );
   });
-  const decline = useLatestCallback(async (card: DockCard) => {
-    try {
-      await cancel({ data: { messageId: card.message.id } });
-    } catch (cause) {
-      // Answered, withdrawn or run out meanwhile: show the card as it now is.
-      if (isAppErrorCode(cause, "CONFLICT")) await reread(card).catch(() => {});
-      throw cause;
-    }
-    void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
-    await reread(card).catch(() => {});
-  });
+  const decline = useLatestCallback((view: AskingView) =>
+    settle(view, () => cancel({ data: { messageId: view.messageId } })),
+  );
 
   const value = useMemo(
-    () => ({
-      place,
-      cards,
-      waiting,
-      next,
-      open,
-      close,
-      setView,
-      switchBy,
-      viewOf,
-      submit,
-      decline,
-    }),
-    [place, cards, waiting, next, open, close, setView, switchBy, viewOf, submit, decline],
+    () => ({ viewOf, submit, decline, focusWaiting }),
+    [viewOf, submit, decline, focusWaiting],
   );
-  const openId = place?.messageId ?? null;
-  const cardDock = useMemo(() => ({ openId, open, viewOf }), [openId, open, viewOf]);
-  return (
-    <QuestionDockContext value={value}>
-      <CardDockContext value={cardDock}>{children}</CardDockContext>
-    </QuestionDockContext>
-  );
+  return <QuestionCardsContext value={value}>{children}</QuestionCardsContext>;
 }
 
-/** A card's kept answers and the way to change them, the same in the stream and the dock, and in
- * another tab. A card no longer waiting keeps nothing. */
 export function useQuestionDrafts(view: AskingView) {
   const messageId = view.messageId;
-  const pending = view.state === "pending";
+  const pending = view.state === "pending" && view.canCommit;
   const subscribe = useCallback(
     (changed: () => void) => subscribeQuestionDrafts(messageId, changed),
     [messageId],
   );
-  // A card no longer waiting reads nothing: a long history has many.
   const drafts = useSyncExternalStore(
     subscribe,
     () => (pending ? readQuestionDrafts(messageId) : NO_DRAFTS),
@@ -338,10 +179,10 @@ export function useQuestionDrafts(view: AskingView) {
   useEffect(() => {
     if (!pending) dropQuestionDrafts(messageId);
   }, [pending, messageId]);
-  const fitted = useMemo(() => fitDrafts(dockQuestions(view), drafts), [view, drafts]);
+  const fitted = useMemo(() => fitDrafts(cardQuestions(view), drafts), [view, drafts]);
   const setDraft = useLatestCallback((questionId: string, draft: Drafts[string]) => {
     const all = { ...readQuestionDrafts(messageId), [questionId]: draft };
-    writeQuestionDrafts(messageId, fitDrafts(dockQuestions(view), all));
+    writeQuestionDrafts(messageId, fitDrafts(cardQuestions(view), all));
   });
   return [pending ? fitted : NO_DRAFTS, setDraft] as const;
 }

@@ -60,7 +60,6 @@
   "action_card_rename": "改个名字…",
   "action_card_refused": "按卡片上的内容做不了。",
   "action_card_questions_recommended": "推荐",
-  "action_card_questions_next": "下一题",
   "action_card_ignore_row": "不回答：{prompt}",
   "action_card_unknown": "这张卡片需要更新 CoForge 后才能显示。"
 }

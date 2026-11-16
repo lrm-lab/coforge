@@ -320,7 +320,7 @@ export const MessageRow = memo(function MessageRow({
                   },
                 ) || message.body}
               </span>
-              <ActionCard card={message.actionCard} />
+              <ActionCard card={message.actionCard} asker={message.senderName} />
             </>
           ) : showsBody ? (
             // `relative` anchors the reply-to-selection affordance to the body it was highlighted
