@@ -50,7 +50,9 @@ export function PiChatConversation({
   const execute = useExecutePiChat();
   const files = usePiChatFiles();
   const queryClient = useQueryClient();
-  const [error, setError] = useState(false);
+  // What failed: a command (it may have reached the cloud computer, so the message says a resend is
+  // safe) or a read of the history (nothing was sent; reading again is enough).
+  const [error, setError] = useState<"send" | "load" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pendingSend, setPendingSend] = useState<PiChatPendingMessage>();
   const latestDraft = useRef(draft);
@@ -129,7 +131,7 @@ export function PiChatConversation({
     });
   };
   const mutate = async (command: PiChatCommand, pending?: PiChatPendingMessage) => {
-    setError(false);
+    setError(null);
     setSubmitting(true);
     try {
       const result = await execute({ data: { computerId, command } });
@@ -168,7 +170,7 @@ export function PiChatConversation({
       refresh(accepted?.id);
       return result;
     } catch {
-      setError(true);
+      setError("send");
       return undefined;
     } finally {
       setSubmitting(false);
@@ -226,7 +228,7 @@ export function PiChatConversation({
     const cursor = history.data?.before;
     if (!cursor || loadingOlder) return;
     setLoadingOlder(true);
-    setError(false);
+    setError(null);
     try {
       const result = await execute({
         data: { computerId, command: { action: "read", sessionId, before: cursor } },
@@ -244,7 +246,7 @@ export function PiChatConversation({
         };
       });
     } catch {
-      setError(true);
+      setError("load");
     } finally {
       setLoadingOlder(false);
     }
@@ -285,12 +287,12 @@ export function PiChatConversation({
           role="alert"
           className="flex flex-wrap items-center gap-2 border-b border-secondary p-3 text-sm text-error-primary"
         >
-          <p>{m.pi_chat_connection_error()}</p>
+          <p>{error === "send" ? m.pi_chat_connection_error() : m.pi_chat_load_error()}</p>
           <Button
             color="secondary"
             size="sm"
             onClick={() => {
-              setError(false);
+              setError(null);
               void refresh();
             }}
           >

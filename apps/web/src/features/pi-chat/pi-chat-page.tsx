@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Plus, RefreshCw01, SearchLg } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { PageHeader } from "#src/components/layout/page-header";
@@ -121,15 +122,16 @@ function PiChatContent(props: Props) {
         >
           <PageHeader
             heading={m.pi_chat_title()}
+            // An icon, so the title keeps its full width in the narrow list column; the empty
+            // conversation pane spells out "New chat" beside it.
             actions={
-              <Button
+              <ButtonUtility
                 size="sm"
                 color="secondary"
-                iconLeading={Plus}
+                icon={Plus}
+                tooltip={m.pi_chat_new()}
                 onClick={() => select(computerId, "new")}
-              >
-                {m.pi_chat_new()}
-              </Button>
+              />
             }
           />
           <div className="space-y-3 p-3">
@@ -161,7 +163,7 @@ function PiChatContent(props: Props) {
             )}
             {sessions.isError && (
               <div role="alert" className="space-y-2 p-3 text-sm text-error-primary">
-                <p>{m.pi_chat_connection_error()}</p>
+                <p>{m.pi_chat_load_error()}</p>
                 <Button
                   size="sm"
                   color="secondary"

@@ -313,5 +313,7 @@
   "records_report_save_not_found": "这份周报已不存在，或已不属于你。",
   "records_report_save_access_denied": "你已无权编辑这份周报。",
   "records_report_save_invalid": "服务器不接受这份内容。",
-  "records_report_save_keep_text": "你写的内容还在编辑器里，离开前请先复制下来。"
+  "records_report_save_keep_text": "你写的内容还在编辑器里，离开前请先复制下来。",
+  "records_weekly_none": "还没有周报。",
+  "records_weekly_no_match": "没有符合「{query}」的周报。"
 }

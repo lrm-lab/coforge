@@ -178,6 +178,15 @@ export function RecordsLayout({
   const myReportsUnread = catalog.myReports.some((item) => item.unread);
   // A report older than the catalog's page is listed once its week is read: its section opens
   // then, as `sectionDefaults` opens it at once for one listed already, unless another is open.
+  // A group with nothing in it is left out rather than shown as an empty heading; with every
+  // group empty, one sentence says so.
+  const membersListed =
+    memberWeeks.weeks.length > 0 ||
+    memberWeeks.hasMore ||
+    memberWeeks.loadingMore ||
+    memberWeeks.loadFailed;
+  const weeklyListed =
+    filteredFavorites.length > 0 || filteredMyReports.length > 0 || membersListed;
   const wasListed = useRef(memberWeeks.selectionListed);
   useEffect(() => {
     const listedNow = memberWeeks.selectionListed && !wasListed.current;
@@ -274,65 +283,76 @@ export function RecordsLayout({
                     ))}
                   </div>
 
-                  <RecordsFavoritesSection
-                    items={filteredFavorites}
-                    showAll={Boolean(query) || favoritesExpanded}
-                    onShowAll={() => setFavoritesExpanded(true)}
-                    selectedRecordId={selectedRecordId}
-                    open={favoritesOpen}
-                    onOpenChange={(open) => {
-                      if (open) enterSection("favorites");
-                      else setFavoritesOpen(false);
-                    }}
-                    onSelect={() => {
-                      enterSection("favorites");
-                      setShowMobileList(false);
-                    }}
-                  />
+                  {filteredFavorites.length > 0 && (
+                    <RecordsFavoritesSection
+                      items={filteredFavorites}
+                      showAll={Boolean(query) || favoritesExpanded}
+                      onShowAll={() => setFavoritesExpanded(true)}
+                      selectedRecordId={selectedRecordId}
+                      open={favoritesOpen}
+                      onOpenChange={(open) => {
+                        if (open) enterSection("favorites");
+                        else setFavoritesOpen(false);
+                      }}
+                      onSelect={() => {
+                        enterSection("favorites");
+                        setShowMobileList(false);
+                      }}
+                    />
+                  )}
 
-                  <RecordsMyReportsSection
-                    items={filteredMyReports}
-                    unread={myReportsUnread}
-                    selectedRecordId={selectedRecordId}
-                    open={myReportsOpen}
-                    onOpenChange={(open) => {
-                      if (open) enterSection("myReports");
-                      else setMyReportsOpen(false);
-                    }}
-                    onSelect={() => {
-                      enterSection("myReports");
-                      setShowMobileList(false);
-                    }}
-                  />
+                  {filteredMyReports.length > 0 && (
+                    <RecordsMyReportsSection
+                      items={filteredMyReports}
+                      unread={myReportsUnread}
+                      selectedRecordId={selectedRecordId}
+                      open={myReportsOpen}
+                      onOpenChange={(open) => {
+                        if (open) enterSection("myReports");
+                        else setMyReportsOpen(false);
+                      }}
+                      onSelect={() => {
+                        enterSection("myReports");
+                        setShowMobileList(false);
+                      }}
+                    />
+                  )}
 
-                  <RecordsMemberWeeksSection
-                    weeks={memberWeeks.weeks}
-                    people={memberWeeks.people}
-                    hasMore={memberWeeks.hasMore}
-                    loadingMore={memberWeeks.loadingMore}
-                    loadFailed={memberWeeks.loadFailed}
-                    onLoadMore={memberWeeks.loadMore}
-                    query={query}
-                    selectedRecordId={selectedRecordId}
-                    selectedWeekKey={selectedWeekKey}
-                    expandedWeeks={expandedWeeks}
-                    onExpandedWeekChange={(weekKey, expanded) => {
-                      const weeks = { ...expandedWeeks, [weekKey]: expanded };
-                      setExpandedWeeks(weeks);
-                      persistExpand({ weeks });
-                    }}
-                    showAll={membersExpanded}
-                    onShowAll={() => setMembersExpanded(true)}
-                    open={membersOpen}
-                    onOpenChange={(open) => {
-                      if (open) enterSection("members");
-                      else setMembersOpen(false);
-                    }}
-                    onSelect={() => {
-                      enterSection("members");
-                      setShowMobileList(false);
-                    }}
-                  />
+                  {membersListed && (
+                    <RecordsMemberWeeksSection
+                      weeks={memberWeeks.weeks}
+                      people={memberWeeks.people}
+                      hasMore={memberWeeks.hasMore}
+                      loadingMore={memberWeeks.loadingMore}
+                      loadFailed={memberWeeks.loadFailed}
+                      onLoadMore={memberWeeks.loadMore}
+                      query={query}
+                      selectedRecordId={selectedRecordId}
+                      selectedWeekKey={selectedWeekKey}
+                      expandedWeeks={expandedWeeks}
+                      onExpandedWeekChange={(weekKey, expanded) => {
+                        const weeks = { ...expandedWeeks, [weekKey]: expanded };
+                        setExpandedWeeks(weeks);
+                        persistExpand({ weeks });
+                      }}
+                      showAll={membersExpanded}
+                      onShowAll={() => setMembersExpanded(true)}
+                      open={membersOpen}
+                      onOpenChange={(open) => {
+                        if (open) enterSection("members");
+                        else setMembersOpen(false);
+                      }}
+                      onSelect={() => {
+                        enterSection("members");
+                        setShowMobileList(false);
+                      }}
+                    />
+                  )}
+                  {!weeklyListed && (
+                    <p className="px-2 text-sm text-tertiary">
+                      {query ? m.records_weekly_no_match({ query }) : m.records_weekly_none()}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <CollapsibleSection

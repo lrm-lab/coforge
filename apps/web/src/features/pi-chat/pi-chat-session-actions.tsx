@@ -106,7 +106,7 @@ export function PiChatSessionActions({
               />
               {error && (
                 <p role="alert" className="text-sm text-error-primary">
-                  {m.pi_chat_connection_error()}
+                  {m.pi_chat_action_error()}
                 </p>
               )}
               <DialogActions>
@@ -131,7 +131,7 @@ export function PiChatSessionActions({
         title={running ? m.pi_chat_stop_delete() : m.pi_chat_delete()}
         description={running ? m.pi_chat_stop_delete_confirm() : m.pi_chat_delete_confirm()}
         confirmLabel={running ? m.pi_chat_stop_delete() : m.pi_chat_delete_action()}
-        errorMessage={m.pi_chat_connection_error()}
+        errorMessage={m.pi_chat_action_error()}
         onConfirm={async () => {
           if (running && !controls)
             await execute({

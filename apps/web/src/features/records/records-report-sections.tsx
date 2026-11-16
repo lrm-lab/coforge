@@ -8,7 +8,7 @@ import type { RecordsCatalog } from "./records-layout";
 import { sidebarPreview } from "./records-sidebar";
 import { CollapsibleSection, RecordLink, SidebarMore, WeekBadge } from "./records-sidebar-parts";
 
-/** The weekly reports the reader starred, a few at first; `showAll` lists every one. */
+/** The weekly reports the reader starred (rendered only when there is one), a few at first; `showAll` lists every one. */
 export function RecordsFavoritesSection({
   items,
   showAll,
@@ -33,34 +33,32 @@ export function RecordsFavoritesSection({
       open={open}
       onOpenChange={onOpenChange}
     >
-      {items.length === 0 ? null : (
-        <ul className="space-y-0.5">
-          {preview.visible.map((item) => (
-            <li key={item.id}>
-              <RecordLink
-                recordId={item.id}
-                selected={item.id === selectedRecordId}
-                onSelect={onSelect}
-              >
-                <ActorAvatar
-                  presence={false}
-                  size="sm"
-                  name={item.author.displayName}
-                  alt={item.author.displayName}
-                  src={item.author.avatarUrl}
-                />
-                <span className="truncate">{item.title}</span>
-              </RecordLink>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="space-y-0.5">
+        {preview.visible.map((item) => (
+          <li key={item.id}>
+            <RecordLink
+              recordId={item.id}
+              selected={item.id === selectedRecordId}
+              onSelect={onSelect}
+            >
+              <ActorAvatar
+                presence={false}
+                size="sm"
+                name={item.author.displayName}
+                alt={item.author.displayName}
+                src={item.author.avatarUrl}
+              />
+              <span className="truncate">{item.title}</span>
+            </RecordLink>
+          </li>
+        ))}
+      </ul>
       <SidebarMore hiddenCount={preview.hiddenCount} onExpand={onShowAll} />
     </CollapsibleSection>
   );
 }
 
-/** The reader's own weekly reports, each marked sent or unread. */
+/** The reader's own weekly reports (rendered only when there is one), each marked sent or unread. */
 export function RecordsMyReportsSection({
   items,
   unread,
@@ -90,39 +88,33 @@ export function RecordsMyReportsSection({
         ) : null
       }
     >
-      {items.length === 0 ? null : (
-        <ul className="space-y-0.5">
-          {items.map((item) => {
-            const sent = item.status === "submitted";
-            return (
-              <li key={item.id}>
-                <RecordLink
-                  recordId={item.id}
-                  selected={item.id === selectedRecordId}
-                  onSelect={onSelect}
-                  className={cn(item.unread && "font-semibold")}
-                >
-                  <WeekBadge week={item.week} className="size-6" />
-                  <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                  {sent ? (
-                    <span className="ml-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-tertiary">
-                      {m.records_report_sent_badge()}
-                    </span>
-                  ) : item.unread ? (
-                    <span
-                      role="img"
-                      aria-label={m.records_report_unread_badge()}
-                      className="ml-auto"
-                    >
-                      <UnreadDot />
-                    </span>
-                  ) : null}
-                </RecordLink>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <ul className="space-y-0.5">
+        {items.map((item) => {
+          const sent = item.status === "submitted";
+          return (
+            <li key={item.id}>
+              <RecordLink
+                recordId={item.id}
+                selected={item.id === selectedRecordId}
+                onSelect={onSelect}
+                className={cn(item.unread && "font-semibold")}
+              >
+                <WeekBadge week={item.week} className="size-6" />
+                <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                {sent ? (
+                  <span className="ml-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-tertiary">
+                    {m.records_report_sent_badge()}
+                  </span>
+                ) : item.unread ? (
+                  <span role="img" aria-label={m.records_report_unread_badge()} className="ml-auto">
+                    <UnreadDot />
+                  </span>
+                ) : null}
+              </RecordLink>
+            </li>
+          );
+        })}
+      </ul>
     </CollapsibleSection>
   );
 }
