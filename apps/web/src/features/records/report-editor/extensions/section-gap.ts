@@ -34,14 +34,29 @@ export function sectionGaps(doc: ProseMirrorNode): {
   return { open, empty };
 }
 
-/** A click in the room puts an empty paragraph there and the caret in it. */
+/** A click in the room puts an empty paragraph there and the caret in it. The paragraph is not
+ * writing yet: it is no edit (`preventUpdate`, nothing to undo) until someone types in it. */
 function writeIntoGap(view: EditorView, at: number) {
   const paragraph = view.state.schema.nodes.paragraph;
   if (!paragraph) return;
   const tr = view.state.tr.insert(at, paragraph.create());
   tr.setSelection(TextSelection.create(tr.doc, at + 1));
+  tr.setMeta("preventUpdate", true).setMeta("addToHistory", false);
   view.dispatch(tr.scrollIntoView());
   view.focus();
+}
+
+/** Leaving a section's room without writing in it takes the empty paragraph away again, so
+ * clicking in and out leaves the report as it was. `keep`: the caret, which may stay. */
+function leaveUnwritten(view: EditorView, keep: number | null) {
+  if (view.isDestroyed) return;
+  const unwritten = sectionGaps(view.state.doc).empty.filter(
+    ({ from, to }) => keep === null || keep < from || keep > to,
+  );
+  if (unwritten.length === 0) return;
+  const tr = view.state.tr;
+  for (const { from, to } of unwritten.reverse()) tr.delete(from, to);
+  view.dispatch(tr.setMeta("preventUpdate", true).setMeta("addToHistory", false));
 }
 
 const sectionGapKey = new PluginKey("sectionGap");
@@ -58,7 +73,20 @@ export const SectionGap = Extension.create({
     return [
       new Plugin({
         key: sectionGapKey,
+        view: () => ({
+          update(view, prevState) {
+            if (view.state.selection.eq(prevState.selection) || !view.hasFocus()) return;
+            // Not while this update is still being applied.
+            queueMicrotask(() => leaveUnwritten(view, view.state.selection.from));
+          },
+        }),
         props: {
+          handleDOMEvents: {
+            blur: (view) => {
+              leaveUnwritten(view, null);
+              return false;
+            },
+          },
           decorations(state) {
             const { open, empty } = sectionGaps(state.doc);
             return DecorationSet.create(state.doc, [
