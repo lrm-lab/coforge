@@ -1,3 +1,4 @@
+import { buildExternalAgentGuide } from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { resolveActorServerRole } from "#src/server/conversations/channel-authority.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
@@ -15,7 +16,7 @@ export type AgentContextResponse = {
   workspace: { id: string; slug: string; name: string };
   credential: { id: string } | null;
   capabilities: string[] | null;
-  prompt: null;
+  prompt: { text: string } | null;
 };
 
 export async function readAgentContext(
@@ -34,11 +35,18 @@ export async function readAgentContext(
     resolveActorServerRole(db, principal.workspaceId, { agentId: principal.agentId }),
   ]);
   if (!agent || !workspace) return undefined;
+  const resolvedAgent = {
+    ...agent,
+    role: serverRole ?? agent.role,
+    external: principal.external === true,
+  };
   return {
-    agent: { ...agent, role: serverRole ?? agent.role, external: principal.external === true },
+    agent: resolvedAgent,
     workspace,
     credential: principal.credentialId ? { id: principal.credentialId } : null,
     capabilities: principal.external ? externalAgentFeatures() : null,
-    prompt: null,
+    prompt: principal.external
+      ? { text: buildExternalAgentGuide({ agent: resolvedAgent, workspace }) }
+      : null,
   };
 }

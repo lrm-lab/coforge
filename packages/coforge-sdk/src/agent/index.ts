@@ -31,4 +31,5 @@ export * from "./app-registration";
 export * from "./context";
 export * from "./local-memory";
 export * from "./team-memory";
+export * from "./cli-guide-sections";
 export * from "./app-registration";
