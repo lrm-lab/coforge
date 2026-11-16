@@ -17,6 +17,7 @@ import { followInternalLinkClick, internalAppHref } from "./internal-app-href";
 import { mentionHandlesByToken, rehypeReferenceChips } from "./message-markdown";
 import type { ChipMention } from "./message-reference-chips";
 import { rehypeTrailingSlot } from "./message-trailing-slot";
+import { rehypeCjkBreaks } from "./message-cjk-breaks";
 import type { MentionRef } from "./mention-text";
 import type {
   OpenAgentProfile,
@@ -102,6 +103,7 @@ export function MessageBody({
         rehypeReferenceChips,
         { mentions: handles, viewerId, plainMentions, channelNames },
       ]);
+    plugins.push(rehypeCjkBreaks);
     // After sanitizing, which would strip the slot's marker.
     if (hasTrailing) plugins.push(rehypeTrailingSlot);
     return plugins;
