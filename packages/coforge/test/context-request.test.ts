@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { contextQueryRequest } from "#src/local-readonly-requests";
+import { contextQueryRequest } from "#src/local-agent-requests";
 
 test("context proxy requests use the daemon's snake_case query contract", async () => {
   const previous = globalThis.fetch;

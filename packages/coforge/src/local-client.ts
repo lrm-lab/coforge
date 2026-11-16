@@ -42,7 +42,7 @@ import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
 import { refuseCredentialSolicitationIfNeeded } from "./send-credential-gate";
 import { proxyHttpFailure, proxyTransportFailure } from "./local-proxy-failure";
-import { computerUpdateNoticeRequest, localReadonlyRequests } from "./local-readonly-requests";
+import { computerUpdateNoticeRequest, localReadonlyRequests } from "./local-agent-requests";
 import {
   envelopeRequest,
   operationFailedCode,
