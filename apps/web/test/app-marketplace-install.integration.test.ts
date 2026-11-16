@@ -197,7 +197,6 @@ test.skipIf(!db)("an owner or admin installs and approves what was shown", async
     await installs.install(s.buyer.actor("admin"), s.key, 1);
     expect(await s.installation(s.buyer.id)).toMatchObject({
       installedByUserId: s.buyer.people.admin.id,
-      agentAccess: "all",
       approvedGroups: ["workspace"],
       approvedRevision: 1,
       approvedByUserId: s.buyer.people.admin.id,

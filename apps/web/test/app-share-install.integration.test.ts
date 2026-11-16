@@ -40,7 +40,6 @@ test.skipIf(!db)("an owner or admin installs from a link and approves what was s
     await installs.installShared(s.buyer.actor("admin"), token, 1);
     expect(await s.installation(s.buyer.id)).toMatchObject({
       installedByUserId: s.buyer.people.admin.id,
-      agentAccess: "all",
       approvedGroups: ["workspace"],
       approvedRevision: 1,
     });

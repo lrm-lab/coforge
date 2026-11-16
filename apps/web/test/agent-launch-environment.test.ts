@@ -275,7 +275,7 @@ test("the launch identity names the apps installed in the Agent's Workspace, and
     secretRotatedAt: null,
     createdAt: new Date(0),
     updatedAt: new Date(0),
-    installations: [{ agentAccess: "all", agents: [] }],
+    installations: [{}],
   });
   // The test above leaves an environment that no longer decrypts.
   runtimeConfig = { ...runtimeConfig, environment: undefined };

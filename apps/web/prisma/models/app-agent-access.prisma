@@ -61,16 +61,3 @@ model AppAgentAccessRequest {
   @@index([decidedByUserId])
   @@map("app_agent_access_requests")
 }
-
-/// Kept for rolling compatibility until a later release drops it: nothing reads or writes the
-/// Selected Agents rows since the mode was removed (task #436).
-model AppInstallationAgent {
-  installationId String          @db.Uuid
-  agentId        String          @db.Uuid
-  installation   AppInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
-  agent          Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
-  @@id([installationId, agentId])
-  @@index([agentId])
-  @@map("app_installation_agents")
-}

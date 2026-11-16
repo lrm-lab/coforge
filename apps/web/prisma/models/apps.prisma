@@ -116,15 +116,11 @@ model AppInstallation {
   /// When the app first reported that revision complete; set and cleared with `setupCompletedRevision`
   /// (`app_installations_setup_completion_check`).
   setupCompletedAt  DateTime?
-  /// Every Agent may use the app; the `selected` mode was removed (task #436) and the column stays
-  /// for rolling compatibility until a later release drops it (`app_installations_agent_access_check`).
-  agentAccess       String    @default("all")
   createdAt         DateTime  @default(now())
   app               App       @relation(fields: [appId], references: [id], onDelete: Cascade)
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   installedBy       User?     @relation("AppInstallationInstalledBy", fields: [installedByUserId], references: [id], onDelete: SetNull)
   approvedBy        User?     @relation("AppInstallationApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
-  agents            AppInstallationAgent[]
   webhookStatus     AppInstallationWebhookStatus?
   bot               AppInstallationBot?
 
