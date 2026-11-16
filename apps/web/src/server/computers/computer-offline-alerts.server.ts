@@ -29,6 +29,10 @@ const EPISODE_KEY_PREFIX = "coforge:computer-offline:v1:";
 const EPISODE_INDEX_KEY = `${EPISODE_KEY_PREFIX}index`;
 const ALERT_CLAIM_PREFIX = "coforge:computer-offline-alert:v1:";
 const EPISODE_BATCH_LIMIT = 200;
+// A claim outlives the send it guards, so a process that dies between claiming and finishing
+// cannot hold the episode forever: after this the next tick claims it again. It must stay well
+// above the longest a send can take.
+const ALERT_CLAIM_TTL_MS = 10 * 60_000;
 
 /**
  * The episode marker and the index that names it move in one script, so a report can never leave
@@ -240,7 +244,8 @@ export async function notifyComputerOfflineAlert(
  * Computers whose offline episode is at least `COMPUTER_OFFLINE_ALERT_AFTER_MS` old, checks the
  * live status keys still agree the Computer is down (a marker can outlive its episode), resolves
  * where the owner can be told (the earliest binding whose Workspace still has them), and sends
- * one assistant DM. A failed send releases its claim so the next tick retries; an episode whose
+ * one assistant DM. A failed send releases its claim so the next tick retries, and the claim
+ * itself expires so a process lost mid-send cannot hold the episode; an episode whose
  * owner has no eligible Workspace, whose Computer is gone or already back online consumes itself
  * without a message. Inert while `possible()` is false; like `PresenceSweep` it never rejects.
  */
@@ -255,6 +260,7 @@ export class ComputerOfflineAlertSweep {
   private readonly stillOnline: (computerId: string) => Promise<boolean>;
   private readonly notify: (input: ComputerOfflineAlertNotice) => Promise<void>;
   private readonly nowMs: () => Promise<number>;
+  private readonly claimTtlMs: number;
 
   constructor(options: {
     redis: () => ComputerOfflineRedis;
@@ -266,6 +272,7 @@ export class ComputerOfflineAlertSweep {
     db?: () => PrismaClient | undefined;
     instanceId?: string;
     now?: () => number;
+    claimTtlMs?: number;
   }) {
     this.redis = options.redis;
     this.lock = options.lock;
@@ -317,6 +324,7 @@ export class ComputerOfflineAlertSweep {
     this.nowMs = now
       ? async () => now()
       : async () => Number(await redis().eval(`${REDIS_NOW_MS_LUA}return now_ms`, 0));
+    this.claimTtlMs = options.claimTtlMs ?? ALERT_CLAIM_TTL_MS;
   }
 
   start(): void {
@@ -380,7 +388,11 @@ export class ComputerOfflineAlertSweep {
     }
     if (nowMs - offlineAtMs < COMPUTER_OFFLINE_ALERT_AFTER_MS) return;
     const claimKey = alertClaimKey(computerId, offlineAtMs);
-    if ((await this.redis().send("SET", [claimKey, "1", "NX"])) === null) return;
+    if (
+      (await this.redis().send("SET", [claimKey, "1", "NX", "PX", String(this.claimTtlMs)])) ===
+      null
+    )
+      return;
     try {
       if (await this.stillOnline(computerId)) {
         await this.endEpisode(computerId, marker, claimKey);
