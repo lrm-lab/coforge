@@ -123,6 +123,9 @@ const bridge = bridgeFor(frame, { displayName: "Lin Xia", kind: "person" }, "adm
 });
 hooks.__decide = (allowed: boolean) => decide?.(allowed);
 hooks.__bridge = bridge;
+const annotations: unknown[] = [];
+bridge.annotations.listen((event) => annotations.push(event));
+hooks.__annotations = annotations;
 frame.src = params.get("src") ?? "about:blank";
 
 const second = document.getElementById("f2") as HTMLIFrameElement | null;

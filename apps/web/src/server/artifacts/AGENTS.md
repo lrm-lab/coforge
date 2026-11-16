@@ -86,6 +86,17 @@ The artifacts module follows the reference product, Raft; add nothing it does no
 - A page reader's access is checked on the ticket and on each page document; a subresource serves
   under its file token until the token expires. Do not widen who can read in this module; call
   `ArtifactReads` as it is.
+- The runtime's annotation layer (`artifact-page-annotate-runtime.server.ts`, locating anchors in
+  `artifact-page-annotate-locate-runtime.server.ts`) draws in an overlay
+  element of its own (a layer apart from find) and never changes the page's own nodes; it answers the
+  host's `coforge/annotate/*` messages only from the host window and origin. The page shares the
+  frame, so none of this is a boundary against the page: it can read or patch the overlay and post
+  what it likes to the host, which treats everything from the frame as untrusted. Its quote logic is
+  generated from `features/artifacts/artifact-text-anchor.ts` (`createTextAnchors`, one source;
+  `artifact-page-annotate-text.test.ts` smoke-tests the generated snippet). The `coforge` object
+  offers no annotate method.
+  The Vite dev server answers a script request for `/_coforge/runtime.js` with its own 404, so a
+  browser e2e that needs the runtime in the real app runs against a built Web (as CI does).
 - Known gaps, pinned in `test/artifact-sandbox-browser.e2e.ts`: resource hints still reach out, and
   so does a WebRTC constructor taken from an `about:blank` frame the page makes: every HTML
   document carries `webrtc 'block'` (the frame inherits it) and the runtime removes the page's own

@@ -1,3 +1,9 @@
+import {
+  ANNOTATE_LOCATE_SOURCE,
+  ANNOTATE_TEXT_SOURCE,
+} from "./artifact-page-annotate-locate-runtime.server";
+import { ANNOTATE_DOM_SOURCE } from "./artifact-page-annotate-runtime.server";
+
 export const PAGE_RUNTIME_PATH = "/_coforge/runtime.js";
 
 const RUNTIME_SOURCE = `(function () {
@@ -40,6 +46,7 @@ function applyTheme(theme) {
 }
 var overlay = null;
 var shadow = null;
+var layers = {};
 var ranges = [];
 var activeIndex = 0;
 var findQuery = "";
@@ -51,6 +58,13 @@ function overlayRoot() {
     document.documentElement.appendChild(overlay);
   }
   return shadow;
+}
+function layer(name) {
+  if (!layers[name]) {
+    layers[name] = document.createElement("div");
+    overlayRoot().appendChild(layers[name]);
+  }
+  return layers[name];
 }
 function collectRanges(query) {
   var found = [];
@@ -75,7 +89,7 @@ function collectRanges(query) {
   return found;
 }
 function drawMatches() {
-  var root = overlayRoot();
+  var root = layer("find");
   root.textContent = "";
   ranges.forEach(function (range, index) {
     var current = index === activeIndex;
@@ -111,7 +125,7 @@ function find(params) {
 window.addEventListener("resize", function () {
   if (ranges.length) drawMatches();
 });
-var offer = null;
+${ANNOTATE_TEXT_SOURCE}${ANNOTATE_DOM_SOURCE}${ANNOTATE_LOCATE_SOURCE}var offer = null;
 var handshake = null;
 function connect() {
   if (!framed) return Promise.resolve(null);
@@ -212,6 +226,8 @@ if (framed) {
       applyTheme(message.params && message.params.theme);
     } else if (message.method === "coforge/find") {
       find(message.params);
+    } else if (annotateMessage(message.method, message.params)) {
+      return;
     } else if (message.method === "coforge/watch" && message.params) {
       var watcher = watchers.get(message.params.id);
       if (watcher) {
@@ -240,10 +256,12 @@ if (framed) {
     scheduled = true;
     requestAnimationFrame(function () {
       scheduled = false;
+      scheduleRelocate();
       post({ method: "ui/notifications/size-changed", params: { width: Math.ceil(document.documentElement.scrollWidth), height: Math.ceil(document.documentElement.scrollHeight) } });
     });
   });
   observer.observe(document.documentElement);
+  startAnnotations();
   connect();
 }
 })();

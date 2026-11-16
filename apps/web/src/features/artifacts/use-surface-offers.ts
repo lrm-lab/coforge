@@ -15,6 +15,7 @@ export type OfferInput<Index> = {
 export type Offer = {
   offered: AnchorDraft | null;
   paintOffer: boolean;
+  autoCompose?: boolean;
   onDismiss: () => void;
   onContentClick?: (event: MouseEvent) => void;
 };

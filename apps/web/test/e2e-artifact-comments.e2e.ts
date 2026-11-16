@@ -76,7 +76,8 @@ test("people comment on an artifact, see each other live, resolve, and use the p
     await browser("open", `${proxy.origin}/en/w/${workspace.slug}/artifacts/${artifact.id}`);
     await waitFor(`${pageHydrated} && document.querySelector("main") != null`, 60_000);
 
-    await browser("find", "role", "button", "click", "--name", "Comment on this artifact");
+    await browser("find", "role", "button", "click", "--name", "Comment options");
+    await browser("find", "role", "menuitem", "click", "--name", "All comments");
     await waitFor(`document.querySelector('aside[aria-label="Comments"]') != null`);
     await waitFor(text("No comments yet"));
     await shoot("1-empty-panel");

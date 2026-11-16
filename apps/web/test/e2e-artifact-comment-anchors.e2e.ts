@@ -111,6 +111,8 @@ test("people comment on a selection and on lines; markers show beside the text; 
     await waitFor(`${pageHydrated} && document.querySelector(".ProseMirror") != null`, 60_000);
 
     await click("button[aria-pressed]");
+    await browser("find", "role", "button", "click", "--name", "Comment options");
+    await browser("find", "role", "menuitem", "click", "--name", "All comments");
     await waitFor(`document.querySelector("aside") != null`);
     await shoot("32-markdown-comment-mode");
     await select(quoted);

@@ -6,14 +6,18 @@ export const COMMENT_DRAFT_HIGHLIGHT = "artifact-comment-draft";
 
 export type AnchorLocation = { range: Range; element: Element; order: number };
 
-export type AnchorPlace =
-  | { status: "found"; location: AnchorLocation }
+export type Place<Location extends { order: number }> =
+  | { status: "found"; location: Location }
   | { status: "changed" | "neutral" };
+
+export type PublishedPlace = Place<{ order: number }>;
+
+export type AnchorPlace = Place<AnchorLocation>;
 
 export type AnchorStatus = AnchorPlace["status"] | "missing";
 
-export const CHANGED: AnchorPlace = { status: "changed" };
-export const NEUTRAL: AnchorPlace = { status: "neutral" };
+export const CHANGED = { status: "changed" } as const;
+export const NEUTRAL = { status: "neutral" } as const;
 
 export type DraftTarget = {
   rect: AffordanceRect;

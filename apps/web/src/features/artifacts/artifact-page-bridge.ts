@@ -12,6 +12,7 @@ import {
   type PageDataPort,
   type Params,
 } from "./artifact-page-bridge-core";
+import { createAnnotationChannel } from "./artifact-page-bridge-annotate";
 import { createAssetCalls } from "./artifact-page-bridge-assets";
 import { createDataCalls } from "./artifact-page-bridge-data";
 import {
@@ -22,6 +23,7 @@ import {
 } from "./artifact-page-levels";
 
 export { PageHostError } from "./artifact-page-bridge-core";
+export type { PageAnnotationEvent } from "./artifact-page-bridge-annotate";
 export type {
   PageAssetsPort,
   PageConfirm,
@@ -66,6 +68,8 @@ export const BRIDGE_DATA_RATE_LIMIT_PER_MINUTE = 600;
 export const BRIDGE_DECLINES_BEFORE_MUTE = 3;
 export const BRIDGE_ERROR_REPORTS = 5;
 
+export type PageBridge = ReturnType<typeof createPageBridge>;
+
 export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
   const hits = new Map<string, number[]>();
   const declines = new Map<ConfirmGate, number>();
@@ -78,9 +82,10 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
   const admit = (key: string) => {
     const now = host.now();
     const recent = (hits.get(key) ?? []).filter((at) => now - at < 60_000);
-    const limit = key.startsWith("db.")
-      ? BRIDGE_DATA_RATE_LIMIT_PER_MINUTE
-      : BRIDGE_RATE_LIMIT_PER_MINUTE;
+    const limit =
+      key.startsWith("db.") || key.startsWith("annotate.")
+        ? BRIDGE_DATA_RATE_LIMIT_PER_MINUTE
+        : BRIDGE_RATE_LIMIT_PER_MINUTE;
     if (recent.length >= limit) {
       hits.set(key, recent);
       throw new BridgeRefusal(REFUSED, "Too many requests");
@@ -109,6 +114,8 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
     host.openLink(url);
     return {};
   };
+
+  const annotations = createAnnotationChannel(send, () => host.userActive());
 
   const kit: BridgeKit = {
     level: host.level,
@@ -149,6 +156,8 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
   const request = async (method: string, params: Params): Promise<unknown> => {
     switch (method) {
       case "ui/initialize":
+        admit("ui/initialize");
+        annotations.handshake();
         return {
           protocolVersion: BRIDGE_PROTOCOL_VERSION,
           hostInfo: { name: "coforge", version: "1" },
@@ -166,7 +175,24 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
   };
 
   const notify = (method: string, params: Params) => {
+    if (method.startsWith("coforge/notifications/annotate-")) {
+      try {
+        admit("annotate.notify");
+      } catch {
+        return;
+      }
+      annotations.notify(method, params);
+      return;
+    }
     switch (method) {
+      case "ui/notifications/initialized":
+        try {
+          admit("ui/notifications/initialized");
+        } catch {
+          return;
+        }
+        annotations.ready();
+        return;
       case "coforge/notifications/error":
         if (errorReports < BRIDGE_ERROR_REPORTS && typeof params.message === "string") {
           errorReports += 1;
@@ -223,6 +249,13 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
     },
     find(params: { query: string; step: number }) {
       send({ method: "coforge/find", params });
+    },
+    annotations: {
+      listen: annotations.listen,
+      configure: annotations.configure,
+      setMarks: annotations.setMarks,
+      setDraft: annotations.setDraft,
+      focus: annotations.focus,
     },
   };
 }

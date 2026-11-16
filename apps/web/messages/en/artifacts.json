@@ -286,5 +286,28 @@
       }
     }
   ],
-  "av_cm_select_line": "Select line {line}"
+  "av_cm_select_line": "Select line {line}",
+  "av_cm_page_tools": "Page comment tools",
+  "av_cm_pick_failed": "Can't comment on that element. Try another, or select its text.",
+  "av_cm_pick_element": "Pick an element",
+  "av_cm_mark_label": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} comment on “{quote}”",
+        "countPlural=other": "{count} comments on “{quote}”"
+      }
+    }
+  ],
+  "av_cm_mark_unnamed": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} comment",
+        "countPlural=other": "{count} comments"
+      }
+    }
+  ]
 }

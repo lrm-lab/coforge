@@ -206,3 +206,33 @@ export const hintsPage = (
 ): string => `<!doctype html><link rel="preconnect" href="${tcp}"><link rel="dns-prefetch" href="${tcp}"><script>
 for (const rel of ["preconnect", "dns-prefetch"]) { const l = document.createElement("link"); l.rel = rel; l.href = ${JSON.stringify(tcp)}; document.head.append(l); }
 </script><p>hints</p>`;
+
+export const annotatePage = (): string => `<!doctype html><html><head><title>annotate</title>
+<style>body{margin:0;font:16px sans-serif;height:3000px}main>*{position:absolute;margin:0}</style></head><body>
+<main>
+<h1 id="title" style="left:20px;top:20px">Launch plan</h1>
+<p style="left:20px;top:80px">Ship the beta  on Friday.
+   Pricing is open for review.</p>
+<ul id="list" style="left:20px;top:160px;padding:0;list-style:none"><li>One</li><li>Two</li><li>Three</li></ul>
+<button data-testid="buy" style="left:20px;top:300px">Buy now</button>
+<span id="a:b" style="left:20px;top:360px">Odd id</span>
+<div style="left:20px;top:2000px">Far below the fold</div>
+</main>
+<script>
+const post = (data) => top.postMessage({ page: "annotate", ...data }, "*");
+const at = (selector) => { const r = document.querySelector(selector).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, right: r.right, top: r.top + scrollY }; };
+const rects = () => ({ title: at("#title"), intro: at("main > p"), second: at("#list li:nth-child(2)"), buy: at("button"), odd: at("main > span"), far: at("main > div:last-child") });
+addEventListener("scroll", () => post({ scrollY }));
+addEventListener("load", () => post({ ready: true, rects: rects() }));
+const FORGED_ROUNDS = 5;
+const forgedPick = { jsonrpc: "2.0", method: "coforge/notifications/annotate-selected", params: { type: "element", data: { selector: "h1", quote: "forged" }, rect: { top: 0, right: 1, bottom: 1, left: 0, width: 1, height: 1 } } };
+const forgedActivation = { jsonrpc: "2.0", method: "coforge/notifications/annotate-activated", params: { id: "nope" } };
+const forge = (tag) => {
+  for (let round = 0; round < FORGED_ROUNDS; round += 1) {
+    parent.postMessage(forgedPick, "*");
+    parent.postMessage(forgedActivation, "*");
+  }
+  parent.postMessage({ jsonrpc: "2.0", method: "coforge/notifications/error", params: { message: "forged:" + tag } }, "*");
+};
+addEventListener("message", (event) => { if (event.data && typeof event.data.forge === "string") forge(event.data.forge); });
+</script></body></html>`;

@@ -284,5 +284,28 @@
       }
     }
   ],
-  "av_cm_select_line": "选择第 {line} 行"
+  "av_cm_select_line": "选择第 {line} 行",
+  "av_cm_page_tools": "页面批注工具",
+  "av_cm_pick_failed": "无法对该元素添加评论。请换一个元素，或选中其中的文字。",
+  "av_cm_pick_element": "点选页面元素",
+  "av_cm_mark_label": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "“{quote}” 上的 {count} 条评论",
+        "countPlural=other": "“{quote}” 上的 {count} 条评论"
+      }
+    }
+  ],
+  "av_cm_mark_unnamed": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} 条评论",
+        "countPlural=other": "{count} 条评论"
+      }
+    }
+  ]
 }

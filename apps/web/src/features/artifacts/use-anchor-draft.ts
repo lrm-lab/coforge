@@ -4,17 +4,29 @@ import { selectionAffordancePlacement } from "#src/features/conversations/messag
 import type { AnchorDraft } from "./artifact-anchor-places";
 
 export const POPOVER_WIDTH_PX = 352;
+export const POPOVER_HEIGHT_PX = 280;
+export const OFFER_WIDTH_PX = 144;
+export const OFFER_HEIGHT_PX = 40;
+const EDGE_PX = 8;
 
-export type PlacedDraft = { draft: AnchorDraft; top: number; left: number };
+export const clampWithin = (value: number, size: number, extent: number) =>
+  Math.max(EDGE_PX, Math.min(value, size - extent - EDGE_PX));
+
+export type PlacedDraft = {
+  draft: AnchorDraft;
+  top: number;
+  left: number;
+  bounds: { width: number; height: number };
+};
+
+export type AnchorDraftState = ReturnType<typeof useAnchorDraft>;
+
+const EMPTY_BOX = { top: 0, right: 0, bottom: 0, left: 0, width: 0, height: 0 };
 
 const placed = (draft: AnchorDraft, frame: Element | null): PlacedDraft => {
-  const { top, left } = selectionAffordancePlacement(
-    draft.target.rect,
-    frame?.getBoundingClientRect() ?? { top: 0, right: 0, bottom: 0, left: 0, width: 0, height: 0 },
-    undefined,
-    "below",
-  );
-  return { draft, top, left };
+  const box = frame?.getBoundingClientRect() ?? EMPTY_BOX;
+  const { top, left } = selectionAffordancePlacement(draft.target.rect, box, undefined, "below");
+  return { draft, top, left, bounds: { width: box.width, height: box.height } };
 };
 
 export function useAnchorDraft({
@@ -22,20 +34,27 @@ export function useAnchorDraft({
   offered,
   frame,
   paintOffer,
+  autoCompose = false,
   onDismiss,
 }: {
   key: string | null;
   offered: AnchorDraft | null;
   frame: RefObject<Element | null>;
   paintOffer: boolean;
+  autoCompose?: boolean;
   onDismiss: () => void;
 }) {
   const [composingState, setComposing] = useState<{ key: string; draft: PlacedDraft } | null>(null);
+  const [placedOffer, setPlacedOffer] = useState<PlacedDraft | null>(null);
   const composing = composingState && composingState.key === key ? composingState.draft : null;
   const offer = useMemo(
-    () => (offered && !composing ? placed(offered, frame.current) : null),
-    [offered, composing, frame],
+    () => (placedOffer && placedOffer.draft === offered && !composing ? placedOffer : null),
+    [placedOffer, offered, composing],
   );
+
+  useEffect(() => {
+    setPlacedOffer(offered ? placed(offered, frame.current) : null);
+  }, [offered, frame]);
 
   useEffect(() => {
     if (composingState && composingState.key !== key) setComposing(null);
@@ -54,6 +73,10 @@ export function useAnchorDraft({
     setComposing(null);
     onDismiss();
   }, [onDismiss]);
+
+  useEffect(() => {
+    if (autoCompose) compose();
+  }, [autoCompose, compose]);
 
   return { offer, composing, compose, close };
 }

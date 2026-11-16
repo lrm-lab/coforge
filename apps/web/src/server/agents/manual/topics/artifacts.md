@@ -68,6 +68,14 @@ const who = user && (await user.get()); // { displayName, kind: "person" }
   address and the reader decides; a page whose requests are declined three times is muted.
 - `comments.open({ body })` asks CoForge to open the comment box, with `body` filled in when
   given. A button for a decision can prefill its answer this way.
+- People comment on an element or a text selection of the page without any call from it: CoForge
+  drives that itself, over the same channel, while the reader has comment mode on. The page cannot
+  start the picker, read the comments, or send a comment for the reader. It does choose what it
+  reports as picked or selected, so the reader always sees the element's label or the quoted text in
+  the comment box before sending, and nothing is posted unless the reader sends it. A page
+  sees the count of comments and the page's own text each one anchors to, never who wrote them or
+  what they say. Keep elements findable across versions: give the ones people will comment on a
+  stable `id` or `data-testid`.
 
 - `db` is a store of JSON documents everyone who sees the page shares: `get(collection, id)`,
   `query(collection, { where, orderBy, limit, after })`, `watch(collection, query, onChange)`,

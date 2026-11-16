@@ -2,6 +2,8 @@ import { Button as AriaButton } from "react-aria-components";
 
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { ELEMENT_LABEL_MAX } from "./artifact-page-annotations";
+import { clip } from "./artifact-text-anchor";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import { anchorStatus, useArtifactCommenting, useCommentPlaces } from "./artifact-commenting";
 
@@ -24,7 +26,7 @@ export function describeAnchor(anchor: CommentAnchor | null): AnchorDescription 
         typeof data.quote === "string" && data.quote
           ? data.quote
           : typeof data.selector === "string"
-            ? data.selector
+            ? clip(data.selector, ELEMENT_LABEL_MAX)
             : undefined,
     };
   return {};

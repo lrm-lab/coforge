@@ -24,7 +24,6 @@ export function ArtifactCommentPanel({
   artifactId,
   shownVersion,
   openPath,
-  focusRequest,
   list,
   groups,
   onClose,
@@ -32,7 +31,6 @@ export function ArtifactCommentPanel({
   artifactId: string;
   shownVersion: number;
   openPath: string | null;
-  focusRequest: number;
   list: ReturnType<typeof useArtifactComments>;
   groups: CommentGroups;
   onClose: () => void;
@@ -164,7 +162,6 @@ export function ArtifactCommentPanel({
       <ArtifactCommentComposer
         artifactId={artifactId}
         target={composerTarget}
-        focusRequest={focusRequest}
         onPosted={() => setReplyTo(null)}
       />
     </ArtifactSidePanel>

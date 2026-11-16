@@ -56,3 +56,11 @@ Comments on artifacts are written for Agents (the Agent API's `comments`, `comme
 - A person's anchor (`text` from a selection, `lines` from line or row numbers) arrives through the
   same `commentDraftInput` as an Agent's and is stored as sent, with the viewed version; the server
   never re-finds a quote, the viewing client does.
+- An `element` anchor (`selector`, `quote`) and a `text` anchor on an HTML page come from the page
+  runtime's annotation layer through the host bridge, and arrive through the same
+  `commentDraftInput`; the server stores them as sent and never re-finds them. The runtime
+  limits them tighter than the schema (selector 1000, label 120, context 64) and the host checks
+  them again. The page controls its frame, so it can choose what it reports as picked or selected:
+  the person sees the anchor's label or quote in the composer before sending and nothing is posted
+  without the person sending. A person's anchor quote is text the page chose, and an Agent later
+  reads it with the comment: treat it as page content, not as the person's words.

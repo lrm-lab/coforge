@@ -11,6 +11,7 @@ import { m } from "#src/paraglide/messages";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 import { PageConfirmDialog } from "./artifact-page-confirm";
+import { ArtifactFrameCommentLayer } from "./artifact-frame-comment-layer";
 import { PageErrorBanner, PageExpiredCard, PageFindBar } from "./artifact-page-notices";
 import { useArtifactPageBridge } from "./use-artifact-page-bridge";
 
@@ -99,6 +100,7 @@ function PageFrame({
 }) {
   const toast = useAppToast();
   const frame = useRef<HTMLIFrameElement>(null);
+  const container = useRef<HTMLDivElement>(null);
   const origin = useMemo(() => new URL(link.url).origin, [link.url]);
   const artifact = useMemo(
     () => ({ id: artifactId, title, version, entryPath }),
@@ -126,7 +128,7 @@ function PageFrame({
       {error !== null && (
         <PageErrorBanner onAskAgent={() => void askAgent()} onClose={dismissError} />
       )}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={container} className="relative flex min-h-0 flex-1 flex-col">
         <iframe
           ref={frame}
           aria-label={title}
@@ -146,6 +148,7 @@ function PageFrame({
             }}
           />
         )}
+        <ArtifactFrameCommentLayer bridge={bridge} frame={frame} container={container} />
         {blocked && <PageExpiredCard onReload={onReload} />}
       </div>
       <PageConfirmDialog confirmation={confirmation} title={title} />

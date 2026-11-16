@@ -1,12 +1,12 @@
 import { createContext, useContext } from "react";
 
-import type { AnchorPlace, AnchorStatus } from "./artifact-anchor-places";
+import type { AnchorStatus, PublishedPlace } from "./artifact-anchor-places";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import type { CommentThread } from "./artifact-comment-threads";
 
 export type CommentTarget = { path: string; anchor: CommentAnchor | null };
 
-export type ThreadPlaces = ReadonlyMap<string, AnchorPlace>;
+export type ThreadPlaces = ReadonlyMap<string, PublishedPlace>;
 
 export type ArtifactCommenting = {
   artifactId: string;

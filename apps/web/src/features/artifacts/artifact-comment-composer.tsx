@@ -91,13 +91,13 @@ const placement = (target: ComposerTarget) => {
 export function ArtifactCommentComposer({
   artifactId,
   target,
-  focusRequest,
+  focusRequest = 0,
   className,
   onPosted,
 }: {
   artifactId: string;
   target: ComposerTarget;
-  focusRequest: number;
+  focusRequest?: number;
   className?: string;
   onPosted: () => void;
 }) {

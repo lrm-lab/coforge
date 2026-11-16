@@ -34,6 +34,7 @@ import {
   type CommentTarget,
   type PublishedPlaces,
 } from "./artifact-commenting";
+import { isFrameAnchor } from "./artifact-page-annotations";
 import { groupThreads } from "./artifact-comment-threads";
 import { useArtifactComments, syncCommentsChange } from "./artifact-comment-queries";
 import { useCommentHandoff } from "./use-comment-handoff";
@@ -189,9 +190,10 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   );
   const revealThread = useCallback<ArtifactCommenting["revealThread"]>(
     (target) => {
-      const framed = webPage && target.path === entryPath;
-      setOpenPath(target.path === entryPath && !webPage ? null : target.path);
-      if (!framed) postReveal(target);
+      const framed = webPage && target.path === entryPath && isFrameAnchor(target.anchor);
+      setOpenPath(framed || (target.path === entryPath && !webPage) ? null : target.path);
+      if (framed || !webPage || target.path !== entryPath || target.anchor?.type === "lines")
+        postReveal(target);
     },
     [entryPath, webPage, postReveal],
   );
@@ -379,7 +381,6 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
                   artifactId={artifactId}
                   shownVersion={shownVersion}
                   openPath={openPath}
-                  focusRequest={commentMode.focusRequest}
                   list={list}
                   groups={groups}
                   onClose={commentMode.closePanel}

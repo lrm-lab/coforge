@@ -59,17 +59,47 @@ These rules apply to `src/features/artifacts/`. They extend
   the shown cap: the place shows without a warning).
 - A draft is one machine (`useAnchorDraft`: offered, composing, close) keyed by file and version;
   switching either discards it. Its target is `{ rect, highlight }`, never a `Range`, so the element
-  picker can anchor into a sandbox frame through the same machine. A line selection is derived from
+  picker can anchor into a sandbox frame through the same machine. `DraftAffordance` is the one
+  offer button and popover (file surface and frame layer alike); a rect never places either outside
+  the container's box (`clampWithin`, measured in an effect when the offer is placed, not in render). A line selection is derived from
   one state and one delegated click on `data-anchor-select`; the selection is painted by the draft
   highlight, not per row. The comment list query lives once in the page; reveal and panel focus are
   consume-once handoffs (`useCommentHandoff`): one is dropped when a newer one replaces it or its file or comment mode moves away, and a reveal is consumed only once the surface has located it against a settled index (`useSurfaceIndex.settled`), so a partial render does not spend it. Stable
   values, the thread list, the handoffs and the places are separate contexts
   (`artifact-commenting.ts`). The composer's target is one union (`ComposerTarget`).
 - Comment mode (the header toggle) is separate from the panel and its transitions live in
-  `useCommentMode`: the toggle turns the mode on and opens the panel, or turns it off and closes the
-  comments panel; closing the panel keeps the mode; "all comments" opens the panel only. Everything
+  `useCommentMode`: the toggle turns the mode on or off and never opens or closes the panel;
+  "all comments" (the chevron) and a marker or thread link open the panel; closing the panel keeps
+  the mode. Everything
   is drawn beside the content (the observed content node is never touched); highlights use the CSS
   Custom Highlight API (`lib/css-highlight.ts`). The text index skips `data-anchor-chrome` widgets
   (the code block's toolbar and previews), so a quote is what the reader sees; a quote shorter than
-  12 characters is found only where some context still matches. An HTML page's frame is never asked
-  for a selection.
+  12 characters is found only where some context still matches.
+- Comments on an HTML page go through the bridge's annotation channel
+  (`artifact-page-bridge-annotate.ts`); the host never touches the page's DOM. Host to frame:
+  `coforge/annotate/mode`, `marks`, `focus`, `draft`. Frame to host:
+  `coforge/notifications/annotate-selected|unselected|cancelled|found|activated` (and an
+  `annotate-mode` acknowledgement the host ignores). The host keeps a gate as a filter: an `element`
+  anchor is accepted once, only while a pick is open and the viewer is active; a `text` anchor only
+  in comment mode and not while picking; `found` and `activated` name only ids the host sent, for the
+  current marks revision; `ui/initialize` closes a pick and `ui/notifications/initialized` replays
+  mode, marks and draft (both rate limited; a replay sends anchors clipped to the incoming limits).
+  Everything arriving is validated again (`parsePicked`) with the anchor limits (selector 1000,
+  label 120, quote 4000, context 64).
+- The boundary is the person, not the gate. The page controls its frame, so the host cannot tell the
+  runtime's pick from one the page forges (the activation gate only filters: picking starts on with
+  comment mode, so a page can time a forgery right after the person turns comment mode on or presses
+  "pick element"). A page can therefore choose what it
+  reports as picked or selected. What holds: the composer always shows the anchor's label or quote
+  (an element anchor with no label shows its selector, truncated) before the person sends, nothing
+  is posted without the person sending, a page cannot start picking, read comments, or send one,
+  and what the frame is sent is only ids, anchors, counts and labels built from its own text.
+- Host state for a frame: `use-frame-offer.ts` (comment mode starts with picking on; the pill
+  toggles it; text selection is offered when picking is off; an element pick composes at once
+  through the offer's `autoCompose`; a pick the page cannot anchor ends with a message),
+  `use-frame-marks.ts` (marks, found keyed by the revision the bridge echoes, places through
+  `publishPlaces`, reveal; `activated` is ignored while a composer is open) and
+  `artifact-frame-comment-layer.tsx`. Reports are provisional until the runtime reports after the
+  page's load; marks past the 500 cap are never placed and read as neutral; an element that is gone
+  is "changed". `revealThread` for an `element` or `text` anchor on a framed entry focuses the mark
+  and leaves the page open; a `lines` anchor opens the source view.
