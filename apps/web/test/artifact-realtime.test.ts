@@ -6,7 +6,6 @@ const event = {
   workspaceId: "w1",
   artifactId: "a1",
   number: 3,
-  publisher: { agentId: "agent-1" },
 } as const;
 
 test("a page reads a version announcement, and nothing else as one", () => {
@@ -19,5 +18,8 @@ test("a page reads a version announcement, and nothing else as one", () => {
     decodeArtifactVersionPublishedEvent({ ...event, type: "task.changed.v1" }),
   ).toBeUndefined();
   expect(decodeArtifactVersionPublishedEvent({ ...event, number: 0 })).toBeUndefined();
-  expect(decodeArtifactVersionPublishedEvent({ ...event, publisher: {} })).toBeUndefined();
+  // An announcement names no publisher; one still carrying the field decodes without it.
+  expect(
+    decodeArtifactVersionPublishedEvent({ ...event, publisher: { agentId: "agent-1" } }),
+  ).toEqual(event);
 });
