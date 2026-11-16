@@ -1,9 +1,10 @@
-import { useEffect, useEffectEvent, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useEffectEvent, useState, type MouseEvent } from "react";
 import { ChevronLeft, ChevronRight, Download01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Empty, EmptyTitle } from "#src/components/ui/empty";
+import { useShortcuts } from "#src/hooks/use-shortcuts";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { takesComments } from "./attachment-preview-kind";
@@ -34,28 +35,6 @@ export type LightboxImage = {
  */
 function keepFocusInside(arrow: HTMLElement) {
   arrow.closest<HTMLElement>('[role="dialog"]')?.focus();
-}
-
-/** Left and right arrow keys step through the images while the lightbox is open (mounted), except
- * in a text field (the comment being written), where they move the caret. */
-function ArrowKeys({ onStep }: { onStep: (delta: -1 | 1) => void }) {
-  const latest = useRef(onStep);
-  latest.current = onStep;
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing) return;
-      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable]")) return;
-      if (event.key === "ArrowLeft") latest.current(-1);
-      else if (event.key === "ArrowRight") latest.current(1);
-      else return;
-      event.preventDefault();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-  return null;
 }
 
 /**
@@ -150,9 +129,17 @@ function LightboxContent({
     const next = index + delta;
     if (next >= 0 && next < images.length) onIndexChange?.(next);
   };
+  // Left and right step through the images, except in a text field (the comment being written),
+  // where they move the caret.
+  useShortcuts(
+    [
+      { hotkey: "ArrowLeft", take: () => (step(-1), true) },
+      { hotkey: "ArrowRight", take: () => (step(1), true) },
+    ],
+    { enabled: paged },
+  );
   return (
     <>
-      {paged && <ArrowKeys onStep={step} />}
       <div className="flex h-14 shrink-0 items-center gap-1 border-b border-secondary bg-primary pr-2 pl-4">
         <ReviewTitle fileName={image.fileName} contentType={image.contentType} />
         {paged && (

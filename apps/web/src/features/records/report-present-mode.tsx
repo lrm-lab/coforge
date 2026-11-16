@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, XClose as X } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useShortcuts } from "#src/hooks/use-shortcuts";
 import { m } from "#src/paraglide/messages";
 import { ReportSectionEditor } from "./report-editor/report-section-editor";
 import { isReportImageZoomOpen } from "./report-image-zoom";
@@ -53,28 +54,25 @@ export function ReportPresentMode({
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKey = (event: KeyboardEvent) => {
-      if (isReportImageZoomOpen()) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose(indexRef.current);
-        return;
-      }
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        turnPageRef.current(-1);
-      }
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        turnPageRef.current(1);
-      }
-    };
-    window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, pages.length]);
+  }, []);
+  // Esc closes, the arrows turn the page, wherever focus was left behind the overlay; an image
+  // zoomed over the page keeps them (its own Esc, its scroll).
+  const presentKey = (take: () => void) => () => {
+    if (isReportImageZoomOpen()) return false;
+    take();
+    return true;
+  };
+  useShortcuts(
+    [
+      { hotkey: "Escape", take: presentKey(() => onClose(indexRef.current)) },
+      { hotkey: "ArrowLeft", take: presentKey(() => turnPage(-1)) },
+      { hotkey: "ArrowRight", take: presentKey(() => turnPage(1)) },
+    ],
+    { ignoreInputs: false, target: "window" },
+  );
 
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;

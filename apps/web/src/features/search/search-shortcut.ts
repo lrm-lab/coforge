@@ -1,36 +1,31 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useState } from "react";
 
+import { useShortcuts } from "#src/hooks/use-shortcuts";
 import { isApplePlatform } from "#src/lib/platform";
 
 /** Asks the open search dialog to put the caret back in its box. */
 export const SEARCH_FOCUS_EVENT = "coforge:search-focus";
 
 /**
- * Cmd+K on Apple platforms, Ctrl+K elsewhere; no other modifier. The key that types "k" counts;
- * only on a layout whose keys type no Latin letters does the physical K key stand in, so Dvorak's
- * Cmd+T or Colemak's Cmd+E are never taken. A held key, input-method composition, or a key
- * another handler already took is left alone.
+ * Cmd+K on Apple platforms, Ctrl+K elsewhere, from anywhere in the app, even while typing; no
+ * other modifier. A held key, input-method composition, or a key another handler already took is
+ * left alone.
  */
-function isSearchShortcut(event: KeyboardEvent) {
-  if (event.repeat || event.isComposing || event.defaultPrevented) return false;
-  const typesLatin = /^[a-z]$/i.test(event.key);
-  if (typesLatin ? event.key.toLowerCase() !== "k" : event.code !== "KeyK") return false;
-  if (event.altKey || event.shiftKey) return false;
-  return isApplePlatform() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-}
-
-/** Cmd/Ctrl+K from anywhere in the app, even while typing. */
 export function useSearchShortcut(onShortcut: () => void) {
-  const fire = useEffectEvent(onShortcut);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!isSearchShortcut(event)) return;
-      event.preventDefault();
-      fire();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  // At the window, after every handler that might take the key.
+  useShortcuts(
+    [
+      {
+        hotkey: "Mod+K",
+        take: (event) => {
+          if (event.repeat) return false;
+          onShortcut();
+          return true;
+        },
+      },
+    ],
+    { target: "window" },
+  );
 }
 
 /** The shortcut as the viewer's keyboard names it, and as `aria-keyshortcuts` names it; unknown
