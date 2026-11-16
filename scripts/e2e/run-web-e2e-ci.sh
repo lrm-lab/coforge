@@ -57,6 +57,9 @@ export COFORGE_CENTRIFUGO_PROXY_SECRET=e2e-proxy-secret
 # /connection/websocket and stays Offline (task #438).
 export COFORGE_E2E_WEB_URL="http://127.0.0.1:$front_port"
 export COFORGE_E2E_CENTRIFUGO_URL=http://127.0.0.1:8000
+# Loopback http://localhost:<front_port> enables public link sharing and serves a-<uuid>.localhost
+# web-page artifacts through the same-origin proxy (which preserves the Host header).
+export COFORGE_ARTIFACT_SANDBOX_ORIGIN="http://localhost:$front_port"
 export COFORGE_FILE_STORAGE_DIR="$output/files"
 # Files that launch Chrome themselves (helpers/headless-chrome.ts) default to the macOS install;
 # on Linux, use the Chrome `agent-browser install` downloaded.
