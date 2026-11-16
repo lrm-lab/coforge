@@ -357,6 +357,7 @@ function MemoryPanelContent({ agentId, canReadPersonal, active = true }: MemoryP
             }))
           )
             throw new Error("delete refused");
+          setDeleting(null);
         }}
       />
     </>
