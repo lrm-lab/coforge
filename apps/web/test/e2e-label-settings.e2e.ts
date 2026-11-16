@@ -94,7 +94,7 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
       } as Parameters<TaskBoard["execute"]>[1]);
 
     const page = `${origin}/en/w/${workspace.slug}/settings?section=labels`;
-    const { row, button, click, shoot, menu, dialogsOpen, press } = labelSettingsPage(
+    const { row, button, click, shoot, menu, holdEnter, dialogsOpen, press } = labelSettingsPage(
       { browser, evaluate },
       artifacts,
     );
@@ -289,13 +289,17 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
 
     // Archive it once more, then delete for good: it comes off both Tasks.
     await archiveBug();
-    await menu(name("Bug"), "Delete permanently");
+    // Enter held on the menu item opens the confirm and must not also confirm it (task #101):
+    // its repeats land on the confirm, which takes only a fresh press.
+    await holdEnter(name("Bug"), "Delete permanently");
     await browser(
       "wait",
       "--fn",
       `(document.querySelector('[role="dialog"], [role="alertdialog"]')?.textContent ?? "").includes("It comes off 2 tasks")`,
     );
     await shoot("desktop-6-delete");
+    expect(await evaluate<number>(dialogsOpen)).toBe(1);
+    expect(await labelRow(bug.id)).not.toBeNull();
     // The confirm has the caret as the dialog opens, so Enter deletes (task #101, Frank).
     await browser(
       "wait",

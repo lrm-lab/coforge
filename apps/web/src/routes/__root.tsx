@@ -3,6 +3,7 @@ import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/reac
 
 import { Favicon } from "#src/components/foundations/logo/favicon";
 import { AppToastProvider } from "#src/components/ui/toast";
+import { HeldEnterGuard } from "#src/hooks/held-enter";
 import { getLocale } from "#src/paraglide/runtime";
 
 import appCss from "#src/styles.css?url";
@@ -61,6 +62,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <Favicon />
       </head>
       <body>
+        <HeldEnterGuard />
         <AppToastProvider>
           <div className="isolate">{children}</div>
         </AppToastProvider>

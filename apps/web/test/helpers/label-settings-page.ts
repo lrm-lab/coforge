@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { browserSession } from "./browser-e2e";
+import { type browserSession, pageDevtools } from "./browser-e2e";
 
 /**
  * The Settings → Labels page as `e2e-label-settings` drives it: its rows, buttons and menus as
@@ -25,7 +25,7 @@ export function labelSettingsPage(
     await browser("screenshot", join(artifacts, `${shot}-dark.png`));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   };
-  const menu = async (label: string, action: string) => {
+  const menu = async (label: string, action: string, pick = true) => {
     await browser("wait", "--fn", `${dialogsOpen} === 0 && ${settled}`);
     // An earlier row's mark would be clicked first.
     await evaluate(
@@ -36,10 +36,40 @@ export function labelSettingsPage(
     );
     await browser("click", '[data-e2e="more"]');
     await browser("wait", "--fn", `${item(action)} !== undefined`);
+    if (!pick) return;
     await evaluate(`(${item(action)}.setAttribute("data-e2e", "item"), true)`);
     await browser("click", '[data-e2e="item"]');
   };
   const dialogsOpen = `document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length`;
+  /** Opens a row's menu and holds Enter down on `action` as a person does (task #101): the press,
+   * the key's auto-repeats while the dialog it opens takes focus, then the release. Real key
+   * events through DevTools, since a held key is one the browser's own `press` cannot send. */
+  const holdEnter = async (label: string, action: string) => {
+    await menu(label, action, false);
+    await evaluate(`(${item(action)}.focus(), true)`);
+    const devtools = await pageDevtools(browser, "/settings");
+    const key = {
+      key: "Enter",
+      code: "Enter",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    };
+    try {
+      await devtools.send("Input.dispatchKeyEvent", { type: "keyDown", ...key, text: "\r" });
+      for (let repeat = 0; repeat < 6; repeat++) {
+        await Bun.sleep(35);
+        await devtools.send("Input.dispatchKeyEvent", {
+          type: "keyDown",
+          ...key,
+          text: "\r",
+          autoRepeat: true,
+        });
+      }
+      await devtools.send("Input.dispatchKeyEvent", { type: "keyUp", ...key });
+    } finally {
+      devtools.close();
+    }
+  };
   /** A real click on what `selector` names, marked for the browser to find. */
   const press = async (selector: string) => {
     await browser(
@@ -52,5 +82,5 @@ export function labelSettingsPage(
     );
     await browser("click", '[data-e2e="press"]');
   };
-  return { row, button, item, click, settled, shoot, menu, dialogsOpen, press };
+  return { row, button, item, click, settled, shoot, menu, holdEnter, dialogsOpen, press };
 }
