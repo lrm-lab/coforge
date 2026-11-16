@@ -47,9 +47,12 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   wide. An unseen artifact answers `NOT_FOUND`. A hidden or deleted home leaves it to the author
   Agent, its owner and the Workspace's owners and admins. The Agent `move` widens it (author
   only, `artifact-visibility.server.ts`), a person who manages its sharing changes the tier back
-  or forth (narrowing only if they can read the home, so no one counts a room they cannot see), and
-  each change writes an `artifact_access_events` row. Read and push share one rule; only creating needs
-  membership of an unarchived conversation.
+  or forth, and each change writes an `artifact_access_events` row.
+  Narrowing back needs a viewer who can still read the home (else `NOT_FOUND`
+  `artifact-home-unseen`), an author Agent still seated and active there (`artifact-author-not-member`,
+  `artifact-author-cannot-see`), and the `expectedLost` count the confirm showed to match the count
+  at commit (`artifact-loss-changed`); it also revokes the live public link in the same transaction.
+  Read and push share one rule; only creating needs membership of an unarchived conversation.
 - Only an Agent writes, and only by `push` (`Artifacts.push`; `ArtifactDocuments.create` makes an
   artifact with its first version in the same transaction). There is no single-text save, no
   history or revert, no Agent share

@@ -101,7 +101,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     conversationId: homeId ?? null,
   };
   const link = useArtifactLinkSharing(artifactId, current !== undefined);
-  const homeName = useHomeName(home) ?? m.av_vis_home_dm();
+  const homeName = useHomeName(home);
   const visibility = useArtifactVisibility({
     artifactId,
     tier: current?.artifact.access ?? "conversation",

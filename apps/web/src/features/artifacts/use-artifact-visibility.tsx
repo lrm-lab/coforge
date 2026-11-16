@@ -2,9 +2,12 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building02, Globe02, MessageChatCircle } from "@untitledui/icons";
 
+import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { m } from "#src/paraglide/messages";
+import { useWorkspaceName } from "#src/features/workspaces/workspace-route";
+import { lossChanged, narrowRefusalMessage } from "./artifact-narrow-refusal";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 import type { ArtifactLinkSharing } from "./artifact-link-sharing";
 import { loadArtifactAccessLoss, setArtifactAccess } from "./artifacts.functions";
@@ -40,10 +43,11 @@ export function useArtifactVisibility({
   artifactId: string;
   tier: "conversation" | "workspace";
   link: ArtifactLinkSharing;
-  homeName: string;
+  homeName: string | undefined;
   narrowable: boolean;
 }) {
   const queryClient = useQueryClient();
+  const workspaceName = useWorkspaceName();
   const [confirming, setConfirming] = useState<Confirmation | null>(null);
   const current: VisibilityChoice = link.url ? "link" : tier;
   const loss = useQuery({
@@ -51,15 +55,22 @@ export function useArtifactVisibility({
     queryFn: () => loadArtifactAccessLoss({ data: { artifactId } }),
     enabled: confirming?.narrowing === true,
     gcTime: 0,
+    retry: false,
   });
+  const refusal = loss.isFetching ? undefined : narrowRefusalMessage(loss.error);
+  const checkFailed = !loss.isFetching && loss.isError && refusal === undefined;
 
-  const apply = async ({
-    choice,
-    linkOff,
-  }: Confirmation | { choice: VisibilityChoice; linkOff: false }) => {
-    if (linkOff) await link.apply(false);
+  const apply = async ({ choice, narrowing, linkOff }: Confirmation) => {
+    if (linkOff && !narrowing) await link.apply(false);
     if (choice === "link") await link.apply(true);
-    else if (choice !== tier) await setArtifactAccess({ data: { artifactId, access: choice } });
+    else if (choice !== tier)
+      await setArtifactAccess({
+        data: {
+          artifactId,
+          access: choice,
+          ...(narrowing && loss.data ? { expectedLost: loss.data.people + loss.data.agents } : {}),
+        },
+      });
     await queryClient.invalidateQueries({ queryKey: ARTIFACTS_KEY });
   };
 
@@ -67,30 +78,35 @@ export function useArtifactVisibility({
     if (choice === current) return;
     const needed = confirmationFor(choice, tier, link.url !== null);
     if (needed) setConfirming(needed);
-    else void apply({ choice, linkOff: false }).catch(() => undefined);
+    else void apply({ choice, narrowing: false, linkOff: false }).catch(() => undefined);
   };
 
   const label = {
-    conversation: homeName,
+    conversation: homeName ?? m.av_vis_home_dm(),
     workspace: m.av_vis_workspace(),
     link: m.av_vis_link(),
   } satisfies Record<VisibilityChoice, string>;
 
   const description = confirming
     ? confirming.narrowing
-      ? loss.data
-        ? m.av_vis_narrow_body({
-            people: m.av_vis_narrow_people({ count: loss.data.people }),
-            agents: m.av_vis_narrow_agents({ count: loss.data.agents }),
-          })
-        : ""
+      ? (refusal ??
+        (checkFailed
+          ? m.av_vis_narrow_check_failed()
+          : loss.data && !loss.isFetching
+            ? m.av_vis_narrow_body({
+                people: m.av_vis_narrow_people({ count: loss.data.people }),
+                agents: m.av_vis_narrow_agents({ count: loss.data.agents }),
+              })
+            : m.av_vis_narrow_checking()))
       : confirming.choice === "link"
         ? m.av_vis_link_on_body()
         : m.av_vis_link_off_body()
     : "";
   const title = confirming
     ? confirming.narrowing
-      ? m.av_vis_narrow_title({ home: homeName })
+      ? homeName
+        ? m.av_vis_narrow_title({ home: homeName })
+        : m.av_vis_narrow_title_unnamed()
       : confirming.choice === "link"
         ? m.av_vis_link_on_title()
         : m.av_vis_link_off_title()
@@ -111,16 +127,41 @@ export function useArtifactVisibility({
       title={title}
       description={description}
       detail={
-        confirming?.narrowing && confirming.linkOff ? (
-          <span className="mt-2 block">{m.av_vis_link_off_body()}</span>
+        confirming?.narrowing ? (
+          <>
+            {checkFailed && (
+              <Button
+                className="mt-2"
+                color="secondary"
+                size="sm"
+                onPress={() => void loss.refetch()}
+              >
+                {m.controls_retry()}
+              </Button>
+            )}
+            {confirming.linkOff && (
+              <span className="mt-2 block">
+                {m.av_vis_narrow_link_off({ workspace: workspaceName })}
+              </span>
+            )}
+          </>
         ) : undefined
       }
-      confirmDisabled={confirming?.narrowing === true && !loss.data}
+      confirmDisabled={confirming?.narrowing === true && (!loss.data || loss.isFetching)}
       confirmLabel={confirmLabel}
-      errorMessage={m.av_vis_failed()}
+      errorMessage={(cause) =>
+        lossChanged(cause)
+          ? m.av_vis_narrow_changed()
+          : (narrowRefusalMessage(cause) ?? m.av_vis_failed())
+      }
       onConfirm={async () => {
         if (!confirming) return;
-        await apply(confirming);
+        try {
+          await apply(confirming);
+        } catch (cause) {
+          if (lossChanged(cause)) void loss.refetch();
+          throw cause;
+        }
         setConfirming(null);
       }}
     />

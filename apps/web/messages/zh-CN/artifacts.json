@@ -101,14 +101,14 @@
   "av_vis_link_off_title": "关闭链接分享？",
   "av_vis_link_off_body": "公开链接将无法再打开。",
   "av_vis_link_off_confirm": "关闭链接分享",
-  "av_vis_narrow_title": "仅限 {home}？",
-  "av_vis_narrow_body": "{people} 和 {agents} 将失去访问权限。",
+  "av_vis_narrow_title": "移到 {home}？",
+  "av_vis_narrow_body": "{people} 人和 {agents} 个 Agent 将失去访问权限。",
   "av_vis_narrow_people": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],
       "selectors": ["countPlural"],
       "match": {
-        "countPlural=other": "{count} 人"
+        "countPlural=other": "{count}"
       }
     }
   ],
@@ -117,12 +117,22 @@
       "declarations": ["input count", "local countPlural = count: plural"],
       "selectors": ["countPlural"],
       "match": {
-        "countPlural=other": "{count} 个 Agent"
+        "countPlural=other": "{count}"
       }
     }
   ],
-  "av_vis_narrow_confirm": "限制访问",
+  "av_vis_narrow_confirm": "移到该会话",
   "av_vis_failed": "无法更改谁能看，请重试。",
+  "av_vis_narrow_title_unnamed": "移到某个对话",
+  "av_vis_narrow_checking": "正在检查谁将失去访问权限…",
+  "av_vis_narrow_check_failed": "无法检查谁将失去访问权限，请重试。",
+  "av_vis_narrow_changed": "数字在你查看后发生了变化。请查看新的数字后再次确认。",
+  "av_vis_narrow_unseen": "你已无法查看该会话，因此无法移回。",
+  "av_vis_narrow_home_gone": "该会话已不存在，因此无法移回。",
+  "av_vis_narrow_no_home": "此 Artifact 没有可移回的会话。",
+  "av_vis_narrow_author_not_member": "它的作者是已不在该会话中的 Agent。请先把该 Agent 加回会话。",
+  "av_vis_narrow_author_cannot_see": "它的作者已无法在那里查看它，因此无法移回。",
+  "av_vis_narrow_link_off": "链接分享将关闭：{workspace} 之外的人和未登录的访客将无法再打开此链接。",
   "av_viewing_count": "{count} 人在看",
   "av_presence_you": "你",
   "av_presence_now": "在看",

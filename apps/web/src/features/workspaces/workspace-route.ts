@@ -6,3 +6,7 @@ const workspaceRoute = getRouteApi("/w/$workspaceSlug");
 export function useWorkspaceSlug(): string {
   return workspaceRoute.useParams().workspaceSlug;
 }
+
+export function useWorkspaceName(): string {
+  return workspaceRoute.useLoaderData().currentWorkspace.name;
+}

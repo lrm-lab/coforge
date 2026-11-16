@@ -75,13 +75,22 @@ export const setArtifactLinkSharing = createServerFn({ method: "POST" })
 
 export const setArtifactAccess = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(z.object({ artifactId: id, access: z.enum(["conversation", "workspace"]) }).strict())
+  .validator(
+    z
+      .object({
+        artifactId: id,
+        access: z.enum(["conversation", "workspace"]),
+        expectedLost: z.number().int().min(0).optional(),
+      })
+      .strict(),
+  )
   .handler(({ context, data }) =>
     productionArtifacts(context.db).visibility.change({
       workspaceId: context.workspaceId,
       artifactId: data.artifactId,
       userId: context.user.id,
       tier: data.access,
+      expectedLost: data.expectedLost,
     }),
   );
 

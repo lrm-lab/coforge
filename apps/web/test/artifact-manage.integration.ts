@@ -229,11 +229,13 @@ test("a person changes the tier when they own the author or administer the Works
     code: "ACCESS_DENIED",
   });
   await expect(change(people.admin, "conversation")).rejects.toMatchObject({
-    code: "ACCESS_DENIED",
+    code: "NOT_FOUND",
+    errorId: "artifact-home-unseen",
+    hint: "You can no longer see that conversation, so it can't go back.",
   });
   await expect(
     artifacts.visibility.loss({ workspaceId, artifactId: id, userId: people.admin }),
-  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+  ).rejects.toMatchObject({ code: "NOT_FOUND", errorId: "artifact-home-unseen" });
   await db.conversationMember.create({
     data: { conversationId: room, workspaceId, userId: people.admin },
   });
@@ -297,4 +299,87 @@ test("narrowing needs a home that still stands, and the loss counts who would st
     await db.conversation.update({ where: { id: room }, data: { hiddenFromWorkspaceAt: null } });
   }
   expect(await tierOf(id)).toBe("workspace");
+});
+
+const widen = async (id: string) =>
+  artifacts.visibility.change({
+    workspaceId,
+    artifactId: id,
+    userId: people.alice,
+    tier: "workspace",
+  });
+const narrow = (id: string, expectedLost?: number) =>
+  artifacts.visibility.change({
+    workspaceId,
+    artifactId: id,
+    userId: people.alice,
+    tier: "conversation",
+    expectedLost,
+  });
+const preview = (id: string) =>
+  artifacts.visibility.loss({ workspaceId, artifactId: id, userId: people.alice });
+
+test("narrowing is refused while its author Agent is not in the home, and while it cannot see it", async () => {
+  const id = await make(agents.bot, room);
+  await widen(id);
+  await db.conversationMember.updateMany({
+    where: { conversationId: room, agentId: agents.bot },
+    data: { leftAt: new Date() },
+  });
+  try {
+    await expect(narrow(id)).rejects.toMatchObject({
+      code: "CONFLICT",
+      errorId: "artifact-author-not-member",
+    });
+    await expect(preview(id)).rejects.toMatchObject({ errorId: "artifact-author-not-member" });
+  } finally {
+    await db.conversationMember.updateMany({
+      where: { conversationId: room, agentId: agents.bot },
+      data: { leftAt: null },
+    });
+  }
+  await db.agent.update({ where: { id: agents.bot }, data: { deletedAt: new Date() } });
+  try {
+    await expect(narrow(id)).rejects.toMatchObject({
+      code: "CONFLICT",
+      errorId: "artifact-author-cannot-see",
+    });
+    await expect(preview(id)).rejects.toMatchObject({ errorId: "artifact-author-cannot-see" });
+  } finally {
+    await db.agent.update({ where: { id: agents.bot }, data: { deletedAt: null } });
+  }
+  expect(await tierOf(id)).toBe("workspace");
+  expect(await narrow(id)).toMatchObject({ to: "conversation" });
+});
+
+test("narrowing commits only for the count that was shown, and turns the public link off", async () => {
+  const id = await make(agents.bot, room);
+  await widen(id);
+  const shown = await preview(id);
+  const expectedLost = shown.people + shown.agents;
+  const late = (
+    await db.agent.create({
+      data: {
+        workspaceId,
+        name: `am-late-${handle}`,
+        displayName: "late",
+        ownerId: people.alice,
+        runtimeConfig: {},
+      },
+    })
+  ).id;
+  try {
+    await expect(narrow(id, expectedLost)).rejects.toMatchObject({
+      code: "CONFLICT",
+      errorId: "artifact-loss-changed",
+    });
+    expect(await tierOf(id)).toBe("workspace");
+  } finally {
+    await db.agent.update({ where: { id: late }, data: { deletedAt: new Date() } });
+  }
+  await db.artifactPublicLink.create({
+    data: { artifactId: id, token: crypto.randomUUID(), createdByUserId: people.alice },
+  });
+  expect(await narrow(id, expectedLost)).toMatchObject({ to: "conversation" });
+  expect(await db.artifactPublicLink.count({ where: { artifactId: id, revokedAt: null } })).toBe(0);
 });

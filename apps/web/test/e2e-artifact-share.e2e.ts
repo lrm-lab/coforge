@@ -155,12 +155,12 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     expect(Number(loss?.[1])).toBeGreaterThanOrEqual(1);
     expect(loss?.[2]).toBe(loss?.[1] === "1" ? "person" : "people");
     expect(loss?.[4]).toBe(loss?.[3] === "1" ? "Agent" : "Agents");
-    expect(await chrome.dialogText()).toContain(`Limit to #e2e-share-${tail}?`);
+    expect(await chrome.dialogText()).toContain(`Move to #e2e-share-${tail}?`);
     await shoot("3-narrowing");
     expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).toBe(
       "workspace",
     );
-    await chrome.confirmDialog("Limit access");
+    await chrome.confirmDialog("Move to that conversation");
     await chrome.untilPillScope(`#e2e-share-${tail}`);
     expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).not.toBe(
       "workspace",

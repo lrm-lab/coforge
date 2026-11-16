@@ -101,7 +101,7 @@
   "av_vis_link_off_title": "Turn off link sharing?",
   "av_vis_link_off_body": "The public link will stop working.",
   "av_vis_link_off_confirm": "Turn off link sharing",
-  "av_vis_narrow_title": "Limit to {home}?",
+  "av_vis_narrow_title": "Move to {home}?",
   "av_vis_narrow_body": "{people} and {agents} will lose access.",
   "av_vis_narrow_people": [
     {
@@ -123,8 +123,18 @@
       }
     }
   ],
-  "av_vis_narrow_confirm": "Limit access",
+  "av_vis_narrow_confirm": "Move to that conversation",
   "av_vis_failed": "Couldn't change who can see it. Try again.",
+  "av_vis_narrow_title_unnamed": "Move to a conversation",
+  "av_vis_narrow_checking": "Checking who would lose access…",
+  "av_vis_narrow_check_failed": "Couldn't check who would lose access. Try again.",
+  "av_vis_narrow_changed": "The numbers changed since you looked. Check the new numbers and confirm again.",
+  "av_vis_narrow_unseen": "You can no longer see that conversation, so it can't go back.",
+  "av_vis_narrow_home_gone": "That conversation no longer exists, so it can't go back.",
+  "av_vis_narrow_no_home": "This artifact has no conversation to go back to.",
+  "av_vis_narrow_author_not_member": "Its author is an Agent that is no longer in that conversation. Add the Agent back first.",
+  "av_vis_narrow_author_cannot_see": "Its author can no longer see it there, so it can't go back.",
+  "av_vis_narrow_link_off": "Link sharing will turn off: people outside {workspace} and signed-out visitors can no longer open this link.",
   "av_viewing_count": "{count} viewing",
   "av_presence_you": "You",
   "av_presence_now": "Viewing now",

@@ -1,8 +1,10 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
   actorConversationHomeReads,
   actorsWithoutConversationRead,
+  agentHasConversationSeat,
   canReadConversationHome,
 } from "#src/server/conversations/channel-read-access.server";
 import {
@@ -44,6 +46,27 @@ const homeGone = () =>
     hint: "its conversation no longer exists or is hidden, so it cannot be narrowed back to it",
   });
 
+const lossChanged = () =>
+  new AppError("CONFLICT", {
+    errorId: "artifact-loss-changed",
+    hint: "who would lose access changed since it was counted",
+  });
+
+const homeUnseen = () =>
+  new AppError("NOT_FOUND", {
+    errorId: "artifact-home-unseen",
+    hint: "You can no longer see that conversation, so it can't go back.",
+  });
+
+const authorRefusal = (errorId: "artifact-author-not-member" | "artifact-author-cannot-see") =>
+  new AppError("CONFLICT", {
+    errorId,
+    hint:
+      errorId === "artifact-author-not-member"
+        ? "Its author is an Agent that is no longer in that conversation. Add the Agent back first."
+        : "Its author can no longer see it there, so it can't go back.",
+  });
+
 const moveRefusal = (reason: "no-owner" | "owner-cannot-see" | "owner-cannot-move") =>
   new AppError("ACCESS_DENIED", {
     errorId: "artifact-move-forbidden",
@@ -67,6 +90,7 @@ export class ArtifactVisibility {
     artifactId: string;
     userId: string;
     tier: ArtifactTier;
+    expectedLost?: number;
   }) {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const actor = { userId: input.userId };
@@ -78,8 +102,14 @@ export class ArtifactVisibility {
         throw new AppError("ACCESS_DENIED");
       const from = artifactTier(artifact);
       if (from === input.tier) return { artifact, from, changed: false };
-      if (input.tier === "conversation")
-        await requireNarrowableHome(tx, input.workspaceId, actor, artifact);
+      if (input.tier === "conversation") {
+        const { lost } = await narrowing(tx, input.workspaceId, actor, artifact);
+        if (input.expectedLost !== undefined && input.expectedLost !== lost) throw lossChanged();
+        await tx.artifactPublicLink.updateMany({
+          where: { artifactId: artifact.id, revokedAt: null },
+          data: { revokedAt: new Date(), revokedByUserId: input.userId },
+        });
+      }
       await writeTier(tx, artifact, from, input.tier, actor);
       return { artifact, from, changed: true };
     });
@@ -103,10 +133,7 @@ export class ArtifactVisibility {
       !(await canManageArtifactSharing(this.db, input.workspaceId, actor, { authorAgentOwnerId }))
     )
       throw new AppError("ACCESS_DENIED");
-    const conversationId = await requireNarrowableHome(this.db, input.workspaceId, actor, artifact);
-    const counts = await actorsWithoutConversationRead(this.db, input.workspaceId, conversationId);
-    if (!counts) throw homeGone();
-    return counts;
+    return (await narrowing(this.db, input.workspaceId, actor, artifact)).counts;
   }
 
   async moveToWorkspace(input: { workspaceId: string; artifactId: string; agentId: string }) {
@@ -175,6 +202,30 @@ async function lockArtifact(
   return artifact;
 }
 
+async function narrowing(
+  db: Tx,
+  workspaceId: string,
+  actor: ArtifactActor,
+  artifact: LockedArtifact,
+) {
+  const conversationId = await requireNarrowableHome(db, workspaceId, actor, artifact);
+  await requireAuthorKeepsAccess(db, conversationId, artifact);
+  const counts = await actorsWithoutConversationRead(db, workspaceId, conversationId);
+  if (!counts) throw homeGone();
+  return { counts, lost: counts.people + counts.agents };
+}
+
+async function requireAuthorKeepsAccess(db: Tx, conversationId: string, artifact: LockedArtifact) {
+  if (!artifact.authorAgentId) return;
+  if (!(await agentHasConversationSeat(db, conversationId, artifact.authorAgentId)))
+    throw authorRefusal("artifact-author-not-member");
+  const author = await db.agent.findFirst({
+    where: { id: artifact.authorAgentId, ...ACTIVE_AGENT_WHERE },
+    select: { id: true },
+  });
+  if (!author) throw authorRefusal("artifact-author-cannot-see");
+}
+
 async function requireNarrowableHome(
   db: Tx,
   workspaceId: string,
@@ -191,11 +242,7 @@ async function requireNarrowableHome(
     conversationId,
   );
   if (!homeStands(home)) throw homeGone();
-  if (!home || !canReadConversationHome(home))
-    throw new AppError("ACCESS_DENIED", {
-      errorId: "artifact-home-unreadable",
-      hint: "only someone who can read its conversation can limit it to that conversation",
-    });
+  if (!home || !canReadConversationHome(home)) throw homeUnseen();
   return conversationId;
 }
 
