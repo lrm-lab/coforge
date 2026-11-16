@@ -1,0 +1,15 @@
+[Unit]
+Description=Attach this container to CoForge and keep the Computer supervisor running
+After=systemd-user-sessions.service
+Wants=user@0.service
+
+[Service]
+Type=simple
+Environment=HOME=/root
+Environment=COFORGE_WORKSPACE_SLUG=my
+ExecStart=/usr/local/bin/coforge-daemon-boot.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

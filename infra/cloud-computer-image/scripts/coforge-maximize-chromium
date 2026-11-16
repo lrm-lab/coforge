@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""Maximize Chromium windows on this display.
+
+Agents start `chromium` directly and often omit --start-maximized, or they
+pass a window position that overrides it. This watches the session and asks
+the window manager to maximize each new Chromium window once.
+"""
+import ctypes
+import os
+import time
+
+X11 = ctypes.CDLL("libX11.so.6")
+
+
+class Display(ctypes.Structure):
+    pass
+
+
+class XClientMessageEvent(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.c_int),
+        ("serial", ctypes.c_ulong),
+        ("send_event", ctypes.c_int),
+        ("display", ctypes.c_void_p),
+        ("window", ctypes.c_ulong),
+        ("message_type", ctypes.c_ulong),
+        ("format", ctypes.c_int),
+        ("data0", ctypes.c_long),
+        ("data1", ctypes.c_long),
+        ("data2", ctypes.c_long),
+        ("data3", ctypes.c_long),
+        ("data4", ctypes.c_long),
+    ]
+
+
+class XEvent(ctypes.Union):
+    _fields_ = [("client", XClientMessageEvent), ("pad", ctypes.c_long * 24)]
+
+
+X11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+X11.XOpenDisplay.restype = ctypes.POINTER(Display)
+X11.XDefaultRootWindow.argtypes = [ctypes.POINTER(Display)]
+X11.XDefaultRootWindow.restype = ctypes.c_ulong
+X11.XInternAtom.argtypes = [ctypes.POINTER(Display), ctypes.c_char_p, ctypes.c_int]
+X11.XInternAtom.restype = ctypes.c_ulong
+X11.XGetWindowProperty.argtypes = [
+    ctypes.POINTER(Display),
+    ctypes.c_ulong,
+    ctypes.c_ulong,
+    ctypes.c_long,
+    ctypes.c_long,
+    ctypes.c_int,
+    ctypes.c_ulong,
+    ctypes.POINTER(ctypes.c_ulong),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_ulong),
+    ctypes.POINTER(ctypes.c_ulong),
+    ctypes.POINTER(ctypes.c_void_p),
+]
+X11.XFree.argtypes = [ctypes.c_void_p]
+X11.XSendEvent.argtypes = [
+    ctypes.POINTER(Display),
+    ctypes.c_ulong,
+    ctypes.c_int,
+    ctypes.c_long,
+    ctypes.c_void_p,
+]
+X11.XFlush.argtypes = [ctypes.POINTER(Display)]
+
+
+def window_property(display, window, name):
+    actual_type = ctypes.c_ulong()
+    actual_format = ctypes.c_int()
+    count = ctypes.c_ulong()
+    bytes_after = ctypes.c_ulong()
+    data = ctypes.c_void_p()
+    status = X11.XGetWindowProperty(
+        display,
+        window,
+        X11.XInternAtom(display, name.encode(), False),
+        0,
+        64,
+        False,
+        0,
+        ctypes.byref(actual_type),
+        ctypes.byref(actual_format),
+        ctypes.byref(count),
+        ctypes.byref(bytes_after),
+        ctypes.byref(data),
+    )
+    if status != 0 or not data or count.value == 0:
+        return []
+    if actual_format.value == 32:
+        values = ctypes.cast(data, ctypes.POINTER(ctypes.c_ulong))
+        result = [int(values[i]) for i in range(count.value)]
+    elif actual_format.value == 8:
+        result = [ctypes.string_at(data, count.value)]
+    else:
+        result = []
+    X11.XFree(data)
+    return result
+
+
+def maximize(display, root, window, state_atom, horz, vert):
+    event = XEvent()
+    event.client.type = 33
+    event.client.display = ctypes.cast(display, ctypes.c_void_p)
+    event.client.window = window
+    event.client.message_type = state_atom
+    event.client.format = 32
+    event.client.data0 = 1
+    event.client.data1 = horz
+    event.client.data2 = vert
+    event.client.data3 = 1
+    X11.XSendEvent(display, root, False, 0x180000, ctypes.byref(event))
+    X11.XFlush(display)
+
+
+def main():
+    display = X11.XOpenDisplay(os.environ.get("DISPLAY", ":1").encode())
+    if not display:
+        return
+    root = X11.XDefaultRootWindow(display)
+    state_atom = X11.XInternAtom(display, b"_NET_WM_STATE", False)
+    horz = X11.XInternAtom(display, b"_NET_WM_STATE_MAXIMIZED_HORZ", False)
+    vert = X11.XInternAtom(display, b"_NET_WM_STATE_MAXIMIZED_VERT", False)
+    finished = set()
+    tries = {}
+    while True:
+        clients = window_property(display, root, "_NET_CLIENT_LIST")
+        for window in clients:
+            if window in finished:
+                continue
+            classes = window_property(display, window, "WM_CLASS")
+            if not classes or b"chromium" not in classes[0].lower():
+                continue
+            state = window_property(display, window, "_NET_WM_STATE")
+            if horz in state and vert in state:
+                finished.add(window)
+                continue
+            tries[window] = tries.get(window, 0) + 1
+            if tries[window] > 8:
+                finished.add(window)
+                continue
+            maximize(display, root, window, state_atom, horz, vert)
+        time.sleep(0.4)
+
+
+if __name__ == "__main__":
+    main()

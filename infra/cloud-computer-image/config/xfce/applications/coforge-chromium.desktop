@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=浏览器
+Name[zh_CN]=浏览器
+Comment=Chromium
+Exec=/usr/local/bin/coforge-chromium %U
+Icon=chromium
+Terminal=false
+Categories=Network;WebBrowser;
+StartupNotify=true

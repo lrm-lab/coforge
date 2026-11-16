@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>云电脑桌面</title>
+  <style>
+    html, body, #screen { margin: 0; height: 100%; background: #111; overflow: hidden; }
+    #screen { width: 100%; }
+    #msg {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: #ddd; font: 16px/1.4 sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="screen"></div>
+  <p id="msg">正在连接桌面…</p>
+  <script type="module">
+    import RFB from "./core/rfb.js";
+
+    const msg = document.getElementById("msg");
+    const params = new URLSearchParams(location.search);
+    const token = params.get("token") || "";
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const base = location.pathname.replace(/\/desktop\.html$/, "").replace(/\/+$/, "");
+    const query = token ? `?token=${encodeURIComponent(token)}` : "";
+    const url = `${proto}://${location.host}${base}/websockify${query}`;
+    const rfb = new RFB(document.getElementById("screen"), url);
+    rfb.scaleViewport = true;
+    rfb.focusOnClick = true;
+    rfb.addEventListener("connect", () => msg.remove());
+    rfb.addEventListener("securityfailure", (ev) => {
+      msg.textContent = ev.detail?.reason || "桌面连接失败";
+    });
+    rfb.addEventListener("disconnect", () => {
+      if (document.body.contains(msg)) msg.textContent = "桌面连接已断开";
+    });
+  </script>
+</body>
+</html>

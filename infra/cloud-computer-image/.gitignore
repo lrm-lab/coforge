@@ -1,0 +1,10 @@
+config/pi.env
+config/coforge.env
+config/pi-test.env
+config/pi-agent/models.json
+config/pi-agent/settings.json
+config/pi-agent/certs/
+coforge/coforge-computer
+build-swarm.nohup.log
+scripts/__pycache__/
+*.pyc

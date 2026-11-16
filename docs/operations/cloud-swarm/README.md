@@ -30,6 +30,8 @@ Web 和 Centrifugo 不在同一个对外地址上时，按 `scripts/e2e/build-co
 
 镜像是 Linux 镜像，里面是为这套环境编译的 `coforge-computer`。入口执行 `coforge-computer foreground`。这个监督进程通过 systemd 用户实例启动每个工作区的 Daemon，因此镜像的 `PATH` 上要有可用的 `systemctl`。基础镜像没有 systemd 时，要自备一个能拉起这些 unit 的 `systemctl`，否则任务退出后 Swarm 会按重启策略反复拉起。
 
+Staging 与 production 的镜像配方在本仓库 [`infra/cloud-computer-image/`](../../../infra/cloud-computer-image/README.md)，用 `./scripts/build-swarm.sh` 从对应 release feed 下载二进制并打标签。`packages/computer/docker/Dockerfile` 只作本地/夹具，不是 Swarm 用的镜像。
+
 把镜像加载到将会运行任务的每个节点上，标签与下面的 `COFORGE_COMPUTER_IMAGE` 一致。`host` 创建服务时使用 `--no-resolve-image`，节点上没有这个标签时不会去仓库拉取。
 
 ## 准备 Swarm

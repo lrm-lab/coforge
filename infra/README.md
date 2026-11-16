@@ -1,4 +1,9 @@
-# Local Centrifugo services
+# Infra
+
+- [cloud-computer-image/](cloud-computer-image/README.md) — staging/production Swarm cloud Computer image (`build-swarm.sh`).
+- Below: local Docker Compose services for development.
+
+## Local Centrifugo services
 
 This Compose project starts three separate containers:
 

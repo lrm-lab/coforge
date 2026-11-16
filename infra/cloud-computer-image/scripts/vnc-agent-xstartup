@@ -1,0 +1,21 @@
+#!/bin/sh
+# One Agent's XFCE session. The wrapper that starts this exports that Agent's
+# XDG directories and COFORGE_SCREEN_DIR. The session bus address is written
+# for the Agent process, which is not a child of this session.
+set -eu
+dir="${COFORGE_SCREEN_DIR:?}"
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
+chmod 700 "$XDG_RUNTIME_DIR"
+mkdir -p "$XDG_CONFIG_HOME/gtk-3.0"
+cp /etc/xdg/gtk-3.0/gtk.css "$XDG_CONFIG_HOME/gtk-3.0/gtk.css"
+nohup /usr/local/bin/coforge-maximize-chromium >/dev/null 2>&1 &
+exec dbus-run-session -- sh -c '
+  printf %s "$DBUS_SESSION_BUS_ADDRESS" > "$COFORGE_SCREEN_DIR/bus"
+  startxfce4 &
+  pid=$!
+  sleep 1
+  /usr/local/bin/coforge-dock-ui &
+  wait "$pid"
+'

@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Print this agent’s tokenized Chromium CDP base URL (requires DISPLAY)."""
+from __future__ import annotations
+
+import os
+import sys
+
+sys.path.insert(0, "/usr/local/lib/coforge")
+try:
+    import coforge_cdp
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import coforge_cdp
+
+
+if __name__ == "__main__":
+    try:
+        print(coforge_cdp.resolve_endpoint())
+    except SystemExit as exc:
+        if exc.code not in (0, None):
+            print(str(exc) if exc.args else "failed", file=sys.stderr)
+        raise
+    except Exception as exc:  # noqa: BLE001
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from exc

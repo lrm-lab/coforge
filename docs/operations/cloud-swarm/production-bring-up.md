@@ -32,11 +32,13 @@ openssl rand -hex 16   # → coforge_cloud_service_password（示例长度；可
 
 生产 feed：`https://releases.coforge.cn`（当前 `latest` 须带 `host` 子命令，且编译绑定 `https://coforge.cn`）。
 
-电脑镜像在 `create_docker_image_for_pi`：
+电脑镜像在本仓库 `infra/cloud-computer-image/`：
 
 ```sh
+cd infra/cloud-computer-image
 cp config/coforge.env.example config/coforge.env
 # COFORGE_ENV=production
+cp config/pi.env.example config/pi.env   # 填入构建所需密钥；勿提交
 ./scripts/build-swarm.sh
 ```
 

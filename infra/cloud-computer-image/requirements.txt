@@ -1,0 +1,4 @@
+# Baked into the cloud-computer image (see Dockerfile). Keep this list light —
+# do not add playwright here (slow image builds); install at runtime if needed.
+pypdf>=6.0.0
+python-pptx>=1.0.0

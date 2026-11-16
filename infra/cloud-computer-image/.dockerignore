@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+*.md
+AGENTS.md
+Dockerfile_*
+*.bak
+coforge/.gitkeep
+scripts/test_*
+scripts/__pycache__/
+build-swarm.nohup.log
+config/pi.env
+config/coforge.env
+config/pi-test.env

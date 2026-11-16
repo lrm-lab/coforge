@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""Open the terminal centered on the visible display.
+
+xfwm4 leaves a normal-sized terminal in a corner unless placement_ratio is
+100. This still moves the window after it appears, so a saved position or a
+position hint cannot leave it off to one side.
+"""
+import ctypes
+import os
+import subprocess
+import sys
+import time
+
+class Display(ctypes.Structure):
+    pass
+
+
+X11 = ctypes.CDLL("libX11.so.6")
+X11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+X11.XDefaultRootWindow.argtypes = [ctypes.POINTER(Display)]
+X11.XInternAtom.argtypes = [ctypes.POINTER(Display), ctypes.c_char_p, ctypes.c_int]
+X11.XGetGeometry.argtypes = [
+    ctypes.POINTER(Display),
+    ctypes.c_ulong,
+    ctypes.POINTER(ctypes.c_ulong),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_uint),
+    ctypes.POINTER(ctypes.c_uint),
+    ctypes.POINTER(ctypes.c_uint),
+    ctypes.POINTER(ctypes.c_uint),
+]
+X11.XSendEvent.argtypes = [
+    ctypes.POINTER(Display),
+    ctypes.c_ulong,
+    ctypes.c_int,
+    ctypes.c_long,
+    ctypes.c_void_p,
+]
+X11.XFlush.argtypes = [ctypes.POINTER(Display)]
+X11.XFree.argtypes = [ctypes.c_void_p]
+X11.XDefaultScreen.argtypes = [ctypes.POINTER(Display)]
+X11.XDefaultScreen.restype = ctypes.c_int
+X11.XDisplayWidth.argtypes = [ctypes.POINTER(Display), ctypes.c_int]
+X11.XDisplayWidth.restype = ctypes.c_int
+X11.XDisplayHeight.argtypes = [ctypes.POINTER(Display), ctypes.c_int]
+X11.XDisplayHeight.restype = ctypes.c_int
+
+
+class XClientMessageEvent(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.c_int),
+        ("serial", ctypes.c_ulong),
+        ("send_event", ctypes.c_int),
+        ("display", ctypes.c_void_p),
+        ("window", ctypes.c_ulong),
+        ("message_type", ctypes.c_ulong),
+        ("format", ctypes.c_int),
+        ("data0", ctypes.c_long),
+        ("data1", ctypes.c_long),
+        ("data2", ctypes.c_long),
+        ("data3", ctypes.c_long),
+        ("data4", ctypes.c_long),
+    ]
+
+
+class XEvent(ctypes.Union):
+    _fields_ = [("client", XClientMessageEvent), ("pad", ctypes.c_long * 24)]
+
+
+X11.XOpenDisplay.restype = ctypes.POINTER(Display)
+X11.XDefaultRootWindow.restype = ctypes.c_ulong
+X11.XInternAtom.restype = ctypes.c_ulong
+X11.XGetWindowProperty.argtypes = [
+    ctypes.POINTER(Display),
+    ctypes.c_ulong,
+    ctypes.c_ulong,
+    ctypes.c_long,
+    ctypes.c_long,
+    ctypes.c_int,
+    ctypes.c_ulong,
+    ctypes.POINTER(ctypes.c_ulong),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_ulong),
+    ctypes.POINTER(ctypes.c_ulong),
+    ctypes.POINTER(ctypes.c_void_p),
+]
+
+
+def window_property(display, window, name, type_atom):
+    actual_type = ctypes.c_ulong()
+    actual_format = ctypes.c_int()
+    count = ctypes.c_ulong()
+    bytes_after = ctypes.c_ulong()
+    data = ctypes.c_void_p()
+    status = X11.XGetWindowProperty(
+        display,
+        window,
+        X11.XInternAtom(display, name.encode(), False),
+        0,
+        16,
+        False,
+        type_atom,
+        ctypes.byref(actual_type),
+        ctypes.byref(actual_format),
+        ctypes.byref(count),
+        ctypes.byref(bytes_after),
+        ctypes.byref(data),
+    )
+    if status != 0 or not data or count.value == 0:
+        return []
+    if actual_format.value == 32:
+        values = ctypes.cast(data, ctypes.POINTER(ctypes.c_ulong))
+        result = [int(values[i]) for i in range(count.value)]
+    else:
+        result = []
+    X11.XFree(data)
+    return result
+
+
+def client_list(display, root):
+    return window_property(display, root, "_NET_CLIENT_LIST", 0)
+
+
+def center_window(display, root, window):
+    root_return = ctypes.c_ulong()
+    x = ctypes.c_int()
+    y = ctypes.c_int()
+    width = ctypes.c_uint()
+    height = ctypes.c_uint()
+    border = ctypes.c_uint()
+    depth = ctypes.c_uint()
+    X11.XGetGeometry(
+        display,
+        window,
+        ctypes.byref(root_return),
+        ctypes.byref(x),
+        ctypes.byref(y),
+        ctypes.byref(width),
+        ctypes.byref(height),
+        ctypes.byref(border),
+        ctypes.byref(depth),
+    )
+    extents = window_property(display, window, "_NET_FRAME_EXTENTS", 0)
+    left = extents[0] if len(extents) == 4 else 0
+    right = extents[1] if len(extents) == 4 else 0
+    top = extents[2] if len(extents) == 4 else 0
+    bottom = extents[3] if len(extents) == 4 else 0
+    work = window_property(display, root, "_NET_WORKAREA", 0)
+    if len(work) >= 4 and work[2] > 0 and work[3] > 0:
+        area_x, area_y, area_w, area_h = work[0], work[1], work[2], work[3]
+    else:
+        screen = X11.XDefaultScreen(display)
+        area_x, area_y = 0, 0
+        area_w = int(X11.XDisplayWidth(display, screen))
+        area_h = int(X11.XDisplayHeight(display, screen))
+    outer_w = int(width.value) + left + right
+    outer_h = int(height.value) + top + bottom
+    move_x = int(area_x + max(0, area_w - outer_w) // 2)
+    move_y = int(area_y + max(0, area_h - outer_h) // 2)
+    atom = X11.XInternAtom(display, b"_NET_MOVERESIZE_WINDOW", False)
+    event = XEvent()
+    event.client.type = 33  # ClientMessage
+    event.client.display = ctypes.cast(display, ctypes.c_void_p)
+    event.client.window = window
+    event.client.message_type = atom
+    event.client.format = 32
+    # NorthWest gravity, and only the X and Y fields are set.
+    event.client.data0 = (1 << 8) | (1 << 9)
+    event.client.data1 = move_x
+    event.client.data2 = move_y
+    X11.XSendEvent(display, root, False, 0x180000, ctypes.byref(event))
+    X11.XFlush(display)
+    return move_x, move_y, outer_w, outer_h
+
+
+def main():
+    display_name = os.environ.get("DISPLAY", ":1").encode()
+    display = X11.XOpenDisplay(display_name)
+    if not display:
+        os.execvp("xfce4-terminal", ["xfce4-terminal", *sys.argv[1:]])
+    root = X11.XDefaultRootWindow(display)
+    before = set(client_list(display, root))
+    proc = subprocess.Popen(["xfce4-terminal", *sys.argv[1:]])
+    window = None
+    deadline = time.monotonic() + 4
+    while time.monotonic() < deadline:
+        time.sleep(0.05)
+        fresh = [item for item in client_list(display, root) if item not in before]
+        if fresh:
+            window = fresh[-1]
+            break
+    if window is None:
+        return proc.wait()
+    time.sleep(0.2)
+    center_window(display, root, window)
+    return proc.wait()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
