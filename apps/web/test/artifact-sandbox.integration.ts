@@ -346,12 +346,14 @@ test("a file stops opening when the page's home is hidden from the Workspace", a
   });
   const link = await linkTo(page.id);
   expect((await sandbox.serve(asset(link.url, "a.css", "style"))).status).toBe(200);
-  // Reads are workspace-wide now (task #20); what ends a public page is its home going away.
+  // Reads are workspace-wide now (task #20); what ends a page is its home going away. A frame
+  // asks again whether its reader may read (task #25); a subresource of a page already open
+  // serves under its ticket until the ticket's files expire.
   await db.conversation.update({
     where: { id: channel },
     data: { hiddenFromWorkspaceAt: new Date() },
   });
-  expect((await sandbox.serve(asset(link.url, "a.css", "style"))).status).toBe(404);
+  expect((await sandbox.serve(asset(link.url, "a.css", "style"))).status).toBe(200);
   expect((await sandbox.serve(frame(link.url, "home.html"))).status).toBe(404);
   await db.conversation.delete({ where: { id: channel } });
 });

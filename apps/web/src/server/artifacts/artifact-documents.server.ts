@@ -4,7 +4,7 @@ import { AppError, isAppError } from "#src/lib/app-error";
 import { nameToSlug } from "#src/lib/slug";
 import { errorType } from "#src/server/errors/error-type.server";
 import {
-  canDeleteArtifact,
+  canDeleteArtifactWithRole,
   type ArtifactActor,
   type ArtifactPublisher,
 } from "./artifact-access.server";
@@ -147,7 +147,10 @@ export class ArtifactDocuments {
     input: { artifactId: string; version?: number },
     options?: { body?: "entry" | "markdown" },
   ) {
-    const read = await this.artifacts.reads.read({ ...reader(scope), ...input });
+    const { viewer, ...read } = await this.artifacts.reads.read({
+      ...reader(scope),
+      ...input,
+    });
     const entryPath = read.version?.entryPath ?? read.artifact.entryPath;
     const file = read.files.find((entry) => entry.path === entryPath);
     const document = artifactOpenableKind(entryPath) === "markdown";
@@ -156,12 +159,11 @@ export class ArtifactDocuments {
       file.sizeBytes <= ARTIFACT_ENTRY_READ_LIMIT &&
       (options?.body !== "markdown" || document);
     const bytes = readable ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
-    // The author came with the read (no second query); the rule is the one `delete` enforces —
-    // and a reader the home's rule kept out cannot delete at all: a delete is the home's write
-    // (task #20).
+    // The author and the viewer's role came with the read (no second query); the rule is the
+    // one `delete` enforces — and a reader the home's rule kept out cannot delete at all: a
+    // delete is the home's write (task #20).
     const canDelete =
-      read.artifact.homeRead &&
-      (await canDeleteArtifact(this.db, scope.workspaceId, scope.actor, read.artifact));
+      read.artifact.homeRead && canDeleteArtifactWithRole(scope.actor, viewer.role, read.artifact);
     return {
       ...read,
       text: bytes ? new TextDecoder().decode(bytes) : "",
