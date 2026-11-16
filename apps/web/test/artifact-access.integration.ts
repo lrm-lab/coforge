@@ -161,7 +161,7 @@ const push = (
     files: [{ path: "document.md", sha256 }],
   });
 const read = (artifactId: string, reader: ArtifactActor) =>
-  artifacts.read({ workspaceId, artifactId, reader });
+  artifacts.reads.read({ workspaceId, artifactId, reader });
 const inConversation = (conversationId: string): ArtifactHome => ({
   kind: "conversation",
   conversationId,
@@ -236,9 +236,9 @@ test("a private channel's or a DM's artifact is every member's to read; its home
   // Outside the Workspace nothing changes.
   for (const reader of [{ userId: people.outsider }, { agentId: agents.foreign }])
     await expect(read(closed.id, reader)).rejects.toMatchObject({ code: "NOT_FOUND" });
-  await expect(
-    create(inConversation(privateChannel), stranger),
-  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  await expect(create(inConversation(privateChannel), stranger)).rejects.toMatchObject({
+    code: "NOT_FOUND",
+  });
   // People's DM with each other holds no artifact: no Agent is in it.
   await expect(create(inConversation(dm), helper)).rejects.toMatchObject({ code: "NOT_FOUND" });
 });

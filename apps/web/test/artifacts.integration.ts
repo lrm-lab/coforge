@@ -117,10 +117,14 @@ test("a push inherits unlisted files and records what changed", async () => {
   });
   expect(second).toMatchObject({ status: "created", number: 2 });
 
-  const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
+  const read = await artifacts.reads.read({
+    workspaceId,
+    reader: { userId },
+    artifactId: artifact.id,
+  });
   expect(read.files.map((entry) => entry.path)).toEqual(["index.md"]);
   expect(read.files[0]!.sha256).toBe("sha-c");
-  const old = await artifacts.read({
+  const old = await artifacts.reads.read({
     workspaceId,
     reader: { userId },
     artifactId: artifact.id,
@@ -162,7 +166,11 @@ test("a push over an older base merges others' files, and conflicts on the same 
     files: [file("index.md", "sha-3")],
   });
   expect(merged).toMatchObject({ status: "created", number: 3, merged: ["notes.txt"] });
-  const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
+  const read = await artifacts.reads.read({
+    workspaceId,
+    reader: { userId },
+    artifactId: artifact.id,
+  });
   expect(read.files.map((entry) => entry.path)).toEqual(["index.md", "notes.txt"]);
 
   // The same file on both sides cannot be merged, whatever its type: nothing merges inside a file.
@@ -221,7 +229,11 @@ test("concurrent pushes serialize: each gets its version, or a replay — never 
   ]);
   const statuses = [first.status, second.status].sort();
   expect(statuses).toEqual(["created", "replayed"]);
-  const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
+  const read = await artifacts.reads.read({
+    workspaceId,
+    reader: { userId },
+    artifactId: artifact.id,
+  });
   expect(read.files.map((entry) => entry.path).sort()).toEqual(["a.txt", "index.md"]);
 });
 
@@ -260,7 +272,11 @@ test("size and kind come from the blob, not the request", async () => {
     files: [file("index.md", "sha-ok-text"), file("photo.png", "sha-ok-image")],
   });
   expect(ok.status).toBe("created");
-  const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
+  const read = await artifacts.reads.read({
+    workspaceId,
+    reader: { userId },
+    artifactId: artifact.id,
+  });
   expect(read.files.find((entry) => entry.path === "photo.png")).toMatchObject({
     kind: "image",
     sizeBytes: ARTIFACT_BINARY_LIMIT,

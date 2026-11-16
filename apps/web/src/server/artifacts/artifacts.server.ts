@@ -386,9 +386,4 @@ export class Artifacts {
       },
     });
   }
-
-  /** The artifact and one version (its current one by default) with that version's files. */
-  read(input: Parameters<ArtifactReads["read"]>[0]) {
-    return this.reads.read(input);
-  }
 }

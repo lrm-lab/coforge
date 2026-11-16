@@ -137,7 +137,7 @@ const push = (
     files: [{ path: "document.md", sha256 }],
   });
 const read = (artifactId: string, reader: ArtifactActor) =>
-  artifacts.read({ workspaceId, artifactId, reader });
+  artifacts.reads.read({ workspaceId, artifactId, reader });
 const inConversation = (conversationId: string): ArtifactHome => ({
   kind: "conversation",
   conversationId,
