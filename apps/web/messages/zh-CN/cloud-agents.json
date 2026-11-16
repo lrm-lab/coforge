@@ -12,5 +12,5 @@
   "agent_create_kind_label": "运行位置",
   "agent_create_kind_cloud": "云端",
   "agent_create_kind_local": "本地电脑",
-  "cloud_agent_create_private_note": "这个 Agent 是私有的，只有你能和它聊天。要拉进频道，先在它的资料页改成公开。"
+  "cloud_agent_create_private_note": "新建的云端 Agent 默认私有，只有你能和它聊天。想把它加入频道，请先在它的资料页设为公开。"
 }
