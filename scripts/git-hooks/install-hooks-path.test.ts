@@ -103,7 +103,19 @@ test("it leaves a different repository-local core.hooksPath alone and says so", 
 
 test("a local path naming a checkout's own .githooks absolutely becomes .githooks", () => {
   git(root, "init", "-q");
-  git(root, "commit", "-q", "--allow-empty", "-m", "first");
+  // CI has no git identity: the commit names its own.
+  git(
+    root,
+    "-c",
+    "user.name=Test Person",
+    "-c",
+    "user.email=person@example.com",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "first",
+  );
   mkdirSync(join(root, ".githooks"));
   const linked = join(home, "linked");
   git(root, "worktree", "add", "-q", linked);
