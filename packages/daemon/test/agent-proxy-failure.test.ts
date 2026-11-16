@@ -382,21 +382,13 @@ test("a judged still-processing refusal keeps the server's code and carries the 
 
 test("safe message-validation refusals retain their exact reason in daemon diagnostics", () => {
   const failure = classifyAgentProxyFailure(
-    AgentMessageRequestError.fromRpc(
-      400,
-      "An explicit @memory question must be answered with memory_offer",
-    ),
+    AgentMessageRequestError.fromRpc(400, "message anchor is outside this target"),
     context,
   );
-  expect(failure.logFields.detail).toBe(
-    "An explicit @memory question must be answered with memory_offer",
-  );
+  expect(failure.logFields.detail).toBe("message anchor is outside this target");
   expect(failure.body.proxy.failure_class).toBe("request_validation");
   const isolated = classifyAgentProxyFailure(
-    AgentMessageRequestError.fromRpc(
-      400,
-      "An explicit @memory question must be answered with memory_offer",
-    ),
+    AgentMessageRequestError.fromRpc(400, "message anchor is outside this target"),
     { ...context, redact: true },
   );
   expect(isolated.logFields.detail).toBeUndefined();
