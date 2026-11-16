@@ -11,7 +11,7 @@ import { setup } from "./fixtures/task-dependencies";
 
 test("a task starts at none, takes a priority on create and update, and records the change", async () => {
   for (const tasksV2 of [true, false]) {
-    const { db, run, make, show, refusal } = await setup({ tasksV2 });
+    const { db, run, make, show, refusal, channel } = await setup({ tasksV2 });
     try {
       const [plain] = await make("bob", 1);
       expect((await show(plain!)).tasks[0]!.priority).toBe("none");
@@ -25,11 +25,38 @@ test("a task starts at none, takes a priority on create and update, and records 
         .tasks;
       expect(raised).toMatchObject({ priority: "high", status: before.status });
       expect(raised!.revision).toBe(before.revision + 1);
+      if (tasksV2) {
+        const taskConversationId = (
+          await db.task.findUniqueOrThrow({
+            where: { conversationId_number: { conversationId: channel.id, number: plain! } },
+            select: { discussionConversationId: true },
+          })
+        ).discussionConversationId;
+        expect(taskConversationId).toBeTruthy();
+        const raisedNotices = await db.systemMessage.findMany({
+          where: { conversationId: taskConversationId!, kind: "task.priority_changed" },
+          orderBy: { message: { sequence: "asc" } },
+        });
+        expect(raisedNotices).toHaveLength(1);
+      }
 
       // The same priority again writes nothing.
       const [again] = (await run("bob", { operation: "update", number: plain!, priority: "high" }))
         .tasks;
       expect(again!.revision).toBe(raised!.revision);
+      if (tasksV2) {
+        const taskConversationId = (
+          await db.task.findUniqueOrThrow({
+            where: { conversationId_number: { conversationId: channel.id, number: plain! } },
+            select: { discussionConversationId: true },
+          })
+        ).discussionConversationId!;
+        expect(
+          await db.systemMessage.count({
+            where: { conversationId: taskConversationId, kind: "task.priority_changed" },
+          }),
+        ).toBe(1);
+      }
 
       // With a status, both change in one write.
       await run("bob", { operation: "claim", number: plain! });
@@ -42,6 +69,19 @@ test("a task starts at none, takes a priority on create and update, and records 
         })
       ).tasks;
       expect(both).toMatchObject({ status: "in_review", priority: "low" });
+      if (tasksV2) {
+        const taskConversationId = (
+          await db.task.findUniqueOrThrow({
+            where: { conversationId_number: { conversationId: channel.id, number: plain! } },
+            select: { discussionConversationId: true },
+          })
+        ).discussionConversationId!;
+        expect(
+          await db.systemMessage.count({
+            where: { conversationId: taskConversationId, kind: "task.priority_changed" },
+          }),
+        ).toBe(2);
+      }
 
       const history = await run("bob", { operation: "history", number: plain! });
       expect(

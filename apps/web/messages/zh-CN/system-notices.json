@@ -20,6 +20,7 @@
   "system_notice_task_assigned_reason": "{actor} 把{task}指派给了 {assignee}：{reason}",
   "system_notice_task_claimed": "{actor} 认领了{task}",
   "system_notice_task_moved": "{actor} 把{task}移到了{status}",
+  "system_notice_task_priority_changed": "{actor} 将{task}的优先级从 {from} 改为 {to}",
   "system_notice_task_unassigned": "{actor} 取消了{task}的指派",
   "system_notice_task_unfollowed": "{actor} 不再关注这个任务",
   "system_notice_task_unfollowed_reason": "{actor} 不再关注这个任务：{reason}",

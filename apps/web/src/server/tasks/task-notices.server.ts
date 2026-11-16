@@ -1,4 +1,4 @@
-import type { TaskStatus } from "@lrm/coforge-sdk/internal";
+import type { TaskPriority, TaskStatus } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import type { HumanNames } from "#src/lib/human-label";
 import {
@@ -165,6 +165,17 @@ export const noticeText = {
   claimed: (claimer: Handle, task: QuotedTask) => `📌 ${claimer} claimed ${reference(task)}`,
   moved: (actor: DisplayName, task: QuotedTask, status: TaskStatus) =>
     `${STATUS_WORDING[status].emoji} ${actor} moved ${reference(task)} to ${STATUS_WORDING[status].label}`,
+  priorityChanged: (
+    actor: DisplayName,
+    task: QuotedTask,
+    from: TaskPriority,
+    to: TaskPriority,
+    owner?: AssigneeMention | null,
+  ) =>
+    addressed(
+      `🏷️ ${actor} changed ${reference(task)} priority from ${from} to ${to}`,
+      owner ?? null,
+    ),
   unassigned: (actor: DisplayName, task: QuotedTask) => `🔓 ${actor} unassigned ${reference(task)}`,
   /** The notice that a Task's last unfinished blocker finished; it names the owner when there is one. */
   unblocked: (blocker: QuotedTask, task: QuotedTask, owner: AssigneeMention | null) =>

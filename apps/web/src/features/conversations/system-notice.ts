@@ -1,4 +1,4 @@
-import type { TaskStatus } from "@lrm/coforge-sdk/internal";
+import type { TaskPriority, TaskStatus } from "@lrm/coforge-sdk/internal";
 
 /** A person a system notice names: the id opens their profile when it resolves; the handle and
  * name survive a deleted person. */
@@ -34,6 +34,16 @@ export type SystemNotice =
     }
   | { kind: "task.claimed"; params: { claimer: SystemPerson; task: SystemTask } }
   | { kind: "task.moved"; params: { actor: SystemPerson; task: SystemTask; status: TaskStatus } }
+  | {
+      kind: "task.priority_changed";
+      params: {
+        actor: SystemPerson;
+        task: SystemTask;
+        from: TaskPriority;
+        to: TaskPriority;
+        owner?: SystemPerson | null;
+      };
+    }
   | { kind: "task.unassigned"; params: { actor: SystemPerson; task: SystemTask } }
   | {
       kind: "task.unfollowed";
@@ -117,6 +127,7 @@ const ownerAddressed = (params: Record<string, unknown>) =>
   (params.owner === null || params.owner === undefined || person(params.owner));
 
 const STATUSES = new Set(["todo", "in_progress", "in_review", "done", "closed"]);
+const PRIORITIES = new Set(["urgent", "high", "medium", "low", "none"]);
 
 /** Whether a stored `kind`/`params` pair is one a renderer can trust. The backfill test runs it
  * over every migrated row; the web can use it to fall back to `body` on a malformed row. */
@@ -156,6 +167,14 @@ export function isSystemNotice(value: { kind: string; params: unknown }): value 
       return person(params.claimer) && task(params.task);
     case "task.moved":
       return person(params.actor) && task(params.task) && STATUSES.has(String(params.status));
+    case "task.priority_changed":
+      return (
+        person(params.actor) &&
+        task(params.task) &&
+        PRIORITIES.has(String(params.from)) &&
+        PRIORITIES.has(String(params.to)) &&
+        (params.owner === null || params.owner === undefined || person(params.owner))
+      );
     case "task.unfollowed":
       return (
         person(params.actor) &&
