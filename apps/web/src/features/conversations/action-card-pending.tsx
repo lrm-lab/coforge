@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, ReactNode, Ref, SetStateAction } from "react";
 import { AlertCircle, Clock } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -34,6 +34,7 @@ const TARGET = "max-sm:min-h-11";
  * with no buttons (task #449).
  */
 export function PendingActionCard({
+  frameRef,
   view,
   fillValues,
   setFillValues,
@@ -46,6 +47,7 @@ export function PendingActionCard({
   onOpenDesktop,
   onCancel,
 }: {
+  frameRef: Ref<HTMLDivElement>;
   view: ToolActionCardView;
   fillValues: Record<string, string>;
   setFillValues: Dispatch<SetStateAction<Record<string, string>>>;
@@ -60,8 +62,6 @@ export function PendingActionCard({
   onOpenDesktop?: () => void;
   onCancel: () => void;
 }) {
-  const Icon = actionCardIcon(view.kind);
-  const title = actionCardTitle(view);
   const deniedReason = actionCardDeniedReason(view);
   const busy = committing || cancelling;
   // The failed commit is sent again as it is; a failed cancel leaves the primary button alone.
@@ -73,23 +73,12 @@ export function PendingActionCard({
       ? m.action_card_retry()
       : actionCardCommitLabel(view, committing);
   return (
-    <div
-      role="group"
-      aria-label={title}
-      data-no-row-tap
-      className="mt-1 flex max-w-md flex-col gap-3 rounded-xl border border-secondary bg-primary p-4"
+    <ActionCardFrame
+      ref={frameRef}
+      view={view}
+      fillValues={fillValues}
+      setFillValues={setFillValues}
     >
-      <div className="flex items-center gap-2">
-        <span className="flex size-6.5 shrink-0 items-center justify-center rounded-md bg-tertiary text-secondary">
-          <Icon aria-hidden="true" className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1 text-sm font-semibold wrap-anywhere text-primary">
-          {title}
-        </span>
-      </div>
-
-      <ActionCardObject view={view} fillValues={fillValues} setFillValues={setFillValues} />
-
       {failure && (
         <p role="alert" className="flex items-start gap-1.5 text-sm text-error-primary">
           <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -156,6 +145,50 @@ export function PendingActionCard({
           )}
         </div>
       )}
+    </ActionCardFrame>
+  );
+}
+
+const NO_FILL_VALUES: Record<string, string> = {};
+
+export function ActionCardFrame({
+  ref,
+  view,
+  fillValues = NO_FILL_VALUES,
+  setFillValues = () => {},
+  minHeight,
+  children,
+}: {
+  ref?: Ref<HTMLDivElement>;
+  view: ToolActionCardView;
+  fillValues?: Record<string, string>;
+  setFillValues?: Dispatch<SetStateAction<Record<string, string>>>;
+  minHeight?: number;
+  children: ReactNode;
+}) {
+  const Icon = actionCardIcon(view.kind);
+  const title = actionCardTitle(view);
+  return (
+    <div
+      ref={ref}
+      role="group"
+      aria-label={title}
+      data-no-row-tap
+      className="mt-1 flex max-w-md flex-col gap-3 rounded-xl border border-secondary bg-primary p-4"
+      style={minHeight ? { minHeight } : undefined}
+    >
+      <div className="flex items-center gap-2">
+        <span className="flex size-6.5 shrink-0 items-center justify-center rounded-md bg-tertiary text-secondary">
+          <Icon aria-hidden="true" className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1 text-sm font-semibold wrap-anywhere text-primary">
+          {title}
+        </span>
+      </div>
+
+      <ActionCardObject view={view} fillValues={fillValues} setFillValues={setFillValues} />
+
+      {children}
     </div>
   );
 }

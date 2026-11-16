@@ -7,6 +7,7 @@ stream (Frank, 2026-11-12). Rules an agent cannot read off the code:
   and one line after them for the next step (`question-card-status.tsx`). Say only what
   the card cannot show: answers in dark mean answered, a gray card means nobody will answer it, and
   a person the line names is drawn by face (`ActorName`). Add no counters or state labels.
+- A card answered while it is on screen keeps its height until the stream mounts it again (`useSettleInPlace`), so the messages below do not move when its Answer line goes.
 - `QuestionDockHost` is per pane and owns which card is open, at which question. On a desktop the
   dock takes the composer's place; the composer is hidden (`contents sm:hidden`), never unmounted,
   so its draft survives, and closing the dock gives focus back to it. On a phone the dock is a

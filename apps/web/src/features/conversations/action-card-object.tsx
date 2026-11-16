@@ -44,7 +44,7 @@ export function NamesWithFaces({
     .formatToParts(people.map((person) => person.displayName))
     .map((part, index) =>
       part.type === "element" ? (
-        <ActorName key={index} actor={cardActor(people[next]!, people[next++]!.kind)} />
+        <ActorName key={index} inline actor={cardActor(people[next]!, people[next++]!.kind)} />
       ) : (
         part.value
       ),

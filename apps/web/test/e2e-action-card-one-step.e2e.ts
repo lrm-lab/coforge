@@ -9,10 +9,11 @@ import { PrismaDirectConversationRepository } from "#src/server/db/repositories/
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * An action card commits its draft in one press and closes to one line in the message (task #449,
- * step 2): Create makes the channel as the card shows it, Add adds the proposed Agent, Dismiss
- * closes a card unmade. The made channel is a link whose tooltip is when it was made, and opens
- * it. A channel name taken since the card was drafted says so and offers no Retry, since sending it
+ * An action card commits its draft in one press (task #449, step 2): Create makes the channel as
+ * the card shows it, Add adds the proposed Agent, Dismiss closes a card unmade. A card handled
+ * while on screen settles in place: its buttons give way to the line it closes to and its box
+ * keeps its height, so the messages below it do not move (Frank, 11-16); opened again, it is that
+ * one line. The made channel is a link whose tooltip is when it was made, and opens it. A channel name taken since the card was drafted says so and offers no Retry, since sending it
  * again fails the same way.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agents
@@ -22,7 +23,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/action-card-one-step");
 
-test("an action card commits in one press and closes to one line", async () => {
+test("an action card commits in one press, settles in place, and is one line reopened", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `card-one-step-${process.pid}`);
   const suffix = `${process.pid}-${Date.now()}`;
@@ -81,13 +82,22 @@ test("an action card commits in one press and closes to one line", async () => {
     evaluate<string[]>(
       `[...(${card(id)}?.querySelectorAll("button") ?? [])].map((el) => el.textContent.trim())`,
     );
-  /** The message's text on screen, without the line a screen reader reads in place of the card. */
+  /** The message's text on screen, without the line a screen reader reads in place of the card or
+   * the initials drawn on faces. */
   const text = (id: string) =>
     evaluate<string>(`(() => {
       const copy = ${message(id)}.cloneNode(true);
-      copy.querySelectorAll(".sr-only").forEach((el) => el.remove());
+      copy.querySelectorAll(".sr-only, [aria-hidden='true']").forEach((el) => el.remove());
       return copy.textContent;
     })()`);
+  /** How far below message `id` the message `next` starts: what a card closing would change. */
+  const gap = (id: string, next: string) =>
+    evaluate<number>(
+      `Math.round(${message(next)}.getBoundingClientRect().top - ${message(id)}.getBoundingClientRect().top)`,
+    );
+  /** The card's box now holds the line it closed to, in place of its buttons. */
+  const settledIn = (id: string) =>
+    `${card(id)}?.querySelector("[data-action-card-handled]") != null`;
   // Colors ease into a new theme: a screenshot waits until no transition is still running.
   const settled = () =>
     browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
@@ -180,15 +190,27 @@ test("an action card commits in one press and closes to one line", async () => {
     await browser("press", "Escape");
     await browser("wait", "--fn", `document.querySelector('[role="dialog"]') == null`);
 
-    // Create, Add and Dismiss each close their card to one line. Each is pressed once the one
-    // before has closed: a card closing moves the ones below it, under a click on its way.
-    const link = `[...${message(createCard.messageId)}.querySelectorAll("a")].find((el) => el.textContent === ${JSON.stringify(`#${launch}`)})`;
+    // Create, Add and Dismiss each settle their card in place: what happened takes the buttons'
+    // row, and the message below starts where it did.
+    const link = `[...${message(createCard.messageId)}.querySelectorAll("a")].find((el) => el.querySelector("[data-channel-name]")?.textContent === ${JSON.stringify(launch)})`;
+    const before = {
+      create: await gap(createCard.messageId, addCard.messageId),
+      add: await gap(addCard.messageId, agentCard.messageId),
+      dismiss: await gap(agentCard.messageId, takenCard.messageId),
+    };
     await press(createCard.messageId, "Create");
-    await browser("wait", "--fn", `${link} !== undefined`);
+    await browser("wait", "--fn", settledIn(createCard.messageId));
     await press(addCard.messageId, "Add");
-    await browser("wait", "--fn", `${card(addCard.messageId)} == null`);
+    await browser("wait", "--fn", settledIn(addCard.messageId));
     await press(agentCard.messageId, "Dismiss");
-    await browser("wait", "--fn", `${card(agentCard.messageId)} == null`);
+    await browser("wait", "--fn", settledIn(agentCard.messageId));
+    expect({
+      create: await gap(createCard.messageId, addCard.messageId),
+      add: await gap(addCard.messageId, agentCard.messageId),
+      dismiss: await gap(agentCard.messageId, takenCard.messageId),
+    }).toEqual(before);
+    expect(await buttons(createCard.messageId)).not.toContain("Create");
+    expect(await buttons(createCard.messageId)).not.toContain("Dismiss");
     const made = await db.conversation.findFirstOrThrow({
       where: { workspaceId, channelName: launch },
       select: { id: true, members: { select: { agentId: true } } },
@@ -203,14 +225,40 @@ test("an action card commits in one press and closes to one line", async () => {
         where: { conversationId: channel.id, agentId: helper.id },
       }),
     ).toBe(1);
-    expect(await text(createCard.messageId)).toContain(`Created channel #${launch}`);
-    expect(await text(addCard.messageId)).toContain(`Added members Release Helper → ${target}`);
-    expect(await text(agentCard.messageId)).toContain("Cancelled");
-    // The viewer's own commit is not followed by their name.
-    expect(await text(createCard.messageId)).not.toContain(DEV_BROWSER_USER.name);
+    const settledRow = (id: string) =>
+      evaluate<string>(`${card(id)}.querySelector("[data-action-card-handled]").textContent`);
+    expect(await settledRow(createCard.messageId)).toBe("Created channelOpen");
+    expect(await settledRow(addCard.messageId)).toBe("Added membersOpen");
+    expect(await settledRow(agentCard.messageId)).toBe("Cancelled");
+    await shot("settled");
 
-    // The made channel's tooltip is when it was made. React Aria opens a hover tooltip once the
-    // page has seen a pointer press, which a person has always made by now.
+    // Phone: the same lines, nothing past the screen's edge.
+    await browser("set", "viewport", "390", "844");
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
+    await browser("wait", "--fn", `${pageHydrated} && ${message(takenCard.messageId)} != null`);
+    // Opened again, a handled card is its one line, with no box around it; a channel in it is its
+    // face and name, never a `#` (task #55), and the viewer's own commit names no one.
+    for (const id of [createCard.messageId, addCard.messageId, agentCard.messageId])
+      expect(await evaluate<boolean>(`${card(id)} == null`)).toBe(true);
+    expect(await text(createCard.messageId)).toContain(`Created channel ${launch}`);
+    expect(await text(addCard.messageId)).toContain(
+      `Added members Release Helper → ${channel.channelName}`,
+    );
+    expect(await text(agentCard.messageId)).toContain("Cancelled");
+    expect(await text(createCard.messageId)).not.toContain(DEV_BROWSER_USER.name);
+    await evaluate(`${message(createCard.messageId)}.scrollIntoView({ block: "center" }) ?? true`);
+    expect(await evaluate<boolean>(`document.documentElement.scrollWidth <= innerWidth`)).toBe(
+      true,
+    );
+    await browser("screenshot", join(artifacts, "phone-handled.png"));
+    await evaluate(`${message(takenCard.messageId)}.scrollIntoView({ block: "center" }) ?? true`);
+    await browser("screenshot", join(artifacts, "phone-pending.png"));
+
+    // The made channel's tooltip is when it was made, and the link opens it. React Aria opens a
+    // hover tooltip once the page has seen a pointer press, which a person has always made by now.
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
+    await browser("wait", "--fn", `${pageHydrated} && ${link} !== undefined`);
     await browser("click", "textarea[data-composer]");
     await evaluate(`${link}.setAttribute("data-e2e-made", "") ?? true`);
     await browser("hover", "[data-e2e-made]");
@@ -220,24 +268,6 @@ test("an action card commits in one press and closes to one line", async () => {
       `/\\d/.test(document.querySelector('[role="tooltip"]')?.textContent ?? "")`,
     );
     await shot("handled");
-
-    // Phone: the same lines, nothing past the screen's edge.
-    await browser("set", "viewport", "390", "844");
-    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
-    await browser("wait", "--fn", `${pageHydrated} && ${message(takenCard.messageId)} != null`);
-    await evaluate(`${message(createCard.messageId)}.scrollIntoView({ block: "center" }) ?? true`);
-    expect(await evaluate<boolean>(`document.documentElement.scrollWidth <= innerWidth`)).toBe(
-      true,
-    );
-    await browser("screenshot", join(artifacts, "phone-handled.png"));
-    await evaluate(`${message(takenCard.messageId)}.scrollIntoView({ block: "center" }) ?? true`);
-    await browser("screenshot", join(artifacts, "phone-pending.png"));
-
-    // The link opens the channel it made.
-    await browser("set", "viewport", "1440", "900");
-    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
-    await browser("wait", "--fn", `${pageHydrated} && ${link} !== undefined`);
-    await evaluate(`${link}.setAttribute("data-e2e-made", "") ?? true`);
     await browser("click", "[data-e2e-made]");
     await browser("wait", "--fn", `location.pathname.endsWith(${JSON.stringify(made.id)})`);
   } finally {

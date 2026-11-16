@@ -5,6 +5,7 @@ import {
   useSuspenseInfiniteQuery,
   hashKey,
   type InfiniteData,
+  type QueryClient,
 } from "@tanstack/react-query";
 
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -122,6 +123,35 @@ export const publicChannelUpdates =
     loadPublicChannelUpdates({ data: { channelId, ...cursor }, signal });
 
 type Pages<T> = InfiniteData<T, ConversationWindowCursor>;
+
+export function updateLoadedMessage<M extends PageMessage>(
+  queryClient: QueryClient,
+  conversationId: string,
+  messageId: string,
+  update: (message: M) => M,
+) {
+  for (const key of conversationWindowKeys(conversationId))
+    queryClient.setQueryData<Pages<ConversationPage<M>>>(key, (pages) => {
+      const at = pages?.pages.findIndex((page) =>
+        page.messages.some((message) => message.id === messageId),
+      );
+      if (!pages || at === undefined || at < 0) return pages;
+      return {
+        ...pages,
+        pages: pages.pages.map((page, index) =>
+          index === at
+            ? {
+                ...page,
+                messages: page.messages.map((message) =>
+                  message.id === messageId ? update(message) : message,
+                ),
+              }
+            : page,
+        ),
+      };
+    });
+  updateLoadedReply<M>(queryClient, conversationId, messageId, update);
+}
 
 /** The conversation no longer exists for this viewer, such as a channel hidden from the
  * Workspace: its page leaves for Chat instead of showing a load failure. */
@@ -304,24 +334,8 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   ];
   const loadedRef = useRef(loaded);
   loadedRef.current = loaded;
-  /** Replace one loaded message, in the window or in the open thread that holds it, keeping every
-   * other page, thread and message object as it is. */
-  const updateMessage = (messageId: string, update: (message: M) => M) => {
-    setPages((pages) => ({
-      ...pages,
-      pages: pages.pages.map((page) =>
-        page.messages.some((message) => message.id === messageId)
-          ? {
-              ...page,
-              messages: page.messages.map((message) =>
-                message.id === messageId ? update(message) : message,
-              ),
-            }
-          : page,
-      ),
-    }));
-    updateLoadedReply<M>(queryClient, conversationId, messageId, update);
-  };
+  const updateMessage = (messageId: string, update: (message: M) => M) =>
+    updateLoadedMessage<M>(queryClient, conversationId, messageId, update);
   const updateMessageRef = useRef(updateMessage);
   updateMessageRef.current = updateMessage;
   const reactionSync = useMemo(

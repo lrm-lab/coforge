@@ -1,11 +1,14 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { Link } from "@tanstack/react-router";
+import { ArrowRight, Check, Clock, Grid01, SlashCircle01 } from "@untitledui/icons";
 
 import { ActorName } from "#src/features/avatars/actor-name";
-
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import type { ActionCardActor } from "#src/server/conversations/action-card-view.server";
 import { m } from "#src/paraglide/messages";
+import { messageSlots } from "#src/lib/message-slots";
+import { cn } from "#src/lib/utils";
 import { AnsweredAtTooltip, type FocusableLink } from "./action-card-answered-at";
 import {
   actionCardHandledVerb,
@@ -13,38 +16,78 @@ import {
   type ToolActionCardView,
 } from "./action-card-labels";
 import { NamesWithFaces } from "./action-card-object";
+import { ActionCardFrame } from "./action-card-pending";
 import { cardActor } from "./action-card-actor";
+import { ChannelPlace } from "./channel-name";
 
-/** What a handled card made: its words and, where the thing has an id, where it opens. */
-type Outcome = {
-  text: ReactNode;
-  target?: { kind: "channel"; channelId: string } | { kind: "agent"; agentId: string };
-};
+type Target = { kind: "channel"; channelId: string } | { kind: "agent"; agentId: string };
 
-/** The made thing (or, for a card closed without being done, the thing it would have made). Only
- * a done card has a `result`. */
+type Outcome = { text: ReactNode; quiet?: boolean };
+
+function AppName({ name }: { name: string }) {
+  return (
+    <span>
+      <Grid01
+        aria-hidden="true"
+        className="mr-1 inline-block size-4 align-text-bottom text-fg-quaternary"
+      />
+      {name}
+    </span>
+  );
+}
+
+function asCommitted(view: ToolActionCardView): ToolActionCardView {
+  if (view.kind !== "channel:add_member" || !view.result) return view;
+  const kept = new Set([...view.result.userIds, ...view.result.agentIds]);
+  return {
+    ...view,
+    humans: view.humans.filter((person) => kept.has(person.id)),
+    agents: view.agents.filter((person) => kept.has(person.id)),
+  };
+}
+
+function AppRegisterNotice({ view, className }: { view: ToolActionCardView; className?: string }) {
+  if (view.kind !== "app:register" || !view.result) return null;
+  return (
+    <p className={cn("text-xs text-tertiary", className)}>
+      {view.result.noOwnerAgent
+        ? m.app_register_card_no_owner_agent()
+        : view.result.secretUndelivered
+          ? m.app_register_card_secret_undelivered()
+          : m.app_register_card_secret_sent()}
+    </p>
+  );
+}
+
 function outcomeOf(view: ToolActionCardView): Outcome | undefined {
   switch (view.kind) {
     case "channel:create":
       return {
-        text: `#${view.name}`,
-        target: view.result ? { kind: "channel", channelId: view.result.channelId } : undefined,
+        text: view.result ? (
+          <ChannelPlace id={view.result.channelId} name={view.name} visibility={view.visibility} />
+        ) : (
+          view.name
+        ),
       };
     case "agent:create":
       return {
-        text: view.name,
-        target: view.result ? { kind: "agent", agentId: view.result.agentId } : undefined,
+        text: view.result ? (
+          <ActorName inline actor={{ kind: "agent", id: view.result.agentId, name: view.name }} />
+        ) : (
+          view.name
+        ),
       };
     case "channel:add_member": {
-      // What was added is what the person kept of the proposal, and the channel opens only for
-      // someone who can read it (its id is null to anyone else).
-      const kept = new Set([...(view.result?.userIds ?? []), ...(view.result?.agentIds ?? [])]);
-      const proposed = [
+      const people = [
         ...view.humans.map((person) => ({ ...person, kind: "user" as const })),
         ...view.agents.map((person) => ({ ...person, kind: "agent" as const })),
       ];
-      const people = view.result ? proposed.filter((person) => kept.has(person.id)) : proposed;
-      const channel = `#${view.channel.displayName}`;
+      const channel =
+        view.result && view.channel.id ? (
+          <ChannelPlace id={view.channel.id} name={view.channel.displayName} />
+        ) : (
+          view.channel.displayName
+        );
       return {
         text: people.length ? (
           <>
@@ -53,46 +96,58 @@ function outcomeOf(view: ToolActionCardView): Outcome | undefined {
         ) : (
           channel
         ),
-        target:
-          view.result && view.channel.id
-            ? { kind: "channel", channelId: view.channel.id }
-            : undefined,
       };
     }
     case "page:fill":
     case "desktop:takeover":
-      return view.prompt ? { text: view.prompt } : undefined;
+      return view.prompt ? { text: view.prompt, quiet: true } : undefined;
     case "app:grant_agent":
-      return { text: view.app.name };
+      return { text: <AppName name={view.app.name} /> };
     case "app:register":
-      // The key names the app in Settings, which the name alone may not.
       return {
-        text: view.result ? `${view.app.name} (${view.result.clientKey})` : view.app.name,
+        text: (
+          <>
+            <AppName name={view.app.name} />
+            {view.result && <span className="ml-1.5 text-quaternary">{view.result.clientKey}</span>}
+          </>
+        ),
       };
     case "app:recover_owner":
       return {
-        text: view.result ? `${view.result.ownerAgent} → ${view.app.name}` : view.app.name,
+        text: view.result ? (
+          <>
+            {view.result.ownerAgent} → <AppName name={view.app.name} />
+          </>
+        ) : (
+          <AppName name={view.app.name} />
+        ),
       };
     default:
       return unhandledKind(view);
   }
 }
 
-const LINK_CLASS =
-  "rounded-sm font-medium text-brand-secondary outline-focus-ring hover:underline focus-visible:outline-2";
+function targetOf(view: ToolActionCardView): Target | undefined {
+  if (view.kind === "channel:create" && view.result)
+    return { kind: "channel", channelId: view.result.channelId };
+  if (view.kind === "agent:create" && view.result)
+    return { kind: "agent", agentId: view.result.agentId };
+  if (view.kind === "channel:add_member" && view.result && view.channel.id)
+    return { kind: "channel", channelId: view.channel.id };
+  return undefined;
+}
 
-/** The link itself, built here and not wrapped in a component: the tooltip's `Focusable` hands its
- * hover and focus props to the element it is given, which must be the one that renders the anchor. */
-function outcomeLink(
+function targetLink(
   workspaceSlug: string,
-  target: NonNullable<Outcome["target"]>,
+  target: Target,
   text: ReactNode,
+  className: string,
 ): FocusableLink {
   return target.kind === "channel" ? (
     <Link
       to="/w/$workspaceSlug/channel/$channelId"
       params={{ workspaceSlug, channelId: target.channelId }}
-      className={LINK_CLASS}
+      className={className}
     >
       {text}
     </Link>
@@ -101,82 +156,159 @@ function outcomeLink(
       to="/w/$workspaceSlug/members"
       params={{ workspaceSlug }}
       search={{ profile: formatAgentProfileParam(target.agentId), agentTab: "profile" }}
-      className={LINK_CLASS}
+      className={className}
     >
       {text}
     </Link>
   );
 }
 
-/**
- * A handled card is no longer a card but one line in the message, as a handled choice is: what was
- * done in gray, then what it made, a link where there is one to open. Someone else's commit is
- * followed by their name; the viewer's own is not. When it was done is the result's tooltip, as a
- * message's own time is. A card closed without being done keeps the action and what it named, then
- * says so in gray (task #449).
- */
-export function HandledActionCard({ view }: { view: ToolActionCardView }) {
-  const workspaceSlug = useWorkspaceSlug();
-  const outcome = outcomeOf(view);
-  const verb = actionCardHandledVerb(view);
-  if (view.state === "cancelled" || view.state === "expired") {
-    const closed =
-      view.state === "expired"
-        ? m.action_card_expired()
-        : view.kind === "app:grant_agent"
-          ? m.app_card_denied()
-          : m.action_card_cancelled();
-    const closedBy = view.committedBy?.isViewer ? undefined : view.committedBy;
-    return (
-      <p className="text-sm wrap-anywhere text-tertiary">
-        <span className="mr-1">{verb}</span>{" "}
-        {outcome && <span className="mr-1.5">{outcome.text}</span>}{" "}
-        {view.committedAt ? (
-          // Who closed it and when, as a done card's result says (task #472).
-          <AnsweredAtTooltip at={view.committedAt} by={closedBy}>
-            <span className="text-quaternary">{closed}</span>
-          </AnsweredAtTooltip>
-        ) : (
-          <span className="text-quaternary">{closed}</span>
-        )}
-      </p>
-    );
-  }
-  const by = view.committedBy && !view.committedBy.isViewer ? view.committedBy : undefined;
-  const at = view.committedAt;
-  const link = outcome?.target && outcomeLink(workspaceSlug, outcome.target, outcome.text);
-  const result = outcome && !link && (
-    <span className="font-medium text-primary">{outcome.text}</span>
+const THING_LINK_CLASS =
+  "rounded-sm font-medium text-primary outline-focus-ring underline-offset-2 hover:underline focus-visible:outline-2 [&:hover_[data-channel-name]]:underline";
+
+const OPEN_LINK_CLASS =
+  "ml-auto inline-flex shrink-0 items-center gap-1 rounded-sm font-semibold text-brand-secondary outline-focus-ring underline-offset-2 hover:underline focus-visible:outline-2";
+
+function isClosed(view: ToolActionCardView) {
+  return view.state === "cancelled" || view.state === "expired";
+}
+
+function HandledMark({ view }: { view: ToolActionCardView }) {
+  const closed = isClosed(view);
+  const Mark = view.state === "expired" ? Clock : closed ? SlashCircle01 : Check;
+  return (
+    <Mark
+      aria-hidden="true"
+      className={cn(
+        "my-0.5 size-4 shrink-0",
+        closed ? "text-fg-quaternary" : "text-fg-success-primary",
+      )}
+    />
   );
+}
+
+function closedWord(view: ToolActionCardView) {
+  if (view.state === "expired") return m.action_card_expired();
+  return view.kind === "app:grant_agent" ? m.app_card_denied() : m.action_card_cancelled();
+}
+
+function HandledBy({ by, className }: { by: ActionCardActor; className?: string }) {
+  return (
+    <span className={cn("text-quaternary", className)}>
+      {messageSlots(m.action_card_handled_by, {
+        name: <ActorName actor={cardActor(by)} inline />,
+      })}
+    </span>
+  );
+}
+
+function othersCommit(view: ToolActionCardView) {
+  return view.committedBy && !view.committedBy.isViewer ? view.committedBy : undefined;
+}
+
+function Timed({
+  at,
+  by,
+  children,
+}: {
+  at: string | undefined;
+  by?: ActionCardActor;
+  children: ReactNode;
+}) {
+  return at ? (
+    <AnsweredAtTooltip at={at} by={by}>
+      {children}
+    </AnsweredAtTooltip>
+  ) : (
+    children
+  );
+}
+
+export function HandledActionCard({ view: shown }: { view: ToolActionCardView }) {
+  const view = asCommitted(shown);
+  const workspaceSlug = useWorkspaceSlug();
+  const closed = isClosed(view);
+  const outcome = outcomeOf(view);
+  const target = targetOf(view);
+  const at = view.committedAt;
+  const by = othersCommit(view);
+  const link =
+    outcome && target && targetLink(workspaceSlug, target, outcome.text, THING_LINK_CLASS);
+  const words = outcome && !link && (
+    <span className={closed || outcome.quiet ? "text-secondary" : "font-medium text-primary"}>
+      {outcome.text}
+    </span>
+  );
+  const thing = link && at ? <AnsweredAtTooltip at={at} link={link} /> : (link ?? words);
+  const verb = actionCardHandledVerb(view);
   return (
     <div className="text-sm wrap-anywhere text-tertiary">
-      <p>
-        {/* With nothing made to point at, the verb itself carries the time. */}
-        <span className="mr-1">
-          {at && !outcome ? <AnsweredAtTooltip at={at}>{verb}</AnsweredAtTooltip> : verb}
-        </span>{" "}
-        {at && link ? (
-          <AnsweredAtTooltip at={at} link={link} />
-        ) : at && result ? (
-          <AnsweredAtTooltip at={at}>{result}</AnsweredAtTooltip>
-        ) : (
-          (link ?? result)
-        )}
-        {by && (
-          <span className="ml-1.5 inline-block max-w-48 truncate align-bottom text-quaternary">
-            · <ActorName actor={cardActor(by)} />
-          </span>
-        )}
+      <p className="flex items-start gap-1.5">
+        <HandledMark view={view} />
+        <span className="min-w-0">
+          {!closed && !link ? <Timed at={at}>{verb}</Timed> : verb} {thing}
+          {closed && (
+            <>
+              {" "}
+              <Timed at={at}>
+                <span className="text-quaternary">{closedWord(view)}</span>
+              </Timed>
+            </>
+          )}
+          {by && (
+            <>
+              {" "}
+              <HandledBy by={by} />
+            </>
+          )}
+        </span>
       </p>
-      {view.kind === "app:register" && view.result && (
-        <p className="pt-1 text-xs text-tertiary">
-          {view.result.noOwnerAgent
-            ? m.app_register_card_no_owner_agent()
-            : view.result.secretUndelivered
-              ? m.app_register_card_secret_undelivered()
-              : m.app_register_card_secret_sent()}
-        </p>
-      )}
+      <AppRegisterNotice view={view} className="pt-1 pl-5.5" />
     </div>
+  );
+}
+
+export function SettledActionCard({
+  frameRef,
+  view: shown,
+  minHeight,
+}: {
+  frameRef: Ref<HTMLDivElement>;
+  view: ToolActionCardView;
+  minHeight: number | undefined;
+}) {
+  const view = asCommitted(shown);
+  const workspaceSlug = useWorkspaceSlug();
+  const closed = isClosed(view);
+  const target = targetOf(view);
+  const by = othersCommit(view);
+  return (
+    <ActionCardFrame ref={frameRef} view={view} minHeight={minHeight}>
+      <div className="mt-auto flex flex-col gap-3">
+        <AppRegisterNotice view={view} />
+        <div
+          data-action-card-handled=""
+          className="flex min-h-9 min-w-0 items-center gap-1.5 text-sm text-tertiary max-sm:min-h-11"
+        >
+          <HandledMark view={view} />
+          <Timed at={view.committedAt} by={by}>
+            <span className={cn("shrink-0", closed && "text-quaternary")}>
+              {closed ? closedWord(view) : actionCardHandledVerb(view)}
+            </span>
+          </Timed>
+          {by && <HandledBy by={by} className="min-w-0 flex-1 truncate" />}
+          {target &&
+            targetLink(
+              workspaceSlug,
+              target,
+              <>
+                {m.action_card_open()}
+                <ArrowRight aria-hidden="true" className="size-4" />
+              </>,
+              OPEN_LINK_CLASS,
+            )}
+        </div>
+      </div>
+    </ActionCardFrame>
   );
 }

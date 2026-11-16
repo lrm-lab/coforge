@@ -175,6 +175,7 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
   ticked rows alone) and read the one `channelMembersQueryKey` query through
   `channel-members-query.ts`, so neither grows its own candidate list.
 - The browser refreshes only the pending action cards it shows, through `loadActionCardStates` on the `messageAvailable` signal and on window focus.
+- A handled action card is one line, the same for every kind (`HandledActionCard`). A card handled while on screen settles in place instead (`SettledActionCard`): its box keeps its height and only the buttons' row says what happened, so the messages below never move (Frank, 11-16); it is one line the next time it mounts. `useSettleInPlace` (`settle-in-place.ts`) decides it for action and question cards alike, by the viewer's own action or the server's `committedAt`/`expiresAt` after the card mounted, never by the cached copy it mounted with, which may be stale. A card's own commit writes its new state into the conversation's cache (`updateLoadedMessage`).
 - A reaction arrives as `message.reaction.v1` (the message's whole summary and its `reactionVersion`) and shows without a
   read only when newer than the loaded message's version, with the viewer's pending clicks folded over it (`reaction-sync.ts`);
   after a resubscribe that lost publications the page re-reads all loaded messages' reactions (`loadMessageReactions`).

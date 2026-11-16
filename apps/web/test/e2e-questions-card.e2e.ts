@@ -196,6 +196,9 @@ test("a questions card is answered in the dock, question by question, then sent 
       ),
     ).toBe(true);
     await evaluate(`(${card(messageId)}.scrollIntoView({ block: "center" }), true)`);
+    const cardHeight = () =>
+      evaluate<number>(`Math.round(${card(messageId)}.getBoundingClientRect().height)`);
+    const askedHeight = await cardHeight();
 
     // Answer opens the dock at the first question: a tab for each and the review after them, the
     // recommendation marked, an option's description under it, and an own-answer row where the
@@ -347,6 +350,9 @@ test("a questions card is answered in the dock, question by question, then sent 
       ["Who hears about a new sign-up?", "Ops, Owner"],
     ]);
     await waitFor(`${card(messageId)}?.dataset.questionCard === "executed"`);
+    // Answered while on screen, the card keeps its height though its Answer line is gone, so the
+    // stream below it does not move (Frank, 11-16).
+    expect(await cardHeight()).toBe(askedHeight);
     expect(await evaluate<string>(rowText(messageId, "webhook"))).toContain("Keep it manual");
     expect(await evaluate<string>(rowText(messageId, "agent"))).toContain("Skipped");
     expect(await evaluate<string>(rowText(messageId, "notify"))).toContain("Ops, Owner");
@@ -372,6 +378,7 @@ test("a questions card is answered in the dock, question by question, then sent 
       60_000,
     );
     expect(await evaluate<string>(rowText(messageId, "notify"))).toContain("Ops, Owner");
+    expect(await cardHeight()).toBeLessThan(askedHeight);
 
     // Someone else's card names whom it waits on, with no Answer; a row opens a dock to look
     // through: the same questions as tabs and no review, nothing to pick, type, send or decline.

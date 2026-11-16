@@ -19,9 +19,12 @@ import {
 } from "./action-cards.functions";
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
-import { HandledActionCard } from "./action-card-handled";
+import { HandledActionCard, SettledActionCard } from "./action-card-handled";
 import type { ToolActionCardView } from "./action-card-labels";
 import { isAskingView } from "./question-dock-model";
+import { useConversationId } from "./conversation-id";
+import { useSettleInPlace } from "./settle-in-place";
+import { updateLoadedMessage } from "./conversation-queries";
 import { QuestionCard } from "./question-card";
 import { PendingActionCard, type ActionCardFailure } from "./action-card-pending";
 import { channelMembersQueryKey } from "./conversation-query-keys";
@@ -79,6 +82,8 @@ export function ActionCard({ card }: { card: ActionCardView }) {
 function KnownActionCard({ card }: { card: ToolActionCardView }) {
   const [view, setView] = useState(card);
   useEffect(() => setView(card), [card]);
+  const [handledHere, setHandledHere] = useState(false);
+  const { box, settles, heldHeight } = useSettleInPlace(view, handledHere);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [failure, setFailure] = useState<ActionCardFailure | null>(null);
@@ -93,6 +98,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
   const commitFill = useServerFn(commitPageFillActionCard);
   const commitDesktop = useServerFn(commitDesktopTakeoverActionCard);
   const queryClient = useQueryClient();
+  const conversationId = useConversationId();
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
   // Known only to someone in the channel, who alone may commit (task #302).
   const addMemberChannelId = view.kind === "channel:add_member" ? view.channel.id : null;
@@ -126,10 +132,21 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
     openCloudDesktopWindow(desktopUrl, desktopComputerId, desktopAgentId);
   }
 
+  function refetchOwn() {
+    setHandledHere(true);
+    return refetch();
+  }
+
   async function refetch() {
     const states = await refresh({ data: { messageIds: [view.messageId] } });
     const next = states[view.messageId];
-    if (next && !isAskingView(next)) setView(next);
+    if (!next || isAskingView(next)) return;
+    setView(next);
+    if (conversationId)
+      updateLoadedMessage(queryClient, conversationId, view.messageId, (message) => ({
+        ...message,
+        actionCard: next,
+      }));
   }
 
   /** Runs a commit and shows the card as the server now has it. A failure says why, and the primary
@@ -162,7 +179,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
     }
     // Committed: a read that fails here leaves the card to the conversation's own refresh, and
     // offers no Retry of a commit that went through.
-    await refetch().catch(() => {});
+    await refetchOwn().catch(() => {});
     setCommitting(false);
   }
 
@@ -174,7 +191,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
       await (view.kind === "app:grant_agent" ? denyAppGrant : cancel)({
         data: { messageId: view.messageId },
       });
-      await refetch();
+      await refetchOwn();
     } catch {
       setFailure({ message: m.action_card_error(), retry: false, from: "cancel" });
     } finally {
@@ -295,6 +312,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
     <>
       {view.state === "pending" ? (
         <PendingActionCard
+          frameRef={box}
           view={view}
           fillValues={fillValues}
           setFillValues={setFillValues}
@@ -313,8 +331,9 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
           onOpenDesktop={desktopUrl ? openDesktop : undefined}
           onCancel={() => void doCancel()}
         />
+      ) : settles ? (
+        <SettledActionCard frameRef={box} view={view} minHeight={heldHeight} />
       ) : (
-        // The dialogs below stay mounted past the commit they made, so they close on their own.
         <HandledActionCard view={view} />
       )}
       {dialogOpen && view.kind === "channel:create" && (
@@ -332,7 +351,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
                 memberAgentIds: memberAgentIds ?? [],
               },
             });
-            await refetch();
+            await refetchOwn();
           }}
         />
       )}
@@ -348,7 +367,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
               commitAddMember({
                 data: { messageId: view.messageId, channelId: addMemberChannelId, ...input },
               }),
-            onCommitted: () => void refetch(),
+            onCommitted: () => void refetchOwn(),
           }}
         />
       )}
@@ -366,7 +385,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
           computerLocked={Boolean(view.requiredComputer)}
           actionCardMessageId={view.messageId}
           onCreate={(input) => create({ data: input })}
-          onCreated={() => void refetch()}
+          onCreated={() => void refetchOwn()}
         />
       )}
     </>

@@ -16,6 +16,7 @@ import {
   type AskingView,
 } from "./question-dock-model";
 import { cardStatus } from "./question-card-status";
+import { useSettleInPlace } from "./settle-in-place";
 
 /**
  * An Agent's question card in the stream (Frank, 11-12): a summary, each question on a line with
@@ -48,8 +49,11 @@ export function QuestionCard({ card }: { card: AskingView }) {
         })
       : undefined;
   const answerable = openable && mine;
+  const { box, heldHeight } = useSettleInPlace(view);
   return (
     <div
+      ref={box}
+      style={heldHeight ? { minHeight: heldHeight } : undefined}
       data-question-card={view.state}
       // A tap on the card is the card's: its rows open the dock, and its gaps do nothing rather
       // than open the message's actions.
