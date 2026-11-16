@@ -24,7 +24,7 @@ export function externalAgentInstallCommand(): string {
     typeof window !== "undefined" && window.location.origin
       ? window.location.origin
       : "https://coforge.example";
-  return `curl -fsSL ${origin}/computer/install.sh | sh`;
+  return `curl -fsSL ${origin}/computer/install.sh | sh && ln -sf "$HOME/.coforge/computer/install/active/coforge" "\${XDG_BIN_HOME:-$HOME/.local/bin}/coforge"`;
 }
 
 export function externalAgentLoginCommand(workspaceSlug: string, agentName: string): string {
@@ -65,7 +65,6 @@ export function ExternalAgentCommandBox({
     <div className="space-y-3">
       <div className="rounded-lg border border-secondary bg-secondary_subtle p-3">
         <p className="text-xs font-medium text-primary">{m.external_agent_install_label()}</p>
-        <p className="mt-0.5 text-xs text-tertiary">{m.external_agent_install_note()}</p>
         <pre className="mt-2 overflow-x-auto font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-primary select-all">
           {installCommand}
         </pre>

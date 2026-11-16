@@ -12,8 +12,9 @@ import {
 
 /**
  * Full external Agent flow: create via NewAgentDialog ("External"), start coforge-cli device
- * grant, approve on /oauth/verify, verify /context + /events + reminder refusal, and revoke
- * the key from the Agent's profile panel.
+ * grant (with extra-long Agent & machine names for break-ui), approve on /oauth/verify, verify
+ * /context + /events + reminder refusal, and revoke the key from the Agent's profile panel.
+ * Captures light, dark, and phone screenshots under `.amp/e2e/external-agent/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/external-agent");
@@ -21,19 +22,23 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/external-agent");
 test("external Agent: create, device login, approve, message check and revoke", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `ext-agent-${process.pid}`);
-  const tail = `${process.pid}-${Date.now()}`.slice(-10);
-  const agentName = `ext-${tail}`;
+  const tail = `${process.pid}-${Date.now()}`.slice(-8);
+  // Intentionally long names to verify wrapping/truncation (break-ui).
+  const agentName = `ext-long-agent-name-${tail}`;
+  const machineName = `build-server-very-long-machine-name-for-break-ui-check-${tail}`;
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   let createdAgentId: string | undefined;
 
   const settled = () =>
     browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
-  const shots = async (name: string) => {
+  const shoot = async (name: string) => {
     await settled();
     await browser("screenshot", join(artifacts, `${name}.png`));
+  };
+  const shots = async (name: string) => {
+    await shoot(name);
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
-    await settled();
-    await browser("screenshot", join(artifacts, `${name}-dark.png`));
+    await shoot(`${name}-dark`);
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   };
 
@@ -43,7 +48,7 @@ test("external Agent: create, device login, approve, message check and revoke", 
     await browser("open", `${origin}/en/w/${workspace.slug}/members`);
     await browser("wait", "--fn", pageHydrated);
 
-    // 1. Open NewAgentDialog and select External.
+    // 1. Open NewAgentDialog, select External, create, and shoot connect card (light, dark, phone).
     await browser("click", `button:has-text("New Agent")`);
     await browser("wait", "--fn", `document.querySelector('[role="dialog"]') !== null`);
     await browser("click", `[role="radio"]:has-text("External")`);
@@ -55,7 +60,10 @@ test("external Agent: create, device login, approve, message check and revoke", 
       "--fn",
       `document.body.innerText.includes("coforge agent login --server")`,
     );
-    await shots("connect-card");
+    await shots("1-connect-card");
+    await browser("set", "viewport", "390", "844");
+    await shoot("1-connect-card-phone");
+    await browser("set", "viewport", "1280", "860");
 
     const agentRow = await db.agent.findFirst({
       where: { workspaceId, name: agentName, deletedAt: null },
@@ -74,10 +82,10 @@ test("external Agent: create, device login, approve, message check and revoke", 
           kind: "external_agent",
           workspace: workspace.slug,
           agent: agentName,
-          machine_name: "e2e-build-box",
-          hostname: "e2e-build-box.local",
-          os: "linux 6.8",
-          client_name: "coforge-cli e2e",
+          machine_name: machineName,
+          hostname: `${machineName}.internal.example`,
+          os: "linux 6.8.0-generic",
+          client_name: "coforge-cli 0.1.0",
         },
       }),
     });
@@ -87,7 +95,7 @@ test("external Agent: create, device login, approve, message check and revoke", 
       user_code: string;
     };
 
-    // 3. Approve in /oauth/verify.
+    // 3. Approve in /oauth/verify (shoot light, dark, phone).
     await browser("open", `${origin}/en/oauth/verify`);
     await browser("wait", "--fn", pageHydrated);
     await browser(
@@ -95,10 +103,21 @@ test("external Agent: create, device login, approve, message check and revoke", 
       `input[autocomplete="one-time-code"], input[inputmode="text"]`,
       grant.user_code.replace(/-/g, ""),
     );
-    await browser("wait", "--fn", `document.body.innerText.includes("e2e-build-box")`);
-    await shots("device-verify");
+    await browser(
+      "wait",
+      "--fn",
+      `document.body.innerText.includes(${JSON.stringify(machineName)})`,
+    );
+    await shots("2-device-verify");
+    await browser("set", "viewport", "390", "844");
+    await shoot("2-device-verify-phone");
+    await browser("set", "viewport", "1280", "860");
     await browser("click", `button:has-text("Approve")`);
-    await browser("wait", "--fn", `document.body.innerText.includes("e2e-build-box") === false`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.body.innerText.includes(${JSON.stringify(machineName)}) === false`,
+    );
 
     // 4. Exchange device_code for sk_ext_ key and verify /context, /events, and reminder refusal.
     const tokenResponse = await fetch(`${origin}/oauth/token`, {
@@ -140,7 +159,7 @@ test("external Agent: create, device login, approve, message check and revoke", 
     });
     expect(remRes.status).toBe(403);
 
-    // 5. Open Agent profile panel and revoke the key.
+    // 5. Open Agent profile panel, shoot connected state, revoke, and shoot revoked state.
     await browser(
       "open",
       `${origin}/en/w/${workspace.slug}/members?profile=agent:${createdAgentId}`,
@@ -148,11 +167,12 @@ test("external Agent: create, device login, approve, message check and revoke", 
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.body.innerText.includes("e2e-build-box")`,
+      `${pageHydrated} && document.body.innerText.includes(${JSON.stringify(machineName)})`,
     );
-    await shots("profile-panel");
+    await shots("3-profile-connected");
     await browser("click", `button:has-text("Revoke")`);
     await browser("wait", "--fn", `document.body.innerText.includes("No machines connected yet.")`);
+    await shoot("4-profile-revoked");
 
     const revokedCtx = await fetch(`${origin}/api/agent/v1/context`, {
       headers: { authorization: `Bearer ${issued.api_key}` },
