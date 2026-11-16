@@ -142,7 +142,7 @@ test("a new artifact holds its files as version 1, named from its title, with a 
     entryPath: "plan.md",
   });
   // A channel artifact; its kind comes from the home access the read already made (no new query).
-  expect(loaded.homeKind).toBe("channel");
+  expect(loaded.artifact.homeKind).toBe("channel");
   // Bob reads it but did not write it and is not an owner/admin: he cannot delete it.
   expect(loaded.canDelete).toBe(false);
   // Alice owns the Workspace, so she can; so can the Agent that wrote it.
@@ -177,6 +177,24 @@ test("the entry file gives the type: a web page's card line is its description, 
     }),
   ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "artifact-entry-type" });
   expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
+});
+
+test("the viewer reads a body only for a document's entry; an Agent's read gets the entry's text", async () => {
+  const page = await documents.create(writing(writer), {
+    conversationId: channelId,
+    title: "Viewer page",
+    manifest: await manifest(writer, { "index.html": "<h1>Page</h1>" }),
+  });
+  // The person's read of a web page carries no body: the sandbox serves it.
+  const viewed = await documents.load(reading(bob), { artifactId: page.id }, { body: "markdown" });
+  expect(viewed.text).toBe("");
+  // The Agent's read still gets the entry's text.
+  expect((await documents.load(writing(writer), { artifactId: page.id })).text).toBe(
+    "<h1>Page</h1>",
+  );
+  // The home's kind comes once, on the artifact.
+  expect(viewed).not.toHaveProperty("homeKind");
+  expect(viewed.artifact.homeKind).toBe("channel");
 });
 
 test("a push is a new version with its preview, and a clash with another Agent's push is refused", async () => {

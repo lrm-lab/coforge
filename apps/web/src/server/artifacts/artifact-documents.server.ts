@@ -131,11 +131,22 @@ export class ArtifactDocuments {
   }
 
   /** The artifact at a version (its current one by default), with its entry file's text and
-   * whether the actor may delete it; an entry file too large to read whole has no text here. */
-  async load(scope: DocumentScope, input: { artifactId: string; version?: number }) {
+   * whether the actor may delete it; an entry file too large to read whole has no text here.
+   * `body: "markdown"` is the viewer's read: a body only for a document's entry — a web page's
+   * is the sandbox's to serve. An Agent's read (the default) gets any entry's text. */
+  async load(
+    scope: DocumentScope,
+    input: { artifactId: string; version?: number },
+    options?: { body?: "entry" | "markdown" },
+  ) {
     const read = await this.artifacts.read({ ...reader(scope), ...input });
-    const file = read.files.find((entry) => entry.path === read.artifact.entryPath);
-    const readable = file?.kind === "text" && file.sizeBytes <= ARTIFACT_ENTRY_READ_LIMIT;
+    const entryPath = read.version?.entryPath ?? read.artifact.entryPath;
+    const file = read.files.find((entry) => entry.path === entryPath);
+    const document = artifactKindOfPath(entryPath) === "markdown";
+    const readable =
+      file?.kind === "text" &&
+      file.sizeBytes <= ARTIFACT_ENTRY_READ_LIMIT &&
+      (options?.body !== "markdown" || document);
     const bytes = readable ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
     // The author came with the read (no second query); the rule is the one `delete` enforces —
     // and a reader the home's rule kept out cannot delete at all: a delete is the home's write
@@ -147,7 +158,6 @@ export class ArtifactDocuments {
       ...read,
       text: bytes ? new TextDecoder().decode(bytes) : "",
       canDelete,
-      homeKind: read.artifact.homeKind,
     };
   }
 
