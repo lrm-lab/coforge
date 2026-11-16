@@ -106,25 +106,19 @@ export function mixStats(
 ): { moved: number; nonMove: number; ratio: number } | undefined {
   const files = patchFiles(patch);
   const deletedPool = new Set<string>();
-  const addedAnywhere = new Set<string>();
-  for (const file of files) {
-    for (const line of file.deleted) deletedPool.add(line);
-    for (const line of file.added) addedAnywhere.add(line);
-  }
-  const movedAdded = new Set<string>();
+  for (const file of files) for (const line of file.deleted) deletedPool.add(line);
+  // Only a line that reappears in a new file is moved: a line deleted and added back in an
+  // existing file (re-indented, reordered, moved between existing files) is not.
+  const movedLines = new Set<string>();
   for (const file of files)
-    if (file.isNew) for (const line of file.added) if (deletedPool.has(line)) movedAdded.add(line);
-  const movedDeleted = new Set<string>();
-  for (const file of files)
-    if (!file.isNew)
-      for (const line of file.deleted) if (addedAnywhere.has(line)) movedDeleted.add(line);
-  const moved = movedAdded.size + movedDeleted.size;
+    if (file.isNew) for (const line of file.added) if (deletedPool.has(line)) movedLines.add(line);
+  // A moved line counts twice, where it left and where it landed.
+  const moved = movedLines.size * 2;
   if (moved < MIN_MOVED_LINES) return undefined;
   let nonMove = 0;
   for (const file of files) {
-    for (const line of file.added) if (!movedAdded.has(line)) nonMove++;
-    for (const line of file.deleted)
-      if (!movedDeleted.has(line) && !movedAdded.has(line)) nonMove++;
+    for (const line of file.added) if (!movedLines.has(line)) nonMove++;
+    for (const line of file.deleted) if (!movedLines.has(line)) nonMove++;
   }
   const total = moved + nonMove;
   return { moved, nonMove, ratio: total === 0 ? 0 : nonMove / total };

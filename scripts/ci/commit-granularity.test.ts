@@ -56,7 +56,7 @@ describe("mixStats", () => {
       "",
     ].join("\n");
     const stats = mixStats(patch);
-    // movedAdded + movedDeleted both count the same 40 relocated lines.
+    // Each of the 40 relocated lines counts where it left and where it landed.
     expect(stats?.moved).toBe(80);
     expect(stats?.nonMove).toBe(0);
   });
@@ -100,6 +100,38 @@ describe("mixStats", () => {
       "+++ b/new.ts",
       "@@ -0,0 +1,10 @@",
       ...few.split("\n").map((l) => `+${l}`),
+      "",
+    ].join("\n");
+    expect(mixStats(patch)).toBeUndefined();
+  });
+
+  test("lines re-indented in place are not moved", () => {
+    const patch = [
+      "diff --git a/pane.tsx b/pane.tsx",
+      "--- a/pane.tsx",
+      "+++ b/pane.tsx",
+      "@@ -1,40 +1,42 @@",
+      ...moved.split("\n").map((l) => `-${l}`),
+      "+<Wrapper>",
+      ...moved.split("\n").map((l) => `+  ${l}`),
+      "+</Wrapper>",
+      "",
+    ].join("\n");
+    expect(mixStats(patch)).toBeUndefined();
+  });
+
+  test("lines moved into an existing file are not judged", () => {
+    const patch = [
+      "diff --git a/old.ts b/old.ts",
+      "--- a/old.ts",
+      "+++ b/old.ts",
+      "@@ -1,40 +0,0 @@",
+      ...moved.split("\n").map((l) => `-${l}`),
+      "diff --git a/other.ts b/other.ts",
+      "--- a/other.ts",
+      "+++ b/other.ts",
+      "@@ -1,0 +1,40 @@",
+      ...moved.split("\n").map((l) => `+${l}`),
       "",
     ].join("\n");
     expect(mixStats(patch)).toBeUndefined();
