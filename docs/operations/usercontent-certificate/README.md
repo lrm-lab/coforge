@@ -70,6 +70,7 @@ docker logs <caddy container> 2>&1 | grep -i -E 'acme|alidns|certificate'
 
 ## Updating the image
 
-Changes under `infra/caddy/` build a new image on push to `main` (workflow `caddy-image.yml`, which
-prints the digest in its job summary). Put that digest in the `caddy` service of both
+After a change under `infra/caddy/` lands on `main`, run the workflow `caddy-image.yml` by hand
+(`gh workflow run caddy-image.yml`); like every publishing workflow it has no push trigger, and it
+prints the digest in its job summary. Put that digest in the `caddy` service of both
 `infra/staging/docker-compose.yml` and `infra/production/docker-compose.yml`.

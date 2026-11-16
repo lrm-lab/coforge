@@ -1,11 +1,6 @@
 name: Build Caddy image
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - infra/caddy/**
-      - .github/workflows/caddy-image.yml
   workflow_dispatch:
 
 permissions:

@@ -378,9 +378,10 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
   // installs no bun.
   expect(binaryCaches).toBe(5);
   expect(bunCaches).toBe(4);
-  // 6 cache-disabled setup steps remain in workflows (5 inline credential
-  // mise-action plus docker/setup-buildx-action's cache-binary); class-2 jobs
+  // 7 cache-disabled setup steps remain in workflows (5 inline credential
+  // mise-action plus two docker/setup-buildx-action cache-binary: the Web
+  // image and the Caddy image); class-2 jobs
   // and ci.yml keep the default full miseDir cache. The composite's inner
   // mise-action is covered by the first test.
-  expect(checked).toBe(6);
+  expect(checked).toBe(7);
 });
