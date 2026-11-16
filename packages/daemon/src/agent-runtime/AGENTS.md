@@ -106,6 +106,17 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - After such a launch, `AgentControl.wake()` sets the persisted record back to
   `phase: "running"` so a later server Start rebinds instead of meeting a stale
   `"stopped"` record.
+- A managed Start never inherits the outcome of a launch the daemon began itself and still has in
+  flight for that Agent: the `launch` port waits for it to settle, then rebinds the process it
+  brought up (input included, as `rebindRunning` delivers it) or, when none runs, launches under
+  the Start's own scope. A Start's attempt holds the Agent's control mutex, so only a
+  self-initiated or unfenced launch can be in flight there.
+- A self-initiated launch that fails while a managed Start's launch attempt is in progress for
+  the Agent (`launchAttemptInProgress`: from just before `ManagedLaunches.attempt` launches until
+  it settles, the launch port's wait included) yields quietly: no launch-failure Activity, no
+  `inactive`, one info line (`agent_runtime:relaunch_yielded`); the Start reports its own outcome.
+  Otherwise it fails as any launch does, even while a Start is merely `startPending`: one that
+  ends without launching (a replay, a fence refusal) or waits out a retry cooldown owes it nothing.
 
 ## Session state and records
 

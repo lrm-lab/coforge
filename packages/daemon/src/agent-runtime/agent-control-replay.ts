@@ -6,6 +6,12 @@ export function carriesStartPrompt(intent: AgentStartIntent): boolean {
   return intent.resumePrompt !== undefined || intent.introductionPrompt !== undefined;
 }
 
+/** Whether a Start brings input a process it did not spawn must still be handed: a wake message
+ * or its prompt turns. */
+export function carriesStartInput(intent: AgentStartIntent): boolean {
+  return Boolean(intent.wakeMessage) || carriesStartPrompt(intent);
+}
+
 export function withoutStartPrompts(intent: AgentStartIntent): AgentStartIntent {
   return { ...intent, resumePrompt: undefined, introductionPrompt: undefined };
 }

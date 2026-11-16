@@ -400,7 +400,7 @@ export async function launchAgentProcess(
         logAgentApiKeyRevokeFailed(agentId, revokeError);
       }
     }
-    reportLaunchFailure(ports, agentId, launch, config, error);
+    reportLaunchFailure(ports, agentId, launch, config, error, { managed: control !== undefined });
     if (ports.currentActivityLaunches.get(agentId) === launch) {
       ports.activityPublisher.forgetBusy(agentId);
       ports.disposeLaunchObservations(agentId);

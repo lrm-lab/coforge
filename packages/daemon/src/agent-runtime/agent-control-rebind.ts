@@ -2,7 +2,7 @@ import { getLogger } from "@logtape/logtape";
 import type { AgentControlScope, AgentStartIntent } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeRecord } from "./agent-runtime-state";
 import type { AgentControlContext } from "./agent-control-runtime";
-import { carriesStartPrompt } from "./agent-control-replay";
+import { carriesStartInput } from "./agent-control-replay";
 
 const logger = getLogger(["coforge", "daemon", "agent-control"]);
 
@@ -52,7 +52,7 @@ export async function rebindRunning(
   await state.store.write(scope.agentId, record);
   // Reuses the same hook the equal-epoch replay branch already uses to deliver a Start's wake
   // message (and prompts) to a running process — never spawns anything.
-  if (intent.wakeMessage || carriesStartPrompt(intent)) await runtime.wake?.(intent);
+  if (carriesStartInput(intent)) await runtime.wake?.(intent);
   await runtime.result(record.lastResult).catch(() => {});
   logger.info("Agent Start rebound to an already-running process", {
     event: "agent_control:start_rebound",

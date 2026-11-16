@@ -593,6 +593,7 @@ export class DaemonRuntime {
       stopAgent: (agentId) => this.stopAgent(agentId),
       startAgent: (agentId, config, recovery, request) =>
         this.#startAgent(agentId, config, recovery, request),
+      launchInFlight: (agentId) => this.#agentLaunches.get(agentId),
       rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
       stops: this.#stopState,
       dropOwedRecovery: (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
@@ -1282,13 +1283,7 @@ export class DaemonRuntime {
     idleNudge: this.#launchCoordinator.idleNudge,
     configApply: this.#configApply,
     drafts: this.#drafts,
-    activity: (
-      agentId: string,
-      kind: AgentActivity["detailKind"],
-      level: AgentActivity["level"],
-      detail: string,
-      extra?: Partial<ActivityDraft>,
-    ) => this.#activity(agentId, kind, level, detail, extra),
+    activity: this.#activity,
     isWorking: this.#turn.isWorking,
   });
 

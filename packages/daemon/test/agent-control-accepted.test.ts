@@ -55,6 +55,7 @@ function harness(agentControlAccepted: boolean) {
     runtimeInstanceId: "daemon-1",
     running: () => false,
     session: () => undefined,
+    launchInFlight: () => undefined,
     stopAgent: async () => {
       calls.push("stop");
     },

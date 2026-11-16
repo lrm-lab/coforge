@@ -172,6 +172,12 @@ export class AgentControl {
     return this.#launches.startPending(agentId);
   }
 
+  /** Whether a managed Start's launch attempt is in progress for this Agent: from just before it
+   * launches until it succeeds or fails, a wait on a launch the daemon began itself included. */
+  launchAttemptInProgress(agentId: string): boolean {
+    return this.#launches.launchAttemptInProgress(agentId);
+  }
+
   start(intent: AgentStartIntent): Promise<void> {
     return this.#launches.track(intent.agentId, () => this.#start(intent));
   }

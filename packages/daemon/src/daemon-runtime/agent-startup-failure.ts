@@ -105,15 +105,32 @@ export async function failAgentStartup(
  * the failure's own wording when it wrote an offline record, the launcher wording otherwise.
  * An offline record also drops the Agent's wake config, so no delivery or App Inbox notice
  * can launch it again until a person's Start succeeds; a quota wait keeps the config — its
- * cooldown, not custody, governs the next launch. */
+ * cooldown, not custody, governs the next launch.
+ *
+ * A launch the daemon began itself (`managed` false) that fails while a managed Start's launch
+ * attempt is in progress for the Agent yielded to that Start: it reports nothing, because the
+ * attempt waits it out and then launches or rebinds the Agent, reporting its own failure if it
+ * has one. A Start that ends without launching (a replay, a refusal) or waits out a retry
+ * cooldown is not an attempt, so the failure is reported like any other. */
 export function reportLaunchFailure(
   ports: AgentLaunchCoordinatorPorts,
   agentId: string,
   launch: OfflineResidencyLaunch,
   config: AgentRuntimeConfig,
   error: unknown,
+  { managed }: Readonly<{ managed: boolean }>,
 ): void {
   if (ports.isStopping() || ports.stops.stopping(agentId)) return;
+  if (!managed && ports.agentControl.launchAttemptInProgress(agentId)) {
+    logger.info("Agent relaunch yielded to a newer Start", {
+      event: "agent_runtime:relaunch_yielded",
+      agent_id: agentId,
+      launch_id: launch.launchId,
+      ...launchFailureLogFields(error),
+      outcome: "yielded",
+    });
+    return;
+  }
   // The Activity sends people to the Computer log for the cause; this is that line.
   logger.warning("Agent launch failed", {
     event: "agent_runtime:launch_failed",

@@ -26,6 +26,9 @@ export class ManagedLaunches {
   readonly #retries: LaunchRetryTimers;
   /** Start calls and launch retries currently running, per Agent. */
   readonly #startsRunning = new Map<string, number>();
+  /** Agents whose managed launch attempt is between its start and its settlement. Attempts run
+   * under the Agent's control mutex, so at most one per Agent. */
+  readonly #attempting = new Set<string>();
   constructor(
     private readonly context: AgentControlContext,
     launchRetryScheduler: LaunchRetryScheduler,
@@ -38,6 +41,14 @@ export class ManagedLaunches {
    */
   startPending(agentId: string): boolean {
     return (this.#startsRunning.get(agentId) ?? 0) > 0 || this.#retries.has(agentId);
+  }
+
+  /** Whether a managed Start's launch attempt is in progress for this Agent: from just before it
+   * launches until it succeeds or fails, the wait the launch port spends on a launch the daemon
+   * began itself included. Narrower than `startPending`: a Start that ends without launching
+   * (a replay, a fence refusal) or waits out a retry cooldown is not in a launch attempt. */
+  launchAttemptInProgress(agentId: string): boolean {
+    return this.#attempting.has(agentId);
   }
 
   /** Counts `run` as a pending Start of this Agent until it settles. */
@@ -105,6 +116,7 @@ export class ManagedLaunches {
     record.daemonInstanceId = this.context.instanceId;
     this.context.sessions.beginLaunch(record);
     await this.context.state.store.write(intent.agentId, record);
+    this.#attempting.add(intent.agentId);
     try {
       let identity;
       try {
@@ -163,6 +175,8 @@ export class ManagedLaunches {
       });
       if (failed) await this.context.runtime.result(failed).catch(() => {});
       return;
+    } finally {
+      this.#attempting.delete(intent.agentId);
     }
     await this.context.runtime.result(record.lastResult).catch(() => {});
   }

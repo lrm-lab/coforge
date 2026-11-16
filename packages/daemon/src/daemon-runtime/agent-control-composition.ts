@@ -7,6 +7,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import { AgentControl } from "#src/agent-runtime/agent-control";
+import { carriesStartInput } from "#src/agent-runtime/agent-control-replay";
 import { AgentControlOpTiming } from "#src/agent-runtime/agent-control-timing";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
@@ -39,6 +40,9 @@ export type AgentControlCompositionPorts = {
     recovery: AgentRecoveryContext | undefined,
     request: LaunchRequest,
   ): Promise<AgentRuntime>;
+  /** The launch in flight for this Agent, whoever started it: its settling, never its outcome,
+   * is what a managed Start waits for. */
+  launchInFlight(agentId: string): Promise<unknown> | undefined;
   /** Rebinds an already-running process to a newer control scope. */
   rebind(intent: AgentStartIntent, launchId: string): Promise<SessionIdentity | undefined>;
   /** Forgets the Session reference of a launch that starts over under a fresh session. */
@@ -93,6 +97,29 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
     });
   });
   const opTiming = new AgentControlOpTiming(runtimeInstanceId);
+  /** A Start's wake message, introduction and resume prompt, handed to the process that runs. */
+  const deliverStartInput = async (intent: AgentStartIntent): Promise<void> => {
+    await ports.startAgent(
+      intent.agentId,
+      runtimeConfigOf(intent),
+      { wakeMessage: intent.wakeMessage },
+      {
+        requestId: intent.requestId,
+        resumePrompt: intent.resumePrompt,
+        introductionPrompt: intent.introductionPrompt,
+        fromStart: { agentConfigRevision: intent.agentConfigRevision },
+      },
+    );
+  };
+  /** Whether the process a launch the daemon began brought up may be rebound to this Start: not
+   * when it runs another native Session than the Start names, which no rebind keeps. */
+  const keepsStartSession = async (intent: AgentStartIntent): Promise<boolean> => {
+    if (!intent.sessionId) return true;
+    const running = await ports.session(intent.agentId)?.readSessionIdentity?.();
+    if (!running?.sessionId || running.sessionId === intent.sessionId) return true;
+    await ports.stopAgent(intent.agentId);
+    return false;
+  };
   const agentControl = new AgentControl(runtimeInstanceId, state, agentSessions, {
     running: (agentId) => ports.running(agentId),
     stop: async (agentId) => {
@@ -103,6 +130,22 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
     // A Stop passed every fence and is about to end the Agent's process.
     stopAccepted: (agentId) => ports.dropOwedRecovery(agentId),
     launch: async (intent, launchId, replacedSessionId, invalidateReason) => {
+      // A managed attempt holds the Agent's control mutex, so a launch already in flight is one
+      // the daemon began itself (a wake, a relaunch after a stall) or an unfenced start. The
+      // server's Start wins over it and never inherits its outcome, success or failure.
+      for (
+        let inFlight = ports.launchInFlight(intent.agentId);
+        inFlight;
+        inFlight = ports.launchInFlight(intent.agentId)
+      )
+        await inFlight.catch(() => {});
+      // AgentControl found nothing running before this attempt, so a process running now is one
+      // that launch brought up: adopt it under this Start's scope, as `rebindRunning` does.
+      if (ports.running(intent.agentId) && (await keepsStartSession(intent))) {
+        const identity = await ports.rebind(intent, launchId);
+        if (carriesStartInput(intent)) await deliverStartInput(intent);
+        return identity;
+      }
       if (replacedSessionId) ports.stops.forgetSession(intent.agentId);
       const runtime = await ports.startAgent(
         intent.agentId,
@@ -123,19 +166,7 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
       );
       return runtime.session.readSessionIdentity?.();
     },
-    wake: async (intent) => {
-      await ports.startAgent(
-        intent.agentId,
-        runtimeConfigOf(intent),
-        { wakeMessage: intent.wakeMessage },
-        {
-          requestId: intent.requestId,
-          resumePrompt: intent.resumePrompt,
-          introductionPrompt: intent.introductionPrompt,
-          fromStart: { agentConfigRevision: intent.agentConfigRevision },
-        },
-      );
-    },
+    wake: deliverStartInput,
     rebind: (intent, launchId) => ports.rebind(intent, launchId),
     startSettled: (agentId) => ports.startSettled(agentId),
     // `launchId` is always present here (minted synchronously by `AgentControl.start()` before
