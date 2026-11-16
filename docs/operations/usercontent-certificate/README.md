@@ -27,8 +27,10 @@ records already point at the host.
 | Staging | `coforge-staging-usercontent-dns` | `CoForgeStagingUserContentDns` |
 
 Each user has one AccessKey and no console access. Its policy allows only the DNS record actions
-Caddy needs on the zone `coforgeusercontent.com`, and carries a source-IP condition for that
-environment's host.
+Caddy needs on the zone `coforgeusercontent.com`. It carries no source-IP condition: Alidns does
+not pass `acs:SourceIp` into its authorization check, so an IP-conditioned allow never matches and
+Caddy gets HTTP 403 (decode the response's `EncodedDiagnosticMessage` with
+`aliyun ram DecodeDiagnosticMessage` to see the conditions RAM evaluated).
 
 ## GitHub Environment secrets
 
@@ -46,11 +48,12 @@ Environment. Every deploy refreshes both files on the host.
 
 The RAM policy can only scope to the whole zone `coforgeusercontent.com`, and staging lives inside
 it. The staging key can therefore write `_acme-challenge` records for production names. Splitting
-staging into its own zone is the fix if that matters.
+staging into its own zone is the fix if that matters. Without an IP condition, a leaked key can
+change any record of the zone from anywhere until it is rotated.
 
 ## Triage
 
-Issuance failures (wrong secret, a source IP that does not match the policy, a missing RAM action)
+Issuance failures (wrong secret, a policy condition Alidns cannot evaluate, a missing RAM action)
 do not show in the deploy health checks, which only probe `coforge.cn`. After a healthy deploy,
 `remote-deploy.sh` resolves a fixed host `a-00000000-0000-0000-0000-000000000000.<sandbox domain>`
 to the local Caddy and requires a trusted TLS handshake, retrying for about 60 seconds. If that
