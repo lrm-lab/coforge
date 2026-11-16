@@ -35,3 +35,5 @@ export * from "./app-registration";
 export * from "./context";
 export * from "./local-memory";
 export * from "./app-registration";
+
+export * from "./team-memory";

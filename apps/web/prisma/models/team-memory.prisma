@@ -1,0 +1,66 @@
+model TeamMemoryState {
+  workspaceId String @id @map("workspace_id") @db.Uuid
+  revision Int @default(0)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("team_memory_states")
+}
+
+model TeamMemoryEntry {
+  id String @id @default(uuid(7)) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  title String
+  content String
+  source String
+  kind String
+  applicability String
+  status String @default("active")
+  revision Int @default(1)
+  authorAgentId String @map("author_agent_id") @db.Uuid
+  dedupKey String @map("dedup_key")
+  searchText String @map("search_text")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions TeamMemoryVersion[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, dedupKey])
+  @@index([workspaceId, status, updatedAt])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("team_memory_entries")
+}
+
+model TeamMemoryVersion {
+  workspaceId String @map("workspace_id") @db.Uuid
+  entryId String @map("entry_id") @db.Uuid
+  revision Int
+  snapshot Json
+  actorAgentId String @map("actor_agent_id") @db.Uuid
+  operation String
+  reason String
+  mergedFrom Json @map("merged_from")
+  createdAt DateTime @default(now()) @map("created_at")
+  entry TeamMemoryEntry @relation(fields: [workspaceId, entryId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@id([workspaceId, entryId, revision])
+  @@map("team_memory_versions")
+}
+
+model TeamMemoryReceipt {
+  workspaceId String @map("workspace_id") @db.Uuid
+  agentId String @map("agent_id") @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  reviewToken String? @map("review_token") @db.Uuid
+  reviewRevision Int @default(0) @map("review_revision")
+  reviewExpiresAt DateTime? @map("review_expires_at")
+  fingerprint String
+  entryId String? @map("entry_id") @db.Uuid
+  deleted Boolean @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, agentId, requestId])
+  @@index([workspaceId, agentId, reviewExpiresAt])
+  @@map("team_memory_receipts")
+}

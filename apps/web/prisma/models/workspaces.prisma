@@ -1,4 +1,7 @@
 model Workspace {
+  teamMemoryState TeamMemoryState?
+  teamMemoryEntries TeamMemoryEntry[]
+  teamMemoryReceipts TeamMemoryReceipt[]
   assistant WorkspaceAssistant?
   id                     String                  @id @default(uuid(7)) @db.Uuid
   slug                   String                  @unique

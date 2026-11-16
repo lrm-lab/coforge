@@ -1,0 +1,65 @@
+import {
+  decodeTeamMemoryCommand,
+  type TeamMemoryCommand,
+  type TeamMemoryResult,
+} from "@lrm/coforge-sdk/agent";
+export type TeamMemoryInvocation = {
+  command: "memory";
+  scope: "team";
+  request: TeamMemoryCommand;
+  json: boolean;
+};
+export function parseTeamMemoryArgs(args: readonly string[]): TeamMemoryInvocation {
+  const row: Record<string, unknown> = { operation: args[0] };
+  let json = false;
+  for (let index = 1; index < args.length; index++) {
+    const flag = args[index]!;
+    if (flag === "--json") {
+      json = true;
+      continue;
+    }
+    if (flag === "--archived") {
+      row.archived = true;
+      continue;
+    }
+    if (!flag.startsWith("--") || args[index + 1] === undefined)
+      throw new Error("Team memory flags require values; see coforge manual get memory");
+    const key = flag.slice(2);
+    if (key in row) throw new Error(`repeated flag: ${flag}`);
+    const value = args[++index]!;
+    row[key] = ["offset", "revision", "fromRevision"].includes(key)
+      ? Number(value)
+      : key === "sources"
+        ? JSON.parse(value)
+        : value;
+  }
+  if (["prepare", "create", "update", "merge"].includes(String(row.operation))) {
+    row.kind ??= "fact";
+    row.applicability ??= "";
+  }
+  return { command: "memory", scope: "team", request: decodeTeamMemoryCommand(row), json };
+}
+export async function runTeamMemoryCommand(
+  invocation: TeamMemoryInvocation,
+  transport: { teamMemory?(request: TeamMemoryCommand): Promise<TeamMemoryResult> },
+): Promise<string> {
+  if (!transport.teamMemory) throw new Error("Team memory requires an updated Computer");
+  const result = await transport.teamMemory(invocation.request);
+  if (invocation.json) return JSON.stringify(result);
+  return [
+    ...result.entries.map(
+      (entry) =>
+        `${entry.title} [${entry.id}]\n${entry.content}\nSource: ${entry.source}\nApplies to: ${entry.applicability || "unspecified"}\nRevision: ${entry.revision}\nState: ${entry.status}\nAuthor: ${entry.authorAgentId}${entry.change ? `\nChanged by: ${entry.change.actorAgentId} (${entry.change.operation})\nReason: ${entry.change.reason}\nMerged from: ${JSON.stringify(entry.change.mergedFrom)}` : ""}`,
+    ),
+    ...(result.status === "review_required"
+      ? [
+          `Inspect related entries and get their full evidence. If this operation is appropriate, resubmit unchanged with --reviewToken ${result.reviewToken}. Otherwise choose another operation and review again.`,
+        ]
+      : []),
+    ...(result.nextOffset === undefined ? [] : [`Continue with --offset ${result.nextOffset}.`]),
+    ...(result.status === "deleted"
+      ? ["Team memory deleted; its content and history were removed."]
+      : []),
+    ...(!result.entries.length && result.status === "ok" ? ["No matching team memory."] : []),
+  ].join("\n\n");
+}
