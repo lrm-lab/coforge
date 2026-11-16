@@ -26,6 +26,8 @@ import type { DaemonConfig } from "./runtime";
 import { AgentInboxCoordinator as InboxCoordinator } from "./agent-inbox-coordinator";
 import { AgentMessageAttentionIndex as MessageAttention } from "./agent-message-attention-index";
 import { AgentMessageOperations as MessageOperations } from "./agent-message-operations";
+import { ImportantUnreadNoticeStore } from "#src/persistence/important-unread-notice-store";
+import { composeImportantUnreadReminder } from "./important-unread-wiring";
 import { MentionDeliveryTracker as MentionDeliveries } from "./mention-delivery-tracker";
 
 /** What the runtime supplies to one Agent's message attention, delivery and inbox state. */
@@ -70,6 +72,8 @@ export type MessageCompositionPorts = {
 
 export type MessageComposition = {
   mentionDeliveries: MentionDeliveryTracker;
+  /** The unread loop the delivery guarantees hang off (task #14). */
+  importantUnread: ReturnType<typeof composeImportantUnreadReminder>;
   messageAttention: AgentMessageAttentionIndex;
   inboxCoordinator: AgentInboxCoordinator;
   messageOperations: AgentMessageOperations;
@@ -193,6 +197,33 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     assertRunning: () => ports.assertRunning(),
     agentIdForContext: (context) => ports.agentIdForContext(context),
   });
+  // Task #14: the unread loop. It writes into whichever session the Agent has and reports a batch
+  // whose retries ran out as one error, so "written but nobody read it" cannot pass unnoticed.
+  const importantUnread = composeImportantUnreadReminder({
+    store: new ImportantUnreadNoticeStore(() => ports.stateDirectory),
+    session: (agentId) => ports.processManager.session(agentId),
+    unread: (agentId) => messageAttention.unreadDeliveries(agentId),
+    report: (agentId, notice) => {
+      const launch = ports.currentActivityLaunch(agentId);
+      if (!launch) return;
+      const where = notice.conversations
+        .flatMap((conversation) => (conversation.target ? [conversation.target] : []))
+        .join(", ");
+      ports.activityPublisher.publish(
+        agentId,
+        launch,
+        ports.activity(
+          agentId,
+          AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+          "error",
+          `Unread important messages were announced ${notice.attempts} times and never read: ${where}.`,
+        ),
+      );
+    },
+  });
+  // A starting Daemon takes over what the last process left; the first sweep tells the Agent.
+  importantUnread.restore();
+
   const messageOperations = new MessageOperations({
     connection: { workspaceId: connection.workspaceId, computerId: connection.computerId },
     attention: messageAttention,
@@ -219,7 +250,13 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         ),
       ),
   });
-  return { mentionDeliveries, messageAttention, inboxCoordinator, messageOperations };
+  return {
+    mentionDeliveries,
+    messageAttention,
+    inboxCoordinator,
+    messageOperations,
+    importantUnread,
+  };
 }
 
 /** The wire payload of one Agent-message rejection report: the delivery's identity fields plus
