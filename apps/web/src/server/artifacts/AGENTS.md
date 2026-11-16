@@ -42,7 +42,8 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   extension (`artifactKindOfPath`: `.html` is a web page, `.md` a document); no column or request
   field states it, and an entry that is neither is refused (`artifact-entry-type`).
 - Only an Agent writes, and only by `push` (`Artifacts.push`; `ArtifactDocuments.create` makes an
-  artifact from a first push). There is no single-text save, no history or revert, no Agent share
+  artifact with its first version in the same transaction). There is no single-text save, no
+  history or revert, no Agent share
   (a person's "send to a conversation" is `artifact-shares.server.ts`), and a person never
   authors or publishes: `Artifact.authorAgentId` and `ArtifactVersion.publisherAgentId` are the
   only writer columns. People read, comment, share and delete.

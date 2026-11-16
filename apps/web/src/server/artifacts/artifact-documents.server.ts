@@ -82,6 +82,9 @@ export class ArtifactDocuments {
             ? `${base}-${attempt}`
             : `${base}-${crypto.randomUUID().slice(0, 6)}`;
       try {
+        // The artifact row and version 1 commit in one transaction (`Artifacts.create`): a
+        // create whose bytes are missing leaves nothing behind, and a replay with the same
+        // key returns the artifact already made without a second version.
         const created = await this.artifacts.create({
           workspaceId: scope.workspaceId,
           home,
@@ -93,20 +96,16 @@ export class ArtifactDocuments {
           ...(input.idempotencyKey !== undefined
             ? { idempotencyKey: input.idempotencyKey, requestHash }
             : {}),
+          version: {
+            files: plan.files,
+            idempotencyKey:
+              input.idempotencyKey === undefined
+                ? crypto.randomUUID()
+                : `${input.idempotencyKey}:v1`,
+          },
         });
-        const first = await this.push(scope, {
-          artifactId: created.id,
-          baseVersion: 0,
-          manifest: { files: plan.files },
-          // On a replayed create this push replays too (same key on the same artifact), so a
-          // retry adds no second version; a fresh create gets its version 1.
-          idempotencyKey:
-            input.idempotencyKey === undefined ? crypto.randomUUID() : `${input.idempotencyKey}:v1`,
-        });
-        // Bytes that vanished since `missingBytes` looked: the same request, sent again after
-        // uploading them, replays this create (with its key) and saves them.
-        if (first.status === "missing")
-          throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-bytes-missing" });
+        // The card's preview line, as a push's refresh leaves it (best effort).
+        await this.#refreshPreview(scope, created.id);
         return (
           await this.artifacts.reads.cards({ ...reader(scope), artifactIds: [created.id] })
         )[0]!;

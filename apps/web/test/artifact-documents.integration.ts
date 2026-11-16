@@ -345,6 +345,18 @@ test("a manifest that names bytes the Agent never uploaded is asked for before a
   expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
 });
 
+test("a create whose bytes are missing writes no artifact row: the row and version 1 are one transaction", async () => {
+  const before = await db.artifact.count({ where: { workspaceId } });
+  await expect(
+    documents.create(writing(writer), {
+      conversationId: channelId,
+      title: "Lost",
+      manifest: { files: [{ path: "lost.md", sha256: "f".repeat(64) }] },
+    }),
+  ).rejects.toMatchObject({ code: "TEMPORARILY_UNAVAILABLE", errorId: "artifact-bytes-missing" });
+  expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
+});
+
 test("with artifacts off, a push stores nothing", async () => {
   const off = new ArtifactDocuments(
     db,
