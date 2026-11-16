@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import {
   ARTIFACT_BINARY_LIMIT,
   ARTIFACT_ENTRY_READ_LIMIT,
@@ -130,6 +131,9 @@ export class Artifacts {
     /** Version 1's files and its own idempotency key; a create may also make the bare row a
      * test or a later step fills. */
     version?: { files: readonly ArtifactFileInput[]; idempotencyKey: string };
+    /** Runs once version 1 commits, before its announcement: the caller's tail work (the
+     * card's preview) that listening pages must already see. A replayed create never runs it. */
+    beforeAnnounce?: (artifactId: string) => Promise<unknown>;
   }) {
     // The experiment first: a Workspace without it hears only that, whatever it sent.
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
@@ -139,13 +143,15 @@ export class Artifacts {
     await this.requireHome(input.workspaceId, input.author, homeKey, "write");
     const { home: _home, ...rest } = input;
     const saved = await createVersionedArtifact(this.db, this.blobs, { ...rest, homeKey });
-    if (saved.fresh && input.version !== undefined)
+    if (saved.fresh && input.version !== undefined) {
+      await input.beforeAnnounce?.(saved.artifact.id);
       await announceVersion(this.signals, {
         workspaceId: input.workspaceId,
         homeKey,
         artifactId: saved.artifact.id,
         number: 1,
       });
+    }
     return saved.artifact;
   }
 
@@ -162,6 +168,10 @@ export class Artifacts {
     description?: string;
     files?: readonly ArtifactFileInput[];
     deletedPaths?: readonly string[];
+    /** Runs once the version commits, before its announcement: the caller's tail work (the
+     * card's preview refresh, parallel with its own bookkeeping) that listening pages must
+     * already see. A replayed push never runs it. */
+    beforeAnnounce?: (saved: { number: number; previewStale: boolean }) => Promise<unknown>;
   }): Promise<
     | {
         status: "created";
@@ -169,6 +179,9 @@ export class Artifacts {
         number: number;
         merged: string[];
         mergedSettings: ArtifactSettingName[];
+        /** Whether what the card's preview draws changed: the entry's text for a document,
+         * the description for a web page. A push that leaves it alone skips the refresh. */
+        previewStale: boolean;
       }
     | { status: "replayed"; versionId: string; number: number }
     | { status: "nothing" }
@@ -323,6 +336,17 @@ export class Artifacts {
       const settingsChanged = ARTIFACT_SETTINGS.some(
         (name) => settings.result[name] !== currentSettings[name],
       );
+      // The preview draws the entry's text (a document) or the description (a web page), so it
+      // is stale only when what it draws changed; a push that leaves it alone skips the refresh.
+      const newKind = artifactOpenableKind(settings.result.entryPath);
+      const previewStale =
+        newKind === null ||
+        newKind !== artifactOpenableKind(currentSettings.entryPath) ||
+        (newKind === "markdown" &&
+          (settings.result.entryPath !== currentSettings.entryPath ||
+            result.get(settings.result.entryPath)?.sha256 !==
+              currentFiles.get(currentSettings.entryPath)?.sha256)) ||
+        (newKind === "html" && settings.result.description !== currentSettings.description);
       // A file sent again as it already is changes nothing.
       const filesChanged =
         deleted.length > 0 ||
@@ -357,15 +381,18 @@ export class Artifacts {
         number: version.number,
         merged,
         mergedSettings: settings.merged,
+        previewStale,
       } as const;
     });
-    if (saved.status === "created")
+    if (saved.status === "created") {
+      await input.beforeAnnounce?.(saved);
       await announceVersion(this.signals, {
         workspaceId: input.workspaceId,
         homeKey,
         artifactId: input.artifactId,
         number: saved.number,
       });
+    }
     return saved;
   }
 

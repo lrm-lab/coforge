@@ -184,19 +184,20 @@ export async function runAgentArtifactOperation(
         ...input
       } = parsed.data as z.infer<typeof PUSH_OVER>;
       const fileManifest = manifestOf({ files, delete: deleted, entry });
-      const saved = await services.documents.push(scope, {
-        artifactId: artifact,
-        ...input,
-        ...(fileManifest ? { manifest: fileManifest } : {}),
-      });
-      // The Agent has seen what it published; a merged push's answer says what was merged.
-      if (saved.status === "created" || saved.status === "replayed")
-        await noteReadPosition(services.db, {
+      // The Agent has seen what it published; a merged push's answer says what was merged. The
+      // position write runs beside the preview refresh, before the announcement.
+      return services.documents.push(
+        scope,
+        {
           artifactId: artifact,
-          agentId,
-          version: saved.number,
-        });
-      return saved;
+          ...input,
+          ...(fileManifest ? { manifest: fileManifest } : {}),
+        },
+        {
+          afterSave: ({ number }) =>
+            noteReadPosition(services.db, { artifactId: artifact, agentId, version: number }),
+        },
+      );
     }
     case "comments":
       return listComments(services.db, principal, parsed.data as z.infer<typeof RULES.comments>);

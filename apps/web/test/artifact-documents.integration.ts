@@ -395,3 +395,68 @@ test("with artifacts off, a push stores nothing", async () => {
     }),
   ).rejects.toMatchObject({ errorId: "artifacts-disabled" });
 });
+
+test("a push refreshes the preview only when what it draws changed, and its tail runs beside the Agent's bookkeeping", async () => {
+  // A blob store that counts reads, to see whether the preview refresh ran at all.
+  let reads = 0;
+  const counting = new ArtifactDocuments(db, artifacts, {
+    read: async (workspaceId, sha256) => {
+      reads++;
+      return blobs.read(workspaceId, sha256);
+    },
+    inspectMany: blobs.inspectMany.bind(blobs),
+    allowed: blobs.allowed.bind(blobs),
+  });
+  const doc = await counting.create(writing(writer), {
+    conversationId: channelId,
+    title: "Tail work",
+    manifest: await manifest(writer, { "tail.md": "# Tail\n\nBody text.\n" }),
+  });
+  const seen: number[] = [];
+  const afterSave = async ({ number }: { number: number }) => {
+    seen.push(number);
+  };
+
+  // A push that leaves the entry alone skips the preview refresh; bookkeeping still runs.
+  reads = 0;
+  const sidecar = await manifest(writer, { "tail-notes.txt": "notes" });
+  const first = await counting.push(
+    writing(writer),
+    {
+      artifactId: doc.id,
+      baseVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+      manifest: sidecar,
+    },
+    { afterSave },
+  );
+  expect(first.status).toBe("created");
+  expect(seen).toEqual([2]);
+  expect(reads).toBe(0);
+
+  // A push that changes the entry refreshes the preview once; its replay books again only.
+  reads = 0;
+  const entry = await manifest(writer, { "tail.md": "# Tail\n\nNew body.\n" });
+  const key = crypto.randomUUID();
+  const changed = await counting.push(
+    writing(writer),
+    { artifactId: doc.id, baseVersion: 2, idempotencyKey: key, manifest: entry },
+    { afterSave },
+  );
+  expect(changed.status).toBe("created");
+  expect(reads).toBe(1);
+  expect(seen).toEqual([2, 3]);
+  const card = (await documents.list(reading(bob), { conversationId: channelId })).find(
+    (c) => c.id === doc.id,
+  );
+  expect(card?.preview).toContain("New body");
+
+  const replay = await counting.push(
+    writing(writer),
+    { artifactId: doc.id, baseVersion: 2, idempotencyKey: key, manifest: entry },
+    { afterSave },
+  );
+  expect(replay.status).toBe("replayed");
+  expect(seen).toEqual([2, 3, 3]);
+  expect(reads).toBe(1);
+});
