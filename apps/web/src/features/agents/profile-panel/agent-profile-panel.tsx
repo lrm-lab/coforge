@@ -1,4 +1,5 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useState } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
@@ -97,20 +98,14 @@ export function AgentProfilePanel({
 }) {
   const timeZone = appRoute.useLoaderData().timeZone;
   const router = useRouter();
-  // Escape closes the panel, like Thread's Close; an open overlay or a field being edited keeps it.
-  // An effect event, so a caller's fresh `onClose` each render does not re-add the listener.
-  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (event.key !== "Escape" || event.defaultPrevented) return;
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (target?.closest("input, textarea, [contenteditable=true]")) return;
-    if (document.querySelector("[role=dialog], [role=alertdialog], [role=listbox], [role=menu]"))
-      return;
-    onClose();
-  });
-  useEffect(() => {
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  useHotkey(
+    "Escape",
+    () => {
+      if (!document.querySelector("[role=dialog], [role=alertdialog], [role=listbox], [role=menu]"))
+        onClose();
+    },
+    { ignoreInputs: true, preventDefault: false },
+  );
   const liveAgent = useLiveAgent(agentId);
   const query = useQuery(agentProfileQuery(agentId));
   const profile = query.data;

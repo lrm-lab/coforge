@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
 
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { useAppToast } from "#src/components/ui/toast";
@@ -39,17 +40,13 @@ export function MessageSelectionHost({ children }: { children: ReactNode }) {
   });
   const exit = useLatestCallback(() => setState(null));
   const active = state !== null;
-  useEffect(() => {
-    if (!active) return;
-    const leave = (event: KeyboardEvent) => {
-      // A dialog or menu open over the stream takes its own Escape first.
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (document.querySelector("[role=dialog], [role=menu]")) return;
-      setState(null);
-    };
-    window.addEventListener("keydown", leave);
-    return () => window.removeEventListener("keydown", leave);
-  }, [active]);
+  useHotkey(
+    "Escape",
+    () => {
+      if (!document.querySelector("[role=dialog], [role=menu]")) exit();
+    },
+    { enabled: active, preventDefault: false },
+  );
   const value = useMemo(() => ({ state, toggle, exit }), [state, toggle, exit]);
   return <MessageSelectionContext value={value}>{children}</MessageSelectionContext>;
 }

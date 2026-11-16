@@ -2,6 +2,7 @@ import type { TaskView } from "@lrm/coforge-sdk/internal";
 import { MemberDirectory } from "#src/features/conversations/member-directory";
 import { DotsHorizontal as MoreHorizontal, XClose } from "@untitledui/icons";
 import { useRouter, useRouterState } from "@tanstack/react-router";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import {
   useEffect,
   useRef,
@@ -17,7 +18,6 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useMediaQuery } from "#src/hooks/use-media-query";
-import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TaskStatusIcon } from "./task-status-icon";
@@ -197,7 +197,6 @@ export function TaskDetailDialog({
   // everything inside has had it: an input method composing, the composer's mention or task
   // completion, a menu, a picker, an image or a confirmation over the popup each take their own
   // Escape first (they mark it handled), and only an Escape nothing took steps back (task #478).
-  const close = useLatestCallback(() => onOpenChange(false));
   const stepOnEscape = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Escape") return;
     // Taken inside (the composer's completion closing): the overlay, which does not look at
@@ -209,20 +208,16 @@ export function TaskDetailDialog({
     event.preventDefault();
     router.history.back();
   };
-  // With focus left on the page (the row that opened a step is gone), the popup still hears Esc:
-  // a step goes back, the first popup closes, as each does with focus inside.
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+  useHotkey(
+    "Escape",
+    (event) => {
       if (event.target !== document.body && event.target !== document.documentElement) return;
       event.preventDefault();
-      if (step) router.history.back();
-      else close();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, step, router, close]);
+      if (stepBack) stepBack();
+      else onOpenChange(false);
+    },
+    { enabled: open, preventDefault: false },
+  );
   const section = (
     <TaskSection
       layout={sidebar ? "sidebar" : "chips"}
