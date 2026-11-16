@@ -12,7 +12,8 @@ import {
 import { runtimeAuthAccount } from "#src/runtime-auth-status";
 import { DROID_ACP_PROFILE } from "./acp-session";
 
-/** A status read runs `droid doctor --checks auth`, which loads the credential store. */
+/** A status read runs `droid doctor --checks auth` (`--auth` on an older build), which loads the
+ * credential store. */
 export const DROID_AUTH_PROBE_TIMEOUT_MS = 20_000;
 /** How long the interactive login may take to print its device code before the fallback text. */
 export const DROID_LOGIN_CODE_TIMEOUT_MS = 60_000;
@@ -69,8 +70,9 @@ export interface DroidAuthAdapterOptions {
 type DoctorResult = Readonly<{ id?: string; status?: string; detail?: string }>;
 
 /**
- * Factory Droid's own auth surface. Status comes from `droid doctor --json --checks auth` (the
- * credential store's verdict, not a guess); sign-in is the interactive TUI in a PTY, because the
+ * Factory Droid's own auth surface. Status comes from `droid doctor --json --checks auth` (or its
+ * older `--auth` spelling), the credential store's verdict, not a guess; sign-in is the interactive
+ * TUI in a PTY, because the
  * CLI has no non-interactive login command, and the device flow prints
  * `https://auth.factory.ai/device` plus a `XXXX-XXXX` code; sign-out is the server's own ACP
  * `logout`, which clears the stored Factory session but cannot touch `FACTORY_API_KEY`.
@@ -178,8 +180,28 @@ export class DroidRuntimeAuthAdapter implements RuntimeAuthAdapter {
     }
   }
 
+  /** The auth selector, oldest spelling last: the current build takes `--checks auth`, and the one
+   * some Computers still run takes `--auth`, refusing `--checks` as an unknown option. Both answer
+   * the same report, so a failed attempt tries the next spelling instead of guessing at versions —
+   * reading only the new one left a signed-in Agent with no account to show. */
   async #doctor(cwd: string, timeoutMs: number): Promise<readonly DoctorResult[]> {
-    const child = this.#host.spawn(["doctor", "--json", "--checks", "auth"], cwd, false);
+    let firstError: unknown;
+    for (const selector of [["--checks", "auth"], ["--auth"]] as const) {
+      try {
+        return await this.#doctorWith(selector, cwd, timeoutMs);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    throw firstError;
+  }
+
+  async #doctorWith(
+    selector: readonly string[],
+    cwd: string,
+    timeoutMs: number,
+  ): Promise<readonly DoctorResult[]> {
+    const child = this.#host.spawn(["doctor", "--json", ...selector], cwd, false);
     try {
       const text = await withDeadline(
         Promise.all([new Response(child.output).text(), child.exited]).then(([output]) => output),

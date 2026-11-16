@@ -24,6 +24,16 @@ if (args.includes("--version")) {
   process.exit(0);
 }
 
+/** The droid build some Computers still run: it has no `--checks` selector and answers `--auth`
+ * instead, refusing anything else the way commander does (task #...): the flag rename is what made
+ * a logged-in Agent look signed out. */
+const legacySelector = Bun.env.DROID_AUTH_FIXTURE_LEGACY === "1";
+
+if (legacySelector && args.includes("doctor") && args.includes("--checks")) {
+  console.error("error: unknown option '--checks' (Did you mean --certs?)");
+  process.exit(1);
+}
+
 if (args.includes("doctor")) {
   const state = readState();
   const results =
