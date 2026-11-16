@@ -21,6 +21,7 @@ let userId: string;
 let agentId: string;
 
 const blobs = new Map<string, ArtifactBlobInfo>();
+const goneBlobs = new Set<string>();
 let inspections = 0;
 const store: ArtifactBlobStore = {
   inspectMany: async (_workspaceId, sha256s) => {
@@ -29,7 +30,8 @@ const store: ArtifactBlobStore = {
       sha256s.flatMap((sha256) => (blobs.has(sha256) ? [[sha256, blobs.get(sha256)!]] : [])),
     );
   },
-  use: async (_tx, _workspaceId, sha256s) => sha256s.filter((sha256) => !blobs.has(sha256)),
+  use: async (_tx, _workspaceId, sha256s) =>
+    sha256s.filter((sha256) => !blobs.has(sha256) || goneBlobs.has(sha256)),
   read: async () => null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
 };
@@ -448,4 +450,44 @@ test("replaying a push returns the version it already made", async () => {
   });
   expect(first.status).toBe("created");
   expect(again).toMatchObject({ status: "replayed", number: 1 });
+});
+
+test("two creates with one idempotency key and inputs share the one artifact they made", async () => {
+  blob("sha-shared-create");
+  const input = {
+    workspaceId,
+    home: { kind: "workspace" },
+    name: `shared-${handle}`,
+    entryPath: "index.md",
+    author: { agentId },
+    idempotencyKey: "shared-create",
+    requestHash: "hash-a",
+    version: { files: [file("index.md", "sha-shared-create")], idempotencyKey: "shared-v1" },
+  } satisfies Parameters<typeof artifacts.create>[0];
+  const [first, second] = await Promise.all([artifacts.create(input), artifacts.create(input)]);
+  expect(first.id).toBe(second.id);
+  expect(await db.artifact.count({ where: { workspaceId, idempotencyKey: "shared-create" } })).toBe(
+    1,
+  );
+  expect(await db.artifactVersion.count({ where: { artifactId: first.id } })).toBe(1);
+});
+
+test("a create whose bytes vanish inside the transaction leaves no artifact row", async () => {
+  blob("sha-vanish");
+  goneBlobs.add("sha-vanish");
+  try {
+    await expect(
+      artifacts.create({
+        workspaceId,
+        home: { kind: "workspace" },
+        name: `vanish-${handle}`,
+        entryPath: "index.md",
+        author: { agentId },
+        version: { files: [file("index.md", "sha-vanish")], idempotencyKey: "vanish-v1" },
+      }),
+    ).rejects.toMatchObject({ code: "TEMPORARILY_UNAVAILABLE" });
+  } finally {
+    goneBlobs.delete("sha-vanish");
+  }
+  expect(await db.artifact.count({ where: { workspaceId, name: `vanish-${handle}` } })).toBe(0);
 });
