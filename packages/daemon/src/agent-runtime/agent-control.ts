@@ -133,8 +133,8 @@ export class AgentControl {
         return "rejected";
       }
       this.#stopped.add(agentId);
-      if (!this.#context.runtime.running(agentId)) return "released";
-      await this.#context.runtime.stop(agentId);
+      this.#context.runtime.stopAccepted?.(agentId);
+      if (this.#context.runtime.running(agentId)) await this.#context.runtime.stop(agentId);
       record.phase = "stopped";
       this.#context.sessions.clear(record);
       await this.#context.state.store.write(agentId, record);

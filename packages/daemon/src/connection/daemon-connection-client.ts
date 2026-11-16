@@ -204,7 +204,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
    * reconnects. A refusal while `start` is connecting rejects `start` instead. */
   onConnectionRefused?(callback: (reason: DaemonConnectRejectionReason) => void): () => void;
   onAgentStart?(callback: (intent: AgentStartIntent) => void): () => void;
-  onAgentStop?(callback: (intent: AgentStopIntent | AgentStaleRuntimeStop) => void): () => void;
+  onAgentStop?(callback: (intent: AgentStopIntent) => void): () => void;
+  onAgentStaleRuntimeStop?(callback: (intent: AgentStaleRuntimeStop) => void): () => void;
   onAgentTurnInterrupt?(callback: (intent: AgentTurnInterruptIntent) => void): () => void;
   onAgentActivityProbe?(callback: (probe: AgentActivityProbe) => void): () => void;
   onAgentInboxPurge?(callback: (purge: AgentInboxPurge) => void): () => void;

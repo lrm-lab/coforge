@@ -504,12 +504,13 @@ test("ready reconciliation stops a moved Agent the new Computer has never starte
   const agent = agentRecord({ id: "moved", name: "moved", computerId: "new-computer" });
   const controlStore: AgentControlStore = {
     memberRole: async () => "owner",
-    get: async () => ({
-      ...agent,
-      state,
-      storedControlState: state,
-      storedRuntimeConfig: pendingRuntimeConfig,
-    }),
+    get: async () =>
+      ({
+        ...agent,
+        state,
+        storedControlState: state,
+        storedRuntimeConfig: pendingRuntimeConfig,
+      }) as AgentControlAgent,
     replace: async () => false,
   };
   const control = new AgentControl(

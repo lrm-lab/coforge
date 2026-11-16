@@ -31,11 +31,15 @@ test("stale runtime stop releases only when the local fence is older", async () 
   });
   let running = true;
   let stops = 0;
+  let owed = 0;
   const control = new AgentControl("daemon", state, new AgentSessions(state, async () => {}), {
     running: () => running,
     stop: async () => {
       stops++;
       running = false;
+    },
+    stopAccepted: () => {
+      owed++;
     },
     rebind: async () => undefined,
     launch: async () => undefined,
@@ -46,5 +50,9 @@ test("stale runtime stop releases only when the local fence is older", async () 
   expect(stops).toBe(0);
   expect(await control.staleRuntimeStop("a", 4)).toBe("released");
   expect(stops).toBe(1);
+  expect(record.phase).toBe("stopped");
+  expect(owed).toBe(1);
+  expect(await control.staleRuntimeStop("a", 5)).toBe("released");
+  expect(owed).toBe(2);
   expect(record.phase).toBe("stopped");
 });

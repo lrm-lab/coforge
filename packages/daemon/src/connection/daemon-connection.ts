@@ -25,7 +25,7 @@ import {
   type AgentReplyIntent,
 } from "@lrm/coforge-sdk/internal/reply-intent";
 import { ListenerSlot } from "./listener-slot";
-import { ServerPublications, type AgentStopPublication } from "./server-publications";
+import { ServerPublications } from "./server-publications";
 import { routePublication } from "./publication-routing";
 import {
   defaultDaemonConnectionTiming,
@@ -108,6 +108,8 @@ import {
   type AgentActivity,
   type AgentStatus,
   type AgentStartIntent,
+  type AgentStopIntent,
+  type AgentStaleRuntimeStop,
   type AgentConfigSync,
   type AgentTurnInterruptIntent,
   type AgentActivityProbe,
@@ -231,7 +233,8 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   );
   readonly #runtimeAuthIntent = new ListenerSlot<(intent: RuntimeAuthIntent) => void>();
   readonly #agentStart = new ListenerSlot<(intent: AgentStartIntent) => void>();
-  readonly #agentStop = new ListenerSlot<(intent: AgentStopPublication) => void>();
+  readonly #agentStop = new ListenerSlot<(intent: AgentStopIntent) => void>();
+  readonly #agentStaleRuntimeStop = new ListenerSlot<(intent: AgentStaleRuntimeStop) => void>();
   readonly #agentTurnInterrupt = new ListenerSlot<(intent: AgentTurnInterruptIntent) => void>();
   readonly #agentActivityProbe = new ListenerSlot<(probe: AgentActivityProbe) => void>();
   readonly #agentInboxPurge = new ListenerSlot<(purge: AgentInboxPurge) => void>();
@@ -333,11 +336,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     latestComputerVersion: this.#latestComputerVersion,
     timing: () => this.timing,
   });
-  /** When this connection last carried inbound traffic, by the connection's own clock. Only a
-   * publication on the Daemon's channel or an answered status RPC sets it; an open socket does
-   * not, which is the whole point. Undefined until the connection first reports connected. */
-  /** Same log suppression as `#loggedUnknownSessionInvalidateMethod`, but per quiet stretch
-   * rather than per connection: cleared the moment anything arrives. */
   #statusRpcQueue = Promise.resolve();
 
   constructor(
@@ -550,8 +548,11 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     return this.#agentStart.set(callback);
   }
 
-  onAgentStop(callback: (intent: AgentStopPublication) => void): () => void {
+  onAgentStop(callback: (intent: AgentStopIntent) => void): () => void {
     return this.#agentStop.set(callback);
+  }
+  onAgentStaleRuntimeStop(callback: (intent: AgentStaleRuntimeStop) => void): () => void {
+    return this.#agentStaleRuntimeStop.set(callback);
   }
   onAgentTurnInterrupt(callback: (intent: AgentTurnInterruptIntent) => void): () => void {
     return this.#agentTurnInterrupt.set(callback);
@@ -905,7 +906,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         data,
         { workspaceId, computerId: config.computerId },
         this.#readyPublications,
-        this.#agentStop,
       ) ||
       routePublication(data, decodeAppRegistrationNotice, (notice) => {
         if (!ownsDaemon(notice)) return false;

@@ -19,6 +19,7 @@ import { AGENT_VISIBILITY, type AgentVisibility } from "#src/features/agents/age
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import type { ControlFence } from "#src/server/agents/agent-config-plan.server";
 import { updateAgentRow } from "./agent-config-fence.repositories.server";
+import { advanceControlEpochForComputerMove } from "#src/server/agents/agent-control-operations.server";
 
 export type { AgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 
@@ -296,26 +297,15 @@ export async function moveAgentToComputer(
     where: { id: input.agentId },
     select: { controlState: true },
   });
-  const controlState = moved?.controlState;
-  if (controlState && typeof controlState === "object" && !Array.isArray(controlState)) {
-    const epoch = (controlState as { epoch?: unknown }).epoch;
-    if (
-      typeof epoch === "number" &&
-      Number.isSafeInteger(epoch) &&
-      epoch > 0 &&
-      epoch < 2 ** 31 - 1
-    )
-      await tx.agent.update({
-        where: { id: input.agentId },
-        data: {
-          controlState: {
-            ...(controlState as Prisma.JsonObject),
-            computerId: input.toComputerId,
-            epoch: epoch + 1,
-          },
-        },
-      });
-  }
+  const nextControlState = advanceControlEpochForComputerMove(
+    moved?.controlState,
+    input.toComputerId,
+  );
+  if (nextControlState)
+    await tx.agent.update({
+      where: { id: input.agentId },
+      data: { controlState: nextControlState as Prisma.JsonObject },
+    });
   // The Agent's keys belong to the Computer that minted them; a move retires them all at once
   // rather than leaving the old Computer's overlap key valid until the next mint.
   await tx.agentApiKey.updateMany({
