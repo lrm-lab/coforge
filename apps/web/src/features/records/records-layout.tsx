@@ -309,6 +309,10 @@ export function RecordsLayout({
                   {filteredMyReports.length > 0 && (
                     <RecordsMyReportsSection
                       items={filteredMyReports}
+                      me={{
+                        displayName: catalog.actorDisplayName,
+                        avatarUrl: catalog.actorAvatarUrl,
+                      }}
                       unread={myReportsUnread}
                       selectedRecordId={selectedRecordId}
                       open={myReportsOpen}
