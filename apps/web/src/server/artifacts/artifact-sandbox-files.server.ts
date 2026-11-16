@@ -1,5 +1,6 @@
 import { artifactContentType } from "./artifact-content-types.server";
-import { ARTIFACT_ENTRY_READ_LIMIT, artifactKindOfPath } from "./artifact-files.server";
+import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
+import { ARTIFACT_ENTRY_READ_LIMIT } from "./artifact-files.server";
 import { SANDBOX_FILE_TTL_SECONDS } from "./artifact-sandbox-ticket.server";
 import {
   sandboxFileHeaders,

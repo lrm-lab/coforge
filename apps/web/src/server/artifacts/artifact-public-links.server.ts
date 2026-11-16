@@ -1,6 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { artifactKindOfPath } from "./artifact-files.server";
+import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import {
   artifactHomeHidden,
@@ -19,8 +19,7 @@ function mintToken(): string {
 }
 
 /** The types a public link serves: an artifact whose entry file is a web page or Markdown. */
-const linkable = (entryPath: string) =>
-  ["html", "markdown"].includes(artifactKindOfPath(entryPath));
+const linkable = (entryPath: string) => artifactOpenableKind(entryPath) !== null;
 
 export class ArtifactPublicLinks {
   constructor(

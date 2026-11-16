@@ -1,4 +1,4 @@
-import { artifactKindOfPath } from "./artifact-files.server";
+import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 
 const TYPES: Record<string, string> = {
   html: "text/html; charset=utf-8",

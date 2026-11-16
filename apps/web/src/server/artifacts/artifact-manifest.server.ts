@@ -1,8 +1,8 @@
 import { AppError } from "#src/lib/app-error";
+import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import {
   ARTIFACT_FILE_LIMIT,
   ARTIFACT_HTML_ENTRY,
-  artifactKindOfPath,
   artifactPathValid,
   type ArtifactFileInput,
 } from "./artifact-files.server";
@@ -24,8 +24,7 @@ function invalid(errorId: string, hint?: string): never {
 /** The entry file is one the web page can show: a Markdown file, or an html page. The artifact's
  * type is that file's. */
 export function requireOpenableEntry(entryPath: string): void {
-  const kind = artifactKindOfPath(entryPath);
-  if (kind !== "markdown" && kind !== "html")
+  if (artifactOpenableKind(entryPath) === null)
     invalid("artifact-entry-type", "the entry file is a .md or .html file");
 }
 
