@@ -299,6 +299,7 @@ export async function moveAgentToComputer(
   });
   const nextControlState = advanceControlEpochForComputerMove(
     moved?.controlState,
+    input.agentId,
     input.toComputerId,
   );
   if (nextControlState)
