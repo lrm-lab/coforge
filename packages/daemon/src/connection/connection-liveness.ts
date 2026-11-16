@@ -33,6 +33,13 @@ import { getLogger } from "@logtape/logtape";
 
 const livenessLogger = getLogger(["coforge", "daemon", "connection"]);
 
+/** How often a rebuild that keeps failing is allowed to log. The attempts themselves stay on the
+ * status refresh's tick - the cadence is not the log's to change - so this is the only brake: a
+ * server refusing an expired token for a day would otherwise write 2880 identical warnings. */
+export const REBUILD_FAILURE_LOG_EVERY_MS = 60 * 60_000;
+
+type RebuildScope = { workspace_id: string; computer_id: string };
+
 /** Rebuilds a connection that has lost its client altogether. Every other recovery path - the
  * give-up resume timer, `InboundQuietness.check` - needs a client to nudge, so a connection whose
  * client is gone had none of them left; the status refresh is the one thing still running, and this
@@ -40,6 +47,9 @@ const livenessLogger = getLogger(["coforge", "daemon", "connection"]);
  * needed and nobody called. */
 export class LostClientRebuild {
   #running = false;
+  #failures = 0;
+  #firstFailureAtMs: number | undefined;
+  #failureLoggedAtMs: number | undefined;
 
   constructor(
     private readonly lastConfig: () =>
@@ -48,6 +58,7 @@ export class LostClientRebuild {
     private readonly start: (token: string, config: DaemonConnectionConfig) => Promise<void>,
     private readonly wasStopped: (error: unknown) => boolean,
     private readonly errorType: (error: unknown) => string,
+    private readonly nowMs: () => number = Date.now,
   ) {}
 
   /** One rebuild at a time: a start still in flight needs no help, and a stop wins. */
@@ -56,30 +67,70 @@ export class LostClientRebuild {
     if (this.#running || !last) return;
     this.#running = true;
     const scope = { workspace_id: last.config.workspaceId, computer_id: last.config.computerId };
-    livenessLogger.warning("Daemon connection has no client; rebuilding it", {
+    // Every attempt, so it stays at `debug`: while the server refuses, this is the line that would
+    // repeat every 30 seconds, and the summary below it is what a person actually needs to read.
+    livenessLogger.debug("Daemon connection has no client; rebuilding it", {
       event: "daemon_connection:rebuild",
       ...scope,
       outcome: "reconnecting",
     });
     void this.start(last.token, last.config)
+      .then(() => {
+        this.#noteRecovered(scope);
+      })
       .catch((error: unknown) => {
         // A stop during the rebuild ends the start it owns; that is not a failed recovery.
         if (this.wasStopped(error)) return;
-        livenessLogger.warning("Daemon connection rebuild failed; the next refresh tries again", {
-          event: "daemon_connection:rebuild_failed",
-          ...scope,
-          error_type: this.errorType(error),
-          outcome: "failed",
-        });
+        this.#noteFailure(error, scope);
       })
       .finally(() => {
         this.#running = false;
       });
   }
 
-  /** A stop cancels a rebuild in flight; the next `start` is a fresh connection. */
+  /** The first failure of a streak gets a warning; later ones are held to one an hour, each saying
+   * how long and how often the rebuild has been failing. */
+  #noteFailure(error: unknown, scope: RebuildScope): void {
+    const nowMs = this.nowMs();
+    this.#failures += 1;
+    this.#firstFailureAtMs ??= nowMs;
+    const sinceLastLogMs =
+      this.#failureLoggedAtMs === undefined ? undefined : nowMs - this.#failureLoggedAtMs;
+    if (sinceLastLogMs !== undefined && sinceLastLogMs < REBUILD_FAILURE_LOG_EVERY_MS) return;
+    this.#failureLoggedAtMs = nowMs;
+    livenessLogger.warning("Daemon connection rebuild failed; the next refresh tries again", {
+      event: "daemon_connection:rebuild_failed",
+      ...scope,
+      error_type: this.errorType(error),
+      outcome: "failed",
+      consecutive_failures: this.#failures,
+      failing_for_ms: nowMs - this.#firstFailureAtMs,
+    });
+  }
+
+  /** The end of a failing streak, once: the hourly warnings never say the connection came back. */
+  #noteRecovered(scope: RebuildScope): void {
+    if (this.#failures === 0) return;
+    const nowMs = this.nowMs();
+    livenessLogger.info("Daemon connection rebuilt after failed attempts", {
+      event: "daemon_connection:rebuild_recovered",
+      ...scope,
+      outcome: "recovered",
+      consecutive_failures: this.#failures,
+      failing_for_ms: nowMs - (this.#firstFailureAtMs ?? nowMs),
+    });
+    this.#failures = 0;
+    this.#firstFailureAtMs = undefined;
+    this.#failureLoggedAtMs = undefined;
+  }
+
+  /** A stop cancels a rebuild in flight, and ends any streak with it: the next `start` is a fresh
+   * connection, so its first success is not a recovery from the failures before the stop. */
   reset(): void {
     this.#running = false;
+    this.#failures = 0;
+    this.#firstFailureAtMs = undefined;
+    this.#failureLoggedAtMs = undefined;
   }
 }
 
