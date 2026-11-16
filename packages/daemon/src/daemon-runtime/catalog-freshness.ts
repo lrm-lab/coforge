@@ -93,6 +93,18 @@ export class CatalogFreshness {
     const dueRetries = this.#retries.due(now);
     const changedSet = new Set(refreshableChanged);
     const retryProviders = dueRetries.filter((provider) => !changedSet.has(provider));
+    // What actually triggered this pass, so a log reader never has to infer it from the timing:
+    // a disk change and a backoff expiry look nothing alike, and neither explains a probe of every
+    // runtime at once (task #42).
+    logger.debug("Code Agent catalog sweep ran", {
+      event: "code_agent_catalog:sweep_ran",
+      changed: refreshableChanged.length,
+      due_retries: retryProviders.length,
+      providers: [...new Set([...refreshableChanged, ...retryProviders])].sort(),
+      at: new Date(now).toISOString(),
+      ...this.#scope(),
+      outcome: "started",
+    });
     if (!refreshableChanged.length && !retryProviders.length) {
       this.#skipped("nothing_due", now);
       return;
